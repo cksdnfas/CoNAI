@@ -6,10 +6,10 @@ import {
   executeGraphWorkflow,
   updateGraphWorkflow,
   type GraphExecutionRecord,
-  type GraphWorkflowExposedInput,
   type GraphWorkflowRecord,
 } from '@/lib/api'
 import { buildGraphEditorSnapshot, buildGraphPayload, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
+import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
 
 /** Own graph save and execution actions for the module-graph page. */
 export function useModuleGraphExecutionActions({
@@ -17,7 +17,6 @@ export function useModuleGraphExecutionActions({
   edges,
   workflowName,
   workflowDescription,
-  workflowExposedInputs,
   draftWorkflowFolderId,
   selectedGraphId,
   selectedGraphRecord,
@@ -41,7 +40,6 @@ export function useModuleGraphExecutionActions({
   edges: ModuleGraphEdge[]
   workflowName: string
   workflowDescription: string
-  workflowExposedInputs: GraphWorkflowExposedInput[]
   draftWorkflowFolderId: number | null
   selectedGraphId: number | null
   selectedGraphRecord: GraphWorkflowRecord | null
@@ -77,8 +75,9 @@ export function useModuleGraphExecutionActions({
     }
 
     const resolvedName = resolveWorkflowDisplayName(workflowName, selectedGraphRecord?.name)
+    const nodeDerivedWorkflowExposedInputs = deriveWorkflowExposedInputsFromNodes(nodes)
     const graph = buildGraphPayload(nodes, edges, {
-      exposed_inputs: workflowExposedInputs,
+      exposed_inputs: nodeDerivedWorkflowExposedInputs,
     })
     const description = workflowDescription.trim() || undefined
     const payload = {
@@ -107,7 +106,7 @@ export function useModuleGraphExecutionActions({
       nodes,
       edges,
       workflowMetadata: {
-        exposed_inputs: workflowExposedInputs,
+        exposed_inputs: nodeDerivedWorkflowExposedInputs,
       },
     })
 
@@ -126,7 +125,7 @@ export function useModuleGraphExecutionActions({
       created,
       name: resolvedName,
     }
-  }, [draftWorkflowFolderId, edges, nodes, onExecutionSelected, onGraphSelected, onSnapshotSaved, onWorkflowNameResolved, refetchGraphWorkflows, selectedGraphId, selectedGraphRecord?.name, showSnackbar, workflowDescription, workflowExposedInputs, workflowName])
+  }, [draftWorkflowFolderId, edges, nodes, onExecutionSelected, onGraphSelected, onSnapshotSaved, onWorkflowNameResolved, refetchGraphWorkflows, selectedGraphId, selectedGraphRecord?.name, showSnackbar, workflowDescription, workflowName])
 
   /** Save the current graph workflow draft and show one user-facing result message. */
   const handleSaveGraph = useCallback(async () => {

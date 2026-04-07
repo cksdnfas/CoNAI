@@ -267,62 +267,6 @@ export function useModuleGraphEditorInteractions({
     handleWorkflowRunInputChange(inputId, image.dataUrl)
   }, [handleWorkflowRunInputChange, handleWorkflowRunInputClear])
 
-  /** Toggle whether one candidate input is exposed at the workflow level. */
-  const handleToggleWorkflowExposedInput = useCallback((inputDefinition: GraphWorkflowExposedInput) => {
-    setWorkflowExposedInputs((current) => {
-      const alreadySelected = current.some((item) => item.id === inputDefinition.id)
-      if (alreadySelected) {
-        return current.filter((item) => item.id !== inputDefinition.id)
-      }
-
-      return [...current, inputDefinition]
-    })
-  }, [setWorkflowExposedInputs])
-
-  /** Patch one exposed-input definition in local workflow metadata. */
-  const handleUpdateWorkflowExposedInput = useCallback((inputId: string, patch: Partial<GraphWorkflowExposedInput>) => {
-    setWorkflowExposedInputs((current) =>
-      current.map((inputDefinition) =>
-        inputDefinition.id === inputId
-          ? {
-              ...inputDefinition,
-              ...patch,
-            }
-          : inputDefinition,
-      ),
-    )
-  }, [setWorkflowExposedInputs])
-
-  /** Reorder one exposed input within the workflow metadata list. */
-  const handleMoveWorkflowExposedInput = useCallback((inputId: string, direction: 'up' | 'down') => {
-    setWorkflowExposedInputs((current) => {
-      const index = current.findIndex((inputDefinition) => inputDefinition.id === inputId)
-      if (index === -1) {
-        return current
-      }
-
-      const targetIndex = direction === 'up' ? index - 1 : index + 1
-      if (targetIndex < 0 || targetIndex >= current.length) {
-        return current
-      }
-
-      const next = [...current]
-      const [moved] = next.splice(index, 1)
-      next.splice(targetIndex, 0, moved)
-      return next
-    })
-  }, [setWorkflowExposedInputs])
-
-  /** Store one selected image as the default value for one exposed workflow input. */
-  const handleWorkflowExposedInputDefaultImageChange = useCallback(async (inputId: string, image?: SelectedImageDraft) => {
-    if (!image) {
-      handleUpdateWorkflowExposedInput(inputId, { default_value: undefined })
-      return
-    }
-
-    handleUpdateWorkflowExposedInput(inputId, { default_value: image.dataUrl })
-  }, [handleUpdateWorkflowExposedInput])
-
   /** Auto-layout the current graph and refit the viewport afterwards. */
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) {
@@ -403,10 +347,6 @@ export function useModuleGraphEditorInteractions({
     handleWorkflowRunInputChange,
     handleWorkflowRunInputClear,
     handleWorkflowRunInputImageChange,
-    handleToggleWorkflowExposedInput,
-    handleUpdateWorkflowExposedInput,
-    handleMoveWorkflowExposedInput,
-    handleWorkflowExposedInputDefaultImageChange,
     handleAutoLayout,
     handleRemoveSelectedNode,
     handleRemoveSelectedEdge,

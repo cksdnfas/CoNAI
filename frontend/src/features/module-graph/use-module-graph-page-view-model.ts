@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
-import { getGraphExecution, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
 import type { AppSettings } from '@/types/settings'
 import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
 import { buildNodeArtifactGroups, buildNodeArtifactPreview, buildGraphEditorSnapshot, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
+import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
 import { buildWorkflowExposedInputId, buildWorkflowValidationIssues } from './module-graph-validation'
 
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
@@ -14,7 +15,6 @@ export function useModuleGraphPageViewModel({
   workflowDescription,
   nodes,
   edges,
-  workflowExposedInputs,
   workflowView,
   lastSavedSnapshot,
   graphWorkflows,
@@ -34,7 +34,6 @@ export function useModuleGraphPageViewModel({
   workflowDescription: string
   nodes: ModuleGraphNode[]
   edges: ModuleGraphEdge[]
-  workflowExposedInputs: GraphWorkflowExposedInput[]
   workflowView: 'browse' | 'edit'
   lastSavedSnapshot: string
   graphWorkflows: GraphWorkflowRecord[]
@@ -50,6 +49,11 @@ export function useModuleGraphPageViewModel({
   settings?: AppSettings | null
   workflowRunInputValues: Record<string, unknown>
 }) {
+  const nodeDerivedWorkflowExposedInputs = useMemo(
+    () => deriveWorkflowExposedInputsFromNodes(nodes),
+    [nodes],
+  )
+
   const currentSnapshot = useMemo(
     () =>
       buildGraphEditorSnapshot({
@@ -58,10 +62,10 @@ export function useModuleGraphPageViewModel({
         nodes,
         edges,
         workflowMetadata: {
-          exposed_inputs: workflowExposedInputs,
+          exposed_inputs: nodeDerivedWorkflowExposedInputs,
         },
       }),
-    [edges, nodes, workflowDescription, workflowExposedInputs, workflowName],
+    [edges, nodeDerivedWorkflowExposedInputs, nodes, workflowDescription, workflowName],
   )
 
   const isDirty = currentSnapshot !== lastSavedSnapshot
@@ -188,10 +192,10 @@ export function useModuleGraphPageViewModel({
             targetPortKey: parseHandleId(edge.targetHandle)?.portKey ?? '',
           }))
           .filter((edge) => edge.targetPortKey.length > 0),
-        exposedInputs: workflowExposedInputs,
+        exposedInputs: nodeDerivedWorkflowExposedInputs,
         settings,
       }),
-    [edges, nodes, settings, workflowExposedInputs],
+    [edges, nodeDerivedWorkflowExposedInputs, nodes, settings],
   )
 
   const selectedWorkflowValidationIssues = useMemo(() => {

@@ -5,7 +5,6 @@ import {
   type GraphExecutionArtifactRecord,
   type GraphExecutionRecord,
   type GraphWorkflowExposedInput,
-  type GraphWorkflowRecord,
 } from '@/lib/api'
 import {
   buildNodeArtifactGroups,
@@ -15,6 +14,7 @@ import {
   type ModuleGraphEdge,
   type ModuleGraphNode,
 } from './module-graph-shared'
+import { buildWorkflowRunInputDefaults, deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
 
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
 
@@ -29,10 +29,9 @@ type NodeArtifactPreviewRecord = {
 /** Keep module-graph workspace selection, input defaults, feedback, and node previews in sync. */
 export function useModuleGraphWorkspaceSync({
   selectedGraphId,
+  nodes,
   executionList,
   selectedExecutionId,
-  selectedGraphRecord,
-  workflowInputCandidates,
   executionDetail,
   latestArtifactPreviewByNode,
   edges,
@@ -43,15 +42,14 @@ export function useModuleGraphWorkspaceSync({
   showSnackbar,
 }: {
   selectedGraphId: number | null
+  nodes: ModuleGraphNode[]
   executionList: GraphExecutionRecord[]
   selectedExecutionId: number | null
-  selectedGraphRecord: GraphWorkflowRecord | null
-  workflowInputCandidates: GraphWorkflowExposedInput[]
   executionDetail: GraphExecutionDetailRecord | undefined
   latestArtifactPreviewByNode: Map<string, NodeArtifactPreviewRecord>
   edges: ModuleGraphEdge[]
   setSelectedExecutionId: (executionId: number | null) => void
-  setWorkflowRunInputValues: (nextValues: Record<string, unknown>) => void
+  setWorkflowRunInputValues: Dispatch<SetStateAction<Record<string, unknown>>>
   setWorkflowExposedInputs: Dispatch<SetStateAction<GraphWorkflowExposedInput[]>>
   setNodes: Dispatch<SetStateAction<ModuleGraphNode[]>>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
@@ -73,38 +71,26 @@ export function useModuleGraphWorkspaceSync({
   }, [executionList, selectedExecutionId, selectedGraphId, setSelectedExecutionId])
 
   useEffect(() => {
-    const exposedInputs = selectedGraphRecord?.graph.metadata?.exposed_inputs ?? []
-    const nextInputValues = exposedInputs.reduce<Record<string, unknown>>((acc, inputDefinition) => {
-      if (inputDefinition.default_value !== undefined) {
-        acc[inputDefinition.id] = inputDefinition.default_value
-      }
-      return acc
-    }, {})
-    setWorkflowRunInputValues(nextInputValues)
-  }, [selectedGraphRecord, setWorkflowRunInputValues])
+    const exposedInputs = deriveWorkflowExposedInputsFromNodes(nodes)
+    const inputDefaults = buildWorkflowRunInputDefaults(exposedInputs)
 
-  useEffect(() => {
-    const candidateMap = new Map(workflowInputCandidates.map((candidate) => [candidate.id, candidate]))
-    setWorkflowExposedInputs((current) =>
-      current
-        .filter((inputDefinition) => candidateMap.has(inputDefinition.id))
-        .map((inputDefinition) => {
-          const candidate = candidateMap.get(inputDefinition.id) as GraphWorkflowExposedInput
-          return {
-            ...candidate,
-            ...inputDefinition,
-            id: candidate.id,
-            node_id: candidate.node_id,
-            port_key: candidate.port_key,
-            data_type: candidate.data_type,
-            ui_data_type: candidate.ui_data_type,
-            options: candidate.options,
-            module_id: candidate.module_id,
-            module_name: candidate.module_name,
-          }
-        }),
-    )
-  }, [setWorkflowExposedInputs, workflowInputCandidates])
+    setWorkflowExposedInputs(exposedInputs)
+    setWorkflowRunInputValues((currentValues) => {
+      const nextValues = exposedInputs.reduce<Record<string, unknown>>((acc, inputDefinition) => {
+        if (currentValues[inputDefinition.id] !== undefined) {
+          acc[inputDefinition.id] = currentValues[inputDefinition.id]
+          return acc
+        }
+
+        if (inputDefaults[inputDefinition.id] !== undefined) {
+          acc[inputDefinition.id] = inputDefaults[inputDefinition.id]
+        }
+        return acc
+      }, {})
+
+      return nextValues
+    })
+  }, [nodes, setWorkflowExposedInputs, setWorkflowRunInputValues])
 
   useEffect(() => {
     const previousStatuses = previousExecutionStatusesRef.current

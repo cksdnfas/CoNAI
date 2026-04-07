@@ -25,7 +25,7 @@ export interface ModuleWorkflowEditorSupportPanelProps {
   setSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
   folderPanel?: ReactNode
   inspectorPanel: ReactNode
-  inputsPanel: ReactNode
+  inputsPanel?: ReactNode
   validationPanel: ReactNode
   resultsPanel: ReactNode
 }
@@ -95,9 +95,11 @@ export function ModuleWorkflowEditorSupportPanel({
         {inspectorPanel}
       </div>
 
-      <div ref={(node) => { setSectionRef('inputs', node) }} className="scroll-mt-24 md:scroll-mt-28">
-        {inputsPanel}
-      </div>
+      {inputsPanel ? (
+        <div ref={(node) => { setSectionRef('inputs', node) }} className="scroll-mt-24 md:scroll-mt-28">
+          {inputsPanel}
+        </div>
+      ) : null}
 
       <div ref={(node) => { setSectionRef('validation', node) }} className="scroll-mt-24 md:scroll-mt-28">
         {validationPanel}

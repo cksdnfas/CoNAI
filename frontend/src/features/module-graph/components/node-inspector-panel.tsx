@@ -14,6 +14,14 @@ import type { GraphExecutionArtifactRecord, ModulePortDefinition } from '@/lib/a
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
+import {
+  WORKFLOW_INPUT_DESCRIPTION_KEY,
+  WORKFLOW_INPUT_ENABLED_KEY,
+  WORKFLOW_INPUT_LABEL_KEY,
+  WORKFLOW_INPUT_REQUIRED_KEY,
+  getWorkflowInputSourcePort,
+  isWorkflowInputEnabledForNode,
+} from '../module-graph-workflow-inputs'
 import { parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 type NodeInspectorPanelProps = {
@@ -406,6 +414,15 @@ export function NodeInspectorPanel({
         return left.label.localeCompare(right.label)
       })
     : []
+  const selectedNodeWorkflowInputPort = selectedNode ? getWorkflowInputSourcePort(selectedNode) : null
+  const selectedNodeWorkflowInputEnabled = selectedNode ? isWorkflowInputEnabledForNode(selectedNode) : false
+  const selectedNodeWorkflowInputLabel = typeof selectedNode?.data.inputValues?.[WORKFLOW_INPUT_LABEL_KEY] === 'string'
+    ? selectedNode.data.inputValues[WORKFLOW_INPUT_LABEL_KEY] as string
+    : ''
+  const selectedNodeWorkflowInputDescription = typeof selectedNode?.data.inputValues?.[WORKFLOW_INPUT_DESCRIPTION_KEY] === 'string'
+    ? selectedNode.data.inputValues[WORKFLOW_INPUT_DESCRIPTION_KEY] as string
+    : ''
+  const selectedNodeWorkflowInputRequired = Boolean(selectedNode?.data.inputValues?.[WORKFLOW_INPUT_REQUIRED_KEY])
   const selectedNodeOutputGroups = useMemo(
     () => selectedNode && selectedExecutionArtifacts
       ? groupNodeOutputArtifacts(
@@ -544,6 +561,82 @@ export function NodeInspectorPanel({
                 </div>
               )}
             </div>
+
+            {selectedNodeWorkflowInputPort ? (
+              <div className="space-y-3 rounded-sm border border-border bg-background/40 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-sm font-medium text-foreground">워크플로우 입력 노출</div>
+                  <Badge variant="outline">{selectedNodeWorkflowInputPort.label}</Badge>
+                  {selectedNodeWorkflowInputEnabled ? <Badge variant="secondary">활성</Badge> : <Badge variant="outline">비활성</Badge>}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant={selectedNodeWorkflowInputEnabled ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => onNodeValueChange(selectedNode.id, WORKFLOW_INPUT_ENABLED_KEY, !selectedNodeWorkflowInputEnabled)}
+                  >
+                    {selectedNodeWorkflowInputEnabled ? '워크플로우 입력 사용 중' : '워크플로우 입력으로 노출'}
+                  </Button>
+                  {selectedNodeWorkflowInputEnabled ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onNodeValueChange(selectedNode.id, WORKFLOW_INPUT_ENABLED_KEY, false)}
+                    >
+                      노출 해제
+                    </Button>
+                  ) : null}
+                </div>
+
+                {selectedNodeWorkflowInputEnabled ? (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">입력 라벨</div>
+                        <Input
+                          value={selectedNodeWorkflowInputLabel}
+                          onChange={(event) => onNodeValueChange(selectedNode.id, WORKFLOW_INPUT_LABEL_KEY, event.target.value)}
+                          placeholder={`${selectedNode.data.module.name} · ${selectedNodeWorkflowInputPort.label}`}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">설명</div>
+                        <Input
+                          value={selectedNodeWorkflowInputDescription}
+                          onChange={(event) => onNodeValueChange(selectedNode.id, WORKFLOW_INPUT_DESCRIPTION_KEY, event.target.value)}
+                          placeholder="실행 패널에 보여줄 설명"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={selectedNodeWorkflowInputRequired ? 'default' : 'outline'}
+                        onClick={() => onNodeValueChange(selectedNode.id, WORKFLOW_INPUT_REQUIRED_KEY, !selectedNodeWorkflowInputRequired)}
+                      >
+                        {selectedNodeWorkflowInputRequired ? '실행 시 반드시 입력' : '현재 노드 값을 기본값으로 사용'}
+                      </Button>
+                    </div>
+
+                    <div className="rounded-sm border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                      {selectedNodeWorkflowInputRequired
+                        ? '필수 입력으로 설정되면 실행 패널에서 값을 꼭 넣어야 하고, 현재 노드 값은 기본값으로 쓰지 않아.'
+                        : '필수 해제 상태에서는 현재 노드 값이 실행 패널 기본값으로 사용돼.'}
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-sm border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                    이 상수 노드를 켜두면 컨트롤 패널 입력 편집 없이도 실행 패널 입력으로 바로 노출돼.
+                  </div>
+                )}
+              </div>
+            ) : null}
 
             {(selectedNode.data.module.exposed_inputs ?? []).length === 0 ? (
               <div className="text-sm text-muted-foreground">이 노드는 편집 가능한 입력 포트가 없어.</div>

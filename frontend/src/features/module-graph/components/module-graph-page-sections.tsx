@@ -3,13 +3,12 @@ import { Folder, FolderOpen, Plus } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
 import { GraphExecutionPanel } from './graph-execution-panel'
 import { ModuleWorkflowEditorSupportPanel, type EditorSupportSectionKey } from './module-workflow-editor-support-panel'
 import { NodeInspectorPanel } from './node-inspector-panel'
-import { WorkflowExposedInputEditor } from './workflow-exposed-input-editor'
 import { WorkflowRunnerPanel } from './workflow-runner-panel'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
 
@@ -32,7 +31,6 @@ export function ModuleGraphEditorSupportSubtitle({
       {([
         ['setup', '설정'],
         ['inspector', '검사'],
-        ['inputs', '입력'],
         ['validation', '검증'],
         ['results', '결과'],
       ] as const).map(([sectionKey, label]) => (
@@ -178,8 +176,6 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   isSavingGraph,
   executingGraphId,
   cancellingExecutionId,
-  workflowInputCandidates,
-  workflowExposedInputs,
   editorValidationIssues,
   executionList,
   executionListError,
@@ -199,10 +195,6 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   onNodeImageChange,
   onExecuteSelectedNode,
   onForceExecuteSelectedNode,
-  onToggleInput,
-  onUpdateInput,
-  onMoveInput,
-  onChangeDefaultImage,
   onValidationIssueSelect,
   onSelectExecution,
   onRerunGraph,
@@ -222,8 +214,6 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   isSavingGraph: boolean
   executingGraphId: number | null
   cancellingExecutionId: number | null
-  workflowInputCandidates: GraphWorkflowExposedInput[]
-  workflowExposedInputs: GraphWorkflowExposedInput[]
   editorValidationIssues: WorkflowValidationIssue[]
   executionList: GraphExecutionRecord[]
   executionListError: string
@@ -243,10 +233,6 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => void
   onExecuteSelectedNode: () => void
   onForceExecuteSelectedNode: () => void
-  onToggleInput: (inputDefinition: GraphWorkflowExposedInput) => void
-  onUpdateInput: (inputId: string, patch: Partial<GraphWorkflowExposedInput>) => void
-  onMoveInput: (inputId: string, direction: 'up' | 'down') => void
-  onChangeDefaultImage: (inputId: string, image?: SelectedImageDraft) => void
   onValidationIssueSelect: (issue: WorkflowValidationIssue) => void
   onSelectExecution: (executionId: number) => void
   onRerunGraph: () => void
@@ -289,16 +275,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
           highlightedPortKey={highlightedPortKey}
         />
       }
-      inputsPanel={
-        <WorkflowExposedInputEditor
-          candidates={workflowInputCandidates}
-          selectedInputs={workflowExposedInputs}
-          onToggleInput={onToggleInput}
-          onUpdateInput={onUpdateInput}
-          onMoveInput={onMoveInput}
-          onChangeDefaultImage={onChangeDefaultImage}
-        />
-      }
+      inputsPanel={null}
       validationPanel={
         <WorkflowValidationPanel
           issues={editorValidationIssues}

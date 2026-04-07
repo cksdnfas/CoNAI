@@ -1,5 +1,6 @@
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
 import { buildApiUrl } from '@/lib/api-client'
+import { applySavedWorkflowInputMetadataToNodes } from './module-graph-workflow-inputs'
 import type {
   GraphExecutionArtifactRecord,
   GraphExecutionStatus,
@@ -373,7 +374,7 @@ export function getPortOffset(index: number, total: number) {
 export function buildFlowFromGraphRecord(graph: GraphWorkflowRecord, modules: ModuleDefinitionRecord[]) {
   const moduleMap = new Map(modules.map((module) => [module.id, module]))
 
-  const nodes: ModuleGraphNode[] = graph.graph.nodes
+  const baseNodes: ModuleGraphNode[] = graph.graph.nodes
     .map((node) => {
       const module = moduleMap.get(node.module_id)
       if (!module) {
@@ -391,6 +392,8 @@ export function buildFlowFromGraphRecord(graph: GraphWorkflowRecord, modules: Mo
       }
     })
     .filter((node): node is ModuleGraphNode => node !== null)
+
+  const nodes = applySavedWorkflowInputMetadataToNodes(baseNodes, graph.graph.metadata?.exposed_inputs)
 
   const edges: ModuleGraphEdge[] = graph.graph.edges.map((edge) => {
     const sourceNode = nodes.find((node) => node.id === edge.source_node_id)

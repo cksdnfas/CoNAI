@@ -26,7 +26,6 @@ export function useModuleGraphPageActions({
   selectedEdgeId,
   workflowName,
   workflowDescription,
-  workflowExposedInputs,
   draftWorkflowFolderId,
   selectedGraphId,
   selectedExecution,
@@ -78,7 +77,6 @@ export function useModuleGraphPageActions({
   selectedEdgeId: string | null
   workflowName: string
   workflowDescription: string
-  workflowExposedInputs: GraphWorkflowExposedInput[]
   draftWorkflowFolderId: number | null
   selectedGraphId: number | null
   selectedExecution: GraphExecutionRecord | null
@@ -130,10 +128,6 @@ export function useModuleGraphPageActions({
     handleWorkflowRunInputChange,
     handleWorkflowRunInputClear,
     handleWorkflowRunInputImageChange,
-    handleToggleWorkflowExposedInput,
-    handleUpdateWorkflowExposedInput,
-    handleMoveWorkflowExposedInput,
-    handleWorkflowExposedInputDefaultImageChange,
     handleAutoLayout,
     handleRemoveSelectedNode,
     handleRemoveSelectedEdge,
@@ -231,7 +225,6 @@ export function useModuleGraphPageActions({
     edges,
     workflowName,
     workflowDescription,
-    workflowExposedInputs,
     draftWorkflowFolderId,
     selectedGraphId,
     selectedGraphRecord,
@@ -269,10 +262,6 @@ export function useModuleGraphPageActions({
     handleWorkflowRunInputChange,
     handleWorkflowRunInputClear,
     handleWorkflowRunInputImageChange,
-    handleToggleWorkflowExposedInput,
-    handleUpdateWorkflowExposedInput,
-    handleMoveWorkflowExposedInput,
-    handleWorkflowExposedInputDefaultImageChange,
     handleAutoLayout,
     handleRemoveSelectedNode,
     handleRemoveSelectedEdge,

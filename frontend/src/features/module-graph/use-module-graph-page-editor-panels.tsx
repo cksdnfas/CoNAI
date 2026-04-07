@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { Connection, OnEdgesChange, OnNodesChange } from '@xyflow/react'
-import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { ModuleGraphCanvas } from './components/module-graph-canvas'
 import {
@@ -39,8 +39,6 @@ export function useModuleGraphPageEditorPanels({
   selectedExecutionId,
   isSavingGraph,
   cancellingExecutionId,
-  workflowInputCandidates,
-  workflowExposedInputs,
   editorValidationIssues,
   executionList,
   executionListError,
@@ -75,10 +73,6 @@ export function useModuleGraphPageEditorPanels({
   onNodeValueClear,
   onNodeImageChange,
   onExecuteSelectedNode,
-  onToggleWorkflowExposedInput,
-  onUpdateWorkflowExposedInput,
-  onMoveWorkflowExposedInput,
-  onWorkflowExposedInputDefaultImageChange,
   onSelectExecution,
   onOpenEditorSupport,
   onRerunSelectedGraph,
@@ -113,8 +107,6 @@ export function useModuleGraphPageEditorPanels({
   selectedExecutionId: number | null
   isSavingGraph: boolean
   cancellingExecutionId: number | null
-  workflowInputCandidates: GraphWorkflowExposedInput[]
-  workflowExposedInputs: GraphWorkflowExposedInput[]
   editorValidationIssues: WorkflowValidationIssue[]
   executionList: GraphExecutionRecord[]
   executionListError: string
@@ -149,10 +141,6 @@ export function useModuleGraphPageEditorPanels({
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => void
   onExecuteSelectedNode: (force: boolean) => void
-  onToggleWorkflowExposedInput: (inputDefinition: GraphWorkflowExposedInput) => void
-  onUpdateWorkflowExposedInput: (inputId: string, patch: Partial<GraphWorkflowExposedInput>) => void
-  onMoveWorkflowExposedInput: (inputId: string, direction: 'up' | 'down') => void
-  onWorkflowExposedInputDefaultImageChange: (inputId: string, image?: SelectedImageDraft) => void
   onSelectExecution: (executionId: number) => void
   onOpenEditorSupport: (section?: EditorSupportSectionKey) => void
   onRerunSelectedGraph: () => void
@@ -244,8 +232,6 @@ export function useModuleGraphPageEditorPanels({
       isSavingGraph={isSavingGraph}
       executingGraphId={executingGraphId}
       cancellingExecutionId={cancellingExecutionId}
-      workflowInputCandidates={workflowInputCandidates}
-      workflowExposedInputs={workflowExposedInputs}
       editorValidationIssues={editorValidationIssues}
       executionList={executionList}
       executionListError={executionListError}
@@ -265,10 +251,6 @@ export function useModuleGraphPageEditorPanels({
       onNodeImageChange={onNodeImageChange}
       onExecuteSelectedNode={() => onExecuteSelectedNode(false)}
       onForceExecuteSelectedNode={() => onExecuteSelectedNode(true)}
-      onToggleInput={onToggleWorkflowExposedInput}
-      onUpdateInput={onUpdateWorkflowExposedInput}
-      onMoveInput={onMoveWorkflowExposedInput}
-      onChangeDefaultImage={onWorkflowExposedInputDefaultImageChange}
       onValidationIssueSelect={onValidationIssueSelect}
       onSelectExecution={(executionId) => {
         onSelectExecution(executionId)
