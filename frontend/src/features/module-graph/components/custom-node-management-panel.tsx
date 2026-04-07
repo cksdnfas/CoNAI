@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { SettingsField, SettingsValueTile } from '@/features/settings/components/settings-primitives'
 import {
   getCustomNodeSource,
   installCustomNodeDependencies,
@@ -39,6 +39,25 @@ function isImageDataUrl(value: unknown): value is string {
 
 function isLikelyFilePath(value: unknown): value is string {
   return typeof value === 'string' && !/^data:image\//.test(value) && /[\\/]|\.[a-z0-9]+$/i.test(value)
+}
+
+type PanelCardHeaderProps = {
+  title: string
+  description: string
+  actions?: ReactNode
+}
+
+function PanelCardHeader({ title, description, actions }: PanelCardHeaderProps) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-border/70 pb-3">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-foreground">{title}</div>
+        <div className="mt-1 text-xs text-muted-foreground">{description}</div>
+      </div>
+
+      {actions ? <div className="flex shrink-0 flex-wrap gap-2">{actions}</div> : null}
+    </div>
+  )
 }
 
 /** Render a local-only manager for file-based custom nodes inside the module graph workspace. */
@@ -210,19 +229,20 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
   })
 
   return (
-    <div className="space-y-6">
-      <SectionHeading
-        heading="커스텀 노드 관리"
-        description={customNodesQuery.data?.customNodesDir ?? 'user/custom_nodes'}
-        actions={(
-          <>
-            <Badge variant="outline">로컬 파일 기반</Badge>
-            <Button type="button" variant="outline" onClick={() => void rescanMutation.mutateAsync()} disabled={rescanMutation.isPending}>
-              {rescanMutation.isPending ? '재스캔 중...' : '재스캔'}
-            </Button>
-          </>
-        )}
-      />
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-sm border border-border/70 bg-surface-low px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Custom Nodes Directory</div>
+          <div className="mt-1 break-all text-sm text-foreground">{customNodesQuery.data?.customNodesDir ?? 'user/custom_nodes'}</div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">로컬 파일 기반</Badge>
+          <Button type="button" variant="outline" onClick={() => void rescanMutation.mutateAsync()} disabled={rescanMutation.isPending}>
+            {rescanMutation.isPending ? '재스캔 중...' : '재스캔'}
+          </Button>
+        </div>
+      </div>
 
       {customNodesQuery.isLoading ? (
         <Alert>
@@ -238,14 +258,13 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
         </Alert>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="space-y-4">
           <Card>
-            <CardContent className="space-y-4 pt-6">
-              <SectionHeading
-                heading="등록된 커스텀 노드"
+            <CardContent className="space-y-3">
+              <PanelCardHeader
+                title="등록된 커스텀 노드"
                 description="user/custom_nodes 아래 폴더를 스캔한 결과야."
-                variant="inside"
                 actions={<Badge variant="outline">{loadedNodes.length}</Badge>}
               />
 
@@ -255,20 +274,25 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                   <AlertDescription>아직 로드된 커스텀 노드가 없어. 스캐폴드로 하나 만들거나 폴더를 추가한 뒤 재스캔해.</AlertDescription>
                 </Alert>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {loadedNodes.map((node) => {
                     const isSelected = selectedTestKey === node.manifest.key
                     return (
-                      <div key={node.manifest.key} className="rounded-sm border border-border/70 bg-background/60 p-3">
+                      <div
+                        key={node.manifest.key}
+                        className="rounded-sm border border-border bg-surface-low px-3 py-2.5 transition-colors hover:border-primary/35"
+                        style={isSelected ? { borderColor: 'var(--color-primary)' } : undefined}
+                      >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-medium text-foreground">{node.manifest.name}</span>
+                              {isSelected ? <Badge variant="secondary">선택됨</Badge> : null}
                               <Badge variant="outline">{node.manifest.key}</Badge>
                               <Badge variant="outline">{node.manifest.entry}</Badge>
                             </div>
-                            {node.manifest.description ? <div className="text-sm text-muted-foreground">{node.manifest.description}</div> : null}
-                            <div className="text-xs text-muted-foreground">{node.folderPath}</div>
+                            {node.manifest.description ? <div className="text-xs text-muted-foreground">{node.manifest.description}</div> : null}
+                            <div className="text-[11px] text-muted-foreground">{node.folderPath}</div>
                           </div>
 
                           <div className="flex flex-wrap gap-2">
@@ -316,11 +340,10 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
           </Card>
 
           <Card>
-            <CardContent className="space-y-4 pt-6">
-              <SectionHeading
-                heading="로드 오류"
+            <CardContent className="space-y-3">
+              <PanelCardHeader
+                title="로드 오류"
                 description="manifest 또는 entry 파일에 문제가 있으면 여기에 보여줘."
-                variant="inside"
                 actions={<Badge variant="outline">{loadErrors.length}</Badge>}
               />
 
@@ -348,20 +371,34 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
 
         <div className="space-y-4">
           <Card>
-            <CardContent className="space-y-4 pt-6">
-              <SectionHeading heading="새 노드 스캐폴드" description="기본 폴더와 starter 파일을 바로 만들어." variant="inside" />
+            <CardContent className="space-y-3">
+              <PanelCardHeader title="새 노드 스캐폴드" description="기본 폴더와 starter 파일을 바로 만들어." />
 
-              <div className="space-y-3">
-                <Input value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="folder name (예: weather-api)" />
-                <Input value={nodeKey} onChange={(event) => setNodeKey(event.target.value)} placeholder="node key (예: custom.weather_api)" />
-                <Input value={nodeName} onChange={(event) => setNodeName(event.target.value)} placeholder="표시 이름" />
-                <Textarea rows={3} value={nodeDescription} onChange={(event) => setNodeDescription(event.target.value)} placeholder="설명 (선택)" />
-                <Select value={scaffoldTemplate} onChange={(event) => setScaffoldTemplate(event.target.value as CustomNodeScaffoldTemplate)}>
-                  <option value="empty">Empty</option>
-                  <option value="hello_world">Hello World</option>
-                  <option value="http_json">HTTP JSON</option>
-                  <option value="image_file">Image File</option>
-                </Select>
+              <div className="grid gap-3">
+                <SettingsField label="folder">
+                  <Input variant="settings" value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="weather-api" />
+                </SettingsField>
+
+                <SettingsField label="node key">
+                  <Input variant="settings" value={nodeKey} onChange={(event) => setNodeKey(event.target.value)} placeholder="custom.weather_api" />
+                </SettingsField>
+
+                <SettingsField label="표시 이름">
+                  <Input variant="settings" value={nodeName} onChange={(event) => setNodeName(event.target.value)} placeholder="Weather API" />
+                </SettingsField>
+
+                <SettingsField label="설명">
+                  <Textarea variant="settings" rows={3} value={nodeDescription} onChange={(event) => setNodeDescription(event.target.value)} placeholder="선택" />
+                </SettingsField>
+
+                <SettingsField label="템플릿">
+                  <Select variant="settings" value={scaffoldTemplate} onChange={(event) => setScaffoldTemplate(event.target.value as CustomNodeScaffoldTemplate)}>
+                    <option value="empty">Empty</option>
+                    <option value="hello_world">Hello World</option>
+                    <option value="http_json">HTTP JSON</option>
+                    <option value="image_file">Image File</option>
+                  </Select>
+                </SettingsField>
                 <Button
                   type="button"
                   onClick={() => void scaffoldMutation.mutateAsync({
@@ -380,15 +417,14 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
           </Card>
 
           <Card>
-            <CardContent className="space-y-4 pt-6">
-              <SectionHeading
-                heading="단건 테스트"
+            <CardContent className="space-y-3">
+              <PanelCardHeader
+                title="단건 테스트"
                 description={selectedTestNode ? `${selectedTestNode.manifest.name} 테스트` : '먼저 테스트할 노드를 선택해.'}
-                variant="inside"
               />
 
               {selectedNodeSourceQuery.data ? (
-                <div className="space-y-3 rounded-sm border border-border/70 bg-background/50 p-3">
+                <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <div className="text-sm font-medium text-foreground">소스 정보</div>
@@ -396,12 +432,12 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     </div>
                     <Badge variant="outline">{selectedNodeSourceQuery.data.sourceHash.slice(0, 12)}</Badge>
                   </div>
-                  <div className="space-y-1 text-xs text-muted-foreground">
-                    <div><span className="font-medium text-foreground">폴더:</span> {selectedNodeSourceQuery.data.folderPath}</div>
-                    <div><span className="font-medium text-foreground">manifest:</span> {selectedNodeSourceQuery.data.manifestPath}</div>
-                    <div><span className="font-medium text-foreground">entry:</span> {selectedNodeSourceQuery.data.entryPath}</div>
-                    <div><span className="font-medium text-foreground">package.json:</span> {selectedNodeSourceQuery.data.packageJsonPath ?? '없음'}</div>
-                    <div><span className="font-medium text-foreground">README:</span> {selectedNodeSourceQuery.data.readmePath ?? '없음'}</div>
+                  <div className="grid gap-2.5 md:grid-cols-2">
+                    <SettingsValueTile label="폴더" value={selectedNodeSourceQuery.data.folderPath} valueClassName="break-all text-xs font-medium" />
+                    <SettingsValueTile label="manifest" value={selectedNodeSourceQuery.data.manifestPath} valueClassName="break-all text-xs font-medium" />
+                    <SettingsValueTile label="entry" value={selectedNodeSourceQuery.data.entryPath} valueClassName="break-all text-xs font-medium" />
+                    <SettingsValueTile label="package.json" value={selectedNodeSourceQuery.data.packageJsonPath ?? '없음'} valueClassName="break-all text-xs font-medium" />
+                    <SettingsValueTile label="README" value={selectedNodeSourceQuery.data.readmePath ?? '없음'} className="md:col-span-2" valueClassName="break-all text-xs font-medium" />
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" variant="outline" onClick={() => void openFolderMutation.mutateAsync(selectedNodeSourceQuery.data.key)} disabled={openFolderMutation.isPending}>
@@ -429,24 +465,27 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     </Button>
                   </div>
                   {selectedNodeSourceQuery.data.packageJsonPath ? (
-                    <Textarea rows={8} value={installResultText} placeholder="npm install 결과가 여기에 보여." readOnly />
+                    <Textarea variant="settings" rows={8} value={installResultText} placeholder="npm install 결과가 여기에 보여." readOnly />
                   ) : null}
-                  <Textarea rows={8} value={stringifyPrettyJson(selectedNodeSourceQuery.data.manifest)} readOnly />
+                  <Textarea variant="settings" rows={8} value={stringifyPrettyJson(selectedNodeSourceQuery.data.manifest)} readOnly />
                 </div>
               ) : null}
 
-              <Textarea
-                rows={8}
-                value={testInputsText}
-                onChange={(event) => setTestInputsText(event.target.value)}
-                placeholder={"{\n  \"input\": \"value\"\n}"}
-              />
+              <SettingsField label="테스트 입력 JSON">
+                <Textarea
+                  variant="settings"
+                  rows={8}
+                  value={testInputsText}
+                  onChange={(event) => setTestInputsText(event.target.value)}
+                  placeholder={"{\n  \"input\": \"value\"\n}"}
+                />
+              </SettingsField>
               <Button type="button" variant="outline" onClick={() => void testMutation.mutateAsync()} disabled={testMutation.isPending || !selectedTestKey}>
                 {testMutation.isPending ? '테스트 실행 중...' : '테스트 실행'}
               </Button>
 
               {previewableImageOutputs.length > 0 ? (
-                <div className="space-y-3 rounded-sm border border-border/70 bg-background/50 p-3">
+                <div className="space-y-2.5 rounded-sm border border-border/70 bg-surface-low p-3">
                   <div className="text-sm font-medium text-foreground">이미지 미리보기</div>
                   <div className="grid gap-3 md:grid-cols-2">
                     {previewableImageOutputs.map((output) => (
@@ -476,7 +515,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               ) : null}
 
               {testResultData?.logs.length ? (
-                <div className="space-y-2 rounded-sm border border-border/70 bg-background/50 p-3">
+                <div className="space-y-2 rounded-sm border border-border/70 bg-surface-low p-3">
                   <div className="text-sm font-medium text-foreground">실행 로그</div>
                   <div className="space-y-1 text-sm text-muted-foreground">
                     {testResultData.logs.map((logItem, index) => (
@@ -488,7 +527,9 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                 </div>
               ) : null}
 
-              <Textarea rows={14} value={testResultText} placeholder="테스트 결과가 여기에 보여." readOnly />
+              <SettingsField label="테스트 결과">
+                <Textarea variant="settings" rows={14} value={testResultText} placeholder="테스트 결과가 여기에 보여." readOnly />
+              </SettingsField>
             </CardContent>
           </Card>
         </div>
