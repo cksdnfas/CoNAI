@@ -14,7 +14,8 @@ interface ImageListMasonryProps {
   columnGap: number
   rowGap: number
   getItemHref?: (image: ImageRecord) => string | undefined
-  onActivate: (imageId: string, href?: string) => void
+  getItemId?: (image: ImageRecord) => string
+  onActivate: (image: ImageRecord, imageId: string, href?: string) => void
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
   renderItemOverlay?: (image: ImageRecord) => ReactNode
@@ -30,6 +31,7 @@ export function ImageListMasonry({
   columnGap,
   rowGap,
   getItemHref,
+  getItemId,
   onActivate,
   scrollMode,
   viewportHeight,
@@ -56,12 +58,15 @@ export function ImageListMasonry({
           return null
         }
 
+        const itemId = String(getItemId ? getItemId(image) : (image.composite_hash ?? image.id))
+
         return (
           <div style={{ paddingBottom: `${rowGap}px` }}>
             <ImageListItem
               image={image}
+              itemId={itemId}
               href={getItemHref?.(image)}
-              selected={selectedIds.includes(String(image.composite_hash ?? image.id))}
+              selected={selectedIds.includes(itemId)}
               selectionMode={selectionMode}
               onActivate={onActivate}
               renderOverlay={renderItemOverlay?.(image)}

@@ -9,6 +9,7 @@ export interface ImageListProps {
   layout?: ImageListLayoutMode
   activationMode?: 'navigate' | 'modal' | 'modal-single'
   getItemHref?: (image: ImageRecord) => string | undefined
+  getItemId?: (image: ImageRecord) => string
   selectable?: boolean
   forceSelectionMode?: boolean
   selectedIds?: string[]

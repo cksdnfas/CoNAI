@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { markHomeScrollRestorePending } from '@/features/home/use-home-scroll-restoration'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
+import type { ImageRecord } from '@/types/image'
 import { ImageListGrid } from './image-list-grid'
 import { ImageListMasonry } from './image-list-masonry'
 import type { ImageListProps } from './image-list-types'
@@ -15,6 +16,7 @@ export function ImageList({
   layout = 'masonry',
   activationMode = 'navigate',
   getItemHref,
+  getItemId,
   selectable = false,
   forceSelectionMode = false,
   selectedIds = [],
@@ -67,7 +69,7 @@ export function ImageList({
 
   /** Handle item activation without forcing drag-preview rerender loops. */
   const handleActivate = useCallback(
-    (imageId: string, href?: string) => {
+    (image: ImageRecord, imageId: string, href?: string) => {
       if (shouldSuppressClick()) {
         return
       }
@@ -81,7 +83,7 @@ export function ImageList({
       }
 
       if ((activationMode === 'modal' || activationMode === 'modal-single') && imageViewModal) {
-        const modalCompositeHash = itemCompositeHashes.includes(imageId) ? imageId : null
+        const modalCompositeHash = image.composite_hash && itemCompositeHashes.includes(image.composite_hash) ? image.composite_hash : null
 
         if (modalCompositeHash) {
           imageViewModal.openImageView(
@@ -128,6 +130,7 @@ export function ImageList({
         <ImageListGrid
           items={items}
           selectedIds={selectedIds}
+          getItemId={getItemId}
           selectionMode={selectionMode}
           minColumnWidth={minColumnWidth}
           columnGap={columnGap}
@@ -145,6 +148,7 @@ export function ImageList({
           containerElement={containerElement}
           items={items}
           selectedIds={selectedIds}
+          getItemId={getItemId}
           selectionMode={selectionMode}
           minColumnWidth={minColumnWidth}
           columnGap={columnGap}

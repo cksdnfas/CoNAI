@@ -13,7 +13,8 @@ interface ImageListGridProps {
   rowGap: number
   gridItemHeight: number
   getItemHref?: (image: ImageRecord) => string | undefined
-  onActivate: (imageId: string, href?: string) => void
+  getItemId?: (image: ImageRecord) => string
+  onActivate: (image: ImageRecord, imageId: string, href?: string) => void
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
   onEndReached?: () => void
@@ -30,6 +31,7 @@ export function ImageListGrid({
   rowGap,
   gridItemHeight,
   getItemHref,
+  getItemId,
   onActivate,
   scrollMode,
   viewportHeight,
@@ -57,17 +59,20 @@ export function ImageListGrid({
         endReached={onEndReached}
         listClassName="image-list-grid"
         itemClassName="image-list-grid-item"
-        computeItemKey={(index, item) => String(item?.composite_hash ?? item?.id ?? index)}
+        computeItemKey={(index, item) => item ? String(getItemId ? getItemId(item) : (item.composite_hash ?? item.id ?? index)) : String(index)}
         itemContent={(_, image) => {
           if (!image) {
             return null
           }
 
+          const itemId = String(getItemId ? getItemId(image) : (image.composite_hash ?? image.id))
+
           return (
             <ImageListItem
               image={image}
+              itemId={itemId}
               href={getItemHref?.(image)}
-              selected={selectedIds.includes(String(image.composite_hash ?? image.id))}
+              selected={selectedIds.includes(itemId)}
               selectionMode={selectionMode}
               gridItemHeight={gridItemHeight}
               onActivate={onActivate}

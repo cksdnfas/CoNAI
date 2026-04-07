@@ -17,7 +17,8 @@ interface ImageListItemProps {
   selectionMode?: boolean
   gridItemHeight?: number
   gridItemAspectRatio?: string
-  onActivate?: (imageId: string, href?: string) => void
+  itemId?: string
+  onActivate?: (image: ImageRecord, itemId: string, href?: string) => void
   renderOverlay?: ReactNode
 }
 
@@ -34,11 +35,12 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   selectionMode = false,
   gridItemHeight,
   gridItemAspectRatio,
+  itemId,
   onActivate,
   renderOverlay,
 }: ImageListItemProps) {
   const previewUrl = getImageListPreviewUrl(image)
-  const imageId = getImageListItemId(image)
+  const imageId = itemId ?? getImageListItemId(image)
   const displayName = getImageListDisplayName(image)
   const [hasPreviewError, setHasPreviewError] = useState(false)
   const aspectRatio = image.width && image.height ? `${image.width} / ${image.height}` : undefined
@@ -84,7 +86,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      onActivate?.(imageId, href)
+      onActivate?.(image, imageId, href)
     }
   }
 
@@ -114,7 +116,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       aria-pressed={selected}
       draggable={false}
       onDragStart={preventNativeDrag}
-      onClick={() => onActivate?.(imageId, href)}
+      onClick={() => onActivate?.(image, imageId, href)}
       onKeyDown={handleKeyDown}
     >
       <div className="relative bg-surface-lowest select-none">

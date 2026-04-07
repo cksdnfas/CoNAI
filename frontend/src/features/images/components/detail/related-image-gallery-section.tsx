@@ -117,7 +117,7 @@ export function RelatedImageGallerySection({
               image={relatedImage}
               href={relatedImage.composite_hash ? `/images/${relatedImage.composite_hash}` : undefined}
               gridItemAspectRatio={cardAspectRatioValue}
-              onActivate={handleActivate}
+              onActivate={(_, imageId, href) => handleActivate(imageId, href)}
             />
           ))}
         </div>

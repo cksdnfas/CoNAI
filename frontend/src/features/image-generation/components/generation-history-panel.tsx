@@ -28,7 +28,7 @@ function hasInFlightHistory(records: Awaited<ReturnType<typeof getGenerationHist
 }
 
 function getGenerationHistorySelectionId(record: Awaited<ReturnType<typeof getGenerationHistory>>['records'][number]) {
-  return String(record.actual_composite_hash || record.composite_hash || `generation-history-${record.id}`)
+  return `generation-history-${record.id}`
 }
 
 function mapHistoryRecordToImageRecord(record: Awaited<ReturnType<typeof getGenerationHistory>>['records'][number]): ImageRecord {
@@ -166,6 +166,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             layout="masonry"
             activationMode="modal"
             getItemHref={getHistoryImageHref}
+            getItemId={(image) => String(image.id)}
             selectable
             selectedIds={selectedHistoryIds}
             onSelectedIdsChange={setSelectedHistoryIds}
@@ -176,7 +177,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             scrollMode={splitPaneScroll ? 'container' : 'window'}
             viewportHeight={splitPaneScroll ? '100%' : undefined}
             renderItemOverlay={(image) => {
-              const imageSelectionId = image?.composite_hash ?? image?.id
+              const imageSelectionId = String(image?.id ?? '')
               if (!imageSelectionId) {
                 return null
               }
