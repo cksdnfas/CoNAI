@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { Copy, FolderOpen, ListTree, Pencil, Plus, Save, Server, Trash2, Upload } from 'lucide-react'
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -544,16 +544,14 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
             actions={<Badge variant="outline">{dropdownLists.length}</Badge>}
           />
 
-          <div className="border-b border-border/70 pb-2">
-            <SegmentedControl
-              value={activeTab}
-              onChange={(value) => setActiveTab(value as DropdownTab)}
-              items={[
-                { value: 'custom', label: '커스텀' },
-                { value: 'auto', label: '자동수집' },
-              ]}
-            />
-          </div>
+          <SegmentedTabBar
+            value={activeTab}
+            onChange={(value) => setActiveTab(value as DropdownTab)}
+            items={[
+              { value: 'custom', label: '커스텀' },
+              { value: 'auto', label: '자동수집' },
+            ]}
+          />
 
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? `${customLists.length}개 목록` : `${autoLists.length}개 목록`}</div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { AppearanceColorEditorContent } from './appearance-color-editor-content'
 import { AppearanceGeneralEditorContent } from './appearance-general-editor-content'
 import { AppearanceListEditorContent } from './appearance-list-editor-content'
@@ -15,14 +15,13 @@ export function AppearanceTabEditorSection(props: AppearanceTabEditorSectionProp
 
   return (
     <div className="space-y-6">
-      <div className="border-b border-white/5 pb-2">
-        <SegmentedControl
-          value={activeTab}
-          items={APPEARANCE_EDITOR_TABS}
-          onChange={(nextTab) => setActiveTab(nextTab as AppearanceEditorTab)}
-          size="xs"
-        />
-      </div>
+      <SegmentedTabBar
+        value={activeTab}
+        items={APPEARANCE_EDITOR_TABS}
+        onChange={(nextTab) => setActiveTab(nextTab as AppearanceEditorTab)}
+        size="xs"
+        className="border-white/5"
+      />
 
       {activeTab === 'general' ? <AppearanceGeneralEditorContent {...props} /> : null}
       {activeTab === 'list' ? <AppearanceListEditorContent {...props} /> : null}

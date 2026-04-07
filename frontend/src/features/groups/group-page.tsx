@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/common/page-header'
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { GroupBreadcrumbs } from './components/group-breadcrumbs'
@@ -156,13 +156,11 @@ export function GroupPage() {
         }
       />
 
-      <div className="border-b border-border/70 pb-2">
-        <SegmentedControl
-          value={selectedSource.key}
-          items={Object.values(groupSources).map((source) => ({ value: source.key, label: source.tabLabel }))}
-          onChange={(nextSourceKey) => handleSelectSource(nextSourceKey as GroupSourceKey)}
-        />
-      </div>
+      <SegmentedTabBar
+        value={selectedSource.key}
+        items={Object.values(groupSources).map((source) => ({ value: source.key, label: source.tabLabel }))}
+        onChange={(nextSourceKey) => handleSelectSource(nextSourceKey as GroupSourceKey)}
+      />
 
       <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <GroupExplorerSidebarPanel

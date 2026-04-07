@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Trash2, WandSparkles } from 'lucide-react'
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -301,23 +301,23 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-2">
-        <SegmentedControl
-          value={activeWorkspaceTab}
-          items={WORKSPACE_TABS}
-          onChange={(nextTab) => setActiveWorkspaceTab(nextTab as WildcardWorkspaceTab)}
-        />
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="outline"
-          onClick={() => setIsPreviewModalOpen(true)}
-          aria-label="파싱 테스트"
-          title="파싱 테스트"
-        >
-          <WandSparkles className="h-4 w-4" />
-        </Button>
-      </div>
+      <SegmentedTabBar
+        value={activeWorkspaceTab}
+        items={WORKSPACE_TABS}
+        onChange={(nextTab) => setActiveWorkspaceTab(nextTab as WildcardWorkspaceTab)}
+        actions={(
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            onClick={() => setIsPreviewModalOpen(true)}
+            aria-label="파싱 테스트"
+            title="파싱 테스트"
+          >
+            <WandSparkles className="h-4 w-4" />
+          </Button>
+        )}
+      />
 
       <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <WildcardExplorerSidebarPanel

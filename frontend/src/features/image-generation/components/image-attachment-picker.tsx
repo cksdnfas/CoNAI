@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Check, ImagePlus, Loader2, Upload } from 'lucide-react'
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -513,7 +513,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
                 heading="이미지 소스"
                 actions={<Badge variant="outline">3 sources</Badge>}
               />
-              <SegmentedControl value={source} items={IMAGE_ATTACHMENT_SOURCE_ITEMS} onChange={(nextSource) => setSource(nextSource as ImageAttachmentSource)} />
+              <SegmentedTabBar value={source} items={IMAGE_ATTACHMENT_SOURCE_ITEMS} onChange={(nextSource) => setSource(nextSource as ImageAttachmentSource)} />
             </CardContent>
           </Card>
 

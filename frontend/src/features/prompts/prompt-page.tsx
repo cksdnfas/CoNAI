@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { PageHeader } from '@/components/common/page-header'
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { exportPromptGroups } from '@/lib/api'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -293,13 +293,11 @@ export function PromptPage() {
     <div className="space-y-6">
       <PageHeader title="Prompts" />
 
-      <div className="border-b border-border/70 pb-2">
-        <SegmentedControl
-          value={promptType}
-          items={PROMPT_TYPE_TABS}
-          onChange={(nextType) => handleChangeType(nextType as PromptTypeFilter)}
-        />
-      </div>
+      <SegmentedTabBar
+        value={promptType}
+        items={PROMPT_TYPE_TABS}
+        onChange={(nextType) => handleChangeType(nextType as PromptTypeFilter)}
+      />
 
       <div className={cn('grid gap-8', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <PromptSidebar

@@ -1,4 +1,4 @@
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
@@ -50,7 +50,7 @@ export function NaiAuthModal({
       widthClassName="max-w-2xl"
     >
       <div className="space-y-4">
-        <SegmentedControl
+        <SegmentedTabBar
           value={loginMode}
           items={[
             { value: 'account', label: '로그인' },

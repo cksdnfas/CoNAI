@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
@@ -107,13 +107,11 @@ export function ImageGenerationPage() {
           }
         />
 
-        <div className="border-b border-border/70 pb-2">
-          <SegmentedControl
-            value={activeTab}
-            items={IMAGE_GENERATION_TABS}
-            onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
-          />
-        </div>
+        <SegmentedTabBar
+          value={activeTab}
+          items={IMAGE_GENERATION_TABS}
+          onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
+        />
       </div>
 
       {activeTab === 'workflows' ? <ModuleWorkflowWorkspace embedded /> : null}

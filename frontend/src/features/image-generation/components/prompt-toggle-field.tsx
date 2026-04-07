@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
 import type { WildcardTool } from '@/lib/api'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
@@ -59,7 +59,7 @@ export function PromptToggleField({
 
   return (
     <div className="space-y-3">
-      <SegmentedControl
+      <SegmentedTabBar
         value={activeTab}
         items={[
           { value: 'positive', label: positiveLabel },
