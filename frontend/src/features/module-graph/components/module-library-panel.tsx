@@ -29,8 +29,8 @@ type ModuleGroup = {
   modules: ModuleDefinitionRecord[]
 }
 
-const SYSTEM_GROUP_ORDER = ['input', 'prompt', 'image', 'analysis', 'output', 'utility', 'other']
-const CUSTOM_GROUP_ORDER = ['nai', 'comfyui', 'other']
+export const SYSTEM_GROUP_ORDER = ['input', 'prompt', 'image', 'analysis', 'output', 'utility', 'other']
+export const CUSTOM_GROUP_ORDER = ['nai', 'comfyui', 'other']
 
 function toTitleCase(rawValue: string) {
   return rawValue
@@ -50,7 +50,7 @@ function getModuleHoverTitle(module: ModuleDefinitionRecord) {
 }
 
 /** Build a user-facing group for system modules based on practical workflow role. */
-function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: string; label: string } {
+export function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: string; label: string } {
   const category = (module.category ?? '').toLowerCase()
   const name = module.name.toLowerCase()
 
@@ -82,7 +82,7 @@ function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: string; la
 }
 
 /** Build a user-facing group for custom modules with minimal noise. */
-function getCustomModuleGroup(module: ModuleDefinitionRecord): { key: string; label: string } {
+export function getCustomModuleGroup(module: ModuleDefinitionRecord): { key: string; label: string } {
   if (module.engine_type === 'nai') {
     return { key: 'nai', label: 'NovelAI' }
   }

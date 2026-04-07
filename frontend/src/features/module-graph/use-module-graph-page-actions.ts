@@ -120,6 +120,7 @@ export function useModuleGraphPageActions({
   const {
     isValidConnection,
     handleConnect,
+    handleAddModuleNode,
     handleAddModuleFromLibrary,
     handleDuplicateSelectedNode,
     handleNodeValueChange,
@@ -254,6 +255,7 @@ export function useModuleGraphPageActions({
   return {
     isValidConnection,
     handleConnect,
+    handleAddModuleNode,
     handleAddModuleFromLibrary,
     handleDuplicateSelectedNode,
     handleNodeValueChange,

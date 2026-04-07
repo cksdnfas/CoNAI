@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { Connection, OnEdgesChange, OnNodesChange } from '@xyflow/react'
-import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { ModuleGraphCanvas } from './components/module-graph-canvas'
 import {
@@ -17,6 +17,7 @@ type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
 
 /** Build the assembled editor-facing panels used by the module-graph page. */
 export function useModuleGraphPageEditorPanels({
+  modules,
   graphWorkflowFolders,
   draftWorkflowFolderId,
   draftChildFolderName,
@@ -83,8 +84,10 @@ export function useModuleGraphPageEditorPanels({
   onEdgeSelect,
   onPaneSelect,
   onConnect,
+  onAddModuleNode,
   isValidConnection,
 }: {
+  modules: ModuleDefinitionRecord[]
   graphWorkflowFolders: GraphWorkflowFolderRecord[]
   draftWorkflowFolderId: number | null
   draftChildFolderName: string
@@ -151,6 +154,7 @@ export function useModuleGraphPageEditorPanels({
   onEdgeSelect: (edgeId: string) => void
   onPaneSelect: () => void
   onConnect: (connection: Connection) => void
+  onAddModuleNode: (module: ModuleDefinitionRecord, options?: { position?: { x: number; y: number }; connectionStart?: { nodeId: string; handleId: string; handleType: 'source' | 'target' } }) => void
   isValidConnection: (connection: Connection | ModuleGraphEdge) => boolean
 }) {
   const graphCanvasNodes = useMemo(
@@ -266,6 +270,7 @@ export function useModuleGraphPageEditorPanels({
     <ModuleGraphCanvas
       nodes={graphCanvasNodes}
       edges={edges}
+      modules={modules}
       reactFlowColorMode={reactFlowColorMode}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
@@ -273,6 +278,7 @@ export function useModuleGraphPageEditorPanels({
       onEdgeSelect={onEdgeSelect}
       onPaneSelect={onPaneSelect}
       onConnect={onConnect}
+      onAddModuleNode={onAddModuleNode}
       isValidConnection={isValidConnection}
     />
   )

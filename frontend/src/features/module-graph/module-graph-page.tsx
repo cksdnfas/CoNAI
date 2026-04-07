@@ -167,6 +167,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   const {
     isValidConnection,
     handleConnect,
+    handleAddModuleNode,
     handleAddModuleFromLibrary,
     handleDuplicateSelectedNode,
     handleNodeValueChange,
@@ -300,6 +301,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     workflowEditorSupportPanels,
     graphCanvas,
   } = useModuleGraphPageEditorPanels({
+    modules,
     graphWorkflowFolders: graphWorkflowFoldersQuery.data ?? [],
     draftWorkflowFolderId,
     draftChildFolderName,
@@ -378,6 +380,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       setSelectedValidationPortKey(null)
     },
     onConnect: handleConnect,
+    onAddModuleNode: handleAddModuleNode,
     isValidConnection,
   })
 

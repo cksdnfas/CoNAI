@@ -129,29 +129,87 @@ export function useModuleGraphEditorInteractions({
     }
   }, [isValidConnection, nodes, setEdges, showSnackbar])
 
-  /** Add one new module node to the graph canvas. */
-  const handleAddModuleNode = useCallback((module: ModuleDefinitionRecord) => {
+  /** Add one new module node to the graph canvas, optionally pre-connecting it from one dragged port. */
+  const handleAddModuleNode = useCallback((
+    module: ModuleDefinitionRecord,
+    options?: {
+      position?: { x: number; y: number }
+      connectionStart?: { nodeId: string; handleId: string; handleType: 'source' | 'target' }
+    },
+  ) => {
     const nodeId = `module-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const offset = nodes.length % 5
+    const nextPosition = options?.position ?? {
+      x: 80 + offset * 40,
+      y: 80 + nodes.length * 48,
+    }
 
     setNodes((current) => [
       ...current,
       {
         id: nodeId,
         type: 'module',
-        position: {
-          x: 80 + offset * 40,
-          y: 80 + current.length * 48,
-        },
+        position: nextPosition,
         data: {
           module,
           inputValues: {},
         },
       },
     ])
+
+    const connectionStart = options?.connectionStart
+    if (connectionStart) {
+      const existingNode = nodes.find((node) => node.id === connectionStart.nodeId)
+      const parsedHandle = parseHandleId(connectionStart.handleId)
+
+      if (existingNode && parsedHandle) {
+        if (connectionStart.handleType === 'source') {
+          const sourcePort = existingNode.data.module.output_ports.find((port) => port.key === parsedHandle.portKey)
+          const compatibleTargetPort = sourcePort
+            ? module.exposed_inputs.find((port) => getModulePortCompatibility(sourcePort.data_type, port.data_type) !== null)
+            : null
+
+          if (sourcePort && compatibleTargetPort) {
+            setEdges((currentEdges) => addEdge(
+              {
+                id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                source: existingNode.id,
+                sourceHandle: connectionStart.handleId,
+                target: nodeId,
+                targetHandle: `in:${compatibleTargetPort.key}`,
+                markerEnd: { type: MarkerType.ArrowClosed },
+                ...buildModuleEdgePresentation(sourcePort, compatibleTargetPort),
+              },
+              currentEdges,
+            ))
+          }
+        } else {
+          const targetPort = existingNode.data.module.exposed_inputs.find((port) => port.key === parsedHandle.portKey)
+          const compatibleSourcePort = targetPort
+            ? module.output_ports.find((port) => getModulePortCompatibility(port.data_type, targetPort.data_type) !== null)
+            : null
+
+          if (targetPort && compatibleSourcePort) {
+            setEdges((currentEdges) => addEdge(
+              {
+                id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                source: nodeId,
+                sourceHandle: `out:${compatibleSourcePort.key}`,
+                target: existingNode.id,
+                targetHandle: connectionStart.handleId,
+                markerEnd: { type: MarkerType.ArrowClosed },
+                ...buildModuleEdgePresentation(compatibleSourcePort, targetPort),
+              },
+              currentEdges,
+            ))
+          }
+        }
+      }
+    }
+
     setSelectedEdgeId(null)
     setSelectedNodeId(nodeId)
-  }, [nodes.length, setNodes, setSelectedEdgeId, setSelectedNodeId])
+  }, [nodes, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId])
 
   /** Add one library module and close the library modal immediately after. */
   const handleAddModuleFromLibrary = useCallback((module: ModuleDefinitionRecord) => {
