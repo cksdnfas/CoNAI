@@ -2,6 +2,18 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionLogLevel, GraphExecutionLogRecord } from '../types/moduleGraph'
 
 export class GraphExecutionLogModel {
+  /** Delete execution logs for a specific execution id set. */
+  static deleteByExecutionIds(executionIds: number[]) {
+    if (executionIds.length === 0) {
+      return 0
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = executionIds.map(() => '?').join(', ')
+    const result = db.prepare(`DELETE FROM graph_execution_logs WHERE execution_id IN (${placeholders})`).run(...executionIds)
+    return result.changes
+  }
+
   static create(data: {
     execution_id: number
     node_id?: string | null

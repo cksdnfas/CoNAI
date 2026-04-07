@@ -11,6 +11,24 @@ function stringifyGraph(value: unknown) {
 }
 
 export class GraphWorkflowModel {
+  /** List workflows that belong to any folder within the provided folder id set. */
+  static findByFolderIds(folderIds: number[], activeOnly = false): GraphWorkflowRecord[] {
+    if (folderIds.length === 0) {
+      return []
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = folderIds.map(() => '?').join(', ')
+    const params: Array<number> = [...folderIds]
+    let query = `SELECT * FROM graph_workflows WHERE folder_id IN (${placeholders})`
+    if (activeOnly) {
+      query += ' AND is_active = 1'
+    }
+    query += ' ORDER BY updated_date DESC, id DESC'
+
+    return db.prepare(query).all(...params) as GraphWorkflowRecord[]
+  }
+
   static create(workflowData: GraphWorkflowCreateData): number {
     const db = getUserSettingsDb()
     const info = db.prepare(`

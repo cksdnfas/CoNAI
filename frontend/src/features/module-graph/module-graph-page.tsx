@@ -84,12 +84,15 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     graphWorkflowFoldersQuery,
     graphExecutionsQuery,
     executionDetailQuery,
+    browseContentQuery,
     modules,
     executionList,
     reactFlowColorMode,
   } = useModuleGraphPageQueries({
     selectedGraphId,
     selectedExecutionId,
+    selectedFolderId,
+    workflowView,
   })
 
   const {
@@ -399,6 +402,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           workflowListSidebar={workflowListSidebar}
           workflowBrowseSidePanel={workflowBrowseSidePanel}
           selectedGraphRecord={selectedGraphRecord}
+          selectedFolderRecord={selectedFolderRecord}
           selectedGraphId={selectedGraphId}
           selectedExecutionId={selectedExecutionId}
           selectedExecutionStatus={selectedExecution?.status ?? null}
@@ -408,6 +412,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           executionDetail={executionDetailQuery.data}
           executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.'}
           executionDetailIsError={executionDetailQuery.isError}
+          browseContent={browseContentQuery.data}
+          browseContentError={browseContentQuery.error instanceof Error ? browseContentQuery.error.message : '생성물 관리 콘텐츠를 불러오지 못했어.'}
+          browseContentIsError={browseContentQuery.isError}
+          onRefreshBrowseContent={() => browseContentQuery.refetch()}
           executingGraphId={executingGraphId}
           cancellingExecutionId={cancellingExecutionId}
           onSelectExecution={setSelectedExecutionId}

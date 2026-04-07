@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   getAppSettings,
   getGraphExecution,
+  getGraphWorkflowBrowseContent,
   getGraphWorkflowExecutions,
   getGraphWorkflowFolders,
   getGraphWorkflows,
@@ -14,9 +15,13 @@ import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 export function useModuleGraphPageQueries({
   selectedGraphId,
   selectedExecutionId,
+  selectedFolderId,
+  workflowView,
 }: {
   selectedGraphId: number | null
   selectedExecutionId: number | null
+  selectedFolderId: number | null
+  workflowView: 'browse' | 'edit'
 }) {
   const modulesQuery = useQuery({
     queryKey: ['module-graph-modules'],
@@ -58,6 +63,13 @@ export function useModuleGraphPageQueries({
     },
   })
 
+  const browseContentQuery = useQuery({
+    queryKey: ['module-graph-browse-content', selectedFolderId ?? 'root'],
+    queryFn: () => getGraphWorkflowBrowseContent(selectedFolderId),
+    enabled: workflowView === 'browse' && selectedGraphId === null,
+    staleTime: 10_000,
+  })
+
   return {
     modulesQuery,
     settingsQuery,
@@ -65,6 +77,7 @@ export function useModuleGraphPageQueries({
     graphWorkflowFoldersQuery,
     graphExecutionsQuery,
     executionDetailQuery,
+    browseContentQuery,
     modules: modulesQuery.data ?? [],
     executionList: graphExecutionsQuery.data ?? [],
     reactFlowColorMode: settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode,

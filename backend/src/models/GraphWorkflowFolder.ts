@@ -37,6 +37,12 @@ function collectDescendantFolderIds(folders: GraphWorkflowFolderRecord[], folder
 
 /** Manage workflow explorer folders for graph workflows. */
 export class GraphWorkflowFolderModel {
+  /** Resolve one folder subtree including the selected folder id itself. */
+  static getSubtreeFolderIds(folderId: number): number[] {
+    const folders = this.findAll()
+    return [folderId, ...collectDescendantFolderIds(folders, folderId)]
+  }
+
   static create(folderData: GraphWorkflowFolderCreateData): number {
     const db = getUserSettingsDb()
     const info = db.prepare(`

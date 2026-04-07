@@ -6,6 +6,7 @@ export interface ModuleWorkflowBrowseViewProps {
   workflowListSidebar: ReactNode
   workflowRunnerPanel: ReactNode
   graphExecutionPanel: ReactNode
+  browseContentPanel?: ReactNode
 }
 
 /** Render the browse-mode layout with workflow list, runner panel, and execution results. */
@@ -14,6 +15,7 @@ export function ModuleWorkflowBrowseView({
   workflowListSidebar,
   workflowRunnerPanel,
   graphExecutionPanel,
+  browseContentPanel,
 }: ModuleWorkflowBrowseViewProps) {
   return (
     <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
@@ -21,7 +23,7 @@ export function ModuleWorkflowBrowseView({
 
       <div className="space-y-6">
         {workflowRunnerPanel}
-        {graphExecutionPanel}
+        {graphExecutionPanel ?? browseContentPanel}
       </div>
     </div>
   )

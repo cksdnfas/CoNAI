@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
-import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowBrowseContentRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
 import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
 import { GraphExecutionPanel } from './graph-execution-panel'
 import { ModuleWorkflowBrowseView } from './module-workflow-browse-view'
 import { ModuleWorkflowEditorView } from './module-workflow-editor-view'
+import { ModuleWorkflowOutputManagementPanel } from './module-workflow-output-management-panel'
 
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
 
@@ -13,6 +14,7 @@ export function ModuleGraphWorkflowBrowseContent({
   workflowListSidebar,
   workflowBrowseSidePanel,
   selectedGraphRecord,
+  selectedFolderRecord,
   selectedGraphId,
   selectedExecutionId,
   selectedExecutionStatus,
@@ -22,6 +24,10 @@ export function ModuleGraphWorkflowBrowseContent({
   executionDetail,
   executionDetailError,
   executionDetailIsError,
+  browseContent,
+  browseContentError,
+  browseContentIsError,
+  onRefreshBrowseContent,
   executingGraphId,
   cancellingExecutionId,
   onSelectExecution,
@@ -33,6 +39,7 @@ export function ModuleGraphWorkflowBrowseContent({
   workflowListSidebar: ReactNode
   workflowBrowseSidePanel: ReactNode
   selectedGraphRecord: GraphWorkflowRecord | null
+  selectedFolderRecord: GraphWorkflowFolderRecord | null
   selectedGraphId: number | null
   selectedExecutionId: number | null
   selectedExecutionStatus: GraphExecutionRecord['status'] | null
@@ -42,6 +49,10 @@ export function ModuleGraphWorkflowBrowseContent({
   executionDetail?: GraphExecutionDetailRecord
   executionDetailError: string
   executionDetailIsError: boolean
+  browseContent?: GraphWorkflowBrowseContentRecord
+  browseContentError: string
+  browseContentIsError: boolean
+  onRefreshBrowseContent?: () => Promise<unknown> | unknown
   executingGraphId: number | null
   cancellingExecutionId: number | null
   onSelectExecution: (executionId: number | null) => void
@@ -74,6 +85,21 @@ export function ModuleGraphWorkflowBrowseContent({
           onCancelExecution={onCancelExecution}
         />
       ) : null}
+      browseContentPanel={selectedGraphRecord ? null : browseContentIsError ? (
+        <div className="rounded-sm border border-dashed border-destructive/40 px-4 py-10 text-sm text-muted-foreground">
+          {browseContentError}
+        </div>
+      ) : browseContent ? (
+        <ModuleWorkflowOutputManagementPanel
+          selectedFolderRecord={selectedFolderRecord}
+          browseContent={browseContent}
+          onRefresh={onRefreshBrowseContent}
+        />
+      ) : (
+        <div className="rounded-sm border border-dashed border-border px-4 py-10 text-sm text-muted-foreground">
+          생성물 관리 콘텐츠를 불러오는 중이야…
+        </div>
+      )}
     />
   )
 }

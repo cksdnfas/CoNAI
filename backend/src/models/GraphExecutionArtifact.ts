@@ -2,6 +2,21 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionArtifactRecord } from '../types/moduleGraph'
 
 export class GraphExecutionArtifactModel {
+  /** List artifacts for an execution id set. */
+  static findByExecutionIds(executionIds: number[]): GraphExecutionArtifactRecord[] {
+    if (executionIds.length === 0) {
+      return []
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = executionIds.map(() => '?').join(', ')
+    return db.prepare(`
+      SELECT * FROM graph_execution_artifacts
+      WHERE execution_id IN (${placeholders})
+      ORDER BY created_date DESC, id DESC
+    `).all(...executionIds) as GraphExecutionArtifactRecord[]
+  }
+
   static create(data: {
     execution_id: number
     node_id: string

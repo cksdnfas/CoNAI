@@ -182,6 +182,41 @@ export interface GraphExecutionFinalResultRecord {
   created_date: string
 }
 
+export interface GraphWorkflowBrowseContentRecord {
+  scope: {
+    folder_id: number | null
+    folder_ids: number[] | null
+    workflow_count: number
+    execution_count: number
+    artifact_count: number
+    final_result_count: number
+    empty_execution_count: number
+  }
+  workflows: GraphWorkflowRecord[]
+  executions: GraphExecutionRecord[]
+  artifacts: GraphExecutionArtifactRecord[]
+  final_results: GraphExecutionFinalResultRecord[]
+  empty_executions: GraphExecutionRecord[]
+}
+
+export interface GraphWorkflowArtifactCopyResult {
+  folder_id: number
+  folder_name: string
+  folder_path: string
+  copied_count: number
+  skipped_count: number
+  copied: Array<{ source_path: string; target_path: string }>
+  skipped: Array<{ source_path: string; reason: string }>
+}
+
+export interface GraphWorkflowEmptyExecutionCleanupResult {
+  requested_count: number
+  deleted_count: number
+  missing: number[]
+  deleted_execution_ids: number[]
+  skipped: Array<{ execution_id: number; reason: string }>
+}
+
 export interface CreateNaiModuleFromSnapshotPayload {
   name: string
   description?: string
@@ -437,6 +472,40 @@ export async function cancelGraphExecution(executionId: number) {
     method: 'POST',
   })
 
+  return response.data
+}
+
+/** Load folder-scoped browse content for generated workflow outputs and empty runs. */
+export async function getGraphWorkflowBrowseContent(folderId?: number | null) {
+  const searchParams = new URLSearchParams()
+  if (typeof folderId === 'number') {
+    searchParams.set('folder_id', String(folderId))
+  }
+
+  const response = await requestJson<ApiEnvelope<GraphWorkflowBrowseContentRecord>>(`/api/graph-workflows/browse-content${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
+  return response.data
+}
+
+/** Copy selected generated workflow artifacts into one watched folder target. */
+export async function copyGraphWorkflowArtifactsToFolder(payload: {
+  folder_id: number
+  source_paths: string[]
+}) {
+  const response = await requestJson<ApiEnvelope<GraphWorkflowArtifactCopyResult>>('/api/graph-workflows/artifacts/copy-to-folder', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return response.data
+}
+
+/** Delete output-less finished executions in bulk. */
+export async function cleanupGraphWorkflowEmptyExecutions(payload: {
+  execution_ids: number[]
+}) {
+  const response = await requestJson<ApiEnvelope<GraphWorkflowEmptyExecutionCleanupResult>>('/api/graph-workflows/executions/cleanup-empty', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
   return response.data
 }
 

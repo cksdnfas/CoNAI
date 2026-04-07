@@ -2,6 +2,35 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionFinalResultRecord } from '../types/moduleGraph'
 
 export class GraphExecutionFinalResultModel {
+  /** List final results for an execution id set. */
+  static findByExecutionIds(executionIds: number[]): GraphExecutionFinalResultRecord[] {
+    if (executionIds.length === 0) {
+      return []
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = executionIds.map(() => '?').join(', ')
+    return db.prepare(`
+      SELECT
+        fr.id,
+        fr.execution_id,
+        fr.final_node_id,
+        fr.source_artifact_id,
+        ga.execution_id AS source_execution_id,
+        fr.source_node_id,
+        fr.source_port_key,
+        fr.artifact_type,
+        ga.storage_path AS source_storage_path,
+        ga.metadata AS source_metadata,
+        fr.created_date
+      FROM graph_execution_final_results fr
+      INNER JOIN graph_execution_artifacts ga
+        ON ga.id = fr.source_artifact_id
+      WHERE fr.execution_id IN (${placeholders})
+      ORDER BY fr.created_date DESC, fr.id DESC
+    `).all(...executionIds) as GraphExecutionFinalResultRecord[]
+  }
+
   static create(data: {
     execution_id: number
     final_node_id: string
