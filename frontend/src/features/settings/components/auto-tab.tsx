@@ -3,6 +3,8 @@ import { AutoOverviewCard } from './auto-overview-card'
 import { AutoTestCard } from './auto-test-card'
 import { KaloscopeSettingsCard } from './kaloscope-settings-card'
 import { TaggerSettingsCard } from './tagger-settings-card'
+import { RatingWeightSettingsCard } from './rating-weight-settings-card'
+import { RatingTierSettingsCard } from './rating-tier-settings-card'
 import type { AutoTabProps } from './auto-tab-types'
 
 export function AutoTab({
@@ -14,10 +16,25 @@ export function AutoTab({
   taggerDependencyResult,
   onPatchTagger,
   onPatchKaloscope,
+  ratingWeightsDraft,
+  ratingWeightValidationMessages,
+  onPatchRatingWeights,
+  ratingTiersDraft,
+  ratingTierValidationMessages,
+  onPatchRatingTier,
+  onAddRatingTier,
+  onDeleteRatingTier,
+  onMoveRatingTierUp,
+  onMoveRatingTierDown,
+  onReorderRatingTier,
   onSaveTagger,
   onSaveKaloscope,
+  onSaveRatingWeights,
+  onSaveRatingTiers,
   isSavingTagger,
   isSavingKaloscope,
+  isSavingRatingWeights,
+  isSavingRatingTiers,
   isCheckingTaggerDependencies,
   autoTestHashInput,
   onAutoTestHashInputChange,
@@ -72,6 +89,40 @@ export function AutoTab({
           taggerDraft={taggerDraft}
           taggerModels={taggerModels}
           onPatchTagger={onPatchTagger}
+        />
+      </section>
+
+      <section>
+        <RatingWeightSettingsCard
+          heading="평가 가중치"
+          actions={
+            <Button size="sm" onClick={onSaveRatingWeights} disabled={!ratingWeightsDraft || isSavingRatingWeights || ratingWeightValidationMessages.length > 0}>
+              저장
+            </Button>
+          }
+          ratingWeightsDraft={ratingWeightsDraft}
+          ratingTiersDraft={ratingTiersDraft}
+          validationMessages={ratingWeightValidationMessages}
+          onPatchRatingWeights={onPatchRatingWeights}
+        />
+      </section>
+
+      <section>
+        <RatingTierSettingsCard
+          heading="평가 등급"
+          actions={
+            <Button size="sm" onClick={onSaveRatingTiers} disabled={!ratingTiersDraft || isSavingRatingTiers || ratingTierValidationMessages.length > 0}>
+              저장
+            </Button>
+          }
+          ratingTiersDraft={ratingTiersDraft}
+          validationMessages={ratingTierValidationMessages}
+          onPatchRatingTier={onPatchRatingTier}
+          onAddRatingTier={onAddRatingTier}
+          onDeleteRatingTier={onDeleteRatingTier}
+          onMoveRatingTierUp={onMoveRatingTierUp}
+          onMoveRatingTierDown={onMoveRatingTierDown}
+          onReorderRatingTier={onReorderRatingTier}
         />
       </section>
 

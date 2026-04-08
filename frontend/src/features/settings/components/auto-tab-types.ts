@@ -1,4 +1,5 @@
-import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult } from '@/lib/api'
+import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult, RatingWeightsRecord } from '@/lib/api'
+import type { RatingTierRecord } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 import type {
   KaloscopeServerStatus,
@@ -18,10 +19,25 @@ export interface AutoTabProps {
   taggerDependencyResult: TaggerDependencyCheckResult | null
   onPatchTagger: (patch: Partial<TaggerSettings>) => void
   onPatchKaloscope: (patch: Partial<KaloscopeSettings>) => void
+  ratingWeightsDraft: RatingWeightsRecord | null
+  ratingWeightValidationMessages: string[]
+  onPatchRatingWeights: (patch: Partial<Pick<RatingWeightsRecord, 'general_weight' | 'sensitive_weight' | 'questionable_weight' | 'explicit_weight'>>) => void
+  ratingTiersDraft: RatingTierRecord[] | null
+  ratingTierValidationMessages: string[]
+  onPatchRatingTier: (tierId: number, patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'max_score' | 'color'>>) => void
+  onAddRatingTier: () => void
+  onDeleteRatingTier: (tierId: number) => void
+  onMoveRatingTierUp: (tierId: number) => void
+  onMoveRatingTierDown: (tierId: number) => void
+  onReorderRatingTier: (sourceTierId: number, targetTierId: number) => void
   onSaveTagger: () => void
   onSaveKaloscope: () => void
+  onSaveRatingWeights: () => void
+  onSaveRatingTiers: () => void
   isSavingTagger: boolean
   isSavingKaloscope: boolean
+  isSavingRatingWeights: boolean
+  isSavingRatingTiers: boolean
   isCheckingTaggerDependencies: boolean
   autoTestHashInput: string
   onAutoTestHashInputChange: (value: string) => void

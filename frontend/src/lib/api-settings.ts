@@ -13,6 +13,25 @@ import type {
   TaggerServerStatus,
   TaggerSettings,
 } from '@/types/settings'
+import type { RatingTierRecord } from '@/features/search/search-types'
+
+export interface RatingTierUpdateInput {
+  tier_name: string
+  min_score: number
+  max_score: number | null
+  tier_order: number
+  color?: string | null
+}
+
+export interface RatingWeightsRecord {
+  id: number
+  general_weight: number
+  sensitive_weight: number
+  questionable_weight: number
+  explicit_weight: number
+  created_at: string
+  updated_at: string
+}
 
 export interface AutoTestMediaRecord {
   compositeHash: string
@@ -212,6 +231,46 @@ export async function updateKaloscopeSettings(settings: Partial<KaloscopeSetting
 
   if (!response.success) {
     throw new Error(response.error || 'Kaloscope 설정을 저장하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function getRatingWeights() {
+  const response = await fetchJson<ApiResponse<RatingWeightsRecord>>('/api/settings/rating/weights')
+  if (!response.success || !response.data) {
+    throw new Error(response.error || '평가 가중치를 불러오지 못했어.')
+  }
+  return response.data
+}
+
+export async function updateRatingWeights(weights: Partial<Pick<RatingWeightsRecord, 'general_weight' | 'sensitive_weight' | 'questionable_weight' | 'explicit_weight'>>) {
+  const response = await fetchJson<ApiResponse<RatingWeightsRecord>>('/api/settings/rating/weights', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(weights),
+  })
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || '평가 가중치를 저장하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function updateRatingTiers(tiers: RatingTierUpdateInput[]) {
+  const response = await fetchJson<ApiResponse<RatingTierRecord[]>>('/api/settings/rating/tiers', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(tiers),
+  })
+
+  if (!response.success || !response.data) {
+    throw new Error(response.error || '평가 등급 설정을 저장하지 못했어.')
   }
 
   return response.data

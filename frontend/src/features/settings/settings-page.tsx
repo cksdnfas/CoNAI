@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -8,6 +8,8 @@ import {
   getImage,
   getKaloscopeStatus,
   getRandomAutoTestMedia,
+  getRatingTiers,
+  getRatingWeights,
   getTaggerModels,
   getTaggerStatus,
   resolveAutoTestMedia,
@@ -18,9 +20,12 @@ import {
   uploadAppearanceFont,
   updateKaloscopeSettings,
   updateMetadataSettings,
+  updateRatingTiers,
+  updateRatingWeights,
   updateTaggerSettings,
 } from '@/lib/api'
-import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult } from '@/lib/api'
+import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult, RatingWeightsRecord } from '@/lib/api'
+import type { RatingTierRecord } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 import type {
   AppearancePresetSlot,
@@ -46,6 +51,88 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { useFolderSettingsTab } from './use-folder-settings-tab'
 
+/** Validate rating-weight inputs before sending them to the backend. */
+function validateRatingWeightsDraft(weights: RatingWeightsRecord | null) {
+  if (!weights) {
+    return [] as string[]
+  }
+
+  const messages: string[] = []
+  const entries = [
+    ['General', weights.general_weight],
+    ['Sensitive', weights.sensitive_weight],
+    ['Questionable', weights.questionable_weight],
+    ['Explicit', weights.explicit_weight],
+  ] as const
+
+  for (const [label, value] of entries) {
+    if (!Number.isFinite(value)) {
+      messages.push(`${label} weight는 숫자여야 해.`)
+      continue
+    }
+    if (value < 0) {
+      messages.push(`${label} weight는 0 이상이어야 해.`)
+    }
+  }
+
+  return messages
+}
+
+/** Validate rating tiers while keeping save-time range normalization simple. */
+function validateRatingTiersDraft(tiers: RatingTierRecord[] | null) {
+  if (!tiers || tiers.length === 0) {
+    return ['최소 1개의 평가 등급이 필요해.']
+  }
+
+  const messages: string[] = []
+
+  tiers.forEach((tier, index) => {
+    const label = tier.tier_name.trim() || `Tier ${index + 1}`
+
+    if (tier.tier_name.trim().length === 0) {
+      messages.push(`등급 ${index + 1}의 이름이 비어 있어.`)
+    }
+    if (!Number.isFinite(tier.min_score) || tier.min_score < 0) {
+      messages.push(`${label}의 최소 점수는 0 이상의 숫자여야 해.`)
+    }
+    if (index < tiers.length - 1) {
+      if (tier.max_score === null || !Number.isFinite(tier.max_score)) {
+        messages.push(`${label}의 최대 점수를 넣어줘.`)
+      } else if (tier.max_score <= tier.min_score) {
+        messages.push(`${label}의 최대 점수는 최소 점수보다 커야 해.`)
+      }
+    }
+
+    const nextTier = tiers[index + 1]
+    if (nextTier && tier.min_score >= nextTier.min_score) {
+      messages.push(`${label} 다음 등급의 최소 점수는 더 커야 해.`)
+    }
+  })
+
+  return Array.from(new Set(messages))
+}
+
+/** Keep tier ranges continuous while respecting edited boundaries. */
+function normalizeRatingTierDrafts(tiers: RatingTierRecord[]) {
+  if (tiers.length === 0) {
+    return tiers
+  }
+
+  const normalized = tiers.map((tier) => ({ ...tier }))
+  normalized[0].min_score = Math.max(0, normalized[0].min_score)
+
+  for (let index = 1; index < normalized.length; index += 1) {
+    const previous = normalized[index - 1]
+    const current = normalized[index]
+    const safeMinScore = Number.isFinite(current.min_score) ? current.min_score : previous.min_score + 1
+    current.min_score = Math.max(previous.min_score + 1, safeMinScore)
+    previous.max_score = current.min_score
+  }
+
+  normalized[normalized.length - 1].max_score = null
+  return normalized
+}
+
 export function SettingsPage() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
@@ -55,6 +142,8 @@ export function SettingsPage() {
   const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
   const [taggerDraft, setTaggerDraft] = useState<TaggerSettings | null>(null)
   const [kaloscopeDraft, setKaloscopeDraft] = useState<KaloscopeSettings | null>(null)
+  const [ratingWeightsDraft, setRatingWeightsDraft] = useState<RatingWeightsRecord | null>(null)
+  const [ratingTiersDraft, setRatingTiersDraft] = useState<RatingTierRecord[] | null>(null)
   const [taggerDependencyResult, setTaggerDependencyResult] = useState<TaggerDependencyCheckResult | null>(null)
   const hasAutoCheckedTaggerDependenciesRef = useRef(false)
   const [autoTestHashInput, setAutoTestHashInput] = useState('')
@@ -79,6 +168,14 @@ export function SettingsPage() {
     queryKey: ['kaloscope-status'],
     queryFn: getKaloscopeStatus,
   })
+  const ratingWeightsQuery = useQuery({
+    queryKey: ['rating-weights'],
+    queryFn: getRatingWeights,
+  })
+  const ratingTiersQuery = useQuery({
+    queryKey: ['rating-tiers'],
+    queryFn: getRatingTiers,
+  })
   const autoTestImageQuery = useQuery({
     queryKey: ['auto-test-image-detail', autoTestMedia?.compositeHash],
     queryFn: () => getImage(autoTestMedia!.compositeHash),
@@ -91,6 +188,16 @@ export function SettingsPage() {
   const effectiveImageSaveDraft = imageSaveDraft ?? settingsQuery.data?.imageSave ?? null
   const effectiveTaggerDraft = taggerDraft ?? settingsQuery.data?.tagger ?? null
   const effectiveKaloscopeDraft = kaloscopeDraft ?? settingsQuery.data?.kaloscope ?? null
+  const effectiveRatingWeightsDraft = ratingWeightsDraft ?? ratingWeightsQuery.data ?? null
+  const effectiveRatingTiersDraft = ratingTiersDraft ?? ratingTiersQuery.data ?? null
+  const ratingWeightValidationMessages = useMemo(
+    () => validateRatingWeightsDraft(effectiveRatingWeightsDraft),
+    [effectiveRatingWeightsDraft],
+  )
+  const ratingTierValidationMessages = useMemo(
+    () => validateRatingTiersDraft(effectiveRatingTiersDraft),
+    [effectiveRatingTiersDraft],
+  )
 
   const notifyInfo = (message: string) => {
     showSnackbar({ message, tone: 'info' })
@@ -206,6 +313,30 @@ export function SettingsPage() {
     },
     onError: (error) => {
       notifyError(error instanceof Error ? error.message : 'Kaloscope 설정 저장에 실패했어.')
+    },
+  })
+
+  const ratingWeightsMutation = useMutation({
+    mutationFn: updateRatingWeights,
+    onSuccess: (weights) => {
+      queryClient.setQueryData(['rating-weights'], weights)
+      setRatingWeightsDraft(weights)
+      notifyInfo('평가 가중치를 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '평가 가중치 저장에 실패했어.')
+    },
+  })
+
+  const ratingTiersMutation = useMutation({
+    mutationFn: updateRatingTiers,
+    onSuccess: (tiers) => {
+      queryClient.setQueryData(['rating-tiers'], tiers)
+      setRatingTiersDraft(tiers)
+      notifyInfo('평가 등급 설정을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '평가 등급 설정 저장에 실패했어.')
     },
   })
 
@@ -431,6 +562,145 @@ export function SettingsPage() {
     setKaloscopeDraft({ ...effectiveKaloscopeDraft, ...patch })
   }
 
+  const patchRatingWeightsDraft = (
+    patch: Partial<Pick<RatingWeightsRecord, 'general_weight' | 'sensitive_weight' | 'questionable_weight' | 'explicit_weight'>>,
+  ) => {
+    if (!effectiveRatingWeightsDraft) return
+    setRatingWeightsDraft({ ...effectiveRatingWeightsDraft, ...patch })
+  }
+
+  const patchRatingTierDraft = (
+    tierId: number,
+    patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'max_score' | 'color'>>,
+  ) => {
+    if (!effectiveRatingTiersDraft) return
+
+    const currentIndex = effectiveRatingTiersDraft.findIndex((tier) => tier.id === tierId)
+    const nextDraft = effectiveRatingTiersDraft.map((tier) => (tier.id === tierId ? { ...tier, ...patch } : tier))
+
+    if (currentIndex >= 0 && currentIndex < nextDraft.length - 1 && patch.max_score !== undefined) {
+      const nextTier = nextDraft[currentIndex + 1]
+      nextTier.min_score = patch.max_score === null ? nextTier.min_score : Math.max(nextDraft[currentIndex].min_score + 1, patch.max_score)
+    }
+
+    setRatingTiersDraft(normalizeRatingTierDrafts(nextDraft))
+  }
+
+  const addRatingTierDraft = () => {
+    const currentTiers = effectiveRatingTiersDraft ?? []
+    if (currentTiers.length === 0) {
+      setRatingTiersDraft(normalizeRatingTierDrafts([
+        {
+          id: Date.now(),
+          tier_name: 'New Tier',
+          min_score: 0,
+          max_score: null,
+          tier_order: 1,
+          color: '#a78bfa',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ]))
+      return
+    }
+
+    const lastTier = currentTiers[currentTiers.length - 1]
+    const nextMinScore = Math.max(lastTier.min_score + 1, lastTier.min_score + 10)
+    const now = new Date().toISOString()
+
+    setRatingTiersDraft(normalizeRatingTierDrafts([
+      ...currentTiers.slice(0, -1),
+      {
+        ...lastTier,
+        max_score: nextMinScore,
+      },
+      {
+        id: Date.now(),
+        tier_name: `Tier ${currentTiers.length + 1}`,
+        min_score: nextMinScore,
+        max_score: null,
+        tier_order: currentTiers.length + 1,
+        color: '#f43f5e',
+        created_at: now,
+        updated_at: now,
+      },
+    ]))
+  }
+
+  const deleteRatingTierDraft = (tierId: number) => {
+    if (!effectiveRatingTiersDraft || effectiveRatingTiersDraft.length <= 1) return
+
+    const remaining = effectiveRatingTiersDraft.filter((tier) => tier.id !== tierId)
+    setRatingTiersDraft(normalizeRatingTierDrafts(remaining))
+  }
+
+  const reorderRatingTierDraft = (sourceTierId: number, targetTierId: number) => {
+    if (!effectiveRatingTiersDraft || sourceTierId === targetTierId) return
+
+    const currentIndex = effectiveRatingTiersDraft.findIndex((tier) => tier.id === sourceTierId)
+    const targetIndex = effectiveRatingTiersDraft.findIndex((tier) => tier.id === targetTierId)
+    if (currentIndex === -1 || targetIndex === -1) return
+
+    const slots = effectiveRatingTiersDraft.map((tier) => ({
+      min_score: tier.min_score,
+      max_score: tier.max_score,
+    }))
+    const reordered = [...effectiveRatingTiersDraft]
+    const [movedTier] = reordered.splice(currentIndex, 1)
+    reordered.splice(targetIndex, 0, movedTier)
+
+    setRatingTiersDraft(normalizeRatingTierDrafts(reordered.map((tier, index) => ({
+      ...tier,
+      min_score: slots[index].min_score,
+      max_score: slots[index].max_score,
+    }))))
+  }
+
+  const moveRatingTierDraft = (tierId: number, direction: 'up' | 'down') => {
+    if (!effectiveRatingTiersDraft) return
+
+    const currentIndex = effectiveRatingTiersDraft.findIndex((tier) => tier.id === tierId)
+    if (currentIndex === -1) return
+
+    const nextIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+    if (nextIndex < 0 || nextIndex >= effectiveRatingTiersDraft.length) return
+
+    reorderRatingTierDraft(tierId, effectiveRatingTiersDraft[nextIndex].id)
+  }
+
+  const handleSaveRatingWeights = () => {
+    if (!effectiveRatingWeightsDraft) return
+    if (ratingWeightValidationMessages.length > 0) {
+      notifyError(ratingWeightValidationMessages[0])
+      return
+    }
+
+    void ratingWeightsMutation.mutateAsync({
+      general_weight: effectiveRatingWeightsDraft.general_weight,
+      sensitive_weight: effectiveRatingWeightsDraft.sensitive_weight,
+      questionable_weight: effectiveRatingWeightsDraft.questionable_weight,
+      explicit_weight: effectiveRatingWeightsDraft.explicit_weight,
+    })
+  }
+
+  const handleSaveRatingTiers = () => {
+    if (!effectiveRatingTiersDraft) return
+    if (ratingTierValidationMessages.length > 0) {
+      notifyError(ratingTierValidationMessages[0])
+      return
+    }
+
+    const normalizedTiers = effectiveRatingTiersDraft.map((tier, index) => ({
+      tier_name: tier.tier_name.trim() || `Tier ${index + 1}`,
+      min_score: tier.min_score,
+      max_score: index === effectiveRatingTiersDraft.length - 1 ? null : effectiveRatingTiersDraft[index + 1].min_score,
+      tier_order: index + 1,
+      color: tier.color?.trim() || null,
+    }))
+
+    void ratingTiersMutation.mutateAsync(normalizedTiers)
+  }
+
   const handleResolveAutoTestMedia = () => {
     const nextHash = autoTestHashInput.trim()
     if (!nextHash) return
@@ -490,10 +760,25 @@ export function SettingsPage() {
               taggerDependencyResult={taggerDependencyResult}
               onPatchTagger={patchTaggerDraft}
               onPatchKaloscope={patchKaloscopeDraft}
+              ratingWeightsDraft={effectiveRatingWeightsDraft}
+              ratingWeightValidationMessages={ratingWeightValidationMessages}
+              onPatchRatingWeights={patchRatingWeightsDraft}
+              ratingTiersDraft={effectiveRatingTiersDraft}
+              ratingTierValidationMessages={ratingTierValidationMessages}
+              onPatchRatingTier={patchRatingTierDraft}
+              onAddRatingTier={addRatingTierDraft}
+              onDeleteRatingTier={deleteRatingTierDraft}
+              onMoveRatingTierUp={(tierId) => moveRatingTierDraft(tierId, 'up')}
+              onMoveRatingTierDown={(tierId) => moveRatingTierDraft(tierId, 'down')}
+              onReorderRatingTier={reorderRatingTierDraft}
               onSaveTagger={() => effectiveTaggerDraft && void taggerMutation.mutateAsync(effectiveTaggerDraft)}
               onSaveKaloscope={() => effectiveKaloscopeDraft && void kaloscopeMutation.mutateAsync(effectiveKaloscopeDraft)}
+              onSaveRatingWeights={handleSaveRatingWeights}
+              onSaveRatingTiers={handleSaveRatingTiers}
               isSavingTagger={taggerMutation.isPending}
               isSavingKaloscope={kaloscopeMutation.isPending}
+              isSavingRatingWeights={ratingWeightsMutation.isPending}
+              isSavingRatingTiers={ratingTiersMutation.isPending}
               isCheckingTaggerDependencies={taggerDependencyMutation.isPending}
               autoTestHashInput={autoTestHashInput}
               onAutoTestHashInputChange={(value) => {
