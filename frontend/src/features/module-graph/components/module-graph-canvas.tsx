@@ -7,6 +7,8 @@ import { ModuleGraphNodeCard } from './module-graph-node-card'
 import { buildHandleId, getModulePortCompatibility, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 const MODULE_GRAPH_NODE_TYPES = { module: ModuleGraphNodeCard }
+const INITIAL_GRAPH_VIEWPORT = { x: 0, y: 0, zoom: 0.65 }
+const INITIAL_GRAPH_FIT_VIEW_OPTIONS = { padding: 0.35, maxZoom: 0.65 }
 
 type PendingConnectionStart = {
   nodeId: string
@@ -364,6 +366,8 @@ export function ModuleGraphCanvas({
         isValidConnection={isValidConnection}
         nodeTypes={MODULE_GRAPH_NODE_TYPES}
         fitView
+        fitViewOptions={INITIAL_GRAPH_FIT_VIEW_OPTIONS}
+        defaultViewport={INITIAL_GRAPH_VIEWPORT}
         colorMode={reactFlowColorMode}
         snapToGrid
         connectionRadius={32}

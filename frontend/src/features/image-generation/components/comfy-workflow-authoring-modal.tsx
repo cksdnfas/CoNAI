@@ -8,10 +8,11 @@ import {
   type Edge,
   type Node,
   type NodeProps,
+  type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuery } from '@tanstack/react-query'
-import { Check, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,8 +55,11 @@ type EditableWorkflowInput = {
 type AuthoringNodeData = {
   label: string
   classType: string
+  title: string
   editableInputs: EditableWorkflowInput[]
   markedJsonPaths: string[]
+  searchMatched?: boolean
+  searchCurrent?: boolean
   onAddField: (nodeId: string, classType: string, input: EditableWorkflowInput) => void
 }
 
@@ -67,7 +71,19 @@ type ParsedWorkflowGraph = {
   edges: AuthoringEdge[]
 }
 
-type WorkflowJsonRecord = Record<string, { class_type?: string; inputs?: Record<string, unknown> }>
+const INITIAL_AUTHORING_VIEWPORT = { x: 0, y: 0, zoom: 0.7 }
+const INITIAL_AUTHORING_FIT_VIEW_OPTIONS = { padding: 0.28, maxZoom: 0.72 }
+
+type WorkflowJsonNodeRecord = {
+  title?: string
+  class_type?: string
+  inputs?: Record<string, unknown>
+  _meta?: {
+    title?: string
+  }
+}
+
+type WorkflowJsonRecord = Record<string, WorkflowJsonNodeRecord>
 
 function humanizeKey(value: string) {
   return value
@@ -128,8 +144,15 @@ function buildFieldFromInput(nodeId: string, classType: string, input: EditableW
   }
 }
 
-function buildNodeLabel(classType: string, editableInputs: EditableWorkflowInput[]) {
-  return editableInputs.length > 0 ? `${classType} · ${editableInputs.length}` : classType
+/** Prefer user-facing node title when present, then fall back to class_type or node id label. */
+function resolveWorkflowNodeTitle(nodeId: string, nodeData: WorkflowJsonNodeRecord) {
+  const preferredTitle = typeof nodeData.title === 'string' && nodeData.title.trim().length > 0
+    ? nodeData.title.trim()
+    : typeof nodeData._meta?.title === 'string' && nodeData._meta.title.trim().length > 0
+      ? nodeData._meta.title.trim()
+      : null
+
+  return preferredTitle ?? nodeData.class_type ?? `Node ${nodeId}`
 }
 
 function parseWorkflowDefinition(workflowJson: string): WorkflowJsonRecord {
@@ -239,13 +262,17 @@ function parseWorkflowGraph(params: {
       }
     }
 
+    const classType = nodeData.class_type || 'Unknown'
+    const title = resolveWorkflowNodeTitle(nodeId, nodeData)
+
     nodes.push({
       id: nodeId,
       type: 'comfyAuthoring',
       position: { x: 0, y: 0 },
       data: {
-        label: buildNodeLabel(nodeData.class_type || `Node ${nodeId}`, editableInputs),
-        classType: nodeData.class_type || 'Unknown',
+        label: title,
+        title,
+        classType,
         editableInputs,
         markedJsonPaths: editableInputs.map((input) => `${nodeId}.inputs.${input.key}`).filter((path) => markedPaths.has(path)),
         onAddField: params.onAddField,
@@ -261,10 +288,20 @@ function parseWorkflowGraph(params: {
 
 function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
   return (
-    <div className="min-w-[240px] rounded-sm border border-border bg-surface-container p-3 shadow-sm">
+    <div
+      className={data.searchCurrent
+        ? 'min-w-[240px] rounded-sm border border-primary bg-surface-container p-3 shadow-sm ring-2 ring-primary/35'
+        : data.searchMatched
+          ? 'min-w-[240px] rounded-sm border border-primary/45 bg-surface-container p-3 shadow-sm'
+          : 'min-w-[240px] rounded-sm border border-border bg-surface-container p-3 shadow-sm'}
+    >
       <div className="space-y-1">
-        <div className="text-sm font-semibold text-foreground">{data.classType}</div>
-        <div className="text-[11px] text-muted-foreground">#{id}</div>
+        <div className="text-sm font-semibold text-foreground">{data.title}</div>
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span>{data.classType}</span>
+          <span>•</span>
+          <span>#{id}</span>
+        </div>
       </div>
 
       {data.editableInputs.length > 0 ? (
@@ -327,7 +364,10 @@ export function ComfyWorkflowAuthoringModal({
   const [markedFields, setMarkedFields] = useState<WorkflowMarkedField[]>([])
   const [expandedFieldIds, setExpandedFieldIds] = useState<string[]>([])
   const [workflowEditorTab, setWorkflowEditorTab] = useState<'json' | 'graph'>('json')
+  const [graphSearchQuery, setGraphSearchQuery] = useState('')
+  const [graphSearchIndex, setGraphSearchIndex] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
+  const [authoringFlowInstance, setAuthoringFlowInstance] = useState<ReactFlowInstance<AuthoringNode, AuthoringEdge> | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -342,6 +382,8 @@ export function ComfyWorkflowAuthoringModal({
       setMarkedFields(initialData.workflow.marked_fields ?? [])
       setExpandedFieldIds([])
       setWorkflowEditorTab('graph')
+      setGraphSearchQuery('')
+      setGraphSearchIndex(0)
       setIsSaving(false)
       return
     }
@@ -353,6 +395,8 @@ export function ComfyWorkflowAuthoringModal({
     setMarkedFields([])
     setExpandedFieldIds([])
     setWorkflowEditorTab('json')
+    setGraphSearchQuery('')
+    setGraphSearchIndex(0)
     setIsSaving(false)
   }, [initialData, mode, open])
 
@@ -417,8 +461,85 @@ export function ComfyWorkflowAuthoringModal({
     }
   }, [jsonError, markedFields, workflowJson])
 
+  const graphSearchMatches = useMemo(() => {
+    if (!parsedGraph) {
+      return []
+    }
+
+    const normalizedQuery = graphSearchQuery.trim().toLowerCase()
+    if (!normalizedQuery) {
+      return []
+    }
+
+    return parsedGraph.nodes
+      .filter((node) => {
+        const haystack = [node.data.title, node.data.classType, node.id]
+          .join(' ')
+          .toLowerCase()
+        return haystack.includes(normalizedQuery)
+      })
+      .map((node) => node.id)
+  }, [graphSearchQuery, parsedGraph])
+
+  const activeGraphSearchNodeId = graphSearchMatches.length > 0
+    ? graphSearchMatches[Math.min(graphSearchIndex, graphSearchMatches.length - 1)]
+    : null
+
+  const graphNodes = useMemo(() => {
+    if (!parsedGraph) {
+      return []
+    }
+
+    const matchedIdSet = new Set(graphSearchMatches)
+    return parsedGraph.nodes.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        searchMatched: matchedIdSet.has(node.id),
+        searchCurrent: node.id === activeGraphSearchNodeId,
+      },
+    }))
+  }, [activeGraphSearchNodeId, graphSearchMatches, parsedGraph])
+
   const reactFlowColorMode: 'light' | 'dark' | 'system' =
     settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode
+
+  useEffect(() => {
+    if (!open || workflowEditorTab !== 'graph' || !parsedGraph || !authoringFlowInstance) {
+      return
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      void authoringFlowInstance.fitView(INITIAL_AUTHORING_FIT_VIEW_OPTIONS)
+    })
+
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [authoringFlowInstance, open, parsedGraph, workflowEditorTab])
+
+  useEffect(() => {
+    setGraphSearchIndex(0)
+  }, [graphSearchQuery])
+
+  useEffect(() => {
+    if (!authoringFlowInstance || !activeGraphSearchNodeId || !parsedGraph) {
+      return
+    }
+
+    const targetNode = parsedGraph.nodes.find((node) => node.id === activeGraphSearchNodeId)
+    if (!targetNode) {
+      return
+    }
+
+    const estimatedWidth = 260
+    const estimatedHeight = 180
+    void authoringFlowInstance.setCenter(
+      targetNode.position.x + estimatedWidth / 2,
+      targetNode.position.y + estimatedHeight / 2,
+      { zoom: 0.88, duration: 240 },
+    )
+  }, [activeGraphSearchNodeId, authoringFlowInstance, parsedGraph])
 
   const dropdownListNames = dropdownLists.map((list) => list.name)
 
@@ -672,7 +793,53 @@ export function ComfyWorkflowAuthoringModal({
                       <input type="file" accept=".json,application/json" hidden onChange={(event) => void handleFileUpload(event.target.files?.[0])} />
                     </label>
                   </Button>
-                ) : null}
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative min-w-[240px]">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        variant="settings"
+                        value={graphSearchQuery}
+                        onChange={(event) => setGraphSearchQuery(event.target.value)}
+                        placeholder="노드 title / class_type / id 검색"
+                        className="pl-8"
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {graphSearchQuery.trim().length > 0 ? `${graphSearchMatches.length}개` : '검색 없음'}
+                    </div>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      disabled={graphSearchMatches.length === 0}
+                      onClick={() => setGraphSearchIndex((current) => (
+                        graphSearchMatches.length === 0
+                          ? 0
+                          : (current - 1 + graphSearchMatches.length) % graphSearchMatches.length
+                      ))}
+                      title="이전 검색 결과"
+                      aria-label="이전 검색 결과"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      disabled={graphSearchMatches.length === 0}
+                      onClick={() => setGraphSearchIndex((current) => (
+                        graphSearchMatches.length === 0
+                          ? 0
+                          : (current + 1) % graphSearchMatches.length
+                      ))}
+                      title="다음 검색 결과"
+                      aria-label="다음 검색 결과"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {workflowEditorTab === 'json' ? (
@@ -694,10 +861,13 @@ export function ComfyWorkflowAuthoringModal({
                     <ReactFlowProvider>
                       <ReactFlow<AuthoringNode, AuthoringEdge>
                         className="theme-graph-flow"
-                        nodes={parsedGraph.nodes}
+                        nodes={graphNodes}
                         edges={parsedGraph.edges}
                         nodeTypes={nodeTypes}
+                        onInit={setAuthoringFlowInstance}
                         fitView
+                        fitViewOptions={INITIAL_AUTHORING_FIT_VIEW_OPTIONS}
+                        defaultViewport={INITIAL_AUTHORING_VIEWPORT}
                         colorMode={reactFlowColorMode}
                         proOptions={{ hideAttribution: true }}
                         defaultMarkerColor="var(--foreground)"
@@ -712,7 +882,7 @@ export function ComfyWorkflowAuthoringModal({
                           zoomable
                           nodeColor="var(--primary)"
                           maskColor="color-mix(in srgb, var(--background) 72%, transparent)"
-                          className="!bg-background"
+                          className="!bg-surface-lowest"
                         />
                         <Controls />
                         <Background color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
