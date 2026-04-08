@@ -19,6 +19,35 @@ function resolveFrontendPort(frontendUrl?: string): number {
   return 1677
 }
 
+/** Keep the heaviest feature dependencies in dedicated chunks. */
+function manualChunks(id: string) {
+  if (!id.includes('node_modules')) {
+    return undefined
+  }
+
+  if (id.includes('@xyflow/react')) {
+    return 'xyflow'
+  }
+
+  if (id.includes('react-konva') || id.includes(`${path.sep}konva${path.sep}`) || id.includes('/konva/')) {
+    return 'konva'
+  }
+
+  if (id.includes('react-router-dom')) {
+    return 'router'
+  }
+
+  if (id.includes('@tanstack/react-query')) {
+    return 'react-query'
+  }
+
+  if (id.includes('react-virtuoso') || id.includes('@virtuoso.dev/masonry') || id.includes('@viselect/vanilla')) {
+    return 'image-list-vendor'
+  }
+
+  return undefined
+}
+
 export default defineConfig(({ mode }) => {
   const envDir = path.resolve(__dirname, '..')
   const env = loadEnv(mode, envDir, '')
@@ -39,6 +68,14 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
       dedupe: ['react', 'react-dom'],
+    },
+    build: {
+      chunkSizeWarningLimit: 550,
+      rollupOptions: {
+        output: {
+          manualChunks,
+        },
+      },
     },
     server: {
       host: '0.0.0.0',
