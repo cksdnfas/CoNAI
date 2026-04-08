@@ -56,7 +56,6 @@ export class AutoTagScheduler {
 
   start(): boolean {
     if (this.isRunning) {
-      console.log('[AutoTagScheduler] Already running');
       return true;
     }
 
@@ -68,9 +67,7 @@ export class AutoTagScheduler {
     const pollingIntervalMs = this.getPollingIntervalMs();
     const batchSize = this.getBatchSize();
 
-    console.log('[AutoTagScheduler] Starting auto-tag scheduler...');
-    console.log(`[AutoTagScheduler] Polling interval: ${pollingIntervalMs / 1000}s`);
-    console.log(`[AutoTagScheduler] Batch size: ${batchSize}`);
+    console.log(`[AutoTagScheduler] Ready (${pollingIntervalMs / 1000}s interval, batch ${batchSize})`);
 
     this.isRunning = true;
     void this.processPendingMedia();
@@ -87,15 +84,12 @@ export class AutoTagScheduler {
   }
 
   stop(): void {
-    console.log('[AutoTagScheduler] Stopping auto-tag scheduler...');
     this.isRunning = false;
 
     if (this.pollingTimer) {
       clearInterval(this.pollingTimer);
       this.pollingTimer = null;
     }
-
-    console.log('[AutoTagScheduler] Stopped');
   }
 
   private extractRatingData(raw: unknown): RatingData | null {

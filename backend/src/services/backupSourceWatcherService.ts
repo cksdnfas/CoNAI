@@ -6,6 +6,8 @@ import { runtimePaths } from '../config/runtimePaths';
 import { WebPConversionService } from './webpConversionService';
 import { BackupSource, BackupSourceService, ensureBackupTargetDirectory } from './backupSourceService';
 
+const isVerboseBackupWatcherLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
+
 type WatcherState = 'initializing' | 'watching' | 'error' | 'stopped';
 
 interface BackupWatcherEntry {
@@ -128,8 +130,6 @@ export class BackupSourceWatcherService {
 
   /** Start all enabled backup source watchers on boot. */
   static async initialize(): Promise<void> {
-    console.log('📥 BackupSourceWatcherService 초기화 중...');
-
     const sources = await BackupSourceService.listSources({ active_only: true });
 
     for (const source of sources) {
@@ -146,7 +146,7 @@ export class BackupSourceWatcherService {
       }
     }
 
-    console.log(`✅ BackupSourceWatcherService 초기화 완료: ${this.watcherRegistry.size}개 워처 실행 중`);
+    console.log(`📥 Backup source watchers ready: ${this.watcherRegistry.size} active`);
   }
 
   /** Start a watcher for one backup source. */
@@ -269,7 +269,9 @@ export class BackupSourceWatcherService {
         return;
       }
 
-      console.log(`📥 [BackupSource] Initial scan started: ${source.display_name || source.source_path} (${files.length} files)`);
+      if (isVerboseBackupWatcherLoggingEnabled) {
+        console.log(`📥 [BackupSource] Initial scan started: ${source.display_name || source.source_path} (${files.length} files)`);
+      }
 
       const summary: InitialImportSummary = {
         scanned: files.length,
@@ -289,7 +291,9 @@ export class BackupSourceWatcherService {
         }
       }
 
-      console.log(`📥 [BackupSource] Initial scan finished: ${source.display_name || source.source_path} (scanned=${summary.scanned}, imported=${summary.imported}, skipped=${summary.skipped}, failed=${summary.failed})`);
+      if (summary.imported > 0 || summary.failed > 0 || isVerboseBackupWatcherLoggingEnabled) {
+        console.log(`📥 [BackupSource] Initial sync: ${source.display_name || source.source_path} (scanned=${summary.scanned}, imported=${summary.imported}, skipped=${summary.skipped}, failed=${summary.failed})`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       BackupSourceService.updateWatcherState(sourceId, 'error', message);
@@ -331,7 +335,9 @@ export class BackupSourceWatcherService {
 
       const preferredTargetPath = buildPreferredTargetPath(source, filePath);
       if (options?.skipIfTargetExists && fs.existsSync(preferredTargetPath)) {
-        console.log(`⏭️ [BackupSource] Skipped existing source file already mirrored in target: ${filePath}`);
+        if (isVerboseBackupWatcherLoggingEnabled) {
+          console.log(`⏭️ [BackupSource] Skipped existing source file already mirrored in target: ${filePath}`);
+        }
         return 'skipped';
       }
 
@@ -353,7 +359,9 @@ export class BackupSourceWatcherService {
       BackupSourceService.updateWatcherLastEvent(sourceId);
       BackupSourceService.updateWatcherState(sourceId, 'watching', null);
 
-      console.log(`📥 [BackupSource] ${path.basename(filePath)} -> ${targetPath}`);
+      if (isVerboseBackupWatcherLoggingEnabled) {
+        console.log(`📥 [BackupSource] ${path.basename(filePath)} -> ${targetPath}`);
+      }
       return 'imported';
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

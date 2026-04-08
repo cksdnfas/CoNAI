@@ -124,16 +124,7 @@ export const publicUrls = {
 };
 
 export function ensureRuntimeDirectories(): void {
-  console.log('[Config] Data Root Configuration:');
-  console.log(`   - Base Path:   ${basePath}`);
-  console.log(`   - Uploads:     ${uploadsDir}`);
-  console.log(`   - Database:    ${databaseDir}`);
-  console.log(`   - Logs:        ${logsDir}`);
-  console.log(`   - Models:      ${modelsDir}`);
-  console.log(`   - CustomNodes: ${customNodesDir}`);
-  console.log(`   - Temp:        ${tempDir}`);
-  console.log(`   - Save:        ${saveDir}`);
-  console.log(`   - Canvas:      ${canvasDir}`);
+  console.log(`[Config] Runtime data root ready: ${basePath}`);
 
   [uploadsDir, databaseDir, logsDir, tempDir, saveDir, canvasDir, modelsDir, customNodesDir, recycleBinDir].forEach(dir => {
     if (!fs.existsSync(dir)) {

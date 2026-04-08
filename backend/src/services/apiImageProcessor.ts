@@ -180,6 +180,5 @@ export class APIImageProcessor {
     const imagesPath = path.join(baseUploadPath, 'images');
 
     await fs.promises.mkdir(imagesPath, { recursive: true });
-    console.log('✓ API upload directories ready');
   }
 }

@@ -83,20 +83,10 @@ export class SettingsService {
         const defaults = this.getDefaultSettings();
         this.settings = mergeLoadedSettingsWithDefaults(loadedSettings, defaults);
 
-        console.log('[SettingsService] Loaded settings from file:', {
-          tagger_enabled: this.settings.tagger.enabled,
-          tagger_model: this.settings.tagger.model,
-          tagger_device: this.settings.tagger.device,
-          kaloscope_enabled: this.settings.kaloscope.enabled,
-          kaloscope_device: this.settings.kaloscope.device,
-          kaloscope_topK: this.settings.kaloscope.topK,
-          similarity_autoHash: this.settings.similarity.autoGenerateHashOnUpload
-        });
-
         // Check for missing fields only (not field order differences)
         const needsMigration = hasMissingSettingsFields(loadedSettings, defaults);
         if (needsMigration) {
-          console.log('[SettingsService] Adding missing fields to settings file');
+          console.warn('[SettingsService] Settings schema updated, writing missing defaults once');
           this.saveSettings(this.settings);
         }
       } else {
@@ -123,11 +113,6 @@ export class SettingsService {
     try {
       writeSettingsFile(settings);
       this.settings = settings;
-      console.log('[SettingsService] Settings saved successfully:', {
-        tagger_enabled: settings.tagger.enabled,
-        kaloscope_enabled: settings.kaloscope.enabled,
-        similarity_autoHash: settings.similarity.autoGenerateHashOnUpload
-      });
     } catch (error) {
       console.error('[SettingsService] Error saving settings:', error);
       throw new Error('Failed to save settings');

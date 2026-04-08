@@ -89,7 +89,7 @@ export class FolderScanService {
         excludePatterns: folder.exclude_patterns ? JSON.parse(folder.exclude_patterns) : null
       });
 
-      const quietScan = options.quietIfNoChanges === true && files.length === 0 && !fullRescan;
+      const quietScan = options.quietIfNoChanges === true && !fullRescan;
 
       if (!quietScan || isVerboseScanDebugEnabled) {
         console.log(`📂 스캔 시작: ${resolvedPath} (${files.length}개 파일 발견)`);
@@ -105,7 +105,9 @@ export class FolderScanService {
           WHERE folder_id = ? AND file_status = 'active'
         `).run(folderId);
         result.missingImages = updateInfo.changes;
-        console.log(`  🔄 전체 재스캔: ${result.missingImages}개 파일 상태 변경`);
+        if (!quietScan || isVerboseScanDebugEnabled || result.missingImages > 0) {
+          console.log(`  🔄 전체 재스캔: ${result.missingImages}개 파일 상태 변경`);
+        }
       }
 
       // 7. 배치별로 파일 처리 (Phase 1: 빠른 등록)
@@ -133,14 +135,13 @@ export class FolderScanService {
 
       const hasMeaningfulChanges =
         result.newImages > 0 ||
-        result.existingImages > 0 ||
         result.updatedPaths > 0 ||
         result.missingImages > 0 ||
         result.errors.length > 0;
 
       if (!options.quietIfNoChanges || hasMeaningfulChanges || isVerboseScanDebugEnabled) {
         console.log(`✅ 스캔 완료: ${result.duration}ms`);
-        console.log(`  📊 신규: ${result.newImages}, 기존: ${result.existingImages}, 업데이트: ${result.updatedPaths}, 오류: ${result.errors.length}`);
+        console.log(`  📊 신규: ${result.newImages}, 기존 확인: ${result.existingImages}, 업데이트: ${result.updatedPaths}, 누락: ${result.missingImages}, 오류: ${result.errors.length}`);
       }
 
       return result;

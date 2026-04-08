@@ -14,24 +14,23 @@ export class TempImageCleanupScheduler {
    */
   static start(): void {
     if (this.job) {
-      console.log('⚠️  Temp image cleanup scheduler is already running');
       return;
     }
 
     // Run every 30 minutes
     this.job = cron.schedule('*/30 * * * *', async () => {
       if (this.isRunning) {
-        console.log('⏭️  Skipping temp cleanup - previous cleanup still running');
         return;
       }
 
       try {
         this.isRunning = true;
-        console.log('🧹 Starting scheduled temp image cleanup...');
 
         const result = await TempImageService.cleanupExpired();
 
-        console.log(`✅ Temp cleanup complete: ${result.deleted} files deleted, ${result.errors} errors`);
+        if (result.deleted > 0 || result.errors > 0) {
+          console.log(`🧹 Temp cleanup: ${result.deleted} files deleted, ${result.errors} errors`);
+        }
       } catch (error) {
         console.error('❌ Error during temp image cleanup:', error);
       } finally {
@@ -39,7 +38,7 @@ export class TempImageCleanupScheduler {
       }
     });
 
-    console.log('✅ Temp image cleanup scheduler started (runs every 30 minutes)');
+    console.log('🧹 Temp cleanup scheduler ready (every 30 minutes)');
   }
 
   /**
@@ -49,7 +48,6 @@ export class TempImageCleanupScheduler {
     if (this.job) {
       this.job.stop();
       this.job = null;
-      console.log('✅ Temp image cleanup scheduler stopped');
     }
   }
 

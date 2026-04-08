@@ -40,8 +40,6 @@ export function getDefaultAppearanceTheme(): AppearanceThemeSettings {
     textScalePercent: 100,
     bodyFontWeightPreset: 'regular',
     emphasisFontWeightPreset: 'standard',
-    searchBoxWidth: 380,
-    searchDrawerWidth: 420,
     desktopSearchMinWidth: 1280,
     desktopNavMinWidth: 1280,
     desktopPageColumnsMinWidth: 1280,
@@ -87,9 +85,14 @@ export function normalizeAppearancePresetSlots(rawSlots: unknown): AppearancePre
     const normalizedAppearance =
       appearanceSource && typeof appearanceSource === 'object'
         ? (() => {
+            const {
+              searchBoxWidth: _searchBoxWidth,
+              searchDrawerWidth: _searchDrawerWidth,
+              ...appearanceSourceWithoutLegacySearchWidths
+            } = appearanceSource as Record<string, unknown>;
             const mergedAppearance = {
               ...defaultAppearance,
-              ...appearanceSource,
+              ...appearanceSourceWithoutLegacySearchWidths,
             };
 
             return {
@@ -213,6 +216,12 @@ export function ensureSettingsConfigDirectory(): void {
 
 /** Merge raw persisted settings into the canonical defaults with env overrides applied last. */
 export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: AppSettings): AppSettings {
+  const {
+    searchBoxWidth: _searchBoxWidth,
+    searchDrawerWidth: _searchDrawerWidth,
+    ...loadedAppearanceWithoutLegacySearchWidths
+  } = loadedSettings.appearance || {};
+
   return {
     general: {
       ...defaults.general,
@@ -248,7 +257,7 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
     },
     appearance: {
       ...defaults.appearance,
-      ...loadedSettings.appearance,
+      ...loadedAppearanceWithoutLegacySearchWidths,
       desktopSearchMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
       desktopNavMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
       desktopPageColumnsMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
@@ -273,56 +282,48 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
 export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): boolean {
   for (const key of Object.keys(defaults.general)) {
     if (!(key in (loaded.general || {}))) {
-      console.log(`[SettingsService] Missing field: general.${key}`);
       return true;
     }
   }
 
   for (const key of Object.keys(defaults.tagger)) {
     if (!(key in (loaded.tagger || {}))) {
-      console.log(`[SettingsService] Missing field: tagger.${key}`);
       return true;
     }
   }
 
   for (const key of Object.keys(defaults.similarity)) {
     if (!(key in (loaded.similarity || {}))) {
-      console.log(`[SettingsService] Missing field: similarity.${key}`);
       return true;
     }
   }
 
   for (const key of Object.keys(defaults.kaloscope)) {
     if (!(key in (loaded.kaloscope || {}))) {
-      console.log(`[SettingsService] Missing field: kaloscope.${key}`);
       return true;
     }
   }
 
   for (const key of Object.keys(defaults.appearance)) {
     if (!(key in (loaded.appearance || {}))) {
-      console.log(`[SettingsService] Missing field: appearance.${key}`);
       return true;
     }
   }
 
   for (const key of Object.keys(defaults.metadataExtraction)) {
     if (!(key in (loaded.metadataExtraction || {}))) {
-      console.log(`[SettingsService] Missing field: metadataExtraction.${key}`);
       return true;
     }
   }
 
   for (const key of Object.keys(defaults.thumbnail)) {
     if (!(key in (loaded.thumbnail || {}))) {
-      console.log(`[SettingsService] Missing field: thumbnail.${key}`);
       return true;
     }
   }
 
   for (const key of Object.keys(defaults.imageSave)) {
     if (!(key in (loaded.imageSave || {}))) {
-      console.log(`[SettingsService] Missing field: imageSave.${key}`);
       return true;
     }
   }

@@ -30,12 +30,9 @@ export class AutoScanScheduler {
       return;
     }
 
-    console.log('🤖 자동 스캔 스케줄러 시작...');
-
     // 매 1분마다 실행
     this.cronTask = cron.schedule('* * * * *', async () => {
       if (this.isRunning) {
-        console.log('  ⏳ 이전 스캔이 아직 진행 중입니다. 건너뜁니다.');
         return;
       }
 
@@ -98,11 +95,8 @@ export class AutoScanScheduler {
 
           const progress = FileVerificationService.getProgress();
           if (progress.isRunning) {
-            console.log('  ⏳ 파일 검증이 이미 진행 중입니다. 건너뜁니다.');
             return;
           }
-
-          console.log('🔍 Phase 3 파일 검증 시작...');
           try {
             await FileVerificationService.verifyAllFiles();
           } catch (error) {
@@ -113,16 +107,16 @@ export class AutoScanScheduler {
         // 주기적 실행
         this.phase3Timer = setInterval(runVerification, verificationIntervalMs);
 
-        console.log(`✅ 파일 검증 스케줄러 시작됨 (Phase 3: ${verificationIntervalSeconds}초마다)`);
+        console.log(`🔍 File verification scheduler enabled (${verificationIntervalSeconds}s)`);
       } else {
-        console.log('ℹ️  파일 검증이 비활성화되어 있습니다');
+        console.log('🔍 File verification scheduler skipped: disabled');
       }
     };
 
     // 파일 검증 스케줄러 시작
     startFileVerification();
 
-    console.log(`✅ 자동 스캔 스케줄러 시작됨 (Phase 1: 1분마다, Phase 2: 1초마다, Phase 3: 파일 검증 활성화시)`);
+    console.log('🤖 Auto-scan scheduler ready (scan: 60s, background: 1s)');
   }
 
   /**

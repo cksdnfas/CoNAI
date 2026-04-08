@@ -50,7 +50,7 @@ export class FastRegistrationService {
     const batchStartTime = Date.now();
     const concurrency = Math.min(os.cpus().length * 4, 20);
     const limit = pLimit(concurrency);
-    const shouldStayQuiet = options.quietIfIdle === true && files.length === 0;
+    const shouldStayQuiet = options.quietIfIdle === true;
 
     if (!shouldStayQuiet) {
       console.log(`  Phase 1: 빠른 등록 모드 (동시성: ${concurrency})`);
@@ -134,7 +134,7 @@ export class FastRegistrationService {
           result.totalScanned++;
 
           // 진행 상황 로그
-          if (result.totalScanned % this.PROGRESS_LOG_INTERVAL === 0 || result.totalScanned === files.length) {
+          if (!shouldStayQuiet && (result.totalScanned % this.PROGRESS_LOG_INTERVAL === 0 || result.totalScanned === files.length)) {
             const progress = ScanProgressTracker.calculateProgress(result.totalScanned, files.length, batchStartTime);
             console.log(
               `  Phase 1 진행: ${result.totalScanned}/${files.length} ` +

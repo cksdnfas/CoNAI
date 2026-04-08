@@ -46,7 +46,7 @@ function ensureEnvFileExists(envPath: string): void {
 const rootEnvPath = getEnvPath();
 ensureEnvFileExists(rootEnvPath);
 dotenv.config({ path: rootEnvPath, quiet: true });
-console.log(`[Config] Initialized with .env from: ${rootEnvPath}`);
+console.log(`[Config] Loaded environment from: ${rootEnvPath}`);
 
 
 // Configure NODE_PATH for native modules in SEA (Single Executable Application)
@@ -179,15 +179,9 @@ const saveDir = runtimePaths.saveDir;
 
 // Initialize session middleware early (will be configured in initializeSessionMiddleware)
 async function initializeSessionMiddleware() {
-  console.log('🔐 Auth DB 초기화 중...');
   initializeAuthDb(); // Synchronous call (better-sqlite3)
-  console.log('✅ Auth DB initialized successfully');
-
-  console.log('🗄️  Unified User DB 초기화 중...');
   initializeUserSettingsDb(); // Synchronous call (better-sqlite3)
-  console.log('✅ Unified User DB initialized successfully');
 
-  console.log('🔐 Configuring session management...');
   const SqliteStore = BetterSqlite3Store(session);
   const sessionSecret = resolveSessionSecret().secret;
 
@@ -214,38 +208,32 @@ async function initializeSessionMiddleware() {
   });
 
   app.use(sessionMiddleware);
-  console.log('✅ Session management configured successfully');
 }
 
 
 // 데이터베이스 초기화 및 서버 시작
 async function startServer() {
   try {
-    console.log('🚀 CoNAI Backend 시작 중...\n');
+    console.log('🚀 CoNAI starting...\n');
 
     // 0. Initialize i18n (language settings)
     const { initI18n } = await import('./i18n');
     initI18n();
 
     // 1. 필요한 폴더들 자동 생성 (uploads, database, logs, temp, models, RecycleBin)
-    console.log('📁 필요한 폴더들을 확인하고 생성 중...');
     ensureRuntimeDirectories();
 
     // 1-1. 시스템 환경 체크 (권한, 도커 등)
     await StartupCheck.runAllChecks();
 
     // 2. 데이터베이스 자동 초기화
-    console.log('🗄️  데이터베이스를 초기화하는 중...');
     const isNewDatabase = !fs.existsSync(runtimePaths.databaseFile);
     await initializeDatabase();
-    console.log('✅ Database initialized successfully');
 
     if (!isSafeSmokeMode) {
-      console.log('📂 기본 Upload 감시 폴더 동기화 중...');
-      const defaultUploadFolder = await WatchedFolderService.reconcileDefaultUploadFolder();
-      console.log(`✅ Default Upload watched folder ready: ${defaultUploadFolder.folder_path}`);
+      await WatchedFolderService.reconcileDefaultUploadFolder();
     } else {
-      console.log('🧪 SAFE_SMOKE_MODE enabled - skipping watched folder reconciliation');
+      console.log('🧪 SAFE_SMOKE_MODE enabled, runtime watchers and jobs stay disabled');
     }
 
     // 3-1. 첫 실행 안내
@@ -260,10 +248,9 @@ async function startServer() {
     // 4-1. Sync file-based custom nodes into the module registry.
     const { CustomNodeRegistryService } = await import('./services/customNodeRegistryService');
     const customNodeSyncResult = await CustomNodeRegistryService.syncCustomNodesFromFileSystem();
-    console.log(`🧩 Custom nodes synced: ${customNodeSyncResult.nodes.length} loaded, ${customNodeSyncResult.errors.length} errors, ${customNodeSyncResult.createdCount} created, ${customNodeSyncResult.updatedCount} updated, ${customNodeSyncResult.deactivatedCount} deactivated`);
 
     // 4-2. Register all routes (after session middleware is configured)
-    registerAppRoutes(app, {
+    const routeRegistration = registerAppRoutes(app, {
       uploadsDir,
       tempDir,
       saveDir,
@@ -272,12 +259,9 @@ async function startServer() {
     });
 
     // 5. Bind API generation history to the unified user DB
-    console.log('🗄️  API generation history binding to unified user DB...');
     initializeApiGenerationDb(); // Synchronous call (better-sqlite3)
-    console.log('✅ API generation history is using the unified user DB');
 
     // 5-1. Generation History Cleanup (startup)
-    console.log('🧹 Running generation history startup cleanup...');
     try {
       const { CleanupService } = await import('./services/cleanupService');
       await CleanupService.runStartupCleanup();
@@ -286,22 +270,17 @@ async function startServer() {
     }
 
     // 5-2. Job Tracker 초기화 (generation progress tracking)
-    console.log('📋 Initializing job tracker...');
     const { JobTracker } = await import('./services/jobTracker');
     JobTracker.initialize();
 
     // 6. 쿼리 캐시 서비스 초기화
-    console.log('💾 Query cache service 초기화 중...');
     QueryCacheService.initialize();
 
     // 6-1. 임시 이미지 서비스 초기화
-    console.log('🖼️  Temp image service 초기화 중...');
     const { TempImageService } = await import('./services/tempImageService');
     await TempImageService.initialize();
-    console.log('✅ Temp image service initialized successfully');
 
     // 7. API 이미지 저장 디렉토리 생성
-    console.log('📁 API 이미지 디렉토리 생성 중...');
     await APIImageProcessor.ensureDirectories();
 
     // 7-11. Runtime side-effect services
@@ -346,6 +325,13 @@ async function startServer() {
       const networkLines = formatNetworkInfo(networkInfo);
 
       const uploadsPathRelative = path.relative(runtimePaths.basePath, uploadsDir) || '.';
+      const accessHintLines = routeRegistration.frontendMode === 'integrated'
+        ? [`🧭 App: ${networkInfo.localUrl} (integrated build)`]
+        : [
+            '🧪 Before build: UI http://localhost:1677',
+            `🧭 After build: app ${networkInfo.localUrl}`,
+          ];
+      const customNodeSummary = `🧩 Custom nodes: ${customNodeSyncResult.nodes.length} loaded, ${customNodeSyncResult.errors.length} errors`;
 
       console.log(`
 ${divider}`);
@@ -362,6 +348,8 @@ ${divider}`);
       console.log(separator);
       console.log(formatLine(`📦 Data Root: ${runtimePaths.basePath}`));
       console.log(formatLine(`📁 Uploads: ${uploadsPathRelative}`));
+      accessHintLines.forEach((line) => console.log(formatLine(line)));
+      console.log(formatLine(customNodeSummary));
       if (isSafeSmokeMode) {
         console.log(formatLine('🧪 SAFE_SMOKE_MODE: runtime jobs disabled'));
       }
@@ -373,11 +361,20 @@ ${divider}`);
         });
       }
 
+      const tips = routeRegistration.frontendMode === 'integrated'
+        ? [
+            `   - Open the app on this computer: ${networkInfo.localUrl}`,
+            '   - Local network access uses the backend URLs above',
+          ]
+        : [
+            '   - Before integrated build, open the Vite UI: http://localhost:1677',
+            `   - Backend API and post-build app entry: ${networkInfo.localUrl}`,
+          ];
+
       console.log(`${footer}
 
 💡 Tips:
-   - Access from this computer: ${networkInfo.localUrl}
-   - Access from local network: Use any of the network URLs above
+${tips.join('\n')}
    - For external access: Configure port forwarding on your router
    - Press Ctrl+C to stop the server
 `);

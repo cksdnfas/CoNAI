@@ -88,12 +88,8 @@ export class FileWatcherService {
    * 서비스 초기화
    */
   static async initialize(): Promise<void> {
-    console.log('👀 FileWatcherService 초기화 중...');
-
     try {
       const folders = listAutoScanWatcherFolders();
-
-      console.log(`  📁 활성 폴더 ${folders.length}개 발견`);
 
       let startedCount = 0;
       let errorCount = 0;
@@ -112,7 +108,6 @@ export class FileWatcherService {
 
             await this.startWatcher(folder.id);
             startedCount++;
-            console.log(`  ✅ 워처 시작: ${folder.folder_name}`);
           } catch (error) {
             errorCount++;
             console.error(`  ❌ 워처 시작 실패: ${folder.folder_name}`, error);
@@ -128,11 +123,11 @@ export class FileWatcherService {
       }
 
       if (startedCount > 0) {
-        console.log(`✅ FileWatcherService 초기화 완료: ${startedCount}개 워처 시작, ${errorCount}개 오류`);
+        console.log(`👀 File watchers ready: ${startedCount} active, ${errorCount} issues`);
       } else if (errorCount > 0) {
-        console.warn(`⚠️  FileWatcherService 초기화: 모든 워처 시작 실패 (${errorCount}개 오류)`);
+        console.warn(`⚠️  File watcher startup failed for all folders (${errorCount} issues)`);
       } else {
-        console.log(`ℹ️  FileWatcherService 초기화: 활성화된 워처 없음`);
+        console.log('👀 File watchers: no enabled folders');
       }
 
     } catch (error) {
@@ -153,7 +148,6 @@ export class FileWatcherService {
     // 이미 실행 중인 워처 확인
     const existing = this.watcherRegistry.get(folderId);
     if (existing && existing.state === 'watching') {
-      console.log(`  ℹ️  이미 실행 중인 워처: folderId=${folderId}`);
       return;
     }
 
@@ -181,7 +175,7 @@ export class FileWatcherService {
     }
 
     if (preparedPath.wasCreated) {
-      console.log(`  ✅ 폴더 자동 생성: ${resolvedPath}`);
+      console.log(`📁 Watcher created missing folder: ${resolvedPath}`);
     }
 
     if (isVerboseScanDebugEnabled) {
@@ -192,9 +186,7 @@ export class FileWatcherService {
     const excludePatterns = parseWatcherJsonArray(folder.exclude_patterns);
     const pollingOptions = resolveWatcherPollingOptions(folder, resolvedPath);
 
-    if (pollingOptions.pollingReason === 'user-configured') {
-      console.log(`  ⚙️  사용자 설정 폴링 간격: ${pollingOptions.pollingInterval}ms`);
-    } else if (pollingOptions.pollingReason === 'network-drive') {
+    if (pollingOptions.pollingReason === 'network-drive') {
       console.warn(`  ⚠️  네트워크 드라이브 감지: ${folder.folder_name}`);
       console.warn(`     폴링 모드 활성화 (간격: ${pollingOptions.pollingInterval}ms)`);
     }
@@ -242,7 +234,6 @@ export class FileWatcherService {
         clearTimeout(timeout);
         entry.state = 'watching';
         this.updateWatcherStatus(folderId, 'watching', null);
-        console.log(`  ✅ 워처 준비 완료: ${folder.folder_name}`);
         resolve();
       });
 
@@ -270,7 +261,9 @@ export class FileWatcherService {
       entry.lastEvent = new Date();
       this.updateLastEventTime(folderId);
 
-      console.log(`👀 [워처:${folderName}] 파일 추가: ${path.basename(filePath)}`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`👀 [워처:${folderName}] 파일 추가: ${path.basename(filePath)}`);
+      }
 
       // handleAddEvent에 디바운스 로직 내장됨
       await this.handleAddEvent(filePath, folderId);
@@ -284,7 +277,9 @@ export class FileWatcherService {
       entry.lastEvent = new Date();
       this.updateLastEventTime(folderId);
 
-      console.log(`📝 [워처:${folderName}] 파일 변경: ${path.basename(filePath)}`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`📝 [워처:${folderName}] 파일 변경: ${path.basename(filePath)}`);
+      }
 
       await this.handleChangeEvent(filePath, folderId);
     });
@@ -297,7 +292,9 @@ export class FileWatcherService {
       entry.lastEvent = new Date();
       this.updateLastEventTime(folderId);
 
-      console.log(`🗑️  [워처:${folderName}] 파일 삭제: ${path.basename(filePath)}`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`🗑️  [워처:${folderName}] 파일 삭제: ${path.basename(filePath)}`);
+      }
 
       this.handleUnlinkEvent(filePath, folderId);
     });
@@ -330,7 +327,9 @@ export class FileWatcherService {
       }
       this.pendingFiles.get(folderId)!.add(filePath);
 
-      console.log(`  📝 파일 큐에 추가: ${path.basename(filePath)} (대기 중: ${this.pendingFiles.get(folderId)!.size}개)`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`  📝 파일 큐에 추가: ${path.basename(filePath)} (대기 중: ${this.pendingFiles.get(folderId)!.size}개)`);
+      }
 
       // 기존 타이머 취소 (디바운스)
       const existingTimer = this.folderScanTimers.get(folderId);
@@ -363,7 +362,9 @@ export class FileWatcherService {
 
     // 이미 스캔 중이면 스킵 (폴더 단위 락킹)
     if (this.processingFolders.has(folderId)) {
-      console.log(`  ⏭️  폴더 스캔 이미 진행 중: folderId=${folderId}`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`  ⏭️  폴더 스캔 이미 진행 중: folderId=${folderId}`);
+      }
       return;
     }
 
@@ -373,14 +374,18 @@ export class FileWatcherService {
     }
 
     const fileCount = pendingFileSet.size;
-    console.log(`  🚀 배치 스캔 시작: folderId=${folderId}, 대기 파일 ${fileCount}개`);
+    if (isVerboseScanDebugEnabled) {
+      console.log(`  🚀 배치 스캔 시작: folderId=${folderId}, 대기 파일 ${fileCount}개`);
+    }
 
     this.processingFolders.add(folderId);
 
     try {
-      const result = await FolderScanService.scanFolder(folderId, false);
+      const result = await FolderScanService.scanFolder(folderId, false, { quietIfNoChanges: true });
 
-      console.log(`  ✅ 배치 스캔 완료: 신규 ${result.newImages}개, 기존 ${result.existingImages}개`);
+      if (isVerboseScanDebugEnabled || result.newImages > 0 || result.updatedPaths > 0 || result.missingImages > 0 || result.errors.length > 0) {
+        console.log(`  ✅ 배치 스캔 완료: 신규 ${result.newImages}개, 기존 ${result.existingImages}개, 업데이트 ${result.updatedPaths}개, 오류 ${result.errors.length}개`);
+      }
 
       // 성공적으로 처리된 파일들 큐에서 제거
       this.pendingFiles.delete(folderId);
@@ -402,7 +407,9 @@ export class FileWatcherService {
   private static async handleChangeEvent(filePath: string, folderId: number): Promise<void> {
     // 폴더가 이미 스캔 중이면 대기
     if (this.processingFolders.has(folderId)) {
-      console.log(`  ⏭️  폴더 스캔 진행 중, 변경 이벤트 대기: ${path.basename(filePath)}`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`  ⏭️  폴더 스캔 진행 중, 변경 이벤트 대기: ${path.basename(filePath)}`);
+      }
       return;
     }
 
@@ -411,12 +418,16 @@ export class FileWatcherService {
     try {
       await this.waitForFileWrite(filePath);
 
-      console.log(`  🔄 파일 변경 감지, 강제 재스캔: ${path.basename(filePath)}`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`  🔄 파일 변경 감지, 강제 재스캔: ${path.basename(filePath)}`);
+      }
 
       // 강제 재스캔으로 수정된 파일 재처리
       const result = await FolderScanService.scanFolder(folderId, true);
 
-      console.log(`  ✅ 파일 업데이트 완료: 신규 ${result.newImages}개, 업데이트 ${result.existingImages}개`);
+      if (isVerboseScanDebugEnabled || result.newImages > 0 || result.updatedPaths > 0 || result.missingImages > 0 || result.errors.length > 0) {
+        console.log(`  ✅ 파일 업데이트 완료: 신규 ${result.newImages}개, 기존 ${result.existingImages}개, 업데이트 ${result.updatedPaths}개, 오류 ${result.errors.length}개`);
+      }
 
     } catch (error) {
       console.error(`  ❌ 파일 업데이트 중 오류: ${path.basename(filePath)}`, error);
@@ -433,8 +444,8 @@ export class FileWatcherService {
       const changes = markWatchedFileMissing(filePath, new Date().toISOString());
 
       if (changes > 0) {
-        console.log(`  ✅ 파일 상태 변경: ${path.basename(filePath)} → missing`);
-      } else {
+        console.warn(`⚠️  Watched file missing: ${path.basename(filePath)}`);
+      } else if (isVerboseScanDebugEnabled) {
         console.log(`  ℹ️  파일이 데이터베이스에 없음: ${path.basename(filePath)}`);
       }
     } catch (error) {
@@ -459,7 +470,9 @@ export class FileWatcherService {
     // Remove from processing set
     this.processingFolders.delete(folderId);
 
-    console.log(`  🧹 상태 정리 완료: folderId=${folderId}`);
+    if (isVerboseScanDebugEnabled) {
+      console.log(`  🧹 상태 정리 완료: folderId=${folderId}`);
+    }
   }
 
   /**
@@ -468,7 +481,6 @@ export class FileWatcherService {
   static async stopWatcher(folderId: number): Promise<void> {
     const entry = this.watcherRegistry.get(folderId);
     if (!entry) {
-      console.log(`  ℹ️  워처가 없음: folderId=${folderId}`);
       // Clean up state even if no watcher entry
       this.cleanupFolderState(folderId);
       return;
@@ -483,7 +495,6 @@ export class FileWatcherService {
       this.cleanupFolderState(folderId);
 
       this.updateWatcherStatus(folderId, 'stopped', null);
-      console.log(`  ✅ 워처 중지: ${entry.folderName}`);
     } catch (error) {
       console.error(`  ❌ 워처 중지 실패: ${entry.folderName}`, error);
       throw error;
@@ -494,7 +505,7 @@ export class FileWatcherService {
    * 워처 재시작
    */
   static async restartWatcher(folderId: number): Promise<void> {
-    console.log(`  🔄 워처 재시작: folderId=${folderId}`);
+    console.warn(`⚠️  Restarting watcher: folderId=${folderId}`);
     await this.stopWatcher(folderId);
     await new Promise(resolve => setTimeout(resolve, 1000));  // 1초 대기
     await this.startWatcher(folderId);
@@ -509,7 +520,9 @@ export class FileWatcherService {
 
     // 이미 재시도 진행 중이면 스킵 (중복 재시도 방지)
     if (entry.isRetrying) {
-      console.log(`  ⏭️  재시도 이미 진행 중: ${entry.folderName}`);
+      if (isVerboseScanDebugEnabled) {
+        console.log(`  ⏭️  재시도 이미 진행 중: ${entry.folderName}`);
+      }
       return;
     }
 
@@ -532,7 +545,7 @@ export class FileWatcherService {
 
     // 지수 백오프 적용 (선형 → 지수)
     const delay = this.RETRY_DELAY_MS * Math.pow(2, entry.retryAttempts - 1);
-    console.log(`  🔄 워처 재시작 예약: ${entry.folderName} (${delay}ms 후, 시도 ${entry.retryAttempts}/${this.MAX_RETRY_ATTEMPTS})`);
+    console.warn(`⚠️  Watcher restart scheduled: ${entry.folderName} (${delay}ms, attempt ${entry.retryAttempts}/${this.MAX_RETRY_ATTEMPTS})`);
 
     entry.isRetrying = true;  // 재시도 플래그 설정
 
@@ -541,7 +554,7 @@ export class FileWatcherService {
         await this.restartWatcher(folderId);
         entry.retryAttempts = 0;  // 성공 시 재시도 카운터 리셋
         entry.isRetrying = false;  // 재시도 플래그 해제
-        console.log(`  ✅ 워처 재시작 성공: ${entry.folderName}`);
+        console.warn(`✅ Watcher recovered: ${entry.folderName}`);
       } catch (error) {
         console.error(`  ❌ 워처 재시작 실패: ${entry.folderName}`, error);
         entry.isRetrying = false;  // 재시도 플래그 해제
@@ -569,12 +582,10 @@ export class FileWatcherService {
    * 모든 워처 중지
    */
   static async stopAll(): Promise<void> {
-    console.log('🛑 모든 워처 중지 중...');
     const folderIds = Array.from(this.watcherRegistry.keys());
     for (const folderId of folderIds) {
       await this.stopWatcher(folderId);
     }
-    console.log('✅ 모든 워처 중지 완료');
   }
 
   /**
@@ -598,7 +609,9 @@ export class FileWatcherService {
     // 심볼릭 링크 스킵
     try {
       if (fs.lstatSync(filePath).isSymbolicLink()) {
-        console.log(`  ⏭️  심볼릭 링크 스킵: ${path.basename(filePath)}`);
+        if (isVerboseScanDebugEnabled) {
+          console.log(`  ⏭️  심볼릭 링크 스킵: ${path.basename(filePath)}`);
+        }
         return false;
       }
     } catch (error) {

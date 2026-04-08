@@ -41,6 +41,11 @@ export interface RegisterAppRoutesOptions {
   uploadLimiter: RequestHandler;
 }
 
+export interface RegisterAppRoutesResult {
+  frontendMode: 'integrated' | 'api-only';
+  frontendDistPath: string | null;
+}
+
 /** Register one static runtime directory with shared CORS and cache headers. */
 function registerRuntimeStaticDirectory(app: Express, mountPath: string, directoryPath: string): void {
   app.use(mountPath, optionalAuth, express.static(directoryPath, {
@@ -61,12 +66,10 @@ function registerRuntimeStaticDirectory(app: Express, mountPath: string, directo
 }
 
 /** Register API routes, runtime static directories, frontend assets, and terminal handlers. */
-export function registerAppRoutes(app: Express, options: RegisterAppRoutesOptions): void {
+export function registerAppRoutes(app: Express, options: RegisterAppRoutesOptions): RegisterAppRoutesResult {
   registerRuntimeStaticDirectory(app, '/uploads', options.uploadsDir);
   registerRuntimeStaticDirectory(app, '/temp', options.tempDir);
   registerRuntimeStaticDirectory(app, '/save', options.saveDir);
-
-  console.log('📋 Registering API routes...');
 
   app.get('/health', (_req, res) => {
     res.json({
@@ -106,8 +109,6 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/thumbnails', optionalAuth, thumbnailRoutes);
 
   app.use('/', mcpRoutes);
-  console.log('🔌 MCP endpoint registered at /mcp');
-  console.log('✅ All API routes registered successfully');
 
   const frontendDistCandidates = process.env.FRONTEND_DIST_PATH
     ? [path.resolve(process.env.FRONTEND_DIST_PATH)]
@@ -118,7 +119,6 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   const frontendDistPath = frontendDistCandidates.find((candidate) => fs.existsSync(candidate));
 
   if (frontendDistPath) {
-    console.log(`🎨 Serving frontend from: ${frontendDistPath}`);
     app.use(express.static(frontendDistPath));
 
     app.get('/{*path}', (req, res, next) => {
@@ -135,13 +135,18 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
       }
     });
   } else {
-    console.warn('⚠️  Frontend dist not found. API-only mode.');
-    console.warn(`   Tried locations: ${frontendDistCandidates.join(', ')}`);
-    console.warn('   Run "npm run build:integrated" to build with frontend.\n');
+    console.warn('⚠️  Frontend build not found. Backend is running in API-only mode.');
+    console.warn('   Before integrated build, open the frontend dev server on http://localhost:1677');
+    console.warn('   After "npm run build:integrated", open the app on the backend port instead.');
   }
 
   app.use(errorHandler);
   app.use((_req, res) => {
     res.status(404).json({ error: 'Not Found' });
   });
+
+  return {
+    frontendMode: frontendDistPath ? 'integrated' : 'api-only',
+    frontendDistPath: frontendDistPath || null,
+  };
 }
