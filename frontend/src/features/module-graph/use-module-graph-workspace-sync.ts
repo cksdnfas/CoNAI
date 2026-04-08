@@ -23,6 +23,7 @@ type NodeArtifactPreviewRecord = {
   latestArtifactLabel: string | null
   latestArtifactPreviewUrl: string | null
   latestArtifactTextPreview: string | null
+  latestArtifactTextValue: string | null
   executionOutputGroups: ReturnType<typeof buildNodeArtifactGroups>
 }
 
@@ -141,7 +142,7 @@ export function useModuleGraphWorkspaceSync({
 
     const fallbackPreviewSignature = Array.from(latestArtifactPreviewByNode.entries())
       .sort(([leftNodeId], [rightNodeId]) => leftNodeId.localeCompare(rightNodeId))
-      .map(([nodeId, preview]) => `${nodeId}:${preview.executionArtifactCount}:${preview.latestArtifactLabel ?? ''}:${preview.latestArtifactPreviewUrl ?? ''}:${preview.latestArtifactTextPreview ?? ''}:${preview.executionOutputGroups.map((group) => `${group.portKey}:${group.artifactCount}:${group.latestArtifactLabel ?? ''}:${group.latestArtifactPreviewUrl ?? ''}:${group.latestArtifactTextPreview ?? ''}`).join(',')}`)
+      .map(([nodeId, preview]) => `${nodeId}:${preview.executionArtifactCount}:${preview.latestArtifactLabel ?? ''}:${preview.latestArtifactPreviewUrl ?? ''}:${preview.latestArtifactTextPreview ?? ''}:${preview.latestArtifactTextValue ?? ''}:${preview.executionOutputGroups.map((group) => `${group.portKey}:${group.artifactCount}:${group.latestArtifactLabel ?? ''}:${group.latestArtifactPreviewUrl ?? ''}:${group.latestArtifactTextPreview ?? ''}:${group.latestArtifactTextValue ?? ''}`).join(',')}`)
       .join('|')
     const edgeSignature = edges
       .map((edge) => `${edge.id}:${edge.source}:${edge.sourceHandle ?? ''}:${edge.target}:${edge.targetHandle ?? ''}`)
@@ -214,6 +215,7 @@ export function useModuleGraphWorkspaceSync({
               latestArtifactLabel: fallbackPreview?.latestArtifactLabel ?? null,
               latestArtifactPreviewUrl: fallbackPreview?.latestArtifactPreviewUrl ?? null,
               latestArtifactTextPreview: fallbackPreview?.latestArtifactTextPreview ?? null,
+              latestArtifactTextValue: fallbackPreview?.latestArtifactTextValue ?? null,
             }
         const selectedExecutionStatus = getNodeExecutionStatus({
           nodeId: node.id,
@@ -241,6 +243,7 @@ export function useModuleGraphWorkspaceSync({
             latestArtifactLabel: artifactPreview.latestArtifactLabel,
             latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
             latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
+            latestArtifactTextValue: artifactPreview.latestArtifactTextValue,
             executionReuseState: reusedNodeIds.has(node.id) ? 'reused' : null,
             executionOutputGroups,
             connectedInputKeys: Array.from(connectedInputMap.get(node.id) ?? []),

@@ -65,6 +65,7 @@ export function WildcardExplorerSidebarPanel({
       title="Explorer"
       badge={<Badge variant="outline">{browserEntries.length}</Badge>}
       floatingFrame
+      floatingLockStorageKey="conai:wildcards:sidebar-locked"
       className={cn(isWideLayout && 'sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}
       bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 space-y-4 overflow-y-auto pr-1')}
       headerExtra={(

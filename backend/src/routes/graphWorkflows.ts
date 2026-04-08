@@ -15,6 +15,7 @@ import {
 import {
   cleanupEmptyGraphExecutions,
   copyGraphWorkflowArtifactsToWatchedFolder,
+  deleteGraphExecutionArtifacts,
 } from '../services/graphWorkflowOutputManagementService'
 import { ModuleGraphResponse, GraphWorkflowCreateData, GraphWorkflowUpdateData } from '../types/moduleGraph'
 import { asyncHandler } from '../middleware/errorHandler'
@@ -322,6 +323,25 @@ router.post('/artifacts/copy-to-folder', asyncHandler(async (req: Request, res: 
   } catch (error) {
     console.error('Error copying graph workflow artifacts to watched folder:', error)
     return res.status(500).json({ success: false, error: 'Failed to copy graph workflow artifacts to watched folder' } as ModuleGraphResponse)
+  }
+}))
+
+router.post('/artifacts/delete', asyncHandler(async (req: Request, res: Response) => {
+  const artifactIds: number[] = Array.isArray(req.body?.artifact_ids)
+    ? Array.from(new Set<number>(req.body.artifact_ids
+      .map((value: unknown) => Number(value))
+      .filter((value: number) => Number.isFinite(value))))
+    : []
+
+  if (artifactIds.length === 0) {
+    return res.status(400).json({ success: false, error: 'artifact_ids is required' } as ModuleGraphResponse)
+  }
+
+  try {
+    return res.json({ success: true, data: await deleteGraphExecutionArtifacts(artifactIds) } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error deleting graph workflow artifacts:', error)
+    return res.status(500).json({ success: false, error: 'Failed to delete graph workflow artifacts' } as ModuleGraphResponse)
   }
 }))
 

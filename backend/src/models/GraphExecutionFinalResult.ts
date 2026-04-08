@@ -78,4 +78,16 @@ export class GraphExecutionFinalResultModel {
       ORDER BY fr.id ASC
     `).all(executionId) as GraphExecutionFinalResultRecord[]
   }
+
+  /** Delete final-result rows that reference one source artifact id set. */
+  static deleteBySourceArtifactIds(sourceArtifactIds: number[]) {
+    if (sourceArtifactIds.length === 0) {
+      return 0
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = sourceArtifactIds.map(() => '?').join(', ')
+    const result = db.prepare(`DELETE FROM graph_execution_final_results WHERE source_artifact_id IN (${placeholders})`).run(...sourceArtifactIds)
+    return result.changes
+  }
 }

@@ -217,6 +217,15 @@ export interface GraphWorkflowEmptyExecutionCleanupResult {
   skipped: Array<{ execution_id: number; reason: string }>
 }
 
+export interface GraphWorkflowArtifactDeleteResult {
+  requested_count: number
+  deleted_count: number
+  missing: number[]
+  deleted_artifact_ids: number[]
+  deleted_file_count: number
+  skipped_files: Array<{ artifact_id: number; path: string; reason: string }>
+}
+
 export interface CreateNaiModuleFromSnapshotPayload {
   name: string
   description?: string
@@ -503,6 +512,17 @@ export async function cleanupGraphWorkflowEmptyExecutions(payload: {
   execution_ids: number[]
 }) {
   const response = await requestJson<ApiEnvelope<GraphWorkflowEmptyExecutionCleanupResult>>('/api/graph-workflows/executions/cleanup-empty', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return response.data
+}
+
+/** Delete raw workflow artifacts that should no longer appear in management lists. */
+export async function deleteGraphWorkflowArtifacts(payload: {
+  artifact_ids: number[]
+}) {
+  const response = await requestJson<ApiEnvelope<GraphWorkflowArtifactDeleteResult>>('/api/graph-workflows/artifacts/delete', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

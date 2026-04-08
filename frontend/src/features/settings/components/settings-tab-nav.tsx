@@ -9,7 +9,7 @@ interface SettingsTabNavProps {
 
 export function SettingsTabNav({ activeTab, onChange }: SettingsTabNavProps) {
   return (
-    <ExplorerSidebar title="Sections" floatingFrame className="min-[800px]:sticky min-[800px]:top-24 min-[800px]:self-start">
+    <ExplorerSidebar title="Sections" floatingFrame floatingLockStorageKey="conai:settings:sidebar-locked" className="min-[800px]:sticky min-[800px]:top-24 min-[800px]:self-start">
       <div className="space-y-2">
         {SETTINGS_TAB_ITEMS.map((item) => (
           <button

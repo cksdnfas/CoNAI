@@ -217,14 +217,15 @@ export function useModuleGraphEditorInteractions({
     setIsModuleLibraryOpen(false)
   }, [handleAddModuleNode, setIsModuleLibraryOpen])
 
-  /** Duplicate the currently selected node with copied input values. */
-  const handleDuplicateSelectedNode = useCallback(() => {
-    if (!selectedNode) {
+  /** Duplicate one node by id with copied input values. */
+  const handleDuplicateNodeById = useCallback((nodeId: string) => {
+    const nodeToDuplicate = nodes.find((node) => node.id === nodeId)
+    if (!nodeToDuplicate) {
       return
     }
 
     const duplicatedNodeId = `module-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const duplicatedInputValues = JSON.parse(JSON.stringify(selectedNode.data.inputValues || {})) as Record<string, unknown>
+    const duplicatedInputValues = JSON.parse(JSON.stringify(nodeToDuplicate.data.inputValues || {})) as Record<string, unknown>
 
     setNodes((currentNodes) => [
       ...currentNodes,
@@ -232,19 +233,28 @@ export function useModuleGraphEditorInteractions({
         id: duplicatedNodeId,
         type: 'module',
         position: {
-          x: selectedNode.position.x + 48,
-          y: selectedNode.position.y + 48,
+          x: nodeToDuplicate.position.x + 48,
+          y: nodeToDuplicate.position.y + 48,
         },
         data: {
-          module: selectedNode.data.module,
+          module: nodeToDuplicate.data.module,
           inputValues: duplicatedInputValues,
         },
       },
     ])
     setSelectedEdgeId(null)
     setSelectedNodeId(duplicatedNodeId)
-    showSnackbar({ message: '선택 노드를 복제했어.', tone: 'info' })
-  }, [selectedNode, setNodes, setSelectedEdgeId, setSelectedNodeId, showSnackbar])
+    showSnackbar({ message: '노드를 복제했어.', tone: 'info' })
+  }, [nodes, setNodes, setSelectedEdgeId, setSelectedNodeId, showSnackbar])
+
+  /** Duplicate the currently selected node with copied input values. */
+  const handleDuplicateSelectedNode = useCallback(() => {
+    if (!selectedNode) {
+      return
+    }
+
+    handleDuplicateNodeById(selectedNode.id)
+  }, [handleDuplicateNodeById, selectedNode])
 
   /** Update one node input value in local editor state. */
   const handleNodeValueChange = useCallback((nodeId: string, portKey: string, value: unknown) => {
@@ -336,17 +346,22 @@ export function useModuleGraphEditorInteractions({
     showSnackbar({ message: '그래프를 자동 정렬했어.', tone: 'info' })
   }, [edges, fitViewAfterAutoLayout, nodes.length, setNodes, showSnackbar])
 
+  /** Remove one node together with its attached edges and exposed-input metadata. */
+  const handleRemoveNodeById = useCallback((nodeId: string) => {
+    setNodes((currentNodes) => currentNodes.filter((node) => node.id !== nodeId))
+    setEdges((currentEdges) => currentEdges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId))
+    setWorkflowExposedInputs((current) => current.filter((inputDefinition) => inputDefinition.node_id !== nodeId))
+    setSelectedNodeId((current) => (current === nodeId ? null : current))
+  }, [setEdges, setNodes, setSelectedNodeId, setWorkflowExposedInputs])
+
   /** Remove the currently selected node together with its attached edges and exposed inputs. */
   const handleRemoveSelectedNode = useCallback(() => {
     if (!selectedNodeId) {
       return
     }
 
-    setNodes((currentNodes) => currentNodes.filter((node) => node.id !== selectedNodeId))
-    setEdges((currentEdges) => currentEdges.filter((edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId))
-    setWorkflowExposedInputs((current) => current.filter((inputDefinition) => inputDefinition.node_id !== selectedNodeId))
-    setSelectedNodeId(null)
-  }, [selectedNodeId, setEdges, setNodes, setSelectedNodeId, setWorkflowExposedInputs])
+    handleRemoveNodeById(selectedNodeId)
+  }, [handleRemoveNodeById, selectedNodeId])
 
   /** Remove the currently selected edge. */
   const handleRemoveSelectedEdge = useCallback(() => {
@@ -398,6 +413,7 @@ export function useModuleGraphEditorInteractions({
     handleConnect,
     handleAddModuleNode,
     handleAddModuleFromLibrary,
+    handleDuplicateNodeById,
     handleDuplicateSelectedNode,
     handleNodeValueChange,
     handleNodeValueClear,
@@ -406,6 +422,7 @@ export function useModuleGraphEditorInteractions({
     handleWorkflowRunInputClear,
     handleWorkflowRunInputImageChange,
     handleAutoLayout,
+    handleRemoveNodeById,
     handleRemoveSelectedNode,
     handleRemoveSelectedEdge,
     handleResetCanvas,

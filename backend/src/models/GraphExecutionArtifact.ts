@@ -2,6 +2,21 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionArtifactRecord } from '../types/moduleGraph'
 
 export class GraphExecutionArtifactModel {
+  /** Find artifacts for a specific id set. */
+  static findByIds(artifactIds: number[]): GraphExecutionArtifactRecord[] {
+    if (artifactIds.length === 0) {
+      return []
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = artifactIds.map(() => '?').join(', ')
+    return db.prepare(`
+      SELECT * FROM graph_execution_artifacts
+      WHERE id IN (${placeholders})
+      ORDER BY created_date DESC, id DESC
+    `).all(...artifactIds) as GraphExecutionArtifactRecord[]
+  }
+
   /** List artifacts for an execution id set. */
   static findByExecutionIds(executionIds: number[]): GraphExecutionArtifactRecord[] {
     if (executionIds.length === 0) {
@@ -49,5 +64,17 @@ export class GraphExecutionArtifactModel {
       WHERE execution_id = ?
       ORDER BY id ASC
     `).all(executionId) as GraphExecutionArtifactRecord[]
+  }
+
+  /** Delete artifacts for a specific id set. */
+  static deleteByIds(artifactIds: number[]) {
+    if (artifactIds.length === 0) {
+      return 0
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = artifactIds.map(() => '?').join(', ')
+    const result = db.prepare(`DELETE FROM graph_execution_artifacts WHERE id IN (${placeholders})`).run(...artifactIds)
+    return result.changes
   }
 }

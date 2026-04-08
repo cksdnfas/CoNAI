@@ -24,6 +24,7 @@ export function useModuleGraphExecutionActions({
   selectedExecution,
   selectedWorkflowValidationIssues,
   workflowRunInputValues,
+  workflowView,
   isDirty,
   onWorkflowNameResolved,
   onGraphSelected,
@@ -47,6 +48,7 @@ export function useModuleGraphExecutionActions({
   selectedExecution: GraphExecutionRecord | null
   selectedWorkflowValidationIssues: Array<{ severity: 'error' | 'warning' | 'info'; nodeLabel: string; title: string }>
   workflowRunInputValues: Record<string, unknown>
+  workflowView: 'browse' | 'edit'
   isDirty: boolean
   onWorkflowNameResolved: (name: string) => void
   onGraphSelected: (graphId: number) => void
@@ -192,7 +194,7 @@ export function useModuleGraphExecutionActions({
       let graphId = selectedGraphId
       let autoSaved = false
 
-      if (selectedGraphId === null || isDirty) {
+      if (workflowView === 'edit' && (selectedGraphId === null || isDirty)) {
         const saveResult = await persistCurrentGraph({ silent: true })
         if (!saveResult) {
           showSnackbar({ message: '선택 노드를 실행하려면 현재 그래프를 먼저 저장할 수 있어야 해.', tone: 'error' })
@@ -231,7 +233,7 @@ export function useModuleGraphExecutionActions({
     } finally {
       setExecutingGraphId(null)
     }
-  }, [executingGraphId, isDirty, nodes, onEdgeCleared, onExecutionSelected, onNodeSelected, persistCurrentGraph, refetchGraphExecutions, selectedGraphId, showSnackbar, workflowRunInputValues])
+  }, [executingGraphId, isDirty, nodes, onEdgeCleared, onExecutionSelected, onNodeSelected, persistCurrentGraph, refetchGraphExecutions, selectedGraphId, showSnackbar, workflowRunInputValues, workflowView])
 
   /** Execute the currently selected node, optionally forcing a full rerun path. */
   const handleExecuteSelectedNode = useCallback(async (forceRerun = false) => {
@@ -282,7 +284,7 @@ export function useModuleGraphExecutionActions({
 
     let graphId = selectedGraphId
 
-    if (selectedGraphId === null || isDirty) {
+    if (workflowView === 'edit' && (selectedGraphId === null || isDirty)) {
       try {
         const saveResult = await persistCurrentGraph({ silent: true })
         if (!saveResult) {
@@ -303,7 +305,7 @@ export function useModuleGraphExecutionActions({
     }
 
     await handleExecuteGraph(graphId)
-  }, [executingGraphId, handleExecuteGraph, isDirty, persistCurrentGraph, selectedGraphId, showSnackbar])
+  }, [executingGraphId, handleExecuteGraph, isDirty, persistCurrentGraph, selectedGraphId, showSnackbar, workflowView])
 
   /** Cancel the currently selected execution and refresh both list and detail views. */
   const handleCancelSelectedExecution = useCallback(async () => {

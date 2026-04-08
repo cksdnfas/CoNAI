@@ -120,6 +120,7 @@ export function useModuleGraphPageViewModel({
       latestArtifactLabel: string | null
       latestArtifactPreviewUrl: string | null
       latestArtifactTextPreview: string | null
+      latestArtifactTextValue: string | null
       executionOutputGroups: ReturnType<typeof buildNodeArtifactGroups>
     }>()
 
@@ -154,6 +155,7 @@ export function useModuleGraphPageViewModel({
           latestArtifactLabel: artifactPreview.latestArtifactLabel,
           latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
           latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
+          latestArtifactTextValue: artifactPreview.latestArtifactTextValue,
           executionOutputGroups: buildNodeArtifactGroups(nodeArtifacts, currentNode?.data.module.output_ports ?? []),
         })
       })

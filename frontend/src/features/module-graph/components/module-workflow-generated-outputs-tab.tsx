@@ -1,15 +1,18 @@
+import { useMemo } from 'react'
 import { Download, Square, SquareCheckBig } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
+import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { GraphExecutionRecord } from '@/lib/api'
 import type { WatchedFolder } from '@/types/folder'
-import { formatDateTime } from '../module-graph-shared'
+import type { ImageRecord } from '@/types/image'
 
 export type ModuleWorkflowGeneratedOutputItem = {
   id: string
   type: string
+  mimeType: string | null
   previewUrl: string | null
   downloadUrl: string | null
   downloadName: string
@@ -21,9 +24,10 @@ export type ModuleWorkflowGeneratedOutputItem = {
   status?: GraphExecutionRecord['status']
 }
 
-/** Render the generated-output tab for workflow browse management. */
+/** Render the generated-output tab using the shared CoNAI image list surface. */
 export function ModuleWorkflowGeneratedOutputsTab({
   outputItems,
+  imageItems,
   selectedOutputIds,
   allVisibleSelected,
   isCopyPanelOpen,
@@ -33,13 +37,14 @@ export function ModuleWorkflowGeneratedOutputsTab({
   watchedFolders,
   watchedFoldersLoading,
   onToggleVisibleSelection,
-  onToggleOutputSelection,
+  onSelectedOutputIdsChange,
   onCopyTargetFolderChange,
   onCloseCopyPanel,
   onCopySelected,
   onDownloadItems,
 }: {
   outputItems: ModuleWorkflowGeneratedOutputItem[]
+  imageItems: ImageRecord[]
   selectedOutputIds: string[]
   allVisibleSelected: boolean
   isCopyPanelOpen: boolean
@@ -49,12 +54,17 @@ export function ModuleWorkflowGeneratedOutputsTab({
   watchedFolders: WatchedFolder[]
   watchedFoldersLoading: boolean
   onToggleVisibleSelection: () => void
-  onToggleOutputSelection: (outputId: string) => void
+  onSelectedOutputIdsChange: (outputIds: string[]) => void
   onCopyTargetFolderChange: (value: string) => void
   onCloseCopyPanel: () => void
   onCopySelected: () => void
   onDownloadItems: (items: ModuleWorkflowGeneratedOutputItem[]) => void
 }) {
+  const outputItemById = useMemo(
+    () => new Map(outputItems.map((item) => [item.id, item])),
+    [outputItems],
+  )
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
@@ -116,71 +126,52 @@ export function ModuleWorkflowGeneratedOutputsTab({
 
         {outputItems.length === 0 ? (
           <div className="rounded-sm border border-dashed border-border px-4 py-10 text-sm text-muted-foreground">
-            No generated outputs were found in this scope yet.
+            이 범위에는 정리할 이미지/영상 생성물이 아직 없어.
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {outputItems.map((item) => {
-              const isSelected = selectedOutputIds.includes(item.id)
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              이미지와 영상만 이 리스트에 보여줘. 텍스트/메타데이터/중간 산출물은 아래 별도 탭에서 관리해.
+            </div>
+            <ImageList
+              items={imageItems}
+              layout="grid"
+              selectable
+              forceSelectionMode
+              selectedIds={selectedOutputIds}
+              onSelectedIdsChange={onSelectedOutputIdsChange}
+              getItemId={(image) => String(image.id)}
+              minColumnWidth={260}
+              gridItemHeight={320}
+              columnGap={20}
+              rowGap={20}
+              renderItemOverlay={(image) => {
+                const item = outputItemById.get(String(image.id))
+                if (!item?.downloadUrl) {
+                  return null
+                }
 
-              return (
-                <div
-                  key={item.id}
-                  className={`overflow-hidden rounded-sm border bg-surface-low transition ${isSelected ? 'border-primary shadow-sm ring-1 ring-primary/30' : 'border-border'}`}
-                >
-                  <button
+                return (
+                  <Button
                     type="button"
-                    className="block w-full text-left"
-                    onClick={() => onToggleOutputSelection(item.id)}
-                    title={isSelected ? 'Deselect output' : 'Select output'}
+                    size="icon"
+                    variant="secondary"
+                    className="h-8 w-8"
+                    title={`${item.label} 다운로드`}
+                    aria-label={`${item.label} 다운로드`}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onDownloadItems([item])
+                    }}
+                    disabled={isDownloading}
                   >
-                    {item.previewUrl ? (
-                      <div className="relative aspect-[4/3] border-b border-border bg-black/10">
-                        <img src={item.previewUrl} alt={item.label} className="h-full w-full object-contain" />
-                        <div className="absolute right-2 top-2">
-                          <Badge variant={isSelected ? 'secondary' : 'outline'}>{isSelected ? 'Selected' : 'Select'}</Badge>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="relative flex aspect-[4/3] items-center justify-center border-b border-border bg-surface-high text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                        {item.type}
-                        <div className="absolute right-2 top-2">
-                          <Badge variant={isSelected ? 'secondary' : 'outline'}>{isSelected ? 'Selected' : 'Select'}</Badge>
-                        </div>
-                      </div>
-                    )}
-                  </button>
-
-                  <div className="space-y-2 px-3 py-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-sm font-medium text-foreground">{item.workflowName}</div>
-                      {item.status ? <Badge variant="outline">{item.status}</Badge> : null}
-                    </div>
-                    <div className="text-xs text-muted-foreground">{item.label}</div>
-                    <div className="text-xs text-muted-foreground">Execution #{item.executionId} · {formatDateTime(item.createdDate)}</div>
-                    {item.storagePath ? (
-                      <div className="truncate text-[11px] text-muted-foreground">{item.storagePath}</div>
-                    ) : null}
-
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                      <Button type="button" size="sm" variant="outline" onClick={() => onToggleOutputSelection(item.id)}>
-                        {isSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                        {isSelected ? 'Selected' : 'Select'}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => onDownloadItems([item])}
-                        disabled={!item.downloadUrl || isDownloading}
-                      >
-                        <Download className="h-4 w-4" />
-                        Download
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+                    <Download className="h-4 w-4" />
+                  </Button>
+                )
+              }}
+            />
           </div>
         )}
       </CardContent>

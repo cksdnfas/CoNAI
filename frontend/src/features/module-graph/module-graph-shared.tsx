@@ -1,4 +1,5 @@
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
+import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { buildApiUrl } from '@/lib/api-client'
 import { applySavedWorkflowInputMetadataToNodes } from './module-graph-workflow-inputs'
 import type {
@@ -19,6 +20,7 @@ export type NodeArtifactGroupPreview = {
   latestArtifactLabel: string | null
   latestArtifactPreviewUrl: string | null
   latestArtifactTextPreview: string | null
+  latestArtifactTextValue: string | null
 }
 
 export type ModuleGraphNodeData = {
@@ -30,10 +32,14 @@ export type ModuleGraphNodeData = {
   latestArtifactLabel?: string | null
   latestArtifactPreviewUrl?: string | null
   latestArtifactTextPreview?: string | null
+  latestArtifactTextValue?: string | null
   executionOutputGroups?: NodeArtifactGroupPreview[]
   executeNodeDisabled?: boolean
   onExecuteNode?: () => void
   onForceExecuteNode?: () => void
+  onNodeValueChange?: (nodeId: string, portKey: string, value: unknown) => void
+  onNodeValueClear?: (nodeId: string, portKey: string) => void
+  onNodeImageChange?: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void
   connectedInputKeys?: string[]
   connectedOutputKeys?: string[]
 }
@@ -180,19 +186,30 @@ export function getArtifactStoredValue(artifact: GraphExecutionArtifactRecord) {
   return 'value' in parsedMetadata ? parsedMetadata.value : parsedMetadata
 }
 
-/** Build a compact one-line text preview for prompt/text/json artifacts. */
-export function buildArtifactTextPreview(artifact: GraphExecutionArtifactRecord, maxLength = 140) {
+/** Build the full readable text payload for prompt/text/json artifacts. */
+export function buildArtifactTextValue(artifact: GraphExecutionArtifactRecord) {
   const storedValue = getArtifactStoredValue(artifact)
   if (storedValue === null || storedValue === undefined) {
     return null
   }
 
-  const rawText =
-    typeof storedValue === 'string'
-      ? storedValue
-      : typeof storedValue === 'number' || typeof storedValue === 'boolean'
-        ? String(storedValue)
-        : JSON.stringify(storedValue)
+  if (typeof storedValue === 'string') {
+    return storedValue.trim() || null
+  }
+
+  if (typeof storedValue === 'number' || typeof storedValue === 'boolean') {
+    return String(storedValue)
+  }
+
+  return JSON.stringify(storedValue, null, 2)
+}
+
+/** Build a compact one-line text preview for prompt/text/json artifacts. */
+export function buildArtifactTextPreview(artifact: GraphExecutionArtifactRecord, maxLength = 140) {
+  const rawText = buildArtifactTextValue(artifact)
+  if (!rawText) {
+    return null
+  }
 
   const normalizedText = rawText.replace(/\s+/g, ' ').trim()
   if (!normalizedText) {
@@ -215,6 +232,7 @@ export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord
       latestArtifactLabel: `${latestVisualArtifact.port_key} · ${latestVisualArtifact.artifact_type}`,
       latestArtifactPreviewUrl: getArtifactPreviewUrl(latestVisualArtifact),
       latestArtifactTextPreview: null,
+      latestArtifactTextValue: null,
     }
   }
 
@@ -227,6 +245,7 @@ export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord
       latestArtifactLabel: `${latestTextArtifact.port_key} · ${latestTextArtifact.artifact_type}`,
       latestArtifactPreviewUrl: null,
       latestArtifactTextPreview: buildArtifactTextPreview(latestTextArtifact),
+      latestArtifactTextValue: buildArtifactTextValue(latestTextArtifact),
     }
   }
 
@@ -234,6 +253,7 @@ export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord
     latestArtifactLabel: null,
     latestArtifactPreviewUrl: null,
     latestArtifactTextPreview: null,
+    latestArtifactTextValue: null,
   }
 }
 
@@ -264,6 +284,7 @@ export function buildNodeArtifactGroups(
         latestArtifactLabel: artifactPreview.latestArtifactLabel,
         latestArtifactPreviewUrl: artifactPreview.latestArtifactPreviewUrl,
         latestArtifactTextPreview: artifactPreview.latestArtifactTextPreview,
+        latestArtifactTextValue: artifactPreview.latestArtifactTextValue,
       } satisfies NodeArtifactGroupPreview
     })
     .sort((left, right) => {

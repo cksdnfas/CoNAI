@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, FileCode2, Folder, Pin, PinOff, Search } from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { ChevronDown, ChevronRight, FileCode2, Folder, Search } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
-import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -23,7 +22,6 @@ type SavedGraphListProps = {
   onSelectFolder: (folderId: number | null) => void
   leftToolbar?: ReactNode
   rightToolbar?: ReactNode
-  floatingActionContainerClassName?: string
 }
 
 type TreeEntry =
@@ -57,27 +55,9 @@ export function SavedGraphList({
   onSelectFolder,
   leftToolbar,
   rightToolbar,
-  floatingActionContainerClassName,
 }: SavedGraphListProps) {
-  const sidebarAnchorRef = useRef<HTMLDivElement | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [isSidebarFloating, setIsSidebarFloating] = useState(false)
-  const [isSidebarFloatingLocked, setIsSidebarFloatingLocked] = useState(() => {
-    if (typeof window === 'undefined') {
-      return false
-    }
-
-    return window.localStorage.getItem(WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY) === 'true'
-  })
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<number[]>([])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    window.localStorage.setItem(WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY, isSidebarFloatingLocked ? 'true' : 'false')
-  }, [isSidebarFloatingLocked])
 
   const foldersByParent = useMemo(() => {
     const nextMap = new Map<number | null, GraphWorkflowFolderRecord[]>()
@@ -173,25 +153,6 @@ export function SavedGraphList({
 
     return filteredRootWorkflows.length > 0 || (visibleFolderIds?.size ?? 0) > 0
   }, [filteredRootWorkflows.length, folders.length, graphs.length, query, visibleFolderIds])
-
-  const handleLockSidebar = () => {
-    setIsSidebarFloatingLocked(true)
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const sidebarTop = sidebarAnchorRef.current?.getBoundingClientRect().top
-        if (sidebarTop === undefined || typeof window === 'undefined') {
-          return
-        }
-
-        const nextOffset = sidebarTop - 96
-        if (Math.abs(nextOffset) < 4) {
-          return
-        }
-
-        window.scrollBy({ top: nextOffset, behavior: 'smooth' })
-      })
-    })
-  }
 
   const toggleFolder = (folderId: number) => {
     setCollapsedFolderIds((current) => (current.includes(folderId) ? current.filter((item) => item !== folderId) : [...current, folderId]))
@@ -304,88 +265,58 @@ export function SavedGraphList({
   )
 
   return (
-    <>
-      <div ref={sidebarAnchorRef}>
-        <ExplorerSidebar
-          title="Explorer"
-          badge={<Badge variant="outline">{graphs.length}</Badge>}
-          floatingFrame
-          floatingLocked={isSidebarFloatingLocked}
-          onFloatingChange={setIsSidebarFloating}
-          className={cn(
-            'isolate flex self-start flex-col',
-            isSidebarFloatingLocked
-              ? 'z-20'
-              : 'sticky top-24 z-30 max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]',
-          )}
-          bodyClassName="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1"
-          headerExtra={
-            <div className="space-y-3 border-b border-white/5 pb-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">{leftToolbar}</div>
-                <div className="flex items-center justify-end gap-2">
-                  {rightToolbar}
-                  {isSidebarFloatingLocked ? (
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      className="bg-surface-low"
-                      onClick={() => setIsSidebarFloatingLocked(false)}
-                      aria-label="사이드바 고정 해제"
-                      title="사이드바 고정 해제"
-                    >
-                      <PinOff className="h-4 w-4" />
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 pl-9 text-sm" />
-              </div>
+    <ExplorerSidebar
+      title="Explorer"
+      badge={<Badge variant="outline">{graphs.length}</Badge>}
+      floatingFrame
+      floatingLockStorageKey={WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY}
+      className="sticky top-24 z-30 isolate self-start max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]"
+      bodyClassName="space-y-1 overflow-y-auto pr-1"
+      headerExtra={
+        <div className="space-y-3 border-b border-white/5 pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">{leftToolbar}</div>
+            <div className="flex items-center justify-end gap-2">
+              {rightToolbar}
             </div>
-          }
-        >
-          <button
-            type="button"
-            onClick={() => onSelectFolder(null)}
-            className={getNavigationItemClassName({
-              active: selectedFolderId === null && selectedGraphId === null,
-              className: 'flex w-full items-center gap-2 px-3 py-2 text-left',
-            })}
-            title="Root"
-          >
-            <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className={cn('truncate text-sm font-medium', selectedFolderId === null && selectedGraphId === null ? 'text-primary' : 'text-foreground')}>
-              Root
-            </span>
-          </button>
+          </div>
 
-          {rootEntries.map((entry) => entry.type === 'folder' ? renderFolderNode(entry.folder, 0) : renderWorkflowRow(entry.workflow, 0))}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 pl-9 text-sm" />
+          </div>
+        </div>
+      }
+    >
+      <button
+        type="button"
+        onClick={() => onSelectFolder(null)}
+        className={getNavigationItemClassName({
+          active: selectedFolderId === null && selectedGraphId === null,
+          className: 'flex w-full items-center gap-2 px-3 py-2 text-left',
+        })}
+        title="Root"
+      >
+        <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className={cn('truncate text-sm font-medium', selectedFolderId === null && selectedGraphId === null ? 'text-primary' : 'text-foreground')}>
+          Root
+        </span>
+      </button>
 
-          {graphs.length === 0 && folders.length === 0 ? (
-            <Alert>
-              <AlertTitle>저장된 워크플로우가 없어</AlertTitle>
-              <AlertDescription>새 폴더나 새 워크플로우를 만들면 여기서 바로 탐색할 수 있어.</AlertDescription>
-            </Alert>
-          ) : null}
-          {(graphs.length > 0 || folders.length > 0) && !hasAnyVisibleItem ? (
-            <Alert>
-              <AlertTitle>검색 결과가 없어</AlertTitle>
-              <AlertDescription>다른 키워드로 찾아봐.</AlertDescription>
-            </Alert>
-          ) : null}
-        </ExplorerSidebar>
-      </div>
+      {rootEntries.map((entry) => entry.type === 'folder' ? renderFolderNode(entry.folder, 0) : renderWorkflowRow(entry.workflow, 0))}
 
-      {isSidebarFloating && !isSidebarFloatingLocked ? (
-        <FloatingBottomAction type="button" onClick={handleLockSidebar} containerClassName={floatingActionContainerClassName}>
-          <Pin className="h-4 w-4" />
-          사이드바 고정
-        </FloatingBottomAction>
+      {graphs.length === 0 && folders.length === 0 ? (
+        <Alert>
+          <AlertTitle>저장된 워크플로우가 없어</AlertTitle>
+          <AlertDescription>새 폴더나 새 워크플로우를 만들면 여기서 바로 탐색할 수 있어.</AlertDescription>
+        </Alert>
       ) : null}
-    </>
+      {(graphs.length > 0 || folders.length > 0) && !hasAnyVisibleItem ? (
+        <Alert>
+          <AlertTitle>검색 결과가 없어</AlertTitle>
+          <AlertDescription>다른 키워드로 찾아봐.</AlertDescription>
+        </Alert>
+      ) : null}
+    </ExplorerSidebar>
   )
 }

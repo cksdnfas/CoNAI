@@ -110,7 +110,7 @@ export function useModuleGraphPageActions({
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const confirmDiscardUnsavedChanges = () => {
-    if (!isDirty) {
+    if (workflowView !== 'edit' || !isDirty) {
       return true
     }
 
@@ -122,6 +122,7 @@ export function useModuleGraphPageActions({
     handleConnect,
     handleAddModuleNode,
     handleAddModuleFromLibrary,
+    handleDuplicateNodeById,
     handleDuplicateSelectedNode,
     handleNodeValueChange,
     handleNodeValueClear,
@@ -130,6 +131,7 @@ export function useModuleGraphPageActions({
     handleWorkflowRunInputClear,
     handleWorkflowRunInputImageChange,
     handleAutoLayout,
+    handleRemoveNodeById,
     handleRemoveSelectedNode,
     handleRemoveSelectedEdge,
     handleResetCanvas,
@@ -233,6 +235,7 @@ export function useModuleGraphPageActions({
     selectedExecution,
     selectedWorkflowValidationIssues,
     workflowRunInputValues,
+    workflowView,
     isDirty,
     onWorkflowNameResolved: setWorkflowName,
     onGraphSelected: setSelectedGraphId,
@@ -257,6 +260,7 @@ export function useModuleGraphPageActions({
     handleConnect,
     handleAddModuleNode,
     handleAddModuleFromLibrary,
+    handleDuplicateNodeById,
     handleDuplicateSelectedNode,
     handleNodeValueChange,
     handleNodeValueClear,
@@ -265,6 +269,7 @@ export function useModuleGraphPageActions({
     handleWorkflowRunInputClear,
     handleWorkflowRunInputImageChange,
     handleAutoLayout,
+    handleRemoveNodeById,
     handleRemoveSelectedNode,
     handleRemoveSelectedEdge,
     handleResetCanvas,

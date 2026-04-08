@@ -31,6 +31,7 @@ export function GroupExplorerSidebarPanel({
       title="Explorer"
       badge={<Badge variant="outline">{groups.length}</Badge>}
       floatingFrame
+      floatingLockStorageKey="conai:groups:sidebar-locked"
       className={cn(isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
       bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
     >

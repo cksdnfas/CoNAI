@@ -61,6 +61,8 @@ export function useModuleGraphPageEditorPanels({
   onWorkflowRunInputChange,
   onWorkflowRunInputClear,
   onWorkflowRunInputImageChange,
+  onDuplicateNodeById,
+  onRemoveNodeById,
   onRunSelectedWorkflow,
   onEditSelectedWorkflow,
   onDeleteSelectedWorkflow,
@@ -131,6 +133,8 @@ export function useModuleGraphPageEditorPanels({
   onWorkflowRunInputChange: (inputId: string, value: unknown) => void
   onWorkflowRunInputClear: (inputId: string) => void
   onWorkflowRunInputImageChange: (inputId: string, image?: SelectedImageDraft) => void
+  onDuplicateNodeById: (nodeId: string) => void
+  onRemoveNodeById: (nodeId: string) => void
   onRunSelectedWorkflow: () => void
   onEditSelectedWorkflow: () => void
   onDeleteSelectedWorkflow: () => void
@@ -166,9 +170,12 @@ export function useModuleGraphPageEditorPanels({
           executeNodeDisabled: executingGraphId !== null,
           onExecuteNode: () => onExecuteNodeById(node.id, false),
           onForceExecuteNode: () => onExecuteNodeById(node.id, true),
+          onNodeValueChange,
+          onNodeValueClear,
+          onNodeImageChange,
         },
       })),
-    [executingGraphId, nodes, onExecuteNodeById],
+    [executingGraphId, nodes, onExecuteNodeById, onNodeImageChange, onNodeValueChange, onNodeValueClear],
   )
 
   const editorSupportSubtitle = (
@@ -279,6 +286,8 @@ export function useModuleGraphPageEditorPanels({
       onPaneSelect={onPaneSelect}
       onConnect={onConnect}
       onAddModuleNode={onAddModuleNode}
+      onDuplicateNodeById={onDuplicateNodeById}
+      onRemoveNodeById={onRemoveNodeById}
       isValidConnection={isValidConnection}
     />
   )

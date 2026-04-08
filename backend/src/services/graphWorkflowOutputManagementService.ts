@@ -79,6 +79,49 @@ export function cleanupEmptyGraphExecutions(executionIds: number[]) {
   }
 }
 
+/** Delete artifact rows and best-effort temp files for one artifact id set. */
+export async function deleteGraphExecutionArtifacts(artifactIds: number[]) {
+  const artifacts = GraphExecutionArtifactModel.findByIds(artifactIds)
+  const foundArtifactIds = new Set(artifacts.map((artifact) => artifact.id))
+  const missing = artifactIds.filter((artifactId) => !foundArtifactIds.has(artifactId))
+  const graphExecutionTempRoot = path.resolve(runtimePaths.tempDir, 'graph-executions')
+  const deletedFiles: string[] = []
+  const skippedFiles: Array<{ artifact_id: number; path: string; reason: string }> = []
+
+  for (const artifact of artifacts) {
+    if (!artifact.storage_path) {
+      continue
+    }
+
+    const resolvedPath = path.resolve(artifact.storage_path)
+    if (!isPathInsideRoot(graphExecutionTempRoot, resolvedPath)) {
+      skippedFiles.push({ artifact_id: artifact.id, path: artifact.storage_path, reason: 'Artifact file is outside the graph execution temp root' })
+      continue
+    }
+
+    try {
+      await fs.promises.unlink(resolvedPath)
+      deletedFiles.push(resolvedPath)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') {
+        skippedFiles.push({ artifact_id: artifact.id, path: artifact.storage_path, reason: 'Failed to delete artifact file' })
+      }
+    }
+  }
+
+  GraphExecutionFinalResultModel.deleteBySourceArtifactIds(artifacts.map((artifact) => artifact.id))
+  const deletedCount = GraphExecutionArtifactModel.deleteByIds(artifacts.map((artifact) => artifact.id))
+
+  return {
+    requested_count: artifactIds.length,
+    deleted_count: deletedCount,
+    missing,
+    deleted_artifact_ids: artifacts.map((artifact) => artifact.id),
+    deleted_file_count: deletedFiles.length,
+    skipped_files: skippedFiles,
+  }
+}
+
 /** Copy generated workflow artifacts into one watched folder target. */
 export async function copyGraphWorkflowArtifactsToWatchedFolder(folderId: number, sourcePaths: string[]) {
   const watchedFolder = await WatchedFolderService.getFolder(folderId)

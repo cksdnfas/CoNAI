@@ -52,7 +52,6 @@ export function ModuleGraphWorkflowListSidebar({
       moduleDefinitionById={moduleDefinitionById}
       onLoadGraph={onLoadGraph}
       onSelectFolder={onSelectFolder}
-      floatingActionContainerClassName={workflowView === 'edit' ? 'bottom-24' : undefined}
       leftToolbar={
         workflowView === 'edit' ? (
           <Button
