@@ -1,0 +1,86 @@
+:root {
+  --vp-c-brand-1: #7c5cff;
+  --vp-c-brand-2: #6b4df0;
+  --vp-c-brand-3: #5d40e0;
+}
+
+.VPHome {
+  padding-bottom: 64px;
+}
+
+.vp-doc .onepage-intro {
+  margin: 20px 0 28px;
+  padding: 20px 22px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 20px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent), transparent 70%);
+}
+
+.vp-doc .onepage-grid {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0 28px;
+}
+
+.vp-doc .accordion-item {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 18px;
+  background: var(--vp-c-bg-soft);
+  overflow: hidden;
+}
+
+.vp-doc .accordion-item summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 18px 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.vp-doc .accordion-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.vp-doc .accordion-item summary::after {
+  content: '열기';
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc .accordion-item[open] summary::after {
+  content: '닫기';
+}
+
+.vp-doc .accordion-body {
+  padding: 0 20px 20px;
+}
+
+.vp-doc .accordion-body > :first-child {
+  margin-top: 0;
+}
+
+.vp-doc .tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.vp-doc .tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--vp-c-default-soft);
+  color: var(--vp-c-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vp-doc .section-anchor {
+  scroll-margin-top: 88px;
+}
