@@ -78,6 +78,8 @@ type WorkflowJsonNodeRecord = {
   title?: string
   class_type?: string
   inputs?: Record<string, unknown>
+  pos?: unknown
+  position?: unknown
   _meta?: {
     title?: string
   }
@@ -165,7 +167,75 @@ function parseWorkflowDefinition(workflowJson: string): WorkflowJsonRecord {
   return parsed as WorkflowJsonRecord
 }
 
-function layoutGraph(nodes: AuthoringNode[], edges: AuthoringEdge[]) {
+function resolveWorkflowNodePosition(nodeData: WorkflowJsonNodeRecord) {
+  const candidate = nodeData.pos ?? nodeData.position
+
+  if (Array.isArray(candidate) && candidate.length >= 2) {
+    const [x, y] = candidate
+    if (typeof x === 'number' && Number.isFinite(x) && typeof y === 'number' && Number.isFinite(y)) {
+      return { x, y }
+    }
+  }
+
+  if (candidate && typeof candidate === 'object') {
+    const record = candidate as Record<string, unknown>
+    const x = typeof record.x === 'number' && Number.isFinite(record.x)
+      ? record.x
+      : typeof record['0'] === 'number' && Number.isFinite(record['0'])
+        ? record['0']
+        : null
+    const y = typeof record.y === 'number' && Number.isFinite(record.y)
+      ? record.y
+      : typeof record['1'] === 'number' && Number.isFinite(record['1'])
+        ? record['1']
+        : null
+
+    if (x !== null && y !== null) {
+      return { x, y }
+    }
+  }
+
+  return null
+}
+
+function estimateAuthoringNodeHeight(node: AuthoringNode) {
+  const editableInputCount = node.data.editableInputs.length
+  if (editableInputCount === 0) {
+    return 120
+  }
+
+  return 108 + editableInputCount * 42
+}
+
+function layoutGraph(nodes: AuthoringNode[], edges: AuthoringEdge[], explicitPositions: Map<string, { x: number; y: number } | null>) {
+  const hasExplicitPositions = nodes.some((node) => explicitPositions.get(node.id) !== null)
+  if (hasExplicitPositions) {
+    const explicitNodes = nodes.filter((node) => explicitPositions.get(node.id) !== null)
+    const maxExplicitX = explicitNodes.reduce((acc, node) => Math.max(acc, explicitPositions.get(node.id)?.x ?? 0), 0)
+    const maxExplicitY = explicitNodes.reduce((acc, node) => Math.max(acc, (explicitPositions.get(node.id)?.y ?? 0) + estimateAuthoringNodeHeight(node)), 0)
+    let missingCursorY = maxExplicitY + 80
+
+    return nodes.map((node) => {
+      const explicitPosition = explicitPositions.get(node.id)
+      if (explicitPosition) {
+        return {
+          ...node,
+          position: explicitPosition,
+        }
+      }
+
+      const nextNode = {
+        ...node,
+        position: {
+          x: maxExplicitX + 360,
+          y: missingCursorY,
+        },
+      }
+      missingCursorY += estimateAuthoringNodeHeight(node) + 48
+      return nextNode
+    })
+  }
+
   const inDegree = new Map<string, number>()
   const adjacency = new Map<string, string[]>()
   const depthByNode = new Map<string, number>()
@@ -204,23 +274,18 @@ function layoutGraph(nodes: AuthoringNode[], edges: AuthoringEdge[]) {
     }
   }
 
-  const columns = new Map<number, string[]>()
-  for (const node of nodes) {
-    const depth = depthByNode.get(node.id) ?? 0
-    const column = columns.get(depth) ?? []
-    column.push(node.id)
-    columns.set(depth, column)
-  }
-
+  const columnYOffsets = new Map<number, number>()
   return nodes.map((node) => {
     const depth = depthByNode.get(node.id) ?? 0
-    const column = columns.get(depth) ?? []
-    const rowIndex = column.indexOf(node.id)
+    const currentY = columnYOffsets.get(depth) ?? 0
+    const estimatedHeight = estimateAuthoringNodeHeight(node)
+    columnYOffsets.set(depth, currentY + estimatedHeight + 48)
+
     return {
       ...node,
       position: {
-        x: depth * 320,
-        y: rowIndex * 220,
+        x: depth * 360,
+        y: currentY,
       },
     }
   })
@@ -236,6 +301,7 @@ function parseWorkflowGraph(params: {
 
   const nodes: AuthoringNode[] = []
   const edges: AuthoringEdge[] = []
+  const explicitPositions = new Map<string, { x: number; y: number } | null>()
 
   for (const [nodeId, nodeData] of Object.entries(workflow)) {
     const inputs = nodeData.inputs ?? {}
@@ -265,6 +331,8 @@ function parseWorkflowGraph(params: {
     const classType = nodeData.class_type || 'Unknown'
     const title = resolveWorkflowNodeTitle(nodeId, nodeData)
 
+    explicitPositions.set(nodeId, resolveWorkflowNodePosition(nodeData))
+
     nodes.push({
       id: nodeId,
       type: 'comfyAuthoring',
@@ -281,7 +349,7 @@ function parseWorkflowGraph(params: {
   }
 
   return {
-    nodes: layoutGraph(nodes, edges),
+    nodes: layoutGraph(nodes, edges, explicitPositions),
     edges,
   }
 }
@@ -503,6 +571,9 @@ export function ComfyWorkflowAuthoringModal({
 
   const reactFlowColorMode: 'light' | 'dark' | 'system' =
     settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode
+  const authoringMiniMapNodeColor = reactFlowColorMode === 'light' ? '#d9480f' : '#f95e14'
+  const authoringMiniMapMaskColor = reactFlowColorMode === 'light' ? 'rgba(255, 255, 255, 0.62)' : 'rgba(8, 10, 14, 0.58)'
+  const authoringMiniMapBgColor = reactFlowColorMode === 'light' ? '#f5f6f8' : '#141414'
 
   useEffect(() => {
     if (!open || workflowEditorTab !== 'graph' || !parsedGraph || !authoringFlowInstance) {
@@ -880,8 +951,11 @@ export function ComfyWorkflowAuthoringModal({
                         <MiniMap
                           pannable
                           zoomable
-                          nodeColor="var(--primary)"
-                          maskColor="color-mix(in srgb, var(--background) 72%, transparent)"
+                          nodeColor={authoringMiniMapNodeColor}
+                          nodeStrokeColor={authoringMiniMapNodeColor}
+                          nodeStrokeWidth={3}
+                          maskColor={authoringMiniMapMaskColor}
+                          bgColor={authoringMiniMapBgColor}
                           className="!bg-surface-lowest"
                         />
                         <Controls />
