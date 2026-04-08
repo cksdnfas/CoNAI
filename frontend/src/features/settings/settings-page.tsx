@@ -37,6 +37,7 @@ import { FoldersTab } from './components/folders-tab'
 import { ImageSaveTab } from './components/image-save-tab'
 import { MetadataTab } from './components/metadata-tab'
 import { SettingsTabNav } from './components/settings-tab-nav'
+import { SecurityTab } from './components/security-tab'
 import type { SettingsTab } from './settings-tabs'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { applyAppearanceTheme } from '@/lib/appearance'
@@ -476,6 +477,8 @@ export function SettingsPage() {
               isUploadingFont={appearanceFontUploadMutation.isPending}
             />
           ) : null}
+
+          {activeTab === 'security' ? <SecurityTab /> : null}
 
           {activeTab === 'auto' ? (
             <AutoTab

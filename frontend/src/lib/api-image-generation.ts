@@ -353,6 +353,7 @@ interface GenerationHistoryResponse {
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(buildApiUrl(path), {
     ...init,
+    credentials: init?.credentials ?? 'include',
     headers: {
       Accept: 'application/json',
       ...(init?.headers ?? {}),

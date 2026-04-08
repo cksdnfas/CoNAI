@@ -1,5 +1,5 @@
 import { Navigate, createHashRouter } from 'react-router-dom'
-import { AppShell } from '@/components/layout/app-shell'
+import { ProtectedAppShell } from '@/features/auth/protected-app-shell'
 import {
   GroupRoute,
   HomeRoute,
@@ -20,7 +20,7 @@ export const appRouter = createHashRouter([
   },
   {
     path: '/',
-    element: <AppShell />,
+    element: <ProtectedAppShell />,
     children: [
       {
         index: true,

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { AuthCredentials } from '../models/AuthCredentials';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { requireAuth } from '../middleware/authMiddleware';
 import { getAuthDbPath } from '../database/authDb';
 import fs from 'fs';
 
@@ -131,9 +132,13 @@ router.post('/setup', asyncHandler(async (req: Request, res: Response) => {
   try {
     await AuthCredentials.create(username, password);
 
+    req.session.authenticated = true;
+    req.session.username = username;
+
     res.json({
       success: true,
-      message: 'Authentication configured successfully'
+      message: 'Authentication configured successfully',
+      username
     });
   } catch (error) {
     console.error('Error creating auth credentials:', error);
@@ -145,7 +150,7 @@ router.post('/setup', asyncHandler(async (req: Request, res: Response) => {
  * Update authentication credentials
  * PUT /api/auth/credentials
  */
-router.put('/credentials', asyncHandler(async (req: Request, res: Response) => {
+router.put('/credentials', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const { currentPassword, newUsername, newPassword } = req.body;
 
   // Validation
@@ -185,7 +190,8 @@ router.put('/credentials', asyncHandler(async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: 'Credentials updated successfully'
+      message: 'Credentials updated successfully',
+      username: newUsername
     });
   } catch (error) {
     console.error('Error updating credentials:', error);
