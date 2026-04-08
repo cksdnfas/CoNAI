@@ -83,7 +83,9 @@ export function ImageList({
       }
 
       if ((activationMode === 'modal' || activationMode === 'modal-single') && imageViewModal) {
-        const modalCompositeHash = image.composite_hash && itemCompositeHashes.includes(image.composite_hash) ? image.composite_hash : null
+        const modalCompositeHash = typeof image.composite_hash === 'string' && image.composite_hash.trim().length > 0
+          ? image.composite_hash
+          : null
 
         if (modalCompositeHash) {
           imageViewModal.openImageView(
