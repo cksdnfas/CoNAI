@@ -9,8 +9,6 @@ on:
     paths:
       - 'docs/**'
       - '.github/workflows/docs-pages.yml'
-      - 'package.json'
-      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:
@@ -34,17 +32,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: docs/package-lock.json
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install docs dependencies
+        run: npm install --prefix docs
 
       - name: Build docs
-        run: npm run docs:build
+        run: npm run build --prefix docs
         env:
           GITHUB_ACTIONS: 'true'
           GITHUB_REPOSITORY: ${{ github.repository }}
