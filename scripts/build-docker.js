@@ -414,7 +414,9 @@ services:
       - PORT=1666
       - HOST=0.0.0.0
       - LOCALE=en
-      # All data paths are automatically configured via RUNTIME_BASE_PATH=/app/data/user/user
+      # Optional: set a fixed secret for multi-instance/shared deployments
+      # - SESSION_SECRET=replace-with-a-long-random-string
+      # All data paths are automatically configured via RUNTIME_BASE_PATH=/app/data/user
 
     restart: unless-stopped
     
@@ -882,8 +884,9 @@ Available environment variables (set in \`docker-compose.yml\`):
 environment:
   - NODE_ENV=production       # Environment mode
   - PORT=1666                 # Internal container port (don't change)
-  - HOST=0.0.0.0             # Listen address
-  - LOCALE=en                # Interface language (en, ko)
+  - HOST=0.0.0.0              # Listen address
+  - LOCALE=en                 # Interface language (en, ko)
+  - SESSION_SECRET=...        # Optional fixed secret (recommended for multi-instance deployments)
 
   # Optional: Override individual data paths
   # - RUNTIME_BASE_PATH=/app/data/user
@@ -893,6 +896,8 @@ environment:
   # - RUNTIME_MODELS_DIR=/custom/path
   # - RUNTIME_RECYCLE_BIN_DIR=/custom/path
 \`\`\`
+
+If \`SESSION_SECRET\` is omitted, CoNAI now creates a persisted runtime secret inside the data volume so sessions remain valid after container restarts. Set an explicit secret when you need multiple app instances to share the same session state.
 
 ### Port Configuration
 

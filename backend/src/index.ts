@@ -66,8 +66,8 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import BetterSqlite3Store from 'better-sqlite3-session-store';
-import crypto from 'crypto';
 import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
+import { resolveSessionSecret } from './utils/sessionSecret';
 import { prepareHttpsOptions } from './utils/httpsOptions';
 import { getNetworkInfo, formatNetworkInfo } from './utils/networkInfo';
 import { StartupCheck } from './utils/startupCheck';
@@ -189,12 +189,7 @@ async function initializeSessionMiddleware() {
 
   console.log('🔐 Configuring session management...');
   const SqliteStore = BetterSqlite3Store(session);
-  const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
-
-  if (!process.env.SESSION_SECRET) {
-    console.warn('⚠️  SESSION_SECRET not set in .env, using random generated secret');
-    console.warn('   Sessions will be invalidated on server restart');
-  }
+  const sessionSecret = resolveSessionSecret().secret;
 
   const sessionMiddleware = session({
     store: new SqliteStore({
