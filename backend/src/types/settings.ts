@@ -30,6 +30,8 @@ export type TaggerDevice = 'auto' | 'cpu' | 'cuda';
 export type KaloscopeDevice = 'auto' | 'cpu' | 'cuda';
 export type PromptSimilarityAlgorithm = 'simhash' | 'minhash';
 
+export const DEFAULT_ARTIST_LINK_URL_TEMPLATE = 'danbooru.donmai.us/posts?tags={key}';
+
 export interface TaggerSettings {
   enabled: boolean;                // Tagger 활성화 (활성화 시 자동으로 미처리 이미지 태깅)
   autoTagOnUpload: boolean;        // 업로드 시 자동 태깅 여부
@@ -47,6 +49,7 @@ export interface KaloscopeSettings {
   autoTagOnUpload: boolean;        // 업로드/스케줄러 자동 처리 여부
   device: KaloscopeDevice;         // 디바이스 선택 (auto/cpu/cuda)
   topK: number;                    // 추출할 아티스트 태그 수
+  artistLinkUrlTemplate: string;   // Artist prompt 배지 외부 링크 템플릿 ({key} placeholder)
 }
 
 export interface PromptSimilarityWeights {

@@ -128,6 +128,24 @@ export function getImageAutoPromptContent(image: ImageRecord) {
   }
 }
 
+/** Build comma-separated auto prompt text so it can be pasted into generation inputs. */
+export function getImageAutoPromptCopyText(image: ImageRecord) {
+  const autoPromptContent = getImageAutoPromptContent(image)
+
+  if (!autoPromptContent) {
+    return ''
+  }
+
+  return [
+    ...autoPromptContent.ratingEntries.map(([tag]) => tag),
+    ...autoPromptContent.characterEntries.map(([tag]) => tag),
+    ...autoPromptContent.generalTags,
+  ]
+    .map((tag) => tag.trim())
+    .filter((tag, index, tags) => tag.length > 0 && tags.indexOf(tag) === index)
+    .join(', ')
+}
+
 /** Build extracted artist prompt tag data for the detail metadata card. */
 export function getImageArtistPromptSection(image: ImageRecord) {
   const kaloscopeArtists = image.auto_tags?.kaloscope?.artists ?? image.auto_tags?.kaloscope?.artist

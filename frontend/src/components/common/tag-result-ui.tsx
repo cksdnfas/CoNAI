@@ -18,18 +18,46 @@ function getRatingAccentStyle(label: string) {
   }
 }
 
-export function TagBundleSection({ label, tags }: { label: string; tags: string[] }) {
+export function TagBundleSection({
+  label,
+  tags,
+  getTagHref,
+  onTagClick,
+}: {
+  label: string
+  tags: string[]
+  getTagHref?: (tag: string) => string | null
+  onTagClick?: (tag: string, href: string) => void
+}) {
   if (tags.length === 0) return null
 
   return (
     <div className="space-y-2 rounded-sm bg-surface-lowest px-3 py-3">
       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
       <div className="flex flex-wrap gap-2">
-        {tags.map((tag) => (
-          <span key={`${label}:${tag}`} className="rounded-full bg-surface-low px-2.5 py-1 text-xs text-foreground">
-            {tag}
-          </span>
-        ))}
+        {tags.map((tag) => {
+          const href = getTagHref?.(tag) ?? null
+
+          if (href) {
+            return (
+              <button
+                key={`${label}:${tag}`}
+                type="button"
+                className="rounded-full bg-surface-low px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high hover:text-primary"
+                onClick={() => onTagClick ? onTagClick(tag, href) : window.open(href, '_blank', 'noopener,noreferrer')}
+                title={`${tag} 링크 열기`}
+              >
+                {tag}
+              </button>
+            )
+          }
+
+          return (
+            <span key={`${label}:${tag}`} className="rounded-full bg-surface-low px-2.5 py-1 text-xs text-foreground">
+              {tag}
+            </span>
+          )
+        })}
       </div>
     </div>
   )

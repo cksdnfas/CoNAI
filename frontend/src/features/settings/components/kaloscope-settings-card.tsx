@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
+import { RotateCcw } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { KaloscopeServerStatus, KaloscopeSettings } from '@/types/settings'
+import { DEFAULT_ARTIST_LINK_URL_TEMPLATE, type KaloscopeServerStatus, type KaloscopeSettings } from '@/types/settings'
 import { SettingsField, SettingsToggleRow } from './settings-primitives'
 
 interface KaloscopeSettingsCardProps {
@@ -58,6 +60,24 @@ export function KaloscopeSettingsCard({
 
               <SettingsField label="Top K">
                 <Input type="number" min={1} max={200} variant="settings" value={kaloscopeDraft.topK} onChange={(event) => onPatchKaloscope({ topK: Number(event.target.value) || 1 })} />
+              </SettingsField>
+
+              <SettingsField label="Artist 링크 URL" className="md:col-span-2">
+                <div className="space-y-2">
+                  <Input
+                    variant="settings"
+                    value={kaloscopeDraft.artistLinkUrlTemplate}
+                    onChange={(event) => onPatchKaloscope({ artistLinkUrlTemplate: event.target.value })}
+                    placeholder={DEFAULT_ARTIST_LINK_URL_TEMPLATE}
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">{`{key}`} 자리에 아티스트 배지 텍스트가 들어가.</p>
+                    <Button type="button" size="sm" variant="outline" onClick={() => onPatchKaloscope({ artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE })}>
+                      <RotateCcw className="h-4 w-4" />
+                      기본값
+                    </Button>
+                  </div>
+                </div>
               </SettingsField>
             </>
           ) : (

@@ -65,18 +65,22 @@ export function ArtistPromptSection({
   label = 'artist',
   accentClassName = 'bg-primary/80',
   collapsibleScores = true,
+  getTagHref,
+  onTagClick,
 }: {
   tags: string[]
   entries: PromptScoreEntries
   label?: string
   accentClassName?: string
   collapsibleScores?: boolean
+  getTagHref?: (tag: string) => string | null
+  onTagClick?: (tag: string, href: string) => void
 }) {
   if (tags.length === 0 && entries.length === 0) return null
 
   return (
     <div className="space-y-3">
-      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} /> : null}
+      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} getTagHref={getTagHref} onTagClick={onTagClick} /> : null}
       {entries.length > 0
         ? collapsibleScores
           ? <CollapsibleScoreMeterList title={label} entries={entries} accentClassName={accentClassName} />

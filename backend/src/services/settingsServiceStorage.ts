@@ -5,6 +5,7 @@ import {
   AppSettings,
   AppearancePresetSlot,
   AppearanceThemeSettings,
+  DEFAULT_ARTIST_LINK_URL_TEMPLATE,
   TaggerModel,
   TaggerDevice,
 } from '../types/settings';
@@ -143,6 +144,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       autoTagOnUpload: false,
       device: ((process.env.KALOSCOPE_DEVICE as 'auto' | 'cpu' | 'cuda') || 'auto'),
       topK: Number.parseInt(process.env.KALOSCOPE_TOPK || '15', 10),
+      artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE,
     },
     similarity: {
       autoGenerateHashOnUpload: true,

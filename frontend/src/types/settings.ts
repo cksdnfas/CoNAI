@@ -6,6 +6,8 @@ export type KaloscopeDevice = 'auto' | 'cpu' | 'cuda'
 export type PromptSimilarityAlgorithm = 'simhash' | 'minhash'
 export type StealthScanMode = 'full' | 'fast' | 'skip'
 
+export const DEFAULT_ARTIST_LINK_URL_TEMPLATE = 'danbooru.donmai.us/posts?tags={key}'
+
 export interface DeleteProtectionSettings {
   enabled: boolean
   recycleBinPath: string
@@ -36,6 +38,7 @@ export interface KaloscopeSettings {
   autoTagOnUpload: boolean
   device: KaloscopeDevice
   topK: number
+  artistLinkUrlTemplate: string
 }
 
 export interface PromptSimilarityWeights {

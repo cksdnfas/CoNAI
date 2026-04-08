@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { FilePenLine } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Copy, FilePenLine, Settings2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -12,11 +12,14 @@ import {
 } from '@/components/common/prompt-result-sections'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
-import { resolvePromptGroups } from '@/lib/api'
+import { getAppSettings, resolvePromptGroups, updateKaloscopeSettings } from '@/lib/api'
+import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
-import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent, getImageGenerationParamItems } from './image-detail-utils'
+import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
+import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent, getImageAutoPromptCopyText, getImageGenerationParamItems } from './image-detail-utils'
 
 interface ImageDetailMetaCardProps {
   image: ImageRecord
@@ -44,8 +47,11 @@ function persistPromptDisplayMode(mode: PromptDisplayMode) {
 
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const imageViewModal = useImageViewModal()
+  const { showSnackbar } = useSnackbar()
   const [promptDisplayMode, setPromptDisplayMode] = useState<PromptDisplayMode>(() => loadPromptDisplayMode())
+  const [isArtistPromptSettingsOpen, setIsArtistPromptSettingsOpen] = useState(false)
   const extractedPromptCards = useMemo(() => getImageExtractedPromptCards(image), [image])
 
   const handlePromptDisplayModeChange = (nextMode: PromptDisplayMode) => {
@@ -56,10 +62,31 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const negativePromptTerms = useMemo(() => getImagePromptTerms(image, 'negative'), [image])
   const autoPromptContent = getImageAutoPromptContent(image)
   const artistPromptSection = getImageArtistPromptSection(image)
+  const autoPromptCopyText = useMemo(() => getImageAutoPromptCopyText(image), [image])
   const generationParamItems = getImageGenerationParamItems(image)
   const canEditMetadata = Boolean(image.composite_hash) && image.file_type === 'image'
   const canTogglePromptGrouping = positivePromptTerms.length > 0 || negativePromptTerms.length > 0
   const metaItemClassName = 'rounded-sm border border-border bg-surface-container p-4'
+
+  const settingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+    staleTime: 60_000,
+  })
+
+  const artistPromptLinkMutation = useMutation({
+    mutationFn: updateKaloscopeSettings,
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['app-settings'], settings)
+      showSnackbar({ message: 'Artist prompt 링크 설정을 저장했어.', tone: 'info' })
+      setIsArtistPromptSettingsOpen(false)
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : 'Artist prompt 링크 설정 저장에 실패했어.', tone: 'error' })
+    },
+  })
+
+  const artistLinkUrlTemplate = settingsQuery.data?.kaloscope.artistLinkUrlTemplate
 
   const positivePromptGroupQuery = useQuery({
     queryKey: ['prompt-group-resolve', 'positive', positivePromptTerms],
@@ -117,6 +144,23 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     positivePromptTerms,
     promptDisplayMode,
   ])
+
+  const handleCopyAutoPrompt = async () => {
+    if (!autoPromptCopyText) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(autoPromptCopyText)
+      showSnackbar({ message: 'Auto prompt를 복사했어.', tone: 'info' })
+    } catch {
+      showSnackbar({ message: 'Auto prompt 복사에 실패했어.', tone: 'error' })
+    }
+  }
+
+  const handleSaveArtistPromptLinkTemplate = (template: string) => {
+    void artistPromptLinkMutation.mutateAsync({ artistLinkUrlTemplate: template })
+  }
 
   return (
     <div className="space-y-3 text-sm text-muted-foreground">
@@ -195,7 +239,13 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         ) : null}
         {autoPromptContent ? (
           <div className={`${metaItemClassName} sm:col-span-2`}>
-            <p className="text-[11px] uppercase tracking-[0.18em]">Auto prompt</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[11px] uppercase tracking-[0.18em]">Auto prompt</p>
+              <Button type="button" size="sm" variant="outline" onClick={() => void handleCopyAutoPrompt()} disabled={!autoPromptCopyText}>
+                <Copy className="h-4 w-4" />
+                복사
+              </Button>
+            </div>
             <div className="mt-3 space-y-3">
               <RatingPromptSection entries={autoPromptContent.ratingEntries} />
               <CharacterPromptSection entries={autoPromptContent.characterEntries} />
@@ -205,18 +255,39 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         ) : null}
         {artistPromptSection ? (
           <div className={`${metaItemClassName} sm:col-span-2`}>
-            <p className="text-[11px] uppercase tracking-[0.18em]">Artist prompt</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[11px] uppercase tracking-[0.18em]">Artist prompt</p>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                onClick={() => setIsArtistPromptSettingsOpen(true)}
+                aria-label="Artist prompt 링크 설정"
+                title="Artist prompt 링크 설정"
+              >
+                <Settings2 className="h-4 w-4" />
+              </Button>
+            </div>
             <div className="mt-3">
               <ArtistPromptSection
                 label={artistPromptSection.label}
                 tags={artistPromptSection.tags}
                 entries={artistPromptSection.entries}
                 collapsibleScores
+                getTagHref={(tag) => buildArtistPromptTagUrl(tag, artistLinkUrlTemplate)}
               />
             </div>
           </div>
         ) : null}
       </div>
+
+      <ArtistPromptLinkSettingsModal
+        open={isArtistPromptSettingsOpen}
+        initialTemplate={artistLinkUrlTemplate ?? ''}
+        isSaving={artistPromptLinkMutation.isPending}
+        onClose={() => setIsArtistPromptSettingsOpen(false)}
+        onSave={handleSaveArtistPromptLinkTemplate}
+      />
     </div>
   )
 }

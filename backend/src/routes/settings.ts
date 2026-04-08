@@ -6,6 +6,7 @@ import { imageTaggerService } from '../services/imageTaggerService';
 import { autoTagScheduler } from '../services/autoTagScheduler';
 import { kaloscopeTaggerService } from '../services/kaloscopeTaggerService';
 import {
+  DEFAULT_ARTIST_LINK_URL_TEMPLATE,
   GeneralSettings,
   TaggerSettings,
   KaloscopeSettings,
@@ -118,6 +119,28 @@ router.put(
         });
         return;
       }
+    }
+
+    if (kaloscopeSettings.artistLinkUrlTemplate !== undefined) {
+      const normalizedTemplate = String(kaloscopeSettings.artistLinkUrlTemplate).trim();
+
+      if (!normalizedTemplate) {
+        res.status(400).json({
+          success: false,
+          error: 'artistLinkUrlTemplate must not be empty',
+        });
+        return;
+      }
+
+      if (!normalizedTemplate.includes('{key}')) {
+        res.status(400).json({
+          success: false,
+          error: `artistLinkUrlTemplate must include {key}. Example: ${DEFAULT_ARTIST_LINK_URL_TEMPLATE}`,
+        });
+        return;
+      }
+
+      kaloscopeSettings.artistLinkUrlTemplate = normalizedTemplate;
     }
 
     const updatedSettings = settingsService.updateKaloscopeSettings(kaloscopeSettings);
