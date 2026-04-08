@@ -269,9 +269,9 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         <Alert>
           <AlertTitle>권장 출력 노드</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-            <span>최종 결과를 표시하려면 Final Result 시스템 노드를 추가해서 원하는 출력에 연결해줘.</span>
+            <span>최종 결과를 표시하려면 최종 결과 시스템 노드를 추가해서 원하는 출력에 연결해줘.</span>
             <Button type="button" size="sm" variant="outline" onClick={() => onAddModule(finalResultModule)}>
-              Final Result 바로 추가
+              최종 결과 바로 추가
             </Button>
           </AlertDescription>
         </Alert>

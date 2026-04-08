@@ -81,7 +81,7 @@ export function buildWorkflowValidationIssues(params: {
       nodeLabel: '워크플로우',
       severity: 'error',
       title: '최종 결과 노드가 없어',
-      detail: '실행 결과를 최종 결과로 확정하려면 Final Result 시스템 노드를 최소 하나 추가해줘.',
+      detail: '실행 결과를 최종 결과로 확정하려면 최종 결과 시스템 노드를 최소 하나 추가해줘.',
     })
   }
 
@@ -125,7 +125,7 @@ export function buildWorkflowValidationIssues(params: {
           nodeLabel,
           severity: 'error',
           title: '최종 결과 노드 입력이 비어 있어',
-          detail: 'Final Result 노드는 value 입력에 최종 결과로 확정할 업스트림 출력을 정확히 1개 연결해야 해.',
+          detail: '최종 결과 노드는 값 입력에 최종 결과로 확정할 업스트림 출력을 정확히 1개 연결해야 해.',
         })
       } else if (finalInputCount > 1) {
         issues.push({
@@ -135,7 +135,7 @@ export function buildWorkflowValidationIssues(params: {
           nodeLabel,
           severity: 'error',
           title: '최종 결과 노드에 입력이 너무 많아',
-          detail: 'Final Result 노드는 value 입력에 업스트림 출력을 1개만 연결할 수 있어.',
+          detail: '최종 결과 노드는 값 입력에 업스트림 출력을 1개만 연결할 수 있어.',
         })
       }
     }

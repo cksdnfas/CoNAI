@@ -91,7 +91,7 @@ function normalizeRequiredStringInput(value: unknown, label: string) {
     return value
   }
 
-  throw new Error(`${label} requires a non-empty string input`)
+  throw new Error(`${label} 노드에는 비어 있지 않은 문자열 입력이 필요해`)
 }
 
 /** Normalize a JSON constant-node input from either a parsed value or a JSON string. */
@@ -99,18 +99,18 @@ function normalizeJsonConstantInput(value: unknown) {
   if (typeof value === 'string') {
     const trimmedValue = value.trim()
     if (trimmedValue.length === 0) {
-      throw new Error('Constant JSON requires one JSON value')
+      throw new Error('상수 JSON 노드에는 JSON 값 1개가 필요해')
     }
 
     try {
       return JSON.parse(trimmedValue)
     } catch {
-      throw new Error('Constant JSON requires valid JSON text')
+      throw new Error('상수 JSON 노드에는 올바른 JSON 텍스트가 필요해')
     }
   }
 
   if (value === undefined) {
-    throw new Error('Constant JSON requires one JSON value')
+    throw new Error('상수 JSON 노드에는 JSON 값 1개가 필요해')
   }
 
   return value
@@ -123,7 +123,7 @@ function normalizeRequiredNumberInput(value: unknown, label: string) {
     return numericValue
   }
 
-  throw new Error(`${label} requires a valid number input`)
+  throw new Error(`${label} 노드에는 올바른 숫자 입력이 필요해`)
 }
 
 /** Normalize a boolean constant-node input. */
@@ -138,7 +138,7 @@ function normalizeRequiredBooleanInput(value: unknown, label: string) {
     if (normalized === 'false') return false
   }
 
-  throw new Error(`${label} requires a boolean input`)
+  throw new Error(`${label} 노드에는 불리언 입력이 필요해`)
 }
 
 /** Execute a constant text or prompt system node. */
@@ -280,12 +280,12 @@ async function executeConstantImageNode(
 ) {
   const imageValue = resolvedInputs.image
   if (typeof imageValue !== 'string' || !imageValue.startsWith('data:image/')) {
-    throw new Error('Constant Image requires one image input')
+    throw new Error('상수 이미지 노드에는 이미지 입력 1개가 필요해')
   }
 
   const base64 = normalizeBase64ImageData(imageValue)
   if (!base64) {
-    throw new Error('Constant Image requires a valid image data URL input')
+    throw new Error('상수 이미지 노드에는 올바른 이미지 data URL 입력이 필요해')
   }
 
   const mimeType = imageValue.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/)?.[1] ?? 'image/png'
@@ -723,17 +723,17 @@ async function executeFinalResultNode(
   const incomingEdges = context.workflow.graph.edges.filter((edge) => edge.target_node_id === node.id && edge.target_port_key === 'value')
 
   if (incomingEdges.length === 0) {
-    throw new Error('Final Result requires one connected upstream artifact on port value')
+    throw new Error('최종 결과 노드는 값 포트에 연결된 업스트림 결과물 1개가 필요해')
   }
 
   if (incomingEdges.length > 1) {
-    throw new Error('Final Result supports exactly one upstream artifact on port value')
+    throw new Error('최종 결과 노드는 값 포트에 업스트림 결과물 1개만 연결할 수 있어')
   }
 
   const sourceEdge = incomingEdges[0]
   const sourceArtifact = context.artifactsByNode.get(sourceEdge.source_node_id)?.[sourceEdge.source_port_key]
   if (!sourceArtifact?.artifactRecordId) {
-    throw new Error('Final Result requires one persisted upstream artifact reference')
+    throw new Error('최종 결과 노드에는 저장된 업스트림 결과물 참조 1개가 필요해')
   }
 
   GraphExecutionFinalResultModel.create({

@@ -5,7 +5,7 @@ import { getNodeDisplayLabel } from './graph-execution-panel-helpers'
 
 function getFinalResultOverlayLabel(nodeLabel: string) {
   const normalizedLabel = nodeLabel.trim().toLowerCase()
-  if (!normalizedLabel || normalizedLabel === 'final' || normalizedLabel === 'final result') {
+  if (!normalizedLabel || normalizedLabel === 'final' || normalizedLabel === 'final result' || normalizedLabel === '최종' || normalizedLabel === '최종 결과') {
     return undefined
   }
 
@@ -30,7 +30,7 @@ export function WorkflowFinalResultsSection({
   finalResults,
   artifacts,
   selectedGraph,
-  emptyLabel = 'Final Result 노드를 추가하고 원하는 출력에 연결해줘.',
+  emptyLabel = '최종 결과 노드를 추가하고 원하는 출력에 연결해줘.',
 }: {
   finalResults: GraphExecutionFinalResultRecord[]
   artifacts: GraphExecutionArtifactRecord[]
@@ -53,7 +53,7 @@ export function WorkflowFinalResultsSection({
       {resolvedEntries.length === 0 ? (
         <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
           <div>{emptyLabel}</div>
-          {selectedGraph ? <div className="mt-1 text-xs text-muted-foreground/90">시스템 모듈의 Final Result를 추가한 뒤, 최종으로 확정할 출력 포트에 연결해줘.</div> : null}
+          {selectedGraph ? <div className="mt-1 text-xs text-muted-foreground/90">시스템 모듈의 최종 결과를 추가한 뒤, 최종으로 확정할 출력 포트에 연결해줘.</div> : null}
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

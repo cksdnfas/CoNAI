@@ -356,7 +356,7 @@ export function WorkflowRunnerPanel({
                       finalResults={latestExecutionFinalResults}
                       artifacts={latestExecutionArtifacts}
                       selectedGraph={selectedGraph}
-                      emptyLabel="아직 선언된 최종 결과가 없어. Final Result 노드를 추가하고 원하는 출력에 연결해줘."
+                      emptyLabel="아직 선언된 최종 결과가 없어. 최종 결과 노드를 추가하고 원하는 출력에 연결해줘."
                     />
                   ) : (
                     <div className="text-sm text-muted-foreground">최종 결과를 불러오는 중…</div>

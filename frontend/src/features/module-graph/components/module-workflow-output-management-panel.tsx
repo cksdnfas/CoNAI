@@ -558,7 +558,7 @@ export function ModuleWorkflowOutputManagementPanel({
             <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.artifact_count}</div>
           </div>
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Final Results</div>
+            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">최종 결과</div>
             <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.final_result_count}</div>
           </div>
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
