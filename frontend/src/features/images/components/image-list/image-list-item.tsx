@@ -54,7 +54,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
 
   useEffect(() => {
     setHasPreviewError(false)
-  }, [previewUrl])
+  }, [previewUrl, image.is_processing, image.width, image.height, image.composite_hash, image.original_file_path])
 
   const placeholderLabel = image.is_processing
     ? '이미지 준비 중'
