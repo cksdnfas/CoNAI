@@ -11,7 +11,16 @@ export default {
   ignoreDeadLinks: true,
   themeConfig: {
     nav: [],
-    sidebar: false,
+    sidebar: [
+      {
+        text: '문서',
+        items: [
+          { text: '기능 맵', link: '/' },
+          { text: '가이드', link: '/GUIDE/' },
+          { text: '릴리즈 노트', link: '/RELEASE-MD/' },
+        ],
+      },
+    ],
     socialLinks: [],
     search: {
       provider: 'local',
