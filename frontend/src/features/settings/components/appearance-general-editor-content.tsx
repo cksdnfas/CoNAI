@@ -183,30 +183,6 @@ export function AppearanceGeneralEditorContent({
             />
           </SettingsField>
 
-          <SettingsField label="데스크톱 검색 전환폭 (px)">
-            <Input
-              type="number"
-              min={640}
-              max={1600}
-              step={10}
-              variant="settings"
-              value={appearanceDraft.desktopSearchMinWidth}
-              onChange={(event) => onPatchAppearance({ desktopSearchMinWidth: Number.parseInt(event.target.value || '768', 10) })}
-            />
-          </SettingsField>
-
-          <SettingsField label="데스크톱 메뉴 전환폭 (px)">
-            <Input
-              type="number"
-              min={768}
-              max={1800}
-              step={10}
-              variant="settings"
-              value={appearanceDraft.desktopNavMinWidth}
-              onChange={(event) => onPatchAppearance({ desktopNavMinWidth: Number.parseInt(event.target.value || '1024', 10) })}
-            />
-          </SettingsField>
-
           <SettingsField label="데스크톱 본문 2칼럼 전환폭 (px)">
             <Input
               type="number"

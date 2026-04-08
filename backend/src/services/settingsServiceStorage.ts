@@ -41,8 +41,8 @@ export function getDefaultAppearanceTheme(): AppearanceThemeSettings {
     emphasisFontWeightPreset: 'standard',
     searchBoxWidth: 380,
     searchDrawerWidth: 420,
-    desktopSearchMinWidth: 768,
-    desktopNavMinWidth: 1024,
+    desktopSearchMinWidth: 1280,
+    desktopNavMinWidth: 1280,
     desktopPageColumnsMinWidth: 1280,
     detailRelatedImageMobileColumns: 1,
     detailRelatedImageColumns: 3,
@@ -85,10 +85,18 @@ export function normalizeAppearancePresetSlots(rawSlots: unknown): AppearancePre
     const defaultAppearance = getDefaultAppearanceTheme();
     const normalizedAppearance =
       appearanceSource && typeof appearanceSource === 'object'
-        ? {
-            ...defaultAppearance,
-            ...appearanceSource,
-          }
+        ? (() => {
+            const mergedAppearance = {
+              ...defaultAppearance,
+              ...appearanceSource,
+            };
+
+            return {
+              ...mergedAppearance,
+              desktopSearchMinWidth: mergedAppearance.desktopPageColumnsMinWidth,
+              desktopNavMinWidth: mergedAppearance.desktopPageColumnsMinWidth,
+            };
+          })()
         : appearanceSource === null
           ? null
           : fallbackSlot.appearance;
@@ -239,6 +247,9 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
     appearance: {
       ...defaults.appearance,
       ...loadedSettings.appearance,
+      desktopSearchMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
+      desktopNavMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
+      desktopPageColumnsMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
       presetSlots: normalizeAppearancePresetSlots(loadedSettings.appearance?.presetSlots),
     },
     metadataExtraction: {

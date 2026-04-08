@@ -1,13 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, FolderTree, House, Image, MessageSquareText, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
 import { HomeSearchDrawer, HomeSearchHeaderBox } from '@/features/home/components/home-search-ui'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
-import { getAppSettings } from '@/lib/api'
-import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
-import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 
 const navItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
@@ -32,12 +28,6 @@ export function AppShell() {
 function AppShellLayout() {
   const location = useLocation()
   const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')
-  const settingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
-  })
-  const appearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
-  const showDesktopSearch = useMinWidth(appearance.desktopSearchMinWidth)
   const navScrollRef = useRef<HTMLDivElement | null>(null)
   const navDragPointerIdRef = useRef<number | null>(null)
   const navDragStartXRef = useRef(0)
@@ -81,7 +71,7 @@ function AppShellLayout() {
       navScrollElement.removeEventListener('scroll', updateNavScrollHints)
       window.removeEventListener('resize', updateNavScrollHints)
     }
-  }, [location.pathname, showDesktopSearch])
+  }, [location.pathname])
 
   /** Reset the temporary nav-drag state after horizontal scroll gestures. */
   const finishNavDrag = () => {
@@ -212,7 +202,7 @@ function AppShellLayout() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-4">
-            <HomeSearchHeaderBox active={true} desktopMode={showDesktopSearch} />
+            <HomeSearchHeaderBox active={true} />
           </div>
         </div>
       </header>

@@ -67,11 +67,18 @@ export function applySimilaritySettingsUpdate(currentSettings: AppSettings, simi
 
 /** Build the next settings state after applying an appearance-settings patch. */
 export function applyAppearanceSettingsUpdate(currentSettings: AppSettings, appearanceSettings: Partial<AppearanceSettings>): AppSettings {
+  const nextAppearance = {
+    ...currentSettings.appearance,
+    ...appearanceSettings,
+  };
+  const desktopPageColumnsMinWidth = nextAppearance.desktopPageColumnsMinWidth;
+
   return {
     ...currentSettings,
     appearance: {
-      ...currentSettings.appearance,
-      ...appearanceSettings,
+      ...nextAppearance,
+      desktopSearchMinWidth: desktopPageColumnsMinWidth,
+      desktopNavMinWidth: desktopPageColumnsMinWidth,
     },
   };
 }

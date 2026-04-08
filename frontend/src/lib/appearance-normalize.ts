@@ -11,6 +11,8 @@ function isEnumValue<T extends string>(value: unknown, options: readonly T[]): v
 }
 
 export function extractAppearanceTheme(appearance: AppearanceSettings | AppearanceThemeSettings): AppearanceThemeSettings {
+  const desktopPageColumnsMinWidth = appearance.desktopPageColumnsMinWidth
+
   return {
     themeMode: appearance.themeMode,
     accentPreset: appearance.accentPreset,
@@ -39,9 +41,9 @@ export function extractAppearanceTheme(appearance: AppearanceSettings | Appearan
     emphasisFontWeightPreset: appearance.emphasisFontWeightPreset,
     searchBoxWidth: appearance.searchBoxWidth,
     searchDrawerWidth: appearance.searchDrawerWidth,
-    desktopSearchMinWidth: appearance.desktopSearchMinWidth,
-    desktopNavMinWidth: appearance.desktopNavMinWidth,
-    desktopPageColumnsMinWidth: appearance.desktopPageColumnsMinWidth,
+    desktopSearchMinWidth: desktopPageColumnsMinWidth,
+    desktopNavMinWidth: desktopPageColumnsMinWidth,
+    desktopPageColumnsMinWidth,
     detailRelatedImageMobileColumns: appearance.detailRelatedImageMobileColumns,
     detailRelatedImageColumns: appearance.detailRelatedImageColumns,
     detailRelatedImageAspectRatio: appearance.detailRelatedImageAspectRatio,
@@ -223,6 +225,9 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
       next[key] = value
     }
   }
+
+  next.desktopSearchMinWidth = next.desktopPageColumnsMinWidth
+  next.desktopNavMinWidth = next.desktopPageColumnsMinWidth
 
   if (next.accentPreset === 'custom') {
     if (!normalizeHexPair(next.customPrimaryColor) || !normalizeHexPair(next.customSecondaryColor)) {

@@ -131,7 +131,7 @@ function HomeSearchSuggestionPanel({
 }
 
 /** Render the header search control as a drawer-open button only. */
-export function HomeSearchHeaderBox({ active, desktopMode: _desktopMode }: { active: boolean; desktopMode: boolean }) {
+export function HomeSearchHeaderBox({ active }: { active: boolean }) {
   const { appliedChips, openDrawer } = useHomeSearch()
 
   if (!active) {
