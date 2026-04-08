@@ -359,6 +359,8 @@
 - 항목을 누르면 아래로 펼쳐지면서, 그 안에서 무엇을 할 수 있는지 바로 보이게 구성합니다.
 - 숨은 핵심 시스템은 사용자 페이지보다 앞쪽에 배치합니다.
 
+<!-- Pages deploy trigger: keep this comment so docs pushes retrigger deployment safely. -->
+
 ## 다음 확장
 
 다음 단계에서는 각 항목 안을 더 세분화해서 아래까지 넣을 수 있습니다.
