@@ -1,17 +1,103 @@
 import type Database from 'better-sqlite3';
 import { ensureBuiltinSystemModules as ensureBuiltinSystemModulesInDb } from './userSettingsBuiltinModules';
 
+function hasColumn(db: Database.Database, tableName: string, columnName: string): boolean {
+  const pragma = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  return pragma.some((column) => column.name === columnName);
+}
+
+/** Rebuild legacy comfyui_servers tables so endpoint becomes the single canonical URL column. */
+function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
+  const schemaRow = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='comfyui_servers'")
+    .get() as { sql?: string } | undefined;
+
+  if (!schemaRow?.sql) {
+    return;
+  }
+
+  const hasEndpoint = hasColumn(db, 'comfyui_servers', 'endpoint');
+  const hasUrl = hasColumn(db, 'comfyui_servers', 'url');
+
+  if (hasEndpoint && !hasUrl) {
+    return;
+  }
+
+  console.log('🔧 Updating comfyui_servers schema to endpoint-only layout...');
+
+  const endpointExpr = hasEndpoint && hasUrl
+    ? "COALESCE(NULLIF(TRIM(endpoint), ''), NULLIF(TRIM(url), ''))"
+    : hasEndpoint
+      ? "NULLIF(TRIM(endpoint), '')"
+      : hasUrl
+        ? "NULLIF(TRIM(url), '')"
+        : 'NULL';
+
+  const descriptionExpr = hasColumn(db, 'comfyui_servers', 'description') ? 'description' : 'NULL';
+  const isActiveExpr = hasColumn(db, 'comfyui_servers', 'is_active') ? 'COALESCE(is_active, 1)' : '1';
+  const isDefaultExpr = hasColumn(db, 'comfyui_servers', 'is_default') ? 'COALESCE(is_default, 0)' : '0';
+  const createdDateExpr = hasColumn(db, 'comfyui_servers', 'created_date')
+    ? 'COALESCE(created_date, CURRENT_TIMESTAMP)'
+    : hasColumn(db, 'comfyui_servers', 'created_at')
+      ? 'COALESCE(created_at, CURRENT_TIMESTAMP)'
+      : 'CURRENT_TIMESTAMP';
+  const updatedDateExpr = hasColumn(db, 'comfyui_servers', 'updated_date')
+    ? 'COALESCE(updated_date, CURRENT_TIMESTAMP)'
+    : hasColumn(db, 'comfyui_servers', 'updated_at')
+      ? 'COALESCE(updated_at, CURRENT_TIMESTAMP)'
+      : 'CURRENT_TIMESTAMP';
+
+  db.exec('PRAGMA foreign_keys = OFF;');
+
+  try {
+    db.exec(`
+      BEGIN TRANSACTION;
+      CREATE TABLE comfyui_servers__new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        endpoint VARCHAR(500) NOT NULL,
+        description TEXT,
+        is_active BOOLEAN DEFAULT 1,
+        is_default BOOLEAN DEFAULT 0,
+        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT INTO comfyui_servers__new (
+        id, name, endpoint, description, is_active, is_default, created_date, updated_date
+      )
+      SELECT
+        id,
+        name,
+        ${endpointExpr} AS endpoint,
+        ${descriptionExpr} AS description,
+        ${isActiveExpr} AS is_active,
+        ${isDefaultExpr} AS is_default,
+        ${createdDateExpr} AS created_date,
+        ${updatedDateExpr} AS updated_date
+      FROM comfyui_servers
+      WHERE NULLIF(TRIM(name), '') IS NOT NULL
+        AND ${endpointExpr} IS NOT NULL;
+
+      DROP TABLE comfyui_servers;
+      ALTER TABLE comfyui_servers__new RENAME TO comfyui_servers;
+      CREATE INDEX IF NOT EXISTS idx_comfyui_servers_active ON comfyui_servers(is_active);
+      COMMIT;
+    `);
+  } catch (error) {
+    db.exec('ROLLBACK;');
+    throw error;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
+}
+
 /** Run legacy table migrations that still require imperative schema changes. */
 export function migrateExistingUserSettingsTables(db: Database.Database): void {
   console.log('🔄 Checking for complex schema migrations...');
 
   try {
-    const hasColumn = (tableName: string, columnName: string): boolean => {
-      const pragma = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
-      return pragma.some((column) => column.name === columnName);
-    };
-
-    if (hasColumn('wildcard_items', 'item_text')) {
+    if (hasColumn(db, 'wildcard_items', 'item_text')) {
       console.log('  Migrating wildcard_items table to new schema...');
 
       db.exec(`
@@ -42,7 +128,7 @@ export function migrateExistingUserSettingsTables(db: Database.Database): void {
       console.log('  ✓ No complex migrations needed');
     }
 
-    if (!hasColumn('wildcard_items', 'weight')) {
+    if (!hasColumn(db, 'wildcard_items', 'weight')) {
       console.log('  Migrating wildcard_items: adding weight column');
       db.exec('ALTER TABLE wildcard_items ADD COLUMN weight REAL DEFAULT 1.0');
     }
@@ -191,6 +277,7 @@ export function ensureGraphWorkflowsAllowDuplicateNames(db: Database.Database): 
 
 /** Apply all post-migration compatibility fixes for older user database schemas. */
 export function ensureUserSettingsCompatibility(db: Database.Database): void {
+  ensureComfyUIServersUseEndpointSchema(db);
   ensureModuleDefinitionsSupportsCurrentShape(db);
   ensureModuleDefinitionCompatibilityIndexes(db);
   ensureGraphWorkflowsAllowDuplicateNames(db);
