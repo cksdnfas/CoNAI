@@ -8,62 +8,28 @@
   padding-bottom: 32px;
 }
 
-.vp-doc .onepage-grid {
-  display: block;
-  margin: 20px 0 28px;
+.vp-doc .feature-sections {
+  margin: 28px 0 32px;
 }
 
-.vp-doc .accordion-item {
-  margin: 0;
-  border: 0;
+.vp-doc .feature-section {
+  padding: 22px 0;
   border-top: 1px solid var(--vp-c-divider);
-  border-radius: 0;
-  background: transparent;
 }
 
-.vp-doc .accordion-item:last-child {
+.vp-doc .feature-section:last-child {
   border-bottom: 1px solid var(--vp-c-divider);
 }
 
-.vp-doc .accordion-item summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 18px 0;
-  font-weight: 700;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 16px;
+.vp-doc .feature-section h2 {
+  margin: 0;
+  font-size: 24px;
 }
 
-.vp-doc .accordion-item summary::-webkit-details-marker {
-  display: none;
-}
-
-.vp-doc .summary-meta {
-  font-size: 12px;
-  font-weight: 500;
+.vp-doc .section-note {
+  margin: 6px 0 14px;
+  font-size: 13px;
   color: var(--vp-c-text-2);
-  white-space: nowrap;
-}
-
-.vp-doc .accordion-item summary::after {
-  content: '열기';
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--vp-c-text-2);
-}
-
-.vp-doc .accordion-item[open] summary::after {
-  content: '닫기';
-}
-
-.vp-doc .accordion-body {
-  padding: 0 0 18px;
-}
-
-.vp-doc .accordion-body > :first-child {
-  margin-top: 0;
 }
 
 .vp-doc .feature-list {
@@ -89,15 +55,8 @@
 }
 
 @media (max-width: 640px) {
-  .vp-doc .accordion-item summary {
-    grid-template-columns: 1fr auto;
-    gap: 8px 12px;
-    align-items: start;
-  }
-
-  .vp-doc .summary-meta {
-    grid-column: 1 / -1;
-    white-space: normal;
+  .vp-doc .feature-section h2 {
+    font-size: 20px;
   }
 
   .vp-doc .feature-list.dense {
