@@ -5,26 +5,64 @@
 }
 
 .VPHome {
-  padding-bottom: 64px;
+  padding-bottom: 40px;
 }
 
-.vp-doc .onepage-intro {
-  margin: 20px 0 28px;
-  padding: 20px 22px;
+.vp-doc .overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin: 14px 0 20px;
+}
+
+.vp-doc .compact-overview {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.vp-doc .overview-card {
+  padding: 14px 16px;
   border: 1px solid var(--vp-c-divider);
-  border-radius: 20px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent), transparent 70%);
+  border-radius: 14px;
+  background: var(--vp-c-bg-soft);
+}
+
+.vp-doc .overview-card h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.vp-doc .overview-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.vp-doc .overview-list li {
+  display: grid;
+  gap: 2px;
+}
+
+.vp-doc .overview-list a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.vp-doc .overview-list span {
+  font-size: 12px;
+  color: var(--vp-c-text-2);
 }
 
 .vp-doc .onepage-grid {
   display: grid;
-  gap: 14px;
-  margin: 18px 0 28px;
+  gap: 10px;
+  margin: 12px 0 24px;
 }
 
 .vp-doc .accordion-item {
   border: 1px solid var(--vp-c-divider);
-  border-radius: 18px;
+  border-radius: 14px;
   background: var(--vp-c-bg-soft);
   overflow: hidden;
 }
@@ -32,21 +70,28 @@
 .vp-doc .accordion-item summary {
   list-style: none;
   cursor: pointer;
-  padding: 18px 20px;
+  padding: 10px 12px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
 }
 
 .vp-doc .accordion-item summary::-webkit-details-marker {
   display: none;
 }
 
+.vp-doc .summary-meta {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vp-c-text-2);
+  white-space: nowrap;
+}
+
 .vp-doc .accordion-item summary::after {
   content: '열기';
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--vp-c-text-2);
 }
@@ -56,31 +101,46 @@
 }
 
 .vp-doc .accordion-body {
-  padding: 0 20px 20px;
+  padding: 0 12px 12px;
 }
 
 .vp-doc .accordion-body > :first-child {
   margin-top: 0;
 }
 
-.vp-doc .tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 10px 0 14px;
+.vp-doc .feature-list {
+  margin: 0;
+  padding-left: 16px;
 }
 
-.vp-doc .tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: var(--vp-c-default-soft);
-  color: var(--vp-c-text-2);
-  font-size: 12px;
-  font-weight: 600;
+.vp-doc .feature-list li + li {
+  margin-top: 4px;
+}
+
+.vp-doc .feature-list.dense {
+  columns: 2;
+  column-gap: 20px;
+}
+
+.vp-doc .feature-list.dense li {
+  break-inside: avoid;
 }
 
 .vp-doc .section-anchor {
   scroll-margin-top: 88px;
+}
+
+@media (max-width: 640px) {
+  .vp-doc .accordion-item summary {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .vp-doc .summary-meta {
+    white-space: normal;
+  }
+
+  .vp-doc .feature-list.dense {
+    columns: 1;
+  }
 }
