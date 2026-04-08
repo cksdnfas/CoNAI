@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { Copy, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Copy, Plus, Sparkles, Trash2, Unplug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -21,12 +21,14 @@ export function ModuleGraphActionMenu({
   state,
   onOpenNodePicker,
   onDuplicateNode,
+  onDisconnectAllConnections,
   onRemoveNode,
   onShowRecommendedNodes,
 }: {
   state: ModuleGraphActionMenuState
   onOpenNodePicker: () => void
   onDuplicateNode: () => void
+  onDisconnectAllConnections: () => void
   onRemoveNode: () => void
   onShowRecommendedNodes: () => void
 }) {
@@ -82,6 +84,17 @@ export function ModuleGraphActionMenu({
               aria-label="노드 복제"
             >
               <Copy className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-8 w-8 rounded-full"
+              onClick={onDisconnectAllConnections}
+              title={`${state.nodeName} 모든 연결 끊기`}
+              aria-label="모든 연결 끊기"
+            >
+              <Unplug className="h-4 w-4" />
             </Button>
             <Button
               type="button"

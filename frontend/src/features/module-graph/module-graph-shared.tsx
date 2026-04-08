@@ -37,6 +37,7 @@ export type ModuleGraphNodeData = {
   executeNodeDisabled?: boolean
   onExecuteNode?: () => void
   onForceExecuteNode?: () => void
+  onDisconnectNodeInput?: (nodeId: string, portKey: string) => void
   onNodeValueChange?: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear?: (nodeId: string, portKey: string) => void
   onNodeImageChange?: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void

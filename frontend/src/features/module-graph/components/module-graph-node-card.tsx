@@ -41,6 +41,7 @@ const TEXT_PORT_COLOR = getPortTypeColor('text')
 const PROMPT_PORT_COLOR = getPortTypeColor('prompt')
 
 type PortCellProps = {
+  nodeId: string
   port?: ModulePortDefinition
   side: 'input' | 'output'
   accentColor: string
@@ -48,6 +49,7 @@ type PortCellProps = {
   satisfied: boolean
   requiredMissing: boolean
   requiredMissingLabel?: string
+  onDisconnectInput?: (nodeId: string, portKey: string) => void
 }
 
 /** Check whether a node input has any explicit or default value. */
@@ -104,7 +106,7 @@ function buildHandleStyle(params: { side: 'input' | 'output'; color: string }): 
 }
 
 /** Render one standard left/right port row for general modules. */
-function PortCell({ port, side, accentColor, connected, satisfied, requiredMissing, requiredMissingLabel = '입력 필요' }: PortCellProps) {
+function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requiredMissing, requiredMissingLabel = '입력 필요', onDisconnectInput }: PortCellProps) {
   if (!port) {
     return <div className="min-h-[34px] rounded-sm border border-dashed border-border/35 bg-surface-low/20" aria-hidden="true" />
   }
@@ -123,6 +125,7 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
       className={`relative min-h-[34px] rounded-sm border ${alignmentClass}`}
       style={{ borderColor, backgroundColor } as CSSProperties}
       title={buildPortTooltip(port, statusLabel)}
+      onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
     >
       <Handle
         id={buildHandleId(side === 'input' ? 'in' : 'out', port.key)}
@@ -130,6 +133,7 @@ function PortCell({ port, side, accentColor, connected, satisfied, requiredMissi
         position={side === 'input' ? Position.Left : Position.Right}
         style={buildHandleStyle({ side, color: portTypeColor })}
         title={buildPortTooltip(port, statusLabel)}
+        onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
       />
 
       <div className={`flex min-h-[32px] items-center gap-2 ${rowJustifyClass}`}>
@@ -476,14 +480,17 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             return (
               <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
                 <PortCell
+                  nodeId={id}
                   port={inputPort}
                   side="input"
                   accentColor={accentColor}
                   connected={inputConnected}
                   satisfied={inputSatisfied}
                   requiredMissing={inputRequiredMissing}
+                  onDisconnectInput={data.onDisconnectNodeInput}
                 />
                 <PortCell
+                  nodeId={id}
                   port={outputPort}
                   side="output"
                   accentColor={accentColor}

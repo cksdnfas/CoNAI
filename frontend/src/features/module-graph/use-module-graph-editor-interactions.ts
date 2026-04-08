@@ -113,16 +113,19 @@ export function useModuleGraphEditorInteractions({
     const targetPort = findNodePort(targetNode, 'in', targetHandle?.portKey)
     const compatibility = getModulePortCompatibility(sourcePort?.data_type, targetPort?.data_type)
 
-    setEdges((currentEdges) =>
-      addEdge(
-        {
-          ...connection,
-          markerEnd: { type: MarkerType.ArrowClosed },
-          ...buildModuleEdgePresentation(sourcePort, targetPort),
-        },
-        currentEdges,
-      ),
-    )
+    setEdges((currentEdges) => {
+      const nextConnection = {
+        ...connection,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        ...buildModuleEdgePresentation(sourcePort, targetPort),
+      }
+
+      const trimmedEdges = targetPort?.multiple
+        ? currentEdges
+        : currentEdges.filter((edge) => !(edge.target === connection.target && edge.targetHandle === connection.targetHandle))
+
+      return addEdge(nextConnection, trimmedEdges)
+    })
 
     if (compatibility === 'string-bridge') {
       showSnackbar({ message: 'text ↔ prompt 연결은 허용돼. 이런 브리지 연결은 점선으로 표시해둘게.', tone: 'info' })
@@ -166,42 +169,56 @@ export function useModuleGraphEditorInteractions({
         if (connectionStart.handleType === 'source') {
           const sourcePort = existingNode.data.module.output_ports.find((port) => port.key === parsedHandle.portKey)
           const compatibleTargetPort = sourcePort
-            ? module.exposed_inputs.find((port) => getModulePortCompatibility(sourcePort.data_type, port.data_type) !== null)
+            ? module.exposed_inputs.find((port) => getModulePortCompatibility(sourcePort.data_type, port.data_type) !== 'incompatible')
             : null
 
           if (sourcePort && compatibleTargetPort) {
-            setEdges((currentEdges) => addEdge(
-              {
-                id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                source: existingNode.id,
-                sourceHandle: connectionStart.handleId,
-                target: nodeId,
-                targetHandle: `in:${compatibleTargetPort.key}`,
-                markerEnd: { type: MarkerType.ArrowClosed },
-                ...buildModuleEdgePresentation(sourcePort, compatibleTargetPort),
-              },
-              currentEdges,
-            ))
+            const nextConnection: Connection = {
+              source: existingNode.id,
+              sourceHandle: connectionStart.handleId,
+              target: nodeId,
+              targetHandle: `in:${compatibleTargetPort.key}`,
+            }
+
+            if (isValidConnection(nextConnection)) {
+              setEdges((currentEdges) => addEdge(
+                {
+                  id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  ...nextConnection,
+                  markerEnd: { type: MarkerType.ArrowClosed },
+                  ...buildModuleEdgePresentation(sourcePort, compatibleTargetPort),
+                },
+                currentEdges,
+              ))
+            }
           }
         } else {
           const targetPort = existingNode.data.module.exposed_inputs.find((port) => port.key === parsedHandle.portKey)
           const compatibleSourcePort = targetPort
-            ? module.output_ports.find((port) => getModulePortCompatibility(port.data_type, targetPort.data_type) !== null)
+            ? module.output_ports.find((port) => getModulePortCompatibility(port.data_type, targetPort.data_type) !== 'incompatible')
             : null
 
           if (targetPort && compatibleSourcePort) {
-            setEdges((currentEdges) => addEdge(
-              {
-                id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                source: nodeId,
-                sourceHandle: `out:${compatibleSourcePort.key}`,
-                target: existingNode.id,
-                targetHandle: connectionStart.handleId,
-                markerEnd: { type: MarkerType.ArrowClosed },
-                ...buildModuleEdgePresentation(compatibleSourcePort, targetPort),
-              },
-              currentEdges,
-            ))
+            const nextConnection: Connection = {
+              source: nodeId,
+              sourceHandle: `out:${compatibleSourcePort.key}`,
+              target: existingNode.id,
+              targetHandle: connectionStart.handleId,
+            }
+
+            if (isValidConnection(nextConnection)) {
+              setEdges((currentEdges) => addEdge(
+                {
+                  id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  ...nextConnection,
+                  markerEnd: { type: MarkerType.ArrowClosed },
+                  ...buildModuleEdgePresentation(compatibleSourcePort, targetPort),
+                },
+                targetPort.multiple
+                  ? currentEdges
+                  : currentEdges.filter((edge) => !(edge.target === existingNode.id && edge.targetHandle === connectionStart.handleId)),
+              ))
+            }
           }
         }
       }
@@ -209,7 +226,7 @@ export function useModuleGraphEditorInteractions({
 
     setSelectedEdgeId(null)
     setSelectedNodeId(nodeId)
-  }, [nodes, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId])
+  }, [isValidConnection, nodes, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId])
 
   /** Add one library module and close the library modal immediately after. */
   const handleAddModuleFromLibrary = useCallback((module: ModuleDefinitionRecord) => {
@@ -346,6 +363,47 @@ export function useModuleGraphEditorInteractions({
     showSnackbar({ message: '그래프를 자동 정렬했어.', tone: 'info' })
   }, [edges, fitViewAfterAutoLayout, nodes.length, setNodes, showSnackbar])
 
+  /** Disconnect all incoming edges from one concrete node input port. */
+  const handleDisconnectNodeInput = useCallback((nodeId: string, portKey: string) => {
+    const targetHandle = `in:${portKey}`
+    let removedCount = 0
+
+    setEdges((currentEdges) => {
+      const nextEdges = currentEdges.filter((edge) => {
+        const shouldKeep = !(edge.target === nodeId && edge.targetHandle === targetHandle)
+        if (!shouldKeep) {
+          removedCount += 1
+        }
+        return shouldKeep
+      })
+      return nextEdges
+    })
+
+    if (removedCount > 0) {
+      showSnackbar({ message: '입력 연결을 끊었어.', tone: 'info' })
+    }
+  }, [setEdges, showSnackbar])
+
+  /** Disconnect every edge attached to one node. */
+  const handleDisconnectAllNodeConnections = useCallback((nodeId: string) => {
+    let removedCount = 0
+
+    setEdges((currentEdges) => {
+      const nextEdges = currentEdges.filter((edge) => {
+        const shouldKeep = edge.source !== nodeId && edge.target !== nodeId
+        if (!shouldKeep) {
+          removedCount += 1
+        }
+        return shouldKeep
+      })
+      return nextEdges
+    })
+
+    if (removedCount > 0) {
+      showSnackbar({ message: '노드의 모든 연결을 끊었어.', tone: 'info' })
+    }
+  }, [setEdges, showSnackbar])
+
   /** Remove one node together with its attached edges and exposed-input metadata. */
   const handleRemoveNodeById = useCallback((nodeId: string) => {
     setNodes((currentNodes) => currentNodes.filter((node) => node.id !== nodeId))
@@ -422,6 +480,8 @@ export function useModuleGraphEditorInteractions({
     handleWorkflowRunInputClear,
     handleWorkflowRunInputImageChange,
     handleAutoLayout,
+    handleDisconnectNodeInput,
+    handleDisconnectAllNodeConnections,
     handleRemoveNodeById,
     handleRemoveSelectedNode,
     handleRemoveSelectedEdge,

@@ -184,6 +184,7 @@ export function ModuleGraphCanvas({
   onConnect,
   onAddModuleNode,
   onDuplicateNodeById,
+  onDisconnectAllNodeConnections,
   onRemoveNodeById,
   isValidConnection,
 }: {
@@ -199,6 +200,7 @@ export function ModuleGraphCanvas({
   onConnect: (connection: Connection) => void
   onAddModuleNode: (module: ModuleDefinitionRecord, options?: { position?: { x: number; y: number }; connectionStart?: PendingConnectionStart }) => void
   onDuplicateNodeById: (nodeId: string) => void
+  onDisconnectAllNodeConnections: (nodeId: string) => void
   onRemoveNodeById: (nodeId: string) => void
   isValidConnection: (connection: Connection | ModuleGraphEdge) => boolean
 }) {
@@ -395,6 +397,14 @@ export function ModuleGraphCanvas({
 
             closeActionMenu()
             onDuplicateNodeById(actionMenuState.nodeId)
+          }}
+          onDisconnectAllConnections={() => {
+            if (actionMenuState.kind !== 'node' || !actionMenuState.nodeId) {
+              return
+            }
+
+            closeActionMenu()
+            onDisconnectAllNodeConnections(actionMenuState.nodeId)
           }}
           onRemoveNode={() => {
             if (actionMenuState.kind !== 'node' || !actionMenuState.nodeId) {

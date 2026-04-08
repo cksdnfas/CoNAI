@@ -1,20 +1,5 @@
 # CoNAI 기능 맵
 
-<div class="overview-grid compact-overview">
-  <section class="overview-card">
-    <h2>핵심 기능</h2>
-    <ul class="overview-list">
-      <li><a href="#library-search">라이브러리 탐색과 검색</a><span>이미지, 프롬프트, 메타데이터를 빠르게 찾기</span></li>
-      <li><a href="#collections">컬렉션 정리</a><span>그룹, 폴더, 프롬프트를 체계적으로 묶기</span></li>
-      <li><a href="#analysis">이미지 분석과 자동 분류</a><span>태깅, 메타 추출, 작가·스타일 추정</span></li>
-      <li><a href="#generation">AI 생성과 워크플로우</a><span>생성, 이력 관리, 재사용 가능한 작업 흐름</span></li>
-      <li><a href="#automation">자동 수집과 자동화</a><span>폴더 자동 반영, 대량 처리, 외부 연동</span></li>
-      <li><a href="#export">저장과 내보내기</a><span>다운로드, 변환, 메타 수정 저장</span></li>
-      <li><a href="#customization">사용자 커스텀</a><span>테마, 폰트, 저장 규칙 설정</span></li>
-    </ul>
-  </section>
-</div>
-
 <div class="onepage-grid">
   <div id="library-search" class="section-anchor"></div>
   <details class="accordion-item">
