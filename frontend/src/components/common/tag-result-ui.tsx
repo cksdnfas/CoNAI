@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { getThemeToneFillStyle, getThemeToneStyle } from '@/lib/theme-tones'
 import { formatScore } from './tag-result-utils'
 
@@ -23,17 +23,22 @@ export function TagBundleSection({
   tags,
   getTagHref,
   onTagClick,
+  headerAction,
 }: {
   label: string
   tags: string[]
   getTagHref?: (tag: string) => string | null
   onTagClick?: (tag: string, href: string) => void
+  headerAction?: ReactNode
 }) {
   if (tags.length === 0) return null
 
   return (
     <div className="space-y-2 rounded-sm bg-surface-lowest px-3 py-3">
-      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
+        {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+      </div>
       <div className="flex flex-wrap gap-2">
         {tags.map((tag) => {
           const href = getTagHref?.(tag) ?? null

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { CollapsibleScoreMeterList, ScoreMeterList, StackedRatingBar, TagBundleSection } from './tag-result-ui'
 
 type PromptScoreEntries = Array<[string, number]>
@@ -37,18 +38,20 @@ export function GeneralPromptSection({
   label = 'general',
   accentClassName = 'bg-primary/80',
   collapsibleScores = true,
+  tagsHeaderAction,
 }: {
   tags: string[]
   entries: PromptScoreEntries
   label?: string
   accentClassName?: string
   collapsibleScores?: boolean
+  tagsHeaderAction?: ReactNode
 }) {
   if (tags.length === 0 && entries.length === 0) return null
 
   return (
     <div className="space-y-3">
-      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} /> : null}
+      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} headerAction={tagsHeaderAction} /> : null}
       {entries.length > 0
         ? collapsibleScores
           ? <CollapsibleScoreMeterList title={label} entries={entries} accentClassName={accentClassName} />

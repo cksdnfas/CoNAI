@@ -241,15 +241,29 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           <div className={`${metaItemClassName} sm:col-span-2`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[11px] uppercase tracking-[0.18em]">Auto prompt</p>
-              <Button type="button" size="sm" variant="outline" onClick={() => void handleCopyAutoPrompt()} disabled={!autoPromptCopyText}>
-                <Copy className="h-4 w-4" />
-                복사
-              </Button>
             </div>
             <div className="mt-3 space-y-3">
               <RatingPromptSection entries={autoPromptContent.ratingEntries} />
               <CharacterPromptSection entries={autoPromptContent.characterEntries} />
-              <GeneralPromptSection tags={autoPromptContent.generalTags} entries={autoPromptContent.generalEntries} collapsibleScores />
+              <GeneralPromptSection
+                tags={autoPromptContent.generalTags}
+                entries={autoPromptContent.generalEntries}
+                collapsibleScores
+                tagsHeaderAction={(
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => void handleCopyAutoPrompt()}
+                    disabled={!autoPromptCopyText}
+                    aria-label="Auto prompt 복사"
+                    title="Auto prompt 복사"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    복사
+                  </Button>
+                )}
+              />
             </div>
           </div>
         ) : null}
