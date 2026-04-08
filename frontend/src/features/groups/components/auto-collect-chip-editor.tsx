@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Search } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Textarea } from '@/components/ui/textarea'
@@ -56,6 +56,8 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
   const [chips, setChips] = useState<SearchChip[]>([])
   const [jsonText, setJsonText] = useState('')
   const [warningMessage, setWarningMessage] = useState<string | null>(null)
+  const [isSuggestionPanelOpen, setIsSuggestionPanelOpen] = useState(false)
+  const searchSectionRef = useRef<HTMLElement | null>(null)
 
   const {
     promptSuggestions,
@@ -76,7 +78,23 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
     setWarningMessage(parsedState.warningMessage)
     setSearchInput('')
     setSearchScope('positive')
+    setIsSuggestionPanelOpen(false)
   }, [initialJsonText])
+
+  useEffect(() => {
+    if (!isSuggestionPanelOpen) {
+      return
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!searchSectionRef.current?.contains(event.target as Node)) {
+        setIsSuggestionPanelOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [isSuggestionPanelOpen])
 
   useEffect(() => {
     if (mode === 'chip') {
@@ -122,6 +140,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
       return [...current, chip]
     })
     setSearchInput('')
+    setIsSuggestionPanelOpen(false)
   }
 
   const submitSearchInput = () => {
@@ -165,13 +184,12 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
 
       {mode === 'chip' ? (
         <div className="space-y-4">
-          <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} />
-
-          {isTextInputScope ? (
-            <div className="theme-settings-control flex items-center rounded-sm border border-border bg-surface-lowest text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
+          <section ref={searchSectionRef} className="space-y-3">
+            <div className="theme-settings-control flex items-center rounded-sm border border-border bg-surface-container text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
               <Search className="mr-2 h-4 w-4 text-muted-foreground" />
               <input
                 value={searchInput}
+                onFocus={() => setIsSuggestionPanelOpen(true)}
                 onChange={(event) => setSearchInput(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
@@ -179,38 +197,53 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
                     submitSearchInput()
                   }
                 }}
-                placeholder={SEARCH_SCOPE_PLACEHOLDERS[searchScope]}
+                placeholder={isTextInputScope ? SEARCH_SCOPE_PLACEHOLDERS[searchScope] : searchSectionTitle}
                 className="h-10 w-full bg-transparent outline-none placeholder:text-muted-foreground"
               />
             </div>
-          ) : null}
 
-          <div className="overflow-hidden rounded-sm border border-border/70 bg-background/60">
-            <div className="border-b border-border/70 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              {searchSectionTitle}
-            </div>
-            <div className="max-h-64 overflow-y-auto py-2">
-              <SearchSuggestionList
-                searchScope={searchScope}
-                searchInput={searchInput}
-                promptSuggestions={promptSuggestions}
-                filteredRatingTiers={filteredRatingTiers}
-                modelSuggestions={modelSuggestions}
-                loraSuggestions={loraSuggestions}
-                suggestionsLoading={suggestionsLoading}
-                ratingTiersLoading={ratingTiersLoading}
-                modelSuggestionsLoading={modelSuggestionsLoading}
-                loraSuggestionsLoading={loraSuggestionsLoading}
-                onSubmitInput={submitSearchInput}
-                onSelectSuggestion={(item) => appendChip(createAutoCollectChip(searchScope, 'OR', item.prompt))}
-                onSelectMetadataSuggestion={(value) => appendChip(createAutoCollectChip(searchScope, 'OR', value))}
-                onSelectRatingTier={(tier) => appendChip(createRatingSearchChip(tier, { operator: 'OR' }))}
-                onSelectAIToolSuggestion={(tool) => appendChip(createAIToolSearchChip(tool, { operator: 'OR' }))}
-                emptyRatingText="사용 가능한 평가 티어가 없어."
-                idlePromptText="검색어 입력"
-              />
-            </div>
-          </div>
+            {isSuggestionPanelOpen ? (
+              <div className="theme-floating-panel overflow-hidden rounded-sm">
+                <div className="flex items-center gap-2 border-b border-white/5 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
+                  <div className="min-w-0 flex-1">
+                    <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsSuggestionPanelOpen(false)}
+                    className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
+                    aria-label="입력 필터 닫기"
+                    title="입력 필터 닫기"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="max-h-[420px] overflow-y-auto py-2">
+                  <SearchSuggestionList
+                    searchScope={searchScope}
+                    searchInput={searchInput}
+                    promptSuggestions={promptSuggestions}
+                    filteredRatingTiers={filteredRatingTiers}
+                    modelSuggestions={modelSuggestions}
+                    loraSuggestions={loraSuggestions}
+                    suggestionsLoading={suggestionsLoading}
+                    ratingTiersLoading={ratingTiersLoading}
+                    modelSuggestionsLoading={modelSuggestionsLoading}
+                    loraSuggestionsLoading={loraSuggestionsLoading}
+                    onSubmitInput={submitSearchInput}
+                    onSelectSuggestion={(item) => appendChip(createAutoCollectChip(searchScope, 'OR', item.prompt))}
+                    onSelectMetadataSuggestion={(value) => appendChip(createAutoCollectChip(searchScope, 'OR', value))}
+                    onSelectRatingTier={(tier) => appendChip(createRatingSearchChip(tier, { operator: 'OR' }))}
+                    onSelectAIToolSuggestion={(tool) => appendChip(createAIToolSearchChip(tool, { operator: 'OR' }))}
+                    emptyRatingText="사용 가능한 평가 티어가 없어."
+                    idlePromptText="검색어 입력"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </section>
 
           <SearchChipList
             chips={chips}

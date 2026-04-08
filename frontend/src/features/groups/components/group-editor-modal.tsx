@@ -173,15 +173,13 @@ export function GroupEditorModal({
             />
           </div>
 
-          <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/50 p-3">
-            <ToggleRow className="justify-between px-0 py-0" variant="detail">
+          <div className="space-y-3">
+            <ToggleRow className="justify-between" variant="settings">
               <p className="text-sm font-medium text-foreground">필터 적용</p>
               <input type="checkbox" checked={autoCollectEnabled} onChange={(event) => setAutoCollectEnabled(event.target.checked)} />
             </ToggleRow>
 
-            {autoCollectEnabled ? (
-              <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} />
-            ) : null}
+            {autoCollectEnabled ? <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} /> : null}
           </div>
 
           <div className="space-y-2">
