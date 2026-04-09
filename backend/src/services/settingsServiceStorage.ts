@@ -8,11 +8,15 @@ import {
   DEFAULT_ARTIST_LINK_URL_TEMPLATE,
   TaggerModel,
   TaggerDevice,
+  WallpaperLayoutPreset,
+  WallpaperWidgetInstance,
+  WallpaperWidgetType,
 } from '../types/settings';
 
 export const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
 const APPEARANCE_PRESET_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'] as const;
+const WALLPAPER_WIDGET_TYPES: WallpaperWidgetType[] = ['clock', 'queue-status', 'group-image-view', 'image-showcase', 'text-note'];
 
 /** Build the default appearance theme used for fresh settings files and fallback merges. */
 export function getDefaultAppearanceTheme(): AppearanceThemeSettings {
@@ -63,6 +67,78 @@ export function getDefaultAppearancePresetSlots(): AppearancePresetSlot[] {
     appearance: null,
     updatedAt: null,
   }));
+}
+
+/** Normalize one raw wallpaper widget into the persisted settings shape. */
+function normalizeWallpaperWidget(rawWidget: unknown): WallpaperWidgetInstance | null {
+  if (!rawWidget || typeof rawWidget !== 'object') {
+    return null;
+  }
+
+  const record = rawWidget as Record<string, unknown>;
+  if (typeof record.id !== 'string' || !WALLPAPER_WIDGET_TYPES.includes(record.type as WallpaperWidgetType)) {
+    return null;
+  }
+
+  const numberFields = ['x', 'y', 'w', 'h', 'zIndex'] as const;
+  for (const field of numberFields) {
+    if (!Number.isFinite(record[field])) {
+      return null;
+    }
+  }
+
+  if (typeof record.locked !== 'boolean' || typeof record.hidden !== 'boolean') {
+    return null;
+  }
+
+  return {
+    id: record.id,
+    type: record.type as WallpaperWidgetType,
+    x: Number(record.x),
+    y: Number(record.y),
+    w: Number(record.w),
+    h: Number(record.h),
+    zIndex: Number(record.zIndex),
+    locked: record.locked,
+    hidden: record.hidden,
+    settings: record.settings && typeof record.settings === 'object' ? record.settings as Record<string, unknown> : {},
+  };
+}
+
+/** Normalize raw wallpaper layout presets from persisted settings into the canonical shape. */
+export function normalizeWallpaperLayoutPresets(rawPresets: unknown): WallpaperLayoutPreset[] {
+  if (!Array.isArray(rawPresets)) {
+    return [];
+  }
+
+  return rawPresets.flatMap((rawPreset) => {
+    if (!rawPreset || typeof rawPreset !== 'object') {
+      return [];
+    }
+
+    const record = rawPreset as Record<string, unknown>;
+    if (
+      typeof record.id !== 'string' ||
+      typeof record.name !== 'string' ||
+      typeof record.canvasPresetId !== 'string' ||
+      typeof record.createdAt !== 'string' ||
+      typeof record.updatedAt !== 'string' ||
+      !Array.isArray(record.widgets)
+    ) {
+      return [];
+    }
+
+    const widgets = record.widgets.map((widget) => normalizeWallpaperWidget(widget)).filter((widget): widget is WallpaperWidgetInstance => widget !== null);
+
+    return [{
+      id: record.id,
+      name: record.name,
+      canvasPresetId: record.canvasPresetId,
+      widgets,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    }];
+  });
 }
 
 /** Normalize raw appearance preset slots from persisted settings into the canonical shape. */
@@ -190,6 +266,8 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
     appearance: {
       ...getDefaultAppearanceTheme(),
       presetSlots: getDefaultAppearancePresetSlots(),
+      wallpaperLayoutPresets: [],
+      wallpaperActivePresetId: null,
     },
     metadataExtraction: {
       enableSecondaryExtraction: true,
@@ -283,6 +361,10 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       desktopNavMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
       desktopPageColumnsMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
       presetSlots: normalizeAppearancePresetSlots(loadedSettings.appearance?.presetSlots),
+      wallpaperLayoutPresets: normalizeWallpaperLayoutPresets(loadedSettings.appearance?.wallpaperLayoutPresets),
+      wallpaperActivePresetId: typeof loadedSettings.appearance?.wallpaperActivePresetId === 'string'
+        ? loadedSettings.appearance.wallpaperActivePresetId
+        : null,
     },
     metadataExtraction: {
       ...defaults.metadataExtraction,

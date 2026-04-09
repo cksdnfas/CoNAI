@@ -11,6 +11,8 @@ import {
   PromptRoute,
   SettingsRoute,
   UploadRoute,
+  WallpaperEditorRoute,
+  WallpaperRuntimeRoute,
 } from '@/app/lazy-routes'
 
 export const appRouter = createHashRouter([
@@ -61,6 +63,14 @@ export const appRouter = createHashRouter([
       {
         path: 'settings',
         element: <SettingsRoute />,
+      },
+      {
+        path: 'wallpaper',
+        element: <WallpaperEditorRoute />,
+      },
+      {
+        path: 'wallpaper/runtime',
+        element: <WallpaperRuntimeRoute />,
       },
       {
         path: '*',

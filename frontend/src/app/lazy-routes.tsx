@@ -55,6 +55,16 @@ const UploadPageLazy = lazy(async () => {
   return { default: module.UploadPage }
 })
 
+const WallpaperEditorPageLazy = lazy(async () => {
+  const module = await import('@/features/wallpaper/wallpaper-editor-page')
+  return { default: module.WallpaperEditorPage }
+})
+
+const WallpaperRuntimePageLazy = lazy(async () => {
+  const module = await import('@/features/wallpaper/wallpaper-runtime-page')
+  return { default: module.WallpaperRuntimePage }
+})
+
 function RouteFallback() {
   return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
 }
@@ -105,4 +115,12 @@ export function NotFoundRoute() {
 
 export function UploadRoute() {
   return withSuspense(<UploadPageLazy />)
+}
+
+export function WallpaperEditorRoute() {
+  return withSuspense(<WallpaperEditorPageLazy />)
+}
+
+export function WallpaperRuntimeRoute() {
+  return withSuspense(<WallpaperRuntimePageLazy />)
 }

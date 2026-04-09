@@ -1,0 +1,194 @@
+import { getWallpaperCanvasPreset } from './wallpaper-canvas-presets'
+import { createWallpaperWidgetInstance, getWallpaperWidgetDefinition } from './wallpaper-widget-registry'
+import type { WallpaperCanvasPreset, WallpaperLayoutPreset, WallpaperWidgetInstance, WallpaperWidgetType } from './wallpaper-types'
+
+const WALLPAPER_LAYOUT_DRAFT_STORAGE_KEY = 'conai.wallpaper.layoutDraft.v1'
+const WALLPAPER_LAYOUT_PRESETS_STORAGE_KEY = 'conai.wallpaper.layoutPresets.v1'
+const WALLPAPER_LAYOUT_ACTIVE_PRESET_ID_STORAGE_KEY = 'conai.wallpaper.activePresetId.v1'
+
+/** Clamp one widget instance into the current canvas grid bounds. */
+export function clampWallpaperWidgetInstance(widget: WallpaperWidgetInstance, canvasPreset: WallpaperCanvasPreset): WallpaperWidgetInstance {
+  const widgetDefinition = getWallpaperWidgetDefinition(widget.type)
+  const nextWidth = Math.max(widgetDefinition.minSize.w, Math.min(widget.w, Math.min(widgetDefinition.maxSize.w, canvasPreset.gridColumns)))
+  const nextHeight = Math.max(widgetDefinition.minSize.h, Math.min(widget.h, Math.min(widgetDefinition.maxSize.h, canvasPreset.gridRows)))
+  const nextX = Math.max(0, Math.min(widget.x, canvasPreset.gridColumns - nextWidth))
+  const nextY = Math.max(0, Math.min(widget.y, canvasPreset.gridRows - nextHeight))
+
+  return {
+    ...widget,
+    x: nextX,
+    y: nextY,
+    w: nextWidth,
+    h: nextHeight,
+  }
+}
+
+/** Normalize all widget frames after a canvas preset change or manual edit. */
+export function normalizeWallpaperLayoutPreset(layoutPreset: WallpaperLayoutPreset, canvasPreset = getWallpaperCanvasPreset(layoutPreset.canvasPresetId)): WallpaperLayoutPreset {
+  return {
+    ...layoutPreset,
+    canvasPresetId: canvasPreset.id,
+    widgets: layoutPreset.widgets.map((widget) => clampWallpaperWidgetInstance(widget, canvasPreset)),
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+/** Create the first local wallpaper layout draft for one selected canvas preset. */
+export function buildWallpaperLayoutDraft(canvasPresetId: string): WallpaperLayoutPreset {
+  const now = new Date().toISOString()
+  return {
+    id: 'wallpaper-layout-draft',
+    name: 'Wallpaper Draft',
+    canvasPresetId,
+    widgets: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+/** Create a small starter layout so the editor and runtime are not completely empty. */
+export function buildWallpaperStarterLayout(canvasPresetId: string): WallpaperLayoutPreset {
+  const canvasPreset = getWallpaperCanvasPreset(canvasPresetId)
+  const baseLayout = buildWallpaperLayoutDraft(canvasPreset.id)
+
+  return normalizeWallpaperLayoutPreset(
+    {
+      ...baseLayout,
+      widgets: [
+        createWallpaperWidgetInstance('clock', canvasPreset, 0),
+        createWallpaperWidgetInstance('queue-status', canvasPreset, 1),
+        createWallpaperWidgetInstance('text-note', canvasPreset, 2),
+      ],
+    },
+    canvasPreset,
+  )
+}
+
+/** Create one editable draft from a saved preset. */
+export function cloneWallpaperPresetToDraft(layoutPreset: WallpaperLayoutPreset): WallpaperLayoutPreset {
+  return normalizeWallpaperLayoutPreset({
+    ...layoutPreset,
+    id: 'wallpaper-layout-draft',
+  })
+}
+
+/** Load the locally saved wallpaper draft when available. */
+export function loadWallpaperLayoutDraft() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(WALLPAPER_LAYOUT_DRAFT_STORAGE_KEY)
+    if (!rawValue) {
+      return null
+    }
+    const parsedValue = JSON.parse(rawValue) as WallpaperLayoutPreset
+    return normalizeWallpaperLayoutPreset(parsedValue)
+  } catch {
+    return null
+  }
+}
+
+/** Persist the current wallpaper draft locally for runtime preview. */
+export function saveWallpaperLayoutDraft(layoutPreset: WallpaperLayoutPreset) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(WALLPAPER_LAYOUT_DRAFT_STORAGE_KEY, JSON.stringify(layoutPreset))
+}
+
+/** Read all named wallpaper presets from local storage. */
+export function loadWallpaperLayoutPresets() {
+  if (typeof window === 'undefined') {
+    return [] as WallpaperLayoutPreset[]
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(WALLPAPER_LAYOUT_PRESETS_STORAGE_KEY)
+    if (!rawValue) {
+      return [] as WallpaperLayoutPreset[]
+    }
+
+    const parsedValue = JSON.parse(rawValue) as WallpaperLayoutPreset[]
+    return parsedValue.map((preset) => normalizeWallpaperLayoutPreset(preset))
+  } catch {
+    return [] as WallpaperLayoutPreset[]
+  }
+}
+
+/** Persist the full named preset list locally. */
+export function saveWallpaperLayoutPresets(layoutPresets: WallpaperLayoutPreset[]) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(WALLPAPER_LAYOUT_PRESETS_STORAGE_KEY, JSON.stringify(layoutPresets))
+}
+
+/** Read the last active preset id when available. */
+export function loadWallpaperActivePresetId() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  return window.localStorage.getItem(WALLPAPER_LAYOUT_ACTIVE_PRESET_ID_STORAGE_KEY)
+}
+
+/** Persist the last active preset id for the editor. */
+export function saveWallpaperActivePresetId(presetId: string | null) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (!presetId) {
+    window.localStorage.removeItem(WALLPAPER_LAYOUT_ACTIVE_PRESET_ID_STORAGE_KEY)
+    return
+  }
+
+  window.localStorage.setItem(WALLPAPER_LAYOUT_ACTIVE_PRESET_ID_STORAGE_KEY, presetId)
+}
+
+/** Save or update one named wallpaper preset from the current draft. */
+export function upsertWallpaperLayoutPreset(layoutPresets: WallpaperLayoutPreset[], draftLayout: WallpaperLayoutPreset, options?: { presetId?: string | null; name?: string }) {
+  const now = new Date().toISOString()
+  const trimmedName = (options?.name ?? draftLayout.name).trim()
+  const presetName = trimmedName || 'Wallpaper Preset'
+  const presetId = options?.presetId ?? `wallpaper-preset-${Date.now()}`
+  const existingPreset = layoutPresets.find((preset) => preset.id === presetId)
+
+  const nextPreset = normalizeWallpaperLayoutPreset({
+    ...draftLayout,
+    id: presetId,
+    name: presetName,
+    createdAt: existingPreset?.createdAt ?? now,
+    updatedAt: now,
+  })
+
+  const nextPresets = existingPreset
+    ? layoutPresets.map((preset) => (preset.id === presetId ? nextPreset : preset))
+    : [...layoutPresets, nextPreset]
+
+  return {
+    presetId,
+    presets: nextPresets,
+  }
+}
+
+/** Delete one named wallpaper preset. */
+export function deleteWallpaperLayoutPreset(layoutPresets: WallpaperLayoutPreset[], presetId: string) {
+  return layoutPresets.filter((preset) => preset.id !== presetId)
+}
+
+/** Add one default widget instance to the current layout draft. */
+export function appendWallpaperWidget(layoutPreset: WallpaperLayoutPreset, widgetType: WallpaperWidgetType) {
+  const canvasPreset = getWallpaperCanvasPreset(layoutPreset.canvasPresetId)
+  return normalizeWallpaperLayoutPreset(
+    {
+      ...layoutPreset,
+      widgets: [...layoutPreset.widgets, createWallpaperWidgetInstance(widgetType, canvasPreset, layoutPreset.widgets.length)],
+    },
+    canvasPreset,
+  )
+}

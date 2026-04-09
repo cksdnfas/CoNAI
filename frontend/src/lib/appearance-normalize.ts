@@ -286,6 +286,8 @@ export function normalizeAppearanceSettings(raw: unknown, fallback: AppearanceSe
   return {
     ...appearance,
     presetSlots,
+    wallpaperLayoutPresets: fallback.wallpaperLayoutPresets,
+    wallpaperActivePresetId: fallback.wallpaperActivePresetId,
   }
 }
 
@@ -298,5 +300,7 @@ export function normalizeAppearanceImport(raw: unknown, fallback: AppearanceSett
   return {
     ...appearance,
     presetSlots: fallback.presetSlots,
+    wallpaperLayoutPresets: fallback.wallpaperLayoutPresets,
+    wallpaperActivePresetId: fallback.wallpaperActivePresetId,
   }
 }

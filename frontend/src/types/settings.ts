@@ -1,3 +1,5 @@
+import type { WallpaperLayoutPreset } from '@/features/wallpaper/wallpaper-types'
+
 export type SimilaritySortBy = 'similarity' | 'upload_date' | 'file_size'
 export type SimilaritySortOrder = 'ASC' | 'DESC'
 export type TaggerModel = 'vit' | 'swinv2' | 'convnext'
@@ -153,6 +155,8 @@ export interface AppearancePresetSlot {
 
 export interface AppearanceSettings extends AppearanceThemeSettings {
   presetSlots: AppearancePresetSlot[]
+  wallpaperLayoutPresets: WallpaperLayoutPreset[]
+  wallpaperActivePresetId: string | null
 }
 
 export interface MetadataExtractionSettings {

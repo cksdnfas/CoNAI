@@ -277,9 +277,9 @@ export async function getGroupFileCounts(groupId: number) {
   return normalizeGroupFileCounts(response.data)
 }
 
-export async function getGroupPreviewImage(groupId: number, params?: { includeChildren?: boolean }) {
+export async function getGroupPreviewImages(groupId: number, params?: { includeChildren?: boolean; count?: number }) {
   const searchParams = new URLSearchParams()
-  searchParams.set('count', '1')
+  searchParams.set('count', String(params?.count ?? 1))
   searchParams.set('includeChildren', String(params?.includeChildren ?? true))
 
   const response = await fetchJson<ApiResponse<ImageRecord[]>>(`/api/groups/${groupId}/preview-images?${searchParams.toString()}`)
@@ -288,7 +288,12 @@ export async function getGroupPreviewImage(groupId: number, params?: { includeCh
     throw new Error(response.error || '그룹 미리보기를 불러오지 못했어.')
   }
 
-  return response.data[0] ?? null
+  return response.data
+}
+
+export async function getGroupPreviewImage(groupId: number, params?: { includeChildren?: boolean }) {
+  const images = await getGroupPreviewImages(groupId, { includeChildren: params?.includeChildren, count: 1 })
+  return images[0] ?? null
 }
 
 export async function downloadGroupArchive(

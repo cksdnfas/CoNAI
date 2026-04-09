@@ -5,7 +5,12 @@ import { Router, Request, Response } from 'express'
 import { asyncHandler } from '../../middleware/errorHandler'
 import { runtimePaths, publicUrls } from '../../config/runtimePaths'
 import { settingsService } from '../../services/settingsService'
-import type { AppearancePresetSlot, AppearanceSettings, AppearanceThemeSettings } from '../../types/settings'
+import type {
+  AppearancePresetSlot,
+  AppearanceSettings,
+  AppearanceThemeSettings,
+  WallpaperWidgetType,
+} from '../../types/settings'
 
 const router = Router()
 const validAppearanceModes = ['system', 'dark', 'light']
@@ -20,6 +25,7 @@ const validBodyFontWeightPresets = ['regular', 'medium']
 const validEmphasisFontWeightPresets = ['standard', 'bold']
 const validGroupExplorerCardStyles = ['compact-row', 'media-tile']
 const validAppearancePresetSlotIds = ['slot-1', 'slot-2', 'slot-3']
+const validWallpaperWidgetTypes: WallpaperWidgetType[] = ['clock', 'queue-status', 'group-image-view', 'image-showcase', 'text-note']
 const appearanceFontDir = path.join(runtimePaths.uploadsDir, 'theme-fonts')
 const allowedFontExtensions = new Set(['.ttf', '.otf', '.woff', '.woff2'])
 const allowedFontMimeTypes = new Set([
@@ -232,6 +238,85 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
   return null
 }
 
+function validateWallpaperWidget(widget: unknown, path: string): string | null {
+  if (!widget || typeof widget !== 'object') {
+    return `${path} must be an object`
+  }
+
+  const record = widget as Record<string, unknown>
+  if (typeof record.id !== 'string' || record.id.trim().length === 0) {
+    return `${path}.id must be a non-empty string`
+  }
+
+  if (!validWallpaperWidgetTypes.includes(record.type as WallpaperWidgetType)) {
+    return `${path}.type must be one of: ${validWallpaperWidgetTypes.join(', ')}`
+  }
+
+  const integerFields = ['x', 'y', 'w', 'h', 'zIndex'] as const
+  for (const field of integerFields) {
+    const value = record[field]
+    if (!Number.isInteger(value)) {
+      return `${path}.${field} must be an integer`
+    }
+  }
+
+  if (typeof record.locked !== 'boolean') {
+    return `${path}.locked must be a boolean`
+  }
+
+  if (typeof record.hidden !== 'boolean') {
+    return `${path}.hidden must be a boolean`
+  }
+
+  if (record.settings !== undefined && (record.settings === null || typeof record.settings !== 'object' || Array.isArray(record.settings))) {
+    return `${path}.settings must be an object`
+  }
+
+  return null
+}
+
+function validateWallpaperLayoutPresets(layoutPresets: unknown): string | null {
+  if (!Array.isArray(layoutPresets)) {
+    return 'wallpaperLayoutPresets must be an array'
+  }
+
+  for (const [index, preset] of layoutPresets.entries()) {
+    if (!preset || typeof preset !== 'object') {
+      return `wallpaperLayoutPresets[${index}] must be an object`
+    }
+
+    const record = preset as Record<string, unknown>
+    if (typeof record.id !== 'string' || record.id.trim().length === 0) {
+      return `wallpaperLayoutPresets[${index}].id must be a non-empty string`
+    }
+
+    if (typeof record.name !== 'string' || record.name.trim().length === 0 || record.name.trim().length > 80) {
+      return `wallpaperLayoutPresets[${index}].name must be a non-empty string up to 80 characters`
+    }
+
+    if (typeof record.canvasPresetId !== 'string' || record.canvasPresetId.trim().length === 0) {
+      return `wallpaperLayoutPresets[${index}].canvasPresetId must be a non-empty string`
+    }
+
+    if (!Array.isArray(record.widgets)) {
+      return `wallpaperLayoutPresets[${index}].widgets must be an array`
+    }
+
+    if (typeof record.createdAt !== 'string' || typeof record.updatedAt !== 'string') {
+      return `wallpaperLayoutPresets[${index}] must include createdAt and updatedAt strings`
+    }
+
+    for (const [widgetIndex, widget] of record.widgets.entries()) {
+      const widgetError = validateWallpaperWidget(widget, `wallpaperLayoutPresets[${index}].widgets[${widgetIndex}]`)
+      if (widgetError) {
+        return widgetError
+      }
+    }
+  }
+
+  return null
+}
+
 function validateAppearancePresetSlots(presetSlots: unknown): string | null {
   if (!Array.isArray(presetSlots) || presetSlots.length !== validAppearancePresetSlotIds.length) {
     return `presetSlots must be an array of ${validAppearancePresetSlotIds.length} items`
@@ -344,11 +429,32 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
+  if (appearanceSettings.wallpaperLayoutPresets !== undefined) {
+    const wallpaperLayoutPresetsValidationError = validateWallpaperLayoutPresets(appearanceSettings.wallpaperLayoutPresets)
+    if (wallpaperLayoutPresetsValidationError) {
+      res.status(400).json({
+        success: false,
+        error: wallpaperLayoutPresetsValidationError,
+      })
+      return
+    }
+  }
+
+  if (appearanceSettings.wallpaperActivePresetId !== undefined && appearanceSettings.wallpaperActivePresetId !== null && typeof appearanceSettings.wallpaperActivePresetId !== 'string') {
+    res.status(400).json({
+      success: false,
+      error: 'wallpaperActivePresetId must be a string or null',
+    })
+    return
+  }
+
   const currentSettings = settingsService.loadSettings()
   const nextAppearance: AppearanceSettings = {
     ...currentSettings.appearance,
     ...appearanceSettings,
     presetSlots: appearanceSettings.presetSlots ?? currentSettings.appearance.presetSlots,
+    wallpaperLayoutPresets: appearanceSettings.wallpaperLayoutPresets ?? currentSettings.appearance.wallpaperLayoutPresets,
+    wallpaperActivePresetId: appearanceSettings.wallpaperActivePresetId ?? currentSettings.appearance.wallpaperActivePresetId,
   }
 
   if (nextAppearance.accentPreset === 'custom') {
@@ -371,6 +477,17 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
         return
       }
     }
+  }
+
+  if (
+    nextAppearance.wallpaperActivePresetId !== null &&
+    !nextAppearance.wallpaperLayoutPresets.some((preset) => preset.id === nextAppearance.wallpaperActivePresetId)
+  ) {
+    res.status(400).json({
+      success: false,
+      error: 'wallpaperActivePresetId must match one of wallpaperLayoutPresets or be null',
+    })
+    return
   }
 
   const updatedSettings = settingsService.updateAppearanceSettings(appearanceSettings)

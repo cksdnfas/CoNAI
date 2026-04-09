@@ -114,6 +114,35 @@ export type EmphasisFontWeightPreset = 'standard' | 'bold';
 export type RelatedImageCardAspectRatio = 'original' | 'square' | 'portrait' | 'landscape';
 export type GroupExplorerCardStyle = 'compact-row' | 'media-tile';
 export type AppearancePresetSlotId = 'slot-1' | 'slot-2' | 'slot-3';
+export type WallpaperWidgetType = 'clock' | 'queue-status' | 'group-image-view' | 'image-showcase' | 'text-note';
+
+export interface WallpaperWidgetSize {
+  w: number;
+  h: number;
+}
+
+export interface WallpaperWidgetFrame extends WallpaperWidgetSize {
+  x: number;
+  y: number;
+}
+
+export interface WallpaperWidgetInstance extends WallpaperWidgetFrame {
+  id: string;
+  type: WallpaperWidgetType;
+  zIndex: number;
+  locked: boolean;
+  hidden: boolean;
+  settings: Record<string, unknown>;
+}
+
+export interface WallpaperLayoutPreset {
+  id: string;
+  name: string;
+  canvasPresetId: string;
+  widgets: WallpaperWidgetInstance[];
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface AppearanceThemeSettings {
   themeMode: ThemeMode;
@@ -164,6 +193,8 @@ export interface AppearancePresetSlot {
 
 export interface AppearanceSettings extends AppearanceThemeSettings {
   presetSlots: AppearancePresetSlot[];
+  wallpaperLayoutPresets: WallpaperLayoutPreset[];
+  wallpaperActivePresetId: string | null;
 }
 
 export type ThumbnailSize = 'original' | '2048' | '1080' | '720' | '512';
