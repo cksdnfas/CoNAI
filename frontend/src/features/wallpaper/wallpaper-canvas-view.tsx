@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { GripVertical } from 'lucide-react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { cn } from '@/lib/utils'
 import type {
   WallpaperCanvasPreset,
@@ -7,6 +9,7 @@ import type {
   WallpaperWidgetInstance,
 } from './wallpaper-types'
 import { WallpaperWidgetBody, type WallpaperWidgetPreviewImage } from './wallpaper-widget-bodies'
+import { clampWallpaperWidgetInstance } from './wallpaper-layout-utils'
 
 interface WallpaperCanvasViewProps {
   canvasPreset: WallpaperCanvasPreset
@@ -46,21 +49,35 @@ function getWallpaperGridDelta(interaction: WallpaperInteractionState, event: Po
 }
 
 /** Build one temporary widget frame preview during drag or resize. */
-function buildWallpaperInteractionPreview(interaction: WallpaperInteractionState, deltaColumns: number, deltaRows: number): WallpaperInteractionPreview {
-  if (interaction.kind === 'move') {
-    return {
-      x: interaction.originWidget.x + deltaColumns,
-      y: interaction.originWidget.y + deltaRows,
-      w: interaction.originWidget.w,
-      h: interaction.originWidget.h,
-    }
-  }
+function buildWallpaperInteractionPreview(
+  interaction: WallpaperInteractionState,
+  deltaColumns: number,
+  deltaRows: number,
+  widget: WallpaperWidgetInstance,
+  canvasPreset: WallpaperCanvasPreset,
+): WallpaperInteractionPreview {
+  const previewWidget = interaction.kind === 'move'
+    ? {
+        ...widget,
+        x: interaction.originWidget.x + deltaColumns,
+        y: interaction.originWidget.y + deltaRows,
+        w: interaction.originWidget.w,
+        h: interaction.originWidget.h,
+      }
+    : {
+        ...widget,
+        x: interaction.originWidget.x,
+        y: interaction.originWidget.y,
+        w: interaction.originWidget.w + deltaColumns,
+        h: interaction.originWidget.h + deltaRows,
+      }
 
+  const clampedPreview = clampWallpaperWidgetInstance(previewWidget, canvasPreset)
   return {
-    x: interaction.originWidget.x,
-    y: interaction.originWidget.y,
-    w: interaction.originWidget.w + deltaColumns,
-    h: interaction.originWidget.h + deltaRows,
+    x: clampedPreview.x,
+    y: clampedPreview.y,
+    w: clampedPreview.w,
+    h: clampedPreview.h,
   }
 }
 
@@ -68,6 +85,7 @@ interface WallpaperWidgetCardProps {
   widget: WallpaperWidgetInstance
   isSelected: boolean
   mode: 'editor' | 'runtime'
+  useMoveHandle?: boolean
   onSelectWidget?: (widgetId: string) => void
   onStartMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onStartResize?: (event: ReactPointerEvent<HTMLButtonElement>) => void
@@ -75,14 +93,14 @@ interface WallpaperWidgetCardProps {
 }
 
 /** Render one widget card inside the wallpaper canvas grid. */
-function WallpaperWidgetCard({ widget, isSelected, mode, onSelectWidget, onStartMove, onStartResize, onOpenImage }: WallpaperWidgetCardProps) {
+function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, onSelectWidget, onStartMove, onStartResize, onOpenImage }: WallpaperWidgetCardProps) {
   const title = String(widget.settings.title ?? widget.type)
   const showTitle = widget.settings.showTitle !== false
   const showBackground = widget.settings.showBackground !== false
   const opacity = typeof widget.settings.opacity === 'number' ? widget.settings.opacity : 1
 
   const cardClassName = cn(
-    'flex h-full w-full flex-col overflow-hidden rounded-sm border text-left transition-all duration-200',
+    'flex h-full w-full flex-col overflow-hidden rounded-sm border text-left transition-all duration-200 select-none',
     showBackground ? 'bg-surface-container/88 backdrop-blur-sm' : 'bg-transparent',
     mode === 'editor'
       ? widget.locked
@@ -109,7 +127,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, onSelectWidget, onStart
         <button
           type="button"
           onClick={() => onSelectWidget?.(widget.id)}
-          onPointerDown={onStartMove}
+          onPointerDown={useMoveHandle ? undefined : onStartMove}
           className={cardClassName}
           style={{ opacity }}
         >
@@ -122,17 +140,32 @@ function WallpaperWidgetCard({ widget, isSelected, mode, onSelectWidget, onStart
       )}
 
       {mode === 'editor' && !widget.locked ? (
-        <button
-          type="button"
-          aria-label="Resize widget"
-          onPointerDown={onStartResize}
-          className={cn(
-            'absolute bottom-2 right-2 flex h-4 w-4 items-center justify-center rounded-[3px] border border-border/80 bg-background/92 text-muted-foreground shadow-sm transition',
-            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-          )}
-        >
-          <span className="pointer-events-none block h-2 w-2 border-b border-r border-current" />
-        </button>
+        <>
+          <button
+            type="button"
+            aria-label="Move widget"
+            onPointerDown={onStartMove}
+            className={cn(
+              'absolute left-2 top-2 flex touch-none items-center justify-center rounded-[5px] border border-border/80 bg-background/92 text-muted-foreground shadow-sm transition select-none',
+              useMoveHandle ? 'h-7 min-w-7 px-1.5 opacity-100' : 'h-5 min-w-5 px-1 opacity-0 group-hover:opacity-100',
+              isSelected ? 'opacity-100' : null,
+            )}
+          >
+            <GripVertical className={useMoveHandle ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+          </button>
+          <button
+            type="button"
+            aria-label="Resize widget"
+            onPointerDown={onStartResize}
+            className={cn(
+              'absolute bottom-2 right-2 flex touch-none items-center justify-center rounded-[5px] border border-border/80 bg-background/92 text-muted-foreground shadow-sm transition select-none',
+              useMoveHandle ? 'h-7 min-w-7 px-1.5 opacity-100' : 'h-4 w-4 opacity-0 group-hover:opacity-100',
+              isSelected ? 'opacity-100' : null,
+            )}
+          >
+            <span className={cn('pointer-events-none block border-b border-r border-current', useMoveHandle ? 'h-3 w-3' : 'h-2 w-2')} />
+          </button>
+        </>
       ) : null}
     </div>
   )
@@ -148,6 +181,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
   const interactionPreviewRef = useRef<WallpaperInteractionPreview | null>(null)
   const previewCloseTimeoutRef = useRef<number | null>(null)
   const isRuntimeMode = mode === 'runtime'
+  const isCoarsePointer = useIsCoarsePointer()
 
   const visibleWidgets = useMemo(
     () => layoutPreset.widgets.filter((widget) => !widget.hidden).sort((left, right) => left.zIndex - right.zIndex),
@@ -171,13 +205,23 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
       return
     }
 
+    const previousBodyTouchAction = document.body.style.touchAction
+    const previousBodyOverscrollBehavior = document.body.style.overscrollBehavior
+    document.body.style.touchAction = 'none'
+    document.body.style.overscrollBehavior = 'none'
+
     const handlePointerMove = (event: PointerEvent) => {
       if (event.pointerId !== interaction.pointerId || !canvasRef.current) {
         return
       }
 
+      const activeWidget = layoutPreset.widgets.find((widget) => widget.id === interaction.widgetId)
+      if (!activeWidget) {
+        return
+      }
+
       const { deltaColumns, deltaRows } = getWallpaperGridDelta(interaction, event, canvasRef.current, canvasPreset)
-      const nextPreview = buildWallpaperInteractionPreview(interaction, deltaColumns, deltaRows)
+      const nextPreview = buildWallpaperInteractionPreview(interaction, deltaColumns, deltaRows, activeWidget, canvasPreset)
       interactionPreviewRef.current = nextPreview
       setInteractionPreview(nextPreview)
     }
@@ -202,11 +246,13 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
     window.addEventListener('pointercancel', handlePointerUp)
 
     return () => {
+      document.body.style.touchAction = previousBodyTouchAction
+      document.body.style.overscrollBehavior = previousBodyOverscrollBehavior
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('pointercancel', handlePointerUp)
     }
-  }, [canvasPreset, interaction, mode, onUpdateWidgetFrame])
+  }, [canvasPreset, interaction, layoutPreset.widgets, mode, onUpdateWidgetFrame])
 
   useEffect(() => {
     return () => {
@@ -309,6 +355,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
             <WallpaperWidgetCard
               widget={widget}
               mode={mode}
+              useMoveHandle={isCoarsePointer}
               isSelected={selectedWidgetId === widget.id}
               onSelectWidget={onSelectWidget}
               onOpenImage={handleOpenPreviewImage}
@@ -317,6 +364,8 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
                   return
                 }
                 event.preventDefault()
+                event.stopPropagation()
+                event.currentTarget.setPointerCapture?.(event.pointerId)
                 onSelectWidget?.(widget.id)
                 interactionPreviewRef.current = null
                 setInteractionPreview(null)
@@ -340,6 +389,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
                 }
                 event.preventDefault()
                 event.stopPropagation()
+                event.currentTarget.setPointerCapture?.(event.pointerId)
                 onSelectWidget?.(widget.id)
                 interactionPreviewRef.current = null
                 setInteractionPreview(null)

@@ -50,7 +50,7 @@ export function ScrubbableNumberInput({
       step={step}
       value={value}
       variant={variant}
-      className={className ?? 'cursor-ew-resize'}
+      className={`${className ?? 'cursor-ew-resize'} touch-none select-none`}
       title="좌우로 드래그해서 값 조절"
       onChange={(event) => onChange(event.target.value)}
       onPointerDown={(event) => {
