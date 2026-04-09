@@ -5,7 +5,7 @@ import type {
   WallpaperLayoutPreset,
   WallpaperWidgetInstance,
 } from './wallpaper-types'
-import { WallpaperWidgetBody } from './wallpaper-widget-bodies'
+import { WallpaperWidgetBody, type WallpaperWidgetPreviewImage } from './wallpaper-widget-bodies'
 
 interface WallpaperCanvasViewProps {
   canvasPreset: WallpaperCanvasPreset
@@ -70,40 +70,55 @@ interface WallpaperWidgetCardProps {
   onSelectWidget?: (widgetId: string) => void
   onStartMove?: (event: ReactPointerEvent<HTMLButtonElement>) => void
   onStartResize?: (event: ReactPointerEvent<HTMLButtonElement>) => void
+  onOpenImage?: (image: WallpaperWidgetPreviewImage) => void
 }
 
 /** Render one widget card inside the wallpaper canvas grid. */
-function WallpaperWidgetCard({ widget, isSelected, mode, onSelectWidget, onStartMove, onStartResize }: WallpaperWidgetCardProps) {
+function WallpaperWidgetCard({ widget, isSelected, mode, onSelectWidget, onStartMove, onStartResize, onOpenImage }: WallpaperWidgetCardProps) {
   const title = String(widget.settings.title ?? widget.type)
   const showTitle = widget.settings.showTitle !== false
   const showBackground = widget.settings.showBackground !== false
   const opacity = typeof widget.settings.opacity === 'number' ? widget.settings.opacity : 1
 
+  const cardClassName = cn(
+    'flex h-full w-full flex-col overflow-hidden rounded-sm border text-left transition-all duration-200',
+    showBackground ? 'bg-surface-container/88 backdrop-blur-sm' : 'bg-transparent',
+    mode === 'editor'
+      ? widget.locked
+        ? 'cursor-default'
+        : 'cursor-grab active:cursor-grabbing hover:border-secondary/70'
+      : 'cursor-default',
+    isSelected ? 'border-secondary shadow-[0_0_0_1px_color-mix(in_srgb,var(--secondary)_22%,transparent)]' : 'border-border/70',
+  )
+
+  const cardContent = (
+    <>
+      {showTitle ? (
+        <div className="border-b border-border/60 px-3 py-2 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">{title}</div>
+      ) : null}
+      <div className="min-h-0 flex-1 p-3">
+        <WallpaperWidgetBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
+      </div>
+    </>
+  )
+
   return (
     <div className="relative h-full w-full group">
-      <button
-        type="button"
-        onClick={() => onSelectWidget?.(widget.id)}
-        onPointerDown={onStartMove}
-        className={cn(
-          'flex h-full w-full flex-col overflow-hidden rounded-sm border text-left transition-all duration-200',
-          showBackground ? 'bg-surface-container/88 backdrop-blur-sm' : 'bg-transparent',
-          mode === 'editor'
-            ? widget.locked
-              ? 'cursor-default'
-              : 'cursor-grab active:cursor-grabbing hover:border-secondary/70'
-            : 'cursor-default',
-          isSelected ? 'border-secondary shadow-[0_0_0_1px_color-mix(in_srgb,var(--secondary)_22%,transparent)]' : 'border-border/70',
-        )}
-        style={{ opacity }}
-      >
-        {showTitle ? (
-          <div className="border-b border-border/60 px-3 py-2 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">{title}</div>
-        ) : null}
-        <div className="min-h-0 flex-1 p-3">
-          <WallpaperWidgetBody widget={widget} mode={mode} />
+      {mode === 'editor' ? (
+        <button
+          type="button"
+          onClick={() => onSelectWidget?.(widget.id)}
+          onPointerDown={onStartMove}
+          className={cardClassName}
+          style={{ opacity }}
+        >
+          {cardContent}
+        </button>
+      ) : (
+        <div className={cardClassName} style={{ opacity }}>
+          {cardContent}
         </div>
-      </button>
+      )}
 
       {mode === 'editor' && !widget.locked ? (
         <button
@@ -126,8 +141,11 @@ function WallpaperWidgetCard({ widget, isSelected, mode, onSelectWidget, onStart
 export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selectedWidgetId, onSelectWidget, onUpdateWidgetFrame }: WallpaperCanvasViewProps) {
   const [interaction, setInteraction] = useState<WallpaperInteractionState | null>(null)
   const [interactionPreview, setInteractionPreview] = useState<WallpaperInteractionPreview | null>(null)
+  const [previewImage, setPreviewImage] = useState<WallpaperWidgetPreviewImage | null>(null)
+  const [isPreviewVisible, setIsPreviewVisible] = useState(false)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const interactionPreviewRef = useRef<WallpaperInteractionPreview | null>(null)
+  const previewCloseTimeoutRef = useRef<number | null>(null)
   const isRuntimeMode = mode === 'runtime'
 
   const visibleWidgets = useMemo(
@@ -189,6 +207,63 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
     }
   }, [canvasPreset, interaction, mode, onUpdateWidgetFrame])
 
+  useEffect(() => {
+    return () => {
+      if (previewCloseTimeoutRef.current !== null) {
+        window.clearTimeout(previewCloseTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!previewImage) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsPreviewVisible(false)
+        if (previewCloseTimeoutRef.current !== null) {
+          window.clearTimeout(previewCloseTimeoutRef.current)
+        }
+        previewCloseTimeoutRef.current = window.setTimeout(() => {
+          setPreviewImage(null)
+          previewCloseTimeoutRef.current = null
+        }, 240)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [previewImage])
+
+  const handleOpenPreviewImage = (image: WallpaperWidgetPreviewImage) => {
+    if (!isRuntimeMode) {
+      return
+    }
+
+    if (previewCloseTimeoutRef.current !== null) {
+      window.clearTimeout(previewCloseTimeoutRef.current)
+      previewCloseTimeoutRef.current = null
+    }
+
+    setPreviewImage(image)
+    window.requestAnimationFrame(() => {
+      setIsPreviewVisible(true)
+    })
+  }
+
+  const handleClosePreviewImage = () => {
+    setIsPreviewVisible(false)
+    if (previewCloseTimeoutRef.current !== null) {
+      window.clearTimeout(previewCloseTimeoutRef.current)
+    }
+    previewCloseTimeoutRef.current = window.setTimeout(() => {
+      setPreviewImage(null)
+      previewCloseTimeoutRef.current = null
+    }, 240)
+  }
+
   const canvasElement = (
     <div
       ref={canvasRef}
@@ -235,6 +310,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
               mode={mode}
               isSelected={selectedWidgetId === widget.id}
               onSelectWidget={onSelectWidget}
+              onOpenImage={handleOpenPreviewImage}
               onStartMove={(event) => {
                 if (mode !== 'editor' || widget.locked) {
                   return
@@ -284,6 +360,36 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
           </div>
         ))}
       </div>
+
+      {previewImage ? (
+        <div
+          className={cn(
+            'absolute inset-0 z-[120] flex items-center justify-center bg-[color-mix(in_srgb,var(--background)_68%,transparent)] p-6 backdrop-blur-md transition-opacity duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+            isPreviewVisible ? 'opacity-100' : 'opacity-0',
+          )}
+          onClick={handleClosePreviewImage}
+        >
+          <button
+            type="button"
+            aria-label="Close image preview"
+            onClick={(event) => {
+              event.stopPropagation()
+              handleClosePreviewImage()
+            }}
+            className={cn(
+              'max-h-full max-w-full overflow-hidden rounded-[24px] border border-white/14 bg-black/14 shadow-[0_16px_40px_rgba(0,0,0,0.18),0_36px_96px_rgba(0,0,0,0.42)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+              isPreviewVisible ? 'translate-y-0 scale-100 opacity-100 rotate-0' : 'translate-y-5 scale-[0.88] opacity-0 -rotate-[1.4deg]',
+            )}
+          >
+            <img
+              src={previewImage.src}
+              alt={previewImage.alt}
+              className="block max-h-[84vh] max-w-[90vw] object-contain"
+              loading="eager"
+            />
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 

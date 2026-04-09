@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { formatDateTime, getArtifactPreviewUrl } from '@/features/module-graph/module-graph-shared'
 import { cn } from '@/lib/utils'
-import type { WallpaperWidgetInstance } from './wallpaper-types'
+import type { WallpaperImageTransitionSpeed, WallpaperImageTransitionStyle, WallpaperWidgetInstance } from './wallpaper-types'
 import { useWallpaperBrowseContentQuery, useWallpaperGroupPreviewImagesQuery } from './wallpaper-widget-data'
 import {
   buildWallpaperFinalResultArtifact,
@@ -11,6 +11,193 @@ import {
   useWallpaperMotionTick,
   useWallpaperRotatingIndex,
 } from './wallpaper-widget-utils'
+
+const WALLPAPER_IMAGE_TRANSITION_DURATIONS: Record<WallpaperImageTransitionSpeed, number> = {
+  fast: 220,
+  normal: 340,
+  slow: 520,
+}
+const WALLPAPER_IMAGE_TRANSITION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+
+export interface WallpaperWidgetPreviewImage {
+  src: string
+  alt: string
+}
+
+interface WallpaperPreviewImageSurfaceProps {
+  src: string
+  alt: string
+  className: string
+  imageClassName: string
+  style?: CSSProperties
+  imageStyle?: CSSProperties
+  children?: ReactNode
+  onOpenImage?: (image: WallpaperWidgetPreviewImage) => void
+  transitionStyle?: WallpaperImageTransitionStyle
+  transitionSpeed?: WallpaperImageTransitionSpeed
+}
+
+function getWallpaperTransitionStateClassName(transitionStyle: WallpaperImageTransitionStyle, layer: 'current' | 'previous', isTransitionActive: boolean) {
+  if (transitionStyle === 'none') {
+    return layer === 'current' ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0'
+  }
+
+  if (transitionStyle === 'fade') {
+    if (layer === 'current') {
+      return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[1.02] translate-y-0 blur-[3px]'
+    }
+    return isTransitionActive ? 'opacity-0 scale-[0.98] translate-y-0 blur-[4px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
+  }
+
+  if (transitionStyle === 'slide') {
+    if (layer === 'current') {
+      return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[0.985] translate-y-3 blur-[2px]'
+    }
+    return isTransitionActive ? 'opacity-0 scale-[1.015] -translate-y-3 blur-[4px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
+  }
+
+  if (transitionStyle === 'blur') {
+    if (layer === 'current') {
+      return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[1.035] translate-y-0 blur-[14px]'
+    }
+    return isTransitionActive ? 'opacity-0 scale-[0.97] translate-y-0 blur-[18px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
+  }
+
+  if (transitionStyle === 'flip') {
+    if (layer === 'current') {
+      return isTransitionActive ? 'opacity-100 [transform:perspective(1200px)_rotateX(0deg)_scale(1)] blur-0' : 'opacity-0 [transform:perspective(1200px)_rotateX(-84deg)_scale(0.96)] blur-[2px]'
+    }
+    return isTransitionActive ? 'opacity-0 [transform:perspective(1200px)_rotateX(84deg)_scale(1.03)] blur-[4px]' : 'opacity-100 [transform:perspective(1200px)_rotateX(0deg)_scale(1)] blur-0'
+  }
+
+  if (transitionStyle === 'shuffle') {
+    if (layer === 'current') {
+      return isTransitionActive ? 'opacity-100 scale-100 translate-x-0 translate-y-0 rotate-0 blur-0' : 'opacity-0 scale-[0.92] -translate-x-3 translate-y-2 -rotate-[3deg] blur-[4px]'
+    }
+    return isTransitionActive ? 'opacity-0 scale-[1.05] translate-x-3 -translate-y-2 rotate-[3deg] blur-[5px]' : 'opacity-100 scale-100 translate-x-0 translate-y-0 rotate-0 blur-0'
+  }
+
+  if (layer === 'current') {
+    return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[0.9] translate-y-[2%] blur-[4px]'
+  }
+
+  return isTransitionActive ? 'opacity-0 scale-[1.08] translate-y-[-2%] blur-[6px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
+}
+
+/** Render one optionally clickable wallpaper image surface. */
+function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal' }: WallpaperPreviewImageSurfaceProps) {
+  const [currentImage, setCurrentImage] = useState<WallpaperWidgetPreviewImage>({ src, alt })
+  const [previousImage, setPreviousImage] = useState<WallpaperWidgetPreviewImage | null>(null)
+  const [isTransitionActive, setIsTransitionActive] = useState(false)
+  const currentImageRef = useRef<WallpaperWidgetPreviewImage>({ src, alt })
+  const transitionTimeoutRef = useRef<number | null>(null)
+  const transitionDurationMs = WALLPAPER_IMAGE_TRANSITION_DURATIONS[transitionSpeed]
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current !== null) {
+        window.clearTimeout(transitionTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const nextImage = { src, alt }
+    const activeImage = currentImageRef.current
+    if (activeImage.src === nextImage.src && activeImage.alt === nextImage.alt) {
+      return
+    }
+
+    if (transitionTimeoutRef.current !== null) {
+      window.clearTimeout(transitionTimeoutRef.current)
+      transitionTimeoutRef.current = null
+    }
+
+    currentImageRef.current = nextImage
+    queueMicrotask(() => {
+      setCurrentImage(nextImage)
+
+      if (transitionStyle === 'none') {
+        setPreviousImage(null)
+        setIsTransitionActive(false)
+        return
+      }
+
+      setPreviousImage(activeImage)
+      setIsTransitionActive(false)
+      window.requestAnimationFrame(() => {
+        setIsTransitionActive(true)
+      })
+      transitionTimeoutRef.current = window.setTimeout(() => {
+        setPreviousImage(null)
+        setIsTransitionActive(false)
+        transitionTimeoutRef.current = null
+      }, transitionDurationMs)
+    })
+  }, [alt, src, transitionDurationMs, transitionStyle])
+
+  const imageLayerStyle = {
+    transitionDuration: `${transitionDurationMs}ms`,
+    transitionTimingFunction: WALLPAPER_IMAGE_TRANSITION_EASING,
+    ...imageStyle,
+  }
+
+  const imageLayers = (
+    <>
+      {previousImage ? (
+        <img
+          src={previousImage.src}
+          alt={previousImage.alt}
+          className={cn(
+            'absolute inset-0 h-full w-full transition-[opacity,transform,filter] will-change-transform',
+            imageClassName,
+            getWallpaperTransitionStateClassName(transitionStyle, 'previous', isTransitionActive),
+          )}
+          style={imageLayerStyle}
+          loading="lazy"
+          draggable={false}
+        />
+      ) : null}
+      <img
+        src={currentImage.src}
+        alt={currentImage.alt}
+        className={cn(
+          'absolute inset-0 h-full w-full transition-[opacity,transform,filter] will-change-transform',
+          imageClassName,
+          onOpenImage ? 'group-hover:scale-[1.03]' : undefined,
+          getWallpaperTransitionStateClassName(transitionStyle, 'current', isTransitionActive),
+        )}
+        style={imageLayerStyle}
+        loading="lazy"
+        draggable={false}
+      />
+    </>
+  )
+
+  if (!onOpenImage) {
+    return (
+      <div className={cn(className, 'relative isolate')} style={style}>
+        {imageLayers}
+        {children}
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      className={cn(className, 'group relative isolate cursor-zoom-in')}
+      style={style}
+      onClick={(event) => {
+        event.stopPropagation()
+        onOpenImage({ src: currentImage.src, alt: currentImage.alt })
+      }}
+    >
+      {imageLayers}
+      {children}
+    </button>
+  )
+}
 
 /** Render the live clock body without forcing timers on every widget. */
 function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'clock' }> }) {
@@ -198,11 +385,13 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
 }
 
 /** Render one recent-results widget using the latest graph outputs. */
-function WallpaperRecentResultsBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'recent-results' }> }) {
+function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'recent-results' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
   const refreshInterval = Math.max(5, widget.settings.refreshIntervalSec) * 1000
   const visibleCount = Math.max(1, Math.min(6, widget.settings.visibleCount))
   const displayMode = widget.settings.displayMode ?? 'grid'
   const shiftInterval = Math.max(4, widget.settings.shiftIntervalSec ?? 8) * 1000
+  const imageTransitionStyle = widget.settings.imageTransitionStyle ?? 'zoom'
+  const imageTransitionSpeed = widget.settings.imageTransitionSpeed ?? 'normal'
 
   const resultsQuery = useWallpaperBrowseContentQuery('recent-results', refreshInterval)
 
@@ -300,9 +489,15 @@ function WallpaperRecentResultsBody({ widget }: { widget: Extract<WallpaperWidge
           const isFront = order === 0
 
           return (
-            <div
-              key={entry.id}
-              className="absolute inset-0 overflow-hidden rounded-sm border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-all duration-[1600ms] ease-out"
+            <WallpaperPreviewImageSurface
+              key={`recent-stack-slot-${order}`}
+              src={entry.previewUrl}
+              alt={entry.workflowName}
+              onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
+              transitionStyle={imageTransitionStyle}
+              transitionSpeed={imageTransitionSpeed}
+              className="absolute inset-0 overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-all duration-[1600ms] ease-out"
+              imageClassName="h-full w-full object-cover"
               style={{
                 inset: `${offsetY}px ${offsetX}px ${Math.max(0, offsetY * 0.4)}px ${Math.max(0, offsetX * 0.35)}px`,
                 transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${scale})`,
@@ -310,7 +505,6 @@ function WallpaperRecentResultsBody({ widget }: { widget: Extract<WallpaperWidge
                 zIndex: 100 - order,
               }}
             >
-              <img src={entry.previewUrl} alt={entry.workflowName} className="h-full w-full object-cover" loading="lazy" />
               <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
                 <div className="truncate text-xs font-medium text-white">{entry.workflowName}</div>
                 <div className="mt-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-white/78">
@@ -318,7 +512,7 @@ function WallpaperRecentResultsBody({ widget }: { widget: Extract<WallpaperWidge
                   <span className="truncate">{isFront ? entry.createdLabel : `-${order}`}</span>
                 </div>
               </div>
-            </div>
+            </WallpaperPreviewImageSurface>
           )
         })}
 
@@ -339,29 +533,39 @@ function WallpaperRecentResultsBody({ widget }: { widget: Extract<WallpaperWidge
         </div>
       ) : null}
 
-      {recentEntries.map((entry) => (
-        <div key={entry.id} className="relative overflow-hidden rounded-sm border border-border/70 bg-surface-low">
-          <img src={entry.previewUrl} alt={entry.workflowName} className="h-full w-full object-cover" loading="lazy" />
-          <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
+      {recentEntries.map((entry, index) => (
+        <WallpaperPreviewImageSurface
+          key={`recent-grid-slot-${index}`}
+          src={entry.previewUrl}
+          alt={entry.workflowName}
+          onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
+          transitionStyle={imageTransitionStyle}
+          transitionSpeed={imageTransitionSpeed}
+          className="relative overflow-hidden rounded-xl border border-border/70 bg-surface-low"
+          imageClassName="h-full w-full object-cover"
+        >
+          <div className="absolute inset-x-0 bottom-0 z-[1] bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
             <div className="truncate text-xs font-medium text-white">{entry.workflowName}</div>
             <div className="mt-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-white/78">
               <span>{entry.badge}</span>
               <span className="truncate">{entry.createdLabel}</span>
             </div>
           </div>
-        </div>
+        </WallpaperPreviewImageSurface>
       ))}
     </div>
   )
 }
 
 /** Render one group-backed preview grid using the existing groups preview API. */
-function WallpaperGroupImageViewBody({ widget, mode }: { widget: Extract<WallpaperWidgetInstance, { type: 'group-image-view' }>; mode: 'editor' | 'runtime' }) {
+function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'group-image-view' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
   const visibleCount = Math.max(1, Math.min(9, widget.settings.visibleCount))
   const motionMode = widget.settings.motionMode ?? 'static'
   const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 'medium')
+  const imageTransitionStyle = widget.settings.imageTransitionStyle ?? 'fade'
+  const imageTransitionSpeed = widget.settings.imageTransitionSpeed ?? 'normal'
   const allowPointerMotion = motionMode === 'pointer' && mode === 'runtime'
   const ambientTick = useWallpaperMotionTick(motionMode === 'ambient')
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null)
@@ -422,13 +626,25 @@ function WallpaperGroupImageViewBody({ widget, mode }: { widget: Extract<Wallpap
           scale = 1.03 + ((Math.abs(pointerOffset.x) + Math.abs(pointerOffset.y)) * 0.02 * motionStrength)
         }
 
-        return (
+        return imageUrl ? (
+          <WallpaperPreviewImageSurface
+            key={`group-grid-slot-${index}`}
+            src={imageUrl}
+            alt="Group preview"
+            onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
+            transitionStyle={imageTransitionStyle}
+            transitionSpeed={imageTransitionSpeed}
+            className="overflow-hidden rounded-lg border border-border/70 bg-surface-low transition-transform duration-200 ease-out will-change-transform"
+            imageClassName="h-full w-full object-cover"
+            style={{ transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})` }}
+          />
+        ) : (
           <div
-            key={String(image.composite_hash ?? image.id)}
-            className="overflow-hidden rounded-sm border border-border/70 bg-surface-low transition-transform duration-200 ease-out will-change-transform"
+            key={`group-grid-slot-${index}`}
+            className="flex h-full min-h-16 items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-surface-low text-xs text-muted-foreground transition-transform duration-200 ease-out will-change-transform"
             style={{ transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})` }}
           >
-            {imageUrl ? <img src={imageUrl} alt="Group preview" className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full min-h-16 items-center justify-center text-xs text-muted-foreground">No image</div>}
+            No image
           </div>
         )
       })}
@@ -443,7 +659,7 @@ function WallpaperGroupImageViewBody({ widget, mode }: { widget: Extract<Wallpap
 }
 
 /** Render one layered floating collage from one chosen image group. */
-function WallpaperFloatingCollageBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'floating-collage' }> }) {
+function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'floating-collage' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
   const visibleCount = Math.max(2, Math.min(6, widget.settings.visibleCount))
@@ -489,10 +705,27 @@ function WallpaperFloatingCollageBody({ widget }: { widget: Extract<WallpaperWid
         const scale = 1.02 + ((Math.sin(phase * 0.55) + 1) * 0.018)
         const rotate = slot.rotate + Math.sin(phase * 0.4) * 2.5 * motionStrength
 
-        return (
+        return imageUrl ? (
+          <WallpaperPreviewImageSurface
+            key={String(image.composite_hash ?? image.id ?? index)}
+            src={imageUrl}
+            alt="Floating collage"
+            onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
+            className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_14px_40px_rgba(0,0,0,0.34)] transition-transform duration-200 ease-out will-change-transform"
+            imageClassName="h-full w-full object-cover"
+            style={{
+              left: slot.left,
+              top: slot.top,
+              width: slot.width,
+              aspectRatio: '4 / 5',
+              zIndex: 10 + slot.depth + index,
+              transform: `translate3d(${translateX}px, ${translateY}px, 0) rotate(${rotate}deg) scale(${scale})`,
+            }}
+          />
+        ) : (
           <div
             key={String(image.composite_hash ?? image.id ?? index)}
-            className="absolute overflow-hidden rounded-md border border-white/15 bg-surface-high shadow-[0_14px_40px_rgba(0,0,0,0.34)] transition-transform duration-200 ease-out will-change-transform"
+            className="absolute flex items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-surface-high text-xs text-muted-foreground shadow-[0_14px_40px_rgba(0,0,0,0.34)] transition-transform duration-200 ease-out will-change-transform"
             style={{
               left: slot.left,
               top: slot.top,
@@ -502,7 +735,7 @@ function WallpaperFloatingCollageBody({ widget }: { widget: Extract<WallpaperWid
               transform: `translate3d(${translateX}px, ${translateY}px, 0) rotate(${rotate}deg) scale(${scale})`,
             }}
           >
-            {imageUrl ? <img src={imageUrl} alt="Floating collage" className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No image</div>}
+            No image
           </div>
         )
       })}
@@ -514,12 +747,14 @@ function WallpaperFloatingCollageBody({ widget }: { widget: Extract<WallpaperWid
 }
 
 /** Render one showcase-style image widget with optional motion playback. */
-function WallpaperImageShowcaseBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'image-showcase' }> }) {
+function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'image-showcase' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
   const playbackMode = widget.settings.playbackMode ?? 'carousel'
   const previewCount = playbackMode === 'static' ? 1 : 10
   const slideshowInterval = Math.max(4, widget.settings.slideshowIntervalSec) * 1000
+  const imageTransitionStyle = widget.settings.imageTransitionStyle ?? 'fade'
+  const imageTransitionSpeed = widget.settings.imageTransitionSpeed ?? 'normal'
 
   const previewQuery = useWallpaperGroupPreviewImagesQuery('image-showcase', groupId, includeChildren, previewCount)
 
@@ -561,20 +796,20 @@ function WallpaperImageShowcaseBody({ widget }: { widget: Extract<WallpaperWidge
       : 'scale(1)'
 
   return (
-    <div className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-surface-low">
-      <img
-        key={String(currentImage?.composite_hash ?? currentImage?.id ?? currentIndex)}
-        src={imageUrl}
-        alt="Showcase"
-        className={cn(
-          'h-full w-full rounded-sm ease-out will-change-transform',
-          widget.settings.fitMode === 'contain' ? 'object-contain' : 'object-cover',
-          kenBurnsEnabled ? 'transition-transform duration-200' : 'transition-transform duration-[1600ms]',
-        )}
-        style={{ transform: showcaseTransform }}
-        loading="lazy"
-      />
-
+    <WallpaperPreviewImageSurface
+      src={imageUrl}
+      alt="Showcase"
+      onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
+      transitionStyle={imageTransitionStyle}
+      transitionSpeed={imageTransitionSpeed}
+      className="relative h-full overflow-hidden rounded-xl border border-border/70 bg-surface-low"
+      imageClassName={cn(
+        'h-full w-full rounded-xl ease-out will-change-transform',
+        widget.settings.fitMode === 'contain' ? 'object-contain' : 'object-cover',
+        kenBurnsEnabled ? 'transition-transform duration-200' : 'transition-transform duration-[1600ms]',
+      )}
+      imageStyle={{ transform: showcaseTransform }}
+    >
       {rotationEnabled ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_74%,transparent))] px-3 py-2">
           <div className="flex items-center gap-1.5">
@@ -593,7 +828,7 @@ function WallpaperImageShowcaseBody({ widget }: { widget: Extract<WallpaperWidge
           </div>
         </div>
       ) : null}
-    </div>
+    </WallpaperPreviewImageSurface>
   )
 }
 
@@ -719,7 +954,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
 }
 
 /** Render one widget body based on the widget type. */
-export function WallpaperWidgetBody({ widget, mode }: { widget: WallpaperWidgetInstance; mode: 'editor' | 'runtime' }) {
+export function WallpaperWidgetBody({ widget, mode, onOpenImage }: { widget: WallpaperWidgetInstance; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
   if (widget.type === 'clock') {
     return <WallpaperClockBody widget={widget} />
   }
@@ -729,7 +964,7 @@ export function WallpaperWidgetBody({ widget, mode }: { widget: WallpaperWidgetI
   }
 
   if (widget.type === 'recent-results') {
-    return <WallpaperRecentResultsBody widget={widget} />
+    return <WallpaperRecentResultsBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
   }
 
   if (widget.type === 'activity-pulse') {
@@ -737,15 +972,15 @@ export function WallpaperWidgetBody({ widget, mode }: { widget: WallpaperWidgetI
   }
 
   if (widget.type === 'group-image-view') {
-    return <WallpaperGroupImageViewBody widget={widget} mode={mode} />
+    return <WallpaperGroupImageViewBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
   }
 
   if (widget.type === 'image-showcase') {
-    return <WallpaperImageShowcaseBody widget={widget} />
+    return <WallpaperImageShowcaseBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
   }
 
   if (widget.type === 'floating-collage') {
-    return <WallpaperFloatingCollageBody widget={widget} />
+    return <WallpaperFloatingCollageBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
   }
 
   return (

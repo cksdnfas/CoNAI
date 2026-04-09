@@ -27,6 +27,10 @@ export interface WallpaperBaseWidgetSettings {
   opacity?: number
 }
 
+export type WallpaperImageTransitionStyle = 'none' | 'fade' | 'zoom' | 'slide' | 'blur' | 'flip' | 'shuffle'
+
+export type WallpaperImageTransitionSpeed = 'fast' | 'normal' | 'slow'
+
 export interface WallpaperClockWidgetSettings extends WallpaperBaseWidgetSettings {
   timeFormat: '12h' | '24h'
   showSeconds: boolean
@@ -43,6 +47,8 @@ export interface WallpaperRecentResultsWidgetSettings extends WallpaperBaseWidge
   visibleCount: number
   displayMode: 'grid' | 'stack'
   shiftIntervalSec: number
+  imageTransitionStyle: WallpaperImageTransitionStyle
+  imageTransitionSpeed: WallpaperImageTransitionSpeed
 }
 
 export interface WallpaperActivityPulseWidgetSettings extends WallpaperBaseWidgetSettings {
@@ -60,12 +66,16 @@ export interface WallpaperGroupImageViewWidgetSettings extends WallpaperGroupSou
   visibleCount: number
   motionMode: 'static' | 'ambient' | 'pointer'
   motionStrength: 'soft' | 'medium' | 'strong'
+  imageTransitionStyle: WallpaperImageTransitionStyle
+  imageTransitionSpeed: WallpaperImageTransitionSpeed
 }
 
 export interface WallpaperImageShowcaseWidgetSettings extends WallpaperGroupSourceWidgetSettings {
   fitMode: 'cover' | 'contain'
   slideshowIntervalSec: number
   playbackMode: 'static' | 'carousel' | 'ken-burns'
+  imageTransitionStyle: WallpaperImageTransitionStyle
+  imageTransitionSpeed: WallpaperImageTransitionSpeed
 }
 
 export interface WallpaperFloatingCollageWidgetSettings extends WallpaperGroupSourceWidgetSettings {

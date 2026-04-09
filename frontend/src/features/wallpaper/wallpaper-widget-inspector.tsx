@@ -183,6 +183,56 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 ))}
               </Select>
             </SettingsField>
+
+            <SettingsField label="Transition">
+              <Select
+                value={selectedWidget.settings.imageTransitionStyle ?? 'zoom'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageTransitionStyle: event.target.value === 'none'
+                      ? 'none'
+                      : event.target.value === 'fade'
+                        ? 'fade'
+                        : event.target.value === 'slide'
+                          ? 'slide'
+                          : event.target.value === 'blur'
+                            ? 'blur'
+                            : event.target.value === 'flip'
+                              ? 'flip'
+                              : event.target.value === 'shuffle'
+                                ? 'shuffle'
+                                : 'zoom',
+                  })
+                }}
+              >
+                <option value="zoom">Zoom</option>
+                <option value="fade">Fade</option>
+                <option value="slide">Slide</option>
+                <option value="blur">Blur</option>
+                <option value="flip">Flip</option>
+                <option value="shuffle">Shuffle</option>
+                <option value="none">None</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="Speed">
+              <Select
+                value={selectedWidget.settings.imageTransitionSpeed ?? 'normal'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageTransitionSpeed: event.target.value === 'fast'
+                      ? 'fast'
+                      : event.target.value === 'slow'
+                        ? 'slow'
+                        : 'normal',
+                  })
+                }}
+              >
+                <option value="fast">Fast</option>
+                <option value="normal">Normal</option>
+                <option value="slow">Slow</option>
+              </Select>
+            </SettingsField>
           </>
         ) : null}
 
@@ -278,6 +328,56 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 <option value="contain">Contain</option>
               </Select>
             </SettingsField>
+
+            <SettingsField label="Transition">
+              <Select
+                value={selectedWidget.settings.imageTransitionStyle ?? 'fade'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageTransitionStyle: event.target.value === 'none'
+                      ? 'none'
+                      : event.target.value === 'zoom'
+                        ? 'zoom'
+                        : event.target.value === 'slide'
+                          ? 'slide'
+                          : event.target.value === 'blur'
+                            ? 'blur'
+                            : event.target.value === 'flip'
+                              ? 'flip'
+                              : event.target.value === 'shuffle'
+                                ? 'shuffle'
+                                : 'fade',
+                  })
+                }}
+              >
+                <option value="fade">Fade</option>
+                <option value="zoom">Zoom</option>
+                <option value="slide">Slide</option>
+                <option value="blur">Blur</option>
+                <option value="flip">Flip</option>
+                <option value="shuffle">Shuffle</option>
+                <option value="none">None</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="Speed">
+              <Select
+                value={selectedWidget.settings.imageTransitionSpeed ?? 'normal'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageTransitionSpeed: event.target.value === 'fast'
+                      ? 'fast'
+                      : event.target.value === 'slow'
+                        ? 'slow'
+                        : 'normal',
+                  })
+                }}
+              >
+                <option value="fast">Fast</option>
+                <option value="normal">Normal</option>
+                <option value="slow">Slow</option>
+              </Select>
+            </SettingsField>
           </>
         ) : null}
 
@@ -341,6 +441,56 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 <option value="soft">Soft</option>
                 <option value="medium">Medium</option>
                 <option value="strong">Strong</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="Transition">
+              <Select
+                value={selectedWidget.settings.imageTransitionStyle ?? 'fade'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageTransitionStyle: event.target.value === 'none'
+                      ? 'none'
+                      : event.target.value === 'zoom'
+                        ? 'zoom'
+                        : event.target.value === 'slide'
+                          ? 'slide'
+                          : event.target.value === 'blur'
+                            ? 'blur'
+                            : event.target.value === 'flip'
+                              ? 'flip'
+                              : event.target.value === 'shuffle'
+                                ? 'shuffle'
+                                : 'fade',
+                  })
+                }}
+              >
+                <option value="fade">Fade</option>
+                <option value="zoom">Zoom</option>
+                <option value="slide">Slide</option>
+                <option value="blur">Blur</option>
+                <option value="flip">Flip</option>
+                <option value="shuffle">Shuffle</option>
+                <option value="none">None</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="Speed">
+              <Select
+                value={selectedWidget.settings.imageTransitionSpeed ?? 'normal'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageTransitionSpeed: event.target.value === 'fast'
+                      ? 'fast'
+                      : event.target.value === 'slow'
+                        ? 'slow'
+                        : 'normal',
+                  })
+                }}
+              >
+                <option value="fast">Fast</option>
+                <option value="normal">Normal</option>
+                <option value="slow">Slow</option>
               </Select>
             </SettingsField>
           </>
