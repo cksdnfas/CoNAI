@@ -6,15 +6,29 @@ function normalizeWallpaperPresetQueryValue(value: string) {
   return value.trim().toLowerCase()
 }
 
-/** Build one stable human-readable query token from a wallpaper preset name. */
-export function buildWallpaperPresetQueryValue(preset: Pick<WallpaperLayoutPreset, 'id' | 'name'>) {
-  const slug = preset.name
+function buildWallpaperPresetSlug(name: string) {
+  return name
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9가-힣]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
 
-  return slug || preset.id
+function getWallpaperPresetQueryId(presetQuery: string) {
+  const separatorIndex = presetQuery.lastIndexOf('--')
+  if (separatorIndex < 0) {
+    return null
+  }
+
+  return normalizeWallpaperPresetQueryValue(presetQuery.slice(separatorIndex + 2)) || null
+}
+
+/** Build one stable human-readable query token from a wallpaper preset name. */
+export function buildWallpaperPresetQueryValue(preset: Pick<WallpaperLayoutPreset, 'id' | 'name'>) {
+  const slug = buildWallpaperPresetSlug(preset.name)
+  const normalizedId = normalizeWallpaperPresetQueryValue(preset.id)
+
+  return slug ? `${slug}--${normalizedId}` : normalizedId
 }
 
 /** Resolve one saved wallpaper preset from a runtime preset query token. */
@@ -24,8 +38,17 @@ export function findWallpaperPresetByQuery(layoutPresets: WallpaperLayoutPreset[
     return null
   }
 
+  const presetIdFromQuery = getWallpaperPresetQueryId(normalizedQuery)
+  if (presetIdFromQuery) {
+    const matchedPresetById = layoutPresets.find((preset) => normalizeWallpaperPresetQueryValue(preset.id) === presetIdFromQuery)
+    if (matchedPresetById) {
+      return matchedPresetById
+    }
+  }
+
   return layoutPresets.find((preset) => (
     normalizeWallpaperPresetQueryValue(preset.id) === normalizedQuery ||
+    normalizeWallpaperPresetQueryValue(buildWallpaperPresetSlug(preset.name)) === normalizedQuery ||
     normalizeWallpaperPresetQueryValue(buildWallpaperPresetQueryValue(preset)) === normalizedQuery
   )) ?? null
 }
