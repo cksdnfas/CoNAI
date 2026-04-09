@@ -68,6 +68,10 @@ export function LoginPage() {
   }
 
   const hasCredentials = authStatusQuery.data?.hasCredentials === true
+
+  if (!hasCredentials) {
+    return <Navigate to={nextPath} replace />
+  }
   const databaseInfo = databaseInfoQuery.data ?? null
 
   return (
