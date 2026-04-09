@@ -16,7 +16,7 @@ import { ImageViewThumbnailStrip } from './image-view-thumbnail-strip'
 import { ImageViewModalContext, type ImageViewModalOpenInput } from './image-view-modal-context'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
-import { formatBytes, getDownloadName, getImageDetailDownloadUrl, getImageDetailRenderUrl } from './image-detail-utils'
+import { getDownloadName, getImageDetailDownloadUrl, getImageDetailRenderUrl } from './image-detail-utils'
 
 interface ImageViewModalState {
   compositeHash: string | null
@@ -282,34 +282,50 @@ function ImageViewModal({
     }
   }, [isDesktopModalLayout, compositeHash, viewMode])
 
-  const showsThumbnailStrip = viewMode !== 'minimal' && thumbnailStripItems.length > 1
+  const showsThumbnailStrip = viewMode === 'full' && thumbnailStripItems.length > 1
 
   return createPortal(
     <div className={cn('fixed inset-0 z-[90] bg-black/72', viewMode === 'minimal' ? 'p-0' : 'p-4 md:p-6')} onMouseDown={onClose}>
-      {viewMode !== 'minimal' && canViewPrevious ? (
+      {canViewPrevious ? (
         <button
           type="button"
-          className="absolute left-0 top-1/2 z-[91] hidden h-40 w-16 -translate-y-1/2 items-center justify-start bg-gradient-to-r from-black/34 via-black/12 to-transparent pl-3 text-white/72 transition hover:text-white xl:flex"
+          className={cn(
+            'absolute left-0 top-1/2 z-[91] hidden -translate-y-1/2 items-center justify-start text-white/72 transition hover:text-white xl:flex',
+            viewMode === 'minimal'
+              ? 'h-48 w-20 bg-gradient-to-r from-black/46 via-black/16 to-transparent pl-4'
+              : 'h-40 w-16 bg-gradient-to-r from-black/34 via-black/12 to-transparent pl-3',
+          )}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={onViewPrevious}
           aria-label="이전 이미지"
         >
-          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/18 bg-black/20 backdrop-blur-sm">
-            <ChevronLeft className="h-6 w-6" />
+          <span className={cn(
+            'flex items-center justify-center rounded-full border border-white/18 bg-black/20 backdrop-blur-sm',
+            viewMode === 'minimal' ? 'h-14 w-14' : 'h-12 w-12',
+          )}>
+            <ChevronLeft className={viewMode === 'minimal' ? 'h-7 w-7' : 'h-6 w-6'} />
           </span>
         </button>
       ) : null}
 
-      {viewMode !== 'minimal' && canViewNext ? (
+      {canViewNext ? (
         <button
           type="button"
-          className="absolute right-0 top-1/2 z-[91] hidden h-40 w-16 -translate-y-1/2 items-center justify-end bg-gradient-to-l from-black/34 via-black/12 to-transparent pr-3 text-white/72 transition hover:text-white xl:flex"
+          className={cn(
+            'absolute right-0 top-1/2 z-[91] hidden -translate-y-1/2 items-center justify-end text-white/72 transition hover:text-white xl:flex',
+            viewMode === 'minimal'
+              ? 'h-48 w-20 bg-gradient-to-l from-black/46 via-black/16 to-transparent pr-4'
+              : 'h-40 w-16 bg-gradient-to-l from-black/34 via-black/12 to-transparent pr-3',
+          )}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={onViewNext}
           aria-label="다음 이미지"
         >
-          <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/18 bg-black/20 backdrop-blur-sm">
-            <ChevronRight className="h-6 w-6" />
+          <span className={cn(
+            'flex items-center justify-center rounded-full border border-white/18 bg-black/20 backdrop-blur-sm',
+            viewMode === 'minimal' ? 'h-14 w-14' : 'h-12 w-12',
+          )}>
+            <ChevronRight className={viewMode === 'minimal' ? 'h-7 w-7' : 'h-6 w-6'} />
           </span>
         </button>
       ) : null}
@@ -423,7 +439,15 @@ function ImageViewMediumContent({ compositeHash, renderHeader }: ImageViewSurfac
   const renderUrl = getImageDetailRenderUrl(image)
   const downloadUrl = getImageDetailDownloadUrl(image)
   const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
-  const mimeSummary = image?.mime_type || image?.file_type || '—'
+  const positivePrompt = image?.ai_metadata?.prompts?.prompt || image?.ai_metadata?.raw_nai_parameters?.prompt || '—'
+  const negativePrompt = image?.ai_metadata?.prompts?.negative_prompt || image?.ai_metadata?.raw_nai_parameters?.uc || '—'
+  const characterPrompt = image?.ai_metadata?.prompts?.character_prompt_text
+    || image?.ai_metadata?.prompts?.characters?.filter(Boolean).join(', ')
+    || image?.ai_metadata?.raw_nai_parameters?.v4_prompt?.caption?.char_captions
+      ?.map((item) => item.char_caption)
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .join(', ')
+    || '—'
 
   const controls: ImageDetailViewHeaderControls = {
     downloadName,
@@ -466,19 +490,9 @@ function ImageViewMediumContent({ compositeHash, renderHeader }: ImageViewSurfac
           </div>
 
           <div className="space-y-3 rounded-sm border border-border bg-surface-container p-4 text-sm text-muted-foreground">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.18em]">File</p>
-              <p className="mt-2 break-all text-sm font-medium text-foreground">{downloadName}</p>
-              <p className="mt-1 break-all font-mono text-[11px] text-foreground/60">{image.original_file_path || '—'}</p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <CompactMetaField label="Dimensions" value={image.width && image.height ? `${image.width} × ${image.height}` : '—'} />
-              <CompactMetaField label="File size" value={formatBytes(image.file_size)} />
-              <CompactMetaField label="Type" value={image.file_type || '—'} />
-              <CompactMetaField label="MIME" value={mimeSummary} />
-              <CompactMetaField label="Model" value={image.ai_metadata?.model_name || '—'} />
-              <CompactMetaField label="Composite hash" value={image.composite_hash || '—'} mono />
-            </div>
+            <PromptField label="Positive" value={positivePrompt} />
+            <PromptField label="Negative" value={negativePrompt} />
+            <PromptField label="Character" value={characterPrompt} />
           </div>
         </div>
       ) : null}
@@ -596,11 +610,11 @@ function ImageViewMinimalContent({
   )
 }
 
-function CompactMetaField({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+function PromptField({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-sm bg-surface-lowest px-3 py-3">
       <p className="text-[11px] uppercase tracking-[0.18em]">{label}</p>
-      <p className={cn('mt-2 text-foreground', mono && 'break-all font-mono text-xs text-foreground/90')}>{value}</p>
+      <p className={cn('mt-2 whitespace-pre-wrap break-words text-sm text-foreground')}>{value}</p>
     </div>
   )
 }
@@ -618,9 +632,9 @@ function ImageViewModeSwitcher({
     <SegmentedControl
       value={viewMode}
       items={[
-        { value: 'full', label: '풀' },
-        { value: 'medium', label: '중간' },
-        { value: 'minimal', label: '초경량' },
+        { value: 'full', label: 'L' },
+        { value: 'medium', label: 'M' },
+        { value: 'minimal', label: 'S' },
       ]}
       onChange={(nextMode) => onChangeViewMode(nextMode as ImageViewModalMode)}
       size="xs"
