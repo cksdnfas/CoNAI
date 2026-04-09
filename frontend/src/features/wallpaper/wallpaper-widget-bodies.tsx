@@ -84,6 +84,57 @@ function getWallpaperTransitionStateClassName(transitionStyle: WallpaperImageTra
   return isTransitionActive ? 'opacity-0 scale-[1.08] translate-y-[-2%] blur-[6px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
 }
 
+function clampWallpaperMetric(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function resolveWallpaperClockMetrics(width: number, height: number, visualStyle: 'minimal' | 'glow' | 'split', showSeconds: boolean) {
+  const safeWidth = Math.max(width, 220)
+  const safeHeight = Math.max(height, 120)
+  const timeDivisor = visualStyle === 'split' ? (showSeconds ? 5.9 : 5.1) : (showSeconds ? 4.7 : 4)
+  const timeSize = clampWallpaperMetric(
+    Math.min(safeWidth / timeDivisor, safeHeight * (visualStyle === 'split' ? 0.34 : 0.42)),
+    26,
+    visualStyle === 'split' ? 76 : 96,
+  )
+
+  return {
+    labelSize: clampWallpaperMetric(Math.min(safeWidth * 0.028, safeHeight * 0.095), 10, 16),
+    dateSize: clampWallpaperMetric(Math.min(safeWidth * 0.045, safeHeight * 0.16), 12, 24),
+    timeSize,
+    secondaryTimeSize: clampWallpaperMetric(timeSize * 0.38, 12, 30),
+    sidePanelWidth: clampWallpaperMetric(safeWidth * 0.24, 76, 140),
+  }
+}
+
+const WALLPAPER_FLOATING_COLLAGE_SLOT_ASPECTS = [0.78, 1.08, 0.86, 1.18, 0.92, 1.28]
+
+function buildWallpaperFloatingCollageSlots(visibleCount: number, layoutSpread: 'compact' | 'balanced' | 'wide') {
+  const config = layoutSpread === 'wide'
+    ? { radiusX: 28, radiusY: 22, minWidth: 20, maxWidth: 29 }
+    : layoutSpread === 'balanced'
+      ? { radiusX: 22, radiusY: 17, minWidth: 22, maxWidth: 31 }
+      : { radiusX: 16, radiusY: 12, minWidth: 24, maxWidth: 33 }
+
+  return Array.from({ length: visibleCount }, (_, index) => {
+    const angle = (-Math.PI / 2) + ((index / Math.max(visibleCount, 1)) * Math.PI * 2) + (index % 2 === 0 ? -0.14 : 0.14)
+    const width = clampWallpaperMetric(config.maxWidth - ((index % 3) * 2.5), config.minWidth, config.maxWidth)
+    const aspectRatio = WALLPAPER_FLOATING_COLLAGE_SLOT_ASPECTS[index % WALLPAPER_FLOATING_COLLAGE_SLOT_ASPECTS.length]
+    const estimatedHeight = width / aspectRatio
+    const left = clampWallpaperMetric(50 + Math.cos(angle) * config.radiusX - width / 2, 4, 96 - width)
+    const top = clampWallpaperMetric(50 + Math.sin(angle) * config.radiusY - estimatedHeight / 2, 5, 95 - estimatedHeight)
+
+    return {
+      left: `${left}%`,
+      top: `${top}%`,
+      width: `${width}%`,
+      rotate: (Math.sin(angle * 1.4) * 8) + ((index % 2 === 0 ? -1 : 1) * 3),
+      depth: (index % 3) + 1,
+      aspectRatio,
+    }
+  })
+}
+
 /** Render one optionally clickable wallpaper image surface. */
 function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal' }: WallpaperPreviewImageSurfaceProps) {
   const [currentImage, setCurrentImage] = useState<WallpaperWidgetPreviewImage>({ src, alt })
@@ -202,6 +253,8 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
 /** Render the live clock body without forcing timers on every widget. */
 function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'clock' }> }) {
   const currentTime = useWallpaperClockText()
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [containerSize, setContainerSize] = useState({ width: widget.w * 72, height: widget.h * 56 })
   const timeFormat = widget.settings.timeFormat
   const showSeconds = widget.settings.showSeconds
   const visualStyle = widget.settings.visualStyle ?? 'minimal'
@@ -213,20 +266,52 @@ function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstanc
   })
   const [hourText, minuteText, secondText] = timeText.split(':')
   const dateText = currentTime.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })
+  const metrics = resolveWallpaperClockMetrics(containerSize.width, containerSize.height, visualStyle, showSeconds)
+  const labelTracking = `${Math.max(1.5, metrics.labelSize * 0.2)}px`
+
+  useEffect(() => {
+    const element = containerRef.current
+    if (!element) {
+      return
+    }
+
+    const updateSize = () => {
+      setContainerSize({
+        width: Math.max(element.clientWidth, widget.w * 72),
+        height: Math.max(element.clientHeight, widget.h * 56),
+      })
+    }
+
+    updateSize()
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateSize)
+      return () => window.removeEventListener('resize', updateSize)
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateSize()
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [widget.h, widget.w])
 
   if (visualStyle === 'split') {
     return (
-      <div className="grid h-full grid-cols-[1fr_auto] gap-3">
+      <div ref={containerRef} className="grid h-full grid-cols-[1fr_auto] gap-3">
         <div className="flex min-w-0 flex-col justify-center rounded-sm border border-border/70 bg-surface-low px-3 py-3">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-secondary">지금</div>
-          <div className="mt-1 flex items-end gap-2 text-3xl font-semibold tracking-[-0.08em] text-foreground sm:text-4xl">
+          <div className="uppercase text-secondary" style={{ fontSize: metrics.labelSize, letterSpacing: labelTracking }}>지금</div>
+          <div className="mt-1 flex items-end gap-2 font-semibold tracking-[-0.08em] text-foreground" style={{ fontSize: metrics.timeSize, lineHeight: 0.92 }}>
             <span>{hourText}:{minuteText}</span>
-            {showSeconds ? <span className="pb-0.5 text-base text-muted-foreground sm:text-lg">{secondText}</span> : null}
+            {showSeconds ? <span className="pb-0.5 text-muted-foreground" style={{ fontSize: metrics.secondaryTimeSize, lineHeight: 1 }}>{secondText}</span> : null}
           </div>
         </div>
-        <div className="flex w-20 flex-col justify-between rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--secondary)_16%,transparent),transparent),var(--surface-low)] px-3 py-3 text-right">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">시계</div>
-          <div className="text-xs text-muted-foreground">{dateText}</div>
+        <div
+          className="flex flex-col justify-between rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--secondary)_16%,transparent),transparent),var(--surface-low)] px-3 py-3 text-right"
+          style={{ width: metrics.sidePanelWidth }}
+        >
+          <div className="uppercase text-muted-foreground" style={{ fontSize: metrics.labelSize, letterSpacing: labelTracking }}>시계</div>
+          <div className="text-muted-foreground" style={{ fontSize: metrics.dateSize, lineHeight: 1.2 }}>{dateText}</div>
         </div>
       </div>
     )
@@ -234,21 +319,24 @@ function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstanc
 
   if (visualStyle === 'glow') {
     return (
-      <div className="flex h-full flex-col justify-center rounded-sm bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_22%,transparent),transparent_46%),linear-gradient(180deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_56%)] px-3">
-        <div className="text-3xl font-semibold tracking-[-0.08em] text-foreground drop-shadow-[0_0_18px_color-mix(in_srgb,var(--secondary)_22%,transparent)] sm:text-4xl">
+      <div ref={containerRef} className="flex h-full flex-col justify-center rounded-sm bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_22%,transparent),transparent_46%),linear-gradient(180deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_56%)] px-3">
+        <div
+          className="font-semibold tracking-[-0.08em] text-foreground drop-shadow-[0_0_18px_color-mix(in_srgb,var(--secondary)_22%,transparent)]"
+          style={{ fontSize: metrics.timeSize, lineHeight: 0.92 }}
+        >
           {timeText}
         </div>
-        <div className="mt-1 text-xs text-muted-foreground sm:text-sm">{dateText}</div>
+        <div className="mt-1 text-muted-foreground" style={{ fontSize: metrics.dateSize, lineHeight: 1.2 }}>{dateText}</div>
       </div>
     )
   }
 
   return (
-    <div className="flex h-full flex-col justify-center">
-      <div className="text-3xl font-semibold tracking-[-0.06em] text-foreground sm:text-4xl">
+    <div ref={containerRef} className="flex h-full flex-col justify-center">
+      <div className="font-semibold tracking-[-0.06em] text-foreground" style={{ fontSize: metrics.timeSize, lineHeight: 0.92 }}>
         {timeText}
       </div>
-      <div className="text-xs text-muted-foreground sm:text-sm">{dateText}</div>
+      <div className="text-muted-foreground" style={{ fontSize: metrics.dateSize, lineHeight: 1.2 }}>{dateText}</div>
     </div>
   )
 }
@@ -659,9 +747,13 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
   const includeChildren = widget.settings.includeChildren
   const visibleCount = Math.max(2, Math.min(6, widget.settings.visibleCount))
   const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 'medium')
+  const layoutSpread = widget.settings.layoutSpread ?? 'compact'
+  const aspectMode = widget.settings.aspectMode ?? 'image'
+  const fitMode = widget.settings.fitMode ?? 'cover'
   const motionTick = useWallpaperMotionTick(true)
 
   const previewQuery = useWallpaperGroupPreviewImagesQuery('floating-collage', groupId, includeChildren, visibleCount)
+  const collageSlots = useMemo(() => buildWallpaperFloatingCollageSlots(visibleCount, layoutSpread), [layoutSpread, visibleCount])
 
   if (groupId === null) {
     return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">설정에서 그룹을 선택해.</div>
@@ -676,14 +768,6 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
   }
 
   const images = (previewQuery.data ?? []).slice(0, visibleCount)
-  const collageSlots = [
-    { left: '4%', top: '10%', width: '34%', rotate: -8, depth: 0 },
-    { left: '31%', top: '4%', width: '40%', rotate: 5, depth: 1 },
-    { left: '59%', top: '16%', width: '28%', rotate: 10, depth: 0 },
-    { left: '13%', top: '48%', width: '31%', rotate: -4, depth: 1 },
-    { left: '42%', top: '42%', width: '37%', rotate: 7, depth: 2 },
-    { left: '68%', top: '52%', width: '22%', rotate: -9, depth: 1 },
-  ]
 
   return (
     <div className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_14%,transparent),transparent_42%),var(--surface-low)]">
@@ -694,11 +778,16 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
       {images.map((image, index) => {
         const imageUrl = getWallpaperImageUrl(image)
         const slot = collageSlots[index % collageSlots.length]
-        const phase = motionTick / 12 + index * 0.9
-        const translateX = Math.sin(phase) * 6 * motionStrength
-        const translateY = Math.cos(phase * 0.82) * 5 * motionStrength
-        const scale = 1.02 + ((Math.sin(phase * 0.55) + 1) * 0.018)
-        const rotate = slot.rotate + Math.sin(phase * 0.4) * 2.5 * motionStrength
+        const phase = (motionTick / 16) + (index * 0.92)
+        const driftMultiplier = motionStrength * (layoutSpread === 'wide' ? 1.18 : layoutSpread === 'balanced' ? 1 : 0.92)
+        const translateX = ((Math.sin(phase) * (14 + slot.depth * 3.5)) + (Math.cos(phase * 0.63) * (6 + slot.depth))) * driftMultiplier
+        const translateY = ((Math.cos(phase * 0.82) * (11 + slot.depth * 2.5)) + (Math.sin(phase * 0.48) * 4.5)) * driftMultiplier
+        const scale = 1.01 + ((Math.sin(phase * 0.55) + 1) * 0.022 * motionStrength)
+        const rotate = slot.rotate + (Math.sin(phase * 0.4) * (4.8 + slot.depth) * motionStrength)
+        const imageAspectRatio = typeof image.width === 'number' && image.width > 0 && typeof image.height === 'number' && image.height > 0
+          ? clampWallpaperMetric(image.width / image.height, 0.58, 1.9)
+          : slot.aspectRatio
+        const resolvedAspectRatio = aspectMode === 'image' ? imageAspectRatio : slot.aspectRatio
 
         return imageUrl ? (
           <WallpaperPreviewImageSurface
@@ -707,12 +796,12 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
             alt="플로팅 콜라주"
             onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
             className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_14px_40px_rgba(0,0,0,0.34)] transition-transform duration-200 ease-out will-change-transform"
-            imageClassName="h-full w-full object-cover"
+            imageClassName={cn('h-full w-full', fitMode === 'contain' ? 'object-contain' : 'object-cover')}
             style={{
               left: slot.left,
               top: slot.top,
               width: slot.width,
-              aspectRatio: '4 / 5',
+              aspectRatio: resolvedAspectRatio,
               zIndex: 10 + slot.depth + index,
               transform: `translate3d(${translateX}px, ${translateY}px, 0) rotate(${rotate}deg) scale(${scale})`,
             }}
@@ -725,7 +814,7 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
               left: slot.left,
               top: slot.top,
               width: slot.width,
-              aspectRatio: '4 / 5',
+              aspectRatio: slot.aspectRatio,
               zIndex: 10 + slot.depth + index,
               transform: `translate3d(${translateX}px, ${translateY}px, 0) rotate(${rotate}deg) scale(${scale})`,
             }}
@@ -735,8 +824,7 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
         )
       })}
 
-      {images.length > 0 ? <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_42%,color-mix(in_srgb,var(--background)_26%,transparent))]" /> : null}
-      <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/90 backdrop-blur-sm">콜라주</div>
+      {images.length > 0 ? <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_36%,color-mix(in_srgb,var(--background)_24%,transparent))]" /> : null}
     </div>
   )
 }

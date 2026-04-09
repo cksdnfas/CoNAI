@@ -81,6 +81,9 @@ export interface WallpaperImageShowcaseWidgetSettings extends WallpaperGroupSour
 export interface WallpaperFloatingCollageWidgetSettings extends WallpaperGroupSourceWidgetSettings {
   visibleCount: number
   motionStrength: 'soft' | 'medium' | 'strong'
+  fitMode: 'cover' | 'contain'
+  aspectMode: 'slot' | 'image'
+  layoutSpread: 'compact' | 'balanced' | 'wide'
 }
 
 export interface WallpaperTextNoteWidgetSettings extends WallpaperBaseWidgetSettings {

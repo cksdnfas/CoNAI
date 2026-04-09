@@ -512,7 +512,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
 
-            <SettingsField label="강도">
+            <SettingsField label="움직임 강도">
               <Select
                 value={selectedWidget.settings.motionStrength ?? 'medium'}
                 onChange={(event) => {
@@ -524,6 +524,49 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 <option value="soft">약함</option>
                 <option value="medium">보통</option>
                 <option value="strong">강함</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="초기 범위">
+              <Select
+                value={selectedWidget.settings.layoutSpread ?? 'compact'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    layoutSpread: event.target.value === 'wide' ? 'wide' : event.target.value === 'balanced' ? 'balanced' : 'compact',
+                  })
+                }}
+              >
+                <option value="compact">좁게</option>
+                <option value="balanced">보통</option>
+                <option value="wide">넓게</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="비율 기준">
+              <Select
+                value={selectedWidget.settings.aspectMode ?? 'image'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    aspectMode: event.target.value === 'slot' ? 'slot' : 'image',
+                  })
+                }}
+              >
+                <option value="image">이미지 비율</option>
+                <option value="slot">슬롯 고정</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="채우기 방식">
+              <Select
+                value={selectedWidget.settings.fitMode ?? 'cover'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    fitMode: event.target.value === 'contain' ? 'contain' : 'cover',
+                  })
+                }}
+              >
+                <option value="cover">채우기</option>
+                <option value="contain">맞춤</option>
               </Select>
             </SettingsField>
           </>
