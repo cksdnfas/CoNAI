@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { cn } from '@/lib/utils'
 import type {
   WallpaperCanvasPreset,
@@ -381,8 +382,8 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
               isPreviewVisible ? 'translate-y-0 scale-100 opacity-100 rotate-0' : 'translate-y-5 scale-[0.88] opacity-0 -rotate-[1.4deg]',
             )}
           >
-            <img
-              src={previewImage.src}
+            <ImagePreviewMedia
+              image={previewImage.image}
               alt={previewImage.alt}
               className="block max-h-[84vh] max-w-[90vw] object-contain"
               loading="eager"

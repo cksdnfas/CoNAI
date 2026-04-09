@@ -17,7 +17,8 @@ export function useWallpaperGroupPreviewImagesQuery(scope: string, groupId: numb
     queryKey: ['wallpaper-widget', scope, groupId, includeChildren, count],
     queryFn: () => getGroupPreviewImages(groupId as number, { includeChildren, count }),
     enabled: groupId !== null,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
   })
 }

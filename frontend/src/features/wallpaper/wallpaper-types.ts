@@ -33,6 +33,8 @@ export type WallpaperImageTransitionSpeed = 'fast' | 'normal' | 'slow'
 
 export type WallpaperImageHoverMotion = 'none' | 'soft' | 'medium' | 'strong'
 
+export type WallpaperFloatingCollageSwapMode = 'time' | 'bounce'
+
 export interface WallpaperClockWidgetSettings extends WallpaperBaseWidgetSettings {
   timeFormat: '12h' | '24h'
   showSeconds: boolean
@@ -86,9 +88,14 @@ export interface WallpaperImageShowcaseWidgetSettings extends WallpaperGroupSour
 export interface WallpaperFloatingCollageWidgetSettings extends WallpaperGroupSourceWidgetSettings {
   visibleCount: number
   motionStrength: 'soft' | 'medium' | 'strong'
+  motionSpeed: number
+  imageScalePercent: number
   fitMode: 'cover' | 'contain'
   aspectMode: 'slot' | 'image'
   layoutSpread: 'compact' | 'balanced' | 'wide'
+  imageSwapMode: WallpaperFloatingCollageSwapMode
+  swapIntervalSec: number
+  swapBounceCount: number
   imageHoverMotion: WallpaperImageHoverMotion
 }
 

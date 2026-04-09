@@ -64,6 +64,32 @@ export function useWallpaperMotionTick(enabled: boolean) {
   return tick
 }
 
+/** Drive smoother motion time for widgets that need continuous animation. */
+export function useWallpaperMotionTime(enabled: boolean) {
+  const [elapsedMs, setElapsedMs] = useState(0)
+
+  useEffect(() => {
+    if (!enabled) {
+      return
+    }
+
+    const startTime = performance.now()
+    let frameId = 0
+
+    const step = (now: number) => {
+      setElapsedMs(now - startTime)
+      frameId = window.requestAnimationFrame(step)
+    }
+
+    frameId = window.requestAnimationFrame(step)
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [enabled])
+
+  return elapsedMs
+}
+
 export function getWallpaperMotionStrengthMultiplier(strength: 'soft' | 'medium' | 'strong') {
   if (strength === 'soft') {
     return 0.7

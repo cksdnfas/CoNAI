@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { formatDateTime, getArtifactPreviewUrl } from '@/features/module-graph/module-graph-shared'
+import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { buildPreviewImageRecord } from '@/features/images/components/inline-media-preview'
+import { formatDateTime, getArtifactPreviewUrl, parseMetadataValue } from '@/features/module-graph/module-graph-shared'
 import { cn } from '@/lib/utils'
+import type { ImageRecord } from '@/types/image'
 import type { WallpaperImageHoverMotion, WallpaperImageTransitionSpeed, WallpaperImageTransitionStyle, WallpaperWidgetInstance } from './wallpaper-types'
 import { useWallpaperBrowseContentQuery, useWallpaperGroupPreviewImagesQuery } from './wallpaper-widget-data'
 import {
@@ -20,12 +23,12 @@ const WALLPAPER_IMAGE_TRANSITION_DURATIONS: Record<WallpaperImageTransitionSpeed
 const WALLPAPER_IMAGE_TRANSITION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
 export interface WallpaperWidgetPreviewImage {
-  src: string
+  image: ImageRecord
   alt: string
 }
 
 interface WallpaperPreviewImageSurfaceProps {
-  src: string
+  image: ImageRecord
   alt: string
   className: string
   imageClassName: string
@@ -36,6 +39,27 @@ interface WallpaperPreviewImageSurfaceProps {
   transitionStyle?: WallpaperImageTransitionStyle
   transitionSpeed?: WallpaperImageTransitionSpeed
   hoverMotion?: WallpaperImageHoverMotion
+}
+
+function getWallpaperArtifactPreviewImage(src: string, alt: string, metadata?: string | null) {
+  const parsedMetadata = parseMetadataValue(metadata)
+  const mimeType = parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) && typeof parsedMetadata.mimeType === 'string'
+    ? parsedMetadata.mimeType
+    : null
+
+  return buildPreviewImageRecord({
+    src,
+    mimeType,
+    fileName: alt,
+    alt,
+  })
+}
+
+function isSameWallpaperPreviewImage(left: WallpaperWidgetPreviewImage, right: WallpaperWidgetPreviewImage) {
+  return left.alt === right.alt
+    && left.image.image_url === right.image.image_url
+    && left.image.thumbnail_url === right.image.thumbnail_url
+    && left.image.mime_type === right.image.mime_type
 }
 
 function getWallpaperTransitionStateClassName(transitionStyle: WallpaperImageTransitionStyle, layer: 'current' | 'previous', isTransitionActive: boolean) {
@@ -110,28 +134,173 @@ function resolveWallpaperClockMetrics(width: number, height: number, visualStyle
 
 const WALLPAPER_FLOATING_COLLAGE_SLOT_ASPECTS = [0.78, 1.08, 0.86, 1.18, 0.92, 1.28]
 
-function buildWallpaperFloatingCollageSlots(visibleCount: number, layoutSpread: 'compact' | 'balanced' | 'wide') {
-  const config = layoutSpread === 'wide'
-    ? { radiusX: 28, radiusY: 22, minWidth: 20, maxWidth: 29 }
-    : layoutSpread === 'balanced'
-      ? { radiusX: 22, radiusY: 17, minWidth: 22, maxWidth: 31 }
-      : { radiusX: 16, radiusY: 12, minWidth: 24, maxWidth: 33 }
+interface WallpaperFloatingCollageSlot {
+  centerX: number
+  centerY: number
+  width: number
+  rotate: number
+  depth: number
+  aspectRatio: number
+  velocityX: number
+  velocityY: number
+  scalePhase: number
+}
+
+interface WallpaperFloatingCollageCardState {
+  key: string
+  x: number
+  y: number
+  vx: number
+  vy: number
+  width: number
+  rotate: number
+  depth: number
+  aspectRatio: number
+  scalePhase: number
+  imageIndex: number
+  bounceCount: number
+  elapsedSinceSwapMs: number
+}
+
+function getWallpaperFloatingCollageClusterConfig(layoutSpread: 'compact' | 'balanced' | 'wide') {
+  if (layoutSpread === 'wide') {
+    return { radiusX: 19, radiusY: 14, minWidth: 16, maxWidth: 22 }
+  }
+
+  if (layoutSpread === 'balanced') {
+    return { radiusX: 13, radiusY: 10, minWidth: 17, maxWidth: 23 }
+  }
+
+  return { radiusX: 8, radiusY: 6, minWidth: 18, maxWidth: 24 }
+}
+
+function clampWallpaperFloatingCollageSpeed(value: number | undefined) {
+  return clampWallpaperMetric(typeof value === 'number' && Number.isFinite(value) ? value : 1, 0.2, 20)
+}
+
+function clampWallpaperFloatingCollageSwapIntervalSec(value: number | undefined) {
+  return Math.round(clampWallpaperMetric(typeof value === 'number' && Number.isFinite(value) ? value : 12, 2, 60))
+}
+
+function clampWallpaperFloatingCollageSwapBounceCount(value: number | undefined) {
+  return Math.round(clampWallpaperMetric(typeof value === 'number' && Number.isFinite(value) ? value : 3, 1, 12))
+}
+
+function resolveWallpaperFloatingCollageAspectRatio(
+  image: { width?: number | null; height?: number | null } | null | undefined,
+  fallback: number,
+) {
+  return typeof image?.width === 'number' && image.width > 0 && typeof image?.height === 'number' && image.height > 0
+    ? clampWallpaperMetric(image.width / image.height, 0.58, 1.9)
+    : fallback
+}
+
+function getNextWallpaperFloatingCollageImageIndex(currentIndex: number, totalImages: number) {
+  if (totalImages <= 1) {
+    return currentIndex
+  }
+
+  return (currentIndex + 1) % totalImages
+}
+
+function buildWallpaperFloatingCollageSlots(visibleCount: number, layoutSpread: 'compact' | 'balanced' | 'wide'): WallpaperFloatingCollageSlot[] {
+  const config = getWallpaperFloatingCollageClusterConfig(layoutSpread)
 
   return Array.from({ length: visibleCount }, (_, index) => {
-    const angle = (-Math.PI / 2) + ((index / Math.max(visibleCount, 1)) * Math.PI * 2) + (index % 2 === 0 ? -0.14 : 0.14)
-    const width = clampWallpaperMetric(config.maxWidth - ((index % 3) * 2.5), config.minWidth, config.maxWidth)
+    const angle = (-Math.PI / 2) + ((index / Math.max(visibleCount, 1)) * Math.PI * 2) + (index % 2 === 0 ? -0.12 : 0.12)
+    const width = clampWallpaperMetric(config.maxWidth - ((index % 3) * 1.8), config.minWidth, config.maxWidth)
     const aspectRatio = WALLPAPER_FLOATING_COLLAGE_SLOT_ASPECTS[index % WALLPAPER_FLOATING_COLLAGE_SLOT_ASPECTS.length]
-    const estimatedHeight = width / aspectRatio
-    const left = clampWallpaperMetric(50 + Math.cos(angle) * config.radiusX - width / 2, 4, 96 - width)
-    const top = clampWallpaperMetric(50 + Math.sin(angle) * config.radiusY - estimatedHeight / 2, 5, 95 - estimatedHeight)
 
     return {
-      left: `${left}%`,
-      top: `${top}%`,
-      width: `${width}%`,
-      rotate: (Math.sin(angle * 1.4) * 8) + ((index % 2 === 0 ? -1 : 1) * 3),
+      centerX: 50 + Math.cos(angle) * config.radiusX,
+      centerY: 50 + Math.sin(angle) * config.radiusY,
+      width,
+      rotate: (Math.sin(angle * 1.4) * 7) + ((index % 2 === 0 ? -1 : 1) * 2.4),
       depth: (index % 3) + 1,
       aspectRatio,
+      velocityX: 5.5 + ((index % 4) * 1.35),
+      velocityY: 4.4 + (((index + 2) % 4) * 1.2),
+      scalePhase: index * 0.85,
+    }
+  })
+}
+
+function resolveWallpaperFloatingCollageCardGeometry(
+  widthPercent: number,
+  aspectRatio: number,
+  containerWidth: number,
+  containerHeight: number,
+  imageScalePercent: number,
+) {
+  const safeContainerWidth = Math.max(containerWidth, 1)
+  const safeContainerHeight = Math.max(containerHeight, 1)
+  const scaledWidthPx = (safeContainerWidth * widthPercent * imageScalePercent) / 10_000
+  const maxWidthByHeightPx = safeContainerHeight * Math.max(aspectRatio, 0.58) * 0.92
+  const resolvedWidthPx = clampWallpaperMetric(Math.min(scaledWidthPx, maxWidthByHeightPx, safeContainerWidth * 0.92), 36, safeContainerWidth * 0.92)
+  const resolvedHeightPx = resolvedWidthPx / Math.max(aspectRatio, 0.58)
+
+  return {
+    widthPx: resolvedWidthPx,
+    halfWidthPx: resolvedWidthPx / 2,
+    halfHeightPx: clampWallpaperMetric(resolvedHeightPx / 2, 24, safeContainerHeight * 0.46),
+  }
+}
+
+function buildWallpaperFloatingCollageCardStates(
+  slots: WallpaperFloatingCollageSlot[],
+  images: Array<{ width?: number | null; height?: number | null }>,
+  motionStrength: number,
+  motionSpeed: number,
+  containerWidth: number,
+  containerHeight: number,
+  aspectMode: 'slot' | 'image',
+  imageScalePercent: number,
+): WallpaperFloatingCollageCardState[] {
+  if (images.length === 0 || containerWidth <= 0 || containerHeight <= 0) {
+    return []
+  }
+
+  const speedMultiplier = motionStrength * clampWallpaperFloatingCollageSpeed(motionSpeed)
+
+  return slots.map((slot, index) => {
+    const imageIndex = index % images.length
+    const aspectRatio = aspectMode === 'image'
+      ? resolveWallpaperFloatingCollageAspectRatio(images[imageIndex], slot.aspectRatio)
+      : slot.aspectRatio
+    const geometry = resolveWallpaperFloatingCollageCardGeometry(slot.width, aspectRatio, containerWidth, containerHeight, imageScalePercent)
+    const startX = (containerWidth * slot.centerX) / 100
+    const startY = (containerHeight * slot.centerY) / 100
+    const x = clampWallpaperMetric(startX, geometry.halfWidthPx, containerWidth - geometry.halfWidthPx)
+    const y = clampWallpaperMetric(startY, geometry.halfHeightPx, containerHeight - geometry.halfHeightPx)
+    let vx = slot.velocityX * speedMultiplier * 5.2 * (index % 2 === 0 ? 1 : -1)
+    let vy = slot.velocityY * speedMultiplier * 7.4 * (index % 3 === 0 ? -1 : 1)
+
+    if (x <= geometry.halfWidthPx + 1) {
+      vx = Math.abs(vx)
+    } else if (x >= containerWidth - geometry.halfWidthPx - 1) {
+      vx = -Math.abs(vx)
+    }
+
+    if (y <= geometry.halfHeightPx + 1) {
+      vy = Math.abs(vy)
+    } else if (y >= containerHeight - geometry.halfHeightPx - 1) {
+      vy = -Math.abs(vy)
+    }
+
+    return {
+      key: `floating-collage-card-${index}`,
+      x,
+      y,
+      vx,
+      vy,
+      width: geometry.widthPx,
+      rotate: slot.rotate,
+      depth: slot.depth,
+      aspectRatio,
+      scalePhase: slot.scalePhase,
+      imageIndex,
+      bounceCount: 0,
+      elapsedSinceSwapMs: 0,
     }
   })
 }
@@ -169,11 +338,11 @@ function getWallpaperHoverImageClassName(hoverMotion: WallpaperImageHoverMotion)
 }
 
 /** Render one optionally clickable wallpaper image surface. */
-function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal', hoverMotion = 'medium' }: WallpaperPreviewImageSurfaceProps) {
-  const [currentImage, setCurrentImage] = useState<WallpaperWidgetPreviewImage>({ src, alt })
+function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal', hoverMotion = 'medium' }: WallpaperPreviewImageSurfaceProps) {
+  const [currentImage, setCurrentImage] = useState<WallpaperWidgetPreviewImage>({ image, alt })
   const [previousImage, setPreviousImage] = useState<WallpaperWidgetPreviewImage | null>(null)
   const [isTransitionActive, setIsTransitionActive] = useState(true)
-  const currentImageRef = useRef<WallpaperWidgetPreviewImage>({ src, alt })
+  const currentImageRef = useRef<WallpaperWidgetPreviewImage>({ image, alt })
   const transitionTimeoutRef = useRef<number | null>(null)
   const transitionDurationMs = WALLPAPER_IMAGE_TRANSITION_DURATIONS[transitionSpeed]
 
@@ -186,9 +355,9 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
   }, [])
 
   useEffect(() => {
-    const nextImage = { src, alt }
+    const nextImage = { image, alt }
     const activeImage = currentImageRef.current
-    if (activeImage.src === nextImage.src && activeImage.alt === nextImage.alt) {
+    if (isSameWallpaperPreviewImage(activeImage, nextImage)) {
       return
     }
 
@@ -218,7 +387,7 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
         transitionTimeoutRef.current = null
       }, transitionDurationMs)
     })
-  }, [alt, src, transitionDurationMs, transitionStyle])
+  }, [alt, image, transitionDurationMs, transitionStyle])
 
   const imageLayerStyle = {
     transitionDuration: `${transitionDurationMs}ms`,
@@ -229,8 +398,8 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
   const imageLayers = (
     <>
       {previousImage ? (
-        <img
-          src={previousImage.src}
+        <ImagePreviewMedia
+          image={previousImage.image}
           alt={previousImage.alt}
           className={cn(
             'absolute inset-0 h-full w-full transition-[opacity,transform,filter] will-change-transform',
@@ -242,8 +411,8 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
           draggable={false}
         />
       ) : null}
-      <img
-        src={currentImage.src}
+      <ImagePreviewMedia
+        image={currentImage.image}
         alt={currentImage.alt}
         className={cn(
           'absolute inset-0 h-full w-full transition-[opacity,transform,filter] will-change-transform',
@@ -274,7 +443,7 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
       style={style}
       onClick={(event) => {
         event.stopPropagation()
-        onOpenImage({ src: currentImage.src, alt: currentImage.alt })
+        onOpenImage({ image: currentImage.image, alt: currentImage.alt })
       }}
     >
       {imageLayers}
@@ -520,7 +689,7 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
   const recentEntries = useMemo(() => {
     const browseContent = resultsQuery.data
     if (!browseContent) {
-      return [] as Array<{ id: string; previewUrl: string; workflowName: string; createdLabel: string; badge: string }>
+      return [] as Array<{ id: string; previewImage: ImageRecord; workflowName: string; createdLabel: string; badge: string }>
     }
 
     const workflowById = new Map(browseContent.workflows.map((workflow) => [workflow.id, workflow]))
@@ -543,10 +712,14 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
 
         const execution = executionById.get(finalResult.source_execution_id ?? finalResult.execution_id)
         const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? '워크플로') : '워크플로'
+        const previewImage = getWallpaperArtifactPreviewImage(previewUrl, workflowName, finalResult.source_metadata)
+        if (!previewImage) {
+          return []
+        }
 
         return [{
           id: `final-${finalResult.id}`,
-          previewUrl,
+          previewImage,
           workflowName,
           createdLabel: formatDateTime(finalResult.created_date),
           badge: '최종',
@@ -567,10 +740,14 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
 
         const execution = executionById.get(artifact.execution_id)
         const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? '워크플로') : '워크플로'
+        const previewImage = getWallpaperArtifactPreviewImage(previewUrl, workflowName, artifact.metadata)
+        if (!previewImage) {
+          return []
+        }
 
         return [{
           id: `artifact-${artifact.id}`,
-          previewUrl,
+          previewImage,
           workflowName,
           createdLabel: formatDateTime(artifact.created_date),
           badge: '실시간',
@@ -613,7 +790,7 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
           return (
             <WallpaperPreviewImageSurface
               key={`recent-stack-slot-${order}`}
-              src={entry.previewUrl}
+              image={entry.previewImage}
               alt={entry.workflowName}
               onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
               transitionStyle={imageTransitionStyle}
@@ -659,7 +836,7 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
       {recentEntries.map((entry, index) => (
         <WallpaperPreviewImageSurface
           key={`recent-grid-slot-${index}`}
-          src={entry.previewUrl}
+          image={entry.previewImage}
           alt={entry.workflowName}
           onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
           transitionStyle={imageTransitionStyle}
@@ -754,7 +931,7 @@ function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { widget: Ex
         return imageUrl ? (
           <WallpaperPreviewImageSurface
             key={`group-grid-slot-${index}`}
-            src={imageUrl}
+            image={image}
             alt="그룹 미리보기"
             onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
             transitionStyle={imageTransitionStyle}
@@ -781,18 +958,172 @@ function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { widget: Ex
 
 /** Render one layered floating collage from one chosen image group. */
 function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'floating-collage' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+  const [cardStates, setCardStates] = useState<WallpaperFloatingCollageCardState[]>([])
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
   const visibleCount = Math.max(2, Math.min(6, widget.settings.visibleCount))
   const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 'medium')
+  const motionSpeed = clampWallpaperFloatingCollageSpeed(widget.settings.motionSpeed ?? 1)
+  const imageScalePercent = clampWallpaperMetric(widget.settings.imageScalePercent ?? 100, 50, 200)
   const layoutSpread = widget.settings.layoutSpread ?? 'compact'
   const aspectMode = widget.settings.aspectMode ?? 'image'
   const fitMode = widget.settings.fitMode ?? 'cover'
   const imageHoverMotion = widget.settings.imageHoverMotion ?? 'medium'
-  const motionTick = useWallpaperMotionTick(true)
+  const imageSwapMode = widget.settings.imageSwapMode ?? 'bounce'
+  const swapIntervalSec = clampWallpaperFloatingCollageSwapIntervalSec(widget.settings.swapIntervalSec)
+  const swapBounceCount = clampWallpaperFloatingCollageSwapBounceCount(widget.settings.swapBounceCount)
+  const previewPoolCount = Math.max(visibleCount * 4, 16)
+  const effectiveContainerWidth = Math.max(containerSize.width, 960)
+  const effectiveContainerHeight = Math.max(containerSize.height, 540)
 
-  const previewQuery = useWallpaperGroupPreviewImagesQuery('floating-collage', groupId, includeChildren, visibleCount)
+  const previewQuery = useWallpaperGroupPreviewImagesQuery('floating-collage', groupId, includeChildren, previewPoolCount)
   const collageSlots = useMemo(() => buildWallpaperFloatingCollageSlots(visibleCount, layoutSpread), [layoutSpread, visibleCount])
+  const images = useMemo(() => previewQuery.data ?? [], [previewQuery.data])
+  const imageCount = images.length
+  const initialCardStates = useMemo(
+    () => buildWallpaperFloatingCollageCardStates(
+      collageSlots,
+      images,
+      motionStrength,
+      motionSpeed,
+      effectiveContainerWidth,
+      effectiveContainerHeight,
+      aspectMode,
+      imageScalePercent,
+    ),
+    [aspectMode, collageSlots, effectiveContainerHeight, effectiveContainerWidth, imageScalePercent, images, motionSpeed, motionStrength],
+  )
+
+  useEffect(() => {
+    const element = containerRef.current
+    if (!element) {
+      return
+    }
+
+    const updateSize = () => {
+      const nextWidth = Math.max(0, element.clientWidth)
+      const nextHeight = Math.max(0, element.clientHeight)
+      setContainerSize((current) => (current.width === nextWidth && current.height === nextHeight ? current : { width: nextWidth, height: nextHeight }))
+    }
+
+    updateSize()
+    const observer = new ResizeObserver(() => {
+      updateSize()
+    })
+    observer.observe(element)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      setCardStates(initialCardStates)
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [initialCardStates])
+
+  useEffect(() => {
+    if (imageCount === 0 || cardStates.length === 0) {
+      return
+    }
+
+    let frameId = 0
+    let lastFrameTime = performance.now()
+    const swapIntervalMs = swapIntervalSec * 1000
+
+    const step = (now: number) => {
+      const deltaMs = Math.min(48, now - lastFrameTime)
+      lastFrameTime = now
+
+      setCardStates((currentCards) => currentCards.map((card, index) => {
+        const currentImage = images[card.imageIndex % imageCount] ?? images[index % imageCount]
+        const resolvedAspectRatio = aspectMode === 'image'
+          ? resolveWallpaperFloatingCollageAspectRatio(currentImage, card.aspectRatio)
+          : card.aspectRatio
+        const geometry = resolveWallpaperFloatingCollageCardGeometry(
+          (card.width / Math.max(effectiveContainerWidth, 1)) * 100,
+          resolvedAspectRatio,
+          effectiveContainerWidth,
+          effectiveContainerHeight,
+          100,
+        )
+        const halfWidth = geometry.halfWidthPx
+        const halfHeight = geometry.halfHeightPx
+
+        let nextX = card.x + ((card.vx * deltaMs) / 1000)
+        let nextY = card.y + ((card.vy * deltaMs) / 1000)
+        let nextVx = card.vx
+        let nextVy = card.vy
+        let bounceEvents = 0
+
+        if (nextX < halfWidth) {
+          nextX = halfWidth + (halfWidth - nextX)
+          nextVx = Math.abs(nextVx)
+          bounceEvents += 1
+        } else if (nextX > effectiveContainerWidth - halfWidth) {
+          nextX = (effectiveContainerWidth - halfWidth) - (nextX - (effectiveContainerWidth - halfWidth))
+          nextVx = -Math.abs(nextVx)
+          bounceEvents += 1
+        }
+
+        if (nextY < halfHeight) {
+          nextY = halfHeight + (halfHeight - nextY)
+          nextVy = Math.abs(nextVy)
+          bounceEvents += 1
+        } else if (nextY > effectiveContainerHeight - halfHeight) {
+          nextY = (effectiveContainerHeight - halfHeight) - (nextY - (effectiveContainerHeight - halfHeight))
+          nextVy = -Math.abs(nextVy)
+          bounceEvents += 1
+        }
+
+        const bounceCountDelta = bounceEvents > 0 ? 1 : 0
+        let nextImageIndex = card.imageIndex
+        let nextBounceCount = card.bounceCount + bounceCountDelta
+        let nextElapsedSinceSwapMs = imageSwapMode === 'time' ? card.elapsedSinceSwapMs + deltaMs : 0
+
+        if (imageCount > 1) {
+          if (imageSwapMode === 'time') {
+            if (nextElapsedSinceSwapMs >= swapIntervalMs) {
+              nextImageIndex = getNextWallpaperFloatingCollageImageIndex(card.imageIndex, imageCount)
+              nextBounceCount = 0
+              nextElapsedSinceSwapMs = 0
+            }
+          } else if (bounceCountDelta > 0 && nextBounceCount >= swapBounceCount) {
+            nextImageIndex = getNextWallpaperFloatingCollageImageIndex(card.imageIndex, imageCount)
+            nextBounceCount = 0
+            nextElapsedSinceSwapMs = 0
+          }
+        }
+
+        return {
+          ...card,
+          x: nextX,
+          y: nextY,
+          vx: nextVx,
+          vy: nextVy,
+          width: geometry.widthPx,
+          aspectRatio: resolvedAspectRatio,
+          imageIndex: nextImageIndex,
+          bounceCount: nextBounceCount,
+          elapsedSinceSwapMs: nextElapsedSinceSwapMs,
+        }
+      }))
+
+      frameId = window.requestAnimationFrame(step)
+    }
+
+    frameId = window.requestAnimationFrame(step)
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [aspectMode, cardStates.length, effectiveContainerHeight, effectiveContainerWidth, imageCount, imageSwapMode, images, swapBounceCount, swapIntervalSec])
 
   if (groupId === null) {
     return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">설정에서 그룹을 선택해.</div>
@@ -806,57 +1137,54 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
     return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">콜라주 이미지를 불러오지 못했어.</div>
   }
 
-  const images = (previewQuery.data ?? []).slice(0, visibleCount)
-
   return (
-    <div className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_14%,transparent),transparent_42%),var(--surface-low)]">
-      {images.length === 0 ? (
+    <div ref={containerRef} className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_14%,transparent),transparent_42%),var(--surface-low)]">
+      {imageCount === 0 ? (
         <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">표시할 콜라주 이미지가 없어.</div>
       ) : null}
 
-      {images.map((image, index) => {
+      {cardStates.map((card, index) => {
+        const image = images[card.imageIndex % imageCount] ?? images[index % imageCount]
         const imageUrl = getWallpaperImageUrl(image)
-        const slot = collageSlots[index % collageSlots.length]
-        const phase = (motionTick / 16) + (index * 0.92)
-        const driftMultiplier = motionStrength * (layoutSpread === 'wide' ? 1.18 : layoutSpread === 'balanced' ? 1 : 0.92)
-        const translateX = ((Math.sin(phase) * (14 + slot.depth * 3.5)) + (Math.cos(phase * 0.63) * (6 + slot.depth))) * driftMultiplier
-        const translateY = ((Math.cos(phase * 0.82) * (11 + slot.depth * 2.5)) + (Math.sin(phase * 0.48) * 4.5)) * driftMultiplier
-        const scale = 1.01 + ((Math.sin(phase * 0.55) + 1) * 0.022 * motionStrength)
-        const rotate = slot.rotate + (Math.sin(phase * 0.4) * (4.8 + slot.depth) * motionStrength)
-        const imageAspectRatio = typeof image.width === 'number' && image.width > 0 && typeof image.height === 'number' && image.height > 0
-          ? clampWallpaperMetric(image.width / image.height, 0.58, 1.9)
-          : slot.aspectRatio
-        const resolvedAspectRatio = aspectMode === 'image' ? imageAspectRatio : slot.aspectRatio
+        const resolvedAspectRatio = aspectMode === 'image'
+          ? resolveWallpaperFloatingCollageAspectRatio(image, card.aspectRatio)
+          : card.aspectRatio
+        const wobblePhase = (card.x * 0.07) + (card.y * 0.05) + card.scalePhase
+        const scale = 1.01 + ((Math.sin(wobblePhase) + 1) * 0.012 * motionStrength)
+        const rotate = card.rotate + (Math.sin((card.x + card.y) * 0.045 + card.scalePhase) * (4.2 + card.depth) * motionStrength)
+        const zIndex = 20 + Math.round(card.y / 8) + card.depth
 
         return imageUrl ? (
           <WallpaperPreviewImageSurface
-            key={String(image.composite_hash ?? image.id ?? index)}
-            src={imageUrl}
+            key={card.key}
+            image={image}
             alt="플로팅 콜라주"
             onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
+            transitionStyle="fade"
+            transitionSpeed="fast"
             hoverMotion={imageHoverMotion}
-            className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_14px_40px_rgba(0,0,0,0.34)] transition-transform duration-200 ease-out will-change-transform"
+            className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_18px_48px_rgba(0,0,0,0.30)] transition-transform duration-75 ease-linear will-change-transform"
             imageClassName={cn('h-full w-full', fitMode === 'contain' ? 'object-contain' : 'object-cover')}
             style={{
-              left: slot.left,
-              top: slot.top,
-              width: slot.width,
+              left: `${card.x}px`,
+              top: `${card.y}px`,
+              width: `${card.width}px`,
               aspectRatio: resolvedAspectRatio,
-              zIndex: 10 + slot.depth + index,
-              transform: `translate3d(${translateX}px, ${translateY}px, 0) rotate(${rotate}deg) scale(${scale})`,
+              zIndex,
+              transform: `translate3d(-50%, -50%, 0) rotate(${rotate}deg) scale(${scale})`,
             }}
           />
         ) : (
           <div
-            key={String(image.composite_hash ?? image.id ?? index)}
-            className="absolute flex items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-surface-high text-xs text-muted-foreground shadow-[0_14px_40px_rgba(0,0,0,0.34)] transition-transform duration-200 ease-out will-change-transform"
+            key={card.key}
+            className="absolute flex items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-surface-high text-xs text-muted-foreground shadow-[0_18px_48px_rgba(0,0,0,0.30)] transition-transform duration-75 ease-linear will-change-transform"
             style={{
-              left: slot.left,
-              top: slot.top,
-              width: slot.width,
-              aspectRatio: slot.aspectRatio,
-              zIndex: 10 + slot.depth + index,
-              transform: `translate3d(${translateX}px, ${translateY}px, 0) rotate(${rotate}deg) scale(${scale})`,
+              left: `${card.x}px`,
+              top: `${card.y}px`,
+              width: `${card.width}px`,
+              aspectRatio: resolvedAspectRatio,
+              zIndex,
+              transform: `translate3d(-50%, -50%, 0) rotate(${rotate}deg) scale(${scale})`,
             }}
           >
             이미지 없음
@@ -864,7 +1192,7 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
         )
       })}
 
-      {images.length > 0 ? <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_36%,color-mix(in_srgb,var(--background)_24%,transparent))]" /> : null}
+      {imageCount > 0 ? <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_30%,color-mix(in_srgb,var(--background)_22%,transparent))]" /> : null}
     </div>
   )
 }
@@ -921,7 +1249,7 @@ function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widget: Ext
 
   return (
     <WallpaperPreviewImageSurface
-      src={imageUrl}
+      image={currentImage}
       alt="쇼케이스"
       onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
       transitionStyle={imageTransitionStyle}
