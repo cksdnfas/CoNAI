@@ -270,7 +270,7 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
   return (
     <button
       type="button"
-      className={cn(className, 'group/image-surface relative isolate cursor-zoom-in transform-gpu transition-transform duration-200 ease-out', getWallpaperHoverSurfaceClassName(hoverMotion))}
+      className={cn(className, 'group/image-surface relative isolate block w-full cursor-zoom-in transform-gpu transition-transform duration-200 ease-out', getWallpaperHoverSurfaceClassName(hoverMotion))}
       style={style}
       onClick={(event) => {
         event.stopPropagation()
