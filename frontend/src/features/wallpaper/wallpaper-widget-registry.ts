@@ -50,6 +50,22 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
     },
   },
   {
+    type: 'activity-pulse',
+    title: 'Activity Pulse',
+    description: 'Show a subtle live pulse driven by queue and recent result activity.',
+    defaultSize: { w: 10, h: 5 },
+    minSize: { w: 7, h: 4 },
+    maxSize: { w: 16, h: 8 },
+    defaultSettings: {
+      title: 'Activity Pulse',
+      showTitle: true,
+      showBackground: true,
+      refreshIntervalSec: 5,
+      motionStrength: 'medium',
+      emphasis: 'mixed',
+    },
+  },
+  {
     type: 'group-image-view',
     title: 'Group Image View',
     description: 'Display a compact gallery from one target image group.',

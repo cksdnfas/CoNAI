@@ -1,4 +1,4 @@
-export type WallpaperWidgetType = 'clock' | 'queue-status' | 'recent-results' | 'group-image-view' | 'image-showcase' | 'floating-collage' | 'text-note'
+export type WallpaperWidgetType = 'clock' | 'queue-status' | 'recent-results' | 'activity-pulse' | 'group-image-view' | 'image-showcase' | 'floating-collage' | 'text-note'
 
 export interface WallpaperCanvasPreset {
   id: string
@@ -45,6 +45,12 @@ export interface WallpaperRecentResultsWidgetSettings extends WallpaperBaseWidge
   shiftIntervalSec: number
 }
 
+export interface WallpaperActivityPulseWidgetSettings extends WallpaperBaseWidgetSettings {
+  refreshIntervalSec: number
+  motionStrength: 'soft' | 'medium' | 'strong'
+  emphasis: 'mixed' | 'queue' | 'results'
+}
+
 export interface WallpaperGroupSourceWidgetSettings extends WallpaperBaseWidgetSettings {
   groupId: number | null
   includeChildren: boolean
@@ -75,6 +81,7 @@ export interface WallpaperWidgetSettingsMap {
   clock: WallpaperClockWidgetSettings
   'queue-status': WallpaperQueueStatusWidgetSettings
   'recent-results': WallpaperRecentResultsWidgetSettings
+  'activity-pulse': WallpaperActivityPulseWidgetSettings
   'group-image-view': WallpaperGroupImageViewWidgetSettings
   'image-showcase': WallpaperImageShowcaseWidgetSettings
   'floating-collage': WallpaperFloatingCollageWidgetSettings
@@ -95,6 +102,7 @@ export type WallpaperWidgetDefinition =
   | WallpaperWidgetDefinitionBase<'clock'>
   | WallpaperWidgetDefinitionBase<'queue-status'>
   | WallpaperWidgetDefinitionBase<'recent-results'>
+  | WallpaperWidgetDefinitionBase<'activity-pulse'>
   | WallpaperWidgetDefinitionBase<'group-image-view'>
   | WallpaperWidgetDefinitionBase<'image-showcase'>
   | WallpaperWidgetDefinitionBase<'floating-collage'>
@@ -113,6 +121,7 @@ export type WallpaperWidgetInstance =
   | WallpaperWidgetInstanceBase<'clock'>
   | WallpaperWidgetInstanceBase<'queue-status'>
   | WallpaperWidgetInstanceBase<'recent-results'>
+  | WallpaperWidgetInstanceBase<'activity-pulse'>
   | WallpaperWidgetInstanceBase<'group-image-view'>
   | WallpaperWidgetInstanceBase<'image-showcase'>
   | WallpaperWidgetInstanceBase<'floating-collage'>
