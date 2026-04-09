@@ -2,6 +2,52 @@ import { getWallpaperCanvasPreset } from './wallpaper-canvas-presets'
 import { createWallpaperWidgetInstance, getWallpaperWidgetDefinition } from './wallpaper-widget-registry'
 import type { WallpaperCanvasPreset, WallpaperLayoutPreset, WallpaperWidgetInstance, WallpaperWidgetType } from './wallpaper-types'
 
+function normalizeWallpaperPresetQueryValue(value: string) {
+  return value.trim().toLowerCase()
+}
+
+/** Build one stable human-readable query token from a wallpaper preset name. */
+export function buildWallpaperPresetQueryValue(preset: Pick<WallpaperLayoutPreset, 'id' | 'name'>) {
+  const slug = preset.name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  return slug || preset.id
+}
+
+/** Resolve one saved wallpaper preset from a runtime preset query token. */
+export function findWallpaperPresetByQuery(layoutPresets: WallpaperLayoutPreset[], presetQuery: string | null | undefined) {
+  const normalizedQuery = normalizeWallpaperPresetQueryValue(presetQuery ?? '')
+  if (!normalizedQuery) {
+    return null
+  }
+
+  return layoutPresets.find((preset) => (
+    normalizeWallpaperPresetQueryValue(preset.id) === normalizedQuery ||
+    normalizeWallpaperPresetQueryValue(buildWallpaperPresetQueryValue(preset)) === normalizedQuery
+  )) ?? null
+}
+
+/** Build one runtime hash-route path for a saved wallpaper preset. */
+export function buildWallpaperRuntimePath(preset?: Pick<WallpaperLayoutPreset, 'id' | 'name'> | null) {
+  if (!preset) {
+    return '/wallpaper/runtime'
+  }
+
+  return `/wallpaper/runtime?preset=${encodeURIComponent(buildWallpaperPresetQueryValue(preset))}`
+}
+
+/** Build one absolute browser URL for a wallpaper runtime hash route. */
+export function buildWallpaperRuntimeAbsoluteUrl(runtimePath: string) {
+  if (typeof window === 'undefined') {
+    return runtimePath
+  }
+
+  return `${window.location.origin}${window.location.pathname}#${runtimePath}`
+}
+
 const WALLPAPER_LAYOUT_DRAFT_STORAGE_KEY = 'conai.wallpaper.layoutDraft.v1'
 const WALLPAPER_LAYOUT_PRESETS_STORAGE_KEY = 'conai.wallpaper.layoutPresets.v1'
 const WALLPAPER_LAYOUT_ACTIVE_PRESET_ID_STORAGE_KEY = 'conai.wallpaper.activePresetId.v1'

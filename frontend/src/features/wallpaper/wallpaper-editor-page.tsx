@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Copy, Plus } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,9 @@ import { getAppSettings, updateAppearanceSettings } from '@/lib/api-settings'
 import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from './wallpaper-canvas-presets'
 import {
   appendWallpaperWidget,
+  buildWallpaperPresetQueryValue,
+  buildWallpaperRuntimeAbsoluteUrl,
+  buildWallpaperRuntimePath,
   buildWallpaperStarterLayout,
   clampWallpaperWidgetInstance,
   cloneWallpaperPresetToDraft,
@@ -116,6 +119,9 @@ export function WallpaperEditorPage() {
     () => layoutPreset.widgets.find((widget) => widget.id === effectiveSelectedWidgetId) ?? null,
     [effectiveSelectedWidgetId, layoutPreset.widgets],
   )
+  const hasFixedRuntimeUrl = Boolean(activePreset)
+  const activeRuntimePath = useMemo(() => buildWallpaperRuntimePath(activePreset), [activePreset])
+  const activeRuntimeAbsoluteUrl = useMemo(() => buildWallpaperRuntimeAbsoluteUrl(activeRuntimePath), [activeRuntimePath])
 
   useEffect(() => {
     saveWallpaperLayoutDraft(layoutPreset)
@@ -220,6 +226,20 @@ export function WallpaperEditorPage() {
     syncWallpaperPresetState(nextPresets, null, '프리셋을 삭제했어.')
   }
 
+  const handleCopyRuntimeUrl = async () => {
+    if (!activePreset) {
+      notifyError('고정 runtime URL은 저장된 프리셋을 먼저 선택하거나 저장해야 해.')
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(activeRuntimeAbsoluteUrl)
+      notifyInfo(`런타임 URL을 복사했어. (${buildWallpaperPresetQueryValue(activePreset)})`)
+    } catch {
+      notifyError('런타임 URL을 복사하지 못했어.')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -240,13 +260,14 @@ export function WallpaperEditorPage() {
               ))}
             </Select>
             <Button asChild variant="outline">
-              <Link to="/wallpaper/runtime">Runtime Preview</Link>
+              <Link to={activeRuntimePath}>Runtime Preview</Link>
             </Button>
           </div>
         )}
       />
 
-      <section className="flex flex-wrap items-end gap-3 rounded-sm border border-border bg-surface-container/70 p-3">
+      <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
+        <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[200px] flex-1 space-y-1">
           <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">Preset</div>
           <Select
@@ -286,6 +307,32 @@ export function WallpaperEditorPage() {
           </Button>
           <Button variant="outline" disabled={!activePreset || wallpaperPresetMutation.isPending} onClick={handleDeletePreset}>
             Delete
+          </Button>
+        </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">Runtime URL</div>
+            <input
+              readOnly
+              value={activePreset ? activeRuntimeAbsoluteUrl : ''}
+              placeholder="저장된 프리셋을 선택하거나 저장하면 고정 URL이 생겨"
+              className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none"
+            />
+          </div>
+          {hasFixedRuntimeUrl ? (
+            <Button asChild variant="outline">
+              <Link to={activeRuntimePath}>Open</Link>
+            </Button>
+          ) : (
+            <Button variant="outline" disabled>
+              Open
+            </Button>
+          )}
+          <Button variant="outline" disabled={!hasFixedRuntimeUrl} onClick={() => { void handleCopyRuntimeUrl() }}>
+            <Copy className="h-4 w-4" />
+            Copy URL
           </Button>
         </div>
       </section>
