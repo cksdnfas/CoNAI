@@ -233,6 +233,28 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 <option value="slow">느림</option>
               </Select>
             </SettingsField>
+
+            <SettingsField label="호버 반응">
+              <Select
+                value={selectedWidget.settings.imageHoverMotion ?? 'medium'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageHoverMotion: event.target.value === 'none'
+                      ? 'none'
+                      : event.target.value === 'soft'
+                        ? 'soft'
+                        : event.target.value === 'strong'
+                          ? 'strong'
+                          : 'medium',
+                  })
+                }}
+              >
+                <option value="none">없음</option>
+                <option value="soft">약함</option>
+                <option value="medium">보통</option>
+                <option value="strong">강함</option>
+              </Select>
+            </SettingsField>
           </>
         ) : null}
 
@@ -378,6 +400,28 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 <option value="slow">느림</option>
               </Select>
             </SettingsField>
+
+            <SettingsField label="호버 반응">
+              <Select
+                value={selectedWidget.settings.imageHoverMotion ?? 'medium'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageHoverMotion: event.target.value === 'none'
+                      ? 'none'
+                      : event.target.value === 'soft'
+                        ? 'soft'
+                        : event.target.value === 'strong'
+                          ? 'strong'
+                          : 'medium',
+                  })
+                }}
+              >
+                <option value="none">없음</option>
+                <option value="soft">약함</option>
+                <option value="medium">보통</option>
+                <option value="strong">강함</option>
+              </Select>
+            </SettingsField>
           </>
         ) : null}
 
@@ -493,6 +537,28 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 <option value="slow">느림</option>
               </Select>
             </SettingsField>
+
+            <SettingsField label="호버 반응">
+              <Select
+                value={selectedWidget.settings.imageHoverMotion ?? 'medium'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageHoverMotion: event.target.value === 'none'
+                      ? 'none'
+                      : event.target.value === 'soft'
+                        ? 'soft'
+                        : event.target.value === 'strong'
+                          ? 'strong'
+                          : 'medium',
+                  })
+                }}
+              >
+                <option value="none">없음</option>
+                <option value="soft">약함</option>
+                <option value="medium">보통</option>
+                <option value="strong">강함</option>
+              </Select>
+            </SettingsField>
           </>
         ) : null}
 
@@ -567,6 +633,28 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               >
                 <option value="cover">채우기</option>
                 <option value="contain">맞춤</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="호버 반응">
+              <Select
+                value={selectedWidget.settings.imageHoverMotion ?? 'medium'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageHoverMotion: event.target.value === 'none'
+                      ? 'none'
+                      : event.target.value === 'soft'
+                        ? 'soft'
+                        : event.target.value === 'strong'
+                          ? 'strong'
+                          : 'medium',
+                  })
+                }}
+              >
+                <option value="none">없음</option>
+                <option value="soft">약함</option>
+                <option value="medium">보통</option>
+                <option value="strong">강함</option>
               </Select>
             </SettingsField>
           </>

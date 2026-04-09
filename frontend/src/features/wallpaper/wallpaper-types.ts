@@ -31,6 +31,8 @@ export type WallpaperImageTransitionStyle = 'none' | 'fade' | 'zoom' | 'slide' |
 
 export type WallpaperImageTransitionSpeed = 'fast' | 'normal' | 'slow'
 
+export type WallpaperImageHoverMotion = 'none' | 'soft' | 'medium' | 'strong'
+
 export interface WallpaperClockWidgetSettings extends WallpaperBaseWidgetSettings {
   timeFormat: '12h' | '24h'
   showSeconds: boolean
@@ -49,6 +51,7 @@ export interface WallpaperRecentResultsWidgetSettings extends WallpaperBaseWidge
   shiftIntervalSec: number
   imageTransitionStyle: WallpaperImageTransitionStyle
   imageTransitionSpeed: WallpaperImageTransitionSpeed
+  imageHoverMotion: WallpaperImageHoverMotion
 }
 
 export interface WallpaperActivityPulseWidgetSettings extends WallpaperBaseWidgetSettings {
@@ -68,6 +71,7 @@ export interface WallpaperGroupImageViewWidgetSettings extends WallpaperGroupSou
   motionStrength: 'soft' | 'medium' | 'strong'
   imageTransitionStyle: WallpaperImageTransitionStyle
   imageTransitionSpeed: WallpaperImageTransitionSpeed
+  imageHoverMotion: WallpaperImageHoverMotion
 }
 
 export interface WallpaperImageShowcaseWidgetSettings extends WallpaperGroupSourceWidgetSettings {
@@ -76,6 +80,7 @@ export interface WallpaperImageShowcaseWidgetSettings extends WallpaperGroupSour
   playbackMode: 'static' | 'carousel' | 'ken-burns'
   imageTransitionStyle: WallpaperImageTransitionStyle
   imageTransitionSpeed: WallpaperImageTransitionSpeed
+  imageHoverMotion: WallpaperImageHoverMotion
 }
 
 export interface WallpaperFloatingCollageWidgetSettings extends WallpaperGroupSourceWidgetSettings {
@@ -84,6 +89,7 @@ export interface WallpaperFloatingCollageWidgetSettings extends WallpaperGroupSo
   fitMode: 'cover' | 'contain'
   aspectMode: 'slot' | 'image'
   layoutSpread: 'compact' | 'balanced' | 'wide'
+  imageHoverMotion: WallpaperImageHoverMotion
 }
 
 export interface WallpaperTextNoteWidgetSettings extends WallpaperBaseWidgetSettings {
