@@ -13,11 +13,25 @@ export default {
     nav: [],
     sidebar: [
       {
-        text: '문서',
+        text: '기능 맵',
         items: [
-          { text: '기능 맵', link: '/' },
-          { text: '가이드', link: '/GUIDE/' },
-          { text: '릴리즈 노트', link: '/RELEASE-MD/' },
+          { text: '기능 맵 보기', link: '/' },
+        ],
+      },
+      {
+        text: '가이드',
+        items: [
+          { text: '전체 가이드 보기', link: '/GUIDE/' },
+          { text: 'MCP 가이드', link: '/GUIDE/MCP_GUIDE' },
+        ],
+      },
+      {
+        text: '릴리즈 노트',
+        items: [
+          { text: '최신 릴리즈 · 26.4.8', link: '/RELEASE-MD/RELEASE_26.4.8' },
+          { text: '이전 릴리즈 · 26.4.5', link: '/RELEASE-MD/RELEASE_26.4.5' },
+          { text: '전전 릴리즈 · 26.3.26', link: '/RELEASE-MD/RELEASE_26.3.26' },
+          { text: '전체 릴리즈 보기', link: '/RELEASE-MD/' },
         ],
       },
     ],
