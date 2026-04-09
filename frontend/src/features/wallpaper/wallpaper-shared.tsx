@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getGraphWorkflowBrowseContent, getGroupPreviewImages } from '@/lib/api'
+import { formatDateTime, getArtifactPreviewUrl } from '@/features/module-graph/module-graph-shared'
+import { getGraphWorkflowBrowseContent, getGroupPreviewImages, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import type {
@@ -43,6 +44,64 @@ function useWallpaperClockText() {
   return currentTime
 }
 
+/** Rotate through a widget image list on an interval when motion is enabled. */
+function useWallpaperRotatingIndex(length: number, intervalMs: number, enabled: boolean) {
+  const [tick, setTick] = useState(0)
+
+  useEffect(() => {
+    if (!enabled || length <= 1) {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      setTick((current) => current + 1)
+    }, Math.max(2_000, intervalMs))
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [enabled, intervalMs, length])
+
+  if (!enabled || length <= 1) {
+    return 0
+  }
+
+  return tick % length
+}
+
+/** Drive subtle ambient motion without a full animation system. */
+function useWallpaperMotionTick(enabled: boolean) {
+  const [tick, setTick] = useState(0)
+
+  useEffect(() => {
+    if (!enabled) {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      setTick((current) => current + 1)
+    }, 90)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [enabled])
+
+  return tick
+}
+
+function getWallpaperMotionStrengthMultiplier(strength: 'soft' | 'medium' | 'strong') {
+  if (strength === 'soft') {
+    return 0.7
+  }
+
+  if (strength === 'strong') {
+    return 1.4
+  }
+
+  return 1
+}
+
 /** Convert pointer movement in pixels into grid-cell deltas. */
 function getWallpaperGridDelta(interaction: WallpaperInteractionState, event: PointerEvent, canvasElement: HTMLDivElement, canvasPreset: WallpaperCanvasPreset) {
   const canvasRect = canvasElement.getBoundingClientRect()
@@ -60,23 +119,70 @@ function getWallpaperImageUrl(image: ImageRecord | null | undefined) {
   return image?.thumbnail_url || image?.image_url || null
 }
 
+/** Build one artifact-like record from a final-result row so shared preview helpers can be reused. */
+function buildWallpaperFinalResultArtifact(finalResult: GraphExecutionFinalResultRecord): GraphExecutionArtifactRecord {
+  return {
+    id: finalResult.source_artifact_id,
+    execution_id: finalResult.source_execution_id ?? finalResult.execution_id,
+    node_id: finalResult.source_node_id,
+    port_key: finalResult.source_port_key,
+    artifact_type: finalResult.artifact_type,
+    storage_path: finalResult.source_storage_path,
+    metadata: finalResult.source_metadata,
+    created_date: finalResult.created_date,
+  }
+}
+
 /** Render the live clock body without forcing timers on every widget. */
 function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'clock' }> }) {
   const currentTime = useWallpaperClockText()
   const timeFormat = widget.settings.timeFormat
   const showSeconds = widget.settings.showSeconds
+  const visualStyle = widget.settings.visualStyle ?? 'minimal'
+  const timeText = currentTime.toLocaleTimeString('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: showSeconds ? '2-digit' : undefined,
+    hour12: timeFormat === '12h',
+  })
+  const [hourText, minuteText, secondText] = timeText.split(':')
+  const dateText = currentTime.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })
+
+  if (visualStyle === 'split') {
+    return (
+      <div className="grid h-full grid-cols-[1fr_auto] gap-3">
+        <div className="flex min-w-0 flex-col justify-center rounded-sm border border-border/70 bg-surface-low px-3 py-3">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-secondary">Now</div>
+          <div className="mt-1 flex items-end gap-2 text-3xl font-semibold tracking-[-0.08em] text-foreground sm:text-4xl">
+            <span>{hourText}:{minuteText}</span>
+            {showSeconds ? <span className="pb-0.5 text-base text-muted-foreground sm:text-lg">{secondText}</span> : null}
+          </div>
+        </div>
+        <div className="flex w-20 flex-col justify-between rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--secondary)_16%,transparent),transparent),var(--surface-low)] px-3 py-3 text-right">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Clock</div>
+          <div className="text-xs text-muted-foreground">{dateText}</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (visualStyle === 'glow') {
+    return (
+      <div className="flex h-full flex-col justify-center rounded-sm bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_22%,transparent),transparent_46%),linear-gradient(180deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_56%)] px-3">
+        <div className="text-3xl font-semibold tracking-[-0.08em] text-foreground drop-shadow-[0_0_18px_color-mix(in_srgb,var(--secondary)_22%,transparent)] sm:text-4xl">
+          {timeText}
+        </div>
+        <div className="mt-1 text-xs text-muted-foreground sm:text-sm">{dateText}</div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col justify-center">
       <div className="text-3xl font-semibold tracking-[-0.06em] text-foreground sm:text-4xl">
-        {currentTime.toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: showSeconds ? '2-digit' : undefined,
-          hour12: timeFormat === '12h',
-        })}
+        {timeText}
       </div>
-      <div className="text-xs text-muted-foreground sm:text-sm">{currentTime.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })}</div>
+      <div className="text-xs text-muted-foreground sm:text-sm">{dateText}</div>
     </div>
   )
 }
@@ -84,6 +190,7 @@ function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstanc
 /** Render one queue status widget using existing graph browse-content APIs. */
 function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'queue-status' }> }) {
   const refreshInterval = Math.max(2, widget.settings.refreshIntervalSec) * 1000
+  const visualMode = widget.settings.visualMode ?? 'tiles'
 
   const queueQuery = useQuery({
     queryKey: ['wallpaper-widget', 'queue-status', refreshInterval],
@@ -110,17 +217,269 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
     return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">큐 상태를 불러오지 못했어.</div>
   }
 
+  const queueItems = [
+    { label: 'Queued', value: queueSummary.queued, tone: 'var(--secondary)', short: 'Q' },
+    { label: 'Running', value: queueSummary.running, tone: '#3ddc97', short: 'R' },
+    { label: 'Failed', value: queueSummary.failed, tone: '#ff6b6b', short: 'F' },
+    { label: 'Workflows', value: queueSummary.workflows, tone: 'var(--primary)', short: 'W' },
+  ]
+  const maxValue = Math.max(...queueItems.map((item) => item.value), 1)
+  const totalActive = queueSummary.queued + queueSummary.running
+
+  if (visualMode === 'bars') {
+    return (
+      <div className="flex h-full flex-col justify-center gap-3 rounded-sm bg-[linear-gradient(180deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_55%)] px-1 py-1 text-xs sm:text-sm">
+        <div className="mb-0.5 flex items-center justify-between gap-2 rounded-sm border border-border/60 bg-background/45 px-3 py-2 backdrop-blur-sm">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Queue</div>
+            <div className="text-sm font-semibold text-foreground">{totalActive.toLocaleString('ko-KR')} active</div>
+          </div>
+          <div className="rounded-full border border-border/70 bg-surface-low px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            {queueSummary.failed > 0 ? 'Attention' : 'Stable'}
+          </div>
+        </div>
+
+        {queueItems.map((item) => {
+          const ratio = Math.max(0.08, item.value / maxValue)
+          return (
+            <div key={item.label} className="space-y-1.5 rounded-sm border border-border/60 bg-background/35 px-3 py-2.5 backdrop-blur-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-background" style={{ backgroundColor: item.tone }}>
+                    {item.short}
+                  </span>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
+                </div>
+                <div className={cn('text-sm font-semibold text-foreground', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+                  {item.value.toLocaleString('ko-KR')}
+                </div>
+              </div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-surface-lowest/90">
+                <div
+                  className={cn('h-full rounded-full transition-[width] duration-700 ease-out', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}
+                  style={{
+                    width: `${ratio * 100}%`,
+                    background: `linear-gradient(90deg, ${item.tone}, color-mix(in srgb, ${item.tone} 68%, white))`,
+                    boxShadow: `0 0 18px color-mix(in srgb, ${item.tone} 26%, transparent)`,
+                  }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  if (visualMode === 'rings') {
+    return (
+      <div className="grid h-full grid-cols-2 gap-2 text-center text-xs sm:text-sm">
+        {queueItems.map((item) => {
+          const ratio = item.value / maxValue
+          const degrees = Math.max(12, Math.round(ratio * 360))
+          return (
+            <div key={item.label} className="relative flex flex-col items-center justify-center overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_54%),var(--surface-low)] px-2 py-3">
+              <div
+                className={cn('absolute inset-0 opacity-60', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}
+                style={{ background: `radial-gradient(circle at center, color-mix(in srgb, ${item.tone} 18%, transparent), transparent 62%)` }}
+              />
+              <div
+                className={cn('relative flex h-14 w-14 items-center justify-center rounded-full border border-border/60 text-sm font-semibold text-foreground transition-transform', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}
+                style={{ background: `conic-gradient(${item.tone} 0deg ${degrees}deg, color-mix(in srgb, var(--surface-lowest) 92%, transparent) ${degrees}deg 360deg)` }}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-background/92 shadow-[0_0_20px_rgba(0,0,0,0.18)] backdrop-blur-sm">
+                  {item.value.toLocaleString('ko-KR')}
+                </div>
+              </div>
+              <div className="relative mt-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div className="grid h-full grid-cols-2 gap-2 text-center text-xs sm:text-sm">
-      {[
-        ['Queued', queueSummary.queued],
-        ['Running', queueSummary.running],
-        ['Failed', queueSummary.failed],
-        ['Workflows', queueSummary.workflows],
-      ].map(([label, value]) => (
-        <div key={String(label)} className="rounded-sm border border-border/70 bg-surface-low px-2 py-3">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
-          <div className="mt-1 text-lg font-semibold text-foreground">{Number(value).toLocaleString('ko-KR')}</div>
+      {queueItems.map((item) => (
+        <div key={item.label} className="relative overflow-hidden rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--background)_20%,transparent),transparent),var(--surface-low)] px-2 py-3">
+          <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: item.tone }} />
+          <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
+          <div className={cn('mt-1 text-lg font-semibold text-foreground', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+            {item.value.toLocaleString('ko-KR')}
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-lowest/90">
+            <div
+              className="h-full rounded-full transition-[width] duration-700 ease-out"
+              style={{
+                width: `${Math.max(0.12, item.value / maxValue) * 100}%`,
+                background: `linear-gradient(90deg, ${item.tone}, color-mix(in srgb, ${item.tone} 70%, white))`,
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Render one recent-results widget using the latest graph outputs. */
+function WallpaperRecentResultsBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'recent-results' }> }) {
+  const refreshInterval = Math.max(5, widget.settings.refreshIntervalSec) * 1000
+  const visibleCount = Math.max(1, Math.min(6, widget.settings.visibleCount))
+  const displayMode = widget.settings.displayMode ?? 'grid'
+  const shiftInterval = Math.max(4, widget.settings.shiftIntervalSec ?? 8) * 1000
+
+  const resultsQuery = useQuery({
+    queryKey: ['wallpaper-widget', 'recent-results', refreshInterval],
+    queryFn: () => getGraphWorkflowBrowseContent(),
+    staleTime: Math.max(1_000, refreshInterval - 1_000),
+    refetchInterval: refreshInterval,
+  })
+
+  const recentEntries = useMemo(() => {
+    const browseContent = resultsQuery.data
+    if (!browseContent) {
+      return [] as Array<{ id: string; previewUrl: string; workflowName: string; createdLabel: string; badge: string }>
+    }
+
+    const workflowById = new Map(browseContent.workflows.map((workflow) => [workflow.id, workflow]))
+    const executionById = new Map(browseContent.executions.map((execution) => [execution.id, execution]))
+    const claimedArtifactIds = new Set<number>()
+
+    const finalEntries = [...browseContent.final_results]
+      .sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
+      .flatMap((finalResult) => {
+        claimedArtifactIds.add(finalResult.source_artifact_id)
+        const artifact = buildWallpaperFinalResultArtifact(finalResult)
+        if (artifact.artifact_type !== 'image' && artifact.artifact_type !== 'mask') {
+          return []
+        }
+
+        const previewUrl = getArtifactPreviewUrl(artifact)
+        if (!previewUrl) {
+          return []
+        }
+
+        const execution = executionById.get(finalResult.source_execution_id ?? finalResult.execution_id)
+        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? 'Workflow') : 'Workflow'
+
+        return [{
+          id: `final-${finalResult.id}`,
+          previewUrl,
+          workflowName,
+          createdLabel: formatDateTime(finalResult.created_date),
+          badge: 'Final',
+        }]
+      })
+
+    const artifactEntries = [...browseContent.artifacts]
+      .sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
+      .flatMap((artifact) => {
+        if (claimedArtifactIds.has(artifact.id) || (artifact.artifact_type !== 'image' && artifact.artifact_type !== 'mask')) {
+          return []
+        }
+
+        const previewUrl = getArtifactPreviewUrl(artifact)
+        if (!previewUrl) {
+          return []
+        }
+
+        const execution = executionById.get(artifact.execution_id)
+        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? 'Workflow') : 'Workflow'
+
+        return [{
+          id: `artifact-${artifact.id}`,
+          previewUrl,
+          workflowName,
+          createdLabel: formatDateTime(artifact.created_date),
+          badge: 'Live',
+        }]
+      })
+
+    return [...finalEntries, ...artifactEntries].slice(0, visibleCount)
+  }, [resultsQuery.data, visibleCount])
+
+  const stackIndex = useWallpaperRotatingIndex(recentEntries.length, shiftInterval, displayMode === 'stack' && recentEntries.length > 1)
+
+  if (resultsQuery.isLoading) {
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Results loading…</div>
+  }
+
+  if (resultsQuery.isError) {
+    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">최근 결과를 불러오지 못했어.</div>
+  }
+
+  if (displayMode === 'stack') {
+    const stackedEntries = recentEntries.map((entry, index) => ({
+      entry,
+      order: (index - stackIndex + recentEntries.length) % Math.max(recentEntries.length, 1),
+    })).sort((left, right) => right.order - left.order)
+
+    return (
+      <div className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_40%),var(--surface-low)]">
+        {recentEntries.length === 0 ? (
+          <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">No recent image results yet.</div>
+        ) : null}
+
+        {stackedEntries.map(({ entry, order }) => {
+          const offsetX = order * 14
+          const offsetY = order * 10
+          const scale = Math.max(0.82, 1 - order * 0.05)
+          const opacity = Math.max(0.28, 1 - order * 0.18)
+          const rotate = (order % 2 === 0 ? -1 : 1) * order * 1.8
+          const isFront = order === 0
+
+          return (
+            <div
+              key={entry.id}
+              className="absolute inset-0 overflow-hidden rounded-sm border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-all duration-[1600ms] ease-out"
+              style={{
+                inset: `${offsetY}px ${offsetX}px ${Math.max(0, offsetY * 0.4)}px ${Math.max(0, offsetX * 0.35)}px`,
+                transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${scale})`,
+                opacity,
+                zIndex: 100 - order,
+              }}
+            >
+              <img src={entry.previewUrl} alt={entry.workflowName} className="h-full w-full object-cover" loading="lazy" />
+              <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
+                <div className="truncate text-xs font-medium text-white">{entry.workflowName}</div>
+                <div className="mt-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-white/78">
+                  <span>{entry.badge}</span>
+                  <span className="truncate">{isFront ? entry.createdLabel : `-${order}`}</span>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+
+        {recentEntries.length > 1 ? (
+          <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/90 backdrop-blur-sm">
+            Stack
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
+  return (
+    <div className={cn('grid h-full gap-2', visibleCount >= 4 ? 'grid-cols-2' : 'grid-cols-1')}>
+      {recentEntries.length === 0 ? (
+        <div className="col-span-full flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
+          No recent image results yet.
+        </div>
+      ) : null}
+
+      {recentEntries.map((entry) => (
+        <div key={entry.id} className="relative overflow-hidden rounded-sm border border-border/70 bg-surface-low">
+          <img src={entry.previewUrl} alt={entry.workflowName} className="h-full w-full object-cover" loading="lazy" />
+          <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
+            <div className="truncate text-xs font-medium text-white">{entry.workflowName}</div>
+            <div className="mt-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-white/78">
+              <span>{entry.badge}</span>
+              <span className="truncate">{entry.createdLabel}</span>
+            </div>
+          </div>
         </div>
       ))}
     </div>
@@ -128,10 +487,15 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
 }
 
 /** Render one group-backed preview grid using the existing groups preview API. */
-function WallpaperGroupImageViewBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'group-image-view' }> }) {
+function WallpaperGroupImageViewBody({ widget, mode }: { widget: Extract<WallpaperWidgetInstance, { type: 'group-image-view' }>; mode: 'editor' | 'runtime' }) {
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
   const visibleCount = Math.max(1, Math.min(9, widget.settings.visibleCount))
+  const motionMode = widget.settings.motionMode ?? 'static'
+  const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 'medium')
+  const allowPointerMotion = motionMode === 'pointer' && mode === 'runtime'
+  const ambientTick = useWallpaperMotionTick(motionMode === 'ambient')
+  const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null)
 
   const previewQuery = useQuery({
     queryKey: ['wallpaper-widget', 'group-image-view', groupId, includeChildren, visibleCount],
@@ -155,41 +519,166 @@ function WallpaperGroupImageViewBody({ widget }: { widget: Extract<WallpaperWidg
 
   const images = previewQuery.data ?? []
   const columnCount = visibleCount >= 6 ? 3 : visibleCount >= 4 ? 2 : 1
+  const rowCount = Math.max(1, Math.ceil(Math.max(images.length, 1) / columnCount))
 
   return (
-    <div className="grid h-full gap-2" style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}>
+    <div
+      className="relative grid h-full gap-2"
+      style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+      onPointerMove={allowPointerMotion ? (event) => {
+        const rect = event.currentTarget.getBoundingClientRect()
+        const nextX = ((event.clientX - rect.left) / Math.max(1, rect.width) - 0.5) * 2
+        const nextY = ((event.clientY - rect.top) / Math.max(1, rect.height) - 0.5) * 2
+        setPointerOffset({ x: nextX, y: nextY })
+      } : undefined}
+      onPointerLeave={allowPointerMotion ? () => setPointerOffset(null) : undefined}
+    >
       {images.length === 0 ? (
         <div className="col-span-full flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
           This group has no preview images yet.
         </div>
       ) : null}
-      {images.map((image) => {
+      {images.map((image, index) => {
         const imageUrl = getWallpaperImageUrl(image)
+        const columnIndex = index % columnCount
+        const rowIndex = Math.floor(index / columnCount)
+        const columnBias = columnIndex - (columnCount - 1) / 2
+        const rowBias = rowIndex - (rowCount - 1) / 2
+        let translateX = 0
+        let translateY = 0
+        let scale = 1
+
+        if (motionMode === 'ambient') {
+          const phase = ambientTick / 8 + index * 0.72
+          translateX = (Math.sin(phase) * 2.8 + columnBias * 1.35) * motionStrength
+          translateY = (Math.cos(phase * 0.9) * 2.4 + rowBias * 1.15) * motionStrength
+          scale = 1.025
+        } else if (allowPointerMotion && pointerOffset) {
+          translateX = (pointerOffset.x * 7 + columnBias * 1.8) * motionStrength
+          translateY = (pointerOffset.y * 7 + rowBias * 1.8) * motionStrength
+          scale = 1.03 + ((Math.abs(pointerOffset.x) + Math.abs(pointerOffset.y)) * 0.02 * motionStrength)
+        }
+
         return (
-          <div key={String(image.composite_hash ?? image.id)} className="overflow-hidden rounded-sm border border-border/70 bg-surface-low">
+          <div
+            key={String(image.composite_hash ?? image.id)}
+            className="overflow-hidden rounded-sm border border-border/70 bg-surface-low transition-transform duration-200 ease-out will-change-transform"
+            style={{ transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})` }}
+          >
             {imageUrl ? <img src={imageUrl} alt="Group preview" className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full min-h-16 items-center justify-center text-xs text-muted-foreground">No image</div>}
           </div>
         )
       })}
+
+      {motionMode !== 'static' ? (
+        <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/90 backdrop-blur-sm">
+          {motionMode === 'pointer' ? 'Reactive' : 'Ambient'}
+        </div>
+      ) : null}
     </div>
   )
 }
 
-/** Render one showcase-style single image preview from a chosen group. */
-function WallpaperImageShowcaseBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'image-showcase' }> }) {
+/** Render one layered floating collage from one chosen image group. */
+function WallpaperFloatingCollageBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'floating-collage' }> }) {
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
+  const visibleCount = Math.max(2, Math.min(6, widget.settings.visibleCount))
+  const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 'medium')
+  const motionTick = useWallpaperMotionTick(true)
 
   const previewQuery = useQuery({
-    queryKey: ['wallpaper-widget', 'image-showcase', groupId, includeChildren],
-    queryFn: async () => {
-      const images = await getGroupPreviewImages(groupId as number, { includeChildren, count: 1 })
-      return images[0] ?? null
-    },
+    queryKey: ['wallpaper-widget', 'floating-collage', groupId, includeChildren, visibleCount],
+    queryFn: () => getGroupPreviewImages(groupId as number, { includeChildren, count: visibleCount }),
     enabled: groupId !== null,
     staleTime: 30_000,
     refetchInterval: 60_000,
   })
+
+  if (groupId === null) {
+    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">Select a group in the inspector.</div>
+  }
+
+  if (previewQuery.isLoading) {
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Collage loading…</div>
+  }
+
+  if (previewQuery.isError) {
+    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">콜라주 이미지를 불러오지 못했어.</div>
+  }
+
+  const images = (previewQuery.data ?? []).slice(0, visibleCount)
+  const collageSlots = [
+    { left: '4%', top: '10%', width: '34%', rotate: -8, depth: 0 },
+    { left: '31%', top: '4%', width: '40%', rotate: 5, depth: 1 },
+    { left: '59%', top: '16%', width: '28%', rotate: 10, depth: 0 },
+    { left: '13%', top: '48%', width: '31%', rotate: -4, depth: 1 },
+    { left: '42%', top: '42%', width: '37%', rotate: 7, depth: 2 },
+    { left: '68%', top: '52%', width: '22%', rotate: -9, depth: 1 },
+  ]
+
+  return (
+    <div className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_14%,transparent),transparent_42%),var(--surface-low)]">
+      {images.length === 0 ? (
+        <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">No collage images available.</div>
+      ) : null}
+
+      {images.map((image, index) => {
+        const imageUrl = getWallpaperImageUrl(image)
+        const slot = collageSlots[index % collageSlots.length]
+        const phase = motionTick / 12 + index * 0.9
+        const translateX = Math.sin(phase) * 6 * motionStrength
+        const translateY = Math.cos(phase * 0.82) * 5 * motionStrength
+        const scale = 1.02 + ((Math.sin(phase * 0.55) + 1) * 0.018)
+        const rotate = slot.rotate + Math.sin(phase * 0.4) * 2.5 * motionStrength
+
+        return (
+          <div
+            key={String(image.composite_hash ?? image.id ?? index)}
+            className="absolute overflow-hidden rounded-md border border-white/15 bg-surface-high shadow-[0_14px_40px_rgba(0,0,0,0.34)] transition-transform duration-200 ease-out will-change-transform"
+            style={{
+              left: slot.left,
+              top: slot.top,
+              width: slot.width,
+              aspectRatio: '4 / 5',
+              zIndex: 10 + slot.depth + index,
+              transform: `translate3d(${translateX}px, ${translateY}px, 0) rotate(${rotate}deg) scale(${scale})`,
+            }}
+          >
+            {imageUrl ? <img src={imageUrl} alt="Floating collage" className="h-full w-full object-cover" loading="lazy" /> : <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No image</div>}
+          </div>
+        )
+      })}
+
+      {images.length > 0 ? <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_42%,color-mix(in_srgb,var(--background)_26%,transparent))]" /> : null}
+      <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/90 backdrop-blur-sm">Collage</div>
+    </div>
+  )
+}
+
+/** Render one showcase-style image widget with optional motion playback. */
+function WallpaperImageShowcaseBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'image-showcase' }> }) {
+  const groupId = widget.settings.groupId
+  const includeChildren = widget.settings.includeChildren
+  const playbackMode = widget.settings.playbackMode ?? 'carousel'
+  const previewCount = playbackMode === 'static' ? 1 : 10
+  const slideshowInterval = Math.max(4, widget.settings.slideshowIntervalSec) * 1000
+
+  const previewQuery = useQuery({
+    queryKey: ['wallpaper-widget', 'image-showcase', groupId, includeChildren, previewCount],
+    queryFn: () => getGroupPreviewImages(groupId as number, { includeChildren, count: previewCount }),
+    enabled: groupId !== null,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
+
+  const images = previewQuery.data ?? []
+  const rotationEnabled = playbackMode !== 'static' && images.length > 1
+  const kenBurnsEnabled = playbackMode === 'ken-burns'
+  const currentIndex = useWallpaperRotatingIndex(images.length, slideshowInterval, rotationEnabled)
+  const motionTick = useWallpaperMotionTick(kenBurnsEnabled)
+  const currentImage = images[currentIndex] ?? images[0] ?? null
+  const imageUrl = getWallpaperImageUrl(currentImage)
 
   if (groupId === null) {
     return (
@@ -206,16 +695,59 @@ function WallpaperImageShowcaseBody({ widget }: { widget: Extract<WallpaperWidge
     return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Showcase loading…</div>
   }
 
-  const imageUrl = getWallpaperImageUrl(previewQuery.data)
   if (!imageUrl) {
     return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">No showcase image available.</div>
   }
 
-  return <img src={imageUrl} alt="Showcase" className={cn('h-full w-full rounded-sm', widget.settings.fitMode === 'contain' ? 'object-contain' : 'object-cover')} loading="lazy" />
+  const motionPhase = motionTick / 18 + currentIndex * 0.8
+  const kenBurnsTranslateX = Math.sin(motionPhase * 0.8) * 8
+  const kenBurnsTranslateY = Math.cos(motionPhase * 0.6) * 6
+  const kenBurnsScale = 1.08 + ((Math.sin(motionPhase * 0.5) + 1) * 0.03)
+  const showcaseTransform = kenBurnsEnabled
+    ? `translate3d(${kenBurnsTranslateX}px, ${kenBurnsTranslateY}px, 0) scale(${kenBurnsScale})`
+    : rotationEnabled
+      ? 'scale(1.03)'
+      : 'scale(1)'
+
+  return (
+    <div className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-surface-low">
+      <img
+        key={String(currentImage?.composite_hash ?? currentImage?.id ?? currentIndex)}
+        src={imageUrl}
+        alt="Showcase"
+        className={cn(
+          'h-full w-full rounded-sm ease-out will-change-transform',
+          widget.settings.fitMode === 'contain' ? 'object-contain' : 'object-cover',
+          kenBurnsEnabled ? 'transition-transform duration-200' : 'transition-transform duration-[1600ms]',
+        )}
+        style={{ transform: showcaseTransform }}
+        loading="lazy"
+      />
+
+      {rotationEnabled ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_74%,transparent))] px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            {images.slice(0, 6).map((image, index) => (
+              <span
+                key={String(image.composite_hash ?? image.id ?? index)}
+                className={cn(
+                  'block h-1.5 rounded-full bg-white/55 transition-all duration-300',
+                  index === currentIndex ? 'w-4 bg-white' : 'w-1.5',
+                )}
+              />
+            ))}
+          </div>
+          <div className="rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/92 backdrop-blur-sm">
+            {kenBurnsEnabled ? 'Ken Burns' : 'Auto'}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 /** Render one widget body based on the widget type. */
-function WallpaperWidgetBody({ widget }: { widget: WallpaperWidgetInstance }) {
+function WallpaperWidgetBody({ widget, mode }: { widget: WallpaperWidgetInstance; mode: 'editor' | 'runtime' }) {
   if (widget.type === 'clock') {
     return <WallpaperClockBody widget={widget} />
   }
@@ -224,12 +756,20 @@ function WallpaperWidgetBody({ widget }: { widget: WallpaperWidgetInstance }) {
     return <WallpaperQueueStatusBody widget={widget} />
   }
 
+  if (widget.type === 'recent-results') {
+    return <WallpaperRecentResultsBody widget={widget} />
+  }
+
   if (widget.type === 'group-image-view') {
-    return <WallpaperGroupImageViewBody widget={widget} />
+    return <WallpaperGroupImageViewBody widget={widget} mode={mode} />
   }
 
   if (widget.type === 'image-showcase') {
     return <WallpaperImageShowcaseBody widget={widget} />
+  }
+
+  if (widget.type === 'floating-collage') {
+    return <WallpaperFloatingCollageBody widget={widget} />
   }
 
   return (
@@ -259,7 +799,6 @@ function WallpaperWidgetCard({ widget, isSelected, mode, onSelectWidget, onStart
     <div className="relative h-full w-full group">
       <button
         type="button"
-        disabled={mode !== 'editor'}
         onClick={() => onSelectWidget?.(widget.id)}
         onPointerDown={onStartMove}
         className={cn(
@@ -269,7 +808,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, onSelectWidget, onStart
             ? widget.locked
               ? 'cursor-default'
               : 'cursor-grab active:cursor-grabbing hover:border-secondary/70'
-            : 'cursor-default pointer-events-none',
+            : 'cursor-default',
           isSelected ? 'border-secondary shadow-[0_0_0_1px_color-mix(in_srgb,var(--secondary)_22%,transparent)]' : 'border-border/70',
         )}
         style={{ opacity }}
@@ -278,7 +817,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, onSelectWidget, onStart
           <div className="border-b border-border/60 px-3 py-2 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">{title}</div>
         ) : null}
         <div className="min-h-0 flex-1 p-3">
-          <WallpaperWidgetBody widget={widget} />
+          <WallpaperWidgetBody widget={widget} mode={mode} />
         </div>
       </button>
 

@@ -1,4 +1,4 @@
-export type WallpaperWidgetType = 'clock' | 'queue-status' | 'group-image-view' | 'image-showcase' | 'text-note'
+export type WallpaperWidgetType = 'clock' | 'queue-status' | 'recent-results' | 'group-image-view' | 'image-showcase' | 'floating-collage' | 'text-note'
 
 export interface WallpaperCanvasPreset {
   id: string
@@ -30,10 +30,19 @@ export interface WallpaperBaseWidgetSettings {
 export interface WallpaperClockWidgetSettings extends WallpaperBaseWidgetSettings {
   timeFormat: '12h' | '24h'
   showSeconds: boolean
+  visualStyle: 'minimal' | 'glow' | 'split'
 }
 
 export interface WallpaperQueueStatusWidgetSettings extends WallpaperBaseWidgetSettings {
   refreshIntervalSec: number
+  visualMode: 'tiles' | 'bars' | 'rings'
+}
+
+export interface WallpaperRecentResultsWidgetSettings extends WallpaperBaseWidgetSettings {
+  refreshIntervalSec: number
+  visibleCount: number
+  displayMode: 'grid' | 'stack'
+  shiftIntervalSec: number
 }
 
 export interface WallpaperGroupSourceWidgetSettings extends WallpaperBaseWidgetSettings {
@@ -43,11 +52,19 @@ export interface WallpaperGroupSourceWidgetSettings extends WallpaperBaseWidgetS
 
 export interface WallpaperGroupImageViewWidgetSettings extends WallpaperGroupSourceWidgetSettings {
   visibleCount: number
+  motionMode: 'static' | 'ambient' | 'pointer'
+  motionStrength: 'soft' | 'medium' | 'strong'
 }
 
 export interface WallpaperImageShowcaseWidgetSettings extends WallpaperGroupSourceWidgetSettings {
   fitMode: 'cover' | 'contain'
   slideshowIntervalSec: number
+  playbackMode: 'static' | 'carousel' | 'ken-burns'
+}
+
+export interface WallpaperFloatingCollageWidgetSettings extends WallpaperGroupSourceWidgetSettings {
+  visibleCount: number
+  motionStrength: 'soft' | 'medium' | 'strong'
 }
 
 export interface WallpaperTextNoteWidgetSettings extends WallpaperBaseWidgetSettings {
@@ -57,8 +74,10 @@ export interface WallpaperTextNoteWidgetSettings extends WallpaperBaseWidgetSett
 export interface WallpaperWidgetSettingsMap {
   clock: WallpaperClockWidgetSettings
   'queue-status': WallpaperQueueStatusWidgetSettings
+  'recent-results': WallpaperRecentResultsWidgetSettings
   'group-image-view': WallpaperGroupImageViewWidgetSettings
   'image-showcase': WallpaperImageShowcaseWidgetSettings
+  'floating-collage': WallpaperFloatingCollageWidgetSettings
   'text-note': WallpaperTextNoteWidgetSettings
 }
 
@@ -75,8 +94,10 @@ interface WallpaperWidgetDefinitionBase<T extends WallpaperWidgetType> {
 export type WallpaperWidgetDefinition =
   | WallpaperWidgetDefinitionBase<'clock'>
   | WallpaperWidgetDefinitionBase<'queue-status'>
+  | WallpaperWidgetDefinitionBase<'recent-results'>
   | WallpaperWidgetDefinitionBase<'group-image-view'>
   | WallpaperWidgetDefinitionBase<'image-showcase'>
+  | WallpaperWidgetDefinitionBase<'floating-collage'>
   | WallpaperWidgetDefinitionBase<'text-note'>
 
 interface WallpaperWidgetInstanceBase<T extends WallpaperWidgetType> extends WallpaperWidgetFrame {
@@ -91,18 +112,21 @@ interface WallpaperWidgetInstanceBase<T extends WallpaperWidgetType> extends Wal
 export type WallpaperWidgetInstance =
   | WallpaperWidgetInstanceBase<'clock'>
   | WallpaperWidgetInstanceBase<'queue-status'>
+  | WallpaperWidgetInstanceBase<'recent-results'>
   | WallpaperWidgetInstanceBase<'group-image-view'>
   | WallpaperWidgetInstanceBase<'image-showcase'>
+  | WallpaperWidgetInstanceBase<'floating-collage'>
   | WallpaperWidgetInstanceBase<'text-note'>
 
 export type WallpaperGroupSourceWidgetInstance =
   | Extract<WallpaperWidgetInstance, { type: 'group-image-view' }>
   | Extract<WallpaperWidgetInstance, { type: 'image-showcase' }>
+  | Extract<WallpaperWidgetInstance, { type: 'floating-collage' }>
 
 export type WallpaperTextNoteWidgetInstance = Extract<WallpaperWidgetInstance, { type: 'text-note' }>
 
 export function isWallpaperGroupSourceWidget(widget: WallpaperWidgetInstance): widget is WallpaperGroupSourceWidgetInstance {
-  return widget.type === 'group-image-view' || widget.type === 'image-showcase'
+  return widget.type === 'group-image-view' || widget.type === 'image-showcase' || widget.type === 'floating-collage'
 }
 
 export function isWallpaperTextNoteWidget(widget: WallpaperWidgetInstance): widget is WallpaperTextNoteWidgetInstance {

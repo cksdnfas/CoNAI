@@ -265,6 +265,31 @@ Settings examples:
 - alignment
 - background style
 
+## Next Expansion, Visual and Motion Widgets
+
+After the current editor and preset foundation, the next product-facing step should focus on motion-capable wallpaper widgets.
+
+Priority candidates:
+
+1. `Carousel Showcase`
+   - automatically rotate through multiple images from one target group
+   - support static versus carousel playback
+   - support fit mode and interval tuning
+2. `Reactive Grid View`
+   - show a multi-image grid that subtly reacts to pointer position when available
+   - degrade gracefully to ambient motion when pointer input is unavailable
+3. `Ken Burns Gallery`
+   - apply slow pan and zoom motion to featured images for low-noise visual movement
+4. `Activity Pulse`
+   - make queue and activity widgets feel alive with restrained motion instead of numbers only
+
+Implementation rules for motion widgets:
+
+- motion should stay subtle enough for long-running wallpaper use
+- pointer-driven behavior must have a non-pointer fallback mode
+- runtime stability matters more than complex transitions
+- prefer extending the existing widget registry and typed widget settings before inventing separate animation systems
+
 ## Technical Constraints
 
 - The editor must work as a normal web page first.

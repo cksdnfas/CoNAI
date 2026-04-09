@@ -114,7 +114,7 @@ export type EmphasisFontWeightPreset = 'standard' | 'bold';
 export type RelatedImageCardAspectRatio = 'original' | 'square' | 'portrait' | 'landscape';
 export type GroupExplorerCardStyle = 'compact-row' | 'media-tile';
 export type AppearancePresetSlotId = 'slot-1' | 'slot-2' | 'slot-3';
-export type WallpaperWidgetType = 'clock' | 'queue-status' | 'group-image-view' | 'image-showcase' | 'text-note';
+export type WallpaperWidgetType = 'clock' | 'queue-status' | 'recent-results' | 'group-image-view' | 'image-showcase' | 'floating-collage' | 'text-note';
 
 export interface WallpaperWidgetSize {
   w: number;

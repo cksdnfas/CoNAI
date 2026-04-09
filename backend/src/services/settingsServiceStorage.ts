@@ -16,7 +16,7 @@ import {
 export const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
 const APPEARANCE_PRESET_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'] as const;
-const WALLPAPER_WIDGET_TYPES: WallpaperWidgetType[] = ['clock', 'queue-status', 'group-image-view', 'image-showcase', 'text-note'];
+const WALLPAPER_WIDGET_TYPES: WallpaperWidgetType[] = ['clock', 'queue-status', 'recent-results', 'group-image-view', 'image-showcase', 'floating-collage', 'text-note'];
 
 /** Build the default appearance theme used for fresh settings files and fallback merges. */
 export function getDefaultAppearanceTheme(): AppearanceThemeSettings {
