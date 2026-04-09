@@ -140,6 +140,7 @@ export async function uploadAppearanceFont(file: File, target: 'sans' | 'mono') 
 
   const response = await fetch(buildApiUrl('/api/settings/appearance/font-upload'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
     },
