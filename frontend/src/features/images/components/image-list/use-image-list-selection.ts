@@ -10,6 +10,18 @@ interface UseImageListSelectionParams {
   selectionAreaClass?: string
 }
 
+function isTouchSelectionEvent(event: Event | null | undefined) {
+  if (!event) {
+    return false
+  }
+
+  if (typeof TouchEvent !== 'undefined' && event instanceof TouchEvent) {
+    return true
+  }
+
+  return 'pointerType' in event && typeof event.pointerType === 'string' && event.pointerType === 'touch'
+}
+
 /** Keep DOM selection preview outside React and commit only the final result. */
 export function useImageListSelection({
   containerElement,
@@ -72,6 +84,10 @@ export function useImageListSelection({
 
     selection
       .on('beforestart', ({ event }) => {
+        if (isTouchSelectionEvent(event)) {
+          return false
+        }
+
         const target = event?.target
         if (!(target instanceof HTMLElement)) return
         if (target.closest('[data-no-select-drag="true"]')) {
