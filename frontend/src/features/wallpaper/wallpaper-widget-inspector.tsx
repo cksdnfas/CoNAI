@@ -1,5 +1,6 @@
 import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { SettingsField, SettingsToggleRow, SettingsValueTile } from '@/features/settings/components/settings-primitives'
 import { cn } from '@/lib/utils'
@@ -20,12 +21,15 @@ interface WallpaperWidgetInspectorPatch {
 interface WallpaperWidgetInspectorProps {
   selectedWidget: WallpaperWidgetInstance | null
   groups: Array<{ id: number; name: string; depth?: number | null }>
+  widgetCount: number
+  widgetOrder: number | null
   onPatchWidget: (widgetId: string, patch: WallpaperWidgetInspectorPatch) => void
+  onChangeWidgetOrder: (widgetId: string, nextOrder: number) => void
   onRemoveWidget: (widgetId: string) => void
 }
 
 /** Render the editor inspector for one selected wallpaper widget. */
-export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget, onRemoveWidget }: WallpaperWidgetInspectorProps) {
+export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, widgetOrder, onPatchWidget, onChangeWidgetOrder, onRemoveWidget }: WallpaperWidgetInspectorProps) {
   if (!selectedWidget) {
     return (
       <div className={cn('rounded-sm border border-dashed border-border bg-surface-low px-4 py-8 text-center text-sm text-muted-foreground')}>
@@ -593,7 +597,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
 
-            <SettingsField label="초기 범위">
+            <SettingsField label="초기 밀집도">
               <Select
                 value={selectedWidget.settings.layoutSpread ?? 'compact'}
                 onChange={(event) => {
@@ -602,11 +606,95 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="compact">좁게</option>
+                <option value="compact">조밀하게</option>
                 <option value="balanced">보통</option>
                 <option value="wide">넓게</option>
               </Select>
             </SettingsField>
+
+            <SettingsField label="이동 속도">
+              <ScrubbableNumberInput
+                variant="settings"
+                min={0.2}
+                max={20}
+                step={0.1}
+                scrubRatio={0.45}
+                value={selectedWidget.settings.motionSpeed ?? 1}
+                onChange={(nextValue) => {
+                  const parsed = Number(nextValue)
+                  updateWidgetSettings({
+                    motionSpeed: Number.isFinite(parsed) ? Math.min(20, Math.max(0.2, parsed)) : 1,
+                  })
+                }}
+              />
+            </SettingsField>
+
+            <SettingsField label="이미지 크기(%)">
+              <ScrubbableNumberInput
+                variant="settings"
+                min={50}
+                max={200}
+                step={1}
+                scrubRatio={0.35}
+                value={selectedWidget.settings.imageScalePercent ?? 100}
+                onChange={(nextValue) => {
+                  const parsed = Number(nextValue)
+                  updateWidgetSettings({
+                    imageScalePercent: Number.isFinite(parsed) ? Math.min(200, Math.max(50, Math.round(parsed))) : 100,
+                  })
+                }}
+              />
+            </SettingsField>
+
+            <SettingsField label="이미지 교체 기준">
+              <Select
+                value={selectedWidget.settings.imageSwapMode ?? 'bounce'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageSwapMode: event.target.value === 'time' ? 'time' : 'bounce',
+                  })
+                }}
+              >
+                <option value="bounce">튕김 횟수</option>
+                <option value="time">시간</option>
+              </Select>
+            </SettingsField>
+
+            {selectedWidget.settings.imageSwapMode === 'time' ? (
+              <SettingsField label="교체 간격(초)">
+                <ScrubbableNumberInput
+                  variant="settings"
+                  min={2}
+                  max={60}
+                  step={1}
+                  scrubRatio={0.35}
+                  value={selectedWidget.settings.swapIntervalSec ?? 12}
+                  onChange={(nextValue) => {
+                    const parsed = Number(nextValue)
+                    updateWidgetSettings({
+                      swapIntervalSec: Number.isFinite(parsed) ? Math.min(60, Math.max(2, Math.round(parsed))) : 12,
+                    })
+                  }}
+                />
+              </SettingsField>
+            ) : (
+              <SettingsField label="교체까지 튕김 수">
+                <ScrubbableNumberInput
+                  variant="settings"
+                  min={1}
+                  max={12}
+                  step={1}
+                  scrubRatio={0.35}
+                  value={selectedWidget.settings.swapBounceCount ?? 3}
+                  onChange={(nextValue) => {
+                    const parsed = Number(nextValue)
+                    updateWidgetSettings({
+                      swapBounceCount: Number.isFinite(parsed) ? Math.min(12, Math.max(1, Math.round(parsed))) : 3,
+                    })
+                  }}
+                />
+              </SettingsField>
+            )}
 
             <SettingsField label="비율 기준">
               <Select
@@ -728,6 +816,21 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
       </div>
 
       <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+        <SettingsField label="순서 (1 = 맨 앞)">
+          <ScrubbableNumberInput
+            variant="settings"
+            min={1}
+            max={Math.max(1, widgetCount)}
+            step={1}
+            scrubRatio={0.35}
+            value={widgetOrder ?? 1}
+            onChange={(nextValue) => {
+              const parsed = Number(nextValue)
+              onChangeWidgetOrder(selectedWidget.id, Number.isFinite(parsed) ? parsed : 1)
+            }}
+          />
+        </SettingsField>
+
         <div className="grid grid-cols-2 gap-2 text-sm">
           {[
             ['X', selectedWidget.x],

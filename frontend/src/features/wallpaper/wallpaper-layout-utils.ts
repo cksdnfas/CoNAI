@@ -250,6 +250,58 @@ export function deleteWallpaperLayoutPreset(layoutPresets: WallpaperLayoutPreset
   return layoutPresets.filter((preset) => preset.id !== presetId)
 }
 
+/** Sort wallpaper widgets from frontmost to backmost using the persisted z-index order. */
+export function getWallpaperWidgetsFrontToBack(widgets: WallpaperWidgetInstance[]) {
+  return [...widgets].sort((left, right) => right.zIndex - left.zIndex)
+}
+
+/** Rebuild widget order from one front-to-back id list while keeping z-indexes contiguous. */
+export function reorderWallpaperWidgets(layoutPreset: WallpaperLayoutPreset, orderedWidgetIds: string[]) {
+  const currentFrontToBack = getWallpaperWidgetsFrontToBack(layoutPreset.widgets)
+  const widgetMap = new Map(layoutPreset.widgets.map((widget) => [widget.id, widget]))
+  const seen = new Set<string>()
+
+  const nextFrontToBack = [
+    ...orderedWidgetIds.map((widgetId) => {
+      seen.add(widgetId)
+      return widgetMap.get(widgetId) ?? null
+    }).filter((widget): widget is WallpaperWidgetInstance => widget !== null),
+    ...currentFrontToBack.filter((widget) => !seen.has(widget.id)),
+  ]
+
+  const widgetCount = nextFrontToBack.length
+  return normalizeWallpaperLayoutPreset({
+    ...layoutPreset,
+    widgets: nextFrontToBack.map((widget, index) => ({
+      ...widget,
+      zIndex: widgetCount - index,
+    })),
+  })
+}
+
+/** Move one widget to the requested front-to-back order position. */
+export function moveWallpaperWidgetToOrder(layoutPreset: WallpaperLayoutPreset, widgetId: string, nextOrder: number) {
+  const currentFrontToBack = getWallpaperWidgetsFrontToBack(layoutPreset.widgets)
+  const currentIndex = currentFrontToBack.findIndex((widget) => widget.id === widgetId)
+  if (currentIndex < 0) {
+    return layoutPreset
+  }
+
+  const clampedIndex = Math.max(0, Math.min(currentFrontToBack.length - 1, Math.round(nextOrder) - 1))
+  if (clampedIndex === currentIndex) {
+    return layoutPreset
+  }
+
+  const reordered = [...currentFrontToBack]
+  const [movedWidget] = reordered.splice(currentIndex, 1)
+  if (!movedWidget) {
+    return layoutPreset
+  }
+  reordered.splice(clampedIndex, 0, movedWidget)
+
+  return reorderWallpaperWidgets(layoutPreset, reordered.map((widget) => widget.id))
+}
+
 /** Add one default widget instance to the current layout draft. */
 export function appendWallpaperWidget(layoutPreset: WallpaperLayoutPreset, widgetType: WallpaperWidgetType) {
   const canvasPreset = getWallpaperCanvasPreset(layoutPreset.canvasPresetId)
