@@ -1,20 +1,47 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren, type ReactNode, type RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, ExternalLink, RefreshCcw, X } from 'lucide-react'
+import { SegmentedControl } from '@/components/common/segmented-control'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { getImagesBatch } from '@/lib/api'
+import { Skeleton } from '@/components/ui/skeleton'
+import { getImage, getImagesBatch } from '@/lib/api'
 import { useMinWidth } from '@/lib/use-min-width'
+import { cn } from '@/lib/utils'
 import { ImageDetailView, type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
+import { ImageDetailMedia } from './image-detail-media'
 import { ImageViewThumbnailStrip } from './image-view-thumbnail-strip'
 import { ImageViewModalContext, type ImageViewModalOpenInput } from './image-view-modal-context'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
+import { formatBytes, getDownloadName, getImageDetailDownloadUrl, getImageDetailRenderUrl } from './image-detail-utils'
 
 interface ImageViewModalState {
   compositeHash: string | null
   compositeHashes: string[]
+}
+
+type ImageViewModalMode = 'full' | 'medium' | 'minimal'
+
+const IMAGE_VIEW_MODAL_MODE_STORAGE_KEY = 'conai:image-view-modal:mode'
+
+function loadImageViewModalMode(): ImageViewModalMode {
+  if (typeof window === 'undefined') {
+    return 'full'
+  }
+
+  const savedValue = window.localStorage.getItem(IMAGE_VIEW_MODAL_MODE_STORAGE_KEY)
+  return savedValue === 'medium' || savedValue === 'minimal' ? savedValue : 'full'
+}
+
+function persistImageViewModalMode(mode: ImageViewModalMode) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(IMAGE_VIEW_MODAL_MODE_STORAGE_KEY, mode)
 }
 
 /** Provide a global image view modal for app-shell image browsing flows. */
@@ -23,6 +50,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     compositeHash: null,
     compositeHashes: [],
   })
+  const [viewMode, setViewMode] = useState<ImageViewModalMode>(() => loadImageViewModalMode())
 
   const activeIndex = useMemo(() => {
     if (!modalState.compositeHash) {
@@ -60,6 +88,11 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       compositeHash: null,
       compositeHashes: [],
     })
+  }, [])
+
+  const handleViewModeChange = useCallback((nextMode: ImageViewModalMode) => {
+    setViewMode(nextMode)
+    persistImageViewModalMode(nextMode)
   }, [])
 
   /** Move to the previous image within the active modal navigation context. */
@@ -164,6 +197,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
           totalCount={modalState.compositeHashes.length}
           thumbnailStripItems={thumbnailStripItems}
           thumbnailStripCompositeHashes={thumbnailStripCompositeHashes}
+          viewMode={viewMode}
+          onChangeViewMode={handleViewModeChange}
           canViewPrevious={canViewPrevious}
           canViewNext={canViewNext}
           onClose={closeImageView}
@@ -182,6 +217,8 @@ interface ImageViewModalProps {
   totalCount: number
   thumbnailStripItems: Awaited<ReturnType<typeof getImagesBatch>>
   thumbnailStripCompositeHashes: string[]
+  viewMode: ImageViewModalMode
+  onChangeViewMode: (mode: ImageViewModalMode) => void
   canViewPrevious: boolean
   canViewNext: boolean
   onClose: () => void
@@ -197,6 +234,8 @@ function ImageViewModal({
   totalCount,
   thumbnailStripItems,
   thumbnailStripCompositeHashes,
+  viewMode,
+  onChangeViewMode,
   canViewPrevious,
   canViewNext,
   onClose,
@@ -214,7 +253,7 @@ function ImageViewModal({
   }, [compositeHash])
 
   useEffect(() => {
-    if (isDesktopModalLayout) {
+    if (isDesktopModalLayout || viewMode === 'minimal') {
       setMobileActionsHeight(0)
       return
     }
@@ -241,11 +280,13 @@ function ImageViewModal({
       resizeObserver.disconnect()
       window.removeEventListener('resize', updateMobileActionsHeight)
     }
-  }, [isDesktopModalLayout, compositeHash])
+  }, [isDesktopModalLayout, compositeHash, viewMode])
+
+  const showsThumbnailStrip = viewMode !== 'minimal' && thumbnailStripItems.length > 1
 
   return createPortal(
-    <div className="fixed inset-0 z-[90] bg-black/72 p-4 md:p-6" onMouseDown={onClose}>
-      {canViewPrevious ? (
+    <div className={cn('fixed inset-0 z-[90] bg-black/72', viewMode === 'minimal' ? 'p-0' : 'p-4 md:p-6')} onMouseDown={onClose}>
+      {viewMode !== 'minimal' && canViewPrevious ? (
         <button
           type="button"
           className="absolute left-0 top-1/2 z-[91] hidden h-40 w-16 -translate-y-1/2 items-center justify-start bg-gradient-to-r from-black/34 via-black/12 to-transparent pl-3 text-white/72 transition hover:text-white xl:flex"
@@ -259,7 +300,7 @@ function ImageViewModal({
         </button>
       ) : null}
 
-      {canViewNext ? (
+      {viewMode !== 'minimal' && canViewNext ? (
         <button
           type="button"
           className="absolute right-0 top-1/2 z-[91] hidden h-40 w-16 -translate-y-1/2 items-center justify-end bg-gradient-to-l from-black/34 via-black/12 to-transparent pr-3 text-white/72 transition hover:text-white xl:flex"
@@ -273,57 +314,318 @@ function ImageViewModal({
         </button>
       ) : null}
 
-      <div
-        ref={containerRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="이미지 보기"
-        className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-6"
-        style={
-          isDesktopModalLayout
-            ? undefined
-            : { paddingBottom: `calc(env(safe-area-inset-bottom) + ${Math.ceil(mobileActionsHeight) + 16}px)` }
-        }
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="xl:min-h-0 xl:flex-1">
-          <ImageDetailView
-            compositeHash={compositeHash}
-            presentation="modal"
-            renderHeader={(controls) => (
-              <ImageViewModalActions
+      {viewMode === 'minimal' ? (
+        <ImageViewMinimalContent
+          compositeHash={compositeHash}
+          activeIndex={activeIndex}
+          totalCount={totalCount}
+          viewMode={viewMode}
+          onChangeViewMode={onChangeViewMode}
+          canViewPrevious={canViewPrevious}
+          canViewNext={canViewNext}
+          onClose={onClose}
+          onViewPrevious={onViewPrevious}
+          onViewNext={onViewNext}
+        />
+      ) : (
+        <div
+          ref={containerRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="이미지 보기"
+          className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-6"
+          style={
+            isDesktopModalLayout
+              ? undefined
+              : { paddingBottom: `calc(env(safe-area-inset-bottom) + ${Math.ceil(mobileActionsHeight) + 16}px)` }
+          }
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="xl:min-h-0 xl:flex-1">
+            {viewMode === 'full' ? (
+              <ImageDetailView
                 compositeHash={compositeHash}
-                activeIndex={activeIndex}
-                totalCount={totalCount}
-                canViewPrevious={canViewPrevious}
-                canViewNext={canViewNext}
-                controls={controls}
-                mobileActionsRef={mobileActionsRef}
-                onClose={onClose}
-                onViewPrevious={onViewPrevious}
-                onViewNext={onViewNext}
+                presentation="modal"
+                renderHeader={(controls) => (
+                  <ImageViewModalActions
+                    compositeHash={compositeHash}
+                    activeIndex={activeIndex}
+                    totalCount={totalCount}
+                    viewMode={viewMode}
+                    onChangeViewMode={onChangeViewMode}
+                    canViewPrevious={canViewPrevious}
+                    canViewNext={canViewNext}
+                    controls={controls}
+                    mobileActionsRef={mobileActionsRef}
+                    onClose={onClose}
+                    onViewPrevious={onViewPrevious}
+                    onViewNext={onViewNext}
+                  />
+                )}
+              />
+            ) : (
+              <ImageViewMediumContent
+                compositeHash={compositeHash}
+                renderHeader={(controls) => (
+                  <ImageViewModalActions
+                    compositeHash={compositeHash}
+                    activeIndex={activeIndex}
+                    totalCount={totalCount}
+                    viewMode={viewMode}
+                    onChangeViewMode={onChangeViewMode}
+                    canViewPrevious={canViewPrevious}
+                    canViewNext={canViewNext}
+                    controls={controls}
+                    mobileActionsRef={mobileActionsRef}
+                    onClose={onClose}
+                    onViewPrevious={onViewPrevious}
+                    onViewNext={onViewNext}
+                  />
+                )}
               />
             )}
-          />
-        </div>
-
-        {thumbnailStripItems.length > 1 ? (
-          <div className="mt-4 border-t border-border/70 pt-3 xl:mt-3 xl:shrink-0 xl:pt-3">
-            <ImageViewThumbnailStrip
-              items={thumbnailStripItems}
-              activeCompositeHash={compositeHash}
-              onSelect={(nextCompositeHash) =>
-                onSelectImage({
-                  compositeHash: nextCompositeHash,
-                  compositeHashes: thumbnailStripCompositeHashes,
-                })
-              }
-            />
           </div>
-        ) : null}
-      </div>
+
+          {showsThumbnailStrip ? (
+            <div className="mt-4 border-t border-border/70 pt-3 xl:mt-3 xl:shrink-0 xl:pt-3">
+              <ImageViewThumbnailStrip
+                items={thumbnailStripItems}
+                activeCompositeHash={compositeHash}
+                onSelect={(nextCompositeHash) =>
+                  onSelectImage({
+                    compositeHash: nextCompositeHash,
+                    compositeHashes: thumbnailStripCompositeHashes,
+                  })
+                }
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>,
     document.body,
+  )
+}
+
+interface ImageViewSurfaceContentProps {
+  compositeHash: string
+  renderHeader: (controls: ImageDetailViewHeaderControls) => ReactNode
+}
+
+function ImageViewMediumContent({ compositeHash, renderHeader }: ImageViewSurfaceContentProps) {
+  const imageQuery = useQuery({
+    queryKey: ['image-detail', compositeHash],
+    queryFn: () => getImage(compositeHash),
+    enabled: Boolean(compositeHash),
+  })
+
+  const image = imageQuery.data
+  const renderUrl = getImageDetailRenderUrl(image)
+  const downloadUrl = getImageDetailDownloadUrl(image)
+  const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
+  const mimeSummary = image?.mime_type || image?.file_type || '—'
+
+  const controls: ImageDetailViewHeaderControls = {
+    downloadName,
+    downloadUrl,
+    image,
+    isRefreshing: imageQuery.isFetching,
+    refresh: () => {
+      void imageQuery.refetch()
+    },
+  }
+
+  return (
+    <div className="space-y-6 xl:flex xl:min-h-0 xl:flex-col xl:space-y-0">
+      <div className="xl:pb-5">{renderHeader(controls)}</div>
+
+      {imageQuery.isLoading ? (
+        <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1.3fr)_360px]">
+          <Skeleton className="min-h-[540px] w-full rounded-sm" />
+          <div className="space-y-3">
+            <Skeleton className="h-24 w-full rounded-sm" />
+            <Skeleton className="h-20 w-full rounded-sm" />
+            <Skeleton className="h-20 w-full rounded-sm" />
+          </div>
+        </div>
+      ) : null}
+
+      {imageQuery.isError ? (
+        <Alert variant="destructive">
+          <AlertTitle>이미지 상세를 불러오지 못했어</AlertTitle>
+          <AlertDescription>{imageQuery.error instanceof Error ? imageQuery.error.message : '알 수 없는 오류가 발생했어.'}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {!imageQuery.isLoading && !imageQuery.isError && image ? (
+        <div className="grid gap-6 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1.3fr)_360px] xl:items-start">
+          <div className="overflow-hidden rounded-sm bg-surface-container shadow-[0_0_40px_rgba(14,14,14,0.22)] xl:min-h-0 xl:h-full">
+            <div className="flex min-h-[540px] items-center justify-center bg-surface-lowest xl:h-full xl:min-h-0">
+              <ImageDetailMedia image={image} renderUrl={renderUrl} className="max-h-[72vh] w-full object-contain xl:max-h-full" />
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-sm border border-border bg-surface-container p-4 text-sm text-muted-foreground">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em]">File</p>
+              <p className="mt-2 break-all text-sm font-medium text-foreground">{downloadName}</p>
+              <p className="mt-1 break-all font-mono text-[11px] text-foreground/60">{image.original_file_path || '—'}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <CompactMetaField label="Dimensions" value={image.width && image.height ? `${image.width} × ${image.height}` : '—'} />
+              <CompactMetaField label="File size" value={formatBytes(image.file_size)} />
+              <CompactMetaField label="Type" value={image.file_type || '—'} />
+              <CompactMetaField label="MIME" value={mimeSummary} />
+              <CompactMetaField label="Model" value={image.ai_metadata?.model_name || '—'} />
+              <CompactMetaField label="Composite hash" value={image.composite_hash || '—'} mono />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+interface ImageViewMinimalContentProps {
+  compositeHash: string
+  activeIndex: number
+  totalCount: number
+  viewMode: ImageViewModalMode
+  onChangeViewMode: (mode: ImageViewModalMode) => void
+  canViewPrevious: boolean
+  canViewNext: boolean
+  onClose: () => void
+  onViewPrevious: () => void
+  onViewNext: () => void
+}
+
+function ImageViewMinimalContent({
+  compositeHash,
+  activeIndex,
+  totalCount,
+  viewMode,
+  onChangeViewMode,
+  canViewPrevious,
+  canViewNext,
+  onClose,
+  onViewPrevious,
+  onViewNext,
+}: ImageViewMinimalContentProps) {
+  const navigate = useNavigate()
+  const imageQuery = useQuery({
+    queryKey: ['image-detail', compositeHash],
+    queryFn: () => getImage(compositeHash),
+    enabled: Boolean(compositeHash),
+  })
+
+  const image = imageQuery.data
+  const renderUrl = getImageDetailRenderUrl(image)
+  const downloadUrl = getImageDetailDownloadUrl(image)
+  const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
+  const showCounter = totalCount > 1 && activeIndex >= 0
+  const overlayButtonClassName = 'border-white/14 bg-black/42 text-white hover:bg-black/60 hover:text-white'
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="이미지 보기"
+      className="relative h-full w-full bg-black"
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <div className="absolute inset-x-0 top-0 z-[92] bg-gradient-to-b from-black/82 via-black/38 to-transparent px-4 pb-10 pt-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={onClose} aria-label="닫기" title="닫기">
+                <X className="h-4 w-4" />
+              </Button>
+              <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={onViewPrevious} disabled={!canViewPrevious} aria-label="이전 이미지" title="이전 이미지">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={onViewNext} disabled={!canViewNext} aria-label="다음 이미지" title="다음 이미지">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              {showCounter ? <div className="px-2 text-xs text-white/72">{activeIndex + 1} / {totalCount}</div> : null}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-white">{downloadName}</p>
+              <p className="truncate text-[11px] text-white/60">{image?.mime_type || image?.file_type || 'image'}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <ImageViewModeSwitcher viewMode={viewMode} onChangeViewMode={onChangeViewMode} tone="overlay" />
+            <Button
+              size="icon-sm"
+              variant="outline"
+              className={overlayButtonClassName}
+              onClick={() => {
+                navigate(`/images/${compositeHash}`)
+                onClose()
+              }}
+              aria-label="상세 페이지 열기"
+              title="상세 페이지"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+            {downloadUrl ? (
+              <Button size="icon-sm" variant="outline" className={overlayButtonClassName} asChild aria-label="다운로드" title="다운로드">
+                <a href={downloadUrl} download={downloadName} aria-label="다운로드" title="다운로드">
+                  <Download className="h-4 w-4" />
+                </a>
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex h-full items-center justify-center px-4 py-20">
+        {imageQuery.isLoading ? <Skeleton className="h-[68vh] w-full max-w-5xl rounded-sm bg-white/8" /> : null}
+        {imageQuery.isError ? (
+          <Alert variant="destructive" className="mx-auto max-w-xl">
+            <AlertTitle>이미지를 불러오지 못했어</AlertTitle>
+            <AlertDescription>{imageQuery.error instanceof Error ? imageQuery.error.message : '알 수 없는 오류가 발생했어.'}</AlertDescription>
+          </Alert>
+        ) : null}
+        {!imageQuery.isLoading && !imageQuery.isError && image ? (
+          <ImageDetailMedia image={image} renderUrl={renderUrl} className="max-h-[calc(100vh-8rem)] w-full max-w-full object-contain" />
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function CompactMetaField({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="rounded-sm bg-surface-lowest px-3 py-3">
+      <p className="text-[11px] uppercase tracking-[0.18em]">{label}</p>
+      <p className={cn('mt-2 text-foreground', mono && 'break-all font-mono text-xs text-foreground/90')}>{value}</p>
+    </div>
+  )
+}
+
+function ImageViewModeSwitcher({
+  viewMode,
+  onChangeViewMode,
+  tone = 'surface',
+}: {
+  viewMode: ImageViewModalMode
+  onChangeViewMode: (mode: ImageViewModalMode) => void
+  tone?: 'surface' | 'overlay'
+}) {
+  return (
+    <SegmentedControl
+      value={viewMode}
+      items={[
+        { value: 'full', label: '풀' },
+        { value: 'medium', label: '중간' },
+        { value: 'minimal', label: '초경량' },
+      ]}
+      onChange={(nextMode) => onChangeViewMode(nextMode as ImageViewModalMode)}
+      size="xs"
+      className={tone === 'overlay' ? 'border-white/12 bg-black/36 text-white backdrop-blur-sm' : undefined}
+    />
   )
 }
 
@@ -331,6 +633,8 @@ interface ImageViewModalActionsProps {
   compositeHash: string
   activeIndex: number
   totalCount: number
+  viewMode: ImageViewModalMode
+  onChangeViewMode: (mode: ImageViewModalMode) => void
   canViewPrevious: boolean
   canViewNext: boolean
   controls: ImageDetailViewHeaderControls
@@ -345,6 +649,8 @@ function ImageViewModalActions({
   compositeHash,
   activeIndex,
   totalCount,
+  viewMode,
+  onChangeViewMode,
   canViewPrevious,
   canViewNext,
   controls,
@@ -383,6 +689,7 @@ function ImageViewModalActions({
   )
 
   const groupAssignButton = <ImageGroupAssignAction image={controls.image} />
+  const modeSwitcher = <ImageViewModeSwitcher viewMode={viewMode} onChangeViewMode={onChangeViewMode} />
 
   const downloadButton = controls.downloadUrl ? (
     <Button size="icon-sm" asChild aria-label="다운로드" title="다운로드">
@@ -395,7 +702,10 @@ function ImageViewModalActions({
   return (
     <>
       <div className="hidden xl:flex xl:flex-wrap xl:items-center xl:justify-between xl:gap-3">
-        <div className="flex flex-wrap items-center gap-2">{navigationButtons}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {navigationButtons}
+          {modeSwitcher}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <ImageEditAction image={controls.image} />
           {groupAssignButton}
@@ -409,11 +719,14 @@ function ImageViewModalActions({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="rounded-sm border border-border bg-background/96 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)] backdrop-blur-md">
-          <div className="flex flex-wrap items-center gap-2">
-            {navigationButtons}
-            <ImageEditAction image={controls.image} />
-            {groupAssignButton}
-            {downloadButton}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {navigationButtons}
+              <ImageEditAction image={controls.image} />
+              {groupAssignButton}
+              {downloadButton}
+            </div>
+            {modeSwitcher}
           </div>
         </div>
       </div>
