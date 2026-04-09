@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Copy, EyeOff, GripVertical, Lock, Plus } from 'lucide-react'
+import { Copy, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Plus } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
@@ -85,6 +85,7 @@ export function WallpaperEditorPage() {
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null)
   const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null)
   const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null)
+  const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(false)
 
   const notifyInfo = (message: string) => showSnackbar({ message, tone: 'info' })
   const notifyError = (message: string) => showSnackbar({ message, tone: 'error' })
@@ -300,6 +301,10 @@ export function WallpaperEditorPage() {
             <Button asChild variant="outline">
               <Link to={draftRuntimePath}>초안 런타임 미리보기</Link>
             </Button>
+            <Button variant="outline" onClick={() => setIsCanvasFocusMode((current) => !current)}>
+              {isCanvasFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              {isCanvasFocusMode ? '집중 보기 종료' : '캔버스 집중 보기'}
+            </Button>
             {hasFixedRuntimeUrl ? (
               <Button asChild variant="outline">
                 <Link to={activeRuntimePath}>저장 프리셋 열기</Link>
@@ -389,8 +394,9 @@ export function WallpaperEditorPage() {
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
-        <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-4">
+      <div className={isCanvasFocusMode ? 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]' : 'grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_320px]'}>
+        {!isCanvasFocusMode ? (
+          <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-4">
           <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">위젯 라이브러리</h2>
           <div className="space-y-2">
             {listWallpaperWidgetDefinitions().map((widget) => (
@@ -410,9 +416,16 @@ export function WallpaperEditorPage() {
               </button>
             ))}
           </div>
-        </section>
+          </section>
+        ) : null}
 
         <div className="space-y-3">
+          {isCanvasFocusMode ? (
+            <div className="rounded-sm border border-border bg-surface-container/70 px-4 py-3 text-sm text-muted-foreground">
+              집중 보기에서는 캔버스를 넓게 보여줘서 실제 런타임 배치 감각을 더 가깝게 확인할 수 있어.
+            </div>
+          ) : null}
+
           <WallpaperCanvasView
             canvasPreset={canvasPreset}
             layoutPreset={layoutPreset}
