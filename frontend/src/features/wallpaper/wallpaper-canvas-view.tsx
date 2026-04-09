@@ -128,6 +128,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
   const [interactionPreview, setInteractionPreview] = useState<WallpaperInteractionPreview | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const interactionPreviewRef = useRef<WallpaperInteractionPreview | null>(null)
+  const isRuntimeMode = mode === 'runtime'
 
   const visibleWidgets = useMemo(
     () => layoutPreset.widgets.filter((widget) => !widget.hidden).sort((left, right) => left.zIndex - right.zIndex),
@@ -188,95 +189,115 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
     }
   }, [canvasPreset, interaction, mode, onUpdateWidgetFrame])
 
+  const canvasElement = (
+    <div
+      ref={canvasRef}
+      className={cn(
+        'relative overflow-hidden bg-background',
+        isRuntimeMode ? 'mx-auto' : 'mx-auto w-full rounded-sm border border-border/80',
+      )}
+      style={isRuntimeMode
+        ? {
+            aspectRatio: `${canvasPreset.width} / ${canvasPreset.height}`,
+            width: `min(100vw, calc(100vh * ${canvasPreset.width} / ${canvasPreset.height}))`,
+            maxWidth: '100vw',
+            maxHeight: '100vh',
+          }
+        : { aspectRatio: `${canvasPreset.width} / ${canvasPreset.height}` }}
+    >
+      <div
+        className="absolute inset-0 grid"
+        style={{
+          gridTemplateColumns: `repeat(${canvasPreset.gridColumns}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${canvasPreset.gridRows}, minmax(0, 1fr))`,
+          backgroundImage: isRuntimeMode
+            ? 'none'
+            : 'linear-gradient(to right, color-mix(in srgb, var(--border) 68%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--border) 68%, transparent) 1px, transparent 1px)',
+          backgroundSize: `${100 / canvasPreset.gridColumns}% ${100 / canvasPreset.gridRows}%`,
+        }}
+      >
+        {renderedWidgets.length === 0 ? (
+          <div className="col-span-full row-span-full flex items-center justify-center text-center text-sm text-muted-foreground">
+            Add a widget from the library to start building the wallpaper layout.
+          </div>
+        ) : null}
+        {renderedWidgets.map((widget) => (
+          <div
+            key={widget.id}
+            className="p-1.5"
+            style={{
+              gridColumn: `${widget.x + 1} / span ${widget.w}`,
+              gridRow: `${widget.y + 1} / span ${widget.h}`,
+            }}
+          >
+            <WallpaperWidgetCard
+              widget={widget}
+              mode={mode}
+              isSelected={selectedWidgetId === widget.id}
+              onSelectWidget={onSelectWidget}
+              onStartMove={(event) => {
+                if (mode !== 'editor' || widget.locked) {
+                  return
+                }
+                event.preventDefault()
+                onSelectWidget?.(widget.id)
+                interactionPreviewRef.current = null
+                setInteractionPreview(null)
+                setInteraction({
+                  kind: 'move',
+                  widgetId: widget.id,
+                  pointerId: event.pointerId,
+                  originClientX: event.clientX,
+                  originClientY: event.clientY,
+                  originWidget: {
+                    x: widget.x,
+                    y: widget.y,
+                    w: widget.w,
+                    h: widget.h,
+                  },
+                })
+              }}
+              onStartResize={(event) => {
+                if (mode !== 'editor' || widget.locked) {
+                  return
+                }
+                event.preventDefault()
+                event.stopPropagation()
+                onSelectWidget?.(widget.id)
+                interactionPreviewRef.current = null
+                setInteractionPreview(null)
+                setInteraction({
+                  kind: 'resize',
+                  widgetId: widget.id,
+                  pointerId: event.pointerId,
+                  originClientX: event.clientX,
+                  originClientY: event.clientY,
+                  originWidget: {
+                    x: widget.x,
+                    y: widget.y,
+                    w: widget.w,
+                    h: widget.h,
+                  },
+                })
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
+  if (isRuntimeMode) {
+    return canvasElement
+  }
+
   return (
     <div className="rounded-sm border border-border bg-surface-low p-3 sm:p-4">
       <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <span>{canvasPreset.name}</span>
         <span>{canvasPreset.aspectRatioLabel} · {canvasPreset.gridColumns}×{canvasPreset.gridRows} grid</span>
       </div>
-      <div
-        ref={canvasRef}
-        className="relative mx-auto w-full overflow-hidden rounded-sm border border-border/80 bg-background"
-        style={{ aspectRatio: `${canvasPreset.width} / ${canvasPreset.height}` }}
-      >
-        <div
-          className="absolute inset-0 grid"
-          style={{
-            gridTemplateColumns: `repeat(${canvasPreset.gridColumns}, minmax(0, 1fr))`,
-            gridTemplateRows: `repeat(${canvasPreset.gridRows}, minmax(0, 1fr))`,
-            backgroundImage: 'linear-gradient(to right, color-mix(in srgb, var(--border) 68%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--border) 68%, transparent) 1px, transparent 1px)',
-            backgroundSize: `${100 / canvasPreset.gridColumns}% ${100 / canvasPreset.gridRows}%`,
-          }}
-        >
-          {renderedWidgets.length === 0 ? (
-            <div className="col-span-full row-span-full flex items-center justify-center text-center text-sm text-muted-foreground">
-              Add a widget from the library to start building the wallpaper layout.
-            </div>
-          ) : null}
-          {renderedWidgets.map((widget) => (
-            <div
-              key={widget.id}
-              className="p-1.5"
-              style={{
-                gridColumn: `${widget.x + 1} / span ${widget.w}`,
-                gridRow: `${widget.y + 1} / span ${widget.h}`,
-              }}
-            >
-              <WallpaperWidgetCard
-                widget={widget}
-                mode={mode}
-                isSelected={selectedWidgetId === widget.id}
-                onSelectWidget={onSelectWidget}
-                onStartMove={(event) => {
-                  if (mode !== 'editor' || widget.locked) {
-                    return
-                  }
-                  event.preventDefault()
-                  onSelectWidget?.(widget.id)
-                  interactionPreviewRef.current = null
-                  setInteractionPreview(null)
-                  setInteraction({
-                    kind: 'move',
-                    widgetId: widget.id,
-                    pointerId: event.pointerId,
-                    originClientX: event.clientX,
-                    originClientY: event.clientY,
-                    originWidget: {
-                      x: widget.x,
-                      y: widget.y,
-                      w: widget.w,
-                      h: widget.h,
-                    },
-                  })
-                }}
-                onStartResize={(event) => {
-                  if (mode !== 'editor' || widget.locked) {
-                    return
-                  }
-                  event.preventDefault()
-                  event.stopPropagation()
-                  onSelectWidget?.(widget.id)
-                  interactionPreviewRef.current = null
-                  setInteractionPreview(null)
-                  setInteraction({
-                    kind: 'resize',
-                    widgetId: widget.id,
-                    pointerId: event.pointerId,
-                    originClientX: event.clientX,
-                    originClientY: event.clientY,
-                    originWidget: {
-                      x: widget.x,
-                      y: widget.y,
-                      w: widget.w,
-                      h: widget.h,
-                    },
-                  })
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
+      {canvasElement}
     </div>
   )
 }

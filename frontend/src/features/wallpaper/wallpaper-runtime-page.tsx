@@ -1,8 +1,5 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { PageHeader } from '@/components/common/page-header'
-import { Button } from '@/components/ui/button'
 import { getAppSettings } from '@/lib/api-settings'
 import { getWallpaperCanvasPreset } from './wallpaper-canvas-presets'
 import { buildWallpaperStarterLayout, cloneWallpaperPresetToDraft, loadWallpaperLayoutDraft } from './wallpaper-layout-utils'
@@ -32,17 +29,7 @@ export function WallpaperRuntimePage() {
   const canvasPreset = getWallpaperCanvasPreset(layoutPreset.canvasPresetId)
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Wallpaper"
-        title="Wallpaper Runtime"
-        actions={(
-          <Button asChild variant="outline">
-            <Link to="/wallpaper">Back to Editor</Link>
-          </Button>
-        )}
-      />
-
+    <div className="flex min-h-screen items-center justify-center overflow-hidden bg-background">
       <WallpaperCanvasView
         canvasPreset={canvasPreset}
         layoutPreset={layoutPreset}

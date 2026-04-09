@@ -28,6 +28,7 @@ export function AppShell() {
 
 function AppShellLayout() {
   const location = useLocation()
+  const isWallpaperRuntime = location.pathname === '/wallpaper/runtime'
   const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')
   const navScrollRef = useRef<HTMLDivElement | null>(null)
   const navDragPointerIdRef = useRef<number | null>(null)
@@ -41,8 +42,6 @@ function AppShellLayout() {
   useEffect(() => {
     const navScrollElement = navScrollRef.current
     if (!navScrollElement) {
-      setCanScrollNavLeft(false)
-      setCanScrollNavRight(false)
       return
     }
 
@@ -84,6 +83,15 @@ function AppShellLayout() {
     window.setTimeout(() => {
       suppressNavClickRef.current = false
     }, 0)
+  }
+
+  if (isWallpaperRuntime) {
+    return (
+      <div className="min-h-screen bg-background text-foreground overflow-hidden">
+        <Outlet />
+        {shouldUseGlobalScrollRestoration ? <ScrollRestoration getKey={(location) => `${location.pathname}${location.search}`} /> : null}
+      </div>
+    )
   }
 
   return (
