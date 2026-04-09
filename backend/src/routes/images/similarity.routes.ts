@@ -111,11 +111,33 @@ router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) =
 router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
   try {
     const { isHash, value } = parseImageIdentifier(routeParam(routeParam(req.params.id)));
-    const threshold = parseInt(req.query.threshold as string) || SIMILARITY_THRESHOLDS.SIMILAR;
-    const limit = parseInt(req.query.limit as string) || PAGINATION.GROUP_IMAGES_LIMIT;
+    const parseIntegerWithFallback = (value: unknown, fallback: number) => {
+      const parsed = Number.parseInt(String(value ?? ''), 10);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    const parseNumberWithFallback = (value: unknown, fallback: number) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+
+    const threshold = parseIntegerWithFallback(req.query.threshold, SIMILARITY_THRESHOLDS.SIMILAR);
+    const limit = parseIntegerWithFallback(req.query.limit, PAGINATION.GROUP_IMAGES_LIMIT);
     const includeColorSimilarity = req.query.includeColorSimilarity === 'true';
+    const useMetadataFilter = req.query.useMetadataFilter === 'true';
     const sortBy = (req.query.sortBy as 'similarity' | 'upload_date' | 'file_size') || 'similarity';
     const sortOrder = (req.query.sortOrder as 'ASC' | 'DESC') || 'DESC';
+    const weights = {
+      perceptualHash: parseNumberWithFallback(req.query.perceptualWeight, 50),
+      dHash: parseNumberWithFallback(req.query.dHashWeight, 30),
+      aHash: parseNumberWithFallback(req.query.aHashWeight, 20),
+      color: parseNumberWithFallback(req.query.colorWeight, includeColorSimilarity ? 15 : 0),
+    };
+    const thresholds = {
+      perceptualHash: parseIntegerWithFallback(req.query.perceptualThreshold, threshold),
+      dHash: parseIntegerWithFallback(req.query.dHashThreshold, Math.min(64, threshold + 3)),
+      aHash: parseIntegerWithFallback(req.query.aHashThreshold, Math.min(64, threshold + 5)),
+      color: parseNumberWithFallback(req.query.colorThreshold, 0),
+    };
 
     let image;
     let similar;
@@ -136,6 +158,9 @@ router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
         threshold,
         limit,
         includeColorSimilarity,
+        weights,
+        thresholds,
+        useMetadataFilter,
         sortBy,
         sortOrder
       });
@@ -155,6 +180,9 @@ router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
         threshold,
         limit,
         includeColorSimilarity,
+        weights,
+        thresholds,
+        useMetadataFilter,
         sortBy,
         sortOrder
       });
@@ -333,6 +361,8 @@ router.post('/similarity/rebuild', asyncHandler(async (req: Request, res: Respon
         const success = await ImageSimilarityModel.updateHash(
           imageData.composite_hash,
           result.hashes.perceptualHash,
+          result.hashes.dHash,
+          result.hashes.aHash,
           ImageSimilarityService.serializeHistogram(result.colorHistogram)
         );
 

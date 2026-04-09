@@ -721,7 +721,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" />
+      <PageHeader title="설정" />
 
       <div className={cn('grid gap-8', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />

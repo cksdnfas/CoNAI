@@ -154,6 +154,19 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       detailSimilarThreshold: 15,
       detailSimilarLimit: 24,
       detailSimilarIncludeColorSimilarity: false,
+      detailSimilarWeights: {
+        perceptualHash: 50,
+        dHash: 30,
+        aHash: 20,
+        color: 0,
+      },
+      detailSimilarThresholds: {
+        perceptualHash: 15,
+        dHash: 18,
+        aHash: 20,
+        color: 0,
+      },
+      detailSimilarUseMetadataFilter: false,
       detailSimilarSortBy: 'similarity',
       detailSimilarSortOrder: 'DESC',
       promptSimilarity: {
@@ -242,6 +255,14 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
     similarity: {
       ...defaults.similarity,
       ...loadedSettings.similarity,
+      detailSimilarWeights: {
+        ...defaults.similarity.detailSimilarWeights,
+        ...loadedSettings.similarity?.detailSimilarWeights,
+      },
+      detailSimilarThresholds: {
+        ...defaults.similarity.detailSimilarThresholds,
+        ...loadedSettings.similarity?.detailSimilarThresholds,
+      },
       promptSimilarity: {
         ...defaults.similarity.promptSimilarity,
         ...loadedSettings.similarity?.promptSimilarity,

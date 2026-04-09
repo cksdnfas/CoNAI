@@ -1,10 +1,8 @@
 import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { ToggleRow } from '@/components/ui/toggle-row'
-import type { SimilaritySettings } from '@/types/settings'
 import type { SimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
 
@@ -16,6 +14,40 @@ interface SimilaritySettingsPanelProps {
   onToggle: () => void
   onPatchDraft: (patch: Partial<SimilaritySettingsDraft>) => void
   onApply: () => void
+}
+
+interface SimilarityNumberFieldProps {
+  label: string
+  min: number
+  max: number
+  step?: number
+  value: number
+  variant?: 'detail' | 'detailNested'
+  onChange: (value: number) => void
+}
+
+function SimilarityNumberField({
+  label,
+  min,
+  max,
+  step = 1,
+  value,
+  variant = 'detailNested',
+  onChange,
+}: SimilarityNumberFieldProps) {
+  return (
+    <div className="space-y-2">
+      <label className={detailSettingsLabelClassName}>{label}</label>
+      <ScrubbableNumberInput
+        min={min}
+        max={max}
+        step={step}
+        variant={variant}
+        value={value}
+        onChange={(nextValue) => onChange(Number(nextValue))}
+      />
+    </div>
+  )
 }
 
 export function SimilaritySettingsPanel({
@@ -34,58 +66,116 @@ export function SimilaritySettingsPanel({
         onToggle={onToggle}
         triggerLabel={isOpen ? '이미지 유사도 설정 닫기' : '이미지 유사도 설정 열기'}
         triggerTitle="이미지 유사도 설정"
-        panelWidthClassName="w-[min(26rem,calc(100vw-2rem))]"
+        panelWidthClassName="w-[min(32rem,calc(100vw-2rem))]"
         icon={<Settings2 className="h-4 w-4" />}
       >
         {draft ? (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <label className={detailSettingsLabelClassName}>Threshold</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={1}
-                  max={64}
-                  step={1}
-                  value={draft.detailSimilarThreshold}
-                  onChange={(event) => onPatchDraft({ detailSimilarThreshold: Number(event.target.value) })}
-                  className="w-full"
-                />
-                <span className="w-10 text-right text-sm text-foreground">{draft.detailSimilarThreshold}</span>
-              </div>
-            </div>
-
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className={detailSettingsLabelClassName}>Limit</label>
-                <Input type="number" min={1} max={100} variant="detail" value={draft.detailSimilarLimit} onChange={(event) => onPatchDraft({ detailSimilarLimit: Number(event.target.value) })} />
-              </div>
-
-              <div className="space-y-2">
-                <label className={detailSettingsLabelClassName}>Sort By</label>
-                <Select variant="detail" value={draft.detailSimilarSortBy} onChange={(event) => onPatchDraft({ detailSimilarSortBy: event.target.value as SimilaritySettings['detailSimilarSortBy'] })}>
-                  <option value="similarity">Similarity</option>
-                  <option value="upload_date">Upload date</option>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <label className={detailSettingsLabelClassName}>Sort Order</label>
-                <Select variant="detail" value={draft.detailSimilarSortOrder} onChange={(event) => onPatchDraft({ detailSimilarSortOrder: event.target.value as SimilaritySettings['detailSimilarSortOrder'] })}>
-                  <option value="DESC">DESC</option>
-                  <option value="ASC">ASC</option>
-                </Select>
-              </div>
+              <SimilarityNumberField
+                label="결과 수"
+                min={1}
+                max={100}
+                step={1}
+                variant="detail"
+                value={draft.detailSimilarLimit}
+                onChange={(value) => onPatchDraft({ detailSimilarLimit: value })}
+              />
 
               <ToggleRow variant="detail">
                 <input
                   type="checkbox"
-                  checked={draft.detailSimilarIncludeColorSimilarity}
-                  onChange={(event) => onPatchDraft({ detailSimilarIncludeColorSimilarity: event.target.checked })}
+                  checked={draft.detailSimilarUseMetadataFilter}
+                  onChange={(event) => onPatchDraft({ detailSimilarUseMetadataFilter: event.target.checked })}
                   className="h-4 w-4"
                 />
-                색상 유사도 포함
+                비슷한 해상도만 우선 보기
               </ToggleRow>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                <h3 className="text-sm font-semibold text-foreground">혼합 비중</h3>
+
+                <SimilarityNumberField
+                  label="pHash 비중"
+                  min={0}
+                  max={100}
+                  value={draft.detailSimilarWeights.perceptualHash}
+                  onChange={(value) => onPatchDraft({ detailSimilarWeights: { ...draft.detailSimilarWeights, perceptualHash: value } })}
+                />
+
+                <SimilarityNumberField
+                  label="dHash 비중"
+                  min={0}
+                  max={100}
+                  value={draft.detailSimilarWeights.dHash}
+                  onChange={(value) => onPatchDraft({ detailSimilarWeights: { ...draft.detailSimilarWeights, dHash: value } })}
+                />
+
+                <SimilarityNumberField
+                  label="aHash 비중"
+                  min={0}
+                  max={100}
+                  value={draft.detailSimilarWeights.aHash}
+                  onChange={(value) => onPatchDraft({ detailSimilarWeights: { ...draft.detailSimilarWeights, aHash: value } })}
+                />
+
+                <SimilarityNumberField
+                  label="색상 비중"
+                  min={0}
+                  max={100}
+                  value={draft.detailSimilarWeights.color}
+                  onChange={(value) => onPatchDraft({
+                    detailSimilarIncludeColorSimilarity: value > 0 || draft.detailSimilarThresholds.color > 0,
+                    detailSimilarWeights: { ...draft.detailSimilarWeights, color: value },
+                  })}
+                />
+              </div>
+
+              <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                <h3 className="text-sm font-semibold text-foreground">항목별 허용 범위</h3>
+
+                <SimilarityNumberField
+                  label="pHash 허용 거리"
+                  min={0}
+                  max={64}
+                  value={draft.detailSimilarThresholds.perceptualHash}
+                  onChange={(value) => onPatchDraft({
+                    detailSimilarThreshold: value,
+                    detailSimilarThresholds: { ...draft.detailSimilarThresholds, perceptualHash: value },
+                  })}
+                />
+
+                <SimilarityNumberField
+                  label="dHash 허용 거리"
+                  min={0}
+                  max={64}
+                  value={draft.detailSimilarThresholds.dHash}
+                  onChange={(value) => onPatchDraft({ detailSimilarThresholds: { ...draft.detailSimilarThresholds, dHash: value } })}
+                />
+
+                <SimilarityNumberField
+                  label="aHash 허용 거리"
+                  min={0}
+                  max={64}
+                  value={draft.detailSimilarThresholds.aHash}
+                  onChange={(value) => onPatchDraft({ detailSimilarThresholds: { ...draft.detailSimilarThresholds, aHash: value } })}
+                />
+
+                <SimilarityNumberField
+                  label="색상 최소 유사도"
+                  min={0}
+                  max={100}
+                  value={draft.detailSimilarThresholds.color}
+                  onChange={(value) => onPatchDraft({
+                    detailSimilarIncludeColorSimilarity: value > 0 || draft.detailSimilarWeights.color > 0,
+                    detailSimilarThresholds: { ...draft.detailSimilarThresholds, color: value },
+                  })}
+                />
+
+                <p className="text-xs text-muted-foreground">숫자 입력칸은 좌우 드래그로도 조절할 수 있어.</p>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">

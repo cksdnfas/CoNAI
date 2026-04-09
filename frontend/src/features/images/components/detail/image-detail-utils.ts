@@ -57,6 +57,9 @@ export interface SimilaritySettingsDraft {
   detailSimilarThreshold: number
   detailSimilarLimit: number
   detailSimilarIncludeColorSimilarity: boolean
+  detailSimilarWeights: SimilaritySettings['detailSimilarWeights']
+  detailSimilarThresholds: SimilaritySettings['detailSimilarThresholds']
+  detailSimilarUseMetadataFilter: boolean
   detailSimilarSortBy: SimilaritySettings['detailSimilarSortBy']
   detailSimilarSortOrder: SimilaritySettings['detailSimilarSortOrder']
 }

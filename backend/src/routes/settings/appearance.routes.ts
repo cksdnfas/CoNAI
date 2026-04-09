@@ -205,8 +205,6 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
   const boundedIntegers: Array<{ key: keyof Pick<AppearanceThemeSettings,
     'fontScalePercent' |
     'textScalePercent' |
-    'searchBoxWidth' |
-    'searchDrawerWidth' |
     'desktopSearchMinWidth' |
     'desktopNavMinWidth' |
     'desktopPageColumnsMinWidth' |
@@ -216,8 +214,6 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
   >; min: number; max: number }> = [
     { key: 'fontScalePercent', min: 85, max: 200 },
     { key: 'textScalePercent', min: 85, max: 200 },
-    { key: 'searchBoxWidth', min: 240, max: 640 },
-    { key: 'searchDrawerWidth', min: 320, max: 720 },
     { key: 'desktopSearchMinWidth', min: 640, max: 1600 },
     { key: 'desktopNavMinWidth', min: 768, max: 1800 },
     { key: 'desktopPageColumnsMinWidth', min: 768, max: 1800 },

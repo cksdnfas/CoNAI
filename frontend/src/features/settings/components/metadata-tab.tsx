@@ -23,7 +23,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }
           <CardContent className="space-y-4">
             <SectionHeading
               variant="inside"
-              heading="Metadata"
+              heading="메타데이터"
               actions={
                 <Button size="sm" onClick={onSave} disabled={!metadataDraft || isSaving}>
                   <Save className="h-4 w-4" />

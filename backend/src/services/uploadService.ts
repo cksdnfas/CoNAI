@@ -188,6 +188,8 @@ export class UploadService {
           await ImageSimilarityModel.updateHash(
             file.composite_hash,
             result.hashes.perceptualHash,
+            result.hashes.dHash,
+            result.hashes.aHash,
             ImageSimilarityService.serializeHistogram(result.colorHistogram)
           );
 

@@ -63,11 +63,28 @@ export interface PromptSimilaritySettings {
   fieldThresholds: PromptSimilarityFieldThresholds
 }
 
+export interface SimilarityComponentWeights {
+  perceptualHash: number
+  dHash: number
+  aHash: number
+  color: number
+}
+
+export interface SimilarityComponentThresholds {
+  perceptualHash: number
+  dHash: number
+  aHash: number
+  color: number
+}
+
 export interface SimilaritySettings {
   autoGenerateHashOnUpload: boolean
   detailSimilarThreshold: number
   detailSimilarLimit: number
   detailSimilarIncludeColorSimilarity: boolean
+  detailSimilarWeights: SimilarityComponentWeights
+  detailSimilarThresholds: SimilarityComponentThresholds
+  detailSimilarUseMetadataFilter: boolean
   detailSimilarSortBy: SimilaritySortBy
   detailSimilarSortOrder: SimilaritySortOrder
   promptSimilarity: PromptSimilaritySettings
@@ -113,8 +130,6 @@ export interface AppearanceThemeSettings {
   textScalePercent: number
   bodyFontWeightPreset: BodyFontWeightPreset
   emphasisFontWeightPreset: EmphasisFontWeightPreset
-  searchBoxWidth: number
-  searchDrawerWidth: number
   desktopSearchMinWidth: number
   desktopNavMinWidth: number
   desktopPageColumnsMinWidth: number

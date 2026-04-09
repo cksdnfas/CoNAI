@@ -255,7 +255,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
           'theme-floating-panel fixed bottom-0 right-0 top-[var(--theme-shell-header-height)] z-40 flex h-[calc(100vh-var(--theme-shell-header-height))] max-w-full flex-col transition-transform duration-300',
           isDrawerOpen ? 'translate-x-0' : 'translate-x-full',
         )}
-        style={{ width: 'min(calc(100vw - 0.75rem), var(--theme-search-drawer-width))' }}
+        style={{ width: 'min(calc(100vw - 0.75rem), 420px)' }}
       >
         <div className="theme-drawer-header flex items-center justify-between border-b border-white/5">
           <div className="text-2xl font-semibold tracking-tight text-foreground">search</div>

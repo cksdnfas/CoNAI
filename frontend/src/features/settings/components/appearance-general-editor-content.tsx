@@ -159,30 +159,6 @@ export function AppearanceGeneralEditorContent({
       <section className="space-y-4">
         <EditorSectionLead title="검색 / 반응형" />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <SettingsField label="검색창 너비 (px)">
-            <Input
-              type="number"
-              min={240}
-              max={640}
-              step={10}
-              variant="settings"
-              value={appearanceDraft.searchBoxWidth}
-              onChange={(event) => onPatchAppearance({ searchBoxWidth: Number.parseInt(event.target.value || '380', 10) })}
-            />
-          </SettingsField>
-
-          <SettingsField label="검색 패널 너비 (px)">
-            <Input
-              type="number"
-              min={320}
-              max={720}
-              step={10}
-              variant="settings"
-              value={appearanceDraft.searchDrawerWidth}
-              onChange={(event) => onPatchAppearance({ searchDrawerWidth: Number.parseInt(event.target.value || '420', 10) })}
-            />
-          </SettingsField>
-
           <SettingsField label="데스크톱 본문 2칼럼 전환폭 (px)">
             <Input
               type="number"

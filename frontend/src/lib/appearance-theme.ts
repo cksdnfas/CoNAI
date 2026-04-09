@@ -204,8 +204,6 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--font-weight-extrabold': emphasisFontWeight.extrabold,
     '--theme-ui-scale': `${appearance.fontScalePercent / 100}`,
     '--theme-text-scale': `${appearance.textScalePercent / 100}`,
-    '--theme-search-box-width': `${appearance.searchBoxWidth}px`,
-    '--theme-search-drawer-width': `${appearance.searchDrawerWidth}px`,
     '--theme-selection-outline-width': `${appearance.selectionOutlineWidth}px`,
     '--theme-selection-outline-width-strong': `calc(${appearance.selectionOutlineWidth}px + 1px)`,
     '--theme-badge-positive': appearance.positiveBadgeColor,

@@ -8,12 +8,39 @@ export type SimilarityMatchType = 'exact' | 'near-duplicate' | 'similar' | 'colo
 /**
  * 유사 이미지 정보
  */
+export interface SimilarityHashComponentScore {
+  available: boolean;
+  used: boolean;
+  weight: number;
+  threshold: number;
+  passed: boolean;
+  distance?: number;
+  similarity?: number;
+}
+
+export interface SimilarityColorComponentScore {
+  available: boolean;
+  used: boolean;
+  weight: number;
+  threshold: number;
+  passed: boolean;
+  similarity?: number;
+}
+
+export interface SimilarityComponentScores {
+  perceptualHash: SimilarityHashComponentScore;
+  dHash: SimilarityHashComponentScore;
+  aHash: SimilarityHashComponentScore;
+  color: SimilarityColorComponentScore;
+}
+
 export interface SimilarImage {
   image: ImageRecord;
   similarity: number;          // 0-100 유사도 점수 (100이 가장 유사)
   hammingDistance: number;     // Hamming distance (낮을수록 유사)
   matchType: SimilarityMatchType;
   colorSimilarity?: number;    // 색상 유사도 (0-100, 선택적)
+  componentScores?: SimilarityComponentScores;
 }
 
 /**
@@ -39,9 +66,22 @@ export interface ColorHistogram {
  * 유사도 검색 옵션
  */
 export interface SimilaritySearchOptions {
-  threshold?: number;          // Hamming distance 임계값 (기본: 15)
+  threshold?: number;          // 레거시 pHash 임계값 (기본: 15)
   limit?: number;              // 결과 최대 개수 (기본: 20)
   includeColorSimilarity?: boolean;  // 색상 유사도 포함 여부
+  weights?: {
+    perceptualHash?: number;
+    dHash?: number;
+    aHash?: number;
+    color?: number;
+  };
+  thresholds?: {
+    perceptualHash?: number;
+    dHash?: number;
+    aHash?: number;
+    color?: number;
+  };
+  useMetadataFilter?: boolean;
   sortBy?: 'similarity' | 'upload_date' | 'file_size';
   sortOrder?: 'ASC' | 'DESC';
 }

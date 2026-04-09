@@ -1,5 +1,6 @@
 import fs from 'fs'
 import { createComfyUIService } from '../comfyuiService'
+import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
 import { saveArtifactBuffer, saveMetadataArtifact } from './artifacts'
 import {
   bufferToDataUrl,
@@ -56,10 +57,11 @@ export async function executeComfyModule(context: ExecutionContext, node: GraphW
     preparedPromptData[field.id] = uploadedName
   }
 
+  const resolvedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui')
   const substitutedWorkflow = comfyService.substitutePromptData(
     JSON.stringify(workflowJson),
     markedFields,
-    preparedPromptData,
+    resolvedPromptData,
   )
 
   const { imagePaths } = await comfyService.generateImages({} as any, substitutedWorkflow)

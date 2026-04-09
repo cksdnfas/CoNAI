@@ -90,6 +90,15 @@ export async function getSimilarImages(
     threshold?: number
     limit?: number
     includeColorSimilarity?: boolean
+    perceptualWeight?: number
+    dHashWeight?: number
+    aHashWeight?: number
+    colorWeight?: number
+    perceptualThreshold?: number
+    dHashThreshold?: number
+    aHashThreshold?: number
+    colorThreshold?: number
+    useMetadataFilter?: boolean
     sortBy?: SimilaritySortBy
     sortOrder?: SimilaritySortOrder
   },
@@ -98,6 +107,15 @@ export async function getSimilarImages(
   searchParams.set('threshold', String(params?.threshold ?? 15))
   searchParams.set('limit', String(params?.limit ?? 24))
   searchParams.set('includeColorSimilarity', String(params?.includeColorSimilarity ?? false))
+  searchParams.set('perceptualWeight', String(params?.perceptualWeight ?? 50))
+  searchParams.set('dHashWeight', String(params?.dHashWeight ?? 30))
+  searchParams.set('aHashWeight', String(params?.aHashWeight ?? 20))
+  searchParams.set('colorWeight', String(params?.colorWeight ?? 0))
+  searchParams.set('perceptualThreshold', String(params?.perceptualThreshold ?? params?.threshold ?? 15))
+  searchParams.set('dHashThreshold', String(params?.dHashThreshold ?? 18))
+  searchParams.set('aHashThreshold', String(params?.aHashThreshold ?? 20))
+  searchParams.set('colorThreshold', String(params?.colorThreshold ?? 0))
+  searchParams.set('useMetadataFilter', String(params?.useMetadataFilter ?? false))
   searchParams.set('sortBy', params?.sortBy ?? 'similarity')
   searchParams.set('sortOrder', params?.sortOrder ?? 'DESC')
 

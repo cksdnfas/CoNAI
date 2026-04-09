@@ -6,6 +6,7 @@ import {
   SimilaritySearchOptions,
   DuplicateSearchOptions,
   SimilarityMatchType,
+  SimilarityComponentScores,
   SIMILARITY_THRESHOLDS
 } from '../../types/similarity';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
@@ -23,13 +24,15 @@ export class ImageSimilarityModel {
   static async updateHash(
     compositeHash: string,
     perceptualHash: string,
+    dHash: string,
+    aHash: string,
     colorHistogram: string
   ): Promise<boolean> {
     const info = db.prepare(`
       UPDATE media_metadata
-      SET perceptual_hash = ?, color_histogram = ?, metadata_updated_date = CURRENT_TIMESTAMP
+      SET perceptual_hash = ?, dhash = ?, ahash = ?, color_histogram = ?, metadata_updated_date = CURRENT_TIMESTAMP
       WHERE composite_hash = ?
-    `).run(perceptualHash, colorHistogram, compositeHash);
+    `).run(perceptualHash, dHash, aHash, colorHistogram, compositeHash);
 
     return info.changes > 0;
   }
@@ -41,6 +44,8 @@ export class ImageSimilarityModel {
   static async updateHashByImageId(
     imageId: number,
     perceptualHash: string,
+    dHash: string,
+    aHash: string,
     colorHistogram: string
   ): Promise<boolean> {
     // image_files를 통해 composite_hash 조회
@@ -57,7 +62,53 @@ export class ImageSimilarityModel {
       return false;
     }
 
-    return await this.updateHash(file.composite_hash, perceptualHash, colorHistogram);
+    return await this.updateHash(file.composite_hash, perceptualHash, dHash, aHash, colorHistogram);
+  }
+
+  private static getSimilarityWeights(options: SimilaritySearchOptions) {
+    return {
+      perceptualHash: Math.max(0, options.weights?.perceptualHash ?? 50),
+      dHash: Math.max(0, options.weights?.dHash ?? 30),
+      aHash: Math.max(0, options.weights?.aHash ?? 20),
+      color: Math.max(0, options.weights?.color ?? (options.includeColorSimilarity ? 15 : 0)),
+    };
+  }
+
+  private static getSimilarityThresholds(options: SimilaritySearchOptions) {
+    const legacyThreshold = options.threshold ?? SIMILARITY_THRESHOLDS.SIMILAR;
+    return {
+      perceptualHash: Math.max(0, Math.min(64, options.thresholds?.perceptualHash ?? legacyThreshold)),
+      dHash: Math.max(0, Math.min(64, options.thresholds?.dHash ?? Math.min(64, legacyThreshold + 3))),
+      aHash: Math.max(0, Math.min(64, options.thresholds?.aHash ?? Math.min(64, legacyThreshold + 5))),
+      color: Math.max(0, Math.min(100, options.thresholds?.color ?? 0)),
+    };
+  }
+
+  private static buildSimilarCandidateQuery(targetImage: ImageMetadataRecord, useMetadataFilter: boolean) {
+    let query = `
+      SELECT
+        im.*,
+        if.id as file_id,
+        if.original_file_path,
+        if.file_size,
+        if.mime_type,
+        if.file_status
+      FROM media_metadata im
+      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+      WHERE im.composite_hash != ? AND im.perceptual_hash IS NOT NULL
+    `;
+    const params: any[] = [targetImage.composite_hash];
+
+    if (useMetadataFilter && targetImage.width && targetImage.height) {
+      const widthMin = targetImage.width * 0.9;
+      const widthMax = targetImage.width * 1.1;
+      const heightMin = targetImage.height * 0.9;
+      const heightMax = targetImage.height * 1.1;
+      query += ' AND im.width BETWEEN ? AND ? AND im.height BETWEEN ? AND ?';
+      params.push(widthMin, widthMax, heightMin, heightMax);
+    }
+
+    return { query, params };
   }
 
   /**
@@ -170,12 +221,14 @@ export class ImageSimilarityModel {
     options: SimilaritySearchOptions = {}
   ): Promise<SimilarImage[]> {
     const {
-      threshold = SIMILARITY_THRESHOLDS.SIMILAR,
       limit = 20,
-      includeColorSimilarity = false,
       sortBy = 'similarity',
       sortOrder = 'DESC'
     } = options;
+
+    const weights = this.getSimilarityWeights(options);
+    const thresholds = this.getSimilarityThresholds(options);
+    const useMetadataFilter = options.useMetadataFilter ?? false;
 
     // 대상 이미지 조회
     const targetImage = db.prepare('SELECT * FROM media_metadata WHERE composite_hash = ?').get(compositeHash) as ImageMetadataRecord | undefined;
@@ -186,78 +239,173 @@ export class ImageSimilarityModel {
       throw new Error('Perceptual hash not available for this image. Please rebuild similarity hashes.');
     }
 
-    // 모든 이미지 조회 (자신 제외) - image_files와 JOIN하여 파일 경로 포함
-    const candidates = db.prepare(`
-      SELECT
-        im.*,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_size,
-        if.mime_type,
-        if.file_status
-      FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
-      WHERE im.composite_hash != ? AND im.perceptual_hash IS NOT NULL
-    `).all(compositeHash) as any[];
+    const { query, params } = this.buildSimilarCandidateQuery(targetImage, useMetadataFilter);
+    const candidates = db.prepare(query).all(...params) as any[];
 
-    // Hamming distance 계산 및 필터링
+    const includeColorSimilarity = Boolean(options.includeColorSimilarity || weights.color > 0 || thresholds.color > 0);
+    let targetHistogram = null as ReturnType<typeof ImageSimilarityService.deserializeHistogram> | null;
+    if (includeColorSimilarity && targetImage.color_histogram) {
+      try {
+        targetHistogram = ImageSimilarityService.deserializeHistogram(targetImage.color_histogram);
+      } catch (error) {
+        console.warn('Failed to deserialize target color histogram:', error);
+      }
+    }
+
     const results: SimilarImage[] = [];
     for (const candidate of candidates) {
       if (!candidate.perceptual_hash) continue;
 
-      const hammingDistance = ImageSimilarityService.calculateHammingDistance(
-        targetImage.perceptual_hash,
-        candidate.perceptual_hash
-      );
+      let weightedScoreSum = 0;
+      let activeWeightSum = 0;
+      const distanceSamples: number[] = [];
+      let colorSimilarity: number | undefined;
+      let shouldSkip = false;
+      const componentScores: SimilarityComponentScores = {
+        perceptualHash: {
+          available: Boolean(targetImage.perceptual_hash && candidate.perceptual_hash),
+          used: false,
+          weight: weights.perceptualHash,
+          threshold: thresholds.perceptualHash,
+          passed: true,
+        },
+        dHash: {
+          available: Boolean(targetImage.dhash && candidate.dhash),
+          used: false,
+          weight: weights.dHash,
+          threshold: thresholds.dHash,
+          passed: true,
+        },
+        aHash: {
+          available: Boolean(targetImage.ahash && candidate.ahash),
+          used: false,
+          weight: weights.aHash,
+          threshold: thresholds.aHash,
+          passed: true,
+        },
+        color: {
+          available: Boolean(targetHistogram && candidate.color_histogram),
+          used: false,
+          weight: weights.color,
+          threshold: thresholds.color,
+          passed: true,
+        },
+      };
 
-      if (hammingDistance <= threshold) {
-        const similarity = ImageSimilarityService.hammingDistanceToSimilarity(hammingDistance);
-        const matchType = ImageSimilarityService.determineMatchType(hammingDistance);
-
-        const similarImage: SimilarImage = {
-          image: candidate as any, // ImageMetadataRecord를 ImageRecord처럼 사용
-          similarity,
-          hammingDistance,
-          matchType
-        };
-
-        // 색상 유사도 계산 (옵션)
-        if (includeColorSimilarity && targetImage.color_histogram && candidate.color_histogram) {
-          try {
-            const targetHist = ImageSimilarityService.deserializeHistogram(targetImage.color_histogram);
-            const candidateHist = ImageSimilarityService.deserializeHistogram(candidate.color_histogram);
-            similarImage.colorSimilarity = ImageSimilarityService.calculateColorSimilarity(
-              targetHist,
-              candidateHist
-            );
-          } catch (error) {
-            console.warn('Failed to calculate color similarity:', error);
-          }
+      const applyHashMetric = (
+        key: keyof Omit<SimilarityComponentScores, 'color'>,
+        targetHash: string | null | undefined,
+        candidateHash: string | null | undefined,
+        weight: number,
+        threshold: number,
+      ) => {
+        if (!targetHash || !candidateHash) {
+          componentScores[key].passed = false;
+          return;
         }
 
-        results.push(similarImage);
+        const distance = ImageSimilarityService.calculateHammingDistance(targetHash, candidateHash);
+        const similarityScore = ImageSimilarityService.hammingDistanceToSimilarity(distance);
+        componentScores[key] = {
+          ...componentScores[key],
+          used: weight > 0,
+          passed: distance <= threshold,
+          distance,
+          similarity: similarityScore,
+        };
+
+        if (weight <= 0) {
+          return;
+        }
+
+        if (distance > threshold) {
+          shouldSkip = true;
+          return;
+        }
+
+        distanceSamples.push(distance);
+        weightedScoreSum += similarityScore * weight;
+        activeWeightSum += weight;
+      };
+
+      applyHashMetric('perceptualHash', targetImage.perceptual_hash, candidate.perceptual_hash, weights.perceptualHash, thresholds.perceptualHash);
+      if (shouldSkip) continue;
+      applyHashMetric('dHash', targetImage.dhash, candidate.dhash, weights.dHash, thresholds.dHash);
+      if (shouldSkip) continue;
+      applyHashMetric('aHash', targetImage.ahash, candidate.ahash, weights.aHash, thresholds.aHash);
+      if (shouldSkip) continue;
+
+      if (targetHistogram && candidate.color_histogram) {
+        try {
+          const candidateHistogram = ImageSimilarityService.deserializeHistogram(candidate.color_histogram);
+          colorSimilarity = ImageSimilarityService.calculateColorSimilarity(targetHistogram, candidateHistogram);
+          componentScores.color = {
+            ...componentScores.color,
+            used: weights.color > 0,
+            passed: colorSimilarity >= thresholds.color,
+            similarity: colorSimilarity,
+          };
+
+          if (weights.color > 0) {
+            if (colorSimilarity < thresholds.color) {
+              continue;
+            }
+            weightedScoreSum += colorSimilarity * weights.color;
+            activeWeightSum += weights.color;
+          }
+        } catch (error) {
+          componentScores.color.passed = false;
+          console.warn('Failed to calculate color similarity:', error);
+        }
       }
+
+      if (activeWeightSum <= 0) {
+        const fallbackDistance = ImageSimilarityService.calculateHammingDistance(targetImage.perceptual_hash, candidate.perceptual_hash);
+        if (fallbackDistance > thresholds.perceptualHash) {
+          continue;
+        }
+        distanceSamples.push(fallbackDistance);
+        weightedScoreSum = ImageSimilarityService.hammingDistanceToSimilarity(fallbackDistance);
+        activeWeightSum = 1;
+      }
+
+      const averageDistance = distanceSamples.length > 0
+        ? distanceSamples.reduce((sum, value) => sum + value, 0) / distanceSamples.length
+        : 64;
+      const roundedAverageDistance = Math.round(averageDistance * 100) / 100;
+      const similarity = Math.round((weightedScoreSum / activeWeightSum) * 100) / 100;
+      const matchType: SimilarityMatchType = distanceSamples.length > 0
+        ? ImageSimilarityService.determineMatchType(Math.round(averageDistance))
+        : 'color-similar';
+
+      results.push({
+        image: candidate as any,
+        similarity,
+        hammingDistance: roundedAverageDistance,
+        matchType,
+        ...(colorSimilarity !== undefined ? { colorSimilarity } : {}),
+        componentScores,
+      });
     }
 
-    // 정렬
     results.sort((a, b) => {
       let comparison = 0;
 
       if (sortBy === 'similarity') {
-        comparison = a.hammingDistance - b.hammingDistance; // 낮을수록 유사
+        comparison = a.similarity - b.similarity;
       } else if (sortBy === 'upload_date') {
         const aDate = (a.image as any).first_seen_date || (a.image as any).upload_date;
         const bDate = (b.image as any).first_seen_date || (b.image as any).upload_date;
         comparison = new Date(aDate).getTime() - new Date(bDate).getTime();
       } else if (sortBy === 'file_size') {
-        // file_size는 media_metadata에 없으므로 스킵
-        comparison = 0;
+        const aSize = Number((a.image as any).file_size || 0);
+        const bSize = Number((b.image as any).file_size || 0);
+        comparison = aSize - bSize;
       }
 
       return sortOrder === 'ASC' ? comparison : -comparison;
     });
 
-    // 제한 개수만큼 반환
     return results.slice(0, limit);
   }
 

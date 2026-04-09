@@ -1,6 +1,8 @@
 /**
  * NovelAI metadata normalization helpers shared by direct generation and graph execution.
  */
+import { WildcardService } from '../../services/wildcardService'
+
 
 export interface NAICharacterPrompt {
   prompt: string
@@ -68,6 +70,20 @@ export interface NAIMetadataInputParams extends Omit<NAIMetadataParams, 'charact
 
 const CHARACTER_GRID_VALUES = [0.1, 0.3, 0.5, 0.7, 0.9] as const
 
+/** Parse one NAI prompt-like string when it contains wildcard syntax. */
+function parseNaiWildcardText(value: string | undefined) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  const trimmedValue = value.trim()
+  if (!trimmedValue.includes('++')) {
+    return trimmedValue
+  }
+
+  return WildcardService.parseWildcards(trimmedValue, 'nai')
+}
+
 /** Parse JSON-or-array payloads into a safe array shape. */
 function normalizeListInput(value: unknown): unknown[] {
   if (!value) {
@@ -108,7 +124,7 @@ function normalizeCharacters(value: NAIMetadataInputParams['characters']): NAICh
     }
 
     const rawEntry = entry as Record<string, unknown>
-    const prompt = typeof rawEntry.prompt === 'string' ? rawEntry.prompt.trim() : ''
+    const prompt = typeof rawEntry.prompt === 'string' ? parseNaiWildcardText(rawEntry.prompt) : ''
     if (!prompt) {
       continue
     }
@@ -118,7 +134,7 @@ function normalizeCharacters(value: NAIMetadataInputParams['characters']): NAICh
 
     normalized.push({
       prompt,
-      uc: typeof rawEntry.uc === 'string' ? rawEntry.uc.trim() : undefined,
+      uc: typeof rawEntry.uc === 'string' ? parseNaiWildcardText(rawEntry.uc) : undefined,
       center_x: snapCharacterGridValue(Number.isFinite(centerX) ? centerX : 0.5),
       center_y: snapCharacterGridValue(Number.isFinite(centerY) ? centerY : 0.5),
     })
@@ -193,8 +209,8 @@ function normalizeCharacterReferences(value: NAIMetadataInputParams['character_r
 export function preprocessMetadata(params: NAIMetadataInputParams): NAIMetadataParams {
   const metadata: NAIMetadataParams = {
     ...params,
-    prompt: typeof params.prompt === 'string' ? params.prompt.trim() : '',
-    negative_prompt: typeof params.negative_prompt === 'string' ? params.negative_prompt.trim() : '',
+    prompt: parseNaiWildcardText(params.prompt),
+    negative_prompt: parseNaiWildcardText(params.negative_prompt),
     characters: normalizeCharacters(params.characters),
     vibes: normalizeVibes(params.vibes),
     character_refs: normalizeCharacterReferences(params.character_refs),

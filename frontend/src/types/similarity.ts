@@ -1,11 +1,38 @@
 import type { ImageRecord } from '@/types/image'
 
+export interface SimilarityHashComponentScore {
+  available: boolean
+  used: boolean
+  weight: number
+  threshold: number
+  passed: boolean
+  distance?: number
+  similarity?: number
+}
+
+export interface SimilarityColorComponentScore {
+  available: boolean
+  used: boolean
+  weight: number
+  threshold: number
+  passed: boolean
+  similarity?: number
+}
+
+export interface SimilarityComponentScores {
+  perceptualHash: SimilarityHashComponentScore
+  dHash: SimilarityHashComponentScore
+  aHash: SimilarityHashComponentScore
+  color: SimilarityColorComponentScore
+}
+
 export interface SimilarImage {
   image: ImageRecord
   similarity: number
   hammingDistance: number
   matchType: 'exact' | 'near-duplicate' | 'similar' | 'color-similar'
   colorSimilarity?: number
+  componentScores?: SimilarityComponentScores
 }
 
 export interface SimilarityQueryResult {

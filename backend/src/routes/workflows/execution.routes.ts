@@ -11,6 +11,7 @@ import { GenerationHistoryService } from '../../services/generationHistoryServic
 import type { GeneratedImageSaveOptions } from '../../utils/fileSaver';
 import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
+import { resolveWorkflowPromptValues } from '../../services/workflowPromptValueResolver';
 
 const router = Router();
 
@@ -120,10 +121,11 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
     const comfyService = createComfyUIService(apiEndpoint);
     const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [];
     const preparedPromptData = await prepareWorkflowPromptData(comfyService, markedFields, prompt_data);
+    const resolvedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui');
     const substitutedWorkflow = comfyService.substitutePromptData(
       workflow.workflow_json,
       markedFields,
-      preparedPromptData,
+      resolvedPromptData,
     );
 
     // 전송 데이터 로깅
@@ -132,13 +134,13 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
       workflow_name: workflow.name,
       server: serverName,
       endpoint: apiEndpoint,
-      prompt_data_keys: Object.keys(preparedPromptData),
-      prompt_data_size: JSON.stringify(preparedPromptData).length
+      prompt_data_keys: Object.keys(resolvedPromptData),
+      prompt_data_size: JSON.stringify(resolvedPromptData).length
     });
 
     // Parse workflow to extract generation parameters
     const workflowJson = JSON.parse(workflow.workflow_json);
-    const extractedParams = ComfyUIWorkflowParser.extractWithSubstitution(workflowJson, preparedPromptData);
+    const extractedParams = ComfyUIWorkflowParser.extractWithSubstitution(workflowJson, resolvedPromptData);
 
     console.log('📊 Extracted workflow parameters:', {
       positive: extractedParams.positivePrompt.substring(0, 50) + '...',

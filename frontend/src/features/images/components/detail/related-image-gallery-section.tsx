@@ -20,6 +20,7 @@ interface RelatedImageGallerySectionProps {
   mobileCardColumns?: number
   desktopCardColumns?: number
   cardAspectRatio?: RelatedImageCardAspectRatio
+  renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
 }
 
 function getRelatedImageCardAspectRatioValue(ratio: RelatedImageCardAspectRatio): string | undefined {
@@ -47,6 +48,7 @@ export function RelatedImageGallerySection({
   mobileCardColumns = 1,
   desktopCardColumns = 3,
   cardAspectRatio = 'square',
+  renderItemPersistentOverlay,
 }: RelatedImageGallerySectionProps) {
   const navigate = useNavigate()
   const imageViewModal = useImageViewModal()
@@ -118,6 +120,7 @@ export function RelatedImageGallerySection({
               href={relatedImage.composite_hash ? `/images/${relatedImage.composite_hash}` : undefined}
               gridItemAspectRatio={cardAspectRatioValue}
               onActivate={(_, imageId, href) => handleActivate(imageId, href)}
+              renderPersistentOverlay={renderItemPersistentOverlay?.(relatedImage)}
             />
           ))}
         </div>

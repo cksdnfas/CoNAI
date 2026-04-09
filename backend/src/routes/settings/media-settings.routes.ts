@@ -46,6 +46,39 @@ router.put(
       return;
     }
 
+    if (similaritySettings.detailSimilarUseMetadataFilter !== undefined && typeof similaritySettings.detailSimilarUseMetadataFilter !== 'boolean') {
+      res.status(400).json({
+        success: false,
+        error: 'detailSimilarUseMetadataFilter must be a boolean',
+      });
+      return;
+    }
+
+    const validateRange = (value: unknown, label: string, min: number, max: number) => {
+      if (value !== undefined && (!Number.isFinite(value as number) || Number(value) < min || Number(value) > max)) {
+        res.status(400).json({
+          success: false,
+          error: `${label} must be between ${min} and ${max}`,
+        });
+        return false;
+      }
+      return true;
+    };
+
+    if (similaritySettings.detailSimilarWeights) {
+      if (!validateRange(similaritySettings.detailSimilarWeights.perceptualHash, 'detailSimilarWeights.perceptualHash', 0, 100)) return;
+      if (!validateRange(similaritySettings.detailSimilarWeights.dHash, 'detailSimilarWeights.dHash', 0, 100)) return;
+      if (!validateRange(similaritySettings.detailSimilarWeights.aHash, 'detailSimilarWeights.aHash', 0, 100)) return;
+      if (!validateRange(similaritySettings.detailSimilarWeights.color, 'detailSimilarWeights.color', 0, 100)) return;
+    }
+
+    if (similaritySettings.detailSimilarThresholds) {
+      if (!validateRange(similaritySettings.detailSimilarThresholds.perceptualHash, 'detailSimilarThresholds.perceptualHash', 0, 64)) return;
+      if (!validateRange(similaritySettings.detailSimilarThresholds.dHash, 'detailSimilarThresholds.dHash', 0, 64)) return;
+      if (!validateRange(similaritySettings.detailSimilarThresholds.aHash, 'detailSimilarThresholds.aHash', 0, 64)) return;
+      if (!validateRange(similaritySettings.detailSimilarThresholds.color, 'detailSimilarThresholds.color', 0, 100)) return;
+    }
+
     if (similaritySettings.detailSimilarSortBy !== undefined) {
       const validSortBy = ['similarity', 'upload_date', 'file_size'];
       if (!validSortBy.includes(similaritySettings.detailSimilarSortBy)) {

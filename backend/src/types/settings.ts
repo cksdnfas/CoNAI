@@ -74,11 +74,28 @@ export interface PromptSimilaritySettings {
   fieldThresholds: PromptSimilarityFieldThresholds;
 }
 
+export interface SimilarityComponentWeights {
+  perceptualHash: number;
+  dHash: number;
+  aHash: number;
+  color: number;
+}
+
+export interface SimilarityComponentThresholds {
+  perceptualHash: number;
+  dHash: number;
+  aHash: number;
+  color: number;
+}
+
 export interface SimilaritySettings {
   autoGenerateHashOnUpload: boolean;      // 업로드 시 자동 해시 생성 여부
-  detailSimilarThreshold: number;         // 상세 페이지 유사 이미지 범위 (Hamming distance)
+  detailSimilarThreshold: number;         // 레거시 pHash 범위 호환값
   detailSimilarLimit: number;             // 상세 페이지 유사 이미지 최대 개수
   detailSimilarIncludeColorSimilarity: boolean; // 색상 유사도 포함 여부
+  detailSimilarWeights: SimilarityComponentWeights;
+  detailSimilarThresholds: SimilarityComponentThresholds;
+  detailSimilarUseMetadataFilter: boolean;
   detailSimilarSortBy: 'similarity' | 'upload_date' | 'file_size';
   detailSimilarSortOrder: 'ASC' | 'DESC';
   promptSimilarity: PromptSimilaritySettings;
@@ -124,8 +141,6 @@ export interface AppearanceThemeSettings {
   textScalePercent: number;
   bodyFontWeightPreset: BodyFontWeightPreset;
   emphasisFontWeightPreset: EmphasisFontWeightPreset;
-  searchBoxWidth: number;
-  searchDrawerWidth: number;
   desktopSearchMinWidth: number;
   desktopNavMinWidth: number;
   desktopPageColumnsMinWidth: number;

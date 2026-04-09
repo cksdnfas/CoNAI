@@ -49,6 +49,14 @@ export function applySimilaritySettingsUpdate(currentSettings: AppSettings, simi
     similarity: {
       ...currentSettings.similarity,
       ...similaritySettings,
+      detailSimilarWeights: {
+        ...currentSettings.similarity.detailSimilarWeights,
+        ...similaritySettings.detailSimilarWeights,
+      },
+      detailSimilarThresholds: {
+        ...currentSettings.similarity.detailSimilarThresholds,
+        ...similaritySettings.detailSimilarThresholds,
+      },
       promptSimilarity: {
         ...currentSettings.similarity.promptSimilarity,
         ...similaritySettings.promptSimilarity,
@@ -67,8 +75,13 @@ export function applySimilaritySettingsUpdate(currentSettings: AppSettings, simi
 
 /** Build the next settings state after applying an appearance-settings patch. */
 export function applyAppearanceSettingsUpdate(currentSettings: AppSettings, appearanceSettings: Partial<AppearanceSettings>): AppSettings {
+  const {
+    searchBoxWidth: _searchBoxWidth,
+    searchDrawerWidth: _searchDrawerWidth,
+    ...currentAppearanceWithoutLegacySearchWidths
+  } = currentSettings.appearance as AppearanceSettings & { searchBoxWidth?: number; searchDrawerWidth?: number };
   const nextAppearance = {
-    ...currentSettings.appearance,
+    ...currentAppearanceWithoutLegacySearchWidths,
     ...appearanceSettings,
   };
   const desktopPageColumnsMinWidth = nextAppearance.desktopPageColumnsMinWidth;

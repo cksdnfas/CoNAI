@@ -20,6 +20,7 @@ interface ImageListItemProps {
   itemId?: string
   onActivate?: (image: ImageRecord, itemId: string, href?: string) => void
   renderOverlay?: ReactNode
+  renderPersistentOverlay?: ReactNode
 }
 
 /** Prevent native media dragging so drag gestures can be used for selection. */
@@ -38,6 +39,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   itemId,
   onActivate,
   renderOverlay,
+  renderPersistentOverlay,
 }: ImageListItemProps) {
   const previewUrl = getImageListPreviewUrl(image)
   const imageId = itemId ?? getImageListItemId(image)
@@ -121,6 +123,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     >
       <div className="relative bg-surface-lowest select-none">
         {content}
+        {renderPersistentOverlay ? <div className="absolute inset-x-0 bottom-0 z-30 p-2">{renderPersistentOverlay}</div> : null}
         {quickActions}
         <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
       </div>

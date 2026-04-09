@@ -434,8 +434,6 @@ export const DEFAULT_APPEARANCE_THEME: AppearanceThemeSettings = {
   textScalePercent: 100,
   bodyFontWeightPreset: 'regular',
   emphasisFontWeightPreset: 'standard',
-  searchBoxWidth: 380,
-  searchDrawerWidth: 420,
   desktopSearchMinWidth: 1280,
   desktopNavMinWidth: 1280,
   desktopPageColumnsMinWidth: 1280,
