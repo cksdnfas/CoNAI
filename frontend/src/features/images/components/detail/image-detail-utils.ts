@@ -1,5 +1,6 @@
 import type { ImageRecord } from '@/types/image'
 import type { SimilaritySettings } from '@/types/settings'
+import { getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 
 export function formatBytes(value?: number | null) {
   if (!value) return '—'
@@ -23,17 +24,13 @@ export function getDownloadName(path?: string | null, compositeHash?: string | n
   return compositeHash ? `${compositeHash}.png` : 'image'
 }
 
-/** Build the in-app render URL for the main detail media view. */
+/** Build the in-app render URL for the main detail media view, thumbnail first with original fallback. */
 export function getImageDetailRenderUrl(image?: ImageRecord | null) {
   if (!image) {
     return null
   }
 
-  if (image.composite_hash) {
-    return `/api/images/${image.composite_hash}/file`
-  }
-
-  return image.image_url || image.thumbnail_url || null
+  return getImageListPreviewUrl(image)
 }
 
 /** Build the original-file download URL for the detail header actions. */

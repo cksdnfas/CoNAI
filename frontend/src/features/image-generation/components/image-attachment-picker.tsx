@@ -251,7 +251,7 @@ function ImageAttachmentSelectionCard({
         {image && previewUrl ? (
           <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
             <InlineMediaPreview
-              src={image.image_url || image.thumbnail_url}
+              src={previewUrl}
               mimeType={image.mime_type}
               fileName={fileName}
               alt={fileName ?? 'selected image'}
