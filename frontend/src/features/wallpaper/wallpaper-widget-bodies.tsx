@@ -88,7 +88,7 @@ function getWallpaperTransitionStateClassName(transitionStyle: WallpaperImageTra
 function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal' }: WallpaperPreviewImageSurfaceProps) {
   const [currentImage, setCurrentImage] = useState<WallpaperWidgetPreviewImage>({ src, alt })
   const [previousImage, setPreviousImage] = useState<WallpaperWidgetPreviewImage | null>(null)
-  const [isTransitionActive, setIsTransitionActive] = useState(false)
+  const [isTransitionActive, setIsTransitionActive] = useState(true)
   const currentImageRef = useRef<WallpaperWidgetPreviewImage>({ src, alt })
   const transitionTimeoutRef = useRef<number | null>(null)
   const transitionDurationMs = WALLPAPER_IMAGE_TRANSITION_DURATIONS[transitionSpeed]
@@ -119,7 +119,7 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
 
       if (transitionStyle === 'none') {
         setPreviousImage(null)
-        setIsTransitionActive(false)
+        setIsTransitionActive(true)
         return
       }
 
@@ -130,7 +130,7 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
       })
       transitionTimeoutRef.current = window.setTimeout(() => {
         setPreviousImage(null)
-        setIsTransitionActive(false)
+        setIsTransitionActive(true)
         transitionTimeoutRef.current = null
       }, transitionDurationMs)
     })
@@ -164,7 +164,7 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
         className={cn(
           'absolute inset-0 h-full w-full transition-[opacity,transform,filter] will-change-transform',
           imageClassName,
-          onOpenImage ? 'group-hover:scale-[1.03]' : undefined,
+          onOpenImage ? 'group-hover/image-surface:scale-[1.03]' : undefined,
           getWallpaperTransitionStateClassName(transitionStyle, 'current', isTransitionActive),
         )}
         style={imageLayerStyle}
@@ -186,7 +186,7 @@ function WallpaperPreviewImageSurface({ src, alt, className, imageClassName, sty
   return (
     <button
       type="button"
-      className={cn(className, 'group relative isolate cursor-zoom-in')}
+      className={cn(className, 'group/image-surface relative isolate cursor-zoom-in')}
       style={style}
       onClick={(event) => {
         event.stopPropagation()
@@ -218,14 +218,14 @@ function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstanc
     return (
       <div className="grid h-full grid-cols-[1fr_auto] gap-3">
         <div className="flex min-w-0 flex-col justify-center rounded-sm border border-border/70 bg-surface-low px-3 py-3">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-secondary">Now</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-secondary">지금</div>
           <div className="mt-1 flex items-end gap-2 text-3xl font-semibold tracking-[-0.08em] text-foreground sm:text-4xl">
             <span>{hourText}:{minuteText}</span>
             {showSeconds ? <span className="pb-0.5 text-base text-muted-foreground sm:text-lg">{secondText}</span> : null}
           </div>
         </div>
         <div className="flex w-20 flex-col justify-between rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--secondary)_16%,transparent),transparent),var(--surface-low)] px-3 py-3 text-right">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Clock</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">시계</div>
           <div className="text-xs text-muted-foreground">{dateText}</div>
         </div>
       </div>
@@ -271,7 +271,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   }, [queueQuery.data])
 
   if (queueQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Queue loading…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">큐 상태 불러오는 중…</div>
   }
 
   if (queueQuery.isError) {
@@ -279,10 +279,10 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   }
 
   const queueItems = [
-    { label: 'Queued', value: queueSummary.queued, tone: 'var(--secondary)', short: 'Q' },
-    { label: 'Running', value: queueSummary.running, tone: '#3ddc97', short: 'R' },
-    { label: 'Failed', value: queueSummary.failed, tone: '#ff6b6b', short: 'F' },
-    { label: 'Workflows', value: queueSummary.workflows, tone: 'var(--primary)', short: 'W' },
+    { label: '대기', value: queueSummary.queued, tone: 'var(--secondary)', short: 'Q' },
+    { label: '실행', value: queueSummary.running, tone: '#3ddc97', short: 'R' },
+    { label: '실패', value: queueSummary.failed, tone: '#ff6b6b', short: 'F' },
+    { label: '워크플로', value: queueSummary.workflows, tone: 'var(--primary)', short: 'W' },
   ]
   const maxValue = Math.max(...queueItems.map((item) => item.value), 1)
   const totalActive = queueSummary.queued + queueSummary.running
@@ -292,11 +292,11 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
       <div className="flex h-full flex-col justify-center gap-3 rounded-sm bg-[linear-gradient(180deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_55%)] px-1 py-1 text-xs sm:text-sm">
         <div className="mb-0.5 flex items-center justify-between gap-2 rounded-sm border border-border/60 bg-background/45 px-3 py-2 backdrop-blur-sm">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Queue</div>
-            <div className="text-sm font-semibold text-foreground">{totalActive.toLocaleString('ko-KR')} active</div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">큐</div>
+            <div className="text-sm font-semibold text-foreground">{totalActive.toLocaleString('ko-KR')} 진행 중</div>
           </div>
           <div className="rounded-full border border-border/70 bg-surface-low px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            {queueSummary.failed > 0 ? 'Attention' : 'Stable'}
+            {queueSummary.failed > 0 ? '주의' : '안정'}
           </div>
         </div>
 
@@ -311,13 +311,13 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
                   </span>
                   <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
                 </div>
-                <div className={cn('text-sm font-semibold text-foreground', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+                <div className={cn('text-sm font-semibold text-foreground', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}>
                   {item.value.toLocaleString('ko-KR')}
                 </div>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-surface-lowest/90">
                 <div
-                  className={cn('h-full rounded-full transition-[width] duration-700 ease-out', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}
+                  className={cn('h-full rounded-full transition-[width] duration-700 ease-out', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}
                   style={{
                     width: `${ratio * 100}%`,
                     background: `linear-gradient(90deg, ${item.tone}, color-mix(in srgb, ${item.tone} 68%, white))`,
@@ -341,11 +341,11 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
           return (
             <div key={item.label} className="relative flex flex-col items-center justify-center overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_54%),var(--surface-low)] px-2 py-3">
               <div
-                className={cn('absolute inset-0 opacity-60', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}
+                className={cn('absolute inset-0 opacity-60', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}
                 style={{ background: `radial-gradient(circle at center, color-mix(in srgb, ${item.tone} 18%, transparent), transparent 62%)` }}
               />
               <div
-                className={cn('relative flex h-14 w-14 items-center justify-center rounded-full border border-border/60 text-sm font-semibold text-foreground transition-transform', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}
+                className={cn('relative flex h-14 w-14 items-center justify-center rounded-full border border-border/60 text-sm font-semibold text-foreground transition-transform', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}
                 style={{ background: `conic-gradient(${item.tone} 0deg ${degrees}deg, color-mix(in srgb, var(--surface-lowest) 92%, transparent) ${degrees}deg 360deg)` }}
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-background/92 shadow-[0_0_20px_rgba(0,0,0,0.18)] backdrop-blur-sm">
@@ -366,7 +366,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
         <div key={item.label} className="relative overflow-hidden rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--background)_20%,transparent),transparent),var(--surface-low)] px-2 py-3">
           <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: item.tone }} />
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
-          <div className={cn('mt-1 text-lg font-semibold text-foreground', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+          <div className={cn('mt-1 text-lg font-semibold text-foreground', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}>
             {item.value.toLocaleString('ko-KR')}
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-lowest/90">
@@ -420,14 +420,14 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
         }
 
         const execution = executionById.get(finalResult.source_execution_id ?? finalResult.execution_id)
-        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? 'Workflow') : 'Workflow'
+        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? '워크플로') : '워크플로'
 
         return [{
           id: `final-${finalResult.id}`,
           previewUrl,
           workflowName,
           createdLabel: formatDateTime(finalResult.created_date),
-          badge: 'Final',
+          badge: '최종',
         }]
       })
 
@@ -444,14 +444,14 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
         }
 
         const execution = executionById.get(artifact.execution_id)
-        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? 'Workflow') : 'Workflow'
+        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? '워크플로') : '워크플로'
 
         return [{
           id: `artifact-${artifact.id}`,
           previewUrl,
           workflowName,
           createdLabel: formatDateTime(artifact.created_date),
-          badge: 'Live',
+          badge: '실시간',
         }]
       })
 
@@ -461,7 +461,7 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
   const stackIndex = useWallpaperRotatingIndex(recentEntries.length, shiftInterval, displayMode === 'stack' && recentEntries.length > 1)
 
   if (resultsQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Results loading…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">최근 결과 불러오는 중…</div>
   }
 
   if (resultsQuery.isError) {
@@ -477,7 +477,7 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
     return (
       <div className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_40%),var(--surface-low)]">
         {recentEntries.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">No recent image results yet.</div>
+          <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">아직 최근 이미지 결과가 없어.</div>
         ) : null}
 
         {stackedEntries.map(({ entry, order }) => {
@@ -518,7 +518,7 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
 
         {recentEntries.length > 1 ? (
           <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/90 backdrop-blur-sm">
-            Stack
+            스택
           </div>
         ) : null}
       </div>
@@ -529,7 +529,7 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
     <div className={cn('grid h-full gap-2', visibleCount >= 4 ? 'grid-cols-2' : 'grid-cols-1')}>
       {recentEntries.length === 0 ? (
         <div className="col-span-full flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
-          No recent image results yet.
+          아직 최근 이미지 결과가 없어.
         </div>
       ) : null}
 
@@ -573,11 +573,11 @@ function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { widget: Ex
   const previewQuery = useWallpaperGroupPreviewImagesQuery('group-image-view', groupId, includeChildren, visibleCount)
 
   if (groupId === null) {
-    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">Select a group in the inspector.</div>
+    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">설정에서 그룹을 선택해.</div>
   }
 
   if (previewQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Group preview loading…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">그룹 미리보기 불러오는 중…</div>
   }
 
   if (previewQuery.isError) {
@@ -602,7 +602,7 @@ function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { widget: Ex
     >
       {images.length === 0 ? (
         <div className="col-span-full flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
-          This group has no preview images yet.
+          이 그룹에는 아직 미리보기 이미지가 없어.
         </div>
       ) : null}
       {images.map((image, index) => {
@@ -630,7 +630,7 @@ function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { widget: Ex
           <WallpaperPreviewImageSurface
             key={`group-grid-slot-${index}`}
             src={imageUrl}
-            alt="Group preview"
+            alt="그룹 미리보기"
             onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
             transitionStyle={imageTransitionStyle}
             transitionSpeed={imageTransitionSpeed}
@@ -644,16 +644,11 @@ function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { widget: Ex
             className="flex h-full min-h-16 items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-surface-low text-xs text-muted-foreground transition-transform duration-200 ease-out will-change-transform"
             style={{ transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})` }}
           >
-            No image
+            이미지 없음
           </div>
         )
       })}
 
-      {motionMode !== 'static' ? (
-        <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/90 backdrop-blur-sm">
-          {motionMode === 'pointer' ? 'Reactive' : 'Ambient'}
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -669,11 +664,11 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
   const previewQuery = useWallpaperGroupPreviewImagesQuery('floating-collage', groupId, includeChildren, visibleCount)
 
   if (groupId === null) {
-    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">Select a group in the inspector.</div>
+    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">설정에서 그룹을 선택해.</div>
   }
 
   if (previewQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Collage loading…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">콜라주 불러오는 중…</div>
   }
 
   if (previewQuery.isError) {
@@ -693,7 +688,7 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
   return (
     <div className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_14%,transparent),transparent_42%),var(--surface-low)]">
       {images.length === 0 ? (
-        <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">No collage images available.</div>
+        <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">표시할 콜라주 이미지가 없어.</div>
       ) : null}
 
       {images.map((image, index) => {
@@ -709,7 +704,7 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
           <WallpaperPreviewImageSurface
             key={String(image.composite_hash ?? image.id ?? index)}
             src={imageUrl}
-            alt="Floating collage"
+            alt="플로팅 콜라주"
             onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
             className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_14px_40px_rgba(0,0,0,0.34)] transition-transform duration-200 ease-out will-change-transform"
             imageClassName="h-full w-full object-cover"
@@ -735,13 +730,13 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
               transform: `translate3d(${translateX}px, ${translateY}px, 0) rotate(${rotate}deg) scale(${scale})`,
             }}
           >
-            No image
+            이미지 없음
           </div>
         )
       })}
 
       {images.length > 0 ? <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_42%,color-mix(in_srgb,var(--background)_26%,transparent))]" /> : null}
-      <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/90 backdrop-blur-sm">Collage</div>
+      <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/90 backdrop-blur-sm">콜라주</div>
     </div>
   )
 }
@@ -770,19 +765,19 @@ function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widget: Ext
     return (
       <div className="flex h-full items-end rounded-sm border border-border/70 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--secondary)_24%,transparent),transparent_55%),linear-gradient(180deg,transparent,color-mix(in_srgb,var(--primary)_10%,transparent)),var(--surface-low)] p-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.18em] text-secondary">Featured</div>
-          <div className="text-sm font-medium text-foreground">Choose a group to drive this showcase.</div>
+          <div className="text-xs uppercase tracking-[0.18em] text-secondary">대표 이미지</div>
+          <div className="text-sm font-medium text-foreground">설정에서 쇼케이스용 그룹을 골라.</div>
         </div>
       </div>
     )
   }
 
   if (previewQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Showcase loading…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">쇼케이스 불러오는 중…</div>
   }
 
   if (!imageUrl) {
-    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">No showcase image available.</div>
+    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">표시할 쇼케이스 이미지가 없어.</div>
   }
 
   const motionPhase = motionTick / 18 + currentIndex * 0.8
@@ -798,7 +793,7 @@ function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widget: Ext
   return (
     <WallpaperPreviewImageSurface
       src={imageUrl}
-      alt="Showcase"
+      alt="쇼케이스"
       onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
       transitionStyle={imageTransitionStyle}
       transitionSpeed={imageTransitionSpeed}
@@ -824,7 +819,7 @@ function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widget: Ext
             ))}
           </div>
           <div className="rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/92 backdrop-blur-sm">
-            {kenBurnsEnabled ? 'Ken Burns' : 'Auto'}
+            {kenBurnsEnabled ? '켄 번즈' : '자동'}
           </div>
         </div>
       ) : null}
@@ -872,7 +867,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
   }, [activityQuery.data])
 
   if (activityQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Activity loading…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">활동 흐름 불러오는 중…</div>
   }
 
   if (activityQuery.isError) {
@@ -896,16 +891,16 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
     return Math.max(0.16, Math.min(1, 0.22 + intensity * 0.5 + wave * 0.22 * motionStrength + emphasisBoost))
   })
   const statusTone = summary.failed > 0 ? '#ff6b6b' : summary.running > 0 ? '#3ddc97' : 'var(--secondary)'
-  const activityBadge = summary.running > 0 ? 'Live' : summary.queued > 0 ? 'Queued' : summary.recentResults > 0 ? 'Recent' : 'Idle'
+  const activityBadge = summary.running > 0 ? '실행 중' : summary.queued > 0 ? '대기 중' : summary.recentResults > 0 ? '최근 결과' : '한가함'
 
   return (
     <div className="flex h-full flex-col justify-between gap-3 rounded-sm bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_18%,transparent),transparent_46%),linear-gradient(180deg,color-mix(in_srgb,var(--primary)_8%,transparent),transparent_60%)] px-3 py-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Activity</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">활동</div>
           <div className="mt-1 flex items-end gap-2">
             <span className="text-2xl font-semibold tracking-[-0.08em] text-foreground sm:text-3xl">{summary.running + summary.queued}</span>
-            <span className="pb-1 text-xs text-muted-foreground">active load</span>
+            <span className="pb-1 text-xs text-muted-foreground">진행 부하</span>
           </div>
         </div>
         <div className="rounded-full border border-border/70 bg-background/50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/92 backdrop-blur-sm">
@@ -931,14 +926,14 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
 
       <div className="grid grid-cols-4 gap-2 text-center text-[11px] sm:text-xs">
         {[
-          { label: 'Running', value: summary.running },
-          { label: 'Queued', value: summary.queued },
-          { label: 'Results', value: summary.recentResults },
-          { label: 'Failed', value: summary.failed },
+          { label: '실행', value: summary.running },
+          { label: '대기', value: summary.queued },
+          { label: '결과', value: summary.recentResults },
+          { label: '실패', value: summary.failed },
         ].map((item) => (
           <div key={item.label} className="rounded-sm border border-border/60 bg-background/35 px-2 py-1.5 backdrop-blur-sm">
             <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{item.label}</div>
-            <div className={cn('mt-1 font-semibold text-foreground', item.label === 'Running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+            <div className={cn('mt-1 font-semibold text-foreground', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}>
               {item.value.toLocaleString('ko-KR')}
             </div>
           </div>
@@ -946,8 +941,8 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
       </div>
 
       <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-        <span>{emphasis === 'queue' ? 'Queue focus' : emphasis === 'results' ? 'Results focus' : 'Mixed focus'}</span>
-        <span>{summary.lastUpdated ? formatDateTime(summary.lastUpdated) : 'No updates'}</span>
+        <span>{emphasis === 'queue' ? '큐 중심' : emphasis === 'results' ? '결과 중심' : '혼합'}</span>
+        <span>{summary.lastUpdated ? formatDateTime(summary.lastUpdated) : '업데이트 없음'}</span>
       </div>
     </div>
   )

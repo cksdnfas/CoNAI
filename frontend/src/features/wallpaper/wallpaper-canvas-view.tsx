@@ -293,7 +293,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
       >
         {renderedWidgets.length === 0 ? (
           <div className="col-span-full row-span-full flex items-center justify-center text-center text-sm text-muted-foreground">
-            Add a widget from the library to start building the wallpaper layout.
+            왼쪽 라이브러리에서 위젯을 추가해서 시작해.
           </div>
         ) : null}
         {renderedWidgets.map((widget) => (
@@ -371,7 +371,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
         >
           <button
             type="button"
-            aria-label="Close image preview"
+            aria-label="이미지 미리보기 닫기"
             onClick={(event) => {
               event.stopPropagation()
               handleClosePreviewImage()
@@ -401,7 +401,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
     <div className="rounded-sm border border-border bg-surface-low p-3 sm:p-4">
       <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <span>{canvasPreset.name}</span>
-        <span>{canvasPreset.aspectRatioLabel} · {canvasPreset.gridColumns}×{canvasPreset.gridRows} grid</span>
+        <span>{canvasPreset.aspectRatioLabel} · {canvasPreset.gridColumns}×{canvasPreset.gridRows} 그리드</span>
       </div>
       {canvasElement}
     </div>

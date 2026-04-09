@@ -243,8 +243,8 @@ export function WallpaperEditorPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Wallpaper"
-        title="Wallpaper Layout"
+        eyebrow="월페이퍼"
+        title="월페이퍼 배치"
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -260,7 +260,7 @@ export function WallpaperEditorPage() {
               ))}
             </Select>
             <Button asChild variant="outline">
-              <Link to={activeRuntimePath}>Runtime Preview</Link>
+              <Link to={activeRuntimePath}>런타임 미리보기</Link>
             </Button>
           </div>
         )}
@@ -269,14 +269,14 @@ export function WallpaperEditorPage() {
       <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
         <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[200px] flex-1 space-y-1">
-          <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">Preset</div>
+          <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">프리셋</div>
           <Select
             value={effectiveActivePresetId ?? ''}
             onChange={(event) => {
               handleLoadPreset(event.target.value || null)
             }}
           >
-            <option value="">Draft only</option>
+            <option value="">초안만</option>
             {savedPresets.map((preset) => (
               <option key={preset.id} value={preset.id}>{preset.name}</option>
             ))}
@@ -284,7 +284,7 @@ export function WallpaperEditorPage() {
         </div>
 
         <div className="min-w-[220px] flex-[1.2] space-y-1">
-          <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">Name</div>
+          <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">이름</div>
           <input
             className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary"
             value={layoutPreset.name}
@@ -300,20 +300,20 @@ export function WallpaperEditorPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" disabled={wallpaperPresetMutation.isPending} onClick={() => handleSavePreset()}>
-            Save
+            저장
           </Button>
           <Button variant="outline" disabled={wallpaperPresetMutation.isPending} onClick={() => handleSavePreset({ saveAsNew: true })}>
-            Save as new
+            다른 이름으로 저장
           </Button>
           <Button variant="outline" disabled={!activePreset || wallpaperPresetMutation.isPending} onClick={handleDeletePreset}>
-            Delete
+            삭제
           </Button>
         </div>
         </div>
 
         <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
           <div className="space-y-1">
-            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">Runtime URL</div>
+            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">런타임 URL</div>
             <input
               readOnly
               value={activePreset ? activeRuntimeAbsoluteUrl : ''}
@@ -323,23 +323,23 @@ export function WallpaperEditorPage() {
           </div>
           {hasFixedRuntimeUrl ? (
             <Button asChild variant="outline">
-              <Link to={activeRuntimePath}>Open</Link>
+              <Link to={activeRuntimePath}>열기</Link>
             </Button>
           ) : (
             <Button variant="outline" disabled>
-              Open
+              열기
             </Button>
           )}
           <Button variant="outline" disabled={!hasFixedRuntimeUrl} onClick={() => { void handleCopyRuntimeUrl() }}>
             <Copy className="h-4 w-4" />
-            Copy URL
+            URL 복사
           </Button>
         </div>
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
         <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-4">
-          <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">Widget Library</h2>
+          <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">위젯 라이브러리</h2>
           <div className="space-y-2">
             {listWallpaperWidgetDefinitions().map((widget) => (
               <button
@@ -372,7 +372,7 @@ export function WallpaperEditorPage() {
         />
 
         <section className="space-y-4 rounded-sm border border-border bg-surface-container/70 p-4">
-          <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">Widget Inspector</h2>
+          <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">위젯 설정</h2>
 
           <WallpaperWidgetInspector
             selectedWidget={selectedWidget}

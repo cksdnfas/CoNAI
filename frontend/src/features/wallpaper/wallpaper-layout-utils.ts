@@ -78,8 +78,8 @@ const WALLPAPER_LAYOUT_ACTIVE_PRESET_ID_STORAGE_KEY = 'conai.wallpaper.activePre
 /** Clamp one widget instance into the current canvas grid bounds. */
 export function clampWallpaperWidgetInstance(widget: WallpaperWidgetInstance, canvasPreset: WallpaperCanvasPreset): WallpaperWidgetInstance {
   const widgetDefinition = getWallpaperWidgetDefinition(widget.type)
-  const nextWidth = Math.max(widgetDefinition.minSize.w, Math.min(widget.w, Math.min(widgetDefinition.maxSize.w, canvasPreset.gridColumns)))
-  const nextHeight = Math.max(widgetDefinition.minSize.h, Math.min(widget.h, Math.min(widgetDefinition.maxSize.h, canvasPreset.gridRows)))
+  const nextWidth = Math.max(widgetDefinition.minSize.w, Math.min(widget.w, canvasPreset.gridColumns))
+  const nextHeight = Math.max(widgetDefinition.minSize.h, Math.min(widget.h, canvasPreset.gridRows))
   const nextX = Math.max(0, Math.min(widget.x, canvasPreset.gridColumns - nextWidth))
   const nextY = Math.max(0, Math.min(widget.y, canvasPreset.gridRows - nextHeight))
 
@@ -107,7 +107,7 @@ export function buildWallpaperLayoutDraft(canvasPresetId: string): WallpaperLayo
   const now = new Date().toISOString()
   return {
     id: 'wallpaper-layout-draft',
-    name: 'Wallpaper Draft',
+    name: '월페이퍼 초안',
     canvasPresetId,
     widgets: [],
     createdAt: now,
@@ -223,7 +223,7 @@ export function saveWallpaperActivePresetId(presetId: string | null) {
 export function upsertWallpaperLayoutPreset(layoutPresets: WallpaperLayoutPreset[], draftLayout: WallpaperLayoutPreset, options?: { presetId?: string | null; name?: string }) {
   const now = new Date().toISOString()
   const trimmedName = (options?.name ?? draftLayout.name).trim()
-  const presetName = trimmedName || 'Wallpaper Preset'
+  const presetName = trimmedName || '월페이퍼 프리셋'
   const presetId = options?.presetId ?? `wallpaper-preset-${Date.now()}`
   const existingPreset = layoutPresets.find((preset) => preset.id === presetId)
 

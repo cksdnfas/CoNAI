@@ -29,7 +29,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
   if (!selectedWidget) {
     return (
       <div className={cn('rounded-sm border border-dashed border-border bg-surface-low px-4 py-8 text-center text-sm text-muted-foreground')}>
-        Select a widget.
+        위젯을 선택해.
       </div>
     )
   }
@@ -47,7 +47,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
     <>
       <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
         <div className="text-sm font-medium text-foreground">{getWallpaperWidgetDefinition(selectedWidget.type).title}</div>
-        <SettingsField label="Title">
+        <SettingsField label="제목">
           <input
             className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary"
             value={selectedWidget.settings.title}
@@ -59,7 +59,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
         {selectedWidget.type === 'clock' ? (
           <>
-            <SettingsField label="Style">
+            <SettingsField label="스타일">
               <Select
                 value={selectedWidget.settings.visualStyle ?? 'minimal'}
                 onChange={(event) => {
@@ -68,12 +68,12 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="minimal">Minimal</option>
-                <option value="glow">Glow</option>
-                <option value="split">Split</option>
+                <option value="minimal">미니멀</option>
+                <option value="glow">글로우</option>
+                <option value="split">분할</option>
               </Select>
             </SettingsField>
-            <SettingsField label="Time format">
+            <SettingsField label="시간 형식">
               <Select
                 value={selectedWidget.settings.timeFormat}
                 onChange={(event) => {
@@ -87,7 +87,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
             <SettingsToggleRow>
-              <span className="flex-1">Show seconds</span>
+              <span className="flex-1">초 표시</span>
               <input
                 type="checkbox"
                 checked={selectedWidget.settings.showSeconds}
@@ -101,7 +101,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
         {selectedWidget.type === 'queue-status' ? (
           <>
-            <SettingsField label="Refresh">
+            <SettingsField label="새로고침">
               <Select
                 value={String(selectedWidget.settings.refreshIntervalSec)}
                 onChange={(event) => {
@@ -114,7 +114,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
 
-            <SettingsField label="Visual">
+            <SettingsField label="표시 방식">
               <Select
                 value={selectedWidget.settings.visualMode ?? 'tiles'}
                 onChange={(event) => {
@@ -123,9 +123,9 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="tiles">Tiles</option>
-                <option value="bars">Bars</option>
-                <option value="rings">Rings</option>
+                <option value="tiles">타일</option>
+                <option value="bars">막대</option>
+                <option value="rings">링</option>
               </Select>
             </SettingsField>
           </>
@@ -133,7 +133,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
         {selectedWidget.type === 'recent-results' ? (
           <>
-            <SettingsField label="Refresh">
+            <SettingsField label="새로고침">
               <Select
                 value={String(selectedWidget.settings.refreshIntervalSec)}
                 onChange={(event) => {
@@ -146,19 +146,19 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
 
-            <SettingsField label="Layout">
+            <SettingsField label="배치">
               <Select
                 value={selectedWidget.settings.displayMode ?? 'grid'}
                 onChange={(event) => {
                   updateWidgetSettings({ displayMode: event.target.value === 'stack' ? 'stack' : 'grid' })
                 }}
               >
-                <option value="grid">Grid</option>
-                <option value="stack">Stack</option>
+                <option value="grid">그리드</option>
+                <option value="stack">스택</option>
               </Select>
             </SettingsField>
 
-            <SettingsField label="Visible count">
+            <SettingsField label="표시 개수">
               <Select
                 value={String(selectedWidget.settings.visibleCount)}
                 onChange={(event) => {
@@ -171,7 +171,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
 
-            <SettingsField label="Shift">
+            <SettingsField label="전환 간격">
               <Select
                 value={String(selectedWidget.settings.shiftIntervalSec ?? 8)}
                 onChange={(event) => {
@@ -184,7 +184,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
 
-            <SettingsField label="Transition">
+            <SettingsField label="전환">
               <Select
                 value={selectedWidget.settings.imageTransitionStyle ?? 'zoom'}
                 onChange={(event) => {
@@ -205,17 +205,17 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="zoom">Zoom</option>
-                <option value="fade">Fade</option>
-                <option value="slide">Slide</option>
-                <option value="blur">Blur</option>
-                <option value="flip">Flip</option>
-                <option value="shuffle">Shuffle</option>
-                <option value="none">None</option>
+                <option value="zoom">줌</option>
+                <option value="fade">페이드</option>
+                <option value="slide">슬라이드</option>
+                <option value="blur">블러</option>
+                <option value="flip">플립</option>
+                <option value="shuffle">셔플</option>
+                <option value="none">없음</option>
               </Select>
             </SettingsField>
 
-            <SettingsField label="Speed">
+            <SettingsField label="속도">
               <Select
                 value={selectedWidget.settings.imageTransitionSpeed ?? 'normal'}
                 onChange={(event) => {
@@ -228,9 +228,9 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="fast">Fast</option>
-                <option value="normal">Normal</option>
-                <option value="slow">Slow</option>
+                <option value="fast">빠름</option>
+                <option value="normal">보통</option>
+                <option value="slow">느림</option>
               </Select>
             </SettingsField>
           </>
@@ -238,7 +238,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
         {selectedWidget.type === 'activity-pulse' ? (
           <>
-            <SettingsField label="Refresh">
+            <SettingsField label="새로고침">
               <Select
                 value={String(selectedWidget.settings.refreshIntervalSec)}
                 onChange={(event) => {
@@ -251,7 +251,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
 
-            <SettingsField label="Focus">
+            <SettingsField label="강조 대상">
               <Select
                 value={selectedWidget.settings.emphasis ?? 'mixed'}
                 onChange={(event) => {
@@ -260,13 +260,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="mixed">Mixed</option>
-                <option value="queue">Queue</option>
-                <option value="results">Results</option>
+                <option value="mixed">혼합</option>
+                <option value="queue">큐</option>
+                <option value="results">결과</option>
               </Select>
             </SettingsField>
 
-            <SettingsField label="Strength">
+            <SettingsField label="강도">
               <Select
                 value={selectedWidget.settings.motionStrength ?? 'medium'}
                 onChange={(event) => {
@@ -275,9 +275,9 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="soft">Soft</option>
-                <option value="medium">Medium</option>
-                <option value="strong">Strong</option>
+                <option value="soft">약함</option>
+                <option value="medium">보통</option>
+                <option value="strong">강함</option>
               </Select>
             </SettingsField>
           </>
@@ -285,7 +285,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
         {selectedWidget.type === 'image-showcase' ? (
           <>
-            <SettingsField label="Playback">
+            <SettingsField label="재생 방식">
               <Select
                 value={selectedWidget.settings.playbackMode ?? 'carousel'}
                 onChange={(event) => {
@@ -298,13 +298,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="carousel">Carousel</option>
-                <option value="ken-burns">Ken Burns</option>
-                <option value="static">Static</option>
+                <option value="carousel">캐러셀</option>
+                <option value="ken-burns">켄 번즈</option>
+                <option value="static">고정</option>
               </Select>
             </SettingsField>
 
-            <SettingsField label="Interval">
+            <SettingsField label="간격">
               <Select
                 value={String(selectedWidget.settings.slideshowIntervalSec ?? 20)}
                 onChange={(event) => {
@@ -317,19 +317,19 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
 
-            <SettingsField label="Fit mode">
+            <SettingsField label="채우기 방식">
               <Select
                 value={selectedWidget.settings.fitMode}
                 onChange={(event) => {
                   updateWidgetSettings({ fitMode: event.target.value === 'contain' ? 'contain' : 'cover' })
                 }}
               >
-                <option value="cover">Cover</option>
-                <option value="contain">Contain</option>
+                <option value="cover">채우기</option>
+                <option value="contain">맞춤</option>
               </Select>
             </SettingsField>
 
-            <SettingsField label="Transition">
+            <SettingsField label="전환">
               <Select
                 value={selectedWidget.settings.imageTransitionStyle ?? 'fade'}
                 onChange={(event) => {
@@ -350,17 +350,17 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="fade">Fade</option>
-                <option value="zoom">Zoom</option>
-                <option value="slide">Slide</option>
-                <option value="blur">Blur</option>
-                <option value="flip">Flip</option>
-                <option value="shuffle">Shuffle</option>
-                <option value="none">None</option>
+                <option value="fade">페이드</option>
+                <option value="zoom">줌</option>
+                <option value="slide">슬라이드</option>
+                <option value="blur">블러</option>
+                <option value="flip">플립</option>
+                <option value="shuffle">셔플</option>
+                <option value="none">없음</option>
               </Select>
             </SettingsField>
 
-            <SettingsField label="Speed">
+            <SettingsField label="속도">
               <Select
                 value={selectedWidget.settings.imageTransitionSpeed ?? 'normal'}
                 onChange={(event) => {
@@ -373,16 +373,16 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="fast">Fast</option>
-                <option value="normal">Normal</option>
-                <option value="slow">Slow</option>
+                <option value="fast">빠름</option>
+                <option value="normal">보통</option>
+                <option value="slow">느림</option>
               </Select>
             </SettingsField>
           </>
         ) : null}
 
         {selectedWidget.type === 'group-image-view' || selectedWidget.type === 'image-showcase' || selectedWidget.type === 'floating-collage' ? (
-          <SettingsField label="Group">
+          <SettingsField label="그룹">
             <Select
               value={selectedWidget.settings.groupId !== null ? String(selectedWidget.settings.groupId) : ''}
               onChange={(event) => {
@@ -390,7 +390,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                 updateWidgetSettings({ groupId: nextValue ? Number(nextValue) : null })
               }}
             >
-              <option value="">Select group</option>
+              <option value="">그룹 선택</option>
               {groups.map((group) => (
                 <option key={group.id} value={group.id}>{`${'　'.repeat(group.depth ?? 0)}${group.name}`}</option>
               ))}
@@ -400,7 +400,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
         {selectedWidget.type === 'group-image-view' ? (
           <>
-            <SettingsField label="Visible count">
+            <SettingsField label="표시 개수">
               <Select
                 className="w-full"
                 value={String(selectedWidget.settings.visibleCount)}
@@ -414,7 +414,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
 
-            <SettingsField label="Motion">
+            <SettingsField label="움직임">
               <Select
                 value={selectedWidget.settings.motionMode ?? 'static'}
                 onChange={(event) => {
@@ -423,13 +423,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="static">Static</option>
-                <option value="ambient">Ambient</option>
-                <option value="pointer">Reactive</option>
+                <option value="static">고정</option>
+                <option value="ambient">앰비언트</option>
+                <option value="pointer">반응형</option>
               </Select>
             </SettingsField>
 
-            <SettingsField label="Strength">
+            <SettingsField label="강도">
               <Select
                 value={selectedWidget.settings.motionStrength ?? 'medium'}
                 onChange={(event) => {
@@ -438,13 +438,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="soft">Soft</option>
-                <option value="medium">Medium</option>
-                <option value="strong">Strong</option>
+                <option value="soft">약함</option>
+                <option value="medium">보통</option>
+                <option value="strong">강함</option>
               </Select>
             </SettingsField>
 
-            <SettingsField label="Transition">
+            <SettingsField label="전환">
               <Select
                 value={selectedWidget.settings.imageTransitionStyle ?? 'fade'}
                 onChange={(event) => {
@@ -465,17 +465,17 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="fade">Fade</option>
-                <option value="zoom">Zoom</option>
-                <option value="slide">Slide</option>
-                <option value="blur">Blur</option>
-                <option value="flip">Flip</option>
-                <option value="shuffle">Shuffle</option>
-                <option value="none">None</option>
+                <option value="fade">페이드</option>
+                <option value="zoom">줌</option>
+                <option value="slide">슬라이드</option>
+                <option value="blur">블러</option>
+                <option value="flip">플립</option>
+                <option value="shuffle">셔플</option>
+                <option value="none">없음</option>
               </Select>
             </SettingsField>
 
-            <SettingsField label="Speed">
+            <SettingsField label="속도">
               <Select
                 value={selectedWidget.settings.imageTransitionSpeed ?? 'normal'}
                 onChange={(event) => {
@@ -488,9 +488,9 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="fast">Fast</option>
-                <option value="normal">Normal</option>
-                <option value="slow">Slow</option>
+                <option value="fast">빠름</option>
+                <option value="normal">보통</option>
+                <option value="slow">느림</option>
               </Select>
             </SettingsField>
           </>
@@ -498,7 +498,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
         {selectedWidget.type === 'floating-collage' ? (
           <>
-            <SettingsField label="Visible count">
+            <SettingsField label="표시 개수">
               <Select
                 className="w-full"
                 value={String(selectedWidget.settings.visibleCount)}
@@ -512,7 +512,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               </Select>
             </SettingsField>
 
-            <SettingsField label="Strength">
+            <SettingsField label="강도">
               <Select
                 value={selectedWidget.settings.motionStrength ?? 'medium'}
                 onChange={(event) => {
@@ -521,16 +521,16 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   })
                 }}
               >
-                <option value="soft">Soft</option>
-                <option value="medium">Medium</option>
-                <option value="strong">Strong</option>
+                <option value="soft">약함</option>
+                <option value="medium">보통</option>
+                <option value="strong">강함</option>
               </Select>
             </SettingsField>
           </>
         ) : null}
 
         {selectedWidget.type === 'text-note' ? (
-          <SettingsField label="Text">
+          <SettingsField label="내용">
             <textarea
               className="theme-settings-control min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
               value={selectedWidget.settings.text}
@@ -543,7 +543,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
         {selectedWidget.type === 'group-image-view' || selectedWidget.type === 'image-showcase' || selectedWidget.type === 'floating-collage' ? (
           <SettingsToggleRow>
-            <span className="flex-1">Include children</span>
+            <span className="flex-1">하위 그룹 포함</span>
             <input
               type="checkbox"
               checked={selectedWidget.settings.includeChildren !== false}
@@ -555,7 +555,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
         ) : null}
 
         <SettingsToggleRow>
-          <span className="flex-1">Show title</span>
+          <span className="flex-1">제목 표시</span>
           <input
             type="checkbox"
             checked={selectedWidget.settings.showTitle !== false}
@@ -565,7 +565,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
           />
         </SettingsToggleRow>
         <SettingsToggleRow>
-          <span className="flex-1">Show background</span>
+          <span className="flex-1">배경 표시</span>
           <input
             type="checkbox"
             checked={selectedWidget.settings.showBackground !== false}
@@ -575,7 +575,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
           />
         </SettingsToggleRow>
         <SettingsToggleRow>
-          <span className="flex-1">Hide widget</span>
+          <span className="flex-1">위젯 숨김</span>
           <input
             type="checkbox"
             checked={selectedWidget.hidden}
@@ -585,7 +585,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
           />
         </SettingsToggleRow>
         <SettingsToggleRow>
-          <span className="flex-1">Lock widget</span>
+          <span className="flex-1">위젯 잠금</span>
           <input
             type="checkbox"
             checked={selectedWidget.locked}
@@ -639,7 +639,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
         }}
       >
         <Trash2 className="h-4 w-4" />
-        Remove widget
+        위젯 삭제
       </Button>
     </>
   )
