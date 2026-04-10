@@ -1,9 +1,10 @@
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
-import { SettingsField, SettingsToggleRow, SettingsValueTile } from '@/features/settings/components/settings-primitives'
+import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { cn } from '@/lib/utils'
 import { getWallpaperWidgetDefinition } from './wallpaper-widget-registry'
-import type { WallpaperWidgetInstance } from './wallpaper-types'
+import type { WallpaperAnimationEasing, WallpaperWidgetInstance } from './wallpaper-types'
+import { WALLPAPER_ANIMATION_EASING_OPTIONS, getWallpaperHoverMotionAmount, getWallpaperMotionStrengthMultiplier } from './wallpaper-widget-utils'
 
 interface WallpaperWidgetInspectorPatch {
   x?: number
@@ -19,14 +20,27 @@ interface WallpaperWidgetInspectorPatch {
 interface WallpaperWidgetInspectorProps {
   selectedWidget: WallpaperWidgetInstance | null
   groups: Array<{ id: number; name: string; depth?: number | null }>
-  widgetCount: number
-  widgetOrder: number | null
   onPatchWidget: (widgetId: string, patch: WallpaperWidgetInspectorPatch) => void
-  onChangeWidgetOrder: (widgetId: string, nextOrder: number) => void
+}
+
+function clampWallpaperInspectorNumber(value: string, fallback: number, min: number, max: number, decimals = 1) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return fallback
+  }
+
+  const clamped = Math.min(max, Math.max(min, parsed))
+  return decimals <= 0 ? Math.round(clamped) : Number(clamped.toFixed(decimals))
+}
+
+function coerceWallpaperAnimationEasing(value: string, fallback: WallpaperAnimationEasing): WallpaperAnimationEasing {
+  return WALLPAPER_ANIMATION_EASING_OPTIONS.some((option) => option.value === value)
+    ? value as WallpaperAnimationEasing
+    : fallback
 }
 
 /** Render the editor inspector for one selected wallpaper widget. */
-export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, widgetOrder, onPatchWidget, onChangeWidgetOrder }: WallpaperWidgetInspectorProps) {
+export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget }: WallpaperWidgetInspectorProps) {
   if (!selectedWidget) {
     return (
       <div className={cn('rounded-sm border border-dashed border-border bg-surface-low px-4 py-8 text-center text-sm text-muted-foreground')}>
@@ -44,10 +58,14 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
     })
   }
 
+  const isGroupSourceWidget = selectedWidget.type === 'group-image-view' || selectedWidget.type === 'image-showcase' || selectedWidget.type === 'floating-collage'
+  const hasBehaviorSection = selectedWidget.type !== 'text-note'
+
   return (
     <>
       <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
         <div className="text-sm font-medium text-foreground">{getWallpaperWidgetDefinition(selectedWidget.type).title}</div>
+        <div className="pt-1 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">기본</div>
         <SettingsField label="제목">
           <input
             className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary"
@@ -57,6 +75,50 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
             }}
           />
         </SettingsField>
+
+        {isGroupSourceWidget ? (
+          <>
+            <SettingsField label="그룹">
+              <Select
+                value={selectedWidget.settings.groupId !== null ? String(selectedWidget.settings.groupId) : ''}
+                onChange={(event) => {
+                  const nextValue = event.target.value
+                  updateWidgetSettings({ groupId: nextValue ? Number(nextValue) : null })
+                }}
+              >
+                <option value="">그룹 선택</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>{`${'　'.repeat(group.depth ?? 0)}${group.name}`}</option>
+                ))}
+              </Select>
+            </SettingsField>
+
+            <SettingsToggleRow>
+              <span className="flex-1">하위 그룹 포함</span>
+              <input
+                type="checkbox"
+                checked={selectedWidget.settings.includeChildren !== false}
+                onChange={(event) => {
+                  updateWidgetSettings({ includeChildren: event.target.checked })
+                }}
+              />
+            </SettingsToggleRow>
+          </>
+        ) : null}
+
+        {selectedWidget.type === 'text-note' ? (
+          <SettingsField label="내용">
+            <textarea
+              className="theme-settings-control min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
+              value={selectedWidget.settings.text}
+              onChange={(event) => {
+                updateWidgetSettings({ text: event.target.value })
+              }}
+            />
+          </SettingsField>
+        ) : null}
+
+        {hasBehaviorSection ? <div className="pt-1 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">동작</div> : null}
 
         {selectedWidget.type === 'clock' ? (
           <>
@@ -134,6 +196,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
 
         {selectedWidget.type === 'recent-results' ? (
           <>
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">레이아웃</div>
             <SettingsField label="새로고침">
               <Select
                 value={String(selectedWidget.settings.refreshIntervalSec)}
@@ -172,6 +235,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
               </Select>
             </SettingsField>
 
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">전환</div>
             <SettingsField label="전환 간격">
               <Select
                 value={String(selectedWidget.settings.shiftIntervalSec ?? 8)}
@@ -235,25 +299,49 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
               </Select>
             </SettingsField>
 
-            <SettingsField label="호버 반응">
+            <SettingsField label="전환 이징">
               <Select
-                value={selectedWidget.settings.imageHoverMotion ?? 'medium'}
+                value={selectedWidget.settings.imageTransitionEasing ?? 'easeOutCubic'}
                 onChange={(event) => {
                   updateWidgetSettings({
-                    imageHoverMotion: event.target.value === 'none'
-                      ? 'none'
-                      : event.target.value === 'soft'
-                        ? 'soft'
-                        : event.target.value === 'strong'
-                          ? 'strong'
-                          : 'medium',
+                    imageTransitionEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
                   })
                 }}
               >
-                <option value="none">없음</option>
-                <option value="soft">약함</option>
-                <option value="medium">보통</option>
-                <option value="strong">강함</option>
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </Select>
+            </SettingsField>
+
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">상호작용</div>
+            <SettingsField label="호버 반응">
+              <ScrubbableNumberInput
+                variant="settings"
+                min={0}
+                max={2.5}
+                step={0.1}
+                scrubRatio={0.45}
+                value={getWallpaperHoverMotionAmount(selectedWidget.settings.imageHoverMotion ?? 1)}
+                onChange={(nextValue) => {
+                  updateWidgetSettings({
+                    imageHoverMotion: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
+                  })
+                }}
+              />
+            </SettingsField>
+            <SettingsField label="호버 이징">
+              <Select
+                value={selectedWidget.settings.hoverEasing ?? 'easeOutCubic'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    hoverEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
+                  })
+                }}
+              >
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </Select>
             </SettingsField>
           </>
@@ -261,6 +349,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
 
         {selectedWidget.type === 'activity-pulse' ? (
           <>
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">모션</div>
             <SettingsField label="새로고침">
               <Select
                 value={String(selectedWidget.settings.refreshIntervalSec)}
@@ -290,24 +379,39 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
             </SettingsField>
 
             <SettingsField label="강도">
-              <Select
-                value={selectedWidget.settings.motionStrength ?? 'medium'}
-                onChange={(event) => {
+              <ScrubbableNumberInput
+                variant="settings"
+                min={0}
+                max={2.5}
+                step={0.1}
+                scrubRatio={0.45}
+                value={getWallpaperMotionStrengthMultiplier(selectedWidget.settings.motionStrength ?? 1)}
+                onChange={(nextValue) => {
                   updateWidgetSettings({
-                    motionStrength: event.target.value === 'soft' ? 'soft' : event.target.value === 'strong' ? 'strong' : 'medium',
+                    motionStrength: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
                   })
                 }}
-              >
-                <option value="soft">약함</option>
-                <option value="medium">보통</option>
-                <option value="strong">강함</option>
-              </Select>
+              />
             </SettingsField>
           </>
         ) : null}
 
         {selectedWidget.type === 'image-showcase' ? (
           <>
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">레이아웃</div>
+            <SettingsField label="채우기 방식">
+              <Select
+                value={selectedWidget.settings.fitMode}
+                onChange={(event) => {
+                  updateWidgetSettings({ fitMode: event.target.value === 'contain' ? 'contain' : 'cover' })
+                }}
+              >
+                <option value="cover">채우기</option>
+                <option value="contain">맞춤</option>
+              </Select>
+            </SettingsField>
+
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">재생</div>
             <SettingsField label="재생 방식">
               <Select
                 value={selectedWidget.settings.playbackMode ?? 'carousel'}
@@ -340,18 +444,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
               </Select>
             </SettingsField>
 
-            <SettingsField label="채우기 방식">
-              <Select
-                value={selectedWidget.settings.fitMode}
-                onChange={(event) => {
-                  updateWidgetSettings({ fitMode: event.target.value === 'contain' ? 'contain' : 'cover' })
-                }}
-              >
-                <option value="cover">채우기</option>
-                <option value="contain">맞춤</option>
-              </Select>
-            </SettingsField>
-
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">전환</div>
             <SettingsField label="전환">
               <Select
                 value={selectedWidget.settings.imageTransitionStyle ?? 'fade'}
@@ -402,49 +495,57 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
               </Select>
             </SettingsField>
 
-            <SettingsField label="호버 반응">
+            <SettingsField label="전환 이징">
               <Select
-                value={selectedWidget.settings.imageHoverMotion ?? 'medium'}
+                value={selectedWidget.settings.imageTransitionEasing ?? 'easeOutCubic'}
                 onChange={(event) => {
                   updateWidgetSettings({
-                    imageHoverMotion: event.target.value === 'none'
-                      ? 'none'
-                      : event.target.value === 'soft'
-                        ? 'soft'
-                        : event.target.value === 'strong'
-                          ? 'strong'
-                          : 'medium',
+                    imageTransitionEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
                   })
                 }}
               >
-                <option value="none">없음</option>
-                <option value="soft">약함</option>
-                <option value="medium">보통</option>
-                <option value="strong">강함</option>
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </Select>
+            </SettingsField>
+
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">상호작용</div>
+            <SettingsField label="호버 반응">
+              <ScrubbableNumberInput
+                variant="settings"
+                min={0}
+                max={2.5}
+                step={0.1}
+                scrubRatio={0.45}
+                value={getWallpaperHoverMotionAmount(selectedWidget.settings.imageHoverMotion ?? 1)}
+                onChange={(nextValue) => {
+                  updateWidgetSettings({
+                    imageHoverMotion: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
+                  })
+                }}
+              />
+            </SettingsField>
+            <SettingsField label="호버 이징">
+              <Select
+                value={selectedWidget.settings.hoverEasing ?? 'easeOutCubic'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    hoverEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
+                  })
+                }}
+              >
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </Select>
             </SettingsField>
           </>
         ) : null}
 
-        {selectedWidget.type === 'group-image-view' || selectedWidget.type === 'image-showcase' || selectedWidget.type === 'floating-collage' ? (
-          <SettingsField label="그룹">
-            <Select
-              value={selectedWidget.settings.groupId !== null ? String(selectedWidget.settings.groupId) : ''}
-              onChange={(event) => {
-                const nextValue = event.target.value
-                updateWidgetSettings({ groupId: nextValue ? Number(nextValue) : null })
-              }}
-            >
-              <option value="">그룹 선택</option>
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>{`${'　'.repeat(group.depth ?? 0)}${group.name}`}</option>
-              ))}
-            </Select>
-          </SettingsField>
-        ) : null}
-
         {selectedWidget.type === 'group-image-view' ? (
           <>
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">레이아웃</div>
             <SettingsField label="표시 개수">
               <Select
                 className="w-full"
@@ -459,6 +560,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
               </Select>
             </SettingsField>
 
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">모션</div>
             <SettingsField label="움직임">
               <Select
                 value={selectedWidget.settings.motionMode ?? 'static'}
@@ -475,20 +577,37 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
             </SettingsField>
 
             <SettingsField label="강도">
+              <ScrubbableNumberInput
+                variant="settings"
+                min={0}
+                max={2.5}
+                step={0.1}
+                scrubRatio={0.45}
+                value={getWallpaperMotionStrengthMultiplier(selectedWidget.settings.motionStrength ?? 1)}
+                onChange={(nextValue) => {
+                  updateWidgetSettings({
+                    motionStrength: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
+                  })
+                }}
+              />
+            </SettingsField>
+
+            <SettingsField label="모션 이징">
               <Select
-                value={selectedWidget.settings.motionStrength ?? 'medium'}
+                value={selectedWidget.settings.motionEasing ?? 'easeOutCubic'}
                 onChange={(event) => {
                   updateWidgetSettings({
-                    motionStrength: event.target.value === 'soft' ? 'soft' : event.target.value === 'strong' ? 'strong' : 'medium',
+                    motionEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
                   })
                 }}
               >
-                <option value="soft">약함</option>
-                <option value="medium">보통</option>
-                <option value="strong">강함</option>
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </Select>
             </SettingsField>
 
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">전환</div>
             <SettingsField label="전환">
               <Select
                 value={selectedWidget.settings.imageTransitionStyle ?? 'fade'}
@@ -539,25 +658,49 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
               </Select>
             </SettingsField>
 
-            <SettingsField label="호버 반응">
+            <SettingsField label="전환 이징">
               <Select
-                value={selectedWidget.settings.imageHoverMotion ?? 'medium'}
+                value={selectedWidget.settings.imageTransitionEasing ?? 'easeOutCubic'}
                 onChange={(event) => {
                   updateWidgetSettings({
-                    imageHoverMotion: event.target.value === 'none'
-                      ? 'none'
-                      : event.target.value === 'soft'
-                        ? 'soft'
-                        : event.target.value === 'strong'
-                          ? 'strong'
-                          : 'medium',
+                    imageTransitionEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
                   })
                 }}
               >
-                <option value="none">없음</option>
-                <option value="soft">약함</option>
-                <option value="medium">보통</option>
-                <option value="strong">강함</option>
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </Select>
+            </SettingsField>
+
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">상호작용</div>
+            <SettingsField label="호버 반응">
+              <ScrubbableNumberInput
+                variant="settings"
+                min={0}
+                max={2.5}
+                step={0.1}
+                scrubRatio={0.45}
+                value={getWallpaperHoverMotionAmount(selectedWidget.settings.imageHoverMotion ?? 1)}
+                onChange={(nextValue) => {
+                  updateWidgetSettings({
+                    imageHoverMotion: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
+                  })
+                }}
+              />
+            </SettingsField>
+            <SettingsField label="호버 이징">
+              <Select
+                value={selectedWidget.settings.hoverEasing ?? 'easeOutCubic'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    hoverEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
+                  })
+                }}
+              >
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </Select>
             </SettingsField>
           </>
@@ -565,6 +708,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
 
         {selectedWidget.type === 'floating-collage' ? (
           <>
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">레이아웃</div>
             <SettingsField label="표시 개수">
               <Select
                 className="w-full"
@@ -576,21 +720,6 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
                 {[2, 3, 4, 5, 6].map((count) => (
                   <option key={count} value={count}>{count}</option>
                 ))}
-              </Select>
-            </SettingsField>
-
-            <SettingsField label="움직임 강도">
-              <Select
-                value={selectedWidget.settings.motionStrength ?? 'medium'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    motionStrength: event.target.value === 'soft' ? 'soft' : event.target.value === 'strong' ? 'strong' : 'medium',
-                  })
-                }}
-              >
-                <option value="soft">약함</option>
-                <option value="medium">보통</option>
-                <option value="strong">강함</option>
               </Select>
             </SettingsField>
 
@@ -606,6 +735,83 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
                 <option value="compact">조밀하게</option>
                 <option value="balanced">보통</option>
                 <option value="wide">넓게</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="이미지 크기(%)">
+              <ScrubbableNumberInput
+                variant="settings"
+                min={50}
+                max={200}
+                step={1}
+                scrubRatio={0.35}
+                value={selectedWidget.settings.imageScalePercent ?? 100}
+                onChange={(nextValue) => {
+                  const parsed = Number(nextValue)
+                  updateWidgetSettings({
+                    imageScalePercent: Number.isFinite(parsed) ? Math.min(200, Math.max(50, Math.round(parsed))) : 100,
+                  })
+                }}
+              />
+            </SettingsField>
+
+            <SettingsField label="비율 기준">
+              <Select
+                value={selectedWidget.settings.aspectMode ?? 'image'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    aspectMode: event.target.value === 'slot' ? 'slot' : 'image',
+                  })
+                }}
+              >
+                <option value="image">이미지 비율</option>
+                <option value="slot">슬롯 고정</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="채우기 방식">
+              <Select
+                value={selectedWidget.settings.fitMode ?? 'cover'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    fitMode: event.target.value === 'contain' ? 'contain' : 'cover',
+                  })
+                }}
+              >
+                <option value="cover">채우기</option>
+                <option value="contain">맞춤</option>
+              </Select>
+            </SettingsField>
+
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">모션</div>
+            <SettingsField label="움직임 강도">
+              <ScrubbableNumberInput
+                variant="settings"
+                min={0}
+                max={2.5}
+                step={0.1}
+                scrubRatio={0.45}
+                value={getWallpaperMotionStrengthMultiplier(selectedWidget.settings.motionStrength ?? 1)}
+                onChange={(nextValue) => {
+                  updateWidgetSettings({
+                    motionStrength: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
+                  })
+                }}
+              />
+            </SettingsField>
+
+            <SettingsField label="모션 이징">
+              <Select
+                value={selectedWidget.settings.motionEasing ?? 'linear'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    motionEasing: coerceWallpaperAnimationEasing(event.target.value, 'linear'),
+                  })
+                }}
+              >
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </Select>
             </SettingsField>
 
@@ -626,23 +832,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
               />
             </SettingsField>
 
-            <SettingsField label="이미지 크기(%)">
-              <ScrubbableNumberInput
-                variant="settings"
-                min={50}
-                max={200}
-                step={1}
-                scrubRatio={0.35}
-                value={selectedWidget.settings.imageScalePercent ?? 100}
-                onChange={(nextValue) => {
-                  const parsed = Number(nextValue)
-                  updateWidgetSettings({
-                    imageScalePercent: Number.isFinite(parsed) ? Math.min(200, Math.max(50, Math.round(parsed))) : 100,
-                  })
-                }}
-              />
-            </SettingsField>
-
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">교체</div>
             <SettingsField label="이미지 교체 기준">
               <Select
                 value={selectedWidget.settings.imageSwapMode ?? 'bounce'}
@@ -654,6 +844,21 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
               >
                 <option value="bounce">튕김 횟수</option>
                 <option value="time">시간</option>
+              </Select>
+            </SettingsField>
+
+            <SettingsField label="전환 이징">
+              <Select
+                value={selectedWidget.settings.imageTransitionEasing ?? 'easeOutCubic'}
+                onChange={(event) => {
+                  updateWidgetSettings({
+                    imageTransitionEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
+                  })
+                }}
+              >
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </Select>
             </SettingsField>
 
@@ -693,88 +898,46 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
               </SettingsField>
             )}
 
-            <SettingsField label="비율 기준">
-              <Select
-                value={selectedWidget.settings.aspectMode ?? 'image'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    aspectMode: event.target.value === 'slot' ? 'slot' : 'image',
-                  })
-                }}
-              >
-                <option value="image">이미지 비율</option>
-                <option value="slot">슬롯 고정</option>
-              </Select>
-            </SettingsField>
-
-            <SettingsField label="채우기 방식">
-              <Select
-                value={selectedWidget.settings.fitMode ?? 'cover'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    fitMode: event.target.value === 'contain' ? 'contain' : 'cover',
-                  })
-                }}
-              >
-                <option value="cover">채우기</option>
-                <option value="contain">맞춤</option>
-              </Select>
-            </SettingsField>
-
+            <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">상호작용</div>
             <SettingsField label="호버 반응">
+              <ScrubbableNumberInput
+                variant="settings"
+                min={0}
+                max={2.5}
+                step={0.1}
+                scrubRatio={0.45}
+                value={getWallpaperHoverMotionAmount(selectedWidget.settings.imageHoverMotion ?? 1)}
+                onChange={(nextValue) => {
+                  updateWidgetSettings({
+                    imageHoverMotion: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
+                  })
+                }}
+              />
+            </SettingsField>
+            <SettingsField label="호버 이징">
               <Select
-                value={selectedWidget.settings.imageHoverMotion ?? 'medium'}
+                value={selectedWidget.settings.hoverEasing ?? 'easeOutCubic'}
                 onChange={(event) => {
                   updateWidgetSettings({
-                    imageHoverMotion: event.target.value === 'none'
-                      ? 'none'
-                      : event.target.value === 'soft'
-                        ? 'soft'
-                        : event.target.value === 'strong'
-                          ? 'strong'
-                          : 'medium',
+                    hoverEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
                   })
                 }}
               >
-                <option value="none">없음</option>
-                <option value="soft">약함</option>
-                <option value="medium">보통</option>
-                <option value="strong">강함</option>
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </Select>
             </SettingsField>
           </>
         ) : null}
 
-        {selectedWidget.type === 'text-note' ? (
-          <SettingsField label="내용">
-            <textarea
-              className="theme-settings-control min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
-              value={selectedWidget.settings.text}
-              onChange={(event) => {
-                updateWidgetSettings({ text: event.target.value })
-              }}
-            />
-          </SettingsField>
-        ) : null}
-
-        {selectedWidget.type === 'group-image-view' || selectedWidget.type === 'image-showcase' || selectedWidget.type === 'floating-collage' ? (
-          <SettingsToggleRow>
-            <span className="flex-1">하위 그룹 포함</span>
-            <input
-              type="checkbox"
-              checked={selectedWidget.settings.includeChildren !== false}
-              onChange={(event) => {
-                updateWidgetSettings({ includeChildren: event.target.checked })
-              }}
-            />
-          </SettingsToggleRow>
-        ) : null}
+        <div className="pt-1 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">표시</div>
 
         <SettingsToggleRow>
           <span className="flex-1">제목 표시</span>
           <input
             type="checkbox"
-            checked={selectedWidget.settings.showTitle !== false}
+            checked={selectedWidget.settings.showTitle === true}
             onChange={(event) => {
               updateWidgetSettings({ showTitle: event.target.checked })
             }}
@@ -784,7 +947,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
           <span className="flex-1">배경 표시</span>
           <input
             type="checkbox"
-            checked={selectedWidget.settings.showBackground !== false}
+            checked={selectedWidget.settings.showBackground === true}
             onChange={(event) => {
               updateWidgetSettings({ showBackground: event.target.checked })
             }}
@@ -812,33 +975,6 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
         </SettingsToggleRow>
       </div>
 
-      <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-        <SettingsField label="순서 (1 = 맨 앞)">
-          <ScrubbableNumberInput
-            variant="settings"
-            min={1}
-            max={Math.max(1, widgetCount)}
-            step={1}
-            scrubRatio={0.35}
-            value={widgetOrder ?? 1}
-            onChange={(nextValue) => {
-              const parsed = Number(nextValue)
-              onChangeWidgetOrder(selectedWidget.id, Number.isFinite(parsed) ? parsed : 1)
-            }}
-          />
-        </SettingsField>
-
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          {[
-            ['X', selectedWidget.x],
-            ['Y', selectedWidget.y],
-            ['W', selectedWidget.w],
-            ['H', selectedWidget.h],
-          ].map(([label, value]) => (
-            <SettingsValueTile key={String(label)} label={label} value={value} className="bg-background px-3 py-2" valueClassName="mt-1 text-sm font-medium" />
-          ))}
-        </div>
-      </div>
     </>
   )
 }

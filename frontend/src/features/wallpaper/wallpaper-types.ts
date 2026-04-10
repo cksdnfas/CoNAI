@@ -31,7 +31,9 @@ export type WallpaperImageTransitionStyle = 'none' | 'fade' | 'zoom' | 'slide' |
 
 export type WallpaperImageTransitionSpeed = 'fast' | 'normal' | 'slow'
 
-export type WallpaperImageHoverMotion = 'none' | 'soft' | 'medium' | 'strong'
+export type WallpaperAnimationEasing = 'linear' | 'easeInOutSine' | 'easeOutCubic' | 'easeInOutCubic' | 'easeOutExpo' | 'easeOutBack' | 'easeOutBounce'
+
+export type WallpaperImageHoverMotion = number
 
 export type WallpaperFloatingCollageSwapMode = 'time' | 'bounce'
 
@@ -53,12 +55,14 @@ export interface WallpaperRecentResultsWidgetSettings extends WallpaperBaseWidge
   shiftIntervalSec: number
   imageTransitionStyle: WallpaperImageTransitionStyle
   imageTransitionSpeed: WallpaperImageTransitionSpeed
+  imageTransitionEasing: WallpaperAnimationEasing
   imageHoverMotion: WallpaperImageHoverMotion
+  hoverEasing: WallpaperAnimationEasing
 }
 
 export interface WallpaperActivityPulseWidgetSettings extends WallpaperBaseWidgetSettings {
   refreshIntervalSec: number
-  motionStrength: 'soft' | 'medium' | 'strong'
+  motionStrength: number
   emphasis: 'mixed' | 'queue' | 'results'
 }
 
@@ -70,10 +74,13 @@ export interface WallpaperGroupSourceWidgetSettings extends WallpaperBaseWidgetS
 export interface WallpaperGroupImageViewWidgetSettings extends WallpaperGroupSourceWidgetSettings {
   visibleCount: number
   motionMode: 'static' | 'ambient' | 'pointer'
-  motionStrength: 'soft' | 'medium' | 'strong'
+  motionStrength: number
+  motionEasing: WallpaperAnimationEasing
   imageTransitionStyle: WallpaperImageTransitionStyle
   imageTransitionSpeed: WallpaperImageTransitionSpeed
+  imageTransitionEasing: WallpaperAnimationEasing
   imageHoverMotion: WallpaperImageHoverMotion
+  hoverEasing: WallpaperAnimationEasing
 }
 
 export interface WallpaperImageShowcaseWidgetSettings extends WallpaperGroupSourceWidgetSettings {
@@ -82,21 +89,26 @@ export interface WallpaperImageShowcaseWidgetSettings extends WallpaperGroupSour
   playbackMode: 'static' | 'carousel' | 'ken-burns'
   imageTransitionStyle: WallpaperImageTransitionStyle
   imageTransitionSpeed: WallpaperImageTransitionSpeed
+  imageTransitionEasing: WallpaperAnimationEasing
   imageHoverMotion: WallpaperImageHoverMotion
+  hoverEasing: WallpaperAnimationEasing
 }
 
 export interface WallpaperFloatingCollageWidgetSettings extends WallpaperGroupSourceWidgetSettings {
   visibleCount: number
-  motionStrength: 'soft' | 'medium' | 'strong'
+  motionStrength: number
+  motionEasing: WallpaperAnimationEasing
   motionSpeed: number
   imageScalePercent: number
   fitMode: 'cover' | 'contain'
   aspectMode: 'slot' | 'image'
   layoutSpread: 'compact' | 'balanced' | 'wide'
   imageSwapMode: WallpaperFloatingCollageSwapMode
+  imageTransitionEasing: WallpaperAnimationEasing
   swapIntervalSec: number
   swapBounceCount: number
   imageHoverMotion: WallpaperImageHoverMotion
+  hoverEasing: WallpaperAnimationEasing
 }
 
 export interface WallpaperTextNoteWidgetSettings extends WallpaperBaseWidgetSettings {

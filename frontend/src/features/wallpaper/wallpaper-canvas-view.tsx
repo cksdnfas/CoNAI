@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { GripVertical } from 'lucide-react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
@@ -18,6 +18,7 @@ interface WallpaperCanvasViewProps {
   selectedWidgetId?: string | null
   onSelectWidget?: (widgetId: string) => void
   onUpdateWidgetFrame?: (widgetId: string, patch: Partial<WallpaperWidgetInstance>) => void
+  editorHeader?: ReactNode
 }
 
 interface WallpaperInteractionState {
@@ -95,8 +96,8 @@ interface WallpaperWidgetCardProps {
 /** Render one widget card inside the wallpaper canvas grid. */
 function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, onSelectWidget, onStartMove, onStartResize, onOpenImage }: WallpaperWidgetCardProps) {
   const title = String(widget.settings.title ?? widget.type)
-  const showTitle = widget.settings.showTitle !== false
-  const showBackground = widget.settings.showBackground !== false
+  const showTitle = widget.settings.showTitle === true
+  const showBackground = widget.settings.showBackground === true
   const opacity = typeof widget.settings.opacity === 'number' ? widget.settings.opacity : 1
 
   const cardClassName = cn(
@@ -172,7 +173,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, 
 }
 
 /** Render the shared wallpaper canvas in editor or runtime mode. */
-export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selectedWidgetId, onSelectWidget, onUpdateWidgetFrame }: WallpaperCanvasViewProps) {
+export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selectedWidgetId, onSelectWidget, onUpdateWidgetFrame, editorHeader }: WallpaperCanvasViewProps) {
   const [interaction, setInteraction] = useState<WallpaperInteractionState | null>(null)
   const [interactionPreview, setInteractionPreview] = useState<WallpaperInteractionPreview | null>(null)
   const [previewImage, setPreviewImage] = useState<WallpaperWidgetPreviewImage | null>(null)
@@ -451,8 +452,12 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
   return (
     <div className="rounded-sm border border-border bg-surface-low p-3 sm:p-4">
       <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>{canvasPreset.name}</span>
-        <span>{canvasPreset.aspectRatioLabel} · {canvasPreset.gridColumns}×{canvasPreset.gridRows} 그리드</span>
+        {editorHeader ?? (
+          <>
+            <span>{canvasPreset.name}</span>
+            <span>{canvasPreset.aspectRatioLabel} · {canvasPreset.gridColumns}×{canvasPreset.gridRows} 그리드</span>
+          </>
+        )}
       </div>
       {canvasElement}
     </div>

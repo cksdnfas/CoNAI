@@ -4,10 +4,12 @@ import { buildPreviewImageRecord } from '@/features/images/components/inline-med
 import { formatDateTime, getArtifactPreviewUrl, parseMetadataValue } from '@/features/module-graph/module-graph-shared'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
-import type { WallpaperImageHoverMotion, WallpaperImageTransitionSpeed, WallpaperImageTransitionStyle, WallpaperWidgetInstance } from './wallpaper-types'
+import type { WallpaperAnimationEasing, WallpaperImageHoverMotion, WallpaperImageTransitionSpeed, WallpaperImageTransitionStyle, WallpaperWidgetInstance } from './wallpaper-types'
 import { useWallpaperBrowseContentQuery, useWallpaperGroupPreviewImagesQuery } from './wallpaper-widget-data'
 import {
   buildWallpaperFinalResultArtifact,
+  getWallpaperAnimationEasingCss,
+  getWallpaperHoverMotionAmount,
   getWallpaperImageUrl,
   getWallpaperMotionStrengthMultiplier,
   useWallpaperClockText,
@@ -20,7 +22,6 @@ const WALLPAPER_IMAGE_TRANSITION_DURATIONS: Record<WallpaperImageTransitionSpeed
   normal: 340,
   slow: 520,
 }
-const WALLPAPER_IMAGE_TRANSITION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
 export interface WallpaperWidgetPreviewImage {
   image: ImageRecord
@@ -38,7 +39,9 @@ interface WallpaperPreviewImageSurfaceProps {
   onOpenImage?: (image: WallpaperWidgetPreviewImage) => void
   transitionStyle?: WallpaperImageTransitionStyle
   transitionSpeed?: WallpaperImageTransitionSpeed
+  transitionEasing?: WallpaperAnimationEasing
   hoverMotion?: WallpaperImageHoverMotion
+  hoverEasing?: WallpaperAnimationEasing
 }
 
 function getWallpaperArtifactPreviewImage(src: string, alt: string, metadata?: string | null) {
@@ -305,46 +308,31 @@ function buildWallpaperFloatingCollageCardStates(
   })
 }
 
-function getWallpaperHoverSurfaceClassName(hoverMotion: WallpaperImageHoverMotion) {
-  if (hoverMotion === 'none') {
-    return ''
+function resolveWallpaperHoverMotionMetrics(hoverMotion: WallpaperImageHoverMotion) {
+  const intensity = getWallpaperHoverMotionAmount(hoverMotion)
+
+  return {
+    intensity,
+    surfaceScale: 1 + (intensity * 0.018),
+    imageScale: 1 + (intensity * 0.03),
+    surfaceShadow: intensity <= 0
+      ? 'none'
+      : `0 ${Math.round(10 + intensity * 7)}px ${Math.round(26 + intensity * 18)}px rgba(0,0,0,${(0.14 + intensity * 0.07).toFixed(3)})`,
   }
-
-  if (hoverMotion === 'soft') {
-    return 'hover:scale-[1.01] hover:shadow-[0_10px_26px_rgba(0,0,0,0.16)]'
-  }
-
-  if (hoverMotion === 'strong') {
-    return 'hover:scale-[1.03] hover:shadow-[0_20px_52px_rgba(0,0,0,0.28)]'
-  }
-
-  return 'hover:scale-[1.018] hover:shadow-[0_16px_42px_rgba(0,0,0,0.22)]'
-}
-
-function getWallpaperHoverImageClassName(hoverMotion: WallpaperImageHoverMotion) {
-  if (hoverMotion === 'none') {
-    return ''
-  }
-
-  if (hoverMotion === 'soft') {
-    return 'group-hover/image-surface:scale-[1.015]'
-  }
-
-  if (hoverMotion === 'strong') {
-    return 'group-hover/image-surface:scale-[1.045]'
-  }
-
-  return 'group-hover/image-surface:scale-[1.03]'
 }
 
 /** Render one optionally clickable wallpaper image surface. */
-function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal', hoverMotion = 'medium' }: WallpaperPreviewImageSurfaceProps) {
+function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal', transitionEasing = 'easeOutCubic', hoverMotion = 1, hoverEasing = 'easeOutCubic' }: WallpaperPreviewImageSurfaceProps) {
   const [currentImage, setCurrentImage] = useState<WallpaperWidgetPreviewImage>({ image, alt })
   const [previousImage, setPreviousImage] = useState<WallpaperWidgetPreviewImage | null>(null)
   const [isTransitionActive, setIsTransitionActive] = useState(true)
+  const [isHovered, setIsHovered] = useState(false)
   const currentImageRef = useRef<WallpaperWidgetPreviewImage>({ image, alt })
   const transitionTimeoutRef = useRef<number | null>(null)
   const transitionDurationMs = WALLPAPER_IMAGE_TRANSITION_DURATIONS[transitionSpeed]
+  const transitionTimingFunction = useMemo(() => getWallpaperAnimationEasingCss(transitionEasing), [transitionEasing])
+  const hoverTimingFunction = useMemo(() => getWallpaperAnimationEasingCss(hoverEasing), [hoverEasing])
+  const hoverMetrics = useMemo(() => resolveWallpaperHoverMotionMetrics(hoverMotion), [hoverMotion])
 
   useEffect(() => {
     return () => {
@@ -391,12 +379,28 @@ function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, s
 
   const imageLayerStyle = {
     transitionDuration: `${transitionDurationMs}ms`,
-    transitionTimingFunction: WALLPAPER_IMAGE_TRANSITION_EASING,
+    transitionTimingFunction,
     ...imageStyle,
   }
+  const imageLayerWrapperStyle = onOpenImage
+    ? {
+        transform: isHovered ? `scale(${hoverMetrics.imageScale})` : 'scale(1)',
+        transitionProperty: 'transform',
+        transitionDuration: '220ms',
+        transitionTimingFunction: hoverTimingFunction,
+      }
+    : undefined
+  const surfaceStyle = onOpenImage
+    ? {
+        ...style,
+        transform: isHovered ? `scale(${hoverMetrics.surfaceScale})` : 'scale(1)',
+        boxShadow: isHovered ? hoverMetrics.surfaceShadow : 'none',
+        transitionTimingFunction: hoverTimingFunction,
+      }
+    : style
 
   const imageLayers = (
-    <>
+    <div className="absolute inset-0 will-change-transform" style={imageLayerWrapperStyle}>
       {previousImage ? (
         <ImagePreviewMedia
           image={previousImage.image}
@@ -417,14 +421,13 @@ function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, s
         className={cn(
           'absolute inset-0 h-full w-full transition-[opacity,transform,filter] will-change-transform',
           imageClassName,
-          onOpenImage ? getWallpaperHoverImageClassName(hoverMotion) : undefined,
           getWallpaperTransitionStateClassName(transitionStyle, 'current', isTransitionActive),
         )}
         style={imageLayerStyle}
         loading="lazy"
         draggable={false}
       />
-    </>
+    </div>
   )
 
   if (!onOpenImage) {
@@ -439,11 +442,17 @@ function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, s
   return (
     <button
       type="button"
-      className={cn(className, 'group/image-surface relative isolate block w-full cursor-zoom-in transform-gpu transition-transform duration-200 ease-out', getWallpaperHoverSurfaceClassName(hoverMotion))}
-      style={style}
+      className={cn(className, 'relative isolate block w-full cursor-zoom-in transform-gpu transition-[transform,box-shadow] duration-200 ease-out')}
+      style={surfaceStyle}
       onClick={(event) => {
         event.stopPropagation()
         onOpenImage({ image: currentImage.image, alt: currentImage.alt })
+      }}
+      onPointerEnter={() => {
+        setIsHovered(true)
+      }}
+      onPointerLeave={() => {
+        setIsHovered(false)
       }}
     >
       {imageLayers}
@@ -682,7 +691,9 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
   const shiftInterval = Math.max(4, widget.settings.shiftIntervalSec ?? 8) * 1000
   const imageTransitionStyle = widget.settings.imageTransitionStyle ?? 'zoom'
   const imageTransitionSpeed = widget.settings.imageTransitionSpeed ?? 'normal'
-  const imageHoverMotion = widget.settings.imageHoverMotion ?? 'medium'
+  const imageTransitionEasing = widget.settings.imageTransitionEasing ?? 'easeOutCubic'
+  const imageHoverMotion = getWallpaperHoverMotionAmount(widget.settings.imageHoverMotion ?? 1)
+  const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
 
   const resultsQuery = useWallpaperBrowseContentQuery('recent-results', refreshInterval)
 
@@ -795,7 +806,9 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
               onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
               transitionStyle={imageTransitionStyle}
               transitionSpeed={imageTransitionSpeed}
+              transitionEasing={imageTransitionEasing}
               hoverMotion={imageHoverMotion}
+              hoverEasing={hoverEasing}
               className="absolute inset-0 overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-all duration-[1600ms] ease-out"
               imageClassName="h-full w-full object-cover"
               style={{
@@ -841,7 +854,9 @@ function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Ext
           onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
           transitionStyle={imageTransitionStyle}
           transitionSpeed={imageTransitionSpeed}
+          transitionEasing={imageTransitionEasing}
           hoverMotion={imageHoverMotion}
+          hoverEasing={hoverEasing}
           className="relative overflow-hidden rounded-xl border border-border/70 bg-surface-low"
           imageClassName="h-full w-full object-cover"
         >
@@ -864,10 +879,13 @@ function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { widget: Ex
   const includeChildren = widget.settings.includeChildren
   const visibleCount = Math.max(1, Math.min(9, widget.settings.visibleCount))
   const motionMode = widget.settings.motionMode ?? 'static'
-  const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 'medium')
+  const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 1)
+  const motionEasing = widget.settings.motionEasing ?? 'easeOutCubic'
   const imageTransitionStyle = widget.settings.imageTransitionStyle ?? 'fade'
   const imageTransitionSpeed = widget.settings.imageTransitionSpeed ?? 'normal'
-  const imageHoverMotion = widget.settings.imageHoverMotion ?? 'medium'
+  const imageTransitionEasing = widget.settings.imageTransitionEasing ?? 'easeOutCubic'
+  const imageHoverMotion = getWallpaperHoverMotionAmount(widget.settings.imageHoverMotion ?? 1)
+  const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
   const allowPointerMotion = motionMode === 'pointer' && mode === 'runtime'
   const ambientTick = useWallpaperMotionTick(motionMode === 'ambient')
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null)
@@ -936,16 +954,24 @@ function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { widget: Ex
             onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
             transitionStyle={imageTransitionStyle}
             transitionSpeed={imageTransitionSpeed}
+            transitionEasing={imageTransitionEasing}
             hoverMotion={imageHoverMotion}
-            className="overflow-hidden rounded-lg border border-border/70 bg-surface-low transition-transform duration-200 ease-out will-change-transform"
+            hoverEasing={hoverEasing}
+            className="overflow-hidden rounded-lg border border-border/70 bg-surface-low transition-transform duration-200 will-change-transform"
             imageClassName="h-full w-full object-cover"
-            style={{ transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})` }}
+            style={{
+              transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`,
+              transitionTimingFunction: getWallpaperAnimationEasingCss(motionEasing),
+            }}
           />
         ) : (
           <div
             key={`group-grid-slot-${index}`}
-            className="flex h-full min-h-16 items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-surface-low text-xs text-muted-foreground transition-transform duration-200 ease-out will-change-transform"
-            style={{ transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})` }}
+            className="flex h-full min-h-16 items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-surface-low text-xs text-muted-foreground transition-transform duration-200 will-change-transform"
+            style={{
+              transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`,
+              transitionTimingFunction: getWallpaperAnimationEasingCss(motionEasing),
+            }}
           >
             이미지 없음
           </div>
@@ -964,13 +990,16 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
   const visibleCount = Math.max(2, Math.min(6, widget.settings.visibleCount))
-  const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 'medium')
+  const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 1)
+  const motionEasing = widget.settings.motionEasing ?? 'linear'
   const motionSpeed = clampWallpaperFloatingCollageSpeed(widget.settings.motionSpeed ?? 1)
   const imageScalePercent = clampWallpaperMetric(widget.settings.imageScalePercent ?? 100, 50, 200)
   const layoutSpread = widget.settings.layoutSpread ?? 'compact'
   const aspectMode = widget.settings.aspectMode ?? 'image'
   const fitMode = widget.settings.fitMode ?? 'cover'
-  const imageHoverMotion = widget.settings.imageHoverMotion ?? 'medium'
+  const imageHoverMotion = getWallpaperHoverMotionAmount(widget.settings.imageHoverMotion ?? 1)
+  const imageTransitionEasing = widget.settings.imageTransitionEasing ?? 'easeOutCubic'
+  const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
   const imageSwapMode = widget.settings.imageSwapMode ?? 'bounce'
   const swapIntervalSec = clampWallpaperFloatingCollageSwapIntervalSec(widget.settings.swapIntervalSec)
   const swapBounceCount = clampWallpaperFloatingCollageSwapBounceCount(widget.settings.swapBounceCount)
@@ -1162,8 +1191,10 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
             onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
             transitionStyle="fade"
             transitionSpeed="fast"
+            transitionEasing={imageTransitionEasing}
             hoverMotion={imageHoverMotion}
-            className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_18px_48px_rgba(0,0,0,0.30)] transition-transform duration-75 ease-linear will-change-transform"
+            hoverEasing={hoverEasing}
+            className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_18px_48px_rgba(0,0,0,0.30)] transition-transform duration-75 will-change-transform"
             imageClassName={cn('h-full w-full', fitMode === 'contain' ? 'object-contain' : 'object-cover')}
             style={{
               left: `${card.x}px`,
@@ -1172,12 +1203,13 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
               aspectRatio: resolvedAspectRatio,
               zIndex,
               transform: `translate3d(-50%, -50%, 0) rotate(${rotate}deg) scale(${scale})`,
+              transitionTimingFunction: getWallpaperAnimationEasingCss(motionEasing),
             }}
           />
         ) : (
           <div
             key={card.key}
-            className="absolute flex items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-surface-high text-xs text-muted-foreground shadow-[0_18px_48px_rgba(0,0,0,0.30)] transition-transform duration-75 ease-linear will-change-transform"
+            className="absolute flex items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-surface-high text-xs text-muted-foreground shadow-[0_18px_48px_rgba(0,0,0,0.30)] transition-transform duration-75 will-change-transform"
             style={{
               left: `${card.x}px`,
               top: `${card.y}px`,
@@ -1185,6 +1217,7 @@ function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: E
               aspectRatio: resolvedAspectRatio,
               zIndex,
               transform: `translate3d(-50%, -50%, 0) rotate(${rotate}deg) scale(${scale})`,
+              transitionTimingFunction: getWallpaperAnimationEasingCss(motionEasing),
             }}
           >
             이미지 없음
@@ -1206,7 +1239,9 @@ function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widget: Ext
   const slideshowInterval = Math.max(4, widget.settings.slideshowIntervalSec) * 1000
   const imageTransitionStyle = widget.settings.imageTransitionStyle ?? 'fade'
   const imageTransitionSpeed = widget.settings.imageTransitionSpeed ?? 'normal'
-  const imageHoverMotion = widget.settings.imageHoverMotion ?? 'medium'
+  const imageTransitionEasing = widget.settings.imageTransitionEasing ?? 'easeOutCubic'
+  const imageHoverMotion = getWallpaperHoverMotionAmount(widget.settings.imageHoverMotion ?? 1)
+  const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
 
   const previewQuery = useWallpaperGroupPreviewImagesQuery('image-showcase', groupId, includeChildren, previewCount)
 
@@ -1254,14 +1289,19 @@ function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widget: Ext
       onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
       transitionStyle={imageTransitionStyle}
       transitionSpeed={imageTransitionSpeed}
+      transitionEasing={imageTransitionEasing}
       hoverMotion={imageHoverMotion}
+      hoverEasing={hoverEasing}
       className="relative h-full overflow-hidden rounded-xl border border-border/70 bg-surface-low"
       imageClassName={cn(
         'h-full w-full rounded-xl ease-out will-change-transform',
         widget.settings.fitMode === 'contain' ? 'object-contain' : 'object-cover',
         kenBurnsEnabled ? 'transition-transform duration-200' : 'transition-transform duration-[1600ms]',
       )}
-      imageStyle={{ transform: showcaseTransform }}
+      imageStyle={{
+        transform: showcaseTransform,
+        transitionTimingFunction: getWallpaperAnimationEasingCss(imageTransitionEasing),
+      }}
     >
       {rotationEnabled ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_74%,transparent))] px-3 py-2">
@@ -1288,7 +1328,7 @@ function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widget: Ext
 /** Render one subtle activity pulse widget from shared queue and result activity. */
 function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'activity-pulse' }> }) {
   const refreshInterval = Math.max(2, widget.settings.refreshIntervalSec) * 1000
-  const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 'medium')
+  const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 1)
   const emphasis = widget.settings.emphasis ?? 'mixed'
   const motionTick = useWallpaperMotionTick(true)
   const activityQuery = useWallpaperBrowseContentQuery('activity-pulse', refreshInterval)

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Copy, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, ExternalLink, Eye, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Save, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
@@ -131,10 +131,6 @@ export function WallpaperEditorPage() {
   const orderedWidgets = useMemo(
     () => getWallpaperWidgetsFrontToBack(layoutPreset.widgets),
     [layoutPreset.widgets],
-  )
-  const selectedWidgetOrder = useMemo(
-    () => (effectiveSelectedWidgetId ? orderedWidgets.findIndex((widget) => widget.id === effectiveSelectedWidgetId) + 1 : null),
-    [effectiveSelectedWidgetId, orderedWidgets],
   )
   const draftRuntimePath = '/wallpaper/runtime'
   const hasFixedRuntimeUrl = Boolean(activePreset)
@@ -289,109 +285,99 @@ export function WallpaperEditorPage() {
     setSelectedWidgetId(nextLayoutPreset.widgets[nextLayoutPreset.widgets.length - 1]?.id ?? null)
   }
 
+  const handleChangeCanvasPreset = (canvasPresetId: string) => {
+    const nextPreset = getWallpaperCanvasPreset(canvasPresetId)
+    setLayoutPreset((current) => normalizeWallpaperLayoutPreset({ ...current, canvasPresetId: nextPreset.id }, nextPreset))
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="월페이퍼"
         title="월페이퍼 배치"
-        actions={(
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              className="min-w-[180px]"
-              value={layoutPreset.canvasPresetId}
-              onChange={(event) => {
-                const nextPreset = getWallpaperCanvasPreset(event.target.value)
-                setLayoutPreset((current) => normalizeWallpaperLayoutPreset({ ...current, canvasPresetId: nextPreset.id }, nextPreset))
-              }}
-            >
-              {listWallpaperCanvasPresets().map((preset) => (
-                <option key={preset.id} value={preset.id}>{preset.name} · {preset.aspectRatioLabel}</option>
-              ))}
-            </Select>
-            <Button asChild variant="outline">
-              <Link to={draftRuntimePath}>초안 런타임 미리보기</Link>
-            </Button>
-            <Button variant="outline" onClick={() => setIsCanvasFocusMode((current) => !current)}>
-              {isCanvasFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              {isCanvasFocusMode ? '집중 보기 종료' : '캔버스 집중 보기'}
-            </Button>
-            {hasFixedRuntimeUrl ? (
-              <Button asChild variant="outline">
-                <Link to={activeRuntimePath}>저장 프리셋 열기</Link>
-              </Button>
-            ) : null}
-          </div>
-        )}
       />
 
-      <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[200px] flex-1 space-y-1">
-          <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">프리셋</div>
-          <Select
-            value={effectiveActivePresetId ?? ''}
-            onChange={(event) => {
-              handleLoadPreset(event.target.value || null)
-            }}
-          >
-            <option value="">초안만</option>
-            {savedPresets.map((preset) => (
-              <option key={preset.id} value={preset.id}>{preset.name}</option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="min-w-[220px] flex-[1.2] space-y-1">
-          <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">이름</div>
-          <input
-            className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary"
-            value={layoutPreset.name}
-            onChange={(event) => {
-              setLayoutPreset((current) => ({
-                ...current,
-                name: event.target.value,
-                updatedAt: new Date().toISOString(),
-              }))
-            }}
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" disabled={wallpaperPresetMutation.isPending} onClick={() => handleSavePreset()}>
-            저장
-          </Button>
-          <Button variant="outline" disabled={wallpaperPresetMutation.isPending} onClick={() => handleSavePreset({ saveAsNew: true })}>
-            다른 이름으로 저장
-          </Button>
-          <Button variant="outline" disabled={!activePreset || wallpaperPresetMutation.isPending} onClick={handleDeletePreset}>
-            삭제
-          </Button>
-        </div>
-        </div>
-
-        <div className="grid gap-2 rounded-sm border border-border/70 bg-surface-low/70 p-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+      <section className="rounded-sm border border-border bg-surface-container/70 p-3">
+        <div className="grid gap-3 lg:grid-cols-[minmax(200px,0.9fr)_minmax(220px,1.2fr)_auto] lg:items-end">
           <div className="space-y-1">
-            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">고정 런타임 URL</div>
+            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">프리셋</div>
+            <Select
+              value={effectiveActivePresetId ?? ''}
+              onChange={(event) => {
+                handleLoadPreset(event.target.value || null)
+              }}
+            >
+              <option value="">초안만</option>
+              {savedPresets.map((preset) => (
+                <option key={preset.id} value={preset.id}>{preset.name}</option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">이름</div>
             <input
-              readOnly
-              value={activePreset ? activeRuntimeAbsoluteUrl : ''}
-              placeholder="저장된 프리셋을 선택하거나 저장하면 고정 URL이 생겨"
-              className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none"
+              className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary"
+              value={layoutPreset.name}
+              onChange={(event) => {
+                setLayoutPreset((current) => ({
+                  ...current,
+                  name: event.target.value,
+                  updatedAt: new Date().toISOString(),
+                }))
+              }}
             />
           </div>
-          {hasFixedRuntimeUrl ? (
-            <Button asChild variant="outline">
-              <Link to={activeRuntimePath}>저장 프리셋 열기</Link>
+
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={wallpaperPresetMutation.isPending}
+              onClick={() => handleSavePreset()}
+              aria-label="저장"
+              title="저장"
+            >
+              <Save className="h-4 w-4" />
             </Button>
-          ) : (
-            <Button variant="outline" disabled>
-              저장 프리셋 열기
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={wallpaperPresetMutation.isPending}
+              onClick={() => handleSavePreset({ saveAsNew: true })}
+              aria-label="다른 이름으로 저장"
+              title="다른 이름으로 저장"
+            >
+              <Copy className="h-4 w-4" />
             </Button>
-          )}
-          <Button variant="outline" disabled={!hasFixedRuntimeUrl} onClick={() => { void handleCopyRuntimeUrl() }}>
-            <Copy className="h-4 w-4" />
-            URL 복사
-          </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={!activePreset || wallpaperPresetMutation.isPending}
+              onClick={handleDeletePreset}
+              aria-label="프리셋 삭제"
+              title="프리셋 삭제"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+            {hasFixedRuntimeUrl ? (
+              <Button asChild variant="outline" size="icon-sm" aria-label="저장 프리셋 열기" title="저장 프리셋 열기">
+                <Link to={activeRuntimePath}>
+                  <ExternalLink className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={!hasFixedRuntimeUrl}
+              onClick={() => { void handleCopyRuntimeUrl() }}
+              aria-label="고정 런타임 URL 복사"
+              title="고정 런타임 URL 복사"
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -409,6 +395,41 @@ export function WallpaperEditorPage() {
             layoutPreset={layoutPreset}
             mode="editor"
             selectedWidgetId={effectiveSelectedWidgetId}
+            editorHeader={(
+              <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Select
+                    className="min-w-[180px]"
+                    value={layoutPreset.canvasPresetId}
+                    onChange={(event) => {
+                      handleChangeCanvasPreset(event.target.value)
+                    }}
+                  >
+                    {listWallpaperCanvasPresets().map((preset) => (
+                      <option key={preset.id} value={preset.id}>{preset.name} · {preset.aspectRatioLabel}</option>
+                    ))}
+                  </Select>
+                  <span className="text-[11px] text-muted-foreground">{canvasPreset.gridColumns}×{canvasPreset.gridRows}</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button asChild variant="outline" size="icon-sm" aria-label="초안 런타임 미리보기" title="초안 런타임 미리보기">
+                    <Link to={draftRuntimePath}>
+                      <Eye className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={() => setIsCanvasFocusMode((current) => !current)}
+                    aria-label={isCanvasFocusMode ? '집중 보기 종료' : '캔버스 집중 보기'}
+                    title={isCanvasFocusMode ? '집중 보기 종료' : '캔버스 집중 보기'}
+                  >
+                    {isCanvasFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            )}
             onSelectWidget={setSelectedWidgetId}
             onUpdateWidgetFrame={(widgetId, patch) => {
               setLayoutPreset((current) => patchSelectedWidget(current, widgetId, patch))
@@ -420,16 +441,16 @@ export function WallpaperEditorPage() {
 
             {selectedWidget ? (
               <>
-                <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+                <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
                   {[
                     ['X', selectedWidget.x],
                     ['Y', selectedWidget.y],
                     ['W', selectedWidget.w],
                     ['H', selectedWidget.h],
                   ].map(([label, value]) => (
-                    <div key={String(label)} className="rounded-sm border border-border bg-surface-low px-3 py-2">
-                      <div className="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">{label}</div>
-                      <div className="mt-1 text-sm font-medium text-foreground">{value}</div>
+                    <div key={String(label)} className="inline-flex items-center gap-1.5">
+                      <span className="font-semibold tracking-[0.16em] uppercase">{label}</span>
+                      <span className="text-sm font-medium text-foreground">{value}</span>
                     </div>
                   ))}
                 </div>
@@ -586,13 +607,8 @@ export function WallpaperEditorPage() {
           <WallpaperWidgetInspector
             selectedWidget={selectedWidget}
             groups={groupsQuery.data ?? []}
-            widgetCount={orderedWidgets.length}
-            widgetOrder={selectedWidgetOrder}
             onPatchWidget={(widgetId, patch) => {
               setLayoutPreset((current) => patchSelectedWidget(current, widgetId, patch))
-            }}
-            onChangeWidgetOrder={(widgetId, nextOrder) => {
-              setLayoutPreset((current) => moveWallpaperWidgetToOrder(current, widgetId, nextOrder))
             }}
           />
         </section>
