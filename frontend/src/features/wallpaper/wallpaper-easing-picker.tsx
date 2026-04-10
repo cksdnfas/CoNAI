@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronRight, Sparkles } from 'lucide-react'
+import { ChevronRight, Save, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
@@ -24,10 +24,19 @@ interface WallpaperEasingPickerProps {
 
 type WallpaperEasingPreviewKind = 'transition' | 'hover' | 'motion'
 
+interface WallpaperSavedEasingPreset {
+  id: string
+  name: string
+  easing: WallpaperAnimationEasing
+  createdAt: string
+}
+
 const GRAPH_SIZE = 304
 const GRAPH_PADDING = 24
 const GRAPH_RANGE_MIN_Y = -1
 const GRAPH_RANGE_MAX_Y = 2
+const WALLPAPER_EASING_PRESETS_STORAGE_KEY = 'conai:wallpaper:easing-presets'
+const MAX_WALLPAPER_SAVED_EASING_PRESETS = 24
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -35,6 +44,56 @@ function clamp(value: number, min: number, max: number) {
 
 function formatPointValue(value: number) {
   return Number(value.toFixed(3))
+}
+
+function loadWallpaperSavedEasingPresets() {
+  if (typeof window === 'undefined') {
+    return [] as WallpaperSavedEasingPreset[]
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(WALLPAPER_EASING_PRESETS_STORAGE_KEY)
+    if (!rawValue) {
+      return []
+    }
+
+    const parsedValue = JSON.parse(rawValue) as unknown
+    if (!Array.isArray(parsedValue)) {
+      return []
+    }
+
+    return parsedValue.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return []
+      }
+
+      const candidate = entry as Partial<WallpaperSavedEasingPreset>
+      if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string' || typeof candidate.easing !== 'string') {
+        return []
+      }
+
+      return [{
+        id: candidate.id,
+        name: candidate.name.trim(),
+        easing: normalizeWallpaperAnimationEasing(candidate.easing),
+        createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : new Date().toISOString(),
+      } satisfies WallpaperSavedEasingPreset]
+    }).filter((preset) => preset.name.length > 0)
+  }
+  catch {
+    return []
+  }
+}
+
+function saveWallpaperSavedEasingPresets(presets: WallpaperSavedEasingPreset[]) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(
+    WALLPAPER_EASING_PRESETS_STORAGE_KEY,
+    JSON.stringify(presets.slice(0, MAX_WALLPAPER_SAVED_EASING_PRESETS)),
+  )
 }
 
 function mapGraphX(value: number) {
@@ -370,9 +429,16 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
   const [activeTab, setActiveTab] = useState<'preset' | 'custom'>(isCustom ? 'custom' : 'preset')
   const [activePreviewKind, setActivePreviewKind] = useState<WallpaperEasingPreviewKind>(previewKind)
   const [customPoints, setCustomPoints] = useState<WallpaperBezierControlPoints>(() => getWallpaperEditableBezierControlPoints(normalizedValue, fallbackPreset))
+  const [savedPresets, setSavedPresets] = useState<WallpaperSavedEasingPreset[]>(() => loadWallpaperSavedEasingPresets())
+  const [presetName, setPresetName] = useState('')
 
   const customEasing = useMemo(() => buildWallpaperCubicBezierEasing(customPoints), [customPoints])
   const previewEasing = activeTab === 'custom' ? customEasing : normalizedValue
+  const matchingSavedPreset = useMemo(
+    () => savedPresets.find((preset) => preset.easing === normalizedValue) ?? null,
+    [normalizedValue, savedPresets],
+  )
+  const pickerLabel = matchingSavedPreset?.name ?? getWallpaperAnimationEasingLabel(normalizedValue)
 
   const updateCustomPoint = (key: keyof WallpaperBezierControlPoints, nextValue: string) => {
     const parsed = Number(nextValue)
@@ -388,6 +454,37 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
     }))
   }
 
+  const handleSavePreset = () => {
+    const trimmedName = presetName.trim()
+    if (!trimmedName) {
+      return
+    }
+
+    setSavedPresets((current) => {
+      const existingPreset = current.find((preset) => preset.name === trimmedName)
+      const nextPresets = existingPreset
+        ? current.map((preset) => preset.id === existingPreset.id ? { ...preset, easing: customEasing } : preset)
+        : [{
+            id: `wallpaper-easing-${Date.now()}`,
+            name: trimmedName,
+            easing: customEasing,
+            createdAt: new Date().toISOString(),
+          }, ...current]
+
+      saveWallpaperSavedEasingPresets(nextPresets)
+      return nextPresets.slice(0, MAX_WALLPAPER_SAVED_EASING_PRESETS)
+    })
+    setPresetName('')
+  }
+
+  const handleRemovePreset = (presetId: string) => {
+    setSavedPresets((current) => {
+      const nextPresets = current.filter((preset) => preset.id !== presetId)
+      saveWallpaperSavedEasingPresets(nextPresets)
+      return nextPresets
+    })
+  }
+
   return (
     <>
       <Button
@@ -398,12 +495,14 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
           setActiveTab(isCustom ? 'custom' : 'preset')
           setActivePreviewKind(previewKind)
           setCustomPoints(getWallpaperEditableBezierControlPoints(normalizedValue, fallbackPreset))
+          setPresetName(matchingSavedPreset?.name ?? '')
+          setSavedPresets(loadWallpaperSavedEasingPresets())
           setOpen(true)
         }}
       >
         <span className="flex min-w-0 items-center gap-2">
           <Sparkles className="h-4 w-4 text-secondary" />
-          <span className="truncate">{getWallpaperAnimationEasingLabel(normalizedValue)}</span>
+          <span className="truncate">{pickerLabel}</span>
         </span>
         <ChevronRight className="h-4 w-4 opacity-70" />
       </Button>
@@ -427,26 +526,68 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
 
           {activeTab === 'preset' ? (
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_360px]">
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-2">
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      onChange(option.value)
-                      setOpen(false)
-                    }}
-                    className={cn(
-                      'rounded-sm border p-3 text-left transition',
-                      normalizedValue === option.value
-                        ? 'border-primary bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]'
-                        : 'border-border bg-surface-low hover:border-primary/50 hover:bg-surface-high',
-                    )}
-                  >
-                    <div className="text-sm font-medium text-foreground">{option.label}</div>
-                    <div className="mt-1 text-xs text-muted-foreground break-all">{getWallpaperAnimationEasingCss(option.value)}</div>
-                  </button>
-                ))}
+              <div className="space-y-4">
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-2">
+                  {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        onChange(option.value)
+                        setOpen(false)
+                      }}
+                      className={cn(
+                        'rounded-sm border p-3 text-left transition',
+                        normalizedValue === option.value
+                          ? 'border-primary bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]'
+                          : 'border-border bg-surface-low hover:border-primary/50 hover:bg-surface-high',
+                      )}
+                    >
+                      <div className="text-sm font-medium text-foreground">{option.label}</div>
+                      <div className="mt-1 text-xs text-muted-foreground break-all">{getWallpaperAnimationEasingCss(option.value)}</div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="rounded-sm border border-border bg-surface-low p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-foreground">내 프리셋</div>
+                      <div className="text-xs text-muted-foreground">커스텀 탭에서 저장한 이징을 여기서 다시 바로 쓸 수 있어.</div>
+                    </div>
+                    <div className="text-xs text-muted-foreground">{savedPresets.length}/{MAX_WALLPAPER_SAVED_EASING_PRESETS}</div>
+                  </div>
+
+                  {savedPresets.length > 0 ? (
+                    <div className="space-y-2">
+                      {savedPresets.map((preset) => (
+                        <div key={preset.id} className="flex items-center gap-2 rounded-sm border border-border/70 bg-background p-2">
+                          <button
+                            type="button"
+                            className={cn(
+                              'min-w-0 flex-1 rounded-sm px-2 py-2 text-left transition hover:bg-surface-low',
+                              normalizedValue === preset.easing ? 'bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]' : '',
+                            )}
+                            onClick={() => {
+                              onChange(preset.easing)
+                              setOpen(false)
+                            }}
+                          >
+                            <div className="truncate text-sm font-medium text-foreground">{preset.name}</div>
+                            <div className="truncate text-[11px] text-muted-foreground">{preset.easing}</div>
+                          </button>
+                          <Button type="button" size="icon-xs" variant="ghost" onClick={() => handleRemovePreset(preset.id)} title="프리셋 삭제" aria-label="프리셋 삭제">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-sm border border-dashed border-border px-3 py-5 text-center text-xs text-muted-foreground">
+                      아직 저장한 커스텀 프리셋이 없어.
+                    </div>
+                  )}
+                </div>
               </div>
 
               <EasingPreviewPanel
@@ -498,6 +639,29 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                         {customEasing}
                       </div>
                     </div>
+
+                    <div className="rounded-sm border border-border bg-surface-low p-3">
+                      <div className="mb-2 text-xs text-muted-foreground">프리셋으로 저장</div>
+                      <div className="flex gap-2">
+                        <Input
+                          variant="settings"
+                          placeholder="예: 부드러운 진입"
+                          value={presetName}
+                          onChange={(event) => setPresetName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              handleSavePreset()
+                            }
+                          }}
+                        />
+                        <Button type="button" onClick={handleSavePreset} disabled={!presetName.trim()}>
+                          <Save className="h-4 w-4" />
+                          저장
+                        </Button>
+                      </div>
+                    </div>
+
                     <div className="rounded-sm border border-border bg-surface-low p-3 text-xs leading-5 text-muted-foreground">
                       <div>X는 시간 흐름, Y는 진행 느낌이야.</div>
                       <div>위로 올리면 초반에 더 빨리 치고 나가고, 아래로 내리면 더 눌렀다가 나가.</div>
