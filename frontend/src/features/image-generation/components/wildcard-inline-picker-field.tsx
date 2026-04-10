@@ -1,13 +1,27 @@
-import { ChevronRight, Folder, FolderOpen, Plus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
 import { inputVariants } from '@/components/ui/input'
 import { textareaVariants } from '@/components/ui/textarea'
-import { getWildcards, type WildcardItemRecord, type WildcardRecord, type WildcardTool } from '@/lib/api'
+import { getWildcards, type WildcardTool } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { filterWildcardTree, flattenWildcardTree, matchesWorkspaceTab, type WildcardWorkspaceTab } from './wildcard-generation-panel-helpers'
+import {
+  buildWildcardInsertion,
+  countWildcardItemsForTool,
+  flattenWildcardRecords,
+  MAX_RECENT_WILDCARDS,
+  readStoredRecentWildcards,
+  readStoredWildcardFilterMode,
+  resolveActiveWildcardQuery,
+  scoreWildcardMatch,
+  type FlattenedWildcardRecord,
+  type WildcardFilterMode,
+  type WildcardInsertionRange,
+  writeStoredRecentWildcards,
+  writeStoredWildcardFilterMode,
+} from './wildcard-inline-picker-helpers'
+import { WildcardInlinePickerExplorer } from './wildcard-inline-picker-explorer'
 
 type WildcardInlinePickerFieldProps = {
   value: string
@@ -20,179 +34,7 @@ type WildcardInlinePickerFieldProps = {
   className?: string
 }
 
-type FlattenedWildcardRecord = {
-  id: number
-  name: string
-  path: string[]
-  type: WildcardRecord['type']
-  isAutoCollected: boolean
-  items: WildcardItemRecord[]
-}
-
-type ActiveWildcardQuery = {
-  start: number
-  end: number
-  query: string
-}
-
-type WildcardInsertionRange = {
-  start: number
-  end: number
-}
-
-type WildcardFilterMode = 'available-only' | 'all'
-
-const WILDCARD_INLINE_EXPLORER_TABS: Array<{ value: WildcardWorkspaceTab; label: string }> = [
-  { value: 'wildcards', label: '와일드카드' },
-  { value: 'preprocess', label: '전처리' },
-  { value: 'lora', label: '로라' },
-]
-
-const RECENT_WILDCARD_KEY_PREFIX = 'conai.wildcards.recent.'
-const FILTER_MODE_KEY_PREFIX = 'conai.wildcards.filter-mode.'
-const MAX_RECENT_WILDCARDS = 8
-
-function readStoredWildcardFilterMode(tool: WildcardTool): WildcardFilterMode {
-  if (typeof window === 'undefined') {
-    return 'available-only'
-  }
-
-  const value = window.localStorage.getItem(`${FILTER_MODE_KEY_PREFIX}${tool}`)
-  return value === 'all' ? 'all' : 'available-only'
-}
-
-function writeStoredWildcardFilterMode(tool: WildcardTool, mode: WildcardFilterMode) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.localStorage.setItem(`${FILTER_MODE_KEY_PREFIX}${tool}`, mode)
-}
-
-function readStoredRecentWildcards(tool: WildcardTool): string[] {
-  if (typeof window === 'undefined') {
-    return []
-  }
-
-  try {
-    const raw = window.localStorage.getItem(`${RECENT_WILDCARD_KEY_PREFIX}${tool}`)
-    if (!raw) {
-      return []
-    }
-
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function writeStoredRecentWildcards(tool: WildcardTool, names: string[]) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.localStorage.setItem(`${RECENT_WILDCARD_KEY_PREFIX}${tool}`, JSON.stringify(names.slice(0, MAX_RECENT_WILDCARDS)))
-}
-
-function flattenWildcards(nodes: WildcardRecord[], parentPath: string[] = []): FlattenedWildcardRecord[] {
-  const entries: FlattenedWildcardRecord[] = []
-
-  for (const node of nodes) {
-    const path = [...parentPath, node.name]
-    entries.push({
-      id: node.id,
-      name: node.name,
-      path,
-      type: node.type,
-      isAutoCollected: node.is_auto_collected === 1,
-      items: node.items ?? [],
-    })
-
-    if (node.children && node.children.length > 0) {
-      entries.push(...flattenWildcards(node.children, path))
-    }
-  }
-
-  return entries
-}
-
-function resolveActiveWildcardQuery(value: string, caretPosition: number): ActiveWildcardQuery | null {
-  const prefix = value.slice(0, Math.max(0, caretPosition))
-  const tokenStart = prefix.lastIndexOf('++')
-
-  if (tokenStart < 0) {
-    return null
-  }
-
-  if (tokenStart > 0) {
-    const previousCharacter = prefix[tokenStart - 1]
-    if (!/[\s,(]/.test(previousCharacter)) {
-      return null
-    }
-  }
-
-  const query = prefix.slice(tokenStart + 2)
-  if (query.includes('++')) {
-    return null
-  }
-
-  if (/[\s,()]/.test(query)) {
-    return null
-  }
-
-  return {
-    start: tokenStart,
-    end: caretPosition,
-    query,
-  }
-}
-
-function countItemsForTool(items: WildcardItemRecord[], tool: WildcardTool) {
-  return items.filter((item) => item.tool === tool).length
-}
-
-/** Build the next prompt value for inline wildcard insertion, auto-adding comma separators when chaining entries. */
-function buildWildcardInsertion(value: string, wildcardName: string, range: WildcardInsertionRange) {
-  const token = `++${wildcardName}++`
-  const before = value.slice(0, range.start)
-  const after = value.slice(range.end)
-  const needsLeadingSeparator = before.trim().length > 0 && !/[\s,(]$/.test(before)
-  const insertedText = `${needsLeadingSeparator ? ', ' : ''}${token}`
-
-  return {
-    nextValue: `${before}${insertedText}${after}`,
-    nextCaretPosition: before.length + insertedText.length,
-  }
-}
-
-function scoreWildcardMatch(record: FlattenedWildcardRecord, normalizedQuery: string) {
-  if (!normalizedQuery) {
-    return 0
-  }
-
-  const name = record.name.toLowerCase()
-  const path = record.path.join(' / ').toLowerCase()
-
-  if (name === normalizedQuery) {
-    return 100
-  }
-
-  if (name.startsWith(normalizedQuery)) {
-    return 80
-  }
-
-  if (name.includes(normalizedQuery)) {
-    return 60
-  }
-
-  if (path.includes(normalizedQuery)) {
-    return 40
-  }
-
-  return -1
-}
-
+/** Highlight the first matched query segment inside one suggestion label. */
 function renderHighlightedText(text: string, query: string) {
   const normalizedQuery = query.trim()
   if (!normalizedQuery) {
@@ -249,8 +91,13 @@ export function WildcardInlinePickerField({
     staleTime: 60_000,
   })
 
-  const flattenedWildcards = useMemo(() => flattenWildcards(wildcardsQuery.data ?? []), [wildcardsQuery.data])
+  const wildcards = wildcardsQuery.data ?? []
+  const flattenedWildcards = useMemo(() => flattenWildcardRecords(wildcards), [wildcards])
   const activeQuery = useMemo(() => resolveActiveWildcardQuery(value, caretPosition), [value, caretPosition])
+  const explorerTreeNodes = useMemo(
+    () => filterWildcardTree(wildcards, (node) => matchesWorkspaceTab(node, activeExplorerTab)),
+    [activeExplorerTab, wildcards],
+  )
 
   const suggestions = useMemo(() => {
     if (!activeQuery) {
@@ -263,9 +110,9 @@ export function WildcardInlinePickerField({
       .map((record) => ({
         record,
         score: scoreWildcardMatch(record, normalizedQuery),
-        toolItemCount: countItemsForTool(record.items, tool),
-        naiItemCount: countItemsForTool(record.items, 'nai'),
-        comfyuiItemCount: countItemsForTool(record.items, 'comfyui'),
+        toolItemCount: countWildcardItemsForTool(record.items, tool),
+        naiItemCount: countWildcardItemsForTool(record.items, 'nai'),
+        comfyuiItemCount: countWildcardItemsForTool(record.items, 'comfyui'),
         recentIndex: recentIndexMap.get(record.name) ?? Number.POSITIVE_INFINITY,
       }))
       .filter(({ score, toolItemCount }) => {
@@ -303,13 +150,8 @@ export function WildcardInlinePickerField({
     return records
   }, [activeQuery, filterMode, flattenedWildcards, recentWildcardNames, tool])
 
-  const explorerTreeNodes = useMemo(
-    () => filterWildcardTree(wildcardsQuery.data ?? [], (node) => matchesWorkspaceTab(node, activeExplorerTab)),
-    [activeExplorerTab, wildcardsQuery.data],
-  )
   const explorerEntries = useMemo(() => flattenWildcardTree(explorerTreeNodes), [explorerTreeNodes])
   const isTreeExplorerMode = filterMode === 'all' && (activeQuery === null || (activeQuery?.query.trim().length ?? 0) === 0)
-
   const isPopupOpen = isFocused && (activeQuery !== null || isExplorerPinned) && !disabled
   const normalizedActiveQuery = activeQuery?.query.trim() ?? ''
   const indexedSuggestions = suggestions.map((suggestion, index) => ({ ...suggestion, index }))
@@ -454,87 +296,6 @@ export function WildcardInlinePickerField({
     ))
   }
 
-  const renderExplorerTree = (nodes: WildcardRecord[], depth = 0): ReactNode => {
-    if (nodes.length === 0) {
-      return null
-    }
-
-    return (
-      <div className="space-y-1">
-        {nodes.map((node) => {
-          const hasChildren = (node.children?.length ?? 0) > 0
-          const isExpanded = expandedExplorerIds.includes(node.id)
-          const isSelected = selectedExplorerId === node.id
-          const naiItemCount = countItemsForTool(node.items ?? [], 'nai')
-          const comfyuiItemCount = countItemsForTool(node.items ?? [], 'comfyui')
-
-          return (
-            <div key={node.id} className="space-y-1">
-              <div className="flex items-center gap-1" style={{ paddingLeft: `${depth * 14}px` }}>
-                {hasChildren ? (
-                  <button
-                    type="button"
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                      toggleExplorerExpanded(node.id)
-                      setSelectedExplorerId(node.id)
-                    }}
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-surface-low hover:text-foreground"
-                    aria-label={isExpanded ? '접기' : '펼치기'}
-                    title={isExpanded ? '접기' : '펼치기'}
-                  >
-                    <ChevronRight className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-90')} />
-                  </button>
-                ) : (
-                  <span className="inline-flex h-8 w-8 shrink-0" aria-hidden="true" />
-                )}
-
-                <button
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                    setSelectedExplorerId(node.id)
-                    if (hasChildren) {
-                      toggleExplorerExpanded(node.id)
-                    }
-                  }}
-                  className={cn(
-                    'inline-flex min-w-0 flex-1 items-center gap-2 rounded-sm px-2 py-2 text-left text-sm transition-colors',
-                    isSelected ? 'bg-surface-high text-foreground' : 'hover:bg-surface-lowest text-foreground',
-                  )}
-                  title={node.name}
-                >
-                  {hasChildren || isSelected ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />}
-                  <span className="truncate">{node.name}</span>
-                </button>
-
-                <div className="hidden shrink-0 items-center gap-1 md:flex">
-                  <Badge variant={tool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
-                  <Badge variant={tool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
-                </div>
-
-                <button
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                    handleInsertWildcard(node.name)
-                  }}
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border bg-surface-lowest text-muted-foreground transition-colors hover:bg-surface-high hover:text-foreground"
-                  aria-label={`++${node.name}++ 추가`}
-                  title={`++${node.name}++ 추가`}
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-
-              {hasChildren && isExpanded ? renderExplorerTree(node.children ?? [], depth + 1) : null}
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-
   const renderSuggestionButton = ({
     record,
     toolItemCount,
@@ -648,31 +409,22 @@ export function WildcardInlinePickerField({
               </div>
               <Badge variant="outline">{isTreeExplorerMode ? explorerEntries.length : suggestions.length}</Badge>
             </div>
-
-            {isTreeExplorerMode ? (
-              <SegmentedTabBar
-                value={activeExplorerTab}
-                items={WILDCARD_INLINE_EXPLORER_TABS}
-                onChange={(value) => setActiveExplorerTab(value as WildcardWorkspaceTab)}
-                fullWidth
-                size="xs"
-                className="border-b-0 pb-0"
-              />
-            ) : null}
           </div>
 
           {wildcardsQuery.isLoading ? (
             <div className="px-3 py-3 text-sm text-muted-foreground">와일드카드 불러오는 중…</div>
           ) : isTreeExplorerMode ? (
-            <div className="max-h-80 overflow-y-auto p-2">
-              {explorerEntries.length > 0 ? (
-                <div className="space-y-1 rounded-sm border border-border/70 bg-surface-low p-2">
-                  {renderExplorerTree(explorerTreeNodes)}
-                </div>
-              ) : (
-                <div className="rounded-sm border border-border/70 bg-surface-low px-3 py-3 text-sm text-muted-foreground">이 분류에는 아직 항목이 없어.</div>
-              )}
-            </div>
+            <WildcardInlinePickerExplorer
+              activeTab={activeExplorerTab}
+              expandedWildcardIds={expandedExplorerIds}
+              selectedWildcardId={selectedExplorerId}
+              tool={tool}
+              treeNodes={explorerTreeNodes}
+              onChangeActiveTab={setActiveExplorerTab}
+              onInsertWildcard={handleInsertWildcard}
+              onSelectWildcard={setSelectedExplorerId}
+              onToggleExpanded={toggleExplorerExpanded}
+            />
           ) : suggestions.length > 0 ? (
             <div className="max-h-72 space-y-3 overflow-y-auto p-2">
               {recentSuggestions.length > 0 ? (
