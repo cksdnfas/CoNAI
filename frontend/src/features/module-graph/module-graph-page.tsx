@@ -308,6 +308,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     workflowEditorSupportPanels,
     graphCanvas,
   } = useModuleGraphPageEditorPanels({
+    workflowView,
     modules,
     graphWorkflowFolders: graphWorkflowFoldersQuery.data ?? [],
     draftWorkflowFolderId,

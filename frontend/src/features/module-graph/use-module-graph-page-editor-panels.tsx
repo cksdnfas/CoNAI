@@ -1,8 +1,11 @@
-import { useMemo } from 'react'
+import { Suspense, lazy, useMemo } from 'react'
 import type { Connection, OnEdgesChange, OnNodesChange } from '@xyflow/react'
 import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import { ModuleGraphCanvas } from './components/module-graph-canvas'
+const ModuleGraphCanvasLazy = lazy(async () => {
+  const module = await import('./components/module-graph-canvas')
+  return { default: module.ModuleGraphCanvas }
+})
 import {
   ModuleGraphEditorSupportSubtitle,
   ModuleGraphWorkflowBrowseSidePanel,
@@ -15,8 +18,13 @@ import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-shared'
 
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
 
+function GraphCanvasFallback() {
+  return <div className="min-h-[28rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+}
+
 /** Build the assembled editor-facing panels used by the module-graph page. */
 export function useModuleGraphPageEditorPanels({
+  workflowView,
   modules,
   graphWorkflowFolders,
   draftWorkflowFolderId,
@@ -91,6 +99,7 @@ export function useModuleGraphPageEditorPanels({
   onAddModuleNode,
   isValidConnection,
 }: {
+  workflowView: 'browse' | 'edit'
   modules: ModuleDefinitionRecord[]
   graphWorkflowFolders: GraphWorkflowFolderRecord[]
   draftWorkflowFolderId: number | null
@@ -213,7 +222,7 @@ export function useModuleGraphPageEditorPanels({
     />
   )
 
-  const workflowBrowseSidePanel = (
+  const workflowBrowseSidePanel = workflowView === 'browse' ? (
     <ModuleGraphWorkflowBrowseSidePanel
       selectedGraphRecord={selectedGraphRecord}
       workflowRunInputValues={workflowRunInputValues}
@@ -231,9 +240,9 @@ export function useModuleGraphPageEditorPanels({
       onOpenFolderSettings={onOpenBrowseManage}
       onValidationIssueSelect={onValidationIssueSelect}
     />
-  )
+  ) : null
 
-  const workflowEditorSupportPanels = (
+  const workflowEditorSupportPanels = workflowView === 'edit' ? (
     <ModuleGraphWorkflowEditorSupportPanels
       nodes={nodes}
       edges={edges}
@@ -276,27 +285,29 @@ export function useModuleGraphPageEditorPanels({
       onRetryExecution={onRetrySelectedExecution}
       onCancelExecution={onCancelSelectedExecution}
     />
-  )
+  ) : null
 
-  const graphCanvas = (
-    <ModuleGraphCanvas
-      nodes={graphCanvasNodes}
-      edges={edges}
-      modules={modules}
-      reactFlowColorMode={reactFlowColorMode}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onNodeSelect={onNodeSelect}
-      onEdgeSelect={onEdgeSelect}
-      onPaneSelect={onPaneSelect}
-      onConnect={onConnect}
-      onAddModuleNode={onAddModuleNode}
-      onDuplicateNodeById={onDuplicateNodeById}
-      onDisconnectAllNodeConnections={onDisconnectAllNodeConnections}
-      onRemoveNodeById={onRemoveNodeById}
-      isValidConnection={isValidConnection}
-    />
-  )
+  const graphCanvas = workflowView === 'edit' ? (
+    <Suspense fallback={<GraphCanvasFallback />}>
+      <ModuleGraphCanvasLazy
+        nodes={graphCanvasNodes}
+        edges={edges}
+        modules={modules}
+        reactFlowColorMode={reactFlowColorMode}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeSelect={onNodeSelect}
+        onEdgeSelect={onEdgeSelect}
+        onPaneSelect={onPaneSelect}
+        onConnect={onConnect}
+        onAddModuleNode={onAddModuleNode}
+        onDuplicateNodeById={onDuplicateNodeById}
+        onDisconnectAllNodeConnections={onDisconnectAllNodeConnections}
+        onRemoveNodeById={onRemoveNodeById}
+        isValidConnection={isValidConnection}
+      />
+    </Suspense>
+  ) : null
 
   return {
     editorSupportSubtitle,
