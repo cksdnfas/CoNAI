@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronRight, Save, Sparkles, Trash2 } from 'lucide-react'
+import { Check, ChevronRight, Pencil, Save, Sparkles, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
@@ -431,6 +431,8 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
   const [customPoints, setCustomPoints] = useState<WallpaperBezierControlPoints>(() => getWallpaperEditableBezierControlPoints(normalizedValue, fallbackPreset))
   const [savedPresets, setSavedPresets] = useState<WallpaperSavedEasingPreset[]>(() => loadWallpaperSavedEasingPresets())
   const [presetName, setPresetName] = useState('')
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null)
+  const [editingPresetName, setEditingPresetName] = useState('')
 
   const customEasing = useMemo(() => buildWallpaperCubicBezierEasing(customPoints), [customPoints])
   const previewEasing = activeTab === 'custom' ? customEasing : normalizedValue
@@ -483,6 +485,36 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
       saveWallpaperSavedEasingPresets(nextPresets)
       return nextPresets
     })
+
+    if (editingPresetId === presetId) {
+      setEditingPresetId(null)
+      setEditingPresetName('')
+    }
+  }
+
+  const handleStartEditingPreset = (preset: WallpaperSavedEasingPreset) => {
+    setEditingPresetId(preset.id)
+    setEditingPresetName(preset.name)
+  }
+
+  const handleCancelEditingPreset = () => {
+    setEditingPresetId(null)
+    setEditingPresetName('')
+  }
+
+  const handleRenamePreset = (presetId: string) => {
+    const trimmedName = editingPresetName.trim()
+    if (!trimmedName) {
+      return
+    }
+
+    setSavedPresets((current) => {
+      const nextPresets = current.map((preset) => preset.id === presetId ? { ...preset, name: trimmedName } : preset)
+      saveWallpaperSavedEasingPresets(nextPresets)
+      return nextPresets
+    })
+    setEditingPresetId(null)
+    setEditingPresetName('')
   }
 
   return (
@@ -497,6 +529,8 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
           setCustomPoints(getWallpaperEditableBezierControlPoints(normalizedValue, fallbackPreset))
           setPresetName(matchingSavedPreset?.name ?? '')
           setSavedPresets(loadWallpaperSavedEasingPresets())
+          setEditingPresetId(null)
+          setEditingPresetName('')
           setOpen(true)
         }}
       >
@@ -560,27 +594,72 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
 
                   {savedPresets.length > 0 ? (
                     <div className="space-y-2">
-                      {savedPresets.map((preset) => (
-                        <div key={preset.id} className="flex items-center gap-2 rounded-sm border border-border/70 bg-background p-2">
-                          <button
-                            type="button"
-                            className={cn(
-                              'min-w-0 flex-1 rounded-sm px-2 py-2 text-left transition hover:bg-surface-low',
-                              normalizedValue === preset.easing ? 'bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]' : '',
+                      {savedPresets.map((preset) => {
+                        const isEditing = editingPresetId === preset.id
+                        const isDuplicateName = editingPresetName.trim().length > 0 && savedPresets.some((candidate) => candidate.id !== preset.id && candidate.name === editingPresetName.trim())
+
+                        return (
+                          <div key={preset.id} className="flex items-center gap-2 rounded-sm border border-border/70 bg-background p-2">
+                            {isEditing ? (
+                              <div className="min-w-0 flex-1 space-y-2 rounded-sm px-2 py-2">
+                                <Input
+                                  variant="settings"
+                                  value={editingPresetName}
+                                  onChange={(event) => setEditingPresetName(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter' && editingPresetName.trim() && !isDuplicateName) {
+                                      event.preventDefault()
+                                      handleRenamePreset(preset.id)
+                                    }
+                                    if (event.key === 'Escape') {
+                                      event.preventDefault()
+                                      handleCancelEditingPreset()
+                                    }
+                                  }}
+                                />
+                                <div className="truncate text-[11px] text-muted-foreground">{preset.easing}</div>
+                                {isDuplicateName ? (
+                                  <div className="text-[11px] text-destructive">같은 이름의 프리셋이 이미 있어.</div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                className={cn(
+                                  'min-w-0 flex-1 rounded-sm px-2 py-2 text-left transition hover:bg-surface-low',
+                                  normalizedValue === preset.easing ? 'bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]' : '',
+                                )}
+                                onClick={() => {
+                                  onChange(preset.easing)
+                                  setOpen(false)
+                                }}
+                              >
+                                <div className="truncate text-sm font-medium text-foreground">{preset.name}</div>
+                                <div className="truncate text-[11px] text-muted-foreground">{preset.easing}</div>
+                              </button>
                             )}
-                            onClick={() => {
-                              onChange(preset.easing)
-                              setOpen(false)
-                            }}
-                          >
-                            <div className="truncate text-sm font-medium text-foreground">{preset.name}</div>
-                            <div className="truncate text-[11px] text-muted-foreground">{preset.easing}</div>
-                          </button>
-                          <Button type="button" size="icon-xs" variant="ghost" onClick={() => handleRemovePreset(preset.id)} title="프리셋 삭제" aria-label="프리셋 삭제">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ))}
+
+                            {isEditing ? (
+                              <>
+                                <Button type="button" size="icon-xs" variant="ghost" onClick={() => handleRenamePreset(preset.id)} disabled={!editingPresetName.trim() || isDuplicateName} title="이름 저장" aria-label="이름 저장">
+                                  <Check className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button type="button" size="icon-xs" variant="ghost" onClick={handleCancelEditingPreset} title="이름 편집 취소" aria-label="이름 편집 취소">
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            ) : (
+                              <Button type="button" size="icon-xs" variant="ghost" onClick={() => handleStartEditingPreset(preset)} title="이름 편집" aria-label="이름 편집">
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+
+                            <Button type="button" size="icon-xs" variant="ghost" onClick={() => handleRemovePreset(preset.id)} title="프리셋 삭제" aria-label="프리셋 삭제">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className="rounded-sm border border-dashed border-border px-3 py-5 text-center text-xs text-muted-foreground">
