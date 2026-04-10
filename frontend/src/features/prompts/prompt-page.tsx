@@ -15,7 +15,7 @@ import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
 import { PromptToolbar } from './components/prompt-toolbar'
 import { usePromptListSelection } from './components/use-prompt-list-selection'
-import { PROMPT_TYPE_TABS, isLockedPromptGroup, isLockedPromptItem } from './prompt-page-utils'
+import { PROMPT_TYPE_TABS, canDeletePromptItem, isLockedPromptGroup, isLockedPromptItem } from './prompt-page-utils'
 import { usePromptPageMutations } from './use-prompt-page-mutations'
 import { usePromptPageQueries } from './use-prompt-page-queries'
 
@@ -28,6 +28,40 @@ type GroupEditorState =
   | { mode: 'create'; defaultParentId?: number | null }
   | { mode: 'edit'; group: PromptGroupRecord }
   | null
+
+async function copyTextWithFallback(text: string) {
+  if (typeof navigator !== 'undefined' && typeof window !== 'undefined' && window.isSecureContext && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  if (typeof document === 'undefined') {
+    throw new Error('Clipboard is not available')
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '0'
+  textarea.style.left = '0'
+  textarea.style.opacity = '0'
+  textarea.style.pointerEvents = 'none'
+  document.body.appendChild(textarea)
+
+  try {
+    textarea.focus({ preventScroll: true })
+    textarea.select()
+    textarea.setSelectionRange(0, textarea.value.length)
+
+    const copied = document.execCommand('copy')
+    if (!copied) {
+      throw new Error('Clipboard copy failed')
+    }
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
 
 export function PromptPage() {
   const { showSnackbar } = useSnackbar()
@@ -138,7 +172,7 @@ export function PromptPage() {
 
   const handleCopyPrompt = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text)
+      await copyTextWithFallback(text)
       showSnackbar({ message: '복사했어.', tone: 'info' })
     } catch {
       showSnackbar({ message: '복사에 실패했어.', tone: 'error' })
@@ -261,6 +295,11 @@ export function PromptPage() {
       return
     }
 
+    if (!canDeletePromptItem(item)) {
+      showSnackbar({ message: '이미지 사용량이 0일 때만 삭제할 수 있어.', tone: 'error' })
+      return
+    }
+
     const confirmed = window.confirm(`정말 이 프롬프트를 삭제할까?\n\n${item.prompt}`)
     if (!confirmed) {
       return
@@ -275,6 +314,10 @@ export function PromptPage() {
     }
     if (selectedLockedPromptCount > 0) {
       showSnackbar({ message: 'LoRA 항목은 삭제할 수 없어.', tone: 'error' })
+      return
+    }
+    if (selectedPromptItems.some((item) => !canDeletePromptItem(item))) {
+      showSnackbar({ message: '사용량이 남아있는 프롬프트는 삭제할 수 없어.', tone: 'error' })
       return
     }
 
@@ -362,7 +405,6 @@ export function PromptPage() {
             onTogglePromptSelection={handleTogglePromptSelection}
             onAssignPrompt={(item) => setAssignModalState({ mode: 'single', item })}
             onDeletePrompt={(item) => void handleDeleteSinglePrompt(item)}
-            onCopyPrompt={handleCopyPrompt}
             onActivatePrompt={(item) => {
               if (shouldSuppressClick()) {
                 return
@@ -370,6 +412,7 @@ export function PromptPage() {
               void handleCopyPrompt(item.prompt)
             }}
             isLockedPromptItem={isLockedPromptItem}
+            canDeletePromptItem={canDeletePromptItem}
           />
         </section>
       </div>

@@ -20,9 +20,9 @@ interface PromptListPanelProps {
   onTogglePromptSelection: (promptId: number, checked: boolean) => void
   onAssignPrompt: (item: PromptCollectionItem) => void
   onDeletePrompt: (item: PromptCollectionItem) => void
-  onCopyPrompt: (text: string) => void
   onActivatePrompt: (item: PromptCollectionItem) => void
   isLockedPromptItem: (item: PromptCollectionItem) => boolean
+  canDeletePromptItem: (item: PromptCollectionItem) => boolean
 }
 
 export function PromptListPanel({
@@ -40,9 +40,9 @@ export function PromptListPanel({
   onTogglePromptSelection,
   onAssignPrompt,
   onDeletePrompt,
-  onCopyPrompt,
   onActivatePrompt,
   isLockedPromptItem,
+  canDeletePromptItem,
 }: PromptListPanelProps) {
   return (
     <section className="space-y-6">
@@ -59,11 +59,10 @@ export function PromptListPanel({
 
       <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>
         <div className="space-y-1">
-          <div className="grid grid-cols-[32px_minmax(0,1fr)_120px_116px] border-b border-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="hidden grid-cols-[32px_minmax(0,1fr)_auto] border-b border-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground sm:grid">
             <span />
             <span>Prompt</span>
-            <span className="text-right">Usage</span>
-            <span />
+            <span className="text-right">Usage / Actions</span>
           </div>
 
           {isLoading ? (
@@ -83,8 +82,7 @@ export function PromptListPanel({
                   item={item}
                   selected={selectedPromptIds.includes(item.id)}
                   canAssign={!isLocked}
-                  canDelete={!isLocked}
-                  onCopy={onCopyPrompt}
+                  canDelete={canDeletePromptItem(item)}
                   onToggleSelect={(checked) => onTogglePromptSelection(item.id, checked)}
                   onAssignGroup={() => onAssignPrompt(item)}
                   onDelete={() => onDeletePrompt(item)}

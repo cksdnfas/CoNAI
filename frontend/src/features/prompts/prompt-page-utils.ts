@@ -24,6 +24,10 @@ export function isLockedPromptItem(item: PromptCollectionItem) {
   return item.group_info?.group_name?.trim().toLowerCase() === 'lora'
 }
 
+export function canDeletePromptItem(item: PromptCollectionItem) {
+  return !isLockedPromptItem(item) && item.usage_count <= 0
+}
+
 export function getPromptTypeTotal(promptType: PromptTypeFilter, statistics?: PromptStatistics) {
   if (!statistics) {
     return 0
