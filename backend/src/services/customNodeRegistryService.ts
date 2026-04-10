@@ -8,6 +8,7 @@ import {
   type ModuleDefinitionCreateData,
   type ModuleDefinitionRecord,
   type ModulePortDefinition,
+  type ModuleDefinitionUpdateData,
   type ModuleUiFieldDefinition,
 } from '../types/moduleGraph';
 
@@ -105,6 +106,12 @@ export type CustomNodeScaffoldResult = {
   sync: CustomNodeSyncResult;
 };
 
+type LoadedCustomNodeManifest = {
+  manifestPath: string;
+  manifestContent: string;
+  manifest: CustomNodeManifest;
+};
+
 function buildDisplayLabel(key: string, label?: string): string {
   if (label && label.trim().length > 0) {
     return label.trim();
@@ -193,34 +200,122 @@ function buildCustomNodeSourceHash(manifestContent: string, entryContent: string
   return crypto.createHash('sha256').update(manifestContent).update('\n').update(entryContent).digest('hex');
 }
 
-/** Validate one custom node manifest and resolve its entry file. */
-async function loadCustomNodeRecord(folderName: string, folderPath: string): Promise<CustomNodeRecord> {
+/** Read and validate one custom node manifest file from disk. */
+async function loadCustomNodeManifest(folderPath: string): Promise<LoadedCustomNodeManifest> {
   const manifestPath = path.join(folderPath, 'node.json');
   const manifestContent = await fs.promises.readFile(manifestPath, 'utf8');
-  const parsedManifest = customNodeManifestSchema.parse(JSON.parse(manifestContent));
 
-  if (path.isAbsolute(parsedManifest.entry)) {
+  return {
+    manifestPath,
+    manifestContent,
+    manifest: customNodeManifestSchema.parse(JSON.parse(manifestContent)),
+  };
+}
+
+/** Resolve one manifest entry path and keep it inside the custom node folder. */
+function resolveCustomNodeEntryPath(folderPath: string, entry: string): string {
+  if (path.isAbsolute(entry)) {
     throw new Error('Manifest entry must be a relative path');
   }
 
-  const entryPath = path.resolve(folderPath, parsedManifest.entry);
+  const entryPath = path.resolve(folderPath, entry);
   if (!entryPath.startsWith(path.resolve(folderPath))) {
     throw new Error('Manifest entry must stay inside the custom node folder');
   }
 
+  return entryPath;
+}
+
+/** Resolve one optional support file path when it already exists on disk. */
+function findExistingCustomNodeFilePath(folderPath: string, fileName: string): string | null {
+  const filePath = path.join(folderPath, fileName);
+  return fs.existsSync(filePath) ? filePath : null;
+}
+
+/** Build one update payload from normalized module creation data. */
+function buildModuleDefinitionUpdateData(createData: ModuleDefinitionCreateData): ModuleDefinitionUpdateData {
+  return {
+    name: createData.name,
+    description: createData.description,
+    category: createData.category,
+    template_defaults: createData.template_defaults,
+    exposed_inputs: createData.exposed_inputs,
+    output_ports: createData.output_ports,
+    ui_schema: createData.ui_schema,
+    is_active: true,
+    color: createData.color,
+    external_key: createData.external_key,
+    source_path: createData.source_path,
+    source_hash: createData.source_hash,
+  };
+}
+
+/** Sync one file-backed custom node into module_definitions and report the outcome. */
+function syncCustomNodeModuleRecord(nodeRecord: CustomNodeRecord, errors: CustomNodeScanError[]): 'created' | 'updated' | 'skipped' {
+  const createData = buildModuleDefinitionCreateData(nodeRecord);
+
+  try {
+    const existingByExternalKey = ModuleDefinitionModel.findByExternalKey(nodeRecord.manifest.key);
+    if (existingByExternalKey) {
+      const updated = ModuleDefinitionModel.update(existingByExternalKey.id, buildModuleDefinitionUpdateData(createData));
+      return updated ? 'updated' : 'skipped';
+    }
+
+    if (ModuleDefinitionModel.existsByName(createData.name)) {
+      errors.push({
+        folderName: nodeRecord.folderName,
+        folderPath: nodeRecord.folderPath,
+        message: `Module name already exists: ${createData.name}`,
+      });
+      return 'skipped';
+    }
+
+    ModuleDefinitionModel.create(createData);
+    return 'created';
+  } catch (error) {
+    errors.push({
+      folderName: nodeRecord.folderName,
+      folderPath: nodeRecord.folderPath,
+      message: error instanceof Error ? error.message : 'Failed to sync custom node module',
+    });
+    return 'skipped';
+  }
+}
+
+/** Deactivate missing file-backed custom node modules that were not seen in the latest scan. */
+function deactivateMissingCustomNodeModules(seenExternalKeys: Set<string>): number {
+  let deactivatedCount = 0;
+  const fileBackedModules = ModuleDefinitionModel.findAll(false)
+    .filter((moduleRecord) => moduleRecord.authoring_source === 'custom_node_fs');
+
+  for (const moduleRecord of fileBackedModules) {
+    if (!moduleRecord.external_key || seenExternalKeys.has(moduleRecord.external_key)) {
+      continue;
+    }
+
+    if (deactivateMissingCustomNodeModule(moduleRecord)) {
+      deactivatedCount += 1;
+    }
+  }
+
+  return deactivatedCount;
+}
+
+/** Validate one custom node manifest and resolve its entry file. */
+async function loadCustomNodeRecord(folderName: string, folderPath: string): Promise<CustomNodeRecord> {
+  const { manifestPath, manifestContent, manifest } = await loadCustomNodeManifest(folderPath);
+  const entryPath = resolveCustomNodeEntryPath(folderPath, manifest.entry);
   const entryContent = await fs.promises.readFile(entryPath, 'utf8');
-  const packageJsonPath = path.join(folderPath, 'package.json');
-  const readmePath = path.join(folderPath, 'README.md');
 
   return {
     folderName,
     folderPath,
     manifestPath,
     entryPath,
-    packageJsonPath: fs.existsSync(packageJsonPath) ? packageJsonPath : null,
-    readmePath: fs.existsSync(readmePath) ? readmePath : null,
+    packageJsonPath: findExistingCustomNodeFilePath(folderPath, 'package.json'),
+    readmePath: findExistingCustomNodeFilePath(folderPath, 'README.md'),
     sourceHash: buildCustomNodeSourceHash(manifestContent, entryContent),
-    manifest: parsedManifest,
+    manifest,
   };
 }
 
@@ -613,68 +708,22 @@ export class CustomNodeRegistryService {
     const scanResult = await this.scanCustomNodesFromFileSystem();
     let createdCount = 0;
     let updatedCount = 0;
-    let deactivatedCount = 0;
     const seenExternalKeys = new Set<string>();
 
     for (const nodeRecord of scanResult.nodes) {
-      const createData = buildModuleDefinitionCreateData(nodeRecord);
       seenExternalKeys.add(nodeRecord.manifest.key);
 
-      try {
-        const existingByExternalKey = ModuleDefinitionModel.findByExternalKey(nodeRecord.manifest.key);
-        if (existingByExternalKey) {
-          const updated = ModuleDefinitionModel.update(existingByExternalKey.id, {
-            name: createData.name,
-            description: createData.description,
-            category: createData.category,
-            template_defaults: createData.template_defaults,
-            exposed_inputs: createData.exposed_inputs,
-            output_ports: createData.output_ports,
-            ui_schema: createData.ui_schema,
-            is_active: true,
-            color: createData.color,
-            external_key: createData.external_key,
-            source_path: createData.source_path,
-            source_hash: createData.source_hash,
-          });
-          if (updated) {
-            updatedCount += 1;
-          }
-          continue;
-        }
-
-        if (ModuleDefinitionModel.existsByName(createData.name)) {
-          scanResult.errors.push({
-            folderName: nodeRecord.folderName,
-            folderPath: nodeRecord.folderPath,
-            message: `Module name already exists: ${createData.name}`,
-          });
-          continue;
-        }
-
-        ModuleDefinitionModel.create(createData);
+      const syncOutcome = syncCustomNodeModuleRecord(nodeRecord, scanResult.errors);
+      if (syncOutcome === 'created') {
         createdCount += 1;
-      } catch (error) {
-        scanResult.errors.push({
-          folderName: nodeRecord.folderName,
-          folderPath: nodeRecord.folderPath,
-          message: error instanceof Error ? error.message : 'Failed to sync custom node module',
-        });
+      }
+
+      if (syncOutcome === 'updated') {
+        updatedCount += 1;
       }
     }
 
-    const fileBackedModules = ModuleDefinitionModel.findAll(false)
-      .filter((moduleRecord) => moduleRecord.authoring_source === 'custom_node_fs');
-
-    for (const moduleRecord of fileBackedModules) {
-      if (!moduleRecord.external_key || seenExternalKeys.has(moduleRecord.external_key)) {
-        continue;
-      }
-
-      if (deactivateMissingCustomNodeModule(moduleRecord)) {
-        deactivatedCount += 1;
-      }
-    }
+    const deactivatedCount = deactivateMissingCustomNodeModules(seenExternalKeys);
 
     return {
       ...scanResult,
