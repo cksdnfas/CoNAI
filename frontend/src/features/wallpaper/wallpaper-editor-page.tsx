@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Copy, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Plus } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
@@ -32,9 +32,9 @@ import {
 } from './wallpaper-layout-utils'
 import { WallpaperCanvasView } from './wallpaper-shared'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
-import { listWallpaperWidgetDefinitions } from './wallpaper-widget-registry'
-import type { WallpaperLayoutPreset, WallpaperWidgetInstance } from './wallpaper-types'
+import type { WallpaperLayoutPreset, WallpaperWidgetInstance, WallpaperWidgetType } from './wallpaper-types'
 import { WallpaperWidgetInspector } from './wallpaper-widget-inspector'
+import { WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sidebar'
 
 interface WallpaperWidgetInstancePatch {
   x?: number
@@ -88,6 +88,7 @@ export function WallpaperEditorPage() {
   const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null)
   const isCoarsePointer = useIsCoarsePointer()
   const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(false)
+  const [selectedLibraryWidgetType, setSelectedLibraryWidgetType] = useState<WallpaperWidgetType | null>(null)
 
   const notifyInfo = (message: string) => showSnackbar({ message, tone: 'info' })
   const notifyError = (message: string) => showSnackbar({ message, tone: 'error' })
@@ -281,6 +282,13 @@ export function WallpaperEditorPage() {
     setDragOverWidgetId(null)
   }
 
+  const handleAddWidget = (widgetType: WallpaperWidgetType) => {
+    const nextLayoutPreset = appendWallpaperWidget(layoutPreset, widgetType)
+    setLayoutPreset(nextLayoutPreset)
+    setSelectedLibraryWidgetType(widgetType)
+    setSelectedWidgetId(nextLayoutPreset.widgets[nextLayoutPreset.widgets.length - 1]?.id ?? null)
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -318,7 +326,7 @@ export function WallpaperEditorPage() {
 
       <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
         <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[200px] flex-1 space-y-1">
+          <div className="min-w-[200px] flex-1 space-y-1">
           <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">프리셋</div>
           <Select
             value={effectiveActivePresetId ?? ''}
@@ -361,73 +369,41 @@ export function WallpaperEditorPage() {
         </div>
         </div>
 
-        <div className="grid gap-3 rounded-sm border border-border/70 bg-surface-low/70 p-3">
+        <div className="grid gap-2 rounded-sm border border-border/70 bg-surface-low/70 p-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
           <div className="space-y-1">
-            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">미리보기 기준</div>
-            <p className="text-sm text-muted-foreground">
-              에디터는 항상 현재 초안을 기준으로 보여줘. 실제 고정 적용 화면은 아래 저장 프리셋 URL을 쓰니까, 저장 전에는 둘이 다를 수 있어.
-            </p>
+            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">고정 런타임 URL</div>
+            <input
+              readOnly
+              value={activePreset ? activeRuntimeAbsoluteUrl : ''}
+              placeholder="저장된 프리셋을 선택하거나 저장하면 고정 URL이 생겨"
+              className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none"
+            />
           </div>
-
-          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
-            <div className="space-y-1">
-              <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">고정 런타임 URL</div>
-              <input
-                readOnly
-                value={activePreset ? activeRuntimeAbsoluteUrl : ''}
-                placeholder="저장된 프리셋을 선택하거나 저장하면 고정 URL이 생겨"
-                className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none"
-              />
-            </div>
-            {hasFixedRuntimeUrl ? (
-              <Button asChild variant="outline">
-                <Link to={activeRuntimePath}>저장 프리셋 열기</Link>
-              </Button>
-            ) : (
-              <Button variant="outline" disabled>
-                저장 프리셋 열기
-              </Button>
-            )}
-            <Button variant="outline" disabled={!hasFixedRuntimeUrl} onClick={() => { void handleCopyRuntimeUrl() }}>
-              <Copy className="h-4 w-4" />
-              URL 복사
+          {hasFixedRuntimeUrl ? (
+            <Button asChild variant="outline">
+              <Link to={activeRuntimePath}>저장 프리셋 열기</Link>
             </Button>
-          </div>
+          ) : (
+            <Button variant="outline" disabled>
+              저장 프리셋 열기
+            </Button>
+          )}
+          <Button variant="outline" disabled={!hasFixedRuntimeUrl} onClick={() => { void handleCopyRuntimeUrl() }}>
+            <Copy className="h-4 w-4" />
+            URL 복사
+          </Button>
         </div>
       </section>
 
       <div className={isCanvasFocusMode ? 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]' : 'grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_320px]'}>
         {!isCanvasFocusMode ? (
-          <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-4">
-          <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">위젯 라이브러리</h2>
-          <div className="space-y-2">
-            {listWallpaperWidgetDefinitions().map((widget) => (
-              <button
-                key={widget.type}
-                type="button"
-                onClick={() => {
-                  setLayoutPreset((current) => appendWallpaperWidget(current, widget.type))
-                }}
-                title={widget.description}
-                className="flex w-full items-center gap-3 rounded-sm border border-border bg-surface-low px-3 py-3 text-left transition hover:border-secondary/70 hover:bg-surface-high"
-              >
-                <div className="mt-0.5 rounded-sm border border-border bg-background p-1.5 text-secondary">
-                  <Plus className="h-3.5 w-3.5" />
-                </div>
-                <div className="min-w-0 text-sm font-medium text-foreground">{widget.title}</div>
-              </button>
-            ))}
-          </div>
-          </section>
+          <WallpaperWidgetLibrarySidebar
+            selectedWidgetType={selectedLibraryWidgetType}
+            onAddWidget={handleAddWidget}
+          />
         ) : null}
 
         <div className="space-y-3">
-          {isCanvasFocusMode ? (
-            <div className="rounded-sm border border-border bg-surface-container/70 px-4 py-3 text-sm text-muted-foreground">
-              집중 보기에서는 캔버스를 넓게 보여줘서 실제 런타임 배치 감각을 더 가깝게 확인할 수 있어.
-            </div>
-          ) : null}
-
           <WallpaperCanvasView
             canvasPreset={canvasPreset}
             layoutPreset={layoutPreset}
@@ -440,10 +416,71 @@ export function WallpaperEditorPage() {
           />
 
           <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">위젯 순서</h2>
-              <div className="text-xs text-muted-foreground">{isCoarsePointer ? '모바일에서는 버튼으로 순서를 바꿀 수 있어.' : '위 = 앞, 아래 = 뒤. 드래그해서 순서를 바꿀 수 있어.'}</div>
-            </div>
+            <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">선택 위젯 컨트롤</h2>
+
+            {selectedWidget ? (
+              <>
+                <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+                  {[
+                    ['X', selectedWidget.x],
+                    ['Y', selectedWidget.y],
+                    ['W', selectedWidget.w],
+                    ['H', selectedWidget.h],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="rounded-sm border border-border bg-surface-low px-3 py-2">
+                      <div className="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">{label}</div>
+                      <div className="mt-1 text-sm font-medium text-foreground">{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: '←', patch: { x: selectedWidget.x - 1 } },
+                    { label: '→', patch: { x: selectedWidget.x + 1 } },
+                    { label: '↑', patch: { y: selectedWidget.y - 1 } },
+                    { label: '↓', patch: { y: selectedWidget.y + 1 } },
+                    { label: 'W-', patch: { w: selectedWidget.w - 1 } },
+                    { label: 'W+', patch: { w: selectedWidget.w + 1 } },
+                    { label: 'H-', patch: { h: selectedWidget.h - 1 } },
+                    { label: 'H+', patch: { h: selectedWidget.h + 1 } },
+                  ].map(({ label, patch }) => (
+                    <Button
+                      key={label}
+                      variant="outline"
+                      size="sm"
+                      disabled={selectedWidget.locked}
+                      onClick={() => {
+                        setLayoutPreset((current) => patchSelectedWidget(current, selectedWidget.id, patch))
+                      }}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      setLayoutPreset((current) => removeSelectedWidget(current, selectedWidget.id))
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    위젯 삭제
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-sm border border-dashed border-border bg-surface-low px-4 py-6 text-center text-sm text-muted-foreground">
+                위젯을 선택해.
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-4">
+            <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">위젯 순서</h2>
 
             {orderedWidgets.length === 0 ? (
               <div className="rounded-sm border border-dashed border-border bg-surface-low px-4 py-6 text-center text-sm text-muted-foreground">

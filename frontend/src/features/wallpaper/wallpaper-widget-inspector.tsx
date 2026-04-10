@@ -1,5 +1,3 @@
-import { Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { SettingsField, SettingsToggleRow, SettingsValueTile } from '@/features/settings/components/settings-primitives'
@@ -25,11 +23,10 @@ interface WallpaperWidgetInspectorProps {
   widgetOrder: number | null
   onPatchWidget: (widgetId: string, patch: WallpaperWidgetInspectorPatch) => void
   onChangeWidgetOrder: (widgetId: string, nextOrder: number) => void
-  onRemoveWidget: (widgetId: string) => void
 }
 
 /** Render the editor inspector for one selected wallpaper widget. */
-export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, widgetOrder, onPatchWidget, onChangeWidgetOrder, onRemoveWidget }: WallpaperWidgetInspectorProps) {
+export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, widgetOrder, onPatchWidget, onChangeWidgetOrder }: WallpaperWidgetInspectorProps) {
   if (!selectedWidget) {
     return (
       <div className={cn('rounded-sm border border-dashed border-border bg-surface-low px-4 py-8 text-center text-sm text-muted-foreground')}>
@@ -841,40 +838,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, widgetCount, 
             <SettingsValueTile key={String(label)} label={label} value={value} className="bg-background px-3 py-2" valueClassName="mt-1 text-sm font-medium" />
           ))}
         </div>
-        <div className="grid grid-cols-4 gap-2">
-          {[
-            { label: '←', patch: { x: selectedWidget.x - 1 } },
-            { label: '→', patch: { x: selectedWidget.x + 1 } },
-            { label: '↑', patch: { y: selectedWidget.y - 1 } },
-            { label: '↓', patch: { y: selectedWidget.y + 1 } },
-            { label: 'W-', patch: { w: selectedWidget.w - 1 } },
-            { label: 'W+', patch: { w: selectedWidget.w + 1 } },
-            { label: 'H-', patch: { h: selectedWidget.h - 1 } },
-            { label: 'H+', patch: { h: selectedWidget.h + 1 } },
-          ].map(({ label, patch }) => (
-            <Button
-              key={label}
-              variant="outline"
-              size="sm"
-              disabled={selectedWidget.locked}
-              onClick={() => onPatchWidget(selectedWidget.id, patch)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
       </div>
-
-      <Button
-        variant="destructive"
-        className="w-full"
-        onClick={() => {
-          onRemoveWidget(selectedWidget.id)
-        }}
-      >
-        <Trash2 className="h-4 w-4" />
-        위젯 삭제
-      </Button>
     </>
   )
 }
