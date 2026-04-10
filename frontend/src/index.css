@@ -367,6 +367,12 @@
     background: var(--surface-lowest);
   }
 
+  .theme-graph-flow.touch-scroll-safe,
+  .theme-graph-flow.touch-scroll-safe .react-flow__pane,
+  .theme-graph-flow.touch-scroll-safe .react-flow__viewport {
+    touch-action: pan-y pinch-zoom;
+  }
+
   .theme-graph-flow .react-flow__panel {
     color: var(--foreground);
   }

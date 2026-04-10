@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Background, Controls, MarkerType, MiniMap, ReactFlow, type Connection, type OnEdgesChange, type OnNodesChange, type ReactFlowInstance } from '@xyflow/react'
 import type { ModuleDefinitionRecord } from '@/lib/api'
+import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { ModuleGraphActionMenu, type ModuleGraphActionMenuState } from './module-graph-action-menu'
 import { ModuleGraphQuickCreateMenu } from './module-graph-quick-create-menu'
 import { ModuleGraphNodeCard } from './module-graph-node-card'
 import { buildHandleId, getModulePortCompatibility, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 const MODULE_GRAPH_NODE_TYPES = { module: ModuleGraphNodeCard }
+const MOBILE_NODE_DRAG_HANDLE_SELECTOR = '.module-graph-drag-handle'
 const INITIAL_GRAPH_VIEWPORT = { x: 0, y: 0, zoom: 0.65 }
 const INITIAL_GRAPH_FIT_VIEW_OPTIONS = { padding: 0.35, maxZoom: 0.65 }
 
@@ -208,6 +210,7 @@ export function ModuleGraphCanvas({
 }) {
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<ModuleGraphNode, ModuleGraphEdge> | null>(null)
   const [quickCreateState, setQuickCreateState] = useState<QuickCreateState | null>(null)
+  const isCoarsePointer = useIsCoarsePointer()
   const [actionMenuState, setActionMenuState] = useState<ActionMenuState | null>(null)
   const suppressNextPaneClickRef = useRef(false)
   const pendingConnectionStartRef = useRef<PendingConnectionStart | null>(null)
@@ -216,6 +219,14 @@ export function ModuleGraphCanvas({
   const recommendedModules = useMemo(
     () => getRecommendedModulesFromConnectionStart(modules, nodes, quickCreateState?.connectionStart ?? null),
     [modules, nodes, quickCreateState?.connectionStart],
+  )
+
+  const reactFlowNodes = useMemo(
+    () => nodes.map((node) => ({
+      ...node,
+      dragHandle: isCoarsePointer ? MOBILE_NODE_DRAG_HANDLE_SELECTOR : undefined,
+    })),
+    [isCoarsePointer, nodes],
   )
 
   const closeQuickCreateMenu = useCallback(() => {
@@ -294,8 +305,8 @@ export function ModuleGraphCanvas({
   return (
     <div className="relative h-[760px] overflow-hidden rounded-sm border border-border bg-surface-lowest">
       <ReactFlow
-        className="theme-graph-flow"
-        nodes={nodes}
+        className={isCoarsePointer ? 'theme-graph-flow touch-scroll-safe' : 'theme-graph-flow'}
+        nodes={reactFlowNodes}
         edges={edges}
         onInit={setReactFlowInstance}
         onNodesChange={onNodesChange}
@@ -369,6 +380,8 @@ export function ModuleGraphCanvas({
         fitViewOptions={INITIAL_GRAPH_FIT_VIEW_OPTIONS}
         defaultViewport={INITIAL_GRAPH_VIEWPORT}
         colorMode={reactFlowColorMode}
+        nodesDraggable
+        panOnDrag={!isCoarsePointer}
         snapToGrid
         connectionRadius={32}
         deleteKeyCode={['Backspace', 'Delete']}

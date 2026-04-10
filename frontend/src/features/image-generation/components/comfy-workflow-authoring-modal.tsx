@@ -12,7 +12,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuery } from '@tanstack/react-query'
-import { Check, ChevronDown, ChevronUp, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, GripVertical, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +22,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import {
   getAppSettings,
   createGenerationWorkflow,
@@ -73,6 +74,7 @@ type ParsedWorkflowGraph = {
 
 const INITIAL_AUTHORING_VIEWPORT = { x: 0, y: 0, zoom: 0.7 }
 const INITIAL_AUTHORING_FIT_VIEW_OPTIONS = { padding: 0.28, maxZoom: 0.72 }
+const AUTHORING_NODE_DRAG_HANDLE_SELECTOR = '.comfy-authoring-drag-handle'
 
 type WorkflowJsonNodeRecord = {
   title?: string
@@ -363,12 +365,17 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
           ? 'min-w-[240px] rounded-sm border border-primary/45 bg-surface-container p-3 shadow-sm'
           : 'min-w-[240px] rounded-sm border border-border bg-surface-container p-3 shadow-sm'}
     >
-      <div className="space-y-1">
-        <div className="text-sm font-semibold text-foreground">{data.title}</div>
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span>{data.classType}</span>
-          <span>•</span>
-          <span>#{id}</span>
+      <div className="flex items-start gap-2">
+        <div className="comfy-authoring-drag-handle flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm border border-border/70 bg-background/50 text-muted-foreground active:cursor-grabbing">
+          <GripVertical className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="text-sm font-semibold text-foreground">{data.title}</div>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span>{data.classType}</span>
+            <span>•</span>
+            <span>#{id}</span>
+          </div>
         </div>
       </div>
 
@@ -435,6 +442,7 @@ export function ComfyWorkflowAuthoringModal({
   const [graphSearchQuery, setGraphSearchQuery] = useState('')
   const [graphSearchIndex, setGraphSearchIndex] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
+  const isCoarsePointer = useIsCoarsePointer()
   const [authoringFlowInstance, setAuthoringFlowInstance] = useState<ReactFlowInstance<AuthoringNode, AuthoringEdge> | null>(null)
 
   useEffect(() => {
@@ -561,13 +569,14 @@ export function ComfyWorkflowAuthoringModal({
     const matchedIdSet = new Set(graphSearchMatches)
     return parsedGraph.nodes.map((node) => ({
       ...node,
+      dragHandle: isCoarsePointer ? AUTHORING_NODE_DRAG_HANDLE_SELECTOR : undefined,
       data: {
         ...node.data,
         searchMatched: matchedIdSet.has(node.id),
         searchCurrent: node.id === activeGraphSearchNodeId,
       },
     }))
-  }, [activeGraphSearchNodeId, graphSearchMatches, parsedGraph])
+  }, [activeGraphSearchNodeId, graphSearchMatches, isCoarsePointer, parsedGraph])
 
   const reactFlowColorMode: 'light' | 'dark' | 'system' =
     settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode
@@ -931,7 +940,7 @@ export function ComfyWorkflowAuthoringModal({
                   {parsedGraph ? (
                     <ReactFlowProvider>
                       <ReactFlow<AuthoringNode, AuthoringEdge>
-                        className="theme-graph-flow"
+                        className={isCoarsePointer ? 'theme-graph-flow touch-scroll-safe' : 'theme-graph-flow'}
                         nodes={graphNodes}
                         edges={parsedGraph.edges}
                         nodeTypes={nodeTypes}
@@ -946,7 +955,7 @@ export function ComfyWorkflowAuthoringModal({
                         nodesDraggable
                         nodesConnectable={false}
                         elementsSelectable
-                        panOnDrag
+                        panOnDrag={!isCoarsePointer}
                       >
                         <MiniMap
                           pannable

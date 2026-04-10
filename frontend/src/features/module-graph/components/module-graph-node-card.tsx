@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { ChevronDown, ChevronRight, Play, RotateCcw } from 'lucide-react'
+import { ChevronDown, ChevronRight, GripVertical, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -411,11 +411,16 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
       title={`${module.name}\n모듈 ID: ${module.id}${module.description ? `\n${module.description}` : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-foreground">{module.name}</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">
-            {summaryText}
-            {missingRequiredInputCount > 0 ? ` · 미설정 ${missingRequiredInputCount}` : ''}
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="module-graph-drag-handle flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm border border-border/70 bg-background/50 text-muted-foreground active:cursor-grabbing">
+            <GripVertical className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-foreground">{module.name}</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              {summaryText}
+              {missingRequiredInputCount > 0 ? ` · 미설정 ${missingRequiredInputCount}` : ''}
+            </div>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
