@@ -31,7 +31,9 @@ export type WallpaperImageTransitionStyle = 'none' | 'fade' | 'zoom' | 'slide' |
 
 export type WallpaperImageTransitionSpeed = 'fast' | 'normal' | 'slow'
 
-export type WallpaperAnimationEasing = 'linear' | 'easeInOutSine' | 'easeOutCubic' | 'easeInOutCubic' | 'easeOutExpo' | 'easeOutBack' | 'easeOutBounce'
+export type WallpaperAnimationEasingPreset = 'linear' | 'easeInOutSine' | 'easeOutCubic' | 'easeInOutCubic' | 'easeOutExpo' | 'easeOutBack' | 'easeOutBounce'
+
+export type WallpaperAnimationEasing = WallpaperAnimationEasingPreset | `cubic-bezier(${string})`
 
 export type WallpaperImageHoverMotion = number
 

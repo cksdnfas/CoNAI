@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ImageRecord } from '@/types/image'
 import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord } from '@/lib/api'
-import type { WallpaperAnimationEasing } from './wallpaper-types'
+import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset } from './wallpaper-types'
 
 /** Render one live clock string for the wallpaper clock widget. */
 export function useWallpaperClockText() {
@@ -91,7 +91,14 @@ export function useWallpaperMotionTime(enabled: boolean) {
   return elapsedMs
 }
 
-export const WALLPAPER_ANIMATION_EASING_OPTIONS: Array<{ value: WallpaperAnimationEasing; label: string }> = [
+export interface WallpaperBezierControlPoints {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+export const WALLPAPER_ANIMATION_EASING_OPTIONS: Array<{ value: WallpaperAnimationEasingPreset; label: string }> = [
   { value: 'linear', label: 'linear' },
   { value: 'easeInOutSine', label: 'easeInOutSine' },
   { value: 'easeOutCubic', label: 'easeOutCubic' },
@@ -101,11 +108,127 @@ export const WALLPAPER_ANIMATION_EASING_OPTIONS: Array<{ value: WallpaperAnimati
   { value: 'easeOutBounce', label: 'easeOutBounce' },
 ]
 
+const WALLPAPER_CUSTOM_EASING_FALLBACK: WallpaperBezierControlPoints = {
+  x1: 0.22,
+  y1: 1,
+  x2: 0.36,
+  y2: 1,
+}
+
 function clampWallpaperNumericIntensity(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+function formatWallpaperBezierNumber(value: number) {
+  const rounded = Number(value.toFixed(3))
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded)
+}
+
+export function isWallpaperAnimationEasingPreset(value: string): value is WallpaperAnimationEasingPreset {
+  return WALLPAPER_ANIMATION_EASING_OPTIONS.some((option) => option.value === value)
+}
+
+export function getWallpaperAnimationEasingLabel(easing: WallpaperAnimationEasing | undefined) {
+  if (!easing) {
+    return 'easeOutCubic'
+  }
+
+  if (isWallpaperAnimationEasingPreset(easing)) {
+    return easing
+  }
+
+  return parseWallpaperCubicBezierEasing(easing) ? '커스텀' : 'easeOutCubic'
+}
+
+export function getWallpaperPresetBezierControlPoints(preset: WallpaperAnimationEasingPreset): WallpaperBezierControlPoints | null {
+  switch (preset) {
+    case 'linear':
+      return { x1: 0, y1: 0, x2: 1, y2: 1 }
+    case 'easeInOutSine':
+      return { x1: 0.37, y1: 0, x2: 0.63, y2: 1 }
+    case 'easeInOutCubic':
+      return { x1: 0.65, y1: 0, x2: 0.35, y2: 1 }
+    case 'easeOutExpo':
+      return { x1: 0.16, y1: 1, x2: 0.3, y2: 1 }
+    case 'easeOutBack':
+      return { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 }
+    case 'easeOutCubic':
+      return { x1: 0.22, y1: 1, x2: 0.36, y2: 1 }
+    case 'easeOutBounce':
+    default:
+      return null
+  }
+}
+
+export function parseWallpaperCubicBezierEasing(easing: string | undefined): WallpaperBezierControlPoints | null {
+  if (!easing) {
+    return null
+  }
+
+  const match = /^cubic-bezier\(\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*,\s*(-?\d*\.?\d+)\s*\)$/i.exec(easing)
+  if (!match) {
+    return null
+  }
+
+  const [x1, y1, x2, y2] = match.slice(1).map(Number)
+  if ([x1, y1, x2, y2].some((value) => !Number.isFinite(value))) {
+    return null
+  }
+
+  return {
+    x1: clampWallpaperNumericIntensity(x1, 0, 1),
+    y1: clampWallpaperNumericIntensity(y1, -2, 2),
+    x2: clampWallpaperNumericIntensity(x2, 0, 1),
+    y2: clampWallpaperNumericIntensity(y2, -2, 2),
+  }
+}
+
+export function buildWallpaperCubicBezierEasing(points: WallpaperBezierControlPoints): WallpaperAnimationEasing {
+  const normalizedPoints = {
+    x1: clampWallpaperNumericIntensity(points.x1, 0, 1),
+    y1: clampWallpaperNumericIntensity(points.y1, -2, 2),
+    x2: clampWallpaperNumericIntensity(points.x2, 0, 1),
+    y2: clampWallpaperNumericIntensity(points.y2, -2, 2),
+  }
+
+  return `cubic-bezier(${formatWallpaperBezierNumber(normalizedPoints.x1)}, ${formatWallpaperBezierNumber(normalizedPoints.y1)}, ${formatWallpaperBezierNumber(normalizedPoints.x2)}, ${formatWallpaperBezierNumber(normalizedPoints.y2)})`
+}
+
+export function normalizeWallpaperAnimationEasing(easing: string | undefined, fallback: WallpaperAnimationEasingPreset = 'easeOutCubic'): WallpaperAnimationEasing {
+  if (easing && isWallpaperAnimationEasingPreset(easing)) {
+    return easing
+  }
+
+  const customBezier = parseWallpaperCubicBezierEasing(easing)
+  if (customBezier) {
+    return buildWallpaperCubicBezierEasing(customBezier)
+  }
+
+  return fallback
+}
+
+export function getWallpaperEditableBezierControlPoints(
+  easing: WallpaperAnimationEasing | undefined,
+  fallback: WallpaperAnimationEasingPreset = 'easeOutCubic',
+): WallpaperBezierControlPoints {
+  const customBezier = parseWallpaperCubicBezierEasing(easing)
+  if (customBezier) {
+    return customBezier
+  }
+
+  if (easing && isWallpaperAnimationEasingPreset(easing)) {
+    return getWallpaperPresetBezierControlPoints(easing) ?? getWallpaperPresetBezierControlPoints(fallback) ?? WALLPAPER_CUSTOM_EASING_FALLBACK
+  }
+
+  return getWallpaperPresetBezierControlPoints(fallback) ?? WALLPAPER_CUSTOM_EASING_FALLBACK
+}
+
 export function getWallpaperAnimationEasingCss(easing: WallpaperAnimationEasing | undefined) {
+  const customBezier = parseWallpaperCubicBezierEasing(easing)
+  if (customBezier) {
+    return buildWallpaperCubicBezierEasing(customBezier)
+  }
+
   switch (easing) {
     case 'linear':
       return 'linear'

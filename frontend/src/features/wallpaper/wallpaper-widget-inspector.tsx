@@ -2,9 +2,10 @@ import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { cn } from '@/lib/utils'
+import { WallpaperEasingPicker } from './wallpaper-easing-picker'
 import { getWallpaperWidgetDefinition } from './wallpaper-widget-registry'
-import type { WallpaperAnimationEasing, WallpaperWidgetInstance } from './wallpaper-types'
-import { WALLPAPER_ANIMATION_EASING_OPTIONS, getWallpaperHoverMotionAmount, getWallpaperMotionStrengthMultiplier } from './wallpaper-widget-utils'
+import type { WallpaperWidgetInstance } from './wallpaper-types'
+import { getWallpaperHoverMotionAmount, getWallpaperMotionStrengthMultiplier } from './wallpaper-widget-utils'
 
 interface WallpaperWidgetInspectorPatch {
   x?: number
@@ -31,12 +32,6 @@ function clampWallpaperInspectorNumber(value: string, fallback: number, min: num
 
   const clamped = Math.min(max, Math.max(min, parsed))
   return decimals <= 0 ? Math.round(clamped) : Number(clamped.toFixed(decimals))
-}
-
-function coerceWallpaperAnimationEasing(value: string, fallback: WallpaperAnimationEasing): WallpaperAnimationEasing {
-  return WALLPAPER_ANIMATION_EASING_OPTIONS.some((option) => option.value === value)
-    ? value as WallpaperAnimationEasing
-    : fallback
 }
 
 /** Render the editor inspector for one selected wallpaper widget. */
@@ -300,18 +295,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
             </SettingsField>
 
             <SettingsField label="전환 이징">
-              <Select
-                value={selectedWidget.settings.imageTransitionEasing ?? 'easeOutCubic'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    imageTransitionEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
-                  })
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.imageTransitionEasing}
+                fallbackPreset="easeOutCubic"
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ imageTransitionEasing: nextValue })
                 }}
-              >
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              />
             </SettingsField>
 
             <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">상호작용</div>
@@ -331,18 +321,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               />
             </SettingsField>
             <SettingsField label="호버 이징">
-              <Select
-                value={selectedWidget.settings.hoverEasing ?? 'easeOutCubic'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    hoverEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
-                  })
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.hoverEasing}
+                fallbackPreset="easeOutCubic"
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ hoverEasing: nextValue })
                 }}
-              >
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              />
             </SettingsField>
           </>
         ) : null}
@@ -496,18 +481,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
             </SettingsField>
 
             <SettingsField label="전환 이징">
-              <Select
-                value={selectedWidget.settings.imageTransitionEasing ?? 'easeOutCubic'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    imageTransitionEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
-                  })
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.imageTransitionEasing}
+                fallbackPreset="easeOutCubic"
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ imageTransitionEasing: nextValue })
                 }}
-              >
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              />
             </SettingsField>
 
             <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">상호작용</div>
@@ -527,18 +507,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               />
             </SettingsField>
             <SettingsField label="호버 이징">
-              <Select
-                value={selectedWidget.settings.hoverEasing ?? 'easeOutCubic'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    hoverEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
-                  })
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.hoverEasing}
+                fallbackPreset="easeOutCubic"
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ hoverEasing: nextValue })
                 }}
-              >
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              />
             </SettingsField>
           </>
         ) : null}
@@ -593,18 +568,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
             </SettingsField>
 
             <SettingsField label="모션 이징">
-              <Select
-                value={selectedWidget.settings.motionEasing ?? 'easeOutCubic'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    motionEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
-                  })
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.motionEasing}
+                fallbackPreset="easeOutCubic"
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ motionEasing: nextValue })
                 }}
-              >
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              />
             </SettingsField>
 
             <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">전환</div>
@@ -659,18 +629,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
             </SettingsField>
 
             <SettingsField label="전환 이징">
-              <Select
-                value={selectedWidget.settings.imageTransitionEasing ?? 'easeOutCubic'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    imageTransitionEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
-                  })
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.imageTransitionEasing}
+                fallbackPreset="easeOutCubic"
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ imageTransitionEasing: nextValue })
                 }}
-              >
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              />
             </SettingsField>
 
             <div className="pt-1 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">상호작용</div>
@@ -690,18 +655,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               />
             </SettingsField>
             <SettingsField label="호버 이징">
-              <Select
-                value={selectedWidget.settings.hoverEasing ?? 'easeOutCubic'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    hoverEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
-                  })
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.hoverEasing}
+                fallbackPreset="easeOutCubic"
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ hoverEasing: nextValue })
                 }}
-              >
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              />
             </SettingsField>
           </>
         ) : null}
@@ -801,18 +761,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
             </SettingsField>
 
             <SettingsField label="모션 이징">
-              <Select
-                value={selectedWidget.settings.motionEasing ?? 'linear'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    motionEasing: coerceWallpaperAnimationEasing(event.target.value, 'linear'),
-                  })
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.motionEasing}
+                fallbackPreset="linear"
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ motionEasing: nextValue })
                 }}
-              >
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              />
             </SettingsField>
 
             <SettingsField label="이동 속도">
@@ -848,18 +803,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
             </SettingsField>
 
             <SettingsField label="전환 이징">
-              <Select
-                value={selectedWidget.settings.imageTransitionEasing ?? 'easeOutCubic'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    imageTransitionEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
-                  })
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.imageTransitionEasing}
+                fallbackPreset="easeOutCubic"
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ imageTransitionEasing: nextValue })
                 }}
-              >
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              />
             </SettingsField>
 
             {selectedWidget.settings.imageSwapMode === 'time' ? (
@@ -915,18 +865,13 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               />
             </SettingsField>
             <SettingsField label="호버 이징">
-              <Select
-                value={selectedWidget.settings.hoverEasing ?? 'easeOutCubic'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    hoverEasing: coerceWallpaperAnimationEasing(event.target.value, 'easeOutCubic'),
-                  })
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.hoverEasing}
+                fallbackPreset="easeOutCubic"
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ hoverEasing: nextValue })
                 }}
-              >
-                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </Select>
+              />
             </SettingsField>
           </>
         ) : null}
