@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Check, ChevronRight, Pencil, Pin, Save, Sparkles, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
+import { Check, ChevronRight, Download, Pencil, Pin, Save, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
@@ -32,6 +32,11 @@ interface WallpaperSavedEasingPreset {
   pinned: boolean
 }
 
+interface WallpaperSavedEasingPresetExportPayload {
+  version: 1
+  presets: WallpaperSavedEasingPreset[]
+}
+
 const GRAPH_SIZE = 304
 const GRAPH_PADDING = 24
 const GRAPH_RANGE_MIN_Y = -1
@@ -45,6 +50,30 @@ function clamp(value: number, min: number, max: number) {
 
 function formatPointValue(value: number) {
   return Number(value.toFixed(3))
+}
+
+function normalizeWallpaperSavedEasingPreset(candidate: unknown, fallbackId: string) {
+  if (!candidate || typeof candidate !== 'object') {
+    return null
+  }
+
+  const value = candidate as Partial<WallpaperSavedEasingPreset>
+  if (typeof value.name !== 'string' || typeof value.easing !== 'string') {
+    return null
+  }
+
+  const trimmedName = value.name.trim()
+  if (!trimmedName) {
+    return null
+  }
+
+  return {
+    id: typeof value.id === 'string' && value.id.trim().length > 0 ? value.id : fallbackId,
+    name: trimmedName,
+    easing: normalizeWallpaperAnimationEasing(value.easing),
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : new Date().toISOString(),
+    pinned: value.pinned === true,
+  } satisfies WallpaperSavedEasingPreset
 }
 
 function loadWallpaperSavedEasingPresets() {
@@ -63,24 +92,10 @@ function loadWallpaperSavedEasingPresets() {
       return []
     }
 
-    return parsedValue.flatMap((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return []
-      }
-
-      const candidate = entry as Partial<WallpaperSavedEasingPreset>
-      if (typeof candidate.id !== 'string' || typeof candidate.name !== 'string' || typeof candidate.easing !== 'string') {
-        return []
-      }
-
-      return [{
-        id: candidate.id,
-        name: candidate.name.trim(),
-        easing: normalizeWallpaperAnimationEasing(candidate.easing),
-        createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : new Date().toISOString(),
-        pinned: candidate.pinned === true,
-      } satisfies WallpaperSavedEasingPreset]
-    }).filter((preset) => preset.name.length > 0)
+    return parsedValue.flatMap((entry, index) => {
+      const normalizedPreset = normalizeWallpaperSavedEasingPreset(entry, `wallpaper-easing-imported-${index}`)
+      return normalizedPreset ? [normalizedPreset] : []
+    })
   }
   catch {
     return []
@@ -105,6 +120,24 @@ function sortWallpaperSavedEasingPresets(presets: WallpaperSavedEasingPreset[]) 
     }
 
     return 0
+  })
+}
+
+function parseWallpaperSavedEasingPresetImport(rawText: string) {
+  const parsedValue = JSON.parse(rawText) as unknown
+  const entries = Array.isArray(parsedValue)
+    ? parsedValue
+    : (parsedValue && typeof parsedValue === 'object' && Array.isArray((parsedValue as WallpaperSavedEasingPresetExportPayload).presets)
+        ? (parsedValue as WallpaperSavedEasingPresetExportPayload).presets
+        : null)
+
+  if (!entries) {
+    throw new Error('프리셋 배열을 찾을 수 없어.')
+  }
+
+  return entries.flatMap((entry, index) => {
+    const normalizedPreset = normalizeWallpaperSavedEasingPreset(entry, `wallpaper-easing-imported-${Date.now()}-${index}`)
+    return normalizedPreset ? [normalizedPreset] : []
   })
 }
 
@@ -445,6 +478,9 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
   const [presetName, setPresetName] = useState('')
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null)
   const [editingPresetName, setEditingPresetName] = useState('')
+  const [importExportMessage, setImportExportMessage] = useState<string | null>(null)
+  const [importExportError, setImportExportError] = useState<string | null>(null)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
 
   const customEasing = useMemo(() => buildWallpaperCubicBezierEasing(customPoints), [customPoints])
   const previewEasing = activeTab === 'custom' ? customEasing : normalizedValue
@@ -542,6 +578,62 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
     })
   }
 
+  const handleExportPresets = () => {
+    if (typeof window === 'undefined' || savedPresets.length === 0) {
+      return
+    }
+
+    const payload: WallpaperSavedEasingPresetExportPayload = {
+      version: 1,
+      presets: sortedSavedPresets,
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const objectUrl = window.URL.createObjectURL(blob)
+    const link = window.document.createElement('a')
+    link.href = objectUrl
+    link.download = 'conai-wallpaper-easing-presets.json'
+    link.click()
+    window.URL.revokeObjectURL(objectUrl)
+    setImportExportError(null)
+    setImportExportMessage(`${sortedSavedPresets.length}개 프리셋을 내보냈어.`)
+  }
+
+  const handleImportPresets = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    try {
+      const importedText = await file.text()
+      const importedPresets = parseWallpaperSavedEasingPresetImport(importedText)
+      if (importedPresets.length === 0) {
+        throw new Error('가져올 수 있는 프리셋이 없어.')
+      }
+
+      setSavedPresets((current) => {
+        const nextByName = new Map(current.map((preset) => [preset.name, preset]))
+        importedPresets.forEach((preset) => {
+          const existingPreset = nextByName.get(preset.name)
+          nextByName.set(preset.name, existingPreset ? { ...existingPreset, easing: preset.easing, pinned: preset.pinned } : preset)
+        })
+
+        const normalizedPresets = sortWallpaperSavedEasingPresets(Array.from(nextByName.values())).slice(0, MAX_WALLPAPER_SAVED_EASING_PRESETS)
+        saveWallpaperSavedEasingPresets(normalizedPresets)
+        return normalizedPresets
+      })
+      setImportExportError(null)
+      setImportExportMessage(`${importedPresets.length}개 프리셋을 가져왔어.`)
+    }
+    catch (error) {
+      setImportExportMessage(null)
+      setImportExportError(error instanceof Error ? error.message : '프리셋 가져오기에 실패했어.')
+    }
+    finally {
+      event.target.value = ''
+    }
+  }
+
   return (
     <>
       <Button
@@ -556,6 +648,8 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
           setSavedPresets(loadWallpaperSavedEasingPresets())
           setEditingPresetId(null)
           setEditingPresetName('')
+          setImportExportMessage(null)
+          setImportExportError(null)
           setOpen(true)
         }}
       >
@@ -609,13 +703,40 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                 </div>
 
                 <div className="rounded-sm border border-border bg-surface-low p-3">
+                  <input
+                    ref={importInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={handleImportPresets}
+                  />
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-medium text-foreground">내 프리셋</div>
                       <div className="text-xs text-muted-foreground">커스텀 탭에서 저장한 이징을 여기서 다시 바로 쓸 수 있어.</div>
                     </div>
-                    <div className="text-xs text-muted-foreground">{savedPresets.length}/{MAX_WALLPAPER_SAVED_EASING_PRESETS}</div>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" size="icon-xs" variant="ghost" onClick={() => importInputRef.current?.click()} title="프리셋 가져오기" aria-label="프리셋 가져오기">
+                        <Upload className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button type="button" size="icon-xs" variant="ghost" onClick={handleExportPresets} disabled={savedPresets.length === 0} title="프리셋 내보내기" aria-label="프리셋 내보내기">
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
+                      <div className="text-xs text-muted-foreground">{savedPresets.length}/{MAX_WALLPAPER_SAVED_EASING_PRESETS}</div>
+                    </div>
                   </div>
+
+                  {importExportMessage ? (
+                    <div className="mb-3 rounded-sm border border-primary/20 bg-primary/10 px-3 py-2 text-xs text-primary">
+                      {importExportMessage}
+                    </div>
+                  ) : null}
+
+                  {importExportError ? (
+                    <div className="mb-3 rounded-sm border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {importExportError}
+                    </div>
+                  ) : null}
 
                   {savedPresets.length > 0 ? (
                     <div className="space-y-2">
