@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Copy, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Plus } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Plus } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
@@ -31,6 +31,7 @@ import {
   upsertWallpaperLayoutPreset,
 } from './wallpaper-layout-utils'
 import { WallpaperCanvasView } from './wallpaper-shared'
+import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { listWallpaperWidgetDefinitions } from './wallpaper-widget-registry'
 import type { WallpaperLayoutPreset, WallpaperWidgetInstance } from './wallpaper-types'
 import { WallpaperWidgetInspector } from './wallpaper-widget-inspector'
@@ -85,6 +86,7 @@ export function WallpaperEditorPage() {
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null)
   const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null)
   const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null)
+  const isCoarsePointer = useIsCoarsePointer()
   const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(false)
 
   const notifyInfo = (message: string) => showSnackbar({ message, tone: 'info' })
@@ -440,7 +442,7 @@ export function WallpaperEditorPage() {
           <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">위젯 순서</h2>
-              <div className="text-xs text-muted-foreground">위 = 앞, 아래 = 뒤. 드래그해서 순서를 바꿀 수 있어.</div>
+              <div className="text-xs text-muted-foreground">{isCoarsePointer ? '모바일에서는 버튼으로 순서를 바꿀 수 있어.' : '위 = 앞, 아래 = 뒤. 드래그해서 순서를 바꿀 수 있어.'}</div>
             </div>
 
             {orderedWidgets.length === 0 ? (
@@ -453,22 +455,30 @@ export function WallpaperEditorPage() {
                   const isSelected = effectiveSelectedWidgetId === widget.id
                   const isDragOver = dragOverWidgetId === widget.id && draggedWidgetId !== widget.id
                   return (
-                    <button
+                    <div
                       key={widget.id}
-                      type="button"
-                      draggable
-                      onClick={() => setSelectedWidgetId(widget.id)}
+                      className={`flex w-full items-center gap-3 rounded-sm border px-3 py-2 text-left transition ${isSelected ? 'border-secondary bg-secondary/10' : 'border-border bg-surface-low hover:border-secondary/60 hover:bg-surface-high'} ${isDragOver ? 'border-primary border-dashed bg-primary/8' : ''}`}
+                      draggable={!isCoarsePointer}
                       onDragStart={() => {
+                        if (isCoarsePointer) {
+                          return
+                        }
                         setDraggedWidgetId(widget.id)
                         setDragOverWidgetId(widget.id)
                       }}
                       onDragOver={(event) => {
+                        if (isCoarsePointer) {
+                          return
+                        }
                         event.preventDefault()
                         if (draggedWidgetId !== widget.id) {
                           setDragOverWidgetId(widget.id)
                         }
                       }}
                       onDrop={(event) => {
+                        if (isCoarsePointer) {
+                          return
+                        }
                         event.preventDefault()
                         handleWidgetDrop(widget.id)
                       }}
@@ -476,21 +486,56 @@ export function WallpaperEditorPage() {
                         setDraggedWidgetId(null)
                         setDragOverWidgetId(null)
                       }}
-                      className={`flex w-full items-center gap-3 rounded-sm border px-3 py-2 text-left transition ${isSelected ? 'border-secondary bg-secondary/10' : 'border-border bg-surface-low hover:border-secondary/60 hover:bg-surface-high'} ${isDragOver ? 'border-primary border-dashed bg-primary/8' : ''}`}
                     >
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <GripVertical className="h-4 w-4" />
-                        <span className="w-5 text-center text-xs font-semibold">{index + 1}</span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-foreground">{String(widget.settings.title ?? widget.type)}</div>
-                        <div className="truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{widget.type}</div>
-                      </div>
-                      <div className="flex items-center gap-1 text-muted-foreground">
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        onClick={() => setSelectedWidgetId(widget.id)}
+                      >
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <GripVertical className="h-4 w-4" />
+                          <span className="w-5 text-center text-xs font-semibold">{index + 1}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-foreground">{String(widget.settings.title ?? widget.type)}</div>
+                          <div className="truncate text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{widget.type}</div>
+                        </div>
+                      </button>
+                      <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                        {isCoarsePointer ? (
+                          <>
+                            <button
+                              type="button"
+                              aria-label="앞으로 이동"
+                              disabled={index === 0}
+                              className="flex h-8 w-8 touch-none items-center justify-center rounded-sm border border-border bg-background text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-40"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setLayoutPreset((current) => moveWallpaperWidgetToOrder(current, widget.id, index))
+                                setSelectedWidgetId(widget.id)
+                              }}
+                            >
+                              <ArrowUp className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="뒤로 이동"
+                              disabled={index === orderedWidgets.length - 1}
+                              className="flex h-8 w-8 touch-none items-center justify-center rounded-sm border border-border bg-background text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-40"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setLayoutPreset((current) => moveWallpaperWidgetToOrder(current, widget.id, index + 2))
+                                setSelectedWidgetId(widget.id)
+                              }}
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </button>
+                          </>
+                        ) : null}
                         {widget.hidden ? <EyeOff className="h-3.5 w-3.5" /> : null}
                         {widget.locked ? <Lock className="h-3.5 w-3.5" /> : null}
                       </div>
-                    </button>
+                    </div>
                   )
                 })}
               </div>
@@ -511,9 +556,6 @@ export function WallpaperEditorPage() {
             }}
             onChangeWidgetOrder={(widgetId, nextOrder) => {
               setLayoutPreset((current) => moveWallpaperWidgetToOrder(current, widgetId, nextOrder))
-            }}
-            onRemoveWidget={(widgetId) => {
-              setLayoutPreset((current) => removeSelectedWidget(current, widgetId))
             }}
           />
         </section>
