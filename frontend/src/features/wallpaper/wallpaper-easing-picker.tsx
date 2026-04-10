@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Check, ChevronRight, Pencil, Save, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, ChevronRight, Pencil, Pin, Save, Sparkles, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
@@ -29,6 +29,7 @@ interface WallpaperSavedEasingPreset {
   name: string
   easing: WallpaperAnimationEasing
   createdAt: string
+  pinned: boolean
 }
 
 const GRAPH_SIZE = 304
@@ -77,6 +78,7 @@ function loadWallpaperSavedEasingPresets() {
         name: candidate.name.trim(),
         easing: normalizeWallpaperAnimationEasing(candidate.easing),
         createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : new Date().toISOString(),
+        pinned: candidate.pinned === true,
       } satisfies WallpaperSavedEasingPreset]
     }).filter((preset) => preset.name.length > 0)
   }
@@ -94,6 +96,16 @@ function saveWallpaperSavedEasingPresets(presets: WallpaperSavedEasingPreset[]) 
     WALLPAPER_EASING_PRESETS_STORAGE_KEY,
     JSON.stringify(presets.slice(0, MAX_WALLPAPER_SAVED_EASING_PRESETS)),
   )
+}
+
+function sortWallpaperSavedEasingPresets(presets: WallpaperSavedEasingPreset[]) {
+  return [...presets].sort((left, right) => {
+    if (left.pinned !== right.pinned) {
+      return Number(right.pinned) - Number(left.pinned)
+    }
+
+    return 0
+  })
 }
 
 function mapGraphX(value: number) {
@@ -436,9 +448,10 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
 
   const customEasing = useMemo(() => buildWallpaperCubicBezierEasing(customPoints), [customPoints])
   const previewEasing = activeTab === 'custom' ? customEasing : normalizedValue
+  const sortedSavedPresets = useMemo(() => sortWallpaperSavedEasingPresets(savedPresets), [savedPresets])
   const matchingSavedPreset = useMemo(
-    () => savedPresets.find((preset) => preset.easing === normalizedValue) ?? null,
-    [normalizedValue, savedPresets],
+    () => sortedSavedPresets.find((preset) => preset.easing === normalizedValue) ?? null,
+    [normalizedValue, sortedSavedPresets],
   )
   const pickerLabel = matchingSavedPreset?.name ?? getWallpaperAnimationEasingLabel(normalizedValue)
 
@@ -471,10 +484,12 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
             name: trimmedName,
             easing: customEasing,
             createdAt: new Date().toISOString(),
+            pinned: false,
           }, ...current]
 
-      saveWallpaperSavedEasingPresets(nextPresets)
-      return nextPresets.slice(0, MAX_WALLPAPER_SAVED_EASING_PRESETS)
+      const normalizedPresets = sortWallpaperSavedEasingPresets(nextPresets).slice(0, MAX_WALLPAPER_SAVED_EASING_PRESETS)
+      saveWallpaperSavedEasingPresets(normalizedPresets)
+      return normalizedPresets
     })
     setPresetName('')
   }
@@ -510,11 +525,21 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
 
     setSavedPresets((current) => {
       const nextPresets = current.map((preset) => preset.id === presetId ? { ...preset, name: trimmedName } : preset)
-      saveWallpaperSavedEasingPresets(nextPresets)
-      return nextPresets
+      const normalizedPresets = sortWallpaperSavedEasingPresets(nextPresets)
+      saveWallpaperSavedEasingPresets(normalizedPresets)
+      return normalizedPresets
     })
     setEditingPresetId(null)
     setEditingPresetName('')
+  }
+
+  const handleTogglePinnedPreset = (presetId: string) => {
+    setSavedPresets((current) => {
+      const nextPresets = current.map((preset) => preset.id === presetId ? { ...preset, pinned: !preset.pinned } : preset)
+      const normalizedPresets = sortWallpaperSavedEasingPresets(nextPresets)
+      saveWallpaperSavedEasingPresets(normalizedPresets)
+      return normalizedPresets
+    })
   }
 
   return (
@@ -594,7 +619,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
 
                   {savedPresets.length > 0 ? (
                     <div className="space-y-2">
-                      {savedPresets.map((preset) => {
+                      {sortedSavedPresets.map((preset) => {
                         const isEditing = editingPresetId === preset.id
                         const isDuplicateName = editingPresetName.trim().length > 0 && savedPresets.some((candidate) => candidate.id !== preset.id && candidate.name === editingPresetName.trim())
 
@@ -634,7 +659,12 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                                   setOpen(false)
                                 }}
                               >
-                                <div className="truncate text-sm font-medium text-foreground">{preset.name}</div>
+                                <div className="flex items-center gap-2">
+                                  <div className="truncate text-sm font-medium text-foreground">{preset.name}</div>
+                                  {preset.pinned ? (
+                                    <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">고정</span>
+                                  ) : null}
+                                </div>
                                 <div className="truncate text-[11px] text-muted-foreground">{preset.easing}</div>
                               </button>
                             )}
@@ -653,6 +683,18 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
                             )}
+
+                            <Button
+                              type="button"
+                              size="icon-xs"
+                              variant="ghost"
+                              onClick={() => handleTogglePinnedPreset(preset.id)}
+                              title={preset.pinned ? '고정 해제' : '위로 고정'}
+                              aria-label={preset.pinned ? '고정 해제' : '위로 고정'}
+                              className={preset.pinned ? 'text-primary' : ''}
+                            >
+                              <Pin className="h-3.5 w-3.5" />
+                            </Button>
 
                             <Button type="button" size="icon-xs" variant="ghost" onClick={() => handleRemovePreset(preset.id)} title="프리셋 삭제" aria-label="프리셋 삭제">
                               <Trash2 className="h-3.5 w-3.5" />
