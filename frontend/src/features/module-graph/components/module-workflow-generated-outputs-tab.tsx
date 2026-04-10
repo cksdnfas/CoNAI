@@ -5,24 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
 import { ImageList } from '@/features/images/components/image-list/image-list'
-import type { GraphExecutionRecord } from '@/lib/api'
 import type { WatchedFolder } from '@/types/folder'
 import type { ImageRecord } from '@/types/image'
-
-export type ModuleWorkflowGeneratedOutputItem = {
-  id: string
-  type: string
-  mimeType: string | null
-  previewUrl: string | null
-  downloadUrl: string | null
-  downloadName: string
-  createdDate: string
-  workflowName: string
-  executionId: number
-  storagePath: string | null
-  label: string
-  status?: GraphExecutionRecord['status']
-}
+import type { ModuleWorkflowGeneratedOutputItem } from './module-workflow-output-management-panel-helpers'
 
 /** Render the generated-output tab using the shared CoNAI image list surface. */
 export function ModuleWorkflowGeneratedOutputsTab({

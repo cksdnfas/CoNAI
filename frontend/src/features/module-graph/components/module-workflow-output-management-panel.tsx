@@ -8,14 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import type {
-  GraphExecutionArtifactRecord,
-  GraphExecutionFinalResultRecord,
   GraphExecutionRecord,
   GraphWorkflowBrowseContentRecord,
   GraphWorkflowFolderRecord,
   GraphWorkflowRecord,
 } from '@/lib/api'
-import { buildApiUrl, triggerBrowserDownload } from '@/lib/api-client'
+import { triggerBrowserDownload } from '@/lib/api-client'
 import {
   cleanupGraphWorkflowEmptyExecutions,
   copyGraphWorkflowArtifactsToFolder,
@@ -23,157 +21,23 @@ import {
 } from '@/lib/api-module-graph'
 import { getWatchedFolders } from '@/lib/api-folders'
 import { cancelGraphExecution } from '@/lib/api'
-import type { ImageRecord } from '@/types/image'
-import { buildArtifactTextPreview, getArtifactPreviewUrl, parseMetadataValue } from '../module-graph-shared'
 import {
-  ModuleWorkflowGeneratedOutputsTab,
+  buildModuleWorkflowOutputCollections,
+  filterModuleWorkflowTechnicalArtifacts,
+  listModuleWorkflowArtifactTypes,
   type ModuleWorkflowGeneratedOutputItem,
-} from './module-workflow-generated-outputs-tab'
+} from './module-workflow-output-management-panel-helpers'
+import { ModuleWorkflowGeneratedOutputsTab } from './module-workflow-generated-outputs-tab'
 import { ModuleWorkflowArtifactRecordsTab } from './module-workflow-artifact-records-tab'
 import { ModuleWorkflowEmptyRunsTab } from './module-workflow-empty-runs-tab'
 
 type BrowseTab = 'outputs' | 'artifacts' | 'queue'
-
-type ArtifactLike = {
-  artifact_type: string
-  storage_path?: string | null
-  metadata?: string | null
-}
-
-type FinalResultLike = {
-  artifact_type: string
-  source_storage_path?: string | null
-  source_metadata?: string | null
-}
 
 const BROWSE_TAB_ITEMS = [
   { value: 'outputs', label: 'Generated Outputs' },
   { value: 'artifacts', label: 'Text & Intermediate' },
   { value: 'queue', label: 'Queue & Empty Runs' },
 ]
-
-const IMAGE_EXTENSION_MIME_MAP: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.bmp': 'image/bmp',
-  '.svg': 'image/svg+xml',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mov': 'video/quicktime',
-  '.avi': 'video/x-msvideo',
-  '.mkv': 'video/x-matroska',
-}
-
-function buildSourcePreviewUrl(path?: string | null) {
-  if (!path) {
-    return null
-  }
-
-  const normalized = path.replace(/\\/g, '/')
-  const marker = '/graph-executions/'
-  const markerIndex = normalized.lastIndexOf(marker)
-  if (markerIndex === -1) {
-    return null
-  }
-
-  return buildApiUrl(`/temp${normalized.slice(markerIndex)}`)
-}
-
-function buildDownloadName(path: string | null | undefined, fallbackLabel: string, executionId: number) {
-  if (path) {
-    const normalized = path.replace(/\\/g, '/')
-    const baseName = normalized.split('/').pop()
-    if (baseName && baseName.trim().length > 0) {
-      return baseName
-    }
-  }
-
-  const sanitizedLabel = fallbackLabel.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'artifact'
-  return `execution-${executionId}-${sanitizedLabel}`
-}
-
-function parseArtifactMetadataValue(value?: string | null) {
-  const metadata = parseMetadataValue(value)
-  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-    ? metadata as Record<string, unknown>
-    : null
-}
-
-function getArtifactLabel(artifact: GraphExecutionArtifactRecord | GraphExecutionFinalResultRecord) {
-  const rawMetadata = 'source_metadata' in artifact
-    ? artifact.source_metadata
-    : ('metadata' in artifact ? artifact.metadata : null)
-  const metadata = parseArtifactMetadataValue(rawMetadata)
-  if (metadata) {
-    const candidate = metadata.label ?? metadata.kind ?? metadata.mimeType
-    if (typeof candidate === 'string' && candidate.trim().length > 0) {
-      return candidate
-    }
-  }
-
-  return artifact.artifact_type
-}
-
-function inferMimeTypeFromPath(path?: string | null) {
-  if (!path) {
-    return null
-  }
-
-  const normalized = path.replace(/\\/g, '/').toLowerCase()
-  const lastDotIndex = normalized.lastIndexOf('.')
-  if (lastDotIndex === -1) {
-    return null
-  }
-
-  return IMAGE_EXTENSION_MIME_MAP[normalized.slice(lastDotIndex)] ?? null
-}
-
-function resolveArtifactMimeType(artifact: ArtifactLike | FinalResultLike) {
-  const metadataKey = 'source_metadata' in artifact ? artifact.source_metadata : ('metadata' in artifact ? artifact.metadata : null)
-  const storagePath = 'source_storage_path' in artifact ? artifact.source_storage_path : ('storage_path' in artifact ? artifact.storage_path : null)
-  const metadata = parseArtifactMetadataValue(metadataKey)
-  const metadataMimeType = metadata?.mimeType
-  if (typeof metadataMimeType === 'string' && metadataMimeType.trim().length > 0) {
-    return metadataMimeType
-  }
-
-  if (artifact.artifact_type === 'image') {
-    return inferMimeTypeFromPath(storagePath) ?? 'image/png'
-  }
-
-  return inferMimeTypeFromPath(storagePath)
-}
-
-function isVisualArtifact(artifact: ArtifactLike | FinalResultLike) {
-  const mimeType = resolveArtifactMimeType(artifact)
-  if (mimeType?.startsWith('image/') || mimeType?.startsWith('video/')) {
-    return true
-  }
-
-  return artifact.artifact_type === 'image'
-}
-
-function buildOutputImageRecord(item: ModuleWorkflowGeneratedOutputItem): ImageRecord {
-  const mimeType = item.mimeType
-  const fileType = mimeType?.startsWith('video/')
-    ? 'video'
-    : mimeType === 'image/gif'
-      ? 'animated'
-      : 'image'
-
-  return {
-    id: item.id,
-    composite_hash: item.id,
-    original_file_path: item.storagePath ?? item.downloadName,
-    thumbnail_url: item.previewUrl,
-    image_url: item.downloadUrl,
-    mime_type: mimeType,
-    file_type: fileType,
-  }
-}
 
 /** Render folder/root-scoped workflow output management content inside browse mode. */
 export function ModuleWorkflowOutputManagementPanel({
@@ -214,101 +78,24 @@ export function ModuleWorkflowOutputManagementPanel({
     [browseContent.executions],
   )
 
-  const outputCollections = useMemo(() => {
-    const visualFinalResults = browseContent.final_results.filter((result) => isVisualArtifact(result))
-    const executionIdsWithVisualFinalResults = new Set(visualFinalResults.map((result) => result.execution_id))
-    const fallbackVisualArtifacts = browseContent.artifacts.filter((artifact) => (
-      isVisualArtifact(artifact) && !executionIdsWithVisualFinalResults.has(artifact.execution_id)
-    ))
-
-    const outputItems: ModuleWorkflowGeneratedOutputItem[] = [
-      ...visualFinalResults.map((result) => {
-        const execution = executionById.get(result.execution_id)
-        const downloadUrl = buildSourcePreviewUrl(result.source_storage_path)
-        const label = getArtifactLabel(result)
-        return {
-          id: `final-${result.id}`,
-          type: result.artifact_type,
-          mimeType: resolveArtifactMimeType(result),
-          previewUrl: downloadUrl,
-          downloadUrl,
-          downloadName: buildDownloadName(result.source_storage_path, label, result.execution_id),
-          createdDate: result.created_date,
-          workflowName: execution ? (workflowNameById.get(execution.graph_workflow_id) ?? `Workflow #${execution.graph_workflow_id}`) : 'Unknown workflow',
-          executionId: result.execution_id,
-          storagePath: result.source_storage_path ?? null,
-          label,
-          status: execution?.status,
-        }
-      }),
-      ...fallbackVisualArtifacts.map((artifact) => {
-        const execution = executionById.get(artifact.execution_id)
-        const downloadUrl = getArtifactPreviewUrl(artifact)
-        const label = getArtifactLabel(artifact)
-        return {
-          id: `artifact-${artifact.id}`,
-          type: artifact.artifact_type,
-          mimeType: resolveArtifactMimeType(artifact),
-          previewUrl: downloadUrl,
-          downloadUrl,
-          downloadName: buildDownloadName(artifact.storage_path, label, artifact.execution_id),
-          createdDate: artifact.created_date,
-          workflowName: execution ? (workflowNameById.get(execution.graph_workflow_id) ?? `Workflow #${execution.graph_workflow_id}`) : 'Unknown workflow',
-          executionId: artifact.execution_id,
-          storagePath: artifact.storage_path ?? null,
-          label,
-          status: execution?.status,
-        }
-      }),
-    ].sort((left, right) => new Date(right.createdDate).getTime() - new Date(left.createdDate).getTime())
-
-    const representedArtifactIds = new Set<number>([
-      ...visualFinalResults.map((result) => result.source_artifact_id),
-      ...fallbackVisualArtifacts.map((artifact) => artifact.id),
-    ])
-
-    const technicalArtifacts = [...browseContent.artifacts]
-      .filter((artifact) => !representedArtifactIds.has(artifact.id))
-      .sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
-
-    return {
-      outputItems,
-      outputImageItems: outputItems.map(buildOutputImageRecord),
-      technicalArtifacts,
-    }
-  }, [browseContent.artifacts, browseContent.final_results, executionById, workflowNameById])
+  const outputCollections = useMemo(() => buildModuleWorkflowOutputCollections({
+    browseContent,
+    executionById,
+    workflowNameById,
+  }), [browseContent, executionById, workflowNameById])
 
   const artifactTypeOptions = useMemo(
-    () => Array.from(new Set(outputCollections.technicalArtifacts.map((artifact) => artifact.artifact_type))).sort((left, right) => left.localeCompare(right, 'en')),
+    () => listModuleWorkflowArtifactTypes(outputCollections.technicalArtifacts),
     [outputCollections.technicalArtifacts],
   )
 
-  const filteredTechnicalArtifacts = useMemo(() => {
-    const normalizedSearch = artifactSearchTerm.trim().toLowerCase()
-
-    return outputCollections.technicalArtifacts.filter((artifact) => {
-      if (artifactTypeFilter !== 'all' && artifact.artifact_type !== artifactTypeFilter) {
-        return false
-      }
-
-      if (!normalizedSearch) {
-        return true
-      }
-
-      const execution = executionById.get(artifact.execution_id)
-      const workflowName = execution ? (workflowNameById.get(execution.graph_workflow_id) ?? `Workflow #${execution.graph_workflow_id}`) : 'Unknown workflow'
-      const previewText = buildArtifactTextPreview(artifact, 220) ?? ''
-      const haystack = [
-        workflowName,
-        artifact.artifact_type,
-        artifact.port_key,
-        previewText,
-        artifact.storage_path ?? '',
-      ].join(' ').toLowerCase()
-
-      return haystack.includes(normalizedSearch)
-    })
-  }, [artifactSearchTerm, artifactTypeFilter, executionById, outputCollections.technicalArtifacts, workflowNameById])
+  const filteredTechnicalArtifacts = useMemo(() => filterModuleWorkflowTechnicalArtifacts({
+    artifacts: outputCollections.technicalArtifacts,
+    artifactSearchTerm,
+    artifactTypeFilter,
+    executionById,
+    workflowNameById,
+  }), [artifactSearchTerm, artifactTypeFilter, executionById, outputCollections.technicalArtifacts, workflowNameById])
 
   const queueExecutions = useMemo(
     () => browseContent.empty_executions,
