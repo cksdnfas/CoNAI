@@ -51,6 +51,11 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { useFolderSettingsTab } from './use-folder-settings-tab'
 
+type AppSettingsRecord = Awaited<ReturnType<typeof getAppSettings>>
+type NotifyFn = (message: string) => void
+type SyncSettingsCache = (nextSettings: AppSettingsRecord) => void
+type RefreshAutoQueries = () => Promise<void>
+
 /** Validate rating-weight inputs before sending them to the backend. */
 function validateRatingWeightsDraft(weights: RatingWeightsRecord | null) {
   if (!weights) {
@@ -133,13 +138,228 @@ function normalizeRatingTierDrafts(tiers: RatingTierRecord[]) {
   return normalized
 }
 
-export function SettingsPage() {
-  const queryClient = useQueryClient()
-  const { showSnackbar } = useSnackbar()
-  const [activeTab, setActiveTab] = useState<SettingsTab>('folders')
+/** Keep appearance preset labels searchable and backend-safe before save. */
+function normalizeAppearancePresetSlots(presetSlots: AppearancePresetSlot[]) {
+  return presetSlots.map((slot, index) => ({
+    ...slot,
+    label: slot.label.trim() || `Slot ${index + 1}`,
+  }))
+}
+
+/** Own appearance-tab draft state, theme preview behavior, and save flows. */
+function useAppearanceSettingsSection({
+  isActive,
+  currentAppearance,
+  savedAppearance,
+  syncSettingsCache,
+  notifyInfo,
+  notifyError,
+}: {
+  isActive: boolean
+  currentAppearance: AppearanceSettings | null | undefined
+  savedAppearance: AppearanceSettings
+  syncSettingsCache: SyncSettingsCache
+  notifyInfo: NotifyFn
+  notifyError: NotifyFn
+}) {
   const [appearanceDraft, setAppearanceDraft] = useState<AppearanceSettings | null>(null)
-  const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
-  const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
+  const effectiveAppearanceDraft = appearanceDraft ?? currentAppearance ?? null
+
+  useEffect(() => {
+    if (isActive) {
+      applyAppearanceTheme(effectiveAppearanceDraft ?? savedAppearance)
+      return
+    }
+
+    applyAppearanceTheme(savedAppearance)
+  }, [effectiveAppearanceDraft, isActive, savedAppearance])
+
+  const appearanceMutation = useMutation({
+    mutationFn: updateAppearanceSettings,
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setAppearanceDraft(settings.appearance)
+      notifyInfo('화면 설정을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '화면 설정 저장에 실패했어.')
+    },
+  })
+
+  const appearancePresetSlotsMutation = useMutation({
+    mutationFn: (presetSlots: AppearancePresetSlot[]) => updateAppearanceSettings({ presetSlots }),
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setAppearanceDraft((draft) =>
+        draft
+          ? { ...draft, presetSlots: settings.appearance.presetSlots }
+          : settings.appearance,
+      )
+      notifyInfo('테마 슬롯을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '테마 슬롯 저장에 실패했어.')
+    },
+  })
+
+  const appearanceFontUploadMutation = useMutation({
+    mutationFn: ({ file, target }: { file: File; target: 'sans' | 'mono' }) => uploadAppearanceFont(file, target),
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '커스텀 폰트 업로드에 실패했어.')
+    },
+  })
+
+  const patchAppearanceDraft = (patch: Partial<AppearanceSettings>) => {
+    if (!effectiveAppearanceDraft) return
+    setAppearanceDraft({ ...effectiveAppearanceDraft, ...patch })
+  }
+
+  const isDirty =
+    JSON.stringify(effectiveAppearanceDraft ?? savedAppearance) !== JSON.stringify(savedAppearance)
+
+  const handleAppearanceReset = () => {
+    setAppearanceDraft((draft) => ({
+      ...DEFAULT_APPEARANCE_SETTINGS,
+      presetSlots: draft?.presetSlots ?? savedAppearance.presetSlots,
+    }))
+  }
+
+  const handleAppearanceCancel = () => {
+    setAppearanceDraft(savedAppearance)
+    applyAppearanceTheme(savedAppearance)
+  }
+
+  const handleAppearanceSave = () => {
+    if (!effectiveAppearanceDraft) return
+    void appearanceMutation.mutateAsync({
+      ...effectiveAppearanceDraft,
+      presetSlots: normalizeAppearancePresetSlots(effectiveAppearanceDraft.presetSlots),
+    })
+  }
+
+  const handleAppearanceExport = async () => {
+    try {
+      const appearanceToExport = {
+        ...(effectiveAppearanceDraft ?? savedAppearance),
+        presetSlots: normalizeAppearancePresetSlots((effectiveAppearanceDraft ?? savedAppearance).presetSlots),
+      }
+      const packageDocument = await buildAppearancePackage(appearanceToExport)
+      const blob = new Blob([JSON.stringify(packageDocument, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `conai-appearance-package-${appearanceToExport.accentPreset}-${appearanceToExport.themeMode}.json`
+      document.body.append(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+      notifyInfo('현재 테마와 연결된 폰트 자산까지 패키지로 내보냈어.')
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : '화면 설정 패키지를 내보내지 못했어.')
+    }
+  }
+
+  const handleAppearanceImport = async (file: File) => {
+    try {
+      const raw = JSON.parse(await file.text()) as unknown
+      const importedAppearance = await restoreAppearancePackage(raw, savedAppearance, uploadAppearanceFont)
+
+      if (!importedAppearance) {
+        throw new Error('Appearance JSON 구조를 확인하지 못했어.')
+      }
+
+      await appearanceMutation.mutateAsync(importedAppearance)
+      notifyInfo('화면 설정 패키지를 불러와 저장했어.')
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : '화면 설정 파일을 불러오지 못했어.')
+    }
+  }
+
+  const handleAppearancePresetSlotsSave = (presetSlots: AppearancePresetSlot[]) => {
+    const normalizedPresetSlots = normalizeAppearancePresetSlots(presetSlots)
+    setAppearanceDraft((draft) => (draft ? { ...draft, presetSlots: normalizedPresetSlots } : draft))
+    void appearancePresetSlotsMutation.mutateAsync(normalizedPresetSlots)
+  }
+
+  const handleAppearanceFontUpload = async (target: 'sans' | 'mono', file: File) => {
+    const uploaded = await appearanceFontUploadMutation.mutateAsync({ file, target })
+
+    setAppearanceDraft((draft) => {
+      const base = draft ?? savedAppearance
+      const next = { ...base, fontPreset: 'custom' as const }
+
+      if (target === 'sans') {
+        next.customFontUrl = uploaded.url
+        next.customFontFileName = uploaded.originalName
+      } else {
+        next.customMonoFontUrl = uploaded.url
+        next.customMonoFontFileName = uploaded.originalName
+      }
+
+      return next
+    })
+
+    notifyInfo(`${target === 'sans' ? '본문' : '모노'} 커스텀 폰트를 업로드했어. 저장하면 기본 테마에 반영돼.`)
+  }
+
+  const handleAppearanceFontClear = (target: 'sans' | 'mono') => {
+    setAppearanceDraft((draft) => {
+      const base = draft ?? savedAppearance
+      const next = { ...base }
+
+      if (target === 'sans') {
+        next.customFontUrl = ''
+        next.customFontFileName = ''
+      } else {
+        next.customMonoFontUrl = ''
+        next.customMonoFontFileName = ''
+      }
+
+      return next
+    })
+
+    notifyInfo(`${target === 'sans' ? '본문' : '모노'} 업로드 폰트를 draft에서 해제했어. 저장하면 반영돼.`)
+  }
+
+  return {
+    tabProps: {
+      appearanceDraft: effectiveAppearanceDraft,
+      savedAppearance,
+      isDirty,
+      onPatchAppearance: patchAppearanceDraft,
+      onReset: handleAppearanceReset,
+      onCancel: handleAppearanceCancel,
+      onSave: handleAppearanceSave,
+      onExport: handleAppearanceExport,
+      onImport: handleAppearanceImport,
+      onSavePresetSlots: handleAppearancePresetSlotsSave,
+      onUploadCustomFont: handleAppearanceFontUpload,
+      onClearCustomFont: handleAppearanceFontClear,
+      isSaving: appearanceMutation.isPending || appearancePresetSlotsMutation.isPending,
+      isUploadingFont: appearanceFontUploadMutation.isPending,
+    },
+  }
+}
+
+/** Own auto-tab queries, drafts, validation, and auto-test flows. */
+function useAutoSettingsSection({
+  isActive,
+  taggerSettings,
+  kaloscopeSettings,
+  syncSettingsCache,
+  refreshAutoQueries,
+  notifyInfo,
+  notifyError,
+}: {
+  isActive: boolean
+  taggerSettings: TaggerSettings | null | undefined
+  kaloscopeSettings: KaloscopeSettings | null | undefined
+  syncSettingsCache: SyncSettingsCache
+  refreshAutoQueries: RefreshAutoQueries
+  notifyInfo: NotifyFn
+  notifyError: NotifyFn
+}) {
+  const queryClient = useQueryClient()
   const [taggerDraft, setTaggerDraft] = useState<TaggerSettings | null>(null)
   const [kaloscopeDraft, setKaloscopeDraft] = useState<KaloscopeSettings | null>(null)
   const [ratingWeightsDraft, setRatingWeightsDraft] = useState<RatingWeightsRecord | null>(null)
@@ -150,12 +370,7 @@ export function SettingsPage() {
   const [autoTestMedia, setAutoTestMedia] = useState<AutoTestMediaRecord | null>(null)
   const [taggerTestResult, setTaggerTestResult] = useState<AutoTestTaggerResult | null>(null)
   const [kaloscopeTestResult, setKaloscopeTestResult] = useState<AutoTestKaloscopeResult | null>(null)
-  const isDesktopPageLayout = useDesktopPageLayout()
 
-  const settingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
-  })
   const taggerModelsQuery = useQuery({
     queryKey: ['tagger-models'],
     queryFn: getTaggerModels,
@@ -182,12 +397,8 @@ export function SettingsPage() {
     enabled: Boolean(autoTestMedia?.compositeHash),
   })
 
-  const effectiveAppearanceDraft = appearanceDraft ?? settingsQuery.data?.appearance ?? null
-  const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
-  const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
-  const effectiveImageSaveDraft = imageSaveDraft ?? settingsQuery.data?.imageSave ?? null
-  const effectiveTaggerDraft = taggerDraft ?? settingsQuery.data?.tagger ?? null
-  const effectiveKaloscopeDraft = kaloscopeDraft ?? settingsQuery.data?.kaloscope ?? null
+  const effectiveTaggerDraft = taggerDraft ?? taggerSettings ?? null
+  const effectiveKaloscopeDraft = kaloscopeDraft ?? kaloscopeSettings ?? null
   const effectiveRatingWeightsDraft = ratingWeightsDraft ?? ratingWeightsQuery.data ?? null
   const effectiveRatingTiersDraft = ratingTiersDraft ?? ratingTiersQuery.data ?? null
   const ratingWeightValidationMessages = useMemo(
@@ -199,94 +410,12 @@ export function SettingsPage() {
     [effectiveRatingTiersDraft],
   )
 
-  const notifyInfo = (message: string) => {
-    showSnackbar({ message, tone: 'info' })
-  }
-
-  const notifyError = (message: string) => {
-    showSnackbar({ message, tone: 'error' })
-  }
-
-  const syncSettingsCache = (nextSettings: Awaited<ReturnType<typeof getAppSettings>>) => {
-    queryClient.setQueryData(['app-settings'], nextSettings)
-  }
-
-  const refreshAutoQueries = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['app-settings'] }),
-      queryClient.invalidateQueries({ queryKey: ['tagger-models'] }),
-      queryClient.invalidateQueries({ queryKey: ['tagger-status'] }),
-      queryClient.invalidateQueries({ queryKey: ['kaloscope-status'] }),
-    ])
-  }
-
   const applyAutoTestMedia = (media: AutoTestMediaRecord) => {
     setAutoTestHashInput(media.compositeHash)
     setAutoTestMedia(media)
     setTaggerTestResult(null)
     setKaloscopeTestResult(null)
   }
-
-  const { tabProps: foldersTabProps } = useFolderSettingsTab({ notifyInfo, notifyError })
-
-  const metadataMutation = useMutation({
-    mutationFn: updateMetadataSettings,
-    onSuccess: (settings) => {
-      syncSettingsCache(settings)
-      setMetadataDraft(settings.metadataExtraction)
-      notifyInfo('메타데이터 추출 설정을 저장했어.')
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '메타데이터 설정 저장에 실패했어.')
-    },
-  })
-
-  const appearanceMutation = useMutation({
-    mutationFn: updateAppearanceSettings,
-    onSuccess: (settings) => {
-      syncSettingsCache(settings)
-      setAppearanceDraft(settings.appearance)
-      notifyInfo('화면 설정을 저장했어.')
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '화면 설정 저장에 실패했어.')
-    },
-  })
-
-  const imageSaveMutation = useMutation({
-    mutationFn: updateImageSaveSettings,
-    onSuccess: (settings) => {
-      syncSettingsCache(settings)
-      setImageSaveDraft(settings.imageSave)
-      notifyInfo('이미지 저장 설정을 저장했어.')
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '이미지 저장 설정 저장에 실패했어.')
-    },
-  })
-
-  const appearancePresetSlotsMutation = useMutation({
-    mutationFn: (presetSlots: AppearancePresetSlot[]) => updateAppearanceSettings({ presetSlots }),
-    onSuccess: (settings) => {
-      syncSettingsCache(settings)
-      setAppearanceDraft((current) =>
-        current
-          ? { ...current, presetSlots: settings.appearance.presetSlots }
-          : settings.appearance,
-      )
-      notifyInfo('테마 슬롯을 저장했어.')
-    },
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '테마 슬롯 저장에 실패했어.')
-    },
-  })
-
-  const appearanceFontUploadMutation = useMutation({
-    mutationFn: ({ file, target }: { file: File; target: 'sans' | 'mono' }) => uploadAppearanceFont(file, target),
-    onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '커스텀 폰트 업로드에 실패했어.')
-    },
-  })
 
   const taggerMutation = useMutation({
     mutationFn: updateTaggerSettings,
@@ -351,21 +480,12 @@ export function SettingsPage() {
   })
 
   useEffect(() => {
-    if (activeTab !== 'auto') return
+    if (!isActive) return
     if (hasAutoCheckedTaggerDependenciesRef.current || taggerDependencyMutation.isPending) return
 
     hasAutoCheckedTaggerDependenciesRef.current = true
     void taggerDependencyMutation.mutateAsync()
-  }, [activeTab, taggerDependencyMutation])
-
-  useEffect(() => {
-    if (activeTab === 'appearance') {
-      applyAppearanceTheme(effectiveAppearanceDraft ?? savedAppearance)
-      return
-    }
-
-    applyAppearanceTheme(savedAppearance)
-  }, [activeTab, effectiveAppearanceDraft, savedAppearance])
+  }, [isActive, taggerDependencyMutation])
 
   const autoTestResolveMutation = useMutation({
     mutationFn: resolveAutoTestMedia,
@@ -423,134 +543,6 @@ export function SettingsPage() {
       notifyError(error instanceof Error ? error.message : 'Kaloscope 테스트에 실패했어.')
     },
   })
-
-  const patchMetadataDraft = (patch: Partial<MetadataExtractionSettings>) => {
-    if (!effectiveMetadataDraft) return
-    setMetadataDraft({ ...effectiveMetadataDraft, ...patch })
-  }
-
-  const patchImageSaveDraft = (patch: Partial<ImageSaveSettings>) => {
-    if (!effectiveImageSaveDraft) return
-    setImageSaveDraft({ ...effectiveImageSaveDraft, ...patch })
-  }
-
-  const patchAppearanceDraft = (patch: Partial<AppearanceSettings>) => {
-    if (!effectiveAppearanceDraft) return
-    setAppearanceDraft({ ...effectiveAppearanceDraft, ...patch })
-  }
-
-  const normalizePresetSlotsForSave = (presetSlots: AppearancePresetSlot[]) =>
-    presetSlots.map((slot, index) => ({
-      ...slot,
-      label: slot.label.trim() || `Slot ${index + 1}`,
-    }))
-
-  const isAppearanceDirty =
-    JSON.stringify(effectiveAppearanceDraft ?? savedAppearance) !== JSON.stringify(savedAppearance)
-
-  const handleAppearanceReset = () => {
-    setAppearanceDraft((current) => ({
-      ...DEFAULT_APPEARANCE_SETTINGS,
-      presetSlots: current?.presetSlots ?? savedAppearance.presetSlots,
-    }))
-  }
-
-  const handleAppearanceCancel = () => {
-    setAppearanceDraft(savedAppearance)
-    applyAppearanceTheme(savedAppearance)
-  }
-
-  const handleAppearanceSave = () => {
-    if (!effectiveAppearanceDraft) return
-    void appearanceMutation.mutateAsync({
-      ...effectiveAppearanceDraft,
-      presetSlots: normalizePresetSlotsForSave(effectiveAppearanceDraft.presetSlots),
-    })
-  }
-
-  const handleAppearanceExport = async () => {
-    try {
-      const appearanceToExport = {
-        ...(effectiveAppearanceDraft ?? savedAppearance),
-        presetSlots: normalizePresetSlotsForSave((effectiveAppearanceDraft ?? savedAppearance).presetSlots),
-      }
-      const packageDocument = await buildAppearancePackage(appearanceToExport)
-      const blob = new Blob([JSON.stringify(packageDocument, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = `conai-appearance-package-${appearanceToExport.accentPreset}-${appearanceToExport.themeMode}.json`
-      document.body.append(anchor)
-      anchor.click()
-      anchor.remove()
-      URL.revokeObjectURL(url)
-      notifyInfo('현재 테마와 연결된 폰트 자산까지 패키지로 내보냈어.')
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : '화면 설정 패키지를 내보내지 못했어.')
-    }
-  }
-
-  const handleAppearanceImport = async (file: File) => {
-    try {
-      const raw = JSON.parse(await file.text()) as unknown
-      const importedAppearance = await restoreAppearancePackage(raw, savedAppearance, uploadAppearanceFont)
-
-      if (!importedAppearance) {
-        throw new Error('Appearance JSON 구조를 확인하지 못했어.')
-      }
-
-      await appearanceMutation.mutateAsync(importedAppearance)
-      notifyInfo('화면 설정 패키지를 불러와 저장했어.')
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : '화면 설정 파일을 불러오지 못했어.')
-    }
-  }
-
-  const handleAppearancePresetSlotsSave = (presetSlots: AppearancePresetSlot[]) => {
-    const normalizedPresetSlots = normalizePresetSlotsForSave(presetSlots)
-    setAppearanceDraft((current) => (current ? { ...current, presetSlots: normalizedPresetSlots } : current))
-    void appearancePresetSlotsMutation.mutateAsync(normalizedPresetSlots)
-  }
-
-  const handleAppearanceFontUpload = async (target: 'sans' | 'mono', file: File) => {
-    const uploaded = await appearanceFontUploadMutation.mutateAsync({ file, target })
-
-    setAppearanceDraft((current) => {
-      const base = current ?? savedAppearance
-      const next = { ...base, fontPreset: 'custom' as const }
-
-      if (target === 'sans') {
-        next.customFontUrl = uploaded.url
-        next.customFontFileName = uploaded.originalName
-      } else {
-        next.customMonoFontUrl = uploaded.url
-        next.customMonoFontFileName = uploaded.originalName
-      }
-
-      return next
-    })
-
-    notifyInfo(`${target === 'sans' ? '본문' : '모노'} 커스텀 폰트를 업로드했어. 저장하면 기본 테마에 반영돼.`)
-  }
-
-  const handleAppearanceFontClear = (target: 'sans' | 'mono') => {
-    setAppearanceDraft((current) => {
-      const base = current ?? savedAppearance
-      const next = { ...base }
-
-      if (target === 'sans') {
-        next.customFontUrl = ''
-        next.customFontFileName = ''
-      } else {
-        next.customMonoFontUrl = ''
-        next.customMonoFontFileName = ''
-      }
-
-      return next
-    })
-
-    notifyInfo(`${target === 'sans' ? '본문' : '모노'} 업로드 폰트를 draft에서 해제했어. 저장하면 반영돼.`)
-  }
 
   const patchTaggerDraft = (patch: Partial<TaggerSettings>) => {
     if (!effectiveTaggerDraft) return
@@ -701,6 +693,13 @@ export function SettingsPage() {
     void ratingTiersMutation.mutateAsync(normalizedTiers)
   }
 
+  const handleAutoTestHashInputChange = (value: string) => {
+    setAutoTestHashInput(value)
+    setAutoTestMedia(null)
+    setTaggerTestResult(null)
+    setKaloscopeTestResult(null)
+  }
+
   const handleResolveAutoTestMedia = () => {
     const nextHash = autoTestHashInput.trim()
     if (!nextHash) return
@@ -719,6 +718,148 @@ export function SettingsPage() {
     void kaloscopeAutoTestMutation.mutateAsync(autoTestMedia.compositeHash)
   }
 
+  return {
+    tabProps: {
+      taggerDraft: effectiveTaggerDraft,
+      kaloscopeDraft: effectiveKaloscopeDraft,
+      taggerModels: taggerModelsQuery.data ?? [],
+      taggerStatus: taggerStatusQuery.data,
+      kaloscopeStatus: kaloscopeStatusQuery.data,
+      taggerDependencyResult,
+      onPatchTagger: patchTaggerDraft,
+      onPatchKaloscope: patchKaloscopeDraft,
+      ratingWeightsDraft: effectiveRatingWeightsDraft,
+      ratingWeightValidationMessages,
+      onPatchRatingWeights: patchRatingWeightsDraft,
+      ratingTiersDraft: effectiveRatingTiersDraft,
+      ratingTierValidationMessages,
+      onPatchRatingTier: patchRatingTierDraft,
+      onAddRatingTier: addRatingTierDraft,
+      onDeleteRatingTier: deleteRatingTierDraft,
+      onMoveRatingTierUp: (tierId: number) => moveRatingTierDraft(tierId, 'up'),
+      onMoveRatingTierDown: (tierId: number) => moveRatingTierDraft(tierId, 'down'),
+      onReorderRatingTier: reorderRatingTierDraft,
+      onSaveTagger: () => effectiveTaggerDraft && void taggerMutation.mutateAsync(effectiveTaggerDraft),
+      onSaveKaloscope: () => effectiveKaloscopeDraft && void kaloscopeMutation.mutateAsync(effectiveKaloscopeDraft),
+      onSaveRatingWeights: handleSaveRatingWeights,
+      onSaveRatingTiers: handleSaveRatingTiers,
+      isSavingTagger: taggerMutation.isPending,
+      isSavingKaloscope: kaloscopeMutation.isPending,
+      isSavingRatingWeights: ratingWeightsMutation.isPending,
+      isSavingRatingTiers: ratingTiersMutation.isPending,
+      isCheckingTaggerDependencies: taggerDependencyMutation.isPending,
+      autoTestHashInput,
+      onAutoTestHashInputChange: handleAutoTestHashInputChange,
+      autoTestMedia,
+      autoTestImage: (autoTestImageQuery.data as ImageRecord | undefined) ?? null,
+      isLoadingAutoTestImage: autoTestImageQuery.isLoading,
+      taggerTestResult,
+      kaloscopeTestResult,
+      onResolveAutoTestMedia: handleResolveAutoTestMedia,
+      onRandomAutoTestMedia: () => void autoTestRandomMutation.mutateAsync(),
+      onRunTaggerAutoTest: handleRunTaggerAutoTest,
+      onRunKaloscopeAutoTest: handleRunKaloscopeAutoTest,
+      isResolvingAutoTestMedia: autoTestResolveMutation.isPending,
+      isPickingRandomAutoTestMedia: autoTestRandomMutation.isPending,
+      isRunningTaggerAutoTest: taggerAutoTestMutation.isPending,
+      isRunningKaloscopeAutoTest: kaloscopeAutoTestMutation.isPending,
+    },
+  }
+}
+
+export function SettingsPage() {
+  const queryClient = useQueryClient()
+  const { showSnackbar } = useSnackbar()
+  const [activeTab, setActiveTab] = useState<SettingsTab>('folders')
+  const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
+  const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
+  const isDesktopPageLayout = useDesktopPageLayout()
+
+  const settingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+  })
+
+  const notifyInfo = (message: string) => {
+    showSnackbar({ message, tone: 'info' })
+  }
+
+  const notifyError = (message: string) => {
+    showSnackbar({ message, tone: 'error' })
+  }
+
+  const syncSettingsCache = (nextSettings: AppSettingsRecord) => {
+    queryClient.setQueryData(['app-settings'], nextSettings)
+  }
+
+  const refreshAutoQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['app-settings'] }),
+      queryClient.invalidateQueries({ queryKey: ['tagger-models'] }),
+      queryClient.invalidateQueries({ queryKey: ['tagger-status'] }),
+      queryClient.invalidateQueries({ queryKey: ['kaloscope-status'] }),
+    ])
+  }
+
+  const { tabProps: foldersTabProps } = useFolderSettingsTab({ notifyInfo, notifyError })
+
+  const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
+  const effectiveImageSaveDraft = imageSaveDraft ?? settingsQuery.data?.imageSave ?? null
+  const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
+
+  const appearanceSection = useAppearanceSettingsSection({
+    isActive: activeTab === 'appearance',
+    currentAppearance: settingsQuery.data?.appearance,
+    savedAppearance,
+    syncSettingsCache,
+    notifyInfo,
+    notifyError,
+  })
+
+  const autoSection = useAutoSettingsSection({
+    isActive: activeTab === 'auto',
+    taggerSettings: settingsQuery.data?.tagger,
+    kaloscopeSettings: settingsQuery.data?.kaloscope,
+    syncSettingsCache,
+    refreshAutoQueries,
+    notifyInfo,
+    notifyError,
+  })
+
+  const metadataMutation = useMutation({
+    mutationFn: updateMetadataSettings,
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setMetadataDraft(settings.metadataExtraction)
+      notifyInfo('메타데이터 추출 설정을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '메타데이터 설정 저장에 실패했어.')
+    },
+  })
+
+  const imageSaveMutation = useMutation({
+    mutationFn: updateImageSaveSettings,
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setImageSaveDraft(settings.imageSave)
+      notifyInfo('이미지 저장 설정을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '이미지 저장 설정 저장에 실패했어.')
+    },
+  })
+
+  const patchMetadataDraft = (patch: Partial<MetadataExtractionSettings>) => {
+    if (!effectiveMetadataDraft) return
+    setMetadataDraft({ ...effectiveMetadataDraft, ...patch })
+  }
+
+  const patchImageSaveDraft = (patch: Partial<ImageSaveSettings>) => {
+    if (!effectiveImageSaveDraft) return
+    setImageSaveDraft({ ...effectiveImageSaveDraft, ...patch })
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader title="설정" />
@@ -730,77 +871,13 @@ export function SettingsPage() {
           {activeTab === 'folders' ? <FoldersTab {...foldersTabProps} /> : null}
 
           {activeTab === 'appearance' ? (
-            <AppearanceTab
-              appearanceDraft={effectiveAppearanceDraft}
-              savedAppearance={savedAppearance}
-              isDirty={isAppearanceDirty}
-              onPatchAppearance={patchAppearanceDraft}
-              onReset={handleAppearanceReset}
-              onCancel={handleAppearanceCancel}
-              onSave={handleAppearanceSave}
-              onExport={handleAppearanceExport}
-              onImport={handleAppearanceImport}
-              onSavePresetSlots={handleAppearancePresetSlotsSave}
-              onUploadCustomFont={handleAppearanceFontUpload}
-              onClearCustomFont={handleAppearanceFontClear}
-              isSaving={appearanceMutation.isPending || appearancePresetSlotsMutation.isPending}
-              isUploadingFont={appearanceFontUploadMutation.isPending}
-            />
+            <AppearanceTab {...appearanceSection.tabProps} />
           ) : null}
 
           {activeTab === 'security' ? <SecurityTab /> : null}
 
           {activeTab === 'auto' ? (
-            <AutoTab
-              taggerDraft={effectiveTaggerDraft}
-              kaloscopeDraft={effectiveKaloscopeDraft}
-              taggerModels={taggerModelsQuery.data ?? []}
-              taggerStatus={taggerStatusQuery.data}
-              kaloscopeStatus={kaloscopeStatusQuery.data}
-              taggerDependencyResult={taggerDependencyResult}
-              onPatchTagger={patchTaggerDraft}
-              onPatchKaloscope={patchKaloscopeDraft}
-              ratingWeightsDraft={effectiveRatingWeightsDraft}
-              ratingWeightValidationMessages={ratingWeightValidationMessages}
-              onPatchRatingWeights={patchRatingWeightsDraft}
-              ratingTiersDraft={effectiveRatingTiersDraft}
-              ratingTierValidationMessages={ratingTierValidationMessages}
-              onPatchRatingTier={patchRatingTierDraft}
-              onAddRatingTier={addRatingTierDraft}
-              onDeleteRatingTier={deleteRatingTierDraft}
-              onMoveRatingTierUp={(tierId) => moveRatingTierDraft(tierId, 'up')}
-              onMoveRatingTierDown={(tierId) => moveRatingTierDraft(tierId, 'down')}
-              onReorderRatingTier={reorderRatingTierDraft}
-              onSaveTagger={() => effectiveTaggerDraft && void taggerMutation.mutateAsync(effectiveTaggerDraft)}
-              onSaveKaloscope={() => effectiveKaloscopeDraft && void kaloscopeMutation.mutateAsync(effectiveKaloscopeDraft)}
-              onSaveRatingWeights={handleSaveRatingWeights}
-              onSaveRatingTiers={handleSaveRatingTiers}
-              isSavingTagger={taggerMutation.isPending}
-              isSavingKaloscope={kaloscopeMutation.isPending}
-              isSavingRatingWeights={ratingWeightsMutation.isPending}
-              isSavingRatingTiers={ratingTiersMutation.isPending}
-              isCheckingTaggerDependencies={taggerDependencyMutation.isPending}
-              autoTestHashInput={autoTestHashInput}
-              onAutoTestHashInputChange={(value) => {
-                setAutoTestHashInput(value)
-                setAutoTestMedia(null)
-                setTaggerTestResult(null)
-                setKaloscopeTestResult(null)
-              }}
-              autoTestMedia={autoTestMedia}
-              autoTestImage={(autoTestImageQuery.data as ImageRecord | undefined) ?? null}
-              isLoadingAutoTestImage={autoTestImageQuery.isLoading}
-              taggerTestResult={taggerTestResult}
-              kaloscopeTestResult={kaloscopeTestResult}
-              onResolveAutoTestMedia={handleResolveAutoTestMedia}
-              onRandomAutoTestMedia={() => void autoTestRandomMutation.mutateAsync()}
-              onRunTaggerAutoTest={handleRunTaggerAutoTest}
-              onRunKaloscopeAutoTest={handleRunKaloscopeAutoTest}
-              isResolvingAutoTestMedia={autoTestResolveMutation.isPending}
-              isPickingRandomAutoTestMedia={autoTestRandomMutation.isPending}
-              isRunningTaggerAutoTest={taggerAutoTestMutation.isPending}
-              isRunningKaloscopeAutoTest={kaloscopeAutoTestMutation.isPending}
-            />
+            <AutoTab {...autoSection.tabProps} />
           ) : null}
 
           {activeTab === 'metadata' ? (
@@ -825,4 +902,3 @@ export function SettingsPage() {
     </div>
   )
 }
-
