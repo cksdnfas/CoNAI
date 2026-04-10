@@ -5,21 +5,16 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
-  type Edge,
-  type Node,
-  type NodeProps,
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuery } from '@tanstack/react-query'
-import { Check, ChevronDown, ChevronUp, GripVertical, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { ChevronDown, ChevronUp, Search, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { SettingsField } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
@@ -31,6 +26,17 @@ import {
   type GenerationWorkflowDetail,
   type WorkflowMarkedField,
 } from '@/lib/api'
+import {
+  buildWorkflowMarkedFieldFromInput,
+  findAuthoringGraphMatches,
+  nodeTypes,
+  parseWorkflowDefinition,
+  parseWorkflowGraph,
+  type AuthoringEdge,
+  type AuthoringNode,
+  type EditableWorkflowInput,
+} from './comfy-workflow-authoring-graph'
+import { ComfyWorkflowMarkedFieldsEditor } from './comfy-workflow-marked-fields-editor'
 import { getErrorMessage } from '../image-generation-shared'
 
 type ComfyWorkflowAuthoringModalInitialData = {
@@ -46,370 +52,11 @@ type ComfyWorkflowAuthoringModalProps = {
   onSaved?: (workflowId: number) => void
 }
 
-type EditableWorkflowInput = {
-  key: string
-  label: string
-  value: string | number | boolean | null
-  inferredType: WorkflowMarkedField['type']
-}
-
-type AuthoringNodeData = {
-  label: string
-  classType: string
-  title: string
-  editableInputs: EditableWorkflowInput[]
-  markedJsonPaths: string[]
-  searchMatched?: boolean
-  searchCurrent?: boolean
-  onAddField: (nodeId: string, classType: string, input: EditableWorkflowInput) => void
-}
-
-type AuthoringNode = Node<AuthoringNodeData, 'comfyAuthoring'>
-type AuthoringEdge = Edge
-
-type ParsedWorkflowGraph = {
-  nodes: AuthoringNode[]
-  edges: AuthoringEdge[]
-}
-
 const INITIAL_AUTHORING_VIEWPORT = { x: 0, y: 0, zoom: 0.7 }
 const INITIAL_AUTHORING_FIT_VIEW_OPTIONS = { padding: 0.28, maxZoom: 0.72 }
 const AUTHORING_NODE_DRAG_HANDLE_SELECTOR = '.comfy-authoring-drag-handle'
 
-type WorkflowJsonNodeRecord = {
-  title?: string
-  class_type?: string
-  inputs?: Record<string, unknown>
-  pos?: unknown
-  position?: unknown
-  _meta?: {
-    title?: string
-  }
-}
-
-type WorkflowJsonRecord = Record<string, WorkflowJsonNodeRecord>
-
-function humanizeKey(value: string) {
-  return value
-    .replace(/_/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^./, (char) => char.toUpperCase())
-}
-
-function sanitizeId(value: string) {
-  return value.replace(/[^a-zA-Z0-9_-]/g, '_')
-}
-
-function inferFieldType(inputKey: string, value: string | number | boolean | null): WorkflowMarkedField['type'] {
-  if (typeof value === 'number') {
-    return 'number'
-  }
-
-  if (typeof value === 'boolean') {
-    return 'select'
-  }
-
-  const normalizedKey = inputKey.toLowerCase()
-  if (normalizedKey.includes('image') || normalizedKey.includes('mask') || normalizedKey.includes('pixels')) {
-    return 'image'
-  }
-
-  if (typeof value === 'string') {
-    if (value.includes('\n') || value.length > 80 || normalizedKey.includes('prompt') || normalizedKey.includes('text')) {
-      return 'textarea'
-    }
-  }
-
-  return 'text'
-}
-
-function buildFieldFromInput(nodeId: string, classType: string, input: EditableWorkflowInput): WorkflowMarkedField {
-  const id = sanitizeId(`${nodeId}_${input.key}`)
-  const fieldType = input.inferredType
-  const dropdownOptions = typeof input.value === 'boolean' ? ['true', 'false'] : undefined
-
-  return {
-    id,
-    label: humanizeKey(input.key),
-    description: `${classType} · ${input.key}`,
-    jsonPath: `${nodeId}.inputs.${input.key}`,
-    type: fieldType,
-    default_value:
-      input.value === null
-        ? undefined
-        : typeof input.value === 'boolean'
-          ? String(input.value)
-          : input.value,
-    placeholder: fieldType === 'text' || fieldType === 'textarea' ? humanizeKey(input.key) : undefined,
-    options: dropdownOptions,
-    required: false,
-  }
-}
-
-/** Prefer user-facing node title when present, then fall back to class_type or node id label. */
-function resolveWorkflowNodeTitle(nodeId: string, nodeData: WorkflowJsonNodeRecord) {
-  const preferredTitle = typeof nodeData.title === 'string' && nodeData.title.trim().length > 0
-    ? nodeData.title.trim()
-    : typeof nodeData._meta?.title === 'string' && nodeData._meta.title.trim().length > 0
-      ? nodeData._meta.title.trim()
-      : null
-
-  return preferredTitle ?? nodeData.class_type ?? `Node ${nodeId}`
-}
-
-function parseWorkflowDefinition(workflowJson: string): WorkflowJsonRecord {
-  const parsed = JSON.parse(workflowJson) as unknown
-
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('워크플로우 JSON 루트는 객체여야 해.')
-  }
-
-  return parsed as WorkflowJsonRecord
-}
-
-function resolveWorkflowNodePosition(nodeData: WorkflowJsonNodeRecord) {
-  const candidate = nodeData.pos ?? nodeData.position
-
-  if (Array.isArray(candidate) && candidate.length >= 2) {
-    const [x, y] = candidate
-    if (typeof x === 'number' && Number.isFinite(x) && typeof y === 'number' && Number.isFinite(y)) {
-      return { x, y }
-    }
-  }
-
-  if (candidate && typeof candidate === 'object') {
-    const record = candidate as Record<string, unknown>
-    const x = typeof record.x === 'number' && Number.isFinite(record.x)
-      ? record.x
-      : typeof record['0'] === 'number' && Number.isFinite(record['0'])
-        ? record['0']
-        : null
-    const y = typeof record.y === 'number' && Number.isFinite(record.y)
-      ? record.y
-      : typeof record['1'] === 'number' && Number.isFinite(record['1'])
-        ? record['1']
-        : null
-
-    if (x !== null && y !== null) {
-      return { x, y }
-    }
-  }
-
-  return null
-}
-
-function estimateAuthoringNodeHeight(node: AuthoringNode) {
-  const editableInputCount = node.data.editableInputs.length
-  if (editableInputCount === 0) {
-    return 120
-  }
-
-  return 108 + editableInputCount * 42
-}
-
-function layoutGraph(nodes: AuthoringNode[], edges: AuthoringEdge[], explicitPositions: Map<string, { x: number; y: number } | null>) {
-  const hasExplicitPositions = nodes.some((node) => explicitPositions.get(node.id) !== null)
-  if (hasExplicitPositions) {
-    const explicitNodes = nodes.filter((node) => explicitPositions.get(node.id) !== null)
-    const maxExplicitX = explicitNodes.reduce((acc, node) => Math.max(acc, explicitPositions.get(node.id)?.x ?? 0), 0)
-    const maxExplicitY = explicitNodes.reduce((acc, node) => Math.max(acc, (explicitPositions.get(node.id)?.y ?? 0) + estimateAuthoringNodeHeight(node)), 0)
-    let missingCursorY = maxExplicitY + 80
-
-    return nodes.map((node) => {
-      const explicitPosition = explicitPositions.get(node.id)
-      if (explicitPosition) {
-        return {
-          ...node,
-          position: explicitPosition,
-        }
-      }
-
-      const nextNode = {
-        ...node,
-        position: {
-          x: maxExplicitX + 360,
-          y: missingCursorY,
-        },
-      }
-      missingCursorY += estimateAuthoringNodeHeight(node) + 48
-      return nextNode
-    })
-  }
-
-  const inDegree = new Map<string, number>()
-  const adjacency = new Map<string, string[]>()
-  const depthByNode = new Map<string, number>()
-
-  for (const node of nodes) {
-    inDegree.set(node.id, 0)
-    adjacency.set(node.id, [])
-    depthByNode.set(node.id, 0)
-  }
-
-  for (const edge of edges) {
-    adjacency.get(edge.source)?.push(edge.target)
-    inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1)
-  }
-
-  const queue = nodes.filter((node) => (inDegree.get(node.id) ?? 0) === 0).map((node) => node.id)
-  const visited = new Set<string>()
-
-  while (queue.length > 0) {
-    const nodeId = queue.shift() as string
-    visited.add(nodeId)
-    const currentDepth = depthByNode.get(nodeId) ?? 0
-
-    for (const nextNodeId of adjacency.get(nodeId) ?? []) {
-      depthByNode.set(nextNodeId, Math.max(depthByNode.get(nextNodeId) ?? 0, currentDepth + 1))
-      inDegree.set(nextNodeId, (inDegree.get(nextNodeId) ?? 1) - 1)
-      if ((inDegree.get(nextNodeId) ?? 0) === 0) {
-        queue.push(nextNodeId)
-      }
-    }
-  }
-
-  for (const node of nodes) {
-    if (!visited.has(node.id)) {
-      depthByNode.set(node.id, Math.max(...depthByNode.values(), 0) + 1)
-    }
-  }
-
-  const columnYOffsets = new Map<number, number>()
-  return nodes.map((node) => {
-    const depth = depthByNode.get(node.id) ?? 0
-    const currentY = columnYOffsets.get(depth) ?? 0
-    const estimatedHeight = estimateAuthoringNodeHeight(node)
-    columnYOffsets.set(depth, currentY + estimatedHeight + 48)
-
-    return {
-      ...node,
-      position: {
-        x: depth * 360,
-        y: currentY,
-      },
-    }
-  })
-}
-
-function parseWorkflowGraph(params: {
-  workflowJson: string
-  markedFields: WorkflowMarkedField[]
-  onAddField: (nodeId: string, classType: string, input: EditableWorkflowInput) => void
-}): ParsedWorkflowGraph {
-  const workflow = parseWorkflowDefinition(params.workflowJson)
-  const markedPaths = new Set(params.markedFields.map((field) => field.jsonPath))
-
-  const nodes: AuthoringNode[] = []
-  const edges: AuthoringEdge[] = []
-  const explicitPositions = new Map<string, { x: number; y: number } | null>()
-
-  for (const [nodeId, nodeData] of Object.entries(workflow)) {
-    const inputs = nodeData.inputs ?? {}
-    const editableInputs: EditableWorkflowInput[] = []
-
-    for (const [inputKey, inputValue] of Object.entries(inputs)) {
-      if (Array.isArray(inputValue) && inputValue.length >= 2) {
-        edges.push({
-          id: `${inputValue[0]}-${nodeId}-${inputKey}`,
-          source: String(inputValue[0]),
-          target: nodeId,
-          label: inputKey,
-        })
-        continue
-      }
-
-      if (typeof inputValue === 'string' || typeof inputValue === 'number' || typeof inputValue === 'boolean' || inputValue === null) {
-        editableInputs.push({
-          key: inputKey,
-          label: humanizeKey(inputKey),
-          value: inputValue,
-          inferredType: inferFieldType(inputKey, inputValue),
-        })
-      }
-    }
-
-    const classType = nodeData.class_type || 'Unknown'
-    const title = resolveWorkflowNodeTitle(nodeId, nodeData)
-
-    explicitPositions.set(nodeId, resolveWorkflowNodePosition(nodeData))
-
-    nodes.push({
-      id: nodeId,
-      type: 'comfyAuthoring',
-      position: { x: 0, y: 0 },
-      data: {
-        label: title,
-        title,
-        classType,
-        editableInputs,
-        markedJsonPaths: editableInputs.map((input) => `${nodeId}.inputs.${input.key}`).filter((path) => markedPaths.has(path)),
-        onAddField: params.onAddField,
-      },
-    })
-  }
-
-  return {
-    nodes: layoutGraph(nodes, edges, explicitPositions),
-    edges,
-  }
-}
-
-function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
-  return (
-    <div
-      className={data.searchCurrent
-        ? 'min-w-[240px] rounded-sm border border-primary bg-surface-container p-3 shadow-sm ring-2 ring-primary/35'
-        : data.searchMatched
-          ? 'min-w-[240px] rounded-sm border border-primary/45 bg-surface-container p-3 shadow-sm'
-          : 'min-w-[240px] rounded-sm border border-border bg-surface-container p-3 shadow-sm'}
-    >
-      <div className="flex items-start gap-2">
-        <div className="comfy-authoring-drag-handle flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm border border-border/70 bg-background/50 text-muted-foreground active:cursor-grabbing">
-          <GripVertical className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="text-sm font-semibold text-foreground">{data.title}</div>
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span>{data.classType}</span>
-            <span>•</span>
-            <span>#{id}</span>
-          </div>
-        </div>
-      </div>
-
-      {data.editableInputs.length > 0 ? (
-        <div className="mt-3 space-y-1.5">
-          {data.editableInputs.map((input) => {
-            const path = `${id}.inputs.${input.key}`
-            const selected = data.markedJsonPaths.includes(path)
-            return (
-              <button
-                key={path}
-                type="button"
-                onClick={() => data.onAddField(id, data.classType, input)}
-                className={selected
-                  ? 'nodrag nopan flex w-full items-center justify-between rounded-sm border border-primary/40 bg-primary/10 px-2 py-1.5 text-left text-xs text-foreground'
-                  : 'nodrag nopan flex w-full items-center justify-between rounded-sm border border-border bg-surface-low px-2 py-1.5 text-left text-xs text-foreground hover:bg-surface-high'}
-              >
-                <span className="truncate">{input.label}</span>
-                <span className="ml-2 shrink-0">{selected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}</span>
-              </button>
-            )
-          })}
-        </div>
-      ) : (
-        <div className="mt-3 text-xs text-muted-foreground">직접 입력 가능한 항목 없음</div>
-      )}
-    </div>
-  )
-}
-
-const nodeTypes = {
-  comfyAuthoring: ComfyAuthoringNodeCard,
-}
-
+/** Read an uploaded workflow JSON file as text. */
 function readTextFile(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -511,7 +158,7 @@ export function ComfyWorkflowAuthoringModal({
   }
 
   const handleAddField = (nodeId: string, classType: string, input: EditableWorkflowInput) => {
-    const field = buildFieldFromInput(nodeId, classType, input)
+    const field = buildWorkflowMarkedFieldFromInput(nodeId, classType, input)
     setMarkedFields((current) => {
       const exists = current.some((item) => item.jsonPath === field.jsonPath)
       if (exists) {
@@ -542,19 +189,7 @@ export function ComfyWorkflowAuthoringModal({
       return []
     }
 
-    const normalizedQuery = graphSearchQuery.trim().toLowerCase()
-    if (!normalizedQuery) {
-      return []
-    }
-
-    return parsedGraph.nodes
-      .filter((node) => {
-        const haystack = [node.data.title, node.data.classType, node.id]
-          .join(' ')
-          .toLowerCase()
-        return haystack.includes(normalizedQuery)
-      })
-      .map((node) => node.id)
+    return findAuthoringGraphMatches(parsedGraph.nodes, graphSearchQuery)
   }, [graphSearchQuery, parsedGraph])
 
   const activeGraphSearchNodeId = graphSearchMatches.length > 0
@@ -627,16 +262,11 @@ export function ComfyWorkflowAuthoringModal({
     setMarkedFields((current) => current.map((field) => (field.id === fieldId ? { ...field, ...patch } : field)))
   }
 
-  const handleFieldOptionsChange = (fieldId: string, rawValue: string) => {
-    handleFieldPatch(fieldId, {
-      options: rawValue
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean),
-    })
+  const handleFieldRemove = (fieldId: string) => {
+    setMarkedFields((current) => current.filter((field) => field.id !== fieldId))
   }
 
-  const toggleExpandedField = (fieldId: string) => {
+  const handleFieldExpandToggle = (fieldId: string) => {
     setExpandedFieldIds((current) => (
       current.includes(fieldId)
         ? current.filter((item) => item !== fieldId)
@@ -728,119 +358,14 @@ export function ComfyWorkflowAuthoringModal({
               </div>
             </section>
 
-            <section className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-foreground">Marked Fields</div>
-                <Badge variant="outline">{markedFields.length}</Badge>
-              </div>
-
-              {markedFields.length > 0 ? (
-                <div className="max-h-[620px] space-y-3 overflow-y-auto pr-1">
-                  {markedFields.map((field) => {
-                    const isExpanded = expandedFieldIds.includes(field.id)
-
-                    return (
-                      <div key={field.id} className="space-y-3 rounded-sm border border-border/70 bg-surface-container p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 space-y-1">
-                            <div className="truncate text-sm font-medium text-foreground">{field.label || field.id}</div>
-                            <div className="truncate text-[11px] text-muted-foreground">{field.jsonPath}</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{field.type}</Badge>
-                            <Button type="button" size="icon-sm" variant="outline" onClick={() => toggleExpandedField(field.id)} title={isExpanded ? '라벨/설명 닫기' : '라벨/설명 수정'} aria-label={isExpanded ? '라벨/설명 닫기' : '라벨/설명 수정'}>
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button type="button" size="icon-sm" variant="outline" onClick={() => setMarkedFields((current) => current.filter((item) => item.id !== field.id))}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        {isExpanded ? (
-                          <div className="grid gap-3 md:grid-cols-2 rounded-sm border border-border/70 bg-background/50 p-3">
-                            <SettingsField label="라벨">
-                              <Input variant="settings" value={field.label} onChange={(event) => handleFieldPatch(field.id, { label: event.target.value })} />
-                            </SettingsField>
-
-                            <SettingsField label="설명" className="md:col-span-2">
-                              <Input variant="settings" value={field.description ?? ''} onChange={(event) => handleFieldPatch(field.id, { description: event.target.value })} />
-                            </SettingsField>
-                          </div>
-                        ) : null}
-
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <SettingsField label="타입">
-                            <Select variant="settings" value={field.type} onChange={(event) => handleFieldPatch(field.id, { type: event.target.value as WorkflowMarkedField['type'] })}>
-                              <option value="text">text</option>
-                              <option value="textarea">textarea</option>
-                              <option value="number">number</option>
-                              <option value="select">select</option>
-                              <option value="image">image</option>
-                            </Select>
-                          </SettingsField>
-
-                          <SettingsToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2 md:self-end">
-                            <input
-                              type="checkbox"
-                              checked={field.required === true}
-                              onChange={(event) => handleFieldPatch(field.id, { required: event.target.checked })}
-                            />
-                            required
-                          </SettingsToggleRow>
-
-                          <SettingsField label="Default" className="md:col-span-2">
-                            {field.type === 'textarea' ? (
-                              <Textarea
-                                variant="settings"
-                                rows={4}
-                                value={field.default_value === undefined || field.default_value === null ? '' : String(field.default_value)}
-                                onChange={(event) => handleFieldPatch(field.id, { default_value: event.target.value })}
-                              />
-                            ) : (
-                              <Input
-                                variant="settings"
-                                type={field.type === 'number' ? 'number' : 'text'}
-                                value={field.default_value === undefined || field.default_value === null ? '' : String(field.default_value)}
-                                onChange={(event) => handleFieldPatch(field.id, { default_value: event.target.value })}
-                              />
-                            )}
-                          </SettingsField>
-                        </div>
-
-                        {field.type === 'select' ? (
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <SettingsField label="Dropdown List">
-                              <Select
-                                variant="settings"
-                                value={field.dropdown_list_name ?? ''}
-                                onChange={(event) => handleFieldPatch(field.id, { dropdown_list_name: event.target.value || undefined })}
-                              >
-                                <option value="">없음</option>
-                                {dropdownListNames.map((name) => (
-                                  <option key={name} value={name}>
-                                    {name}
-                                  </option>
-                                ))}
-                              </Select>
-                            </SettingsField>
-
-                            <SettingsField label="직접 옵션">
-                              <Input
-                                variant="settings"
-                                value={(field.options ?? []).join(', ')}
-                                onChange={(event) => handleFieldOptionsChange(field.id, event.target.value)}
-                                placeholder="option1, option2"
-                              />
-                            </SettingsField>
-                          </div>
-                        ) : null}
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : null}
-            </section>
+            <ComfyWorkflowMarkedFieldsEditor
+              markedFields={markedFields}
+              expandedFieldIds={expandedFieldIds}
+              dropdownListNames={dropdownListNames}
+              onFieldPatch={handleFieldPatch}
+              onFieldRemove={handleFieldRemove}
+              onFieldExpandToggle={handleFieldExpandToggle}
+            />
           </div>
 
           <div className="min-w-0">
