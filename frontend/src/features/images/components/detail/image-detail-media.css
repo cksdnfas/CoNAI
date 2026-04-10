@@ -1,0 +1,96 @@
+.conai-video-player {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, transparent);
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--primary) 10%, transparent), transparent 42%),
+    #000;
+  box-shadow: 0 0 40px rgb(0 0 0 / 0.28);
+}
+
+.conai-video-player .plyr {
+  height: 100%;
+  width: 100%;
+  --plyr-font-family: var(--font-sans);
+}
+
+.conai-video-player .plyr__video-wrapper {
+  background: #000;
+}
+
+.conai-video-player .plyr--video,
+.conai-video-player .plyr__video-wrapper,
+.conai-video-player .plyr video {
+  height: 100%;
+  width: 100%;
+}
+
+.conai-video-player .plyr__control--overlaid {
+  background: color-mix(in srgb, var(--primary) 78%, black);
+  box-shadow:
+    0 10px 32px rgb(0 0 0 / 0.38),
+    0 0 0 1px rgb(255 255 255 / 0.12) inset;
+}
+
+.conai-video-player .plyr__control--overlaid:hover {
+  background: color-mix(in srgb, var(--primary) 88%, black);
+}
+
+.conai-video-player .plyr__controls {
+  gap: 0.2rem;
+  padding: 0.75rem;
+  border-top: 1px solid rgb(255 255 255 / 0.06);
+  backdrop-filter: blur(14px);
+}
+
+.conai-video-player .plyr__controls .plyr__control {
+  color: rgb(255 255 255 / 0.9);
+}
+
+.conai-video-player .plyr__controls .plyr__control:hover,
+.conai-video-player .plyr__controls .plyr__control[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--primary) 26%, transparent);
+}
+
+.conai-video-player .plyr__progress__buffer {
+  color: rgb(255 255 255 / 0.18);
+}
+
+.conai-video-player .plyr__menu__container {
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.38);
+  overflow: hidden;
+}
+
+.conai-video-player .plyr__menu__container .plyr__control {
+  min-height: 2.4rem;
+}
+
+.conai-video-player__media {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .conai-video-player .plyr {
+    --plyr-control-icon-size: 20px;
+    --plyr-control-spacing: 0.36rem;
+  }
+
+  .conai-video-player .plyr__controls {
+    padding: 0.62rem;
+  }
+
+  .conai-video-player .plyr__control--overlaid {
+    transform: scale(1.08);
+  }
+}
+
+@media (pointer: coarse) {
+  .conai-video-player .plyr__controls .plyr__control {
+    min-width: 2.6rem;
+    min-height: 2.6rem;
+  }
+
+  .conai-video-player .plyr__menu__container .plyr__control {
+    min-height: 2.8rem;
+  }
+}

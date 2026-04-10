@@ -1,4 +1,5 @@
 import 'plyr/dist/plyr.css'
+import './image-detail-media.css'
 
 import type Plyr from 'plyr'
 import { RotateCcw, RotateCw, ZoomIn, ZoomOut } from 'lucide-react'
@@ -82,6 +83,7 @@ function EnhancedVideoDetailMedia({ renderUrl, className }: { renderUrl: string;
         keyboard: { focused: true, global: false },
         clickToPlay: true,
         resetOnEnd: false,
+        seekTime: 5,
         fullscreen: { enabled: true, iosNative: true },
         tooltips: { controls: true, seek: true },
       })
@@ -98,20 +100,26 @@ function EnhancedVideoDetailMedia({ renderUrl, className }: { renderUrl: string;
 
   return (
     <div
-      className={cn('w-full overflow-hidden rounded-sm bg-black', className)}
+      className={cn('conai-video-player w-full overflow-hidden rounded-sm bg-black', className)}
       style={{
         ['--plyr-color-main' as string]: 'var(--primary)',
         ['--plyr-control-icon-size' as string]: '18px',
+        ['--plyr-control-spacing' as string]: '0.5rem',
+        ['--plyr-control-radius' as string]: '999px',
         ['--plyr-video-control-background-hover' as string]: 'color-mix(in srgb, var(--primary) 32%, black)',
-        ['--plyr-video-controls-background' as string]: 'linear-gradient(transparent, rgba(0, 0, 0, 0.74))',
+        ['--plyr-video-controls-background' as string]: 'linear-gradient(transparent, rgba(0, 0, 0, 0.82))',
         ['--plyr-menu-background' as string]: 'rgba(18, 18, 22, 0.96)',
         ['--plyr-menu-color' as string]: 'white',
+        ['--plyr-menu-radius' as string]: '14px',
+        ['--plyr-range-thumb-height' as string]: '13px',
+        ['--plyr-range-thumb-shadow' as string]: '0 0 0 4px rgb(249 94 20 / 0.18)',
+        ['--plyr-video-progress-buffered-background' as string]: 'rgb(255 255 255 / 0.14)',
       }}
     >
       <video
         key={renderUrl}
         ref={videoRef}
-        className="h-full w-full bg-black object-contain"
+        className="conai-video-player__media h-full w-full bg-black object-contain"
         controls
         playsInline
         preload="metadata"
