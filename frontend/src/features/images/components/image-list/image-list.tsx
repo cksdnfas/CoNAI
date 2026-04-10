@@ -1,14 +1,25 @@
-import { useCallback, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { markHomeScrollRestorePending } from '@/features/home/use-home-scroll-restoration'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import type { ImageRecord } from '@/types/image'
-import { ImageListGrid } from './image-list-grid'
-import { ImageListMasonry } from './image-list-masonry'
+const ImageListGridLazy = lazy(async () => {
+  const module = await import('./image-list-grid')
+  return { default: module.ImageListGrid }
+})
+
+const ImageListMasonryLazy = lazy(async () => {
+  const module = await import('./image-list-masonry')
+  return { default: module.ImageListMasonry }
+})
 import type { ImageListProps } from './image-list-types'
 import { useImageListLoadMore } from './use-image-list-load-more'
 import { useImageListSelection } from './use-image-list-selection'
+
+function ImageListFallback() {
+  return <div className="min-h-[18rem] rounded-sm bg-surface-low animate-pulse" />
+}
 
 /** Render the reusable CoNAI image list using Virtuoso rendering + ViSelect selection. */
 export function ImageList({
@@ -128,40 +139,42 @@ export function ImageList({
         }
       }}
     >
-      {layout === 'grid' ? (
-        <ImageListGrid
-          items={items}
-          selectedIds={selectedIds}
-          getItemId={getItemId}
-          selectionMode={selectionMode}
-          minColumnWidth={minColumnWidth}
-          columnGap={columnGap}
-          rowGap={rowGap}
-          gridItemHeight={gridItemHeight}
-          getItemHref={getItemHref}
-          onActivate={handleActivate}
-          scrollMode={scrollMode}
-          viewportHeight={viewportHeight}
-          onEndReached={handleEndReached}
-          renderItemOverlay={renderItemOverlay}
-        />
-      ) : (
-        <ImageListMasonry
-          containerElement={containerElement}
-          items={items}
-          selectedIds={selectedIds}
-          getItemId={getItemId}
-          selectionMode={selectionMode}
-          minColumnWidth={minColumnWidth}
-          columnGap={columnGap}
-          rowGap={rowGap}
-          getItemHref={getItemHref}
-          onActivate={handleActivate}
-          scrollMode={scrollMode}
-          viewportHeight={viewportHeight}
-          renderItemOverlay={renderItemOverlay}
-        />
-      )}
+      <Suspense fallback={<ImageListFallback />}>
+        {layout === 'grid' ? (
+          <ImageListGridLazy
+            items={items}
+            selectedIds={selectedIds}
+            getItemId={getItemId}
+            selectionMode={selectionMode}
+            minColumnWidth={minColumnWidth}
+            columnGap={columnGap}
+            rowGap={rowGap}
+            gridItemHeight={gridItemHeight}
+            getItemHref={getItemHref}
+            onActivate={handleActivate}
+            scrollMode={scrollMode}
+            viewportHeight={viewportHeight}
+            onEndReached={handleEndReached}
+            renderItemOverlay={renderItemOverlay}
+          />
+        ) : (
+          <ImageListMasonryLazy
+            containerElement={containerElement}
+            items={items}
+            selectedIds={selectedIds}
+            getItemId={getItemId}
+            selectionMode={selectionMode}
+            minColumnWidth={minColumnWidth}
+            columnGap={columnGap}
+            rowGap={rowGap}
+            getItemHref={getItemHref}
+            onActivate={handleActivate}
+            scrollMode={scrollMode}
+            viewportHeight={viewportHeight}
+            renderItemOverlay={renderItemOverlay}
+          />
+        )}
+      </Suspense>
 
       {scrollMode === 'window' ? <div ref={loadMoreSentinelRef} className="h-px w-full" aria-hidden="true" /> : null}
     </div>
