@@ -1,13 +1,9 @@
+import { Suspense, lazy } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import {
-  ModuleGraphWorkflowBrowseContent,
-  ModuleGraphWorkflowEditorContent,
-  ModuleGraphWorkflowListSidebar,
-  ModuleGraphWorkspaceModals,
-} from './components/module-graph-page-sections'
+import { ModuleGraphWorkflowListSidebar } from './components/module-graph-page-sections'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { useModuleGraphPageState } from './use-module-graph-page-state'
 import { useModuleGraphPageQueries } from './use-module-graph-page-queries'
@@ -17,11 +13,30 @@ import { useModuleGraphEditorShell } from './use-module-graph-editor-shell'
 import { useModuleGraphPageEditorPanels } from './use-module-graph-page-editor-panels'
 import { useModuleGraphPageActions } from './use-module-graph-page-actions'
 
+const ModuleGraphWorkflowBrowseContentLazy = lazy(async () => {
+  const module = await import('./components/module-graph-workflow-content')
+  return { default: module.ModuleGraphWorkflowBrowseContent }
+})
+
+const ModuleGraphWorkflowEditorContentLazy = lazy(async () => {
+  const module = await import('./components/module-graph-workflow-content')
+  return { default: module.ModuleGraphWorkflowEditorContent }
+})
+
+const ModuleGraphWorkspaceModalsLazy = lazy(async () => {
+  const module = await import('./components/module-graph-workspace-modals')
+  return { default: module.ModuleGraphWorkspaceModals }
+})
+
 type ModuleWorkflowWorkspaceProps = {
   embedded?: boolean
 }
 
 const UNSAVED_CHANGES_CONFIRM_MESSAGE = '저장하지 않은 변경사항이 있어. 이 작업을 진행하면 현재 편집 내용이 사라질 수 있어. 계속할까?'
+
+function WorkflowPageFallback() {
+  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+}
 
 function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorkspaceProps) {
   const { showSnackbar } = useSnackbar()
@@ -406,94 +421,100 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       ) : null}
 
       {workflowView === 'browse' ? (
-        <ModuleGraphWorkflowBrowseContent
-          isDesktopPageLayout={isDesktopPageLayout}
-          workflowListSidebar={workflowListSidebar}
-          workflowBrowseSidePanel={workflowBrowseSidePanel}
-          selectedGraphRecord={selectedGraphRecord}
-          selectedFolderRecord={selectedFolderRecord}
-          selectedGraphId={selectedGraphId}
-          selectedExecutionId={selectedExecutionId}
-          selectedExecutionStatus={selectedExecution?.status ?? null}
-          executionList={executionList}
-          executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.'}
-          executionListIsError={graphExecutionsQuery.isError}
-          executionDetail={executionDetailQuery.data}
-          executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.'}
-          executionDetailIsError={executionDetailQuery.isError}
-          browseContent={browseContentQuery.data}
-          browseContentError={browseContentQuery.error instanceof Error ? browseContentQuery.error.message : '생성물 관리 콘텐츠를 불러오지 못했어.'}
-          browseContentIsError={browseContentQuery.isError}
-          onRefreshBrowseContent={() => browseContentQuery.refetch()}
-          executingGraphId={executingGraphId}
-          cancellingExecutionId={cancellingExecutionId}
-          onSelectExecution={setSelectedExecutionId}
-          onRerunGraph={() => void handleRerunSelectedGraph()}
-          onRetryExecution={() => void handleRetrySelectedExecution()}
-          onCancelExecution={() => void handleCancelSelectedExecution()}
-        />
+        <Suspense fallback={<WorkflowPageFallback />}>
+          <ModuleGraphWorkflowBrowseContentLazy
+            isDesktopPageLayout={isDesktopPageLayout}
+            workflowListSidebar={workflowListSidebar}
+            workflowBrowseSidePanel={workflowBrowseSidePanel}
+            selectedGraphRecord={selectedGraphRecord}
+            selectedFolderRecord={selectedFolderRecord}
+            selectedGraphId={selectedGraphId}
+            selectedExecutionId={selectedExecutionId}
+            selectedExecutionStatus={selectedExecution?.status ?? null}
+            executionList={executionList}
+            executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.'}
+            executionListIsError={graphExecutionsQuery.isError}
+            executionDetail={executionDetailQuery.data}
+            executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.'}
+            executionDetailIsError={executionDetailQuery.isError}
+            browseContent={browseContentQuery.data}
+            browseContentError={browseContentQuery.error instanceof Error ? browseContentQuery.error.message : '생성물 관리 콘텐츠를 불러오지 못했어.'}
+            browseContentIsError={browseContentQuery.isError}
+            onRefreshBrowseContent={() => browseContentQuery.refetch()}
+            executingGraphId={executingGraphId}
+            cancellingExecutionId={cancellingExecutionId}
+            onSelectExecution={setSelectedExecutionId}
+            onRerunGraph={() => void handleRerunSelectedGraph()}
+            onRetryExecution={() => void handleRetrySelectedExecution()}
+            onCancelExecution={() => void handleCancelSelectedExecution()}
+          />
+        </Suspense>
       ) : (
-        <ModuleGraphWorkflowEditorContent
-          isDesktopPageLayout={isDesktopPageLayout}
-          workflowListSidebar={workflowListSidebar}
-          nodesCount={nodes.length}
-          edgesCount={edges.length}
-          selectedNode={selectedNode}
-          selectedEdge={selectedEdge}
-          selectedExecutionId={selectedExecutionId}
-          selectedGraphRecord={selectedGraphRecord}
-          workflowName={workflowName}
-          isEditorSupportOpen={isEditorSupportOpen}
-          editorSupportSubtitle={editorSupportSubtitle}
-          workflowEditorSupportPanels={workflowEditorSupportPanels}
-          graphCanvas={graphCanvas}
-          onOpenModuleLibrary={() => setIsModuleLibraryOpen(true)}
-          onAutoLayout={handleAutoLayout}
-          onDuplicateSelectedNode={handleDuplicateSelectedNode}
-          onRemoveSelectedNode={handleRemoveSelectedNode}
-          onRemoveSelectedEdge={handleRemoveSelectedEdge}
-          onResetCanvas={handleResetCanvas}
-          onOpenEditorSupport={() => openEditorSupport(selectedNode ? 'inspector' : selectedExecutionId ? 'results' : 'setup')}
-          onCloseEditorSupport={closeEditorSupport}
-        />
+        <Suspense fallback={<WorkflowPageFallback />}>
+          <ModuleGraphWorkflowEditorContentLazy
+            isDesktopPageLayout={isDesktopPageLayout}
+            workflowListSidebar={workflowListSidebar}
+            nodesCount={nodes.length}
+            edgesCount={edges.length}
+            selectedNode={selectedNode}
+            selectedEdge={selectedEdge}
+            selectedExecutionId={selectedExecutionId}
+            selectedGraphRecord={selectedGraphRecord}
+            workflowName={workflowName}
+            isEditorSupportOpen={isEditorSupportOpen}
+            editorSupportSubtitle={editorSupportSubtitle}
+            workflowEditorSupportPanels={workflowEditorSupportPanels}
+            graphCanvas={graphCanvas}
+            onOpenModuleLibrary={() => setIsModuleLibraryOpen(true)}
+            onAutoLayout={handleAutoLayout}
+            onDuplicateSelectedNode={handleDuplicateSelectedNode}
+            onRemoveSelectedNode={handleRemoveSelectedNode}
+            onRemoveSelectedEdge={handleRemoveSelectedEdge}
+            onResetCanvas={handleResetCanvas}
+            onOpenEditorSupport={() => openEditorSupport(selectedNode ? 'inspector' : selectedExecutionId ? 'results' : 'setup')}
+            onCloseEditorSupport={closeEditorSupport}
+          />
+        </Suspense>
       )}
 
-      <ModuleGraphWorkspaceModals
-        workflowView={workflowView}
-        isBrowseManageModalOpen={isBrowseManageModalOpen}
-        browseManageModalTitle={browseManageModalTitle}
-        graphWorkflowFolders={graphWorkflowFoldersQuery.data ?? []}
-        selectedGraphRecord={selectedGraphRecord}
-        selectedFolderRecord={selectedFolderRecord}
-        folderDeleteTarget={folderDeleteTarget}
-        isModuleLibraryOpen={isModuleLibraryOpen}
-        isCustomNodeManagerOpen={isCustomNodeManagerOpen}
-        modules={modules}
-        modulesErrorMessage={modulesQuery.error instanceof Error ? modulesQuery.error.message : '모듈 목록을 불러오지 못했어.'}
-        modulesIsError={modulesQuery.isError}
-        onCloseBrowseManage={() => setIsBrowseManageModalOpen(false)}
-        onAssignWorkflowFolder={(folderId) => handleAssignSelectedWorkflowFolder(folderId)}
-        onCreateFolder={(input) => handleCreateWorkflowFolder(input)}
-        onUpdateFolder={(folderId, input) => handleUpdateSelectedFolder(folderId, input)}
-        onDeleteFolder={(folderId) => handleDeleteSelectedFolder(folderId)}
-        onEditWorkflow={() => {
-          setIsBrowseManageModalOpen(false)
-          handleEditSelectedWorkflow()
-        }}
-        onDeleteWorkflow={async () => {
-          await handleDeleteSelectedWorkflow()
-          setIsBrowseManageModalOpen(false)
-        }}
-        onCloseFolderDelete={() => setFolderDeleteTarget(null)}
-        onConfirmDeleteFolder={(mode) => {
-          void handleConfirmDeleteFolder(mode)
-        }}
-        onCloseModuleLibrary={() => setIsModuleLibraryOpen(false)}
-        onOpenCustomNodeManager={() => setIsCustomNodeManagerOpen(true)}
-        onCloseCustomNodeManager={() => setIsCustomNodeManagerOpen(false)}
-        onRefreshModules={modulesQuery.refetch}
-        onAddModule={handleAddModuleFromLibrary}
-      />
+      <Suspense fallback={null}>
+        <ModuleGraphWorkspaceModalsLazy
+          workflowView={workflowView}
+          isBrowseManageModalOpen={isBrowseManageModalOpen}
+          browseManageModalTitle={browseManageModalTitle}
+          graphWorkflowFolders={graphWorkflowFoldersQuery.data ?? []}
+          selectedGraphRecord={selectedGraphRecord}
+          selectedFolderRecord={selectedFolderRecord}
+          folderDeleteTarget={folderDeleteTarget}
+          isModuleLibraryOpen={isModuleLibraryOpen}
+          isCustomNodeManagerOpen={isCustomNodeManagerOpen}
+          modules={modules}
+          modulesErrorMessage={modulesQuery.error instanceof Error ? modulesQuery.error.message : '모듈 목록을 불러오지 못했어.'}
+          modulesIsError={modulesQuery.isError}
+          onCloseBrowseManage={() => setIsBrowseManageModalOpen(false)}
+          onAssignWorkflowFolder={(folderId) => handleAssignSelectedWorkflowFolder(folderId)}
+          onCreateFolder={(input) => handleCreateWorkflowFolder(input)}
+          onUpdateFolder={(folderId, input) => handleUpdateSelectedFolder(folderId, input)}
+          onDeleteFolder={(folderId) => handleDeleteSelectedFolder(folderId)}
+          onEditWorkflow={() => {
+            setIsBrowseManageModalOpen(false)
+            handleEditSelectedWorkflow()
+          }}
+          onDeleteWorkflow={async () => {
+            await handleDeleteSelectedWorkflow()
+            setIsBrowseManageModalOpen(false)
+          }}
+          onCloseFolderDelete={() => setFolderDeleteTarget(null)}
+          onConfirmDeleteFolder={(mode) => {
+            void handleConfirmDeleteFolder(mode)
+          }}
+          onCloseModuleLibrary={() => setIsModuleLibraryOpen(false)}
+          onOpenCustomNodeManager={() => setIsCustomNodeManagerOpen(true)}
+          onCloseCustomNodeManager={() => setIsCustomNodeManagerOpen(false)}
+          onRefreshModules={modulesQuery.refetch}
+          onAddModule={handleAddModuleFromLibrary}
+        />
+      </Suspense>
     </div>
   )
 }
