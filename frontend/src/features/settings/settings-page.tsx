@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -36,13 +36,7 @@ import type {
   TaggerDependencyCheckResult,
   TaggerSettings,
 } from '@/types/settings'
-import { AutoTab } from './components/auto-tab'
-import { AppearanceTab } from './components/appearance-tab'
-import { FoldersTab } from './components/folders-tab'
-import { ImageSaveTab } from './components/image-save-tab'
-import { MetadataTab } from './components/metadata-tab'
 import { SettingsTabNav } from './components/settings-tab-nav'
-import { SecurityTab } from './components/security-tab'
 import type { SettingsTab } from './settings-tabs'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { applyAppearanceTheme } from '@/lib/appearance'
@@ -51,10 +45,44 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { useFolderSettingsTab } from './use-folder-settings-tab'
 
+const FoldersTabLazy = lazy(async () => {
+  const module = await import('./components/folders-tab')
+  return { default: module.FoldersTab }
+})
+
+const AppearanceTabLazy = lazy(async () => {
+  const module = await import('./components/appearance-tab')
+  return { default: module.AppearanceTab }
+})
+
+const SecurityTabLazy = lazy(async () => {
+  const module = await import('./components/security-tab')
+  return { default: module.SecurityTab }
+})
+
+const AutoTabLazy = lazy(async () => {
+  const module = await import('./components/auto-tab')
+  return { default: module.AutoTab }
+})
+
+const MetadataTabLazy = lazy(async () => {
+  const module = await import('./components/metadata-tab')
+  return { default: module.MetadataTab }
+})
+
+const ImageSaveTabLazy = lazy(async () => {
+  const module = await import('./components/image-save-tab')
+  return { default: module.ImageSaveTab }
+})
+
 type AppSettingsRecord = Awaited<ReturnType<typeof getAppSettings>>
 type NotifyFn = (message: string) => void
 type SyncSettingsCache = (nextSettings: AppSettingsRecord) => void
 type RefreshAutoQueries = () => Promise<void>
+
+function SettingsSectionFallback() {
+  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+}
 
 /** Validate rating-weight inputs before sending them to the backend. */
 function validateRatingWeightsDraft(weights: RatingWeightsRecord | null) {
@@ -374,22 +402,27 @@ function useAutoSettingsSection({
   const taggerModelsQuery = useQuery({
     queryKey: ['tagger-models'],
     queryFn: getTaggerModels,
+    enabled: isActive,
   })
   const taggerStatusQuery = useQuery({
     queryKey: ['tagger-status'],
     queryFn: getTaggerStatus,
+    enabled: isActive,
   })
   const kaloscopeStatusQuery = useQuery({
     queryKey: ['kaloscope-status'],
     queryFn: getKaloscopeStatus,
+    enabled: isActive,
   })
   const ratingWeightsQuery = useQuery({
     queryKey: ['rating-weights'],
     queryFn: getRatingWeights,
+    enabled: isActive,
   })
   const ratingTiersQuery = useQuery({
     queryKey: ['rating-tiers'],
     queryFn: getRatingTiers,
+    enabled: isActive,
   })
   const autoTestImageQuery = useQuery({
     queryKey: ['auto-test-image-detail', autoTestMedia?.compositeHash],
@@ -868,35 +901,37 @@ export function SettingsPage() {
         <SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />
 
         <section className="space-y-8">
-          {activeTab === 'folders' ? <FoldersTab {...foldersTabProps} /> : null}
+          <Suspense fallback={<SettingsSectionFallback />}>
+            {activeTab === 'folders' ? <FoldersTabLazy {...foldersTabProps} /> : null}
 
-          {activeTab === 'appearance' ? (
-            <AppearanceTab {...appearanceSection.tabProps} />
-          ) : null}
+            {activeTab === 'appearance' ? (
+              <AppearanceTabLazy {...appearanceSection.tabProps} />
+            ) : null}
 
-          {activeTab === 'security' ? <SecurityTab /> : null}
+            {activeTab === 'security' ? <SecurityTabLazy /> : null}
 
-          {activeTab === 'auto' ? (
-            <AutoTab {...autoSection.tabProps} />
-          ) : null}
+            {activeTab === 'auto' ? (
+              <AutoTabLazy {...autoSection.tabProps} />
+            ) : null}
 
-          {activeTab === 'metadata' ? (
-            <MetadataTab
-              metadataDraft={effectiveMetadataDraft}
-              onPatchMetadata={patchMetadataDraft}
-              onSave={() => effectiveMetadataDraft && void metadataMutation.mutateAsync(effectiveMetadataDraft)}
-              isSaving={metadataMutation.isPending}
-            />
-          ) : null}
+            {activeTab === 'metadata' ? (
+              <MetadataTabLazy
+                metadataDraft={effectiveMetadataDraft}
+                onPatchMetadata={patchMetadataDraft}
+                onSave={() => effectiveMetadataDraft && void metadataMutation.mutateAsync(effectiveMetadataDraft)}
+                isSaving={metadataMutation.isPending}
+              />
+            ) : null}
 
-          {activeTab === 'image-save' ? (
-            <ImageSaveTab
-              imageSaveDraft={effectiveImageSaveDraft}
-              onPatchImageSave={patchImageSaveDraft}
-              onSave={() => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft)}
-              isSaving={imageSaveMutation.isPending}
-            />
-          ) : null}
+            {activeTab === 'image-save' ? (
+              <ImageSaveTabLazy
+                imageSaveDraft={effectiveImageSaveDraft}
+                onPatchImageSave={patchImageSaveDraft}
+                onSave={() => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft)}
+                isSaving={imageSaveMutation.isPending}
+              />
+            ) : null}
+          </Suspense>
         </section>
       </div>
     </div>

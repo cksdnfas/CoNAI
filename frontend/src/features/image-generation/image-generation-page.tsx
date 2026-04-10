@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -6,15 +6,39 @@ import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
-import { ModuleWorkflowWorkspace } from '@/features/module-graph/module-graph-page'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import { ComfyGenerationPanel } from './components/comfy-generation-panel'
-import { GenerationHistoryPanel } from './components/generation-history-panel'
-import { NaiGenerationPanel } from './components/nai-generation-panel'
-import { WildcardGenerationPanel } from './components/wildcard-generation-panel'
+
+const NaiGenerationPanelLazy = lazy(async () => {
+  const module = await import('./components/nai-generation-panel')
+  return { default: module.NaiGenerationPanel }
+})
+
+const ComfyGenerationPanelLazy = lazy(async () => {
+  const module = await import('./components/comfy-generation-panel')
+  return { default: module.ComfyGenerationPanel }
+})
+
+const WildcardGenerationPanelLazy = lazy(async () => {
+  const module = await import('./components/wildcard-generation-panel')
+  return { default: module.WildcardGenerationPanel }
+})
+
+const GenerationHistoryPanelLazy = lazy(async () => {
+  const module = await import('./components/generation-history-panel')
+  return { default: module.GenerationHistoryPanel }
+})
+
+const ModuleWorkflowWorkspaceLazy = lazy(async () => {
+  const module = await import('@/features/module-graph/module-graph-page')
+  return { default: module.ModuleWorkflowWorkspace }
+})
 
 type ImageGenerationTab = 'nai' | 'comfyui' | 'wildcards' | 'workflows'
+
+function PanelFallback() {
+  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+}
 
 const IMAGE_GENERATION_TABS: Array<{ value: ImageGenerationTab; label: string }> = [
   { value: 'nai', label: 'NAI' },
@@ -69,10 +93,18 @@ export function ImageGenerationPage() {
   const useCompactControllerDrawer = Boolean(drawerHeaderContentId)
 
   const controllerPanel = activeTab === 'nai'
-    ? <NaiGenerationPanel refreshNonce={globalRefreshNonce} onHistoryRefresh={handleHistoryRefresh} splitPaneScroll={useWideNaiSplitPaneScroll} compactActionBar={useCompactNaiActionBar} headerPortalTargetId={naiDrawerHeaderContentId} />
+    ? (
+      <NaiGenerationPanelLazy
+        refreshNonce={globalRefreshNonce}
+        onHistoryRefresh={handleHistoryRefresh}
+        splitPaneScroll={useWideNaiSplitPaneScroll}
+        compactActionBar={useCompactNaiActionBar}
+        headerPortalTargetId={naiDrawerHeaderContentId}
+      />
+    )
     : activeTab === 'comfyui'
       ? (
-        <ComfyGenerationPanel
+        <ComfyGenerationPanelLazy
           refreshNonce={globalRefreshNonce}
           onHistoryRefresh={handleHistoryRefresh}
           selectedWorkflowId={selectedComfyWorkflowId}
@@ -81,7 +113,7 @@ export function ImageGenerationPage() {
         />
       )
       : activeTab === 'wildcards'
-        ? <WildcardGenerationPanel refreshNonce={globalRefreshNonce} />
+        ? <WildcardGenerationPanelLazy refreshNonce={globalRefreshNonce} />
         : null
 
   const isDrawerOpen = shouldUseControllerDrawer && isControllerOpen
@@ -114,7 +146,11 @@ export function ImageGenerationPage() {
         />
       </div>
 
-      {activeTab === 'workflows' ? <ModuleWorkflowWorkspace embedded /> : null}
+      {activeTab === 'workflows' ? (
+        <Suspense fallback={<PanelFallback />}>
+          <ModuleWorkflowWorkspaceLazy embedded />
+        </Suspense>
+      ) : null}
 
       {activeTab !== 'workflows' && controllerPanel ? (
         isWideLayout ? (
@@ -126,26 +162,32 @@ export function ImageGenerationPage() {
             )}
           >
             <div className={cn('min-w-0', useWideNaiSplitPaneScroll && 'xl:flex xl:min-h-0 xl:flex-col')}>
-              {controllerPanel}
+              <Suspense fallback={<PanelFallback />}>
+                {controllerPanel}
+              </Suspense>
             </div>
             {shouldShowHistory ? (
               <div className={cn('min-w-0', useWideNaiSplitPaneScroll && 'xl:flex xl:min-h-0 xl:flex-col')}>
-                <GenerationHistoryPanel
-                  refreshNonce={historyRefreshNonce}
-                  serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
-                  workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
-                  splitPaneScroll={useWideNaiSplitPaneScroll}
-                />
+                <Suspense fallback={<PanelFallback />}>
+                  <GenerationHistoryPanelLazy
+                    refreshNonce={historyRefreshNonce}
+                    serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
+                    workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
+                    splitPaneScroll={useWideNaiSplitPaneScroll}
+                  />
+                </Suspense>
               </div>
             ) : null}
           </div>
         ) : shouldUseControllerDrawer && shouldShowHistory ? (
           <>
-            <GenerationHistoryPanel
-              refreshNonce={historyRefreshNonce}
-              serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
-              workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
-            />
+            <Suspense fallback={<PanelFallback />}>
+              <GenerationHistoryPanelLazy
+                refreshNonce={historyRefreshNonce}
+                serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
+                workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
+              />
+            </Suspense>
 
             <FloatingBottomAction type="button" onClick={() => setIsControllerOpen(true)}>
               <SlidersHorizontal className="h-4 w-4" />
@@ -160,22 +202,34 @@ export function ImageGenerationPage() {
               headerContentId={drawerHeaderContentId}
               bodyClassName={useCompactControllerDrawer ? 'p-0 pb-14' : undefined}
             >
-              {controllerPanel}
+              <Suspense fallback={<PanelFallback />}>
+                {controllerPanel}
+              </Suspense>
             </BottomDrawerSheet>
           </>
         ) : activeTab === 'comfyui' ? (
           <div className="space-y-6">
-            <div className="min-w-0">{controllerPanel}</div>
+            <div className="min-w-0">
+              <Suspense fallback={<PanelFallback />}>
+                {controllerPanel}
+              </Suspense>
+            </div>
             {shouldShowHistory ? (
-              <GenerationHistoryPanel
-                refreshNonce={historyRefreshNonce}
-                serviceType="comfyui"
-                workflowId={selectedComfyWorkflowId}
-              />
+              <Suspense fallback={<PanelFallback />}>
+                <GenerationHistoryPanelLazy
+                  refreshNonce={historyRefreshNonce}
+                  serviceType="comfyui"
+                  workflowId={selectedComfyWorkflowId}
+                />
+              </Suspense>
             ) : null}
           </div>
         ) : (
-          <div className="min-w-0">{controllerPanel}</div>
+          <div className="min-w-0">
+            <Suspense fallback={<PanelFallback />}>
+              {controllerPanel}
+            </Suspense>
+          </div>
         )
       ) : null}
     </div>
