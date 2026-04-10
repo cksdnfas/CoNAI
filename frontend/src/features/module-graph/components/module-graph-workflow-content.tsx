@@ -1,12 +1,24 @@
-import type { ReactNode } from 'react'
+import { Suspense, lazy, type ReactNode } from 'react'
 import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowBrowseContentRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
 import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
-import { GraphExecutionPanel } from './graph-execution-panel'
 import { ModuleWorkflowBrowseView } from './module-workflow-browse-view'
 import { ModuleWorkflowEditorView } from './module-workflow-editor-view'
-import { ModuleWorkflowOutputManagementPanel } from './module-workflow-output-management-panel'
+
+const GraphExecutionPanelLazy = lazy(async () => {
+  const module = await import('./graph-execution-panel')
+  return { default: module.GraphExecutionPanel }
+})
+
+const ModuleWorkflowOutputManagementPanelLazy = lazy(async () => {
+  const module = await import('./module-workflow-output-management-panel')
+  return { default: module.ModuleWorkflowOutputManagementPanel }
+})
 
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
+
+function WorkflowContentFallback() {
+  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+}
 
 /** Render the browse-mode content block for the module-graph workspace. */
 export function ModuleGraphWorkflowBrowseContent({
@@ -66,35 +78,39 @@ export function ModuleGraphWorkflowBrowseContent({
       workflowListSidebar={workflowListSidebar}
       workflowRunnerPanel={workflowBrowseSidePanel}
       graphExecutionPanel={selectedGraphRecord ? (
-        <GraphExecutionPanel
-          selectedGraphId={selectedGraphId}
-          selectedGraph={selectedGraphRecord}
-          selectedExecutionId={selectedExecutionId}
-          selectedExecutionStatus={selectedExecutionStatus}
-          executionList={executionList}
-          executionListError={executionListError}
-          executionListIsError={executionListIsError}
-          executionDetail={executionDetail}
-          executionDetailError={executionDetailError}
-          executionDetailIsError={executionDetailIsError}
-          isExecutingGraph={executingGraphId !== null}
-          isCancellingExecution={cancellingExecutionId === selectedExecutionId}
-          onSelectExecution={onSelectExecution}
-          onRerunGraph={onRerunGraph}
-          onRetryExecution={onRetryExecution}
-          onCancelExecution={onCancelExecution}
-        />
+        <Suspense fallback={<WorkflowContentFallback />}>
+          <GraphExecutionPanelLazy
+            selectedGraphId={selectedGraphId}
+            selectedGraph={selectedGraphRecord}
+            selectedExecutionId={selectedExecutionId}
+            selectedExecutionStatus={selectedExecutionStatus}
+            executionList={executionList}
+            executionListError={executionListError}
+            executionListIsError={executionListIsError}
+            executionDetail={executionDetail}
+            executionDetailError={executionDetailError}
+            executionDetailIsError={executionDetailIsError}
+            isExecutingGraph={executingGraphId !== null}
+            isCancellingExecution={cancellingExecutionId === selectedExecutionId}
+            onSelectExecution={onSelectExecution}
+            onRerunGraph={onRerunGraph}
+            onRetryExecution={onRetryExecution}
+            onCancelExecution={onCancelExecution}
+          />
+        </Suspense>
       ) : null}
       browseContentPanel={selectedGraphRecord ? null : browseContentIsError ? (
         <div className="rounded-sm border border-dashed border-destructive/40 px-4 py-10 text-sm text-muted-foreground">
           {browseContentError}
         </div>
       ) : browseContent ? (
-        <ModuleWorkflowOutputManagementPanel
-          selectedFolderRecord={selectedFolderRecord}
-          browseContent={browseContent}
-          onRefresh={onRefreshBrowseContent}
-        />
+        <Suspense fallback={<WorkflowContentFallback />}>
+          <ModuleWorkflowOutputManagementPanelLazy
+            selectedFolderRecord={selectedFolderRecord}
+            browseContent={browseContent}
+            onRefresh={onRefreshBrowseContent}
+          />
+        </Suspense>
       ) : (
         <div className="rounded-sm border border-dashed border-border px-4 py-10 text-sm text-muted-foreground">
           생성물 관리 콘텐츠를 불러오는 중이야…

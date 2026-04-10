@@ -1,10 +1,27 @@
+import { Suspense, lazy } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api'
-import { CustomNodeManagementPanel } from './custom-node-management-panel'
-import { ModuleLibraryPanel } from './module-library-panel'
-import { WorkflowFolderSettingsPanel } from './workflow-folder-settings-panel'
+
+const WorkflowFolderSettingsPanelLazy = lazy(async () => {
+  const module = await import('./workflow-folder-settings-panel')
+  return { default: module.WorkflowFolderSettingsPanel }
+})
+
+const ModuleLibraryPanelLazy = lazy(async () => {
+  const module = await import('./module-library-panel')
+  return { default: module.ModuleLibraryPanel }
+})
+
+const CustomNodeManagementPanelLazy = lazy(async () => {
+  const module = await import('./custom-node-management-panel')
+  return { default: module.CustomNodeManagementPanel }
+})
+
+function WorkspaceModalFallback() {
+  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+}
 
 /** Render the browse/manage, folder-delete, and module-library modals for the module-graph page. */
 export function ModuleGraphWorkspaceModals({
@@ -70,19 +87,23 @@ export function ModuleGraphWorkspaceModals({
         onClose={onCloseBrowseManage}
         widthClassName="max-w-3xl"
       >
-        <WorkflowFolderSettingsPanel
-          key={selectedGraphRecord ? `workflow-${selectedGraphRecord.id}` : selectedFolderRecord ? `folder-${selectedFolderRecord.id}` : 'root'}
-          folders={graphWorkflowFolders}
-          selectedFolder={selectedFolderRecord}
-          selectedWorkflow={selectedGraphRecord}
-          showHeader={false}
-          onAssignWorkflowFolder={onAssignWorkflowFolder}
-          onCreateFolder={onCreateFolder}
-          onUpdateFolder={onUpdateFolder}
-          onDeleteFolder={onDeleteFolder}
-          onEditWorkflow={onEditWorkflow}
-          onDeleteWorkflow={onDeleteWorkflow}
-        />
+        {workflowView === 'browse' && isBrowseManageModalOpen ? (
+          <Suspense fallback={<WorkspaceModalFallback />}>
+            <WorkflowFolderSettingsPanelLazy
+              key={selectedGraphRecord ? `workflow-${selectedGraphRecord.id}` : selectedFolderRecord ? `folder-${selectedFolderRecord.id}` : 'root'}
+              folders={graphWorkflowFolders}
+              selectedFolder={selectedFolderRecord}
+              selectedWorkflow={selectedGraphRecord}
+              showHeader={false}
+              onAssignWorkflowFolder={onAssignWorkflowFolder}
+              onCreateFolder={onCreateFolder}
+              onUpdateFolder={onUpdateFolder}
+              onDeleteFolder={onDeleteFolder}
+              onEditWorkflow={onEditWorkflow}
+              onDeleteWorkflow={onDeleteWorkflow}
+            />
+          </Suspense>
+        ) : null}
       </SettingsModal>
 
       <SettingsModal
@@ -124,14 +145,18 @@ export function ModuleGraphWorkspaceModals({
         onClose={onCloseModuleLibrary}
         widthClassName="max-w-6xl"
       >
-        <ModuleLibraryPanel
-          modules={modules}
-          isError={modulesIsError}
-          errorMessage={modulesErrorMessage}
-          onAddModule={onAddModule}
-          onOpenCustomNodeManager={onOpenCustomNodeManager}
-          surface="plain"
-        />
+        {isModuleLibraryOpen ? (
+          <Suspense fallback={<WorkspaceModalFallback />}>
+            <ModuleLibraryPanelLazy
+              modules={modules}
+              isError={modulesIsError}
+              errorMessage={modulesErrorMessage}
+              onAddModule={onAddModule}
+              onOpenCustomNodeManager={onOpenCustomNodeManager}
+              surface="plain"
+            />
+          </Suspense>
+        ) : null}
       </SettingsModal>
 
       <SettingsModal
@@ -141,7 +166,11 @@ export function ModuleGraphWorkspaceModals({
         onClose={onCloseCustomNodeManager}
         widthClassName="max-w-6xl"
       >
-        <CustomNodeManagementPanel onModulesChanged={onRefreshModules} />
+        {isCustomNodeManagerOpen ? (
+          <Suspense fallback={<WorkspaceModalFallback />}>
+            <CustomNodeManagementPanelLazy onModulesChanged={onRefreshModules} />
+          </Suspense>
+        ) : null}
       </SettingsModal>
     </>
   )
