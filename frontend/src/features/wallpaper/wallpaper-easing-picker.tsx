@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,11 +18,14 @@ import {
 interface WallpaperEasingPickerProps {
   value: WallpaperAnimationEasing | undefined
   fallbackPreset?: WallpaperAnimationEasingPreset
+  previewKind?: WallpaperEasingPreviewKind
   onChange: (value: WallpaperAnimationEasing) => void
 }
 
-const GRAPH_SIZE = 240
-const GRAPH_PADDING = 18
+type WallpaperEasingPreviewKind = 'transition' | 'hover' | 'motion'
+
+const GRAPH_SIZE = 304
+const GRAPH_PADDING = 24
 const GRAPH_RANGE_MIN_Y = -1
 const GRAPH_RANGE_MAX_Y = 2
 
@@ -50,6 +53,27 @@ function unmapGraphX(value: number) {
 function unmapGraphY(value: number) {
   const normalized = 1 - ((value - GRAPH_PADDING) / GRAPH_SIZE)
   return clamp(GRAPH_RANGE_MIN_Y + (normalized * (GRAPH_RANGE_MAX_Y - GRAPH_RANGE_MIN_Y)), GRAPH_RANGE_MIN_Y, GRAPH_RANGE_MAX_Y)
+}
+
+function getWallpaperEasingPreviewMeta(kind: WallpaperEasingPreviewKind) {
+  switch (kind) {
+    case 'hover':
+      return {
+        title: '호버 미리보기',
+        description: '살짝 닿았을 때 커지는 느낌과 반응 속도를 봐.',
+      }
+    case 'motion':
+      return {
+        title: '모션 미리보기',
+        description: '계속 움직이는 요소가 얼마나 밀고 당기는지 확인해.',
+      }
+    case 'transition':
+    default:
+      return {
+        title: '전환 미리보기',
+        description: '이미지나 카드가 바뀔 때 들어오는 감각을 확인해.',
+      }
+  }
 }
 
 function EasingGraph({ value, onChange }: { value: WallpaperBezierControlPoints; onChange: (value: WallpaperBezierControlPoints) => void }) {
@@ -94,110 +118,257 @@ function EasingGraph({ value, onChange }: { value: WallpaperBezierControlPoints;
   const path = `M ${startPoint.x} ${startPoint.y} C ${controlOne.x} ${controlOne.y}, ${controlTwo.x} ${controlTwo.y}, ${endPoint.x} ${endPoint.y}`
 
   return (
-    <svg
-      ref={graphRef}
-      viewBox={`0 0 ${GRAPH_SIZE + (GRAPH_PADDING * 2)} ${GRAPH_SIZE + (GRAPH_PADDING * 2)}`}
-      className="h-[276px] w-full rounded-sm border border-border bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--primary)_8%,transparent),transparent_45%),var(--surface-low)]"
-    >
-      {[0, 0.25, 0.5, 0.75, 1].map((line) => {
-        const x = mapGraphX(line)
-        const y = GRAPH_PADDING + (line * GRAPH_SIZE)
-        return (
-          <g key={line}>
-            <line x1={x} y1={GRAPH_PADDING} x2={x} y2={GRAPH_PADDING + GRAPH_SIZE} stroke="color-mix(in srgb, var(--border) 72%, transparent)" strokeWidth="1" />
-            <line x1={GRAPH_PADDING} y1={y} x2={GRAPH_PADDING + GRAPH_SIZE} y2={y} stroke="color-mix(in srgb, var(--border) 72%, transparent)" strokeWidth="1" />
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>그래프 편집</span>
+        <span>드래그로 곡선 조절</span>
+      </div>
+      <svg
+        ref={graphRef}
+        viewBox={`0 0 ${GRAPH_SIZE + (GRAPH_PADDING * 2)} ${GRAPH_SIZE + (GRAPH_PADDING * 2)}`}
+        className="h-[352px] w-full rounded-sm border border-border bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_45%),var(--surface-low)]"
+      >
+        {[0, 0.25, 0.5, 0.75, 1].map((line) => {
+          const x = mapGraphX(line)
+          const y = GRAPH_PADDING + (line * GRAPH_SIZE)
+          return (
+            <g key={line}>
+              <line x1={x} y1={GRAPH_PADDING} x2={x} y2={GRAPH_PADDING + GRAPH_SIZE} stroke="color-mix(in srgb, var(--border) 72%, transparent)" strokeWidth="1" />
+              <line x1={GRAPH_PADDING} y1={y} x2={GRAPH_PADDING + GRAPH_SIZE} y2={y} stroke="color-mix(in srgb, var(--border) 72%, transparent)" strokeWidth="1" />
+            </g>
+          )
+        })}
+
+        <text x={GRAPH_PADDING} y={18} className="fill-muted-foreground text-[11px]">빠름</text>
+        <text x={GRAPH_PADDING} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-[11px]">눌림</text>
+        <text x={GRAPH_SIZE + GRAPH_PADDING - 14} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-[11px]">시간</text>
+
+        <path d={`M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}`} stroke="color-mix(in srgb, var(--muted-foreground) 48%, transparent)" strokeDasharray="5 6" strokeWidth="1.5" fill="none" />
+        <path d={path} stroke="var(--primary)" strokeWidth="4" fill="none" />
+        <line x1={startPoint.x} y1={startPoint.y} x2={controlOne.x} y2={controlOne.y} stroke="color-mix(in srgb, var(--secondary) 62%, transparent)" strokeWidth="2" />
+        <line x1={endPoint.x} y1={endPoint.y} x2={controlTwo.x} y2={controlTwo.y} stroke="color-mix(in srgb, var(--secondary) 62%, transparent)" strokeWidth="2" />
+
+        <circle cx={startPoint.x} cy={startPoint.y} r="6" fill="var(--muted-foreground)" opacity="0.72" />
+        <circle cx={endPoint.x} cy={endPoint.y} r="6" fill="var(--muted-foreground)" opacity="0.72" />
+
+        {[
+          { id: 'p1', point: controlOne, label: 'P1', valueText: `${formatPointValue(value.x1)}, ${formatPointValue(value.y1)}` },
+          { id: 'p2', point: controlTwo, label: 'P2', valueText: `${formatPointValue(value.x2)}, ${formatPointValue(value.y2)}` },
+        ].map((handle) => (
+          <g key={handle.id}>
+            <circle cx={handle.point.x} cy={handle.point.y} r="18" fill="color-mix(in srgb, var(--primary) 12%, transparent)" />
+            <circle cx={handle.point.x} cy={handle.point.y} r="12" fill="color-mix(in srgb, var(--primary) 22%, var(--background))" stroke="var(--primary)" strokeWidth="2.5" />
+            <circle
+              cx={handle.point.x}
+              cy={handle.point.y}
+              r="18"
+              fill="transparent"
+              className="cursor-grab active:cursor-grabbing"
+              onPointerDown={(event) => {
+                event.preventDefault()
+                setDragHandle(handle.id as 'p1' | 'p2')
+              }}
+            />
+            <text x={handle.point.x} y={handle.point.y - 24} textAnchor="middle" className="fill-foreground text-[11px] font-semibold">
+              {handle.label}
+            </text>
+            <text x={handle.point.x} y={handle.point.y + 31} textAnchor="middle" className="fill-muted-foreground text-[10px] font-medium">
+              {handle.valueText}
+            </text>
           </g>
-        )
-      })}
-
-      <path d={`M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}`} stroke="color-mix(in srgb, var(--muted-foreground) 48%, transparent)" strokeDasharray="5 6" strokeWidth="1.5" fill="none" />
-      <path d={path} stroke="var(--primary)" strokeWidth="3" fill="none" />
-      <line x1={startPoint.x} y1={startPoint.y} x2={controlOne.x} y2={controlOne.y} stroke="color-mix(in srgb, var(--secondary) 60%, transparent)" strokeWidth="1.5" />
-      <line x1={endPoint.x} y1={endPoint.y} x2={controlTwo.x} y2={controlTwo.y} stroke="color-mix(in srgb, var(--secondary) 60%, transparent)" strokeWidth="1.5" />
-
-      <circle cx={startPoint.x} cy={startPoint.y} r="5" fill="var(--muted-foreground)" opacity="0.7" />
-      <circle cx={endPoint.x} cy={endPoint.y} r="5" fill="var(--muted-foreground)" opacity="0.7" />
-
-      {[
-        { id: 'p1', point: controlOne, label: 'P1' },
-        { id: 'p2', point: controlTwo, label: 'P2' },
-      ].map((handle) => (
-        <g key={handle.id}>
-          <circle
-            cx={handle.point.x}
-            cy={handle.point.y}
-            r="10"
-            fill="color-mix(in srgb, var(--primary) 18%, var(--background))"
-            stroke="var(--primary)"
-            strokeWidth="2"
-            className="cursor-grab active:cursor-grabbing"
-            onPointerDown={(event) => {
-              event.preventDefault()
-              setDragHandle(handle.id as 'p1' | 'p2')
-            }}
-          />
-          <text x={handle.point.x} y={handle.point.y - 16} textAnchor="middle" className="fill-muted-foreground text-[11px] font-medium">
-            {handle.label}
-          </text>
-        </g>
-      ))}
-    </svg>
+        ))}
+      </svg>
+    </div>
   )
 }
 
-function EasingPreview({ easing }: { easing: WallpaperAnimationEasing }) {
+function EasingPreview({ easing, kind }: { easing: WallpaperAnimationEasing; kind: WallpaperEasingPreviewKind }) {
   const [replayCount, setReplayCount] = useState(0)
   const easingCss = useMemo(() => getWallpaperAnimationEasingCss(easing), [easing])
-  const trackRef = useRef<HTMLDivElement | null>(null)
-  const dotRef = useRef<HTMLDivElement | null>(null)
+  const motionTrackRef = useRef<HTMLDivElement | null>(null)
+  const motionDotRef = useRef<HTMLDivElement | null>(null)
+  const hoverCardRef = useRef<HTMLDivElement | null>(null)
+  const transitionIncomingRef = useRef<HTMLDivElement | null>(null)
+  const transitionOutgoingRef = useRef<HTMLDivElement | null>(null)
+  const meta = getWallpaperEasingPreviewMeta(kind)
 
   useEffect(() => {
-    const trackWidth = Math.max((trackRef.current?.clientWidth ?? 0) - 12, 0)
-    const dotElement = dotRef.current
-    if (!dotElement) {
+    if (kind === 'motion') {
+      const trackWidth = Math.max((motionTrackRef.current?.clientWidth ?? 0) - 24, 0)
+      const dotElement = motionDotRef.current
+      if (!dotElement) {
+        return
+      }
+
+      dotElement.getAnimations().forEach((animation) => animation.cancel())
+      dotElement.animate(
+        [
+          { transform: 'translate(0px, -50%) scale(1)' },
+          { transform: `translate(${trackWidth}px, -50%) scale(1.04)` },
+        ],
+        {
+          duration: 950,
+          fill: 'forwards',
+          easing: easingCss,
+        },
+      )
       return
     }
 
-    dotElement.getAnimations().forEach((animation) => animation.cancel())
-    dotElement.animate(
+    if (kind === 'hover') {
+      const hoverCard = hoverCardRef.current
+      if (!hoverCard) {
+        return
+      }
+
+      hoverCard.getAnimations().forEach((animation) => animation.cancel())
+      hoverCard.animate(
+        [
+          { transform: 'translate(-50%, -50%) scale(1)', boxShadow: '0 10px 24px rgba(0,0,0,0.18)' },
+          { transform: 'translate(-50%, -50%) scale(1.1)', boxShadow: '0 22px 52px rgba(0,0,0,0.3)' },
+        ],
+        {
+          duration: 780,
+          direction: 'alternate',
+          fill: 'forwards',
+          easing: easingCss,
+        },
+      )
+      return
+    }
+
+    const incoming = transitionIncomingRef.current
+    const outgoing = transitionOutgoingRef.current
+    if (!incoming || !outgoing) {
+      return
+    }
+
+    incoming.getAnimations().forEach((animation) => animation.cancel())
+    outgoing.getAnimations().forEach((animation) => animation.cancel())
+
+    outgoing.animate(
       [
-        { transform: 'translate(0px, -50%)' },
-        { transform: `translate(${trackWidth}px, -50%)` },
+        { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', filter: 'blur(0px)' },
+        { opacity: 0, transform: 'translate(-50%, -50%) scale(0.94)', filter: 'blur(10px)' },
       ],
       {
-        duration: 900,
+        duration: 820,
         fill: 'forwards',
         easing: easingCss,
       },
     )
-  }, [easingCss, replayCount])
+
+    incoming.animate(
+      [
+        { opacity: 0, transform: 'translate(-50%, -50%) scale(1.06)', filter: 'blur(8px)' },
+        { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', filter: 'blur(0px)' },
+      ],
+      {
+        duration: 820,
+        fill: 'forwards',
+        easing: easingCss,
+      },
+    )
+  }, [easingCss, kind, replayCount])
 
   return (
     <div className="rounded-sm border border-border bg-surface-low p-3">
-      <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-        <span>미리보기</span>
-        <button type="button" className="text-secondary hover:text-foreground" onClick={() => setReplayCount((current) => current + 1)}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-medium text-foreground">{meta.title}</div>
+          <div className="text-[11px] text-muted-foreground">{meta.description}</div>
+        </div>
+        <button type="button" className="text-xs text-secondary hover:text-foreground" onClick={() => setReplayCount((current) => current + 1)}>
           다시 재생
         </button>
       </div>
-      <div className="relative h-12 overflow-hidden rounded-sm border border-border/70 bg-background">
-        <div ref={trackRef} className="absolute inset-y-0 left-2 right-2">
+
+      <div className="relative h-28 overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_45%),var(--background)]">
+        {kind === 'motion' ? (
+          <div ref={motionTrackRef} className="absolute inset-y-0 left-4 right-4">
+            <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-border/70" />
+            <div
+              ref={motionDotRef}
+              className="absolute left-0 top-1/2 h-6 w-6 rounded-full border border-primary/60 bg-primary shadow-[0_0_22px_color-mix(in_srgb,var(--primary)_32%,transparent)]"
+              style={{ transform: 'translate(0px, -50%)' }}
+            />
+          </div>
+        ) : null}
+
+        {kind === 'hover' ? (
           <div
-            ref={dotRef}
-            className="absolute left-0 top-1/2 h-3 w-3 rounded-full bg-primary shadow-[0_0_22px_color-mix(in_srgb,var(--primary)_28%,transparent)]"
-            style={{ transform: 'translate(0px, -50%)' }}
-          />
-        </div>
+            ref={hoverCardRef}
+            className="absolute left-1/2 top-1/2 flex h-16 w-24 -translate-x-1/2 -translate-y-1/2 items-end rounded-xl border border-white/15 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--primary)_20%,transparent),color-mix(in_srgb,var(--secondary)_18%,transparent)),var(--surface-high)] p-3 text-xs font-medium text-foreground shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
+          >
+            Hover
+          </div>
+        ) : null}
+
+        {kind === 'transition' ? (
+          <>
+            <div
+              ref={transitionOutgoingRef}
+              className="absolute left-1/2 top-1/2 flex h-16 w-24 -translate-x-1/2 -translate-y-1/2 items-end rounded-xl border border-white/12 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--muted)_18%,transparent),transparent),var(--surface-low)] p-3 text-xs font-medium text-muted-foreground shadow-[0_12px_28px_rgba(0,0,0,0.16)]"
+            >
+              이전
+            </div>
+            <div
+              ref={transitionIncomingRef}
+              className="absolute left-1/2 top-1/2 flex h-16 w-24 -translate-x-1/2 -translate-y-1/2 items-end rounded-xl border border-white/15 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--primary)_22%,transparent),color-mix(in_srgb,var(--secondary)_16%,transparent)),var(--surface-high)] p-3 text-xs font-medium text-foreground shadow-[0_12px_34px_rgba(0,0,0,0.22)]"
+              style={{ opacity: 0 }}
+            >
+              현재
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   )
 }
 
-export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', onChange }: WallpaperEasingPickerProps) {
+function EasingPreviewPanel({
+  activePreviewKind,
+  easing,
+  onChangePreviewKind,
+  extraContent,
+}: {
+  activePreviewKind: WallpaperEasingPreviewKind
+  easing: WallpaperAnimationEasing
+  onChangePreviewKind: (kind: WallpaperEasingPreviewKind) => void
+  extraContent?: ReactNode
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {([
+          ['transition', '전환'],
+          ['hover', '호버'],
+          ['motion', '모션'],
+        ] as const).map(([kind, label]) => (
+          <Button
+            key={kind}
+            type="button"
+            size="xs"
+            variant={activePreviewKind === kind ? 'default' : 'ghost'}
+            onClick={() => onChangePreviewKind(kind)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+
+      <EasingPreview easing={easing} kind={activePreviewKind} />
+      {extraContent}
+    </div>
+  )
+}
+
+export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', previewKind = 'transition', onChange }: WallpaperEasingPickerProps) {
   const normalizedValue = normalizeWallpaperAnimationEasing(value, fallbackPreset)
   const isCustom = normalizedValue.startsWith('cubic-bezier(')
   const [open, setOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'preset' | 'custom'>(isCustom ? 'custom' : 'preset')
+  const [activePreviewKind, setActivePreviewKind] = useState<WallpaperEasingPreviewKind>(previewKind)
   const [customPoints, setCustomPoints] = useState<WallpaperBezierControlPoints>(() => getWallpaperEditableBezierControlPoints(normalizedValue, fallbackPreset))
 
   const customEasing = useMemo(() => buildWallpaperCubicBezierEasing(customPoints), [customPoints])
@@ -225,6 +396,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
         className="w-full justify-between"
         onClick={() => {
           setActiveTab(isCustom ? 'custom' : 'preset')
+          setActivePreviewKind(previewKind)
           setCustomPoints(getWallpaperEditableBezierControlPoints(normalizedValue, fallbackPreset))
           setOpen(true)
         }}
@@ -240,8 +412,8 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
         open={open}
         onClose={() => setOpen(false)}
         title="이징 설정"
-        description="프리셋을 바로 고르거나, 커스텀 탭에서 그래프를 직접 만져서 cubic-bezier를 만들 수 있어."
-        widthClassName="max-w-5xl"
+        description="프리셋은 바로 적용하고, 커스텀은 그래프를 직접 만져서 cubic-bezier를 만들 수 있어."
+        widthClassName="max-w-6xl"
       >
         <div className="space-y-4">
           <div className="inline-flex rounded-sm border border-border bg-surface-low p-1">
@@ -254,29 +426,43 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
           </div>
 
           {activeTab === 'preset' ? (
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => {
-                    onChange(option.value)
-                    setOpen(false)
-                  }}
-                  className={cn(
-                    'rounded-sm border p-3 text-left transition',
-                    normalizedValue === option.value
-                      ? 'border-primary bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]'
-                      : 'border-border bg-surface-low hover:border-primary/50 hover:bg-surface-high',
-                  )}
-                >
-                  <div className="text-sm font-medium text-foreground">{option.label}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{getWallpaperAnimationEasingCss(option.value)}</div>
-                </button>
-              ))}
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_360px]">
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-2">
+                {WALLPAPER_ANIMATION_EASING_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      onChange(option.value)
+                      setOpen(false)
+                    }}
+                    className={cn(
+                      'rounded-sm border p-3 text-left transition',
+                      normalizedValue === option.value
+                        ? 'border-primary bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]'
+                        : 'border-border bg-surface-low hover:border-primary/50 hover:bg-surface-high',
+                    )}
+                  >
+                    <div className="text-sm font-medium text-foreground">{option.label}</div>
+                    <div className="mt-1 text-xs text-muted-foreground break-all">{getWallpaperAnimationEasingCss(option.value)}</div>
+                  </button>
+                ))}
+              </div>
+
+              <EasingPreviewPanel
+                activePreviewKind={activePreviewKind}
+                easing={previewEasing}
+                onChangePreviewKind={setActivePreviewKind}
+                extraContent={(
+                  <div className="rounded-sm border border-border bg-surface-low p-3 text-xs leading-5 text-muted-foreground">
+                    <div>프리셋은 바로 적용돼.</div>
+                    <div>완전히 다른 감각을 만들고 싶으면 커스텀 탭에서 그래프를 직접 만지면 돼.</div>
+                  </div>
+                )}
+              />
             </div>
           ) : (
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.95fr)]">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_380px]">
               <div className="space-y-4">
                 <EasingGraph value={customPoints} onChange={setCustomPoints} />
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -300,34 +486,40 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <EasingPreview easing={previewEasing} />
-                <div className="rounded-sm border border-border bg-surface-low p-3">
-                  <div className="mb-2 text-xs text-muted-foreground">현재 커스텀 값</div>
-                  <div className="rounded-sm border border-border/70 bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
-                    {customEasing}
-                  </div>
-                </div>
-                <div className="rounded-sm border border-border bg-surface-low p-3 text-xs leading-5 text-muted-foreground">
-                  <div>X는 시간 흐름, Y는 진행 느낌이야.</div>
-                  <div>위로 올리면 초반에 더 빨리 치고 나가고, 아래로 내리면 더 눌렀다가 나가.</div>
-                  <div>`easeOutBounce` 같은 다중 튕김 계열은 프리셋으로 두고, 커스텀은 bezier 기반으로 다루는 게 안정적이야.</div>
-                </div>
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-                    닫기
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      onChange(customEasing)
-                      setOpen(false)
-                    }}
-                  >
-                    커스텀 적용
-                  </Button>
-                </div>
-              </div>
+              <EasingPreviewPanel
+                activePreviewKind={activePreviewKind}
+                easing={previewEasing}
+                onChangePreviewKind={setActivePreviewKind}
+                extraContent={(
+                  <>
+                    <div className="rounded-sm border border-border bg-surface-low p-3">
+                      <div className="mb-2 text-xs text-muted-foreground">현재 커스텀 값</div>
+                      <div className="rounded-sm border border-border/70 bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
+                        {customEasing}
+                      </div>
+                    </div>
+                    <div className="rounded-sm border border-border bg-surface-low p-3 text-xs leading-5 text-muted-foreground">
+                      <div>X는 시간 흐름, Y는 진행 느낌이야.</div>
+                      <div>위로 올리면 초반에 더 빨리 치고 나가고, 아래로 내리면 더 눌렀다가 나가.</div>
+                      <div>`easeOutBounce` 같은 다중 튕김 계열은 프리셋으로 두고, 커스텀은 bezier 기반으로 다루는 게 안정적이야.</div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+                        닫기
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          onChange(customEasing)
+                          setOpen(false)
+                        }}
+                      >
+                        커스텀 적용
+                      </Button>
+                    </div>
+                  </>
+                )}
+              />
             </div>
           )}
         </div>

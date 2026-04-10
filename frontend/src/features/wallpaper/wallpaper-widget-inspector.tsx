@@ -298,6 +298,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               <WallpaperEasingPicker
                 value={selectedWidget.settings.imageTransitionEasing}
                 fallbackPreset="easeOutCubic"
+                previewKind="transition"
                 onChange={(nextValue) => {
                   updateWidgetSettings({ imageTransitionEasing: nextValue })
                 }}
@@ -324,6 +325,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               <WallpaperEasingPicker
                 value={selectedWidget.settings.hoverEasing}
                 fallbackPreset="easeOutCubic"
+                previewKind="hover"
                 onChange={(nextValue) => {
                   updateWidgetSettings({ hoverEasing: nextValue })
                 }}
@@ -484,6 +486,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               <WallpaperEasingPicker
                 value={selectedWidget.settings.imageTransitionEasing}
                 fallbackPreset="easeOutCubic"
+                previewKind="transition"
                 onChange={(nextValue) => {
                   updateWidgetSettings({ imageTransitionEasing: nextValue })
                 }}
@@ -510,6 +513,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               <WallpaperEasingPicker
                 value={selectedWidget.settings.hoverEasing}
                 fallbackPreset="easeOutCubic"
+                previewKind="hover"
                 onChange={(nextValue) => {
                   updateWidgetSettings({ hoverEasing: nextValue })
                 }}
@@ -571,6 +575,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               <WallpaperEasingPicker
                 value={selectedWidget.settings.motionEasing}
                 fallbackPreset="easeOutCubic"
+                previewKind="motion"
                 onChange={(nextValue) => {
                   updateWidgetSettings({ motionEasing: nextValue })
                 }}
@@ -632,6 +637,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               <WallpaperEasingPicker
                 value={selectedWidget.settings.imageTransitionEasing}
                 fallbackPreset="easeOutCubic"
+                previewKind="transition"
                 onChange={(nextValue) => {
                   updateWidgetSettings({ imageTransitionEasing: nextValue })
                 }}
@@ -658,6 +664,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               <WallpaperEasingPicker
                 value={selectedWidget.settings.hoverEasing}
                 fallbackPreset="easeOutCubic"
+                previewKind="hover"
                 onChange={(nextValue) => {
                   updateWidgetSettings({ hoverEasing: nextValue })
                 }}
@@ -764,6 +771,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               <WallpaperEasingPicker
                 value={selectedWidget.settings.motionEasing}
                 fallbackPreset="linear"
+                previewKind="motion"
                 onChange={(nextValue) => {
                   updateWidgetSettings({ motionEasing: nextValue })
                 }}
@@ -806,6 +814,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               <WallpaperEasingPicker
                 value={selectedWidget.settings.imageTransitionEasing}
                 fallbackPreset="easeOutCubic"
+                previewKind="transition"
                 onChange={(nextValue) => {
                   updateWidgetSettings({ imageTransitionEasing: nextValue })
                 }}
@@ -868,6 +877,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               <WallpaperEasingPicker
                 value={selectedWidget.settings.hoverEasing}
                 fallbackPreset="easeOutCubic"
+                previewKind="hover"
                 onChange={(nextValue) => {
                   updateWidgetSettings({ hoverEasing: nextValue })
                 }}
