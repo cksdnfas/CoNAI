@@ -13,7 +13,9 @@ import {
   type ModuleDefinitionRecord,
 } from '@/lib/api'
 import { buildFlowFromGraphRecord, buildGraphEditorSnapshot, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
+import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
+import { clearPersistedWorkflowRunnerDraft, loadPersistedWorkflowRunnerDraft } from './workflow-runner-draft-storage'
 
 /** Own workflow/folder browse-management actions for the module-graph page. */
 export function useModuleGraphBrowseActions({
@@ -86,6 +88,10 @@ export function useModuleGraphBrowseActions({
   /** Apply one saved workflow record into the current editor state. */
   const applyGraphRecordToEditor = useCallback((graph: GraphWorkflowRecord) => {
     const { nodes: nextNodes, edges: nextEdges } = buildFlowFromGraphRecord(graph, modules)
+    const exposedInputs = deriveWorkflowExposedInputsFromNodes(nextNodes)
+    const defaultInputValues = buildWorkflowRunInputDefaults(exposedInputs)
+    const persistedInputValues = loadPersistedWorkflowRunnerDraft(graph.id, exposedInputs)
+
     setNodes(nextNodes)
     setEdges(nextEdges)
     setSelectedGraphId(graph.id)
@@ -96,8 +102,11 @@ export function useModuleGraphBrowseActions({
     setWorkflowDescription(graph.description || '')
     setSelectedFolderId(graph.folder_id ?? null)
     setDraftWorkflowFolderId(graph.folder_id ?? null)
-    setWorkflowExposedInputs(graph.graph.metadata?.exposed_inputs ?? [])
-    setWorkflowRunInputValues(buildWorkflowRunInputDefaults(graph.graph.metadata?.exposed_inputs ?? []))
+    setWorkflowExposedInputs(exposedInputs)
+    setWorkflowRunInputValues({
+      ...defaultInputValues,
+      ...persistedInputValues,
+    })
     setLastSavedSnapshot(
       buildGraphEditorSnapshot({
         name: graph.name,
@@ -105,7 +114,7 @@ export function useModuleGraphBrowseActions({
         nodes: nextNodes,
         edges: nextEdges,
         workflowMetadata: {
-          exposed_inputs: graph.graph.metadata?.exposed_inputs ?? [],
+          exposed_inputs: exposedInputs,
         },
       }),
     )
@@ -263,6 +272,7 @@ export function useModuleGraphBrowseActions({
 
     try {
       await deleteGraphWorkflow(selectedGraphRecord.id)
+      clearPersistedWorkflowRunnerDraft(selectedGraphRecord.id)
       resetWorkflowDraft()
       setWorkflowView('browse')
       setIsEditorSupportOpen(false)

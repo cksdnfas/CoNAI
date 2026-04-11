@@ -193,6 +193,189 @@ export const DEFAULT_COMFYUI_SERVER_FORM: ComfyUIServerFormDraft = {
   description: '',
 }
 
+const NAI_FORM_DRAFT_STORAGE_KEY = 'conai:image-generation:nai-form-draft:v1'
+const COMFY_SELECTED_WORKFLOW_STORAGE_KEY = 'conai:image-generation:comfy:selected-workflow-id:v1'
+const COMFY_WORKFLOW_DRAFT_STORAGE_KEY_PREFIX = 'conai:image-generation:comfy:workflow-draft:v1:'
+type PersistedNaiFormDraft = {
+  selectedCharacterIndex: number | null
+  form: NAIFormDraft
+}
+
+function readLocalStorageJson<T>(key: string): T | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(key)
+    if (!rawValue) {
+      return null
+    }
+
+    return JSON.parse(rawValue) as T
+  } catch {
+    return null
+  }
+}
+
+function writeLocalStorageJson(key: string, value: unknown) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Ignore quota/private-mode persistence failures.
+  }
+}
+
+function removeLocalStorageValue(key: string) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.removeItem(key)
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+}
+
+function normalizePersistedNaiFormDraft(value: Partial<NAIFormDraft> | null | undefined): NAIFormDraft {
+  const rawCharacters = Array.isArray(value?.characters) ? value.characters : []
+  const rawVibes = Array.isArray(value?.vibes) ? value.vibes : []
+  const rawCharacterReferences = Array.isArray(value?.characterReferences) ? value.characterReferences : []
+
+  return {
+    ...DEFAULT_NAI_FORM,
+    ...value,
+    characters: rawCharacters.map((character) => ({
+      ...EMPTY_NAI_CHARACTER_PROMPT,
+      ...character,
+    })),
+    vibes: rawVibes.map((vibe) => ({
+      ...EMPTY_NAI_VIBE,
+      strength: typeof vibe?.strength === 'string' ? vibe.strength : EMPTY_NAI_VIBE.strength,
+      informationExtracted: typeof vibe?.informationExtracted === 'string' ? vibe.informationExtracted : EMPTY_NAI_VIBE.informationExtracted,
+      encoded: '',
+      image: undefined,
+    })),
+    characterReferences: rawCharacterReferences.map((reference) => ({
+      ...EMPTY_NAI_CHARACTER_REFERENCE,
+      type: reference?.type === 'character' || reference?.type === 'style' || reference?.type === 'character&style'
+        ? reference.type
+        : EMPTY_NAI_CHARACTER_REFERENCE.type,
+      strength: typeof reference?.strength === 'string' ? reference.strength : EMPTY_NAI_CHARACTER_REFERENCE.strength,
+      fidelity: typeof reference?.fidelity === 'string' ? reference.fidelity : EMPTY_NAI_CHARACTER_REFERENCE.fidelity,
+      image: undefined,
+    })),
+    sourceImage: undefined,
+    maskImage: undefined,
+  }
+}
+
+function buildPersistableNaiFormDraft(form: NAIFormDraft): NAIFormDraft {
+  return {
+    ...form,
+    vibes: form.vibes.map((vibe) => ({
+      ...vibe,
+      encoded: '',
+      image: undefined,
+    })),
+    characterReferences: form.characterReferences.map((reference) => ({
+      ...reference,
+      image: undefined,
+    })),
+    sourceImage: undefined,
+    maskImage: undefined,
+  }
+}
+
+/** Restore the last persisted NAI editor draft, excluding heavy image payloads. */
+export function loadPersistedNaiFormDraft(): PersistedNaiFormDraft {
+  const rawValue = readLocalStorageJson<Partial<PersistedNaiFormDraft>>(NAI_FORM_DRAFT_STORAGE_KEY)
+  const selectedCharacterIndex = typeof rawValue?.selectedCharacterIndex === 'number' ? rawValue.selectedCharacterIndex : null
+
+  return {
+    selectedCharacterIndex,
+    form: normalizePersistedNaiFormDraft(rawValue?.form),
+  }
+}
+
+/** Persist the current NAI editor draft while omitting image payloads that would bloat storage. */
+export function persistNaiFormDraft(form: NAIFormDraft, selectedCharacterIndex: number | null) {
+  writeLocalStorageJson(NAI_FORM_DRAFT_STORAGE_KEY, {
+    selectedCharacterIndex,
+    form: buildPersistableNaiFormDraft(form),
+  } satisfies PersistedNaiFormDraft)
+}
+
+/** Restore the last selected Comfy workflow, if any. */
+export function loadPersistedSelectedComfyWorkflowId() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const rawValue = window.localStorage.getItem(COMFY_SELECTED_WORKFLOW_STORAGE_KEY)
+  if (!rawValue) {
+    return null
+  }
+
+  const parsedValue = Number(rawValue)
+  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null
+}
+
+/** Persist the current Comfy workflow selection for fast return after navigation. */
+export function persistSelectedComfyWorkflowId(workflowId: number | null) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (workflowId === null) {
+    removeLocalStorageValue(COMFY_SELECTED_WORKFLOW_STORAGE_KEY)
+    return
+  }
+
+  try {
+    window.localStorage.setItem(COMFY_SELECTED_WORKFLOW_STORAGE_KEY, String(workflowId))
+  } catch {
+    // Ignore quota/private-mode persistence failures.
+  }
+}
+
+function buildComfyWorkflowDraftStorageKey(workflowId: number) {
+  return `${COMFY_WORKFLOW_DRAFT_STORAGE_KEY_PREFIX}${workflowId}`
+}
+
+/** Restore one persisted Comfy workflow draft, limited to text/select/number fields. */
+export function loadPersistedComfyWorkflowDraft(workflowId: number): Record<string, WorkflowFieldDraftValue> {
+  const rawValue = readLocalStorageJson<Record<string, unknown>>(buildComfyWorkflowDraftStorageKey(workflowId))
+  if (!rawValue) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(rawValue)
+      .filter(([, value]) => typeof value === 'string')
+      .map(([fieldId, value]) => [fieldId, value as WorkflowFieldDraftValue]),
+  ) as Record<string, WorkflowFieldDraftValue>
+}
+
+/** Persist one Comfy workflow draft, skipping image payload fields. */
+export function persistComfyWorkflowDraft(workflowId: number, draft: Record<string, WorkflowFieldDraftValue>) {
+  const persistableDraft = Object.fromEntries(
+    Object.entries(draft).filter(([, value]) => typeof value === 'string'),
+  )
+
+  writeLocalStorageJson(buildComfyWorkflowDraftStorageKey(workflowId), persistableDraft)
+}
+
+/** Remove one persisted Comfy workflow draft, usually after an explicit reset. */
+export function clearPersistedComfyWorkflowDraft(workflowId: number) {
+  removeLocalStorageValue(buildComfyWorkflowDraftStorageKey(workflowId))
+}
+
 /** Read a human-friendly error message from an unknown failure. */
 export function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback

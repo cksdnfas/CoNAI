@@ -7,10 +7,12 @@ import {
   EMPTY_NAI_CHARACTER_PROMPT,
   EMPTY_NAI_CHARACTER_REFERENCE,
   EMPTY_NAI_VIBE,
+  loadPersistedNaiFormDraft,
   NAI_SAMPLE_COUNT_MAX,
   NAI_SAMPLE_COUNT_MIN,
   NAI_RESOLUTION_PRESETS,
   normalizeNaiCharacterPromptDrafts,
+  persistNaiFormDraft,
   resolveNaiResolutionPreset,
   shouldUseNaiCharacterPositions,
   supportsNaiCharacterPrompts,
@@ -26,8 +28,9 @@ export function useNaiFormController({
 }: {
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
-  const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(null)
-  const [naiForm, setNaiForm] = useState<NAIFormDraft>(DEFAULT_NAI_FORM)
+  const [persistedDraft] = useState(() => loadPersistedNaiFormDraft())
+  const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(persistedDraft.selectedCharacterIndex)
+  const [naiForm, setNaiForm] = useState<NAIFormDraft>(persistedDraft.form)
   const [naiModuleName, setNaiModuleName] = useState('NAI Module')
   const [naiModuleDescription, setNaiModuleDescription] = useState('')
   const [naiExposedFieldKeys, setNaiExposedFieldKeys] = useState<string[]>(['prompt', 'negative_prompt', 'characters', 'vibes', 'character_refs', 'seed'])
@@ -44,6 +47,14 @@ export function useNaiFormController({
   }, [naiModuleFieldOptions])
 
   useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      persistNaiFormDraft(naiForm, selectedCharacterIndex)
+    }, 250)
+
+    return () => window.clearTimeout(timeout)
+  }, [naiForm, selectedCharacterIndex])
+
+  useEffect(() => {
     if (naiForm.characterPositionAiChoice || canUseCharacterPositions) {
       return
     }
@@ -53,6 +64,20 @@ export function useNaiFormController({
       characterPositionAiChoice: true,
     }))
   }, [canUseCharacterPositions, naiForm.characterPositionAiChoice])
+
+  useEffect(() => {
+    setSelectedCharacterIndex((current) => {
+      if (current === null) {
+        return null
+      }
+
+      if (naiForm.characters.length === 0) {
+        return null
+      }
+
+      return Math.min(current, naiForm.characters.length - 1)
+    })
+  }, [naiForm.characters.length])
 
   /** Reset the full editable NAI form back to defaults. */
   const resetNaiForm = () => {

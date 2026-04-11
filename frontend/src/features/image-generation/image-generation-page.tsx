@@ -1,5 +1,6 @@
 import { Suspense, lazy, useState } from 'react'
 import { RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
@@ -8,6 +9,7 @@ import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
+import { loadPersistedSelectedComfyWorkflowId, persistSelectedComfyWorkflowId } from './image-generation-shared'
 
 const NaiGenerationPanelLazy = lazy(async () => {
   const module = await import('./components/nai-generation-panel')
@@ -59,7 +61,7 @@ export function ImageGenerationPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [globalRefreshNonce, setGlobalRefreshNonce] = useState(0)
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
-  const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(null)
+  const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(() => loadPersistedSelectedComfyWorkflowId())
   const [isControllerOpen, setIsControllerOpen] = useState(false)
   const isWideLayout = useDesktopPageLayout()
   const activeTab = parseImageGenerationTab(searchParams.get('tab'))
@@ -81,6 +83,10 @@ export function ImageGenerationPage() {
     setIsControllerOpen(false)
     setSearchParams(nextSearchParams)
   }
+
+  useEffect(() => {
+    persistSelectedComfyWorkflowId(selectedComfyWorkflowId)
+  }, [selectedComfyWorkflowId])
 
   const controllerLabel = activeTab === 'nai' ? 'NAI' : activeTab === 'wildcards' ? 'Wildcard' : 'ComfyUI'
   const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))

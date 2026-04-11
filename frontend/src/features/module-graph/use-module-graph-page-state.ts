@@ -3,6 +3,7 @@ import { useEdgesState, useNodesState } from '@xyflow/react'
 import type { GraphWorkflowExposedInput, GraphWorkflowFolderRecord } from '@/lib/api'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
 import { buildGraphEditorSnapshot, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
+import { persistWorkflowRunnerDraft } from './workflow-runner-draft-storage'
 
 /** Own local page state for the module-graph workspace screen. */
 export function useModuleGraphPageState() {
@@ -45,6 +46,18 @@ export function useModuleGraphPageState() {
       setDraftWorkflowFolderId(selectedFolderId)
     }
   }, [selectedFolderId, selectedGraphId])
+
+  useEffect(() => {
+    if (selectedGraphId === null) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      persistWorkflowRunnerDraft(selectedGraphId, workflowExposedInputs, workflowRunInputValues)
+    }, 250)
+
+    return () => window.clearTimeout(timeout)
+  }, [selectedGraphId, workflowExposedInputs, workflowRunInputValues])
 
   return {
     workflowName,

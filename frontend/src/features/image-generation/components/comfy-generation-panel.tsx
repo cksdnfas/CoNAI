@@ -23,7 +23,10 @@ import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import type { ImageSaveSettings } from '@/types/settings'
 import {
   buildWorkflowDraft,
+  clearPersistedComfyWorkflowDraft,
   getErrorMessage,
+  loadPersistedComfyWorkflowDraft,
+  persistComfyWorkflowDraft,
   type ModuleFieldOption,
   type SelectedImageDraft,
   type WorkflowFieldDraftValue,
@@ -209,7 +212,17 @@ export function ComfyGenerationPanel({
       return
     }
 
-    setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))
+    const baseDraft = buildWorkflowDraft(selectedWorkflowFields)
+    const persistedDraft = loadPersistedComfyWorkflowDraft(selectedWorkflow.id)
+    const validFieldIds = new Set(selectedWorkflowFields.map((field) => field.id))
+    const filteredPersistedDraft = Object.fromEntries(
+      Object.entries(persistedDraft).filter(([fieldId]) => validFieldIds.has(fieldId)),
+    )
+
+    setWorkflowDraft({
+      ...baseDraft,
+      ...filteredPersistedDraft,
+    })
   }, [selectedWorkflow, selectedWorkflowFields])
 
   useEffect(() => {
@@ -244,6 +257,18 @@ export function ComfyGenerationPanel({
       [fieldId]: value,
     }))
   }
+
+  useEffect(() => {
+    if (!selectedWorkflowId) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      persistComfyWorkflowDraft(selectedWorkflowId, workflowDraft)
+    }, 250)
+
+    return () => window.clearTimeout(timeout)
+  }, [selectedWorkflowId, workflowDraft])
 
   const handleWorkflowImageChange = async (fieldId: string, image?: SelectedImageDraft) => {
     handleWorkflowFieldChange(fieldId, image ?? '')
@@ -490,7 +515,12 @@ export function ComfyGenerationPanel({
             onSelectServer={setSelectedServerId}
             onFieldChange={handleWorkflowFieldChange}
             onImageChange={handleWorkflowImageChange}
-            onResetDraft={() => setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))}
+            onResetDraft={() => {
+              if (selectedWorkflow) {
+                clearPersistedComfyWorkflowDraft(selectedWorkflow.id)
+              }
+              setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))
+            }}
             onOpenModuleSave={() => selectedWorkflow ? handleOpenModuleSave(selectedWorkflow.id) : undefined}
             onOpenSaveOptions={() => setIsGenerationSaveOptionsOpen(true)}
             onGenerateSelected={() => void handleGenerateSelected()}
