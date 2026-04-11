@@ -1,14 +1,29 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import type { WallpaperAnimationEasing } from './wallpaper-types'
-import { getWallpaperAnimationEasingCss, type WallpaperBezierControlPoints } from './wallpaper-widget-utils'
+import {
+  getWallpaperAnimationEasingCss,
+  getWallpaperPresetBezierControlPoints,
+  isWallpaperAnimationEasingPreset,
+  normalizeWallpaperAnimationEasing,
+  parseWallpaperCubicBezierEasing,
+  type WallpaperBezierControlPoints,
+} from './wallpaper-widget-utils'
 
 export type WallpaperEasingPreviewKind = 'transition' | 'hover' | 'motion'
 
 const GRAPH_SIZE = 304
 const GRAPH_PADDING = 24
-export const WALLPAPER_EASING_GRAPH_RANGE_MIN_Y = -1
-export const WALLPAPER_EASING_GRAPH_RANGE_MAX_Y = 2
+const GRAPH_VIEWBOX_SIZE = GRAPH_SIZE + (GRAPH_PADDING * 2)
+export const WALLPAPER_EASING_GRAPH_RANGE_MIN_Y = -3
+export const WALLPAPER_EASING_GRAPH_RANGE_MAX_Y = 3
+const WALLPAPER_EASING_PREVIEW_GRAPH_WIDTH = 112
+const WALLPAPER_EASING_PREVIEW_GRAPH_HEIGHT = 56
+const WALLPAPER_EASING_PREVIEW_GRAPH_PADDING_X = 8
+const WALLPAPER_EASING_PREVIEW_GRAPH_PADDING_Y = 6
+const WALLPAPER_EASING_PREVIEW_GRAPH_SAMPLES = 28
 
 // Clamp graph input values to the editable easing range.
 function clampWallpaperEasingGraphValue(value: number, min: number, max: number) {
@@ -54,6 +69,18 @@ function unmapWallpaperEasingGraphY(value: number) {
   )
 }
 
+// Convert one browser pointer event into SVG graph coordinates.
+function getWallpaperEasingGraphPointerPosition(event: { clientX: number, clientY: number }, svgElement: SVGSVGElement) {
+  const rect = svgElement.getBoundingClientRect()
+  const scaleX = GRAPH_VIEWBOX_SIZE / Math.max(rect.width, 1)
+  const scaleY = GRAPH_VIEWBOX_SIZE / Math.max(rect.height, 1)
+
+  return {
+    x: (event.clientX - rect.left) * scaleX,
+    y: (event.clientY - rect.top) * scaleY,
+  }
+}
+
 // Describe the currently selected preview mode.
 function getWallpaperEasingPreviewMeta(kind: WallpaperEasingPreviewKind) {
   switch (kind) {
@@ -76,6 +103,140 @@ function getWallpaperEasingPreviewMeta(kind: WallpaperEasingPreviewKind) {
   }
 }
 
+// Evaluate one cubic-bezier component at a normalized parameter value.
+function evaluateWallpaperBezierComponent(p1: number, p2: number, time: number) {
+  const inverseTime = 1 - time
+  return (3 * inverseTime * inverseTime * time * p1) + (3 * inverseTime * time * time * p2) + (time * time * time)
+}
+
+// Solve one cubic-bezier timing curve into a graph Y value at the requested time.
+function evaluateWallpaperBezierEasingAtTime(points: WallpaperBezierControlPoints, time: number) {
+  let lowerBound = 0
+  let upperBound = 1
+
+  for (let iteration = 0; iteration < 18; iteration += 1) {
+    const parameter = (lowerBound + upperBound) / 2
+    const x = evaluateWallpaperBezierComponent(points.x1, points.x2, parameter)
+    if (x < time) {
+      lowerBound = parameter
+    }
+    else {
+      upperBound = parameter
+    }
+  }
+
+  return evaluateWallpaperBezierComponent(points.y1, points.y2, (lowerBound + upperBound) / 2)
+}
+
+// Sample one bounce easing curve for the compact preview graph.
+function evaluateWallpaperBounceEasingAtTime(time: number) {
+  const bounceFactor = 7.5625
+  const bounceStep = 2.75
+
+  if (time < 1 / bounceStep) {
+    return bounceFactor * time * time
+  }
+
+  if (time < 2 / bounceStep) {
+    const shifted = time - (1.5 / bounceStep)
+    return (bounceFactor * shifted * shifted) + 0.75
+  }
+
+  if (time < 2.5 / bounceStep) {
+    const shifted = time - (2.25 / bounceStep)
+    return (bounceFactor * shifted * shifted) + 0.9375
+  }
+
+  const shifted = time - (2.625 / bounceStep)
+  return (bounceFactor * shifted * shifted) + 0.984375
+}
+
+// Build sampled graph points for one easing preview thumbnail.
+function sampleWallpaperEasingPreviewPoints(easing: WallpaperAnimationEasing | undefined) {
+  const normalizedEasing = normalizeWallpaperAnimationEasing(easing)
+  const presetBezier = isWallpaperAnimationEasingPreset(normalizedEasing)
+    ? getWallpaperPresetBezierControlPoints(normalizedEasing)
+    : null
+  const customBezier = parseWallpaperCubicBezierEasing(normalizedEasing)
+  const bezierPoints = customBezier ?? presetBezier
+
+  return Array.from({ length: WALLPAPER_EASING_PREVIEW_GRAPH_SAMPLES }, (_, index) => {
+    const time = index / (WALLPAPER_EASING_PREVIEW_GRAPH_SAMPLES - 1)
+    const value = normalizedEasing === 'easeOutBounce'
+      ? evaluateWallpaperBounceEasingAtTime(time)
+      : bezierPoints
+        ? evaluateWallpaperBezierEasingAtTime(bezierPoints, time)
+        : time
+
+    return { x: time, y: value }
+  })
+}
+
+// Build the graph path and viewport range for one compact easing preview.
+function buildWallpaperEasingPreviewGraph(points: Array<{ x: number, y: number }>) {
+  const minSampleY = Math.min(0, ...points.map((point) => point.y))
+  const maxSampleY = Math.max(1, ...points.map((point) => point.y))
+  const verticalPadding = Math.max((maxSampleY - minSampleY) * 0.14, 0.08)
+  const minY = minSampleY - verticalPadding
+  const maxY = maxSampleY + verticalPadding
+  const rangeY = Math.max(maxY - minY, 0.001)
+  const width = WALLPAPER_EASING_PREVIEW_GRAPH_WIDTH
+  const height = WALLPAPER_EASING_PREVIEW_GRAPH_HEIGHT
+
+  const mapX = (value: number) => WALLPAPER_EASING_PREVIEW_GRAPH_PADDING_X + (value * (width - (WALLPAPER_EASING_PREVIEW_GRAPH_PADDING_X * 2)))
+  const mapY = (value: number) => {
+    const normalized = (value - minY) / rangeY
+    return height - WALLPAPER_EASING_PREVIEW_GRAPH_PADDING_Y - (normalized * (height - (WALLPAPER_EASING_PREVIEW_GRAPH_PADDING_Y * 2)))
+  }
+
+  return {
+    width,
+    height,
+    baselinePath: `M ${mapX(0)} ${mapY(0)} L ${mapX(1)} ${mapY(1)}`,
+    pathData: points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${mapX(point.x)} ${mapY(point.y)}`).join(' '),
+    horizontalGuideY: mapY(1),
+  }
+}
+
+// Render a compact graph preview for one easing value.
+export function WallpaperEasingGraphPreview({ easing, className }: { easing: WallpaperAnimationEasing | undefined, className?: string }) {
+  const graph = useMemo(
+    () => buildWallpaperEasingPreviewGraph(sampleWallpaperEasingPreviewPoints(easing)),
+    [easing],
+  )
+
+  return (
+    <svg
+      viewBox={`0 0 ${graph.width} ${graph.height}`}
+      aria-hidden="true"
+      className={cn('block h-12 w-full', className)}
+    >
+      <line
+        x1={WALLPAPER_EASING_PREVIEW_GRAPH_PADDING_X}
+        y1={graph.horizontalGuideY}
+        x2={graph.width - WALLPAPER_EASING_PREVIEW_GRAPH_PADDING_X}
+        y2={graph.horizontalGuideY}
+        stroke="color-mix(in srgb, var(--border) 72%, transparent)"
+        strokeWidth="1"
+      />
+      <path
+        d={graph.baselinePath}
+        stroke="color-mix(in srgb, var(--muted-foreground) 46%, transparent)"
+        strokeWidth="1.5"
+        strokeDasharray="4 4"
+        fill="none"
+      />
+      <path
+        d={graph.pathData}
+        stroke="var(--primary)"
+        strokeWidth="2.75"
+        strokeLinecap="round"
+        fill="none"
+      />
+    </svg>
+  )
+}
+
 // Render the editable cubic-bezier graph with draggable control points.
 export function WallpaperEasingGraph({
   value,
@@ -85,29 +246,41 @@ export function WallpaperEasingGraph({
   onChange: (value: WallpaperBezierControlPoints) => void
 }) {
   const graphRef = useRef<SVGSVGElement | null>(null)
-  const [dragHandle, setDragHandle] = useState<'p1' | 'p2' | null>(null)
+  const [dragState, setDragState] = useState<{
+    handle: 'p1' | 'p2'
+    pointerId: number
+    offsetX: number
+    offsetY: number
+  } | null>(null)
 
   useEffect(() => {
-    if (!dragHandle) {
+    if (!dragState) {
       return
     }
 
     const handlePointerMove = (event: PointerEvent) => {
-      const rect = graphRef.current?.getBoundingClientRect()
-      if (!rect) {
+      if (event.pointerId !== dragState.pointerId) {
         return
       }
 
-      const nextX = unmapWallpaperEasingGraphX(event.clientX - rect.left)
-      const nextY = unmapWallpaperEasingGraphY(event.clientY - rect.top)
+      const svgElement = graphRef.current
+      if (!svgElement) {
+        return
+      }
+
+      const pointerPosition = getWallpaperEasingGraphPointerPosition(event, svgElement)
+      const nextX = unmapWallpaperEasingGraphX(pointerPosition.x - dragState.offsetX)
+      const nextY = unmapWallpaperEasingGraphY(pointerPosition.y - dragState.offsetY)
       onChange({
         ...value,
-        ...(dragHandle === 'p1' ? { x1: nextX, y1: nextY } : { x2: nextX, y2: nextY }),
+        ...(dragState.handle === 'p1' ? { x1: nextX, y1: nextY } : { x2: nextX, y2: nextY }),
       })
     }
 
-    const stopDragging = () => {
-      setDragHandle(null)
+    const stopDragging = (event: PointerEvent) => {
+      if (event.pointerId === dragState.pointerId) {
+        setDragState(null)
+      }
     }
 
     window.addEventListener('pointermove', handlePointerMove)
@@ -116,7 +289,7 @@ export function WallpaperEasingGraph({
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', stopDragging)
     }
-  }, [dragHandle, onChange, value])
+  }, [dragState, onChange, value])
 
   const startPoint = { x: mapWallpaperEasingGraphX(0), y: mapWallpaperEasingGraphY(0) }
   const endPoint = { x: mapWallpaperEasingGraphX(1), y: mapWallpaperEasingGraphY(1) }
@@ -132,7 +305,7 @@ export function WallpaperEasingGraph({
       </div>
       <svg
         ref={graphRef}
-        viewBox={`0 0 ${GRAPH_SIZE + (GRAPH_PADDING * 2)} ${GRAPH_SIZE + (GRAPH_PADDING * 2)}`}
+        viewBox={`0 0 ${GRAPH_VIEWBOX_SIZE} ${GRAPH_VIEWBOX_SIZE}`}
         className="h-[352px] w-full rounded-sm border border-border bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_45%),var(--surface-low)]"
       >
         {[0, 0.25, 0.5, 0.75, 1].map((line) => {
@@ -170,10 +343,23 @@ export function WallpaperEasingGraph({
               cy={handle.point.y}
               r="18"
               fill="transparent"
-              className="cursor-grab active:cursor-grabbing"
+              className="cursor-grab touch-none active:cursor-grabbing"
               onPointerDown={(event) => {
                 event.preventDefault()
-                setDragHandle(handle.id as 'p1' | 'p2')
+                const svgElement = graphRef.current
+                if (!svgElement) {
+                  return
+                }
+
+                const pointerPosition = getWallpaperEasingGraphPointerPosition(event, svgElement)
+                const currentPoint = handle.id === 'p1' ? controlOne : controlTwo
+                event.currentTarget.setPointerCapture?.(event.pointerId)
+                setDragState({
+                  handle: handle.id as 'p1' | 'p2',
+                  pointerId: event.pointerId,
+                  offsetX: pointerPosition.x - currentPoint.x,
+                  offsetY: pointerPosition.y - currentPoint.y,
+                })
               }}
             />
             <text x={handle.point.x} y={handle.point.y - 24} textAnchor="middle" className="fill-foreground text-[11px] font-semibold">
@@ -280,15 +466,15 @@ function WallpaperEasingPreview({ easing, kind }: { easing: WallpaperAnimationEa
   }, [easingCss, kind, replayCount])
 
   return (
-    <div className="rounded-sm border border-border bg-surface-low p-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
+    <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <div className="text-xs font-medium text-foreground">{meta.title}</div>
           <div className="text-[11px] text-muted-foreground">{meta.description}</div>
         </div>
-        <button type="button" className="text-xs text-secondary hover:text-foreground" onClick={() => setReplayCount((current) => current + 1)}>
+        <Button type="button" size="xs" variant="ghost" onClick={() => setReplayCount((current) => current + 1)}>
           다시 재생
-        </button>
+        </Button>
       </div>
 
       <div className="relative h-28 overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_45%),var(--background)]">
@@ -348,23 +534,16 @@ export function WallpaperEasingPreviewPanel({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {([
-          ['transition', '전환'],
-          ['hover', '호버'],
-          ['motion', '모션'],
-        ] as const).map(([kind, label]) => (
-          <Button
-            key={kind}
-            type="button"
-            size="xs"
-            variant={activePreviewKind === kind ? 'default' : 'ghost'}
-            onClick={() => onChangePreviewKind(kind)}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
+      <SegmentedTabBar
+        value={activePreviewKind}
+        onChange={(nextValue) => onChangePreviewKind(nextValue as WallpaperEasingPreviewKind)}
+        size="sm"
+        items={[
+          { value: 'transition', label: '전환' },
+          { value: 'hover', label: '호버' },
+          { value: 'motion', label: '모션' },
+        ]}
+      />
 
       <WallpaperEasingPreview easing={easing} kind={activePreviewKind} />
       {extraContent}

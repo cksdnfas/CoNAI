@@ -177,18 +177,18 @@ export function parseWallpaperCubicBezierEasing(easing: string | undefined): Wal
 
   return {
     x1: clampWallpaperNumericIntensity(x1, 0, 1),
-    y1: clampWallpaperNumericIntensity(y1, -2, 2),
+    y1: clampWallpaperNumericIntensity(y1, -3, 3),
     x2: clampWallpaperNumericIntensity(x2, 0, 1),
-    y2: clampWallpaperNumericIntensity(y2, -2, 2),
+    y2: clampWallpaperNumericIntensity(y2, -3, 3),
   }
 }
 
 export function buildWallpaperCubicBezierEasing(points: WallpaperBezierControlPoints): WallpaperAnimationEasing {
   const normalizedPoints = {
     x1: clampWallpaperNumericIntensity(points.x1, 0, 1),
-    y1: clampWallpaperNumericIntensity(points.y1, -2, 2),
+    y1: clampWallpaperNumericIntensity(points.y1, -3, 3),
     x2: clampWallpaperNumericIntensity(points.x2, 0, 1),
-    y2: clampWallpaperNumericIntensity(points.y2, -2, 2),
+    y2: clampWallpaperNumericIntensity(points.y2, -3, 3),
   }
 
   return `cubic-bezier(${formatWallpaperBezierNumber(normalizedPoints.x1)}, ${formatWallpaperBezierNumber(normalizedPoints.y1)}, ${formatWallpaperBezierNumber(normalizedPoints.x2)}, ${formatWallpaperBezierNumber(normalizedPoints.y2)})`
