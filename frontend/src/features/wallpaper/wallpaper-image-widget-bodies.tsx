@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { formatDateTime, getArtifactPreviewUrl } from '@/features/module-graph/module-graph-shared'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -48,7 +49,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
       .flatMap((finalResult) => {
         claimedArtifactIds.add(finalResult.source_artifact_id)
         const artifact = buildWallpaperFinalResultArtifact(finalResult)
-        if (artifact.artifact_type !== 'image' && artifact.artifact_type !== 'mask') {
+        if (artifact.artifact_type !== 'image') {
           return []
         }
 
@@ -76,7 +77,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
     const artifactEntries = [...browseContent.artifacts]
       .sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
       .flatMap((artifact) => {
-        if (claimedArtifactIds.has(artifact.id) || (artifact.artifact_type !== 'image' && artifact.artifact_type !== 'mask')) {
+        if (claimedArtifactIds.has(artifact.id) || artifact.artifact_type !== 'image') {
           return []
         }
 
@@ -133,35 +134,56 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
           const opacity = Math.max(0.28, 1 - order * 0.18)
           const rotate = (order % 2 === 0 ? -1 : 1) * order * 1.8
           const isFront = order === 0
-
-          return (
-            <WallpaperPreviewImageSurface
-              key={`recent-stack-slot-${order}`}
-              image={entry.previewImage}
-              alt={entry.workflowName}
-              onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
-              transitionStyle={imageTransitionStyle}
-              transitionSpeed={imageTransitionSpeed}
-              transitionEasing={imageTransitionEasing}
-              hoverMotion={imageHoverMotion}
-              hoverEasing={hoverEasing}
-              className="absolute inset-0 overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-all duration-[1600ms] ease-out"
-              imageClassName="h-full w-full object-cover"
-              style={{
-                inset: `${offsetY}px ${offsetX}px ${Math.max(0, offsetY * 0.4)}px ${Math.max(0, offsetX * 0.35)}px`,
-                transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${scale})`,
-                opacity,
-                zIndex: 100 - order,
-              }}
-            >
-              <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
+          const cardStyle = {
+            inset: `${offsetY}px ${offsetX}px ${Math.max(0, offsetY * 0.4)}px ${Math.max(0, offsetX * 0.35)}px`,
+            transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${scale})`,
+            opacity,
+            zIndex: 100 - order,
+          }
+          const cardContent = (
+            <>
+              <ImagePreviewMedia
+                image={entry.previewImage}
+                alt={entry.workflowName}
+                className="absolute inset-0 h-full w-full object-cover"
+                loading="lazy"
+                draggable={false}
+              />
+              <div className="absolute inset-x-0 bottom-0 z-[1] bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
                 <div className="truncate text-xs font-medium text-white">{entry.workflowName}</div>
                 <div className="mt-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.16em] text-white/78">
                   <span>{entry.badge}</span>
                   <span className="truncate">{isFront ? entry.createdLabel : `-${order}`}</span>
                 </div>
               </div>
-            </WallpaperPreviewImageSurface>
+            </>
+          )
+
+          if (mode === 'runtime' && onOpenImage) {
+            return (
+              <button
+                key={entry.id}
+                type="button"
+                className="absolute inset-0 block overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-all duration-[1600ms] ease-out"
+                style={cardStyle}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onOpenImage({ image: entry.previewImage, alt: entry.workflowName })
+                }}
+              >
+                {cardContent}
+              </button>
+            )
+          }
+
+          return (
+            <div
+              key={entry.id}
+              className="absolute inset-0 overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-all duration-[1600ms] ease-out"
+              style={cardStyle}
+            >
+              {cardContent}
+            </div>
           )
         })}
 

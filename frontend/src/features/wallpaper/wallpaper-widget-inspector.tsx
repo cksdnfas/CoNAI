@@ -1,9 +1,12 @@
 import { Select } from '@/components/ui/select'
 import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { cn } from '@/lib/utils'
-import { getWallpaperWidgetDefinition } from './wallpaper-widget-registry'
+import {
+  WallpaperInspectorDisclosure,
+  WallpaperInspectorSectionCard,
+} from './wallpaper-widget-inspector-editor-shared'
 import { WallpaperWidgetTypeEditorFields } from './wallpaper-widget-inspector-editors'
-import { isWallpaperGroupSourceWidget, isWallpaperTextNoteWidget, type WallpaperWidgetInstance } from './wallpaper-types'
+import { isWallpaperGroupSourceWidget, type WallpaperWidgetInstance } from './wallpaper-types'
 
 interface WallpaperWidgetInspectorPatch {
   x?: number
@@ -42,13 +45,10 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
   }
 
   const isGroupSourceWidget = isWallpaperGroupSourceWidget(selectedWidget)
-  const hasBehaviorSection = !isWallpaperTextNoteWidget(selectedWidget)
 
   return (
-    <>
-      <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-        <div className="text-sm font-medium text-foreground">{getWallpaperWidgetDefinition(selectedWidget.type).title}</div>
-        <div className="pt-1 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">기본</div>
+    <div className="space-y-3">
+      <WallpaperInspectorSectionCard title="기본">
         <SettingsField label="제목">
           <input
             className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary"
@@ -89,52 +89,57 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
           </>
         ) : null}
 
-        {hasBehaviorSection ? <div className="pt-1 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">동작</div> : null}
-        <WallpaperWidgetTypeEditorFields selectedWidget={selectedWidget} updateWidgetSettings={updateWidgetSettings} />
+        <WallpaperInspectorDisclosure
+          title="표시"
+          defaultOpen={false}
+        >
+          <SettingsToggleRow>
+            <span className="flex-1">제목 표시</span>
+            <input
+              type="checkbox"
+              checked={selectedWidget.settings.showTitle === true}
+              onChange={(event) => {
+                updateWidgetSettings({ showTitle: event.target.checked })
+              }}
+            />
+          </SettingsToggleRow>
 
-        <div className="pt-1 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">표시</div>
+          <SettingsToggleRow>
+            <span className="flex-1">배경 표시</span>
+            <input
+              type="checkbox"
+              checked={selectedWidget.settings.showBackground === true}
+              onChange={(event) => {
+                updateWidgetSettings({ showBackground: event.target.checked })
+              }}
+            />
+          </SettingsToggleRow>
 
-        <SettingsToggleRow>
-          <span className="flex-1">제목 표시</span>
-          <input
-            type="checkbox"
-            checked={selectedWidget.settings.showTitle === true}
-            onChange={(event) => {
-              updateWidgetSettings({ showTitle: event.target.checked })
-            }}
-          />
-        </SettingsToggleRow>
-        <SettingsToggleRow>
-          <span className="flex-1">배경 표시</span>
-          <input
-            type="checkbox"
-            checked={selectedWidget.settings.showBackground === true}
-            onChange={(event) => {
-              updateWidgetSettings({ showBackground: event.target.checked })
-            }}
-          />
-        </SettingsToggleRow>
-        <SettingsToggleRow>
-          <span className="flex-1">위젯 숨김</span>
-          <input
-            type="checkbox"
-            checked={selectedWidget.hidden}
-            onChange={(event) => {
-              onPatchWidget(selectedWidget.id, { hidden: event.target.checked })
-            }}
-          />
-        </SettingsToggleRow>
-        <SettingsToggleRow>
-          <span className="flex-1">위젯 잠금</span>
-          <input
-            type="checkbox"
-            checked={selectedWidget.locked}
-            onChange={(event) => {
-              onPatchWidget(selectedWidget.id, { locked: event.target.checked })
-            }}
-          />
-        </SettingsToggleRow>
-      </div>
-    </>
+          <SettingsToggleRow>
+            <span className="flex-1">위젯 숨김</span>
+            <input
+              type="checkbox"
+              checked={selectedWidget.hidden}
+              onChange={(event) => {
+                onPatchWidget(selectedWidget.id, { hidden: event.target.checked })
+              }}
+            />
+          </SettingsToggleRow>
+
+          <SettingsToggleRow>
+            <span className="flex-1">위젯 잠금</span>
+            <input
+              type="checkbox"
+              checked={selectedWidget.locked}
+              onChange={(event) => {
+                onPatchWidget(selectedWidget.id, { locked: event.target.checked })
+              }}
+            />
+          </SettingsToggleRow>
+        </WallpaperInspectorDisclosure>
+      </WallpaperInspectorSectionCard>
+
+      <WallpaperWidgetTypeEditorFields selectedWidget={selectedWidget} updateWidgetSettings={updateWidgetSettings} />
+    </div>
   )
 }

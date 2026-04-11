@@ -1,15 +1,15 @@
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { SettingsField } from '@/features/settings/components/settings-primitives'
-import { WallpaperEasingPicker } from './wallpaper-easing-picker'
 import {
+  WallpaperInspectorSectionCard,
   WallpaperHoverInteractionEditorFields,
-  WallpaperInspectorSubsectionLabel,
   clampWallpaperInspectorNumber,
   type WallpaperWidgetSettingsPatchUpdater,
 } from './wallpaper-widget-inspector-editor-shared'
 import type { WallpaperWidgetInstance } from './wallpaper-types'
-import { getWallpaperMotionStrengthMultiplier } from './wallpaper-widget-utils'
+import { WallpaperEasingPicker } from './wallpaper-easing-picker'
+import { getWallpaperImageTransitionDurationMs, getWallpaperMotionStrengthMultiplier } from './wallpaper-widget-utils'
 
 type WallpaperStatusWidgetInstance = Extract<WallpaperWidgetInstance, { type: 'queue-status' | 'recent-results' | 'activity-pulse' }>
 
@@ -26,8 +26,8 @@ export function WallpaperStatusWidgetEditorFields({
   switch (selectedWidget.type) {
     case 'queue-status':
       return (
-        <>
-          <SettingsField label="새로고침">
+        <WallpaperInspectorSectionCard title="데이터">
+          <SettingsField label="데이터 새로고침">
             <Select
               value={String(selectedWidget.settings.refreshIntervalSec)}
               onChange={(event) => {
@@ -54,145 +54,161 @@ export function WallpaperStatusWidgetEditorFields({
               <option value="rings">링</option>
             </Select>
           </SettingsField>
-        </>
+        </WallpaperInspectorSectionCard>
       )
 
     case 'recent-results':
       return (
         <>
-          <WallpaperInspectorSubsectionLabel label="레이아웃" />
-          <SettingsField label="새로고침">
-            <Select
-              value={String(selectedWidget.settings.refreshIntervalSec)}
-              onChange={(event) => {
-                updateWidgetSettings({ refreshIntervalSec: Number(event.target.value) })
-              }}
-            >
-              {[5, 10, 15, 30, 60].map((seconds) => (
-                <option key={seconds} value={seconds}>{seconds}s</option>
-              ))}
-            </Select>
-          </SettingsField>
+          <WallpaperInspectorSectionCard title="레이아웃">
+            <SettingsField label="데이터 새로고침">
+              <Select
+                value={String(selectedWidget.settings.refreshIntervalSec)}
+                onChange={(event) => {
+                  updateWidgetSettings({ refreshIntervalSec: Number(event.target.value) })
+                }}
+              >
+                {[5, 10, 15, 30, 60].map((seconds) => (
+                  <option key={seconds} value={seconds}>{seconds}s</option>
+                ))}
+              </Select>
+            </SettingsField>
 
-          <SettingsField label="배치">
-            <Select
-              value={selectedWidget.settings.displayMode ?? 'grid'}
-              onChange={(event) => {
-                updateWidgetSettings({ displayMode: event.target.value === 'stack' ? 'stack' : 'grid' })
-              }}
-            >
-              <option value="grid">그리드</option>
-              <option value="stack">스택</option>
-            </Select>
-          </SettingsField>
+            <SettingsField label="배치">
+              <Select
+                value={selectedWidget.settings.displayMode ?? 'grid'}
+                onChange={(event) => {
+                  updateWidgetSettings({ displayMode: event.target.value === 'stack' ? 'stack' : 'grid' })
+                }}
+              >
+                <option value="grid">그리드</option>
+                <option value="stack">스택</option>
+              </Select>
+            </SettingsField>
 
-          <SettingsField label="표시 개수">
-            <Select
-              value={String(selectedWidget.settings.visibleCount)}
-              onChange={(event) => {
-                updateWidgetSettings({ visibleCount: Number(event.target.value) })
-              }}
-            >
-              {[1, 2, 3, 4, 6].map((count) => (
-                <option key={count} value={count}>{count}</option>
-              ))}
-            </Select>
-          </SettingsField>
+            <SettingsField label="표시 개수">
+              <Select
+                value={String(selectedWidget.settings.visibleCount)}
+                onChange={(event) => {
+                  updateWidgetSettings({ visibleCount: Number(event.target.value) })
+                }}
+              >
+                {[1, 2, 3, 4, 6].map((count) => (
+                  <option key={count} value={count}>{count}</option>
+                ))}
+              </Select>
+            </SettingsField>
+          </WallpaperInspectorSectionCard>
 
-          <WallpaperInspectorSubsectionLabel label="전환" />
-          <SettingsField label="전환 간격">
-            <Select
-              value={String(selectedWidget.settings.shiftIntervalSec ?? 8)}
-              onChange={(event) => {
-                updateWidgetSettings({ shiftIntervalSec: Number(event.target.value) })
-              }}
-            >
-              {[4, 6, 8, 12, 16].map((seconds) => (
-                <option key={seconds} value={seconds}>{seconds}s</option>
-              ))}
-            </Select>
-          </SettingsField>
+          <WallpaperInspectorSectionCard title="전환">
+            <SettingsField label="전환 애니메이션">
+              <WallpaperEasingPicker
+                value={selectedWidget.settings.imageTransitionEasing}
+                fallbackPreset="easeOutCubic"
+                previewKind="transition"
+                summary={`간격 ${selectedWidget.settings.shiftIntervalSec ?? 8}s · 속도 ${selectedWidget.settings.imageTransitionSpeed ?? 'normal'} · ${getWallpaperImageTransitionDurationMs(selectedWidget.settings.imageTransitionSpeed)}ms`}
+                previewConfig={{
+                  transitionStyle: selectedWidget.settings.imageTransitionStyle ?? 'zoom',
+                  transitionDurationMs: getWallpaperImageTransitionDurationMs(selectedWidget.settings.imageTransitionSpeed),
+                }}
+                editorContent={(
+                  <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
+                    <div className="mb-2 space-y-1">
+                      <div className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">전환 옵션</div>
+                      <div className="text-[11px] leading-5 text-muted-foreground">이 모달 안에서 전환 간격, 방식, 속도를 같이 조정하고 바로 미리보기로 판단해.</div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <SettingsField label="화면 전환 간격">
+                        <Select
+                          value={String(selectedWidget.settings.shiftIntervalSec ?? 8)}
+                          onChange={(event) => {
+                            updateWidgetSettings({ shiftIntervalSec: Number(event.target.value) })
+                          }}
+                        >
+                          {[4, 6, 8, 12, 16].map((seconds) => (
+                            <option key={seconds} value={seconds}>{seconds}s</option>
+                          ))}
+                        </Select>
+                      </SettingsField>
 
-          <SettingsField label="전환">
-            <Select
-              value={selectedWidget.settings.imageTransitionStyle ?? 'zoom'}
-              onChange={(event) => {
-                updateWidgetSettings({
-                  imageTransitionStyle: event.target.value === 'none'
-                    ? 'none'
-                    : event.target.value === 'fade'
-                      ? 'fade'
-                      : event.target.value === 'slide'
-                        ? 'slide'
-                        : event.target.value === 'blur'
-                          ? 'blur'
-                          : event.target.value === 'flip'
-                            ? 'flip'
-                            : event.target.value === 'shuffle'
-                              ? 'shuffle'
-                              : 'zoom',
-                })
-              }}
-            >
-              <option value="zoom">줌</option>
-              <option value="fade">페이드</option>
-              <option value="slide">슬라이드</option>
-              <option value="blur">블러</option>
-              <option value="flip">플립</option>
-              <option value="shuffle">셔플</option>
-              <option value="none">없음</option>
-            </Select>
-          </SettingsField>
+                      <SettingsField label="전환">
+                        <Select
+                          value={selectedWidget.settings.imageTransitionStyle ?? 'zoom'}
+                          onChange={(event) => {
+                            updateWidgetSettings({
+                              imageTransitionStyle: event.target.value === 'none'
+                                ? 'none'
+                                : event.target.value === 'fade'
+                                  ? 'fade'
+                                  : event.target.value === 'slide'
+                                    ? 'slide'
+                                    : event.target.value === 'blur'
+                                      ? 'blur'
+                                      : event.target.value === 'flip'
+                                        ? 'flip'
+                                        : event.target.value === 'shuffle'
+                                          ? 'shuffle'
+                                          : 'zoom',
+                            })
+                          }}
+                        >
+                          <option value="zoom">줌</option>
+                          <option value="fade">페이드</option>
+                          <option value="slide">슬라이드</option>
+                          <option value="blur">블러</option>
+                          <option value="flip">플립</option>
+                          <option value="shuffle">셔플</option>
+                          <option value="none">없음</option>
+                        </Select>
+                      </SettingsField>
 
-          <SettingsField label="속도">
-            <Select
-              value={selectedWidget.settings.imageTransitionSpeed ?? 'normal'}
-              onChange={(event) => {
-                updateWidgetSettings({
-                  imageTransitionSpeed: event.target.value === 'fast'
-                    ? 'fast'
-                    : event.target.value === 'slow'
-                      ? 'slow'
-                      : 'normal',
-                })
-              }}
-            >
-              <option value="fast">빠름</option>
-              <option value="normal">보통</option>
-              <option value="slow">느림</option>
-            </Select>
-          </SettingsField>
+                      <SettingsField label="속도">
+                        <Select
+                          value={selectedWidget.settings.imageTransitionSpeed ?? 'normal'}
+                          onChange={(event) => {
+                            updateWidgetSettings({
+                              imageTransitionSpeed: event.target.value === 'fast'
+                                ? 'fast'
+                                : event.target.value === 'slow'
+                                  ? 'slow'
+                                  : 'normal',
+                            })
+                          }}
+                        >
+                          <option value="fast">빠름</option>
+                          <option value="normal">보통</option>
+                          <option value="slow">느림</option>
+                        </Select>
+                      </SettingsField>
+                    </div>
+                  </div>
+                )}
+                onChange={(nextValue) => {
+                  updateWidgetSettings({ imageTransitionEasing: nextValue })
+                }}
+              />
+            </SettingsField>
+          </WallpaperInspectorSectionCard>
 
-          <SettingsField label="전환 이징">
-            <WallpaperEasingPicker
-              value={selectedWidget.settings.imageTransitionEasing}
-              fallbackPreset="easeOutCubic"
-              previewKind="transition"
-              onChange={(nextValue) => {
-                updateWidgetSettings({ imageTransitionEasing: nextValue })
+          <WallpaperInspectorSectionCard title="상호작용">
+            <WallpaperHoverInteractionEditorFields
+              hoverMotion={selectedWidget.settings.imageHoverMotion}
+              hoverEasing={selectedWidget.settings.hoverEasing}
+              onHoverMotionChange={(nextValue) => {
+                updateWidgetSettings({ imageHoverMotion: nextValue })
+              }}
+              onHoverEasingChange={(nextValue) => {
+                updateWidgetSettings({ hoverEasing: nextValue })
               }}
             />
-          </SettingsField>
-
-          <WallpaperInspectorSubsectionLabel label="상호작용" />
-          <WallpaperHoverInteractionEditorFields
-            hoverMotion={selectedWidget.settings.imageHoverMotion}
-            hoverEasing={selectedWidget.settings.hoverEasing}
-            onHoverMotionChange={(nextValue) => {
-              updateWidgetSettings({ imageHoverMotion: nextValue })
-            }}
-            onHoverEasingChange={(nextValue) => {
-              updateWidgetSettings({ hoverEasing: nextValue })
-            }}
-          />
+          </WallpaperInspectorSectionCard>
         </>
       )
 
     case 'activity-pulse':
       return (
-        <>
-          <WallpaperInspectorSubsectionLabel label="모션" />
-          <SettingsField label="새로고침">
+        <WallpaperInspectorSectionCard title="모션">
+          <SettingsField label="데이터 새로고침">
             <Select
               value={String(selectedWidget.settings.refreshIntervalSec)}
               onChange={(event) => {
@@ -235,7 +251,7 @@ export function WallpaperStatusWidgetEditorFields({
               }}
             />
           </SettingsField>
-        </>
+        </WallpaperInspectorSectionCard>
       )
 
     default:

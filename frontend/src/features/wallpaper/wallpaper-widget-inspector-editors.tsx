@@ -1,7 +1,10 @@
 import { Select } from '@/components/ui/select'
 import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import {
+  WallpaperInspectorSectionCard,
+  type WallpaperWidgetSettingsPatchUpdater,
+} from './wallpaper-widget-inspector-editor-shared'
 import { WallpaperImageWidgetEditorFields } from './wallpaper-widget-inspector-image-editor-fields'
-import type { WallpaperWidgetSettingsPatchUpdater } from './wallpaper-widget-inspector-editor-shared'
 import { WallpaperStatusWidgetEditorFields } from './wallpaper-widget-inspector-status-editor-fields'
 import type { WallpaperWidgetInstance } from './wallpaper-types'
 
@@ -15,7 +18,7 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSe
   switch (selectedWidget.type) {
     case 'clock':
       return (
-        <>
+        <WallpaperInspectorSectionCard title="시계">
           <SettingsField label="스타일">
             <Select
               value={selectedWidget.settings.visualStyle ?? 'minimal'}
@@ -53,20 +56,22 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSe
               }}
             />
           </SettingsToggleRow>
-        </>
+        </WallpaperInspectorSectionCard>
       )
 
     case 'text-note':
       return (
-        <SettingsField label="내용">
-          <textarea
-            className="theme-settings-control min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
-            value={selectedWidget.settings.text}
-            onChange={(event) => {
-              updateWidgetSettings({ text: event.target.value })
-            }}
-          />
-        </SettingsField>
+        <WallpaperInspectorSectionCard title="내용">
+          <SettingsField label="내용">
+            <textarea
+              className="theme-settings-control min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
+              value={selectedWidget.settings.text}
+              onChange={(event) => {
+                updateWidgetSettings({ text: event.target.value })
+              }}
+            />
+          </SettingsField>
+        </WallpaperInspectorSectionCard>
       )
 
     case 'queue-status':

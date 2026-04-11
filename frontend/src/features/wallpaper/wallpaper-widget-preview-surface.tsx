@@ -12,14 +12,9 @@ import type {
 } from './wallpaper-types'
 import {
   getWallpaperAnimationEasingCss,
-  getWallpaperHoverMotionAmount,
+  getWallpaperImageTransitionDurationMs,
+  resolveWallpaperHoverMotionMetrics,
 } from './wallpaper-widget-utils'
-
-const WALLPAPER_IMAGE_TRANSITION_DURATIONS: Record<WallpaperImageTransitionSpeed, number> = {
-  fast: 220,
-  normal: 340,
-  slow: 520,
-}
 
 export interface WallpaperWidgetPreviewImage {
   image: ImageRecord
@@ -111,19 +106,6 @@ function getWallpaperTransitionStateClassName(transitionStyle: WallpaperImageTra
   return isTransitionActive ? 'opacity-0 scale-[1.08] translate-y-[-2%] blur-[6px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
 }
 
-function resolveWallpaperHoverMotionMetrics(hoverMotion: WallpaperImageHoverMotion) {
-  const intensity = getWallpaperHoverMotionAmount(hoverMotion)
-
-  return {
-    intensity,
-    surfaceScale: 1 + (intensity * 0.018),
-    imageScale: 1 + (intensity * 0.03),
-    surfaceShadow: intensity <= 0
-      ? 'none'
-      : `0 ${Math.round(10 + intensity * 7)}px ${Math.round(26 + intensity * 18)}px rgba(0,0,0,${(0.14 + intensity * 0.07).toFixed(3)})`,
-  }
-}
-
 /** Render one optionally clickable wallpaper image surface. */
 export function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal', transitionEasing = 'easeOutCubic', hoverMotion = 1, hoverEasing = 'easeOutCubic' }: WallpaperPreviewImageSurfaceProps) {
   const [currentImage, setCurrentImage] = useState<WallpaperWidgetPreviewImage>({ image, alt })
@@ -132,7 +114,7 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
   const [isHovered, setIsHovered] = useState(false)
   const currentImageRef = useRef<WallpaperWidgetPreviewImage>({ image, alt })
   const transitionTimeoutRef = useRef<number | null>(null)
-  const transitionDurationMs = WALLPAPER_IMAGE_TRANSITION_DURATIONS[transitionSpeed]
+  const transitionDurationMs = getWallpaperImageTransitionDurationMs(transitionSpeed)
   const transitionTimingFunction = useMemo(() => getWallpaperAnimationEasingCss(transitionEasing), [transitionEasing])
   const hoverTimingFunction = useMemo(() => getWallpaperAnimationEasingCss(hoverEasing), [hoverEasing])
   const hoverMetrics = useMemo(() => resolveWallpaperHoverMotionMetrics(hoverMotion), [hoverMotion])
@@ -180,6 +162,12 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
     })
   }, [alt, image, transitionDurationMs, transitionStyle])
 
+  const baseSurfaceZIndex = typeof style?.zIndex === 'number'
+    ? style.zIndex
+    : typeof style?.zIndex === 'string'
+      ? Number(style.zIndex)
+      : null
+  const raisedSurfaceZIndex = Number.isFinite(baseSurfaceZIndex) ? Number(baseSurfaceZIndex) + 1000 : 1000
   const imageLayerStyle = {
     transitionDuration: `${transitionDurationMs}ms`,
     transitionTimingFunction,
@@ -193,14 +181,17 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
         transitionTimingFunction: hoverTimingFunction,
       }
     : undefined
-  const surfaceStyle = onOpenImage
-    ? {
-        ...style,
-        transform: isHovered ? `scale(${hoverMetrics.surfaceScale})` : 'scale(1)',
-        boxShadow: isHovered ? hoverMetrics.surfaceShadow : 'none',
-        transitionTimingFunction: hoverTimingFunction,
-      }
-    : style
+  const surfaceStyle = {
+    ...style,
+    ...(onOpenImage
+      ? {
+          transform: isHovered ? `scale(${hoverMetrics.surfaceScale})` : 'scale(1)',
+          boxShadow: isHovered ? hoverMetrics.surfaceShadow : 'none',
+          transitionTimingFunction: hoverTimingFunction,
+        }
+      : null),
+    zIndex: isHovered ? raisedSurfaceZIndex : style?.zIndex,
+  }
 
   const imageLayers = (
     <div className="absolute inset-0 will-change-transform" style={imageLayerWrapperStyle}>
@@ -235,7 +226,16 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
 
   if (!onOpenImage) {
     return (
-      <div className={cn(className, 'relative isolate')} style={style}>
+      <div
+        className={cn(className, 'relative isolate')}
+        style={surfaceStyle}
+        onPointerEnter={() => {
+          setIsHovered(true)
+        }}
+        onPointerLeave={() => {
+          setIsHovered(false)
+        }}
+      >
         {imageLayers}
         {children}
       </div>
