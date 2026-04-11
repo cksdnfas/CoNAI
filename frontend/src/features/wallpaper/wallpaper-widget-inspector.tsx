@@ -116,6 +116,17 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
           </SettingsToggleRow>
 
           <SettingsToggleRow>
+            <span className="flex-1">경계선 표시</span>
+            <input
+              type="checkbox"
+              checked={selectedWidget.settings.showBorder === true}
+              onChange={(event) => {
+                updateWidgetSettings({ showBorder: event.target.checked })
+              }}
+            />
+          </SettingsToggleRow>
+
+          <SettingsToggleRow>
             <span className="flex-1">위젯 숨김</span>
             <input
               type="checkbox"

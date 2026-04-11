@@ -24,6 +24,7 @@ export interface WallpaperBaseWidgetSettings {
   title: string
   showTitle: boolean
   showBackground: boolean
+  showBorder?: boolean
   opacity?: number
 }
 
@@ -57,6 +58,7 @@ export interface WallpaperRecentResultsWidgetSettings extends WallpaperBaseWidge
   shiftIntervalSec: number
   imageTransitionStyle: WallpaperImageTransitionStyle
   imageTransitionSpeed: WallpaperImageTransitionSpeed
+  imageTransitionDurationMs?: number
   imageTransitionEasing: WallpaperAnimationEasing
   imageHoverMotion: WallpaperImageHoverMotion
   hoverEasing: WallpaperAnimationEasing
@@ -80,6 +82,7 @@ export interface WallpaperGroupImageViewWidgetSettings extends WallpaperGroupSou
   motionEasing: WallpaperAnimationEasing
   imageTransitionStyle: WallpaperImageTransitionStyle
   imageTransitionSpeed: WallpaperImageTransitionSpeed
+  imageTransitionDurationMs?: number
   imageTransitionEasing: WallpaperAnimationEasing
   imageHoverMotion: WallpaperImageHoverMotion
   hoverEasing: WallpaperAnimationEasing
@@ -91,6 +94,7 @@ export interface WallpaperImageShowcaseWidgetSettings extends WallpaperGroupSour
   playbackMode: 'static' | 'carousel' | 'ken-burns'
   imageTransitionStyle: WallpaperImageTransitionStyle
   imageTransitionSpeed: WallpaperImageTransitionSpeed
+  imageTransitionDurationMs?: number
   imageTransitionEasing: WallpaperAnimationEasing
   imageHoverMotion: WallpaperImageHoverMotion
   hoverEasing: WallpaperAnimationEasing

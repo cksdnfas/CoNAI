@@ -98,6 +98,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, 
   const title = String(widget.settings.title ?? widget.type)
   const showTitle = widget.settings.showTitle === true
   const showBackground = widget.settings.showBackground === true
+  const showBorder = mode === 'runtime' && widget.settings.showBorder === true
   const opacity = typeof widget.settings.opacity === 'number' ? widget.settings.opacity : 1
 
   const cardClassName = cn(
@@ -108,13 +109,17 @@ function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, 
         ? 'cursor-default'
         : 'cursor-grab active:cursor-grabbing hover:border-secondary/70'
       : 'cursor-default',
-    isSelected ? 'border-secondary shadow-[0_0_0_1px_color-mix(in_srgb,var(--secondary)_22%,transparent)]' : 'border-border/70',
+    showBorder
+      ? isSelected
+        ? 'border-secondary shadow-[0_0_0_1px_color-mix(in_srgb,var(--secondary)_22%,transparent)]'
+        : 'border-border/70'
+      : 'border-transparent shadow-none',
   )
 
   const cardContent = (
     <>
       {showTitle ? (
-        <div className="border-b border-border/60 px-3 py-2 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">{title}</div>
+        <div className={cn('px-3 py-2 text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase', showBorder ? 'border-b border-border/60' : 'border-b-0')}>{title}</div>
       ) : null}
       <div className="min-h-0 flex-1 p-3">
         <WallpaperWidgetBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
