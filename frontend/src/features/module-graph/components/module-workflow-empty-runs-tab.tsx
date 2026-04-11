@@ -29,20 +29,22 @@ export function ModuleWorkflowEmptyRunsTab({
 }) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-base">Queue & Empty Runs</CardTitle>
-        <div className="flex items-center gap-2">
+      <CardHeader>
+        <div className="flex flex-row items-start justify-between gap-3">
+          <CardTitle className="min-w-0 flex-1 text-base">대기열 · 빈 실행</CardTitle>
+          <div className="flex items-center gap-2">
           <Badge variant="outline">{queueExecutions.length}</Badge>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={onToggleVisibleSelection}
-            disabled={queueExecutions.length === 0}
-          >
-            {allQueueSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-            {allQueueSelected ? 'Clear Visible' : 'Select Visible'}
-          </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onToggleVisibleSelection}
+              disabled={queueExecutions.length === 0}
+            >
+              {allQueueSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+              {allQueueSelected ? 'Clear Visible' : 'Select Visible'}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>

@@ -34,9 +34,9 @@ import { ModuleWorkflowEmptyRunsTab } from './module-workflow-empty-runs-tab'
 type BrowseTab = 'outputs' | 'artifacts' | 'queue'
 
 const BROWSE_TAB_ITEMS = [
-  { value: 'outputs', label: 'Generated Outputs' },
-  { value: 'artifacts', label: 'Text & Intermediate' },
-  { value: 'queue', label: 'Queue & Empty Runs' },
+  { value: 'outputs', label: '생성 결과' },
+  { value: 'artifacts', label: '텍스트 · 중간 산출물' },
+  { value: 'queue', label: '대기열 · 빈 실행' },
 ]
 
 /** Render folder/root-scoped workflow output management content inside browse mode. */
@@ -321,15 +321,10 @@ export function ModuleWorkflowOutputManagementPanel({
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader className="space-y-2">
+        <CardHeader>
           <CardTitle className="text-base">
-            {selectedFolderRecord ? `${selectedFolderRecord.name} · Generated Workflow Content` : 'Module Workflow Output Inbox'}
+            {selectedFolderRecord ? `${selectedFolderRecord.name} · 워크플로우 생성물` : '워크플로우 생성물'}
           </CardTitle>
-          <div className="text-sm text-muted-foreground">
-            {selectedFolderRecord
-              ? 'Browse generated outputs and cleanup targets produced by workflows in this folder subtree.'
-              : 'Browse recent generated outputs and cleanup targets across all workflow folders.'}
-          </div>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
@@ -428,8 +423,8 @@ export function ModuleWorkflowOutputManagementPanel({
           isDownloading={isDownloading}
           showDownloadAction
           statusText={downloadableSelectedItems.length > 0
-            ? `${downloadableSelectedItems.length.toLocaleString('ko-KR')}개 생성물을 바로 다운로드할 수 있어`
-            : '현재 선택에서 다운로드 가능한 생성물이 없어'}
+            ? `${downloadableSelectedItems.length.toLocaleString('ko-KR')}개 다운로드 가능`
+            : '다운로드 가능 항목 없음'}
           extraActions={(
             <Button
               size="sm"
@@ -450,7 +445,6 @@ export function ModuleWorkflowOutputManagementPanel({
         <SelectionActionBar
           selectedCount={selectedArtifacts.length}
           summary={`${selectedArtifacts.length.toLocaleString('ko-KR')}개 아티팩트 선택됨`}
-          description="텍스트 결과물, 메타데이터, 중간 산출물을 DB 기준으로 정리해."
           onClear={() => setSelectedArtifactIds([])}
           actions={(
             <Button

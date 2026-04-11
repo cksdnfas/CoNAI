@@ -52,32 +52,29 @@ export function ModuleWorkflowGeneratedOutputsTab({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-        <CardTitle className="text-base">Generated Outputs</CardTitle>
-        <div className="flex items-center gap-2">
+      <CardHeader>
+        <div className="flex flex-row items-start justify-between gap-3">
+          <CardTitle className="min-w-0 flex-1 text-base">생성 결과</CardTitle>
+          <div className="flex items-center gap-2">
           <Badge variant="outline">{outputItems.length}</Badge>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={onToggleVisibleSelection}
-            disabled={outputItems.length === 0}
-          >
-            {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-            {allVisibleSelected ? 'Clear Visible' : 'Select Visible'}
-          </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onToggleVisibleSelection}
+              disabled={outputItems.length === 0}
+            >
+              {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+              {allVisibleSelected ? 'Clear Visible' : 'Select Visible'}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {isCopyPanelOpen ? (
           <div className="rounded-sm border border-border bg-surface-low px-4 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium text-foreground">Copy selected outputs to watched folder</div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  선택한 생성물을 watched folder로 복사한 뒤, 기존 스캐너 흐름에 맡겨 관리 라이브러리에 편입시켜.
-                </div>
-              </div>
+              <div className="text-sm font-medium text-foreground">Copy selected outputs to watched folder</div>
               <Badge variant="outline">{selectedOutputIds.length}</Badge>
             </div>
 
@@ -115,9 +112,6 @@ export function ModuleWorkflowGeneratedOutputsTab({
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">
-              이미지와 영상만 이 리스트에 보여줘. 텍스트/메타데이터/중간 산출물은 아래 별도 탭에서 관리해.
-            </div>
             <ImageList
               items={imageItems}
               layout="grid"

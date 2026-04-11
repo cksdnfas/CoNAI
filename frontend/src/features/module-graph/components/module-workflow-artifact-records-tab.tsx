@@ -55,17 +55,12 @@ export function ModuleWorkflowArtifactRecordsTab({
     <Card>
       <CardHeader className="space-y-4">
         <div className="flex flex-row items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle className="text-base">Text & Intermediate Artifacts</CardTitle>
-            <div className="text-sm text-muted-foreground">
-              메타데이터, JSON, 텍스트 결과물, 그리고 최종 목록에 노출되지 않는 중간 산출물을 DB 기준으로 정리하는 영역이야.
-            </div>
-          </div>
+          <CardTitle className="min-w-0 flex-1 text-base">텍스트 · 중간 산출물</CardTitle>
           <div className="flex items-center gap-2">
             <Badge variant="outline">{artifacts.length}</Badge>
             <Button
               type="button"
-              size="icon-sm"
+              size="sm"
               variant="outline"
               onClick={onToggleVisibleSelection}
               disabled={artifacts.length === 0}
@@ -74,6 +69,7 @@ export function ModuleWorkflowArtifactRecordsTab({
               data-no-select-drag="true"
             >
               {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+              {allVisibleSelected ? 'Clear Visible' : 'Select Visible'}
             </Button>
           </div>
         </div>
