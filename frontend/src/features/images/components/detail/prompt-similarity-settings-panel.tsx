@@ -2,7 +2,7 @@ import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
-import type { PromptSimilaritySettingsDraft } from './image-detail-utils'
+import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type PromptSimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
 
 interface PromptSimilaritySettingsPanelProps {
@@ -38,18 +38,18 @@ export function PromptSimilaritySettingsPanel({
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label className={detailSettingsLabelClassName}>Result Limit</label>
-                <ScrubbableNumberInput min={1} max={100} step={1} variant="detail" value={draft.resultLimit} onChange={(value) => onPatchDraft({ resultLimit: Number(value) })} />
+                <label className={detailSettingsLabelClassName}>표시 줄 수</label>
+                <ScrubbableNumberInput min={SIMILARITY_RESULT_ROW_MIN} max={SIMILARITY_RESULT_ROW_MAX} step={1} variant="detail" value={draft.resultLimit} onChange={(value) => onPatchDraft({ resultLimit: Number(value) })} />
               </div>
 
               <div className="space-y-2">
-                <label className={detailSettingsLabelClassName}>Combined Threshold</label>
+                <label className={detailSettingsLabelClassName}>종합 유사도 기준</label>
                 <ScrubbableNumberInput min={0} max={100} step={1} variant="detail" value={draft.combinedThreshold} onChange={(value) => onPatchDraft({ combinedThreshold: Number(value) })} />
               </div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+              <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
                 <h3 className="text-sm font-semibold text-foreground">가중치</h3>
 
                 <div className="space-y-2">
@@ -68,7 +68,7 @@ export function PromptSimilaritySettingsPanel({
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+              <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
                 <h3 className="text-sm font-semibold text-foreground">필드 임계값</h3>
 
                 <div className="space-y-2">

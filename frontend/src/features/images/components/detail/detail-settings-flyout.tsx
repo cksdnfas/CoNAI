@@ -25,12 +25,12 @@ export function DetailSettingsFlyout({
 }: DetailSettingsFlyoutProps) {
   return (
     <div className="relative">
-      <Button size="icon-sm" variant="outline" onClick={onToggle} aria-label={triggerLabel} title={triggerTitle}>
+      <Button size="icon-sm" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={onToggle} aria-label={triggerLabel} title={triggerTitle}>
         {icon}
       </Button>
 
       {isOpen ? (
-        <div className={`absolute right-0 top-12 z-30 rounded-2xl border border-border bg-surface-container p-4 shadow-[0_0_32px_rgba(14,14,14,0.28)] ${panelWidthClassName}`}>
+        <div className={`absolute right-0 top-12 z-30 rounded-sm border border-border bg-background p-4 shadow-[0_18px_40px_rgba(0,0,0,0.32)] ${panelWidthClassName}`}>
           {children}
         </div>
       ) : null}

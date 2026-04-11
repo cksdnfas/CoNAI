@@ -2,8 +2,8 @@ import 'plyr/dist/plyr.css'
 import './image-detail-media.css'
 
 import type Plyr from 'plyr'
-import { RotateCcw, RotateCw, ZoomIn, ZoomOut } from 'lucide-react'
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent } from 'react'
+import { ChevronLeft, ChevronRight, Lock, RotateCcw, RotateCw, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import type { ImageRecord } from '@/types/image'
 import { getImageListMediaKind } from '@/features/images/components/image-list/image-list-utils'
@@ -25,6 +25,8 @@ const MAX_SCALE = 6
 const ZOOM_STEP = 0.24
 const DOUBLE_TAP_SCALE = 2
 const ROTATION_STEP = 90
+const IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY = 'conai:image-detail-media:wheel-zoom-enabled'
+const IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY = 'conai:image-detail-media:controls-collapsed'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -37,6 +39,39 @@ function normalizeRotation(value: number) {
 
 function getPointerDistance(first: PointerPosition, second: PointerPosition) {
   return Math.hypot(second.x - first.x, second.y - first.y)
+}
+
+function loadImageWheelZoomEnabled() {
+  if (typeof window === 'undefined') {
+    return true
+  }
+
+  const savedValue = window.localStorage.getItem(IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY)
+  return savedValue !== 'false'
+}
+
+function persistImageWheelZoomEnabled(enabled: boolean) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY, enabled ? 'true' : 'false')
+}
+
+function loadImageControlsCollapsed() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return window.localStorage.getItem(IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY) === 'true'
+}
+
+function persistImageControlsCollapsed(collapsed: boolean) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY, collapsed ? 'true' : 'false')
 }
 
 /** Render the main detail media using the correct element for image, GIF, or video files. */
@@ -139,6 +174,7 @@ function InteractiveImageDetailMedia({
   altText: string
   className: string
 }) {
+  const viewportRef = useRef<HTMLDivElement | null>(null)
   const pointersRef = useRef(new Map<number, PointerPosition>())
   const pinchStartDistanceRef = useRef<number | null>(null)
   const pinchStartScaleRef = useRef(MIN_SCALE)
@@ -156,6 +192,8 @@ function InteractiveImageDetailMedia({
   const [rotation, setRotation] = useState(0)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [isGestureActive, setIsGestureActive] = useState(false)
+  const [isWheelZoomEnabled, setIsWheelZoomEnabled] = useState(() => loadImageWheelZoomEnabled())
+  const [isControlsCollapsed, setIsControlsCollapsed] = useState(() => loadImageControlsCollapsed())
 
   useEffect(() => {
     scaleRef.current = scale
@@ -185,16 +223,16 @@ function InteractiveImageDetailMedia({
   const isPannable = scale > MIN_SCALE + 0.001 || rotation !== 0
   const transformSummary = `${Math.round(scale * 100)}%${rotation !== 0 ? ` · ${rotation}°` : ''}`
 
-  const resetView = () => {
+  const resetView = useCallback(() => {
     scaleRef.current = MIN_SCALE
     rotationRef.current = 0
     offsetRef.current = { x: 0, y: 0 }
     setScale(MIN_SCALE)
     setRotation(0)
     setOffset({ x: 0, y: 0 })
-  }
+  }, [])
 
-  const applyScale = (nextScale: number) => {
+  const applyScale = useCallback((nextScale: number) => {
     const clampedScale = clamp(nextScale, MIN_SCALE, MAX_SCALE)
     scaleRef.current = clampedScale
     setScale(clampedScale)
@@ -203,17 +241,17 @@ function InteractiveImageDetailMedia({
       offsetRef.current = { x: 0, y: 0 }
       setOffset({ x: 0, y: 0 })
     }
-  }
+  }, [])
 
-  const zoomBy = (delta: number) => {
+  const zoomBy = useCallback((delta: number) => {
     applyScale(scaleRef.current + delta)
-  }
+  }, [applyScale])
 
-  const rotateBy = (delta: number) => {
+  const rotateBy = useCallback((delta: number) => {
     const nextRotation = normalizeRotation(rotationRef.current + delta)
     rotationRef.current = nextRotation
     setRotation(nextRotation)
-  }
+  }, [])
 
   const syncRemainingPointerAsPanOrigin = () => {
     const remainingEntry = Array.from(pointersRef.current.entries())[0]
@@ -232,11 +270,46 @@ function InteractiveImageDetailMedia({
     }
   }
 
-  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    zoomBy(event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)
+  const toggleWheelZoomEnabled = () => {
+    setIsWheelZoomEnabled((current) => {
+      const nextValue = !current
+      persistImageWheelZoomEnabled(nextValue)
+      return nextValue
+    })
   }
+
+  const toggleControlsCollapsed = () => {
+    setIsControlsCollapsed((current) => {
+      const nextValue = !current
+      persistImageControlsCollapsed(nextValue)
+      return nextValue
+    })
+  }
+
+  useEffect(() => {
+    const node = viewportRef.current
+    if (!node) {
+      return
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!isWheelZoomEnabled) {
+        return
+      }
+
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+      event.stopPropagation()
+      zoomBy(event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)
+    }
+
+    node.addEventListener('wheel', handleWheel, { passive: false })
+
+    return () => {
+      node.removeEventListener('wheel', handleWheel)
+    }
+  }, [isWheelZoomEnabled, zoomBy])
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) {
@@ -341,32 +414,67 @@ function InteractiveImageDetailMedia({
 
   return (
     <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
-      <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5 rounded-full border border-white/12 bg-black/58 px-2 py-2 text-white shadow-lg backdrop-blur-sm">
-        <div className="hidden px-2 text-[11px] text-white/72 sm:block">보기 전용 · {transformSummary}</div>
-        <Button size="icon-sm" type="button" variant="secondary" className="border-white/12 bg-white/10 text-white hover:bg-white/18 hover:text-white" onClick={() => zoomBy(-ZOOM_STEP)} title="축소" aria-label="축소">
-          <ZoomOut className="h-4 w-4" />
-        </Button>
-        <Button size="icon-sm" type="button" variant="secondary" className="border-white/12 bg-white/10 text-white hover:bg-white/18 hover:text-white" onClick={() => zoomBy(ZOOM_STEP)} title="확대" aria-label="확대">
-          <ZoomIn className="h-4 w-4" />
-        </Button>
-        <Button size="icon-sm" type="button" variant="secondary" className="border-white/12 bg-white/10 text-white hover:bg-white/18 hover:text-white" onClick={() => rotateBy(-ROTATION_STEP)} title="왼쪽 회전" aria-label="왼쪽 회전">
-          <RotateCcw className="h-4 w-4" />
-        </Button>
-        <Button size="icon-sm" type="button" variant="secondary" className="border-white/12 bg-white/10 text-white hover:bg-white/18 hover:text-white" onClick={() => rotateBy(ROTATION_STEP)} title="오른쪽 회전" aria-label="오른쪽 회전">
-          <RotateCw className="h-4 w-4" />
-        </Button>
-        <Button size="sm" type="button" variant="secondary" className="border-white/12 bg-white/10 px-3 text-white hover:bg-white/18 hover:text-white" onClick={resetView} title="초기화" aria-label="초기화">
-          초기화
-        </Button>
+      <div className="absolute bottom-3 right-3 z-10 flex items-end gap-2">
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-1.5 rounded-sm border border-border bg-background p-2 text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] transition-all duration-200 ease-out',
+            isControlsCollapsed ? 'pointer-events-none translate-x-3 opacity-0' : 'translate-x-0 opacity-100',
+          )}
+        >
+          <div className="hidden px-2 text-[11px] text-muted-foreground sm:block">{transformSummary}</div>
+          <Button
+            size="icon-sm"
+            type="button"
+            variant="outline"
+            className={cn('bg-surface-container hover:bg-surface-high', isWheelZoomEnabled && 'border-primary/40 text-primary')}
+            onClick={toggleWheelZoomEnabled}
+            title={isWheelZoomEnabled ? '휠 확대/축소 잠금' : '휠 확대/축소 허용'}
+            aria-label={isWheelZoomEnabled ? '휠 확대 및 축소 잠금' : '휠 확대 및 축소 허용'}
+          >
+            {isWheelZoomEnabled ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+          </Button>
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(-ZOOM_STEP)} title="축소" aria-label="축소">
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(ZOOM_STEP)} title="확대" aria-label="확대">
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => rotateBy(-ROTATION_STEP)} title="왼쪽 회전" aria-label="왼쪽 회전">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => rotateBy(ROTATION_STEP)} title="오른쪽 회전" aria-label="오른쪽 회전">
+            <RotateCw className="h-4 w-4" />
+          </Button>
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={resetView} title="초기화" aria-label="초기화">
+            <Undo2 className="h-4 w-4" />
+          </Button>
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={toggleControlsCollapsed} title="컨트롤 수납" aria-label="컨트롤 수납">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {isControlsCollapsed ? (
+          <Button
+            size="icon-sm"
+            type="button"
+            variant="outline"
+            className="bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)]"
+            onClick={toggleControlsCollapsed}
+            title="컨트롤 펼치기"
+            aria-label="컨트롤 펼치기"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        ) : null}
       </div>
 
       <div
+        ref={viewportRef}
         className={cn(
           'flex h-full w-full items-center justify-center overflow-hidden select-none',
-          isPannable ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in',
+          isPannable ? 'cursor-grab active:cursor-grabbing' : isWheelZoomEnabled ? 'cursor-zoom-in' : 'cursor-default',
         )}
-        style={{ touchAction: 'none' }}
-        onWheel={handleWheel}
+        style={{ touchAction: 'none', overscrollBehavior: isWheelZoomEnabled ? 'contain' : 'auto' }}
         onDoubleClick={() => {
           if (scaleRef.current > MIN_SCALE + 0.001) {
             resetView()

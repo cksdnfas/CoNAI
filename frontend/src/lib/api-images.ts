@@ -126,8 +126,14 @@ export async function getSimilarImages(
   return response.data
 }
 
-export async function getPromptSimilarImages(compositeHash: string) {
-  const response = await fetchJson<ApiResponse<PromptSimilarityQueryResult>>(`/api/images/prompt-similarity/by-image/${compositeHash}`)
+export async function getPromptSimilarImages(compositeHash: string, limit?: number) {
+  const searchParams = new URLSearchParams()
+  if (typeof limit === 'number' && Number.isFinite(limit)) {
+    searchParams.set('limit', String(Math.max(1, Math.round(limit))))
+  }
+
+  const query = searchParams.toString()
+  const response = await fetchJson<ApiResponse<PromptSimilarityQueryResult>>(`/api/images/prompt-similarity/by-image/${compositeHash}${query ? `?${query}` : ''}`)
   if (!response.success) {
     throw new Error(response.error || '텍스트 기반 유사 이미지를 불러오지 못했어.')
   }

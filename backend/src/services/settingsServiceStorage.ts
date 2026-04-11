@@ -228,7 +228,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
     similarity: {
       autoGenerateHashOnUpload: true,
       detailSimilarThreshold: 15,
-      detailSimilarLimit: 24,
+      detailSimilarLimit: 2,
       detailSimilarIncludeColorSimilarity: false,
       detailSimilarWeights: {
         perceptualHash: 50,
@@ -249,7 +249,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
         enabled: true,
         algorithm: 'simhash',
         autoBuildOnMetadataUpdate: true,
-        resultLimit: 60,
+        resultLimit: 2,
         combinedThreshold: 50,
         weights: {
           positive: 1,

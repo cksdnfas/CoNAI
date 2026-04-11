@@ -46,6 +46,31 @@ export function getImageDetailDownloadUrl(image?: ImageRecord | null) {
   return image.image_url || image.thumbnail_url || null
 }
 
+export const SIMILARITY_RESULT_ROW_MIN = 1
+export const SIMILARITY_RESULT_ROW_MAX = 12
+export const SIMILARITY_RESULT_ROW_DEFAULT = 2
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+export function normalizeSimilarityResultRows(value?: number | null) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return SIMILARITY_RESULT_ROW_DEFAULT
+  }
+
+  const rounded = Math.round(value)
+  if (rounded === 24 || rounded === 60) {
+    return SIMILARITY_RESULT_ROW_DEFAULT
+  }
+
+  return clamp(rounded, SIMILARITY_RESULT_ROW_MIN, SIMILARITY_RESULT_ROW_MAX)
+}
+
+export function resolveSimilarityResultLimit(rowCount: number | null | undefined, columnCount: number) {
+  return normalizeSimilarityResultRows(rowCount) * clamp(Math.round(columnCount), 1, 6)
+}
+
 export function getValidImageRecords(images: ImageRecord[]) {
   return images.filter((image) => typeof image.composite_hash === 'string' && image.composite_hash.length > 0)
 }

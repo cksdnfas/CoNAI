@@ -29,10 +29,10 @@ router.put(
     }
 
     if (similaritySettings.detailSimilarLimit !== undefined) {
-      if (!Number.isInteger(similaritySettings.detailSimilarLimit) || similaritySettings.detailSimilarLimit < 1 || similaritySettings.detailSimilarLimit > 100) {
+      if (!Number.isInteger(similaritySettings.detailSimilarLimit) || similaritySettings.detailSimilarLimit < 1 || similaritySettings.detailSimilarLimit > 12) {
         res.status(400).json({
           success: false,
-          error: 'detailSimilarLimit must be an integer between 1 and 100',
+          error: 'detailSimilarLimit must be an integer between 1 and 12',
         });
         return;
       }
@@ -132,10 +132,10 @@ router.put(
       }
 
       if (promptSimilarity.resultLimit !== undefined) {
-        if (!Number.isInteger(promptSimilarity.resultLimit) || promptSimilarity.resultLimit < 1 || promptSimilarity.resultLimit > 100) {
+        if (!Number.isInteger(promptSimilarity.resultLimit) || promptSimilarity.resultLimit < 1 || promptSimilarity.resultLimit > 12) {
           res.status(400).json({
             success: false,
-            error: 'promptSimilarity.resultLimit must be an integer between 1 and 100',
+            error: 'promptSimilarity.resultLimit must be an integer between 1 and 12',
           });
           return;
         }

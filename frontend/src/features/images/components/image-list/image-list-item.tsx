@@ -108,7 +108,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       role="button"
       tabIndex={0}
       className={cn(
-        'theme-list-shadow image-list-selectable group relative isolate block w-full overflow-hidden rounded-sm bg-surface-low text-left transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-primary/60',
+        'theme-list-shadow image-list-selectable group relative isolate block w-full rounded-sm bg-surface-low text-left transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-primary/60 hover:z-10 focus-within:z-10',
         selected && 'is-selected',
         selectionMode ? 'cursor-default' : 'cursor-pointer',
       )}
@@ -121,12 +121,12 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       onClick={() => onActivate?.(image, imageId, href)}
       onKeyDown={handleKeyDown}
     >
-      <div className="relative bg-surface-lowest select-none">
+      <div className="relative overflow-hidden rounded-sm bg-surface-lowest select-none">
         {content}
-        {renderPersistentOverlay ? <div className="absolute inset-x-0 bottom-0 z-30 p-2">{renderPersistentOverlay}</div> : null}
-        {quickActions}
-        <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
       </div>
+      {renderPersistentOverlay ? <div className="absolute inset-x-0 bottom-0 z-30 p-2">{renderPersistentOverlay}</div> : null}
+      {quickActions}
+      <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
     </div>
   )
 })

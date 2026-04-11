@@ -2,8 +2,7 @@ import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
-import { ToggleRow } from '@/components/ui/toggle-row'
-import type { SimilaritySettingsDraft } from './image-detail-utils'
+import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type SimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
 
 interface SimilaritySettingsPanelProps {
@@ -73,28 +72,28 @@ export function SimilaritySettingsPanel({
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <SimilarityNumberField
-                label="결과 수"
-                min={1}
-                max={100}
+                label="표시 줄 수"
+                min={SIMILARITY_RESULT_ROW_MIN}
+                max={SIMILARITY_RESULT_ROW_MAX}
                 step={1}
                 variant="detail"
                 value={draft.detailSimilarLimit}
                 onChange={(value) => onPatchDraft({ detailSimilarLimit: value })}
               />
 
-              <ToggleRow variant="detail">
+              <label className="flex items-center gap-3 pt-6 text-sm text-foreground sm:pt-7">
                 <input
                   type="checkbox"
                   checked={draft.detailSimilarUseMetadataFilter}
                   onChange={(event) => onPatchDraft({ detailSimilarUseMetadataFilter: event.target.checked })}
                   className="h-4 w-4"
                 />
-                비슷한 해상도만 우선 보기
-              </ToggleRow>
+                <span>비슷한 해상도만 우선 보기</span>
+              </label>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+              <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
                 <h3 className="text-sm font-semibold text-foreground">혼합 비중</h3>
 
                 <SimilarityNumberField
@@ -133,7 +132,7 @@ export function SimilaritySettingsPanel({
                 />
               </div>
 
-              <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+              <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
                 <h3 className="text-sm font-semibold text-foreground">항목별 허용 범위</h3>
 
                 <SimilarityNumberField
@@ -173,8 +172,6 @@ export function SimilaritySettingsPanel({
                     detailSimilarThresholds: { ...draft.detailSimilarThresholds, color: value },
                   })}
                 />
-
-                <p className="text-xs text-muted-foreground">숫자 입력칸은 좌우 드래그로도 조절할 수 있어.</p>
               </div>
             </div>
 

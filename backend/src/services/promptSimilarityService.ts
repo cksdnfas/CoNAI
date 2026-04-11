@@ -161,7 +161,7 @@ export class PromptSimilarityService {
   }
 
   /** Search prompt-similar images for one source composite hash. */
-  static findSimilarByCompositeHash(compositeHash: string): PromptSimilarityMatch[] {
+  static findSimilarByCompositeHash(compositeHash: string, limitOverride?: number): PromptSimilarityMatch[] {
     const settings = this.getEffectiveSettings();
     if (!settings.enabled) {
       return [];
@@ -227,7 +227,12 @@ export class PromptSimilarityService {
     }
 
     matches.sort((left, right) => right.combinedSimilarity - left.combinedSimilarity);
-    return matches.slice(0, settings.resultLimit);
+
+    const resultLimit = typeof limitOverride === 'number' && Number.isFinite(limitOverride)
+      ? Math.max(1, Math.min(100, Math.round(limitOverride)))
+      : settings.resultLimit;
+
+    return matches.slice(0, resultLimit);
   }
 
   /** Rebuild prompt similarity fields for all rows using the active algorithm. */
@@ -300,7 +305,7 @@ export class PromptSimilarityService {
       enabled: current.enabled,
       algorithm: current.algorithm,
       autoBuildOnMetadataUpdate: current.autoBuildOnMetadataUpdate,
-      resultLimit: Math.max(1, Math.min(100, Math.round(current.resultLimit))),
+      resultLimit: Math.max(1, Math.min(12, Math.round(current.resultLimit))),
       combinedThreshold: normalizeThreshold(current.combinedThreshold, defaults.combinedThreshold),
       weights: {
         positive: normalizeWeight(current.weights.positive, defaults.weights.positive),

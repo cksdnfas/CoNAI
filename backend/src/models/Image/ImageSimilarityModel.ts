@@ -163,6 +163,27 @@ export class ImageSimilarityModel {
     };
   }
 
+  /** Normalize duplicate-search weights for multi-hash duplicate confirmation. */
+  private static getDuplicateWeights(options: DuplicateSearchOptions): SimilarityWeights {
+    return {
+      perceptualHash: Math.max(0, options.weights?.perceptualHash ?? 40),
+      dHash: Math.max(0, options.weights?.dHash ?? 35),
+      aHash: Math.max(0, options.weights?.aHash ?? 25),
+      color: 0,
+    };
+  }
+
+  /** Normalize duplicate-search thresholds while keeping dHash/aHash slightly looser than pHash. */
+  private static getDuplicateThresholds(options: DuplicateSearchOptions): SimilarityThresholds {
+    const legacyThreshold = options.threshold ?? SIMILARITY_THRESHOLDS.NEAR_DUPLICATE;
+    return {
+      perceptualHash: Math.max(0, Math.min(64, options.thresholds?.perceptualHash ?? legacyThreshold)),
+      dHash: Math.max(0, Math.min(64, options.thresholds?.dHash ?? Math.min(64, legacyThreshold + 1))),
+      aHash: Math.max(0, Math.min(64, options.thresholds?.aHash ?? Math.min(64, legacyThreshold + 2))),
+      color: 0,
+    };
+  }
+
   /** Build the duplicate-search candidate query with the existing metadata filter. */
   private static buildDuplicateCandidateQuery(targetImage: ImageMetadataRecord, includeMetadata: boolean) {
     let query = `
@@ -359,30 +380,88 @@ export class ImageSimilarityModel {
     }
   }
 
-  /** Build one duplicate-search result from the existing hamming threshold rules. */
+  /** Build one duplicate-search result using pHash, dHash, and aHash together. */
   private static buildDuplicateMatch(
     targetImage: ImageMetadataRecord,
     candidate: SimilarityCandidateRecord,
-    threshold: number,
+    weights: SimilarityWeights,
+    thresholds: SimilarityThresholds,
   ): SimilarImage | null {
     if (!candidate.perceptual_hash) {
       return null;
     }
 
-    const hammingDistance = ImageSimilarityService.calculateHammingDistance(
-      targetImage.perceptual_hash!,
-      candidate.perceptual_hash,
-    );
+    const componentScores = this.buildSimilarityComponentScores(targetImage, candidate, weights, thresholds, null);
+    let weightedScoreSum = 0;
+    let activeWeightSum = 0;
+    const distanceSamples: number[] = [];
 
-    if (hammingDistance > threshold) {
+    const perceptualScore = this.scoreHashComponent(
+      componentScores.perceptualHash,
+      targetImage.perceptual_hash,
+      candidate.perceptual_hash,
+      weights.perceptualHash,
+      thresholds.perceptualHash,
+    );
+    componentScores.perceptualHash = perceptualScore.componentScore;
+    if (perceptualScore.shouldSkip) {
+      return null;
+    }
+    if (perceptualScore.distance !== undefined && weights.perceptualHash > 0) {
+      distanceSamples.push(perceptualScore.distance);
+      weightedScoreSum += perceptualScore.weightedScore;
+      activeWeightSum += perceptualScore.activeWeight;
+    }
+
+    const dHashScore = this.scoreHashComponent(
+      componentScores.dHash,
+      targetImage.dhash,
+      candidate.dhash,
+      weights.dHash,
+      thresholds.dHash,
+    );
+    componentScores.dHash = dHashScore.componentScore;
+    if (dHashScore.shouldSkip) {
+      return null;
+    }
+    if (dHashScore.distance !== undefined && weights.dHash > 0) {
+      distanceSamples.push(dHashScore.distance);
+      weightedScoreSum += dHashScore.weightedScore;
+      activeWeightSum += dHashScore.activeWeight;
+    }
+
+    const aHashScore = this.scoreHashComponent(
+      componentScores.aHash,
+      targetImage.ahash,
+      candidate.ahash,
+      weights.aHash,
+      thresholds.aHash,
+    );
+    componentScores.aHash = aHashScore.componentScore;
+    if (aHashScore.shouldSkip) {
+      return null;
+    }
+    if (aHashScore.distance !== undefined && weights.aHash > 0) {
+      distanceSamples.push(aHashScore.distance);
+      weightedScoreSum += aHashScore.weightedScore;
+      activeWeightSum += aHashScore.activeWeight;
+    }
+
+    if (activeWeightSum <= 0 || distanceSamples.length === 0) {
       return null;
     }
 
+    const averageDistance = distanceSamples.reduce((sum, value) => sum + value, 0) / distanceSamples.length;
+    const similarity = Math.round((weightedScoreSum / activeWeightSum) * 100) / 100;
+    const hammingDistance = Math.round(averageDistance * 100) / 100;
+    const matchType: SimilarityMatchType = ImageSimilarityService.determineMatchType(Math.round(averageDistance));
+
     return {
       image: candidate as any,
-      similarity: ImageSimilarityService.hammingDistanceToSimilarity(hammingDistance),
+      similarity,
       hammingDistance,
-      matchType: ImageSimilarityService.determineMatchType(hammingDistance),
+      matchType,
+      componentScores,
     };
   }
 
@@ -584,19 +663,26 @@ export class ImageSimilarityModel {
     options: DuplicateSearchOptions = {}
   ): Promise<SimilarImage[]> {
     const {
-      threshold = SIMILARITY_THRESHOLDS.NEAR_DUPLICATE,
       includeMetadata = true
     } = options;
 
+    const weights = this.getDuplicateWeights(options);
+    const thresholds = this.getDuplicateThresholds(options);
     const targetImage = this.requirePerceptualHashImage(compositeHash);
     const { query, params } = this.buildDuplicateCandidateQuery(targetImage, includeMetadata);
     const candidates = db.prepare(query).all(...params) as SimilarityCandidateRecord[];
 
     const results = candidates
-      .map(candidate => this.buildDuplicateMatch(targetImage, candidate, threshold))
+      .map(candidate => this.buildDuplicateMatch(targetImage, candidate, weights, thresholds))
       .filter((candidate): candidate is SimilarImage => candidate !== null);
 
-    return results.sort((a, b) => a.hammingDistance - b.hammingDistance);
+    return results.sort((a, b) => {
+      const similarityDiff = b.similarity - a.similarity;
+      if (similarityDiff !== 0) {
+        return similarityDiff;
+      }
+      return a.hammingDistance - b.hammingDistance;
+    });
   }
 
   /**

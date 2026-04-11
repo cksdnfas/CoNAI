@@ -1,4 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { Image as ImageIcon, Type, type LucideIcon } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +11,7 @@ import type { SimilarImage } from '@/types/similarity'
 import type { RelatedImageCardAspectRatio, SimilaritySettings } from '@/types/settings'
 import {
   getValidImageRecords,
+  normalizeSimilarityResultRows,
   type PromptSimilaritySettingsDraft,
   type SimilaritySettingsDraft,
 } from './image-detail-utils'
@@ -47,9 +50,9 @@ const SIMILAR_IMAGE_SECTION_TITLE_LABELS: Record<SimilarImageTab, string> = {
   text: '유사 이미지 [텍스트]',
 }
 
-const SIMILAR_IMAGE_TAB_BUTTON_LABELS: Record<SimilarImageTab, string> = {
-  image: '이미지',
-  text: '텍스트',
+const SIMILAR_IMAGE_TAB_ICONS: Record<SimilarImageTab, LucideIcon> = {
+  image: ImageIcon,
+  text: Type,
 }
 
 const SIMILARITY_COMPONENT_LABELS = {
@@ -81,7 +84,7 @@ function buildSimilaritySettingsDraft(similarity?: SimilaritySettings | null): S
 
   return {
     detailSimilarThreshold: similarity.detailSimilarThreshold,
-    detailSimilarLimit: similarity.detailSimilarLimit,
+    detailSimilarLimit: normalizeSimilarityResultRows(similarity.detailSimilarLimit),
     detailSimilarIncludeColorSimilarity: similarity.detailSimilarIncludeColorSimilarity,
     detailSimilarWeights: similarity.detailSimilarWeights,
     detailSimilarThresholds: similarity.detailSimilarThresholds,
@@ -100,7 +103,7 @@ function buildPromptSimilaritySettingsDraft(
   }
 
   return {
-    resultLimit: promptSimilarity.resultLimit,
+    resultLimit: normalizeSimilarityResultRows(promptSimilarity.resultLimit),
     combinedThreshold: promptSimilarity.combinedThreshold,
     weights: {
       positive: promptSimilarity.weights.positive,
@@ -133,7 +136,7 @@ function sanitizeSimilaritySettingsDraft(draft: SimilaritySettingsDraft): Simila
 
   return {
     detailSimilarThreshold: nextThresholds.perceptualHash,
-    detailSimilarLimit: Math.max(1, Math.min(100, Math.round(draft.detailSimilarLimit))),
+    detailSimilarLimit: normalizeSimilarityResultRows(draft.detailSimilarLimit),
     detailSimilarIncludeColorSimilarity: nextWeights.color > 0,
     detailSimilarWeights: nextWeights,
     detailSimilarThresholds: nextThresholds,
@@ -148,7 +151,7 @@ function sanitizePromptSimilaritySettingsDraft(
   draft: PromptSimilaritySettingsDraft,
 ): PromptSimilaritySettingsDraft {
   return {
-    resultLimit: Math.max(1, Math.min(100, Math.round(draft.resultLimit))),
+    resultLimit: normalizeSimilarityResultRows(draft.resultLimit),
     combinedThreshold: Math.max(0, Math.min(100, Math.round(draft.combinedThreshold))),
     weights: {
       positive: Math.max(0, Math.min(100, Number(draft.weights.positive))),
@@ -172,46 +175,135 @@ function getErrorMessage(error: unknown, fallback: string) {
 function getSimilarityComponentRows(item: SimilarImage): SimilarityComponentRow[] {
   const rows: SimilarityComponentRow[] = []
 
-  if (item.componentScores?.perceptualHash) {
-    rows.push({ key: 'perceptualHash', label: SIMILARITY_COMPONENT_LABELS.perceptualHash, score: item.componentScores.perceptualHash })
+  const pushRow = (key: SimilarityComponentRow['key'], label: string, score?: SimilarityComponentScore) => {
+    if (!score || (!score.available && !score.used)) {
+      return
+    }
+    rows.push({ key, label, score })
   }
 
-  if (item.componentScores?.dHash) {
-    rows.push({ key: 'dHash', label: SIMILARITY_COMPONENT_LABELS.dHash, score: item.componentScores.dHash })
-  }
-
-  if (item.componentScores?.aHash) {
-    rows.push({ key: 'aHash', label: SIMILARITY_COMPONENT_LABELS.aHash, score: item.componentScores.aHash })
-  }
-
-  if (item.componentScores?.color) {
-    rows.push({ key: 'color', label: SIMILARITY_COMPONENT_LABELS.color, score: item.componentScores.color })
-  }
+  pushRow('perceptualHash', SIMILARITY_COMPONENT_LABELS.perceptualHash, item.componentScores?.perceptualHash)
+  pushRow('dHash', SIMILARITY_COMPONENT_LABELS.dHash, item.componentScores?.dHash)
+  pushRow('aHash', SIMILARITY_COMPONENT_LABELS.aHash, item.componentScores?.aHash)
+  pushRow('color', SIMILARITY_COMPONENT_LABELS.color, item.componentScores?.color)
 
   return rows
 }
 
 /** Render the persistent similarity badge and popup for each related-image card. */
-function SimilarImageScoreOverlay({ item }: { item: SimilarImage }) {
-  const [isHovering, setIsHovering] = useState(false)
+export function SimilarImageScoreOverlay({ item }: { item: SimilarImage }) {
+  const anchorRef = useRef<HTMLDivElement | null>(null)
+  const [isAnchorHovered, setIsAnchorHovered] = useState(false)
+  const [isPopupHovered, setIsPopupHovered] = useState(false)
   const [isDismissed, setIsDismissed] = useState(false)
+  const [popupPosition, setPopupPosition] = useState<{ top: number; left: number; placement: 'top' | 'bottom'; width: number } | null>(null)
   const componentRows = getSimilarityComponentRows(item)
-  const isOpen = isHovering && !isDismissed
+  const isOpen = (isAnchorHovered || isPopupHovered) && !isDismissed
 
-  const handleBadgeHover = () => {
-    setIsHovering(true)
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') {
+      return
+    }
+
+    const updatePosition = () => {
+      const anchor = anchorRef.current
+      if (!anchor) {
+        return
+      }
+
+      const rect = anchor.getBoundingClientRect()
+      const viewportPadding = 12
+      const popupGap = 8
+      const popupWidth = Math.min(240, window.innerWidth - viewportPadding * 2)
+      const estimatedPopupHeight = componentRows.length > 0 ? 180 : 116
+      const shouldOpenAbove = rect.bottom + popupGap + estimatedPopupHeight > window.innerHeight - viewportPadding && rect.top > estimatedPopupHeight + popupGap
+
+      let left = rect.left
+      if (left + popupWidth > window.innerWidth - viewportPadding) {
+        left = rect.right - popupWidth
+      }
+      left = Math.max(viewportPadding, left)
+
+      setPopupPosition({
+        top: shouldOpenAbove ? rect.top - popupGap : rect.bottom + popupGap,
+        left,
+        placement: shouldOpenAbove ? 'top' : 'bottom',
+        width: popupWidth,
+      })
+    }
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [componentRows.length, isOpen])
+
+  const handleAnchorEnter = () => {
+    setIsAnchorHovered(true)
     setIsDismissed(false)
   }
+
+  const popup = isOpen && popupPosition && typeof document !== 'undefined'
+    ? createPortal(
+      <div
+        className="z-[120] rounded-sm border border-border bg-background/96 p-3 text-[11px] shadow-[0_12px_32px_rgba(0,0,0,0.34)] backdrop-blur-sm"
+        style={{
+          position: 'fixed',
+          top: popupPosition.top,
+          left: popupPosition.left,
+          width: popupPosition.width,
+          transform: popupPosition.placement === 'top' ? 'translateY(-100%)' : undefined,
+        }}
+        onMouseEnter={() => {
+          setIsPopupHovered(true)
+          setIsDismissed(false)
+        }}
+        onMouseLeave={() => setIsPopupHovered(false)}
+        onClick={(event) => {
+          event.stopPropagation()
+          setIsDismissed(true)
+        }}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="font-semibold text-foreground">세부 점수</span>
+          <Badge variant="outline" className="px-2 py-0.5 tracking-normal normal-case">{item.matchType}</Badge>
+        </div>
+
+        <div className="grid gap-1.5">
+          {componentRows.length > 0 ? componentRows.map(({ key, label, score }) => (
+            <div key={key} className="flex items-start justify-between gap-2 leading-4">
+              <span className="text-muted-foreground">{label}</span>
+              <span className={cn('text-right', score.used && !score.passed ? 'text-destructive' : 'text-foreground')}>
+                {!score.available
+                  ? '데이터 없음'
+                  : 'distance' in score
+                    ? `유사 ${formatSimilarityValue(score.similarity)} · 거리 ${score.distance ?? '—'}/${score.threshold} · 비중 ${score.weight}`
+                    : `유사 ${formatSimilarityValue(score.similarity)} · 기준 ${score.threshold} · 비중 ${score.weight}`}
+              </span>
+            </div>
+          )) : (
+            <div className="flex items-start justify-between gap-2 leading-4">
+              <span className="text-muted-foreground">pHash</span>
+              <span className="text-right text-foreground">유사 {formatSimilarityValue(item.similarity)} · 거리 {item.hammingDistance}</span>
+            </div>
+          )}
+        </div>
+      </div>,
+      document.body,
+    )
+    : null
 
   return (
     <div className="flex justify-start">
       <div
+        ref={anchorRef}
         className="relative max-w-full"
-        onMouseEnter={handleBadgeHover}
-        onMouseLeave={() => {
-          setIsHovering(false)
-          setIsDismissed(false)
-        }}
+        onMouseEnter={handleAnchorEnter}
+        onMouseLeave={() => setIsAnchorHovered(false)}
         onClick={(event) => event.stopPropagation()}
       >
         <Badge
@@ -220,7 +312,7 @@ function SimilarImageScoreOverlay({ item }: { item: SimilarImage }) {
             'max-w-full shadow-sm backdrop-blur-sm tracking-normal normal-case',
             getSimilarityBadgeClassName(item.similarity),
           )}
-          onMouseEnter={handleBadgeHover}
+          onMouseEnter={handleAnchorEnter}
           onMouseMove={() => {
             if (isDismissed) {
               setIsDismissed(false)
@@ -231,35 +323,7 @@ function SimilarImageScoreOverlay({ item }: { item: SimilarImage }) {
           {formatSimilarityValue(item.similarity)}
         </Badge>
 
-        {isOpen ? (
-          <div
-            className="absolute bottom-full left-0 z-40 mb-2 w-60 rounded-sm border border-border bg-background/96 p-3 text-[11px] shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-sm"
-            onClick={(event) => {
-              event.stopPropagation()
-              setIsDismissed(true)
-            }}
-          >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="font-semibold text-foreground">세부 점수</span>
-              <Badge variant="outline" className="px-2 py-0.5 tracking-normal normal-case">{item.matchType}</Badge>
-            </div>
-
-            <div className="grid gap-1.5">
-              {componentRows.map(({ key, label, score }) => (
-                <div key={key} className="flex items-start justify-between gap-2 leading-4">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className={cn('text-right', score.used && !score.passed ? 'text-destructive' : 'text-foreground')}>
-                    {!score.available
-                      ? '데이터 없음'
-                      : 'distance' in score
-                        ? `유사 ${formatSimilarityValue(score.similarity)} · 거리 ${score.distance ?? '—'}/${score.threshold} · 비중 ${score.weight}`
-                        : `유사 ${formatSimilarityValue(score.similarity)} · 기준 ${score.threshold} · 비중 ${score.weight}`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+        {popup}
       </div>
     </div>
   )
@@ -420,53 +484,62 @@ export function ImageDetailSimilaritySection({
 
   const similarSectionActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <div className="inline-flex items-center rounded-sm border border-border bg-surface-container p-1">
-        {SIMILAR_IMAGE_TABS.map((tab) => (
-          <Button
-            key={tab}
-            size="sm"
-            variant="ghost"
-            onClick={() => handleSelectSimilarImageTab(tab)}
-            className={cn(
-              'h-8 px-3 text-xs font-semibold',
-              activeSimilarImageTab === tab ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {SIMILAR_IMAGE_TAB_BUTTON_LABELS[tab]}
-          </Button>
-        ))}
+      <div className="inline-flex items-center gap-0.5 rounded-sm border border-border bg-surface-container p-0.5 shadow-sm">
+        {SIMILAR_IMAGE_TABS.map((tab) => {
+          const Icon = SIMILAR_IMAGE_TAB_ICONS[tab]
+
+          return (
+            <Button
+              key={tab}
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => handleSelectSimilarImageTab(tab)}
+              className={cn(
+                activeSimilarImageTab === tab ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+              aria-label={SIMILAR_IMAGE_SECTION_TITLE_LABELS[tab]}
+              title={SIMILAR_IMAGE_SECTION_TITLE_LABELS[tab]}
+            >
+              <Icon className="h-4 w-4" />
+            </Button>
+          )
+        })}
       </div>
 
       {activeSimilarImageTab === 'image' ? (
-        <SimilaritySettingsPanel
-          isOpen={isSimilaritySettingsOpen}
-          draft={similarityDraft}
-          isSaving={saveSimilaritySettingsMutation.isPending}
-          errorMessage={
-            saveSimilaritySettingsMutation.isError
-              ? getErrorMessage(saveSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
-              : null
-          }
-          onToggle={handleToggleSimilaritySettings}
-          onPatchDraft={handlePatchSimilarityDraft}
-          onApply={handleApplySimilaritySettings}
-        />
+        <div className="shrink-0">
+          <SimilaritySettingsPanel
+            isOpen={isSimilaritySettingsOpen}
+            draft={similarityDraft}
+            isSaving={saveSimilaritySettingsMutation.isPending}
+            errorMessage={
+              saveSimilaritySettingsMutation.isError
+                ? getErrorMessage(saveSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
+                : null
+            }
+            onToggle={handleToggleSimilaritySettings}
+            onPatchDraft={handlePatchSimilarityDraft}
+            onApply={handleApplySimilaritySettings}
+          />
+        </div>
       ) : null}
 
       {activeSimilarImageTab === 'text' ? (
-        <PromptSimilaritySettingsPanel
-          isOpen={isPromptSimilaritySettingsOpen}
-          draft={promptSimilarityDraft}
-          isSaving={savePromptSimilaritySettingsMutation.isPending}
-          errorMessage={
-            savePromptSimilaritySettingsMutation.isError
-              ? getErrorMessage(savePromptSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
-              : null
-          }
-          onToggle={handleTogglePromptSimilaritySettings}
-          onPatchDraft={handlePatchPromptSimilarityDraft}
-          onApply={handleApplyPromptSimilaritySettings}
-        />
+        <div className="shrink-0">
+          <PromptSimilaritySettingsPanel
+            isOpen={isPromptSimilaritySettingsOpen}
+            draft={promptSimilarityDraft}
+            isSaving={savePromptSimilaritySettingsMutation.isPending}
+            errorMessage={
+              savePromptSimilaritySettingsMutation.isError
+                ? getErrorMessage(savePromptSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
+                : null
+            }
+            onToggle={handleTogglePromptSimilaritySettings}
+            onPatchDraft={handlePatchPromptSimilarityDraft}
+            onApply={handleApplyPromptSimilaritySettings}
+          />
+        </div>
       ) : null}
     </div>
   )

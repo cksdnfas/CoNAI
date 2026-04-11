@@ -9,7 +9,12 @@ router.get(
   '/by-image/:compositeHash',
   asyncHandler(async (req: Request, res: Response) => {
     const compositeHash = String(req.params.compositeHash);
-    const items = PromptSimilarityService.findSimilarByCompositeHash(compositeHash).map((item) => ({
+    const requestedLimit = Number.parseInt(String(req.query.limit ?? ''), 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(100, Math.round(requestedLimit)))
+      : undefined;
+
+    const items = PromptSimilarityService.findSimilarByCompositeHash(compositeHash, limit).map((item) => ({
       ...item,
       image: enrichImageWithFileView(item.image),
     }));

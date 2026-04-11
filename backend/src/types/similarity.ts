@@ -90,9 +90,19 @@ export interface SimilaritySearchOptions {
  * 중복 검색 옵션
  */
 export interface DuplicateSearchOptions {
-  threshold?: number;          // Hamming distance 임계값 (기본: 5)
+  threshold?: number;          // 레거시 pHash 임계값 (기본: 5)
   minGroupSize?: number;       // 최소 그룹 크기 (기본: 2)
   includeMetadata?: boolean;   // 메타데이터 기반 필터링 포함
+  weights?: {
+    perceptualHash?: number;
+    dHash?: number;
+    aHash?: number;
+  };
+  thresholds?: {
+    perceptualHash?: number;
+    dHash?: number;
+    aHash?: number;
+  };
 }
 
 /**

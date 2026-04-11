@@ -6,14 +6,17 @@ import { getAppSettings, getImage, getImageDuplicates, getPromptSimilarImages, g
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
+import type { SimilarImage } from '@/types/similarity'
 import { ImageDetailMedia } from './components/detail/image-detail-media'
 import { ImageDetailMetaCard } from './components/detail/image-detail-meta-card'
-import { ImageDetailSimilaritySection } from './components/detail/image-detail-similarity-section'
+import { ImageDetailSimilaritySection, SimilarImageScoreOverlay } from './components/detail/image-detail-similarity-section'
 import {
   getDownloadName,
   getImageDetailDownloadUrl,
   getImageDetailRenderUrl,
   getValidImageRecords,
+  normalizeSimilarityResultRows,
+  resolveSimilarityResultLimit,
 } from './components/detail/image-detail-utils'
 import { RelatedImageGallerySection } from './components/detail/related-image-gallery-section'
 
@@ -39,6 +42,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 /** Render the shared image detail body so page and modal presentations stay aligned. */
 export function ImageDetailView({ compositeHash, presentation = 'page', renderHeader }: ImageDetailViewProps) {
   const useSplitPaneScroll = presentation === 'modal' && useMinWidth(1280)
+  const usesDesktopRelatedImageColumns = useMinWidth(768)
 
   useEffect(() => {
     if (presentation === 'page') {
@@ -53,6 +57,15 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
 
   const effectiveSimilaritySettings = settingsQuery.data?.similarity
   const effectiveAppearanceSettings = settingsQuery.data?.appearance
+
+  const relatedImageMobileColumns = effectiveAppearanceSettings?.detailRelatedImageMobileColumns ?? 1
+  const relatedImageDesktopColumns = effectiveAppearanceSettings?.detailRelatedImageColumns ?? 3
+  const relatedImageAspectRatio = effectiveAppearanceSettings?.detailRelatedImageAspectRatio ?? 'square'
+  const activeRelatedImageColumns = usesDesktopRelatedImageColumns ? relatedImageDesktopColumns : relatedImageMobileColumns
+  const detailSimilarRows = normalizeSimilarityResultRows(effectiveSimilaritySettings?.detailSimilarLimit)
+  const promptSimilarRows = normalizeSimilarityResultRows(effectiveSimilaritySettings?.promptSimilarity?.resultLimit)
+  const detailSimilarLimit = resolveSimilarityResultLimit(detailSimilarRows, activeRelatedImageColumns)
+  const promptSimilarLimit = resolveSimilarityResultLimit(promptSimilarRows, activeRelatedImageColumns)
 
   const imageQuery = useQuery({
     queryKey: ['image-detail', compositeHash],
@@ -71,7 +84,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
       'image-similar',
       compositeHash,
       effectiveSimilaritySettings?.detailSimilarThreshold ?? 15,
-      effectiveSimilaritySettings?.detailSimilarLimit ?? 24,
+      detailSimilarRows,
+      detailSimilarLimit,
       effectiveSimilaritySettings?.detailSimilarIncludeColorSimilarity ?? false,
       effectiveSimilaritySettings?.detailSimilarWeights?.perceptualHash ?? 50,
       effectiveSimilaritySettings?.detailSimilarWeights?.dHash ?? 30,
@@ -88,7 +102,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
     queryFn: () =>
       getSimilarImages(compositeHash, {
         threshold: effectiveSimilaritySettings?.detailSimilarThreshold ?? 15,
-        limit: effectiveSimilaritySettings?.detailSimilarLimit ?? 24,
+        limit: detailSimilarLimit,
         includeColorSimilarity: effectiveSimilaritySettings?.detailSimilarIncludeColorSimilarity ?? false,
         perceptualWeight: effectiveSimilaritySettings?.detailSimilarWeights?.perceptualHash ?? 50,
         dHashWeight: effectiveSimilaritySettings?.detailSimilarWeights?.dHash ?? 30,
@@ -112,7 +126,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
       effectiveSimilaritySettings?.promptSimilarity?.enabled ?? true,
       effectiveSimilaritySettings?.promptSimilarity?.algorithm ?? 'simhash',
       effectiveSimilaritySettings?.promptSimilarity?.combinedThreshold ?? 50,
-      effectiveSimilaritySettings?.promptSimilarity?.resultLimit ?? 60,
+      promptSimilarRows,
+      promptSimilarLimit,
       effectiveSimilaritySettings?.promptSimilarity?.weights?.positive ?? 1,
       effectiveSimilaritySettings?.promptSimilarity?.weights?.negative ?? 0,
       effectiveSimilaritySettings?.promptSimilarity?.weights?.auto ?? 0,
@@ -120,7 +135,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
       effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.negative ?? 50,
       effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.auto ?? 50,
     ],
-    queryFn: () => getPromptSimilarImages(compositeHash),
+    queryFn: () => getPromptSimilarImages(compositeHash, promptSimilarLimit),
     enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings),
   })
 
@@ -129,9 +144,16 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
   const downloadUrl = getImageDetailDownloadUrl(image)
   const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
 
+  const duplicateImageItems = duplicatesQuery.data?.similar ?? []
+
   const duplicateImages = useMemo(
-    () => getValidImageRecords((duplicatesQuery.data?.similar ?? []).map((item) => item.image)),
-    [duplicatesQuery.data?.similar],
+    () => getValidImageRecords(duplicateImageItems.map((item) => item.image)),
+    [duplicateImageItems],
+  )
+
+  const duplicateImageItemByHash = useMemo(
+    () => new Map(duplicateImageItems.map((item) => [String(item.image.composite_hash), item] satisfies [string, SimilarImage])),
+    [duplicateImageItems],
   )
 
   const duplicateHashSet = useMemo(() => new Set(duplicateImages.map((item) => item.composite_hash as string)), [duplicateImages])
@@ -153,9 +175,15 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
     [duplicateHashSet, promptSimilarQuery.data?.items],
   )
 
-  const relatedImageMobileColumns = effectiveAppearanceSettings?.detailRelatedImageMobileColumns ?? 1
-  const relatedImageDesktopColumns = effectiveAppearanceSettings?.detailRelatedImageColumns ?? 3
-  const relatedImageAspectRatio = effectiveAppearanceSettings?.detailRelatedImageAspectRatio ?? 'square'
+  const renderDuplicateImageOverlay = (duplicateImage: ImageRecord): ReactNode => {
+    const compositeHash = duplicateImage.composite_hash
+    if (typeof compositeHash !== 'string' || compositeHash.length === 0) {
+      return null
+    }
+
+    const item = duplicateImageItemByHash.get(compositeHash)
+    return item ? <SimilarImageScoreOverlay item={item} /> : null
+  }
 
   const headerControls: ImageDetailViewHeaderControls = {
     downloadName,
@@ -229,6 +257,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
                 mobileCardColumns={relatedImageMobileColumns}
                 desktopCardColumns={relatedImageDesktopColumns}
                 cardAspectRatio={relatedImageAspectRatio}
+                renderItemPersistentOverlay={renderDuplicateImageOverlay}
               />
             ) : null}
 
