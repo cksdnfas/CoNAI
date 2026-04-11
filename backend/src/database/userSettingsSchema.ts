@@ -194,6 +194,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
       graph_workflow_id INTEGER NOT NULL,
       graph_version INTEGER NOT NULL,
       status TEXT NOT NULL CHECK(status IN ('draft', 'queued', 'running', 'completed', 'failed', 'cancelled')) DEFAULT 'draft',
+      trigger_type TEXT NOT NULL CHECK(trigger_type IN ('manual', 'schedule')) DEFAULT 'manual',
+      schedule_id INTEGER,
       execution_plan TEXT,
       started_at DATETIME,
       completed_at DATETIME,
@@ -201,11 +203,40 @@ export function createUserSettingsSchema(db: Database.Database): void {
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       failed_node_id TEXT,
-      FOREIGN KEY (graph_workflow_id) REFERENCES graph_workflows(id) ON DELETE CASCADE
+      FOREIGN KEY (graph_workflow_id) REFERENCES graph_workflows(id) ON DELETE CASCADE,
+      FOREIGN KEY (schedule_id) REFERENCES graph_workflow_schedules(id) ON DELETE SET NULL
     )
   `);
 
-  // 14. Graph execution artifacts table (future intermediate image/text/blob tracking)
+  // 14. Graph workflow schedules table (saved one-time / interval / daily workflow autoruns)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS graph_workflow_schedules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      graph_workflow_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      schedule_type TEXT NOT NULL CHECK(schedule_type IN ('once', 'interval', 'daily')),
+      status TEXT NOT NULL CHECK(status IN ('active', 'paused', 'error_stopped', 'overlap_stopped', 'completed')) DEFAULT 'paused',
+      timezone TEXT,
+      run_at DATETIME,
+      interval_minutes INTEGER,
+      daily_time TEXT,
+      max_run_count INTEGER,
+      input_values TEXT,
+      confirmed_graph_version INTEGER,
+      confirmed_input_signature TEXT,
+      stop_reason_code TEXT,
+      stop_reason_message TEXT,
+      last_execution_id INTEGER,
+      next_run_at DATETIME,
+      last_enqueued_at DATETIME,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (graph_workflow_id) REFERENCES graph_workflows(id) ON DELETE CASCADE,
+      FOREIGN KEY (last_execution_id) REFERENCES graph_executions(id) ON DELETE SET NULL
+    )
+  `);
+
+  // 15. Graph execution artifacts table (future intermediate image/text/blob tracking)
   db.exec(`
     CREATE TABLE IF NOT EXISTS graph_execution_artifacts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -220,7 +251,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
-  // 15. Graph execution logs table (node-level timeline/logging)
+  // 16. Graph execution logs table (node-level timeline/logging)
   db.exec(`
     CREATE TABLE IF NOT EXISTS graph_execution_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -235,7 +266,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
-  // 16. Graph execution final results table (explicit workflow-declared final outputs)
+  // 17. Graph execution final results table (explicit workflow-declared final outputs)
   db.exec(`
     CREATE TABLE IF NOT EXISTS graph_execution_final_results (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -353,6 +384,45 @@ export function createUserSettingsSchema(db: Database.Database): void {
     console.log('  Migrating graph_executions: adding failed_node_id column');
     db.exec('ALTER TABLE graph_executions ADD COLUMN failed_node_id TEXT');
   }
+  if (!hasColumn('graph_executions', 'trigger_type')) {
+    console.log('  Migrating graph_executions: adding trigger_type column');
+    db.exec("ALTER TABLE graph_executions ADD COLUMN trigger_type TEXT NOT NULL DEFAULT 'manual'");
+  }
+  if (!hasColumn('graph_executions', 'schedule_id')) {
+    console.log('  Migrating graph_executions: adding schedule_id column');
+    db.exec('ALTER TABLE graph_executions ADD COLUMN schedule_id INTEGER');
+  }
+
+  // Migrate graph_workflow_schedules table
+  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='graph_workflow_schedules'").get()) {
+    console.log('  Migrating user settings: creating graph_workflow_schedules table');
+    db.exec(`
+      CREATE TABLE graph_workflow_schedules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        graph_workflow_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        schedule_type TEXT NOT NULL CHECK(schedule_type IN ('once', 'interval', 'daily')),
+        status TEXT NOT NULL CHECK(status IN ('active', 'paused', 'error_stopped', 'overlap_stopped', 'completed')) DEFAULT 'paused',
+        timezone TEXT,
+        run_at DATETIME,
+        interval_minutes INTEGER,
+        daily_time TEXT,
+        max_run_count INTEGER,
+        input_values TEXT,
+        confirmed_graph_version INTEGER,
+        confirmed_input_signature TEXT,
+        stop_reason_code TEXT,
+        stop_reason_message TEXT,
+        last_execution_id INTEGER,
+        next_run_at DATETIME,
+        last_enqueued_at DATETIME,
+        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (graph_workflow_id) REFERENCES graph_workflows(id) ON DELETE CASCADE,
+        FOREIGN KEY (last_execution_id) REFERENCES graph_executions(id) ON DELETE SET NULL
+      )
+    `);
+  }
 
   // Create indexes (now safe - all columns exist)
   const indexes = [
@@ -387,7 +457,12 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_graph_workflow_versions_workflow_id ON graph_workflow_versions(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_executions_workflow_id ON graph_executions(graph_workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_executions_status ON graph_executions(status)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_executions_trigger_type ON graph_executions(trigger_type)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_executions_schedule_id ON graph_executions(schedule_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_executions_failed_node ON graph_executions(failed_node_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_workflow_schedules_workflow_id ON graph_workflow_schedules(graph_workflow_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_workflow_schedules_status ON graph_workflow_schedules(status)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_workflow_schedules_next_run_at ON graph_workflow_schedules(next_run_at)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_execution_id ON graph_execution_artifacts(execution_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_node_port ON graph_execution_artifacts(node_id, port_key)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_execution_id ON graph_execution_logs(execution_id)',
@@ -409,6 +484,6 @@ export function createUserSettingsSchema(db: Database.Database): void {
     VALUES (?, ?, ?)
   `).run('civitai', 'Civitai', 1);
 
-  console.log('  ✅ User settings tables created (16 tables + indexes)');
+  console.log('  ✅ User settings tables created (17 tables + indexes)');
 
 }

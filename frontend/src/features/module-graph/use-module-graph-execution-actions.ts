@@ -8,7 +8,7 @@ import {
   type GraphExecutionRecord,
   type GraphWorkflowRecord,
 } from '@/lib/api'
-import { buildGraphEditorSnapshot, buildGraphPayload, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
+import { buildGraphEditorSnapshot, buildGraphPayload, getModuleNodeDisplayLabel, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
 
 /** Own graph save and execution actions for the module-graph page. */
@@ -93,9 +93,17 @@ export function useModuleGraphExecutionActions({
     let created: boolean
 
     if (selectedGraphId !== null) {
-      await updateGraphWorkflow(selectedGraphId, payload)
+      const updateResult = await updateGraphWorkflow(selectedGraphId, payload)
       graphId = selectedGraphId
       created = false
+
+      const pausedScheduleCount = updateResult.schedule_maintenance?.pausedScheduleCount ?? 0
+      if (!silent && pausedScheduleCount > 0) {
+        showSnackbar({
+          message: `워크플로우 변경으로 자동 실행 ${pausedScheduleCount}개를 검토 대기 상태로 전환했어. 다시 확인 후 재개해줘.`,
+          tone: 'info',
+        })
+      }
     } else {
       const createdResult = await createGraphWorkflow(payload)
       graphId = createdResult.id
@@ -222,10 +230,11 @@ export function useModuleGraphExecutionActions({
       const result = await executeGraphNode(graphId, nodeId, payload)
       onExecutionSelected(result.executionId)
       await refetchGraphExecutions()
+      const nodeDisplayLabel = getModuleNodeDisplayLabel(node)
       showSnackbar({
         message: forceRerun
-          ? `${autoSaved ? '현재 그래프를 저장한 뒤 ' : ''}강제 재실행 요청을 등록했어. 실행 #${result.executionId}는 ${node.data.module.name}까지 캐시 없이 다시 처리해.`
-          : `${autoSaved ? '현재 그래프를 저장한 뒤 ' : ''}선택 노드 실행 요청을 등록했어. 실행 #${result.executionId}가 ${node.data.module.name}까지 필요한 upstream만 처리해.`,
+          ? `${autoSaved ? '현재 그래프를 저장한 뒤 ' : ''}강제 재실행 요청을 등록했어. 실행 #${result.executionId}는 ${nodeDisplayLabel}까지 캐시 없이 다시 처리해.`
+          : `${autoSaved ? '현재 그래프를 저장한 뒤 ' : ''}선택 노드 실행 요청을 등록했어. 실행 #${result.executionId}가 ${nodeDisplayLabel}까지 필요한 upstream만 처리해.`,
         tone: 'info',
       })
     } catch (error) {

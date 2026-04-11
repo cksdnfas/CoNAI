@@ -17,7 +17,13 @@ import { triggerBrowserDownload } from '@/lib/api-client'
 import {
   cleanupGraphWorkflowEmptyExecutions,
   copyGraphWorkflowArtifactsToFolder,
+  createGraphWorkflowSchedule,
   deleteGraphWorkflowArtifacts,
+  deleteGraphWorkflowSchedule,
+  pauseGraphWorkflowSchedule,
+  resumeGraphWorkflowSchedule,
+  runGraphWorkflowScheduleNow,
+  updateGraphWorkflowSchedule,
 } from '@/lib/api-module-graph'
 import { getWatchedFolders } from '@/lib/api-folders'
 import { cancelGraphExecution } from '@/lib/api'
@@ -62,6 +68,7 @@ export function ModuleWorkflowOutputManagementPanel({
   const [isCopying, setIsCopying] = useState(false)
   const [isCleaningQueue, setIsCleaningQueue] = useState(false)
   const [isDeletingArtifacts, setIsDeletingArtifacts] = useState(false)
+  const [isMutatingSchedules, setIsMutatingSchedules] = useState(false)
 
   const watchedFoldersQuery = useQuery({
     queryKey: ['watched-folders', 'output-copy-targets'],
@@ -100,6 +107,10 @@ export function ModuleWorkflowOutputManagementPanel({
   const queueExecutions = useMemo(
     () => browseContent.empty_executions,
     [browseContent.empty_executions],
+  )
+  const workflowSchedules = useMemo(
+    () => browseContent.schedules,
+    [browseContent.schedules],
   )
 
   const selectedOutputItems = useMemo(
@@ -314,6 +325,107 @@ export function ModuleWorkflowOutputManagementPanel({
     }
   }
 
+  const handleCreateSchedule = async (payload: {
+    graph_workflow_id: number
+    name: string
+    schedule_type: 'once' | 'interval' | 'daily'
+    status?: 'active' | 'paused'
+    run_at?: string | null
+    interval_minutes?: number | null
+    daily_time?: string | null
+    max_run_count?: number | null
+    input_values?: Record<string, unknown> | null
+  }) => {
+    try {
+      setIsMutatingSchedules(true)
+      await createGraphWorkflowSchedule(payload)
+      showSnackbar({ message: '자동 실행을 추가했어.', tone: 'info' })
+      await onRefresh?.()
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '자동 실행 생성에 실패했어.', tone: 'error' })
+    } finally {
+      setIsMutatingSchedules(false)
+    }
+  }
+
+  const handleUpdateSchedule = async (scheduleId: number, payload: {
+    name: string
+    schedule_type: 'once' | 'interval' | 'daily'
+    status?: 'active' | 'paused'
+    run_at?: string | null
+    interval_minutes?: number | null
+    daily_time?: string | null
+    max_run_count?: number | null
+    input_values?: Record<string, unknown> | null
+  }) => {
+    try {
+      setIsMutatingSchedules(true)
+      await updateGraphWorkflowSchedule(scheduleId, payload)
+      showSnackbar({ message: '자동 실행을 업데이트했어.', tone: 'info' })
+      await onRefresh?.()
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '자동 실행 수정에 실패했어.', tone: 'error' })
+    } finally {
+      setIsMutatingSchedules(false)
+    }
+  }
+
+  const handlePauseSchedule = async (scheduleId: number) => {
+    try {
+      setIsMutatingSchedules(true)
+      await pauseGraphWorkflowSchedule(scheduleId)
+      showSnackbar({ message: '자동 실행을 일시정지했어.', tone: 'info' })
+      await onRefresh?.()
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '자동 실행 일시정지에 실패했어.', tone: 'error' })
+    } finally {
+      setIsMutatingSchedules(false)
+    }
+  }
+
+  const handleResumeSchedule = async (scheduleId: number) => {
+    try {
+      setIsMutatingSchedules(true)
+      await resumeGraphWorkflowSchedule(scheduleId)
+      showSnackbar({ message: '자동 실행을 다시 켰어.', tone: 'info' })
+      await onRefresh?.()
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '자동 실행 재개에 실패했어.', tone: 'error' })
+    } finally {
+      setIsMutatingSchedules(false)
+    }
+  }
+
+  const handleRunScheduleNow = async (scheduleId: number) => {
+    try {
+      setIsMutatingSchedules(true)
+      const result = await runGraphWorkflowScheduleNow(scheduleId)
+      showSnackbar({ message: `자동 실행에서 즉시 실행을 등록했어. 실행 #${result.executionId}`, tone: 'info' })
+      await onRefresh?.()
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '즉시 실행 요청에 실패했어.', tone: 'error' })
+    } finally {
+      setIsMutatingSchedules(false)
+    }
+  }
+
+  const handleDeleteSchedule = async (scheduleId: number) => {
+    if (!window.confirm('이 자동 실행을 정말 삭제할까? 연결된 queued 예약 실행도 함께 정리될 수 있어.')) {
+      return
+    }
+
+    try {
+      setIsMutatingSchedules(true)
+      await deleteGraphWorkflowSchedule(scheduleId)
+      showSnackbar({ message: '자동 실행을 삭제했어.', tone: 'info' })
+      await onRefresh?.()
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '자동 실행 삭제에 실패했어.', tone: 'error' })
+    } finally {
+      setIsMutatingSchedules(false)
+    }
+  }
+
   const allVisibleSelected = outputCollections.outputItems.length > 0 && selectedOutputIds.length === outputCollections.outputItems.length
   const allArtifactSelected = filteredTechnicalArtifacts.length > 0 && selectedArtifactIds.length === filteredTechnicalArtifacts.length
   const allQueueSelected = queueExecutions.length > 0 && selectedQueueExecutionIds.length === queueExecutions.length
@@ -326,7 +438,7 @@ export function ModuleWorkflowOutputManagementPanel({
             {selectedFolderRecord ? `${selectedFolderRecord.name} · 워크플로우 생성물` : '워크플로우 생성물'}
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
             <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Workflows</div>
             <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.workflow_count}</div>
@@ -334,6 +446,10 @@ export function ModuleWorkflowOutputManagementPanel({
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
             <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Executions</div>
             <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.execution_count}</div>
+          </div>
+          <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
+            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">자동 실행</div>
+            <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.schedule_count}</div>
           </div>
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
             <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Artifacts</div>
@@ -344,7 +460,7 @@ export function ModuleWorkflowOutputManagementPanel({
             <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.final_result_count}</div>
           </div>
           <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Empty Runs</div>
+            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">빈 실행</div>
             <div className="mt-1 text-lg font-semibold text-foreground">{browseContent.scope.empty_execution_count}</div>
           </div>
         </CardContent>
@@ -398,11 +514,14 @@ export function ModuleWorkflowOutputManagementPanel({
 
       {activeTab === 'queue' ? (
         <ModuleWorkflowEmptyRunsTab
+          schedules={workflowSchedules}
+          workflows={browseContent.workflows}
           queueExecutions={queueExecutions}
           selectedQueueExecutionIds={selectedQueueExecutionIds}
           allQueueSelected={allQueueSelected}
           workflowNameById={workflowNameById}
           isCleaningQueue={isCleaningQueue}
+          isMutatingSchedules={isMutatingSchedules}
           onToggleVisibleSelection={() => setSelectedQueueExecutionIds(allQueueSelected ? [] : queueExecutions.map((execution) => execution.id))}
           onToggleQueueSelection={handleToggleQueueSelection}
           onCancelSingle={(executionId) => {
@@ -413,6 +532,12 @@ export function ModuleWorkflowOutputManagementPanel({
             setSelectedQueueExecutionIds([executionId])
             void handleCleanupSelectedEmptyRuns([executionId])
           }}
+          onCreateSchedule={(payload) => void handleCreateSchedule(payload)}
+          onUpdateSchedule={(scheduleId, payload) => void handleUpdateSchedule(scheduleId, payload)}
+          onPauseSchedule={(scheduleId) => void handlePauseSchedule(scheduleId)}
+          onResumeSchedule={(scheduleId) => void handleResumeSchedule(scheduleId)}
+          onDeleteSchedule={(scheduleId) => void handleDeleteSchedule(scheduleId)}
+          onRunScheduleNow={(scheduleId) => void handleRunScheduleNow(scheduleId)}
         />
       ) : null}
 

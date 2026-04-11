@@ -7,6 +7,9 @@ export type ModuleAuthoringSource = 'nai_form_snapshot' | 'comfyui_workflow_wrap
 export type ModulePortDirection = 'input' | 'output'
 export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 export type GraphExecutionStatus = 'draft' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type GraphExecutionTriggerType = 'manual' | 'schedule'
+export type GraphWorkflowScheduleType = 'once' | 'interval' | 'daily'
+export type GraphWorkflowScheduleStatus = 'active' | 'paused' | 'error_stopped' | 'overlap_stopped' | 'completed'
 
 export interface ModulePortDefinition {
   key: string
@@ -197,6 +200,8 @@ export interface GraphExecutionRecord {
   graph_workflow_id: number
   graph_version: number
   status: GraphExecutionStatus
+  trigger_type?: GraphExecutionTriggerType
+  schedule_id?: number | null
   execution_plan?: string | null
   started_at?: string | null
   completed_at?: string | null
@@ -206,6 +211,68 @@ export interface GraphExecutionRecord {
   cancel_requested?: boolean
   created_date: string
   updated_date: string
+}
+
+export interface GraphWorkflowScheduleRecord {
+  id: number
+  graph_workflow_id: number
+  name: string
+  schedule_type: GraphWorkflowScheduleType
+  status: GraphWorkflowScheduleStatus
+  timezone?: string | null
+  run_at?: string | null
+  interval_minutes?: number | null
+  daily_time?: string | null
+  max_run_count?: number | null
+  input_values?: string | null
+  confirmed_graph_version?: number | null
+  confirmed_input_signature?: string | null
+  stop_reason_code?: string | null
+  stop_reason_message?: string | null
+  last_execution_id?: number | null
+  next_run_at?: string | null
+  last_enqueued_at?: string | null
+  created_date: string
+  updated_date: string
+}
+
+export interface GraphWorkflowScheduleCreateData {
+  graph_workflow_id: number
+  name: string
+  schedule_type: GraphWorkflowScheduleType
+  status?: GraphWorkflowScheduleStatus
+  timezone?: string | null
+  run_at?: string | null
+  interval_minutes?: number | null
+  daily_time?: string | null
+  max_run_count?: number | null
+  input_values?: Record<string, unknown> | null
+  confirmed_graph_version?: number | null
+  confirmed_input_signature?: string | null
+  stop_reason_code?: string | null
+  stop_reason_message?: string | null
+  last_execution_id?: number | null
+  next_run_at?: string | null
+  last_enqueued_at?: string | null
+}
+
+export interface GraphWorkflowScheduleUpdateData {
+  name?: string
+  schedule_type?: GraphWorkflowScheduleType
+  status?: GraphWorkflowScheduleStatus
+  timezone?: string | null
+  run_at?: string | null
+  interval_minutes?: number | null
+  daily_time?: string | null
+  max_run_count?: number | null
+  input_values?: Record<string, unknown> | null
+  confirmed_graph_version?: number | null
+  confirmed_input_signature?: string | null
+  stop_reason_code?: string | null
+  stop_reason_message?: string | null
+  last_execution_id?: number | null
+  next_run_at?: string | null
+  last_enqueued_at?: string | null
 }
 
 export type GraphExecutionLogLevel = 'info' | 'warn' | 'error'

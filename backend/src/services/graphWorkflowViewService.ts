@@ -3,6 +3,7 @@ import { GraphExecutionFinalResultModel } from '../models/GraphExecutionFinalRes
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowFolderModel } from '../models/GraphWorkflowFolder'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
+import { GraphWorkflowScheduleModel } from '../models/GraphWorkflowSchedule'
 import { GraphWorkflowExecutionQueue } from './graphWorkflowExecutionQueue'
 
 /** Parse one stored workflow row into a response-safe graph document shape. */
@@ -28,6 +29,7 @@ export function buildGraphWorkflowBrowseContent(folderId: number | null) {
     ? GraphWorkflowModel.findByFolderIds(folderScopeIds, true).map(parseStoredGraphWorkflow)
     : GraphWorkflowModel.findAll(true).map(parseStoredGraphWorkflow)
   const workflowIds = workflows.map((workflow) => workflow.id)
+  const schedules = GraphWorkflowScheduleModel.findByWorkflowIds(workflowIds)
   const executions = GraphExecutionModel.findByWorkflowIds(workflowIds, 300).map(decorateGraphExecutionRecord)
   const executionIds = executions.map((execution) => execution.id)
   const artifacts = GraphExecutionArtifactModel.findByExecutionIds(executionIds)
@@ -51,11 +53,13 @@ export function buildGraphWorkflowBrowseContent(folderId: number | null) {
       folder_ids: folderId !== null ? folderScopeIds : null,
       workflow_count: workflows.length,
       execution_count: executions.length,
+      schedule_count: schedules.length,
       artifact_count: artifacts.length,
       final_result_count: finalResults.length,
       empty_execution_count: emptyExecutions.length,
     },
     workflows,
+    schedules,
     executions,
     artifacts,
     final_results: finalResults,

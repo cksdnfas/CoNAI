@@ -58,7 +58,11 @@ const TABLE_EXPECTATIONS: TableExpectation[] = [
   },
   {
     table: 'graph_executions',
-    requiredColumns: ['id', 'graph_workflow_id', 'graph_version', 'status', 'execution_plan', 'started_at', 'completed_at', 'error_message', 'created_date', 'updated_date', 'failed_node_id'],
+    requiredColumns: ['id', 'graph_workflow_id', 'graph_version', 'status', 'trigger_type', 'schedule_id', 'execution_plan', 'started_at', 'completed_at', 'error_message', 'created_date', 'updated_date', 'failed_node_id'],
+  },
+  {
+    table: 'graph_workflow_schedules',
+    requiredColumns: ['id', 'graph_workflow_id', 'name', 'schedule_type', 'status', 'timezone', 'run_at', 'interval_minutes', 'daily_time', 'max_run_count', 'input_values', 'confirmed_graph_version', 'confirmed_input_signature', 'stop_reason_code', 'stop_reason_message', 'last_execution_id', 'next_run_at', 'last_enqueued_at', 'created_date', 'updated_date'],
   },
   {
     table: 'graph_execution_artifacts',

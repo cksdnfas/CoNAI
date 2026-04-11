@@ -271,13 +271,21 @@ export function useModuleGraphBrowseActions({
     }
 
     try {
-      await deleteGraphWorkflow(selectedGraphRecord.id)
+      const result = await deleteGraphWorkflow(selectedGraphRecord.id)
       clearPersistedWorkflowRunnerDraft(selectedGraphRecord.id)
       resetWorkflowDraft()
       setWorkflowView('browse')
       setIsEditorSupportOpen(false)
       await refetchGraphWorkflows()
-      showSnackbar({ message: '워크플로우를 삭제했어.', tone: 'info' })
+      const deletedScheduleCount = result.schedule_maintenance?.deletedScheduleCount ?? 0
+      const cancelledQueuedCount = result.schedule_maintenance?.cancelled ?? 0
+      const runningCancelRequestCount = result.schedule_maintenance?.runningCancellationRequested ?? 0
+      showSnackbar({
+        message: deletedScheduleCount > 0 || cancelledQueuedCount > 0 || runningCancelRequestCount > 0
+          ? `워크플로우를 삭제했고, 연결된 자동 실행 ${deletedScheduleCount}개와 예약 ${cancelledQueuedCount}개를 정리했어${runningCancelRequestCount > 0 ? `, 실행 중 ${runningCancelRequestCount}개는 취소 요청도 넣었고` : ''}.`
+          : '워크플로우를 삭제했어.',
+        tone: 'info',
+      })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '워크플로우 삭제에 실패했어.', tone: 'error' })
     }

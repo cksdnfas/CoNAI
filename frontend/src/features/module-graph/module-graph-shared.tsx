@@ -25,6 +25,7 @@ export type NodeArtifactGroupPreview = {
 
 export type ModuleGraphNodeData = {
   module: ModuleDefinitionRecord
+  label?: string
   inputValues: Record<string, unknown>
   executionStatus?: 'idle' | 'completed' | 'failed' | 'blocked'
   executionArtifactCount?: number
@@ -40,6 +41,7 @@ export type ModuleGraphNodeData = {
   onDisconnectNodeInput?: (nodeId: string, portKey: string) => void
   onNodeValueChange?: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear?: (nodeId: string, portKey: string) => void
+  onNodeLabelChange?: (nodeId: string, label: string) => void
   onNodeImageChange?: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void
   connectedInputKeys?: string[]
   connectedOutputKeys?: string[]
@@ -87,6 +89,14 @@ const PORT_TYPE_COLORS: Record<ModulePortDataType, string> = {
   any: '#b0bec5',
 }
 
+const GENERIC_MODULE_PORT_DESCRIPTIONS = new Set([
+  '노드 안에 저장해둘 텍스트 값이야.',
+  '노드 안에 저장해둘 JSON 값이야.',
+  '노드 안에 저장해둘 이미지야.',
+  '노드 안에 저장해둘 숫자 값이야.',
+  '노드 안에 저장해둘 참/거짓 값이야.',
+])
+
 /** Resolve one stable system-operation key from module metadata when present. */
 export function getModuleOperationKey(module: ModuleDefinitionRecord) {
   if (typeof module.internal_fixed_values?.operation_key === 'string') {
@@ -129,6 +139,33 @@ export function getModuleColor(module: ModuleDefinitionRecord) {
 /** Resolve a stable accent color for one module port data type. */
 export function getPortTypeColor(dataType: ModulePortDataType) {
   return PORT_TYPE_COLORS[dataType]
+}
+
+/** Hide boilerplate per-port help copy so node cards and runners stay concise. */
+export function normalizeModulePortDescription(description?: string | null) {
+  const trimmedDescription = typeof description === 'string' ? description.trim() : ''
+  if (!trimmedDescription || GENERIC_MODULE_PORT_DESCRIPTIONS.has(trimmedDescription)) {
+    return undefined
+  }
+
+  return trimmedDescription
+}
+
+/** Resolve the user-visible node name, preferring one custom label when present. */
+export function getModuleNodeDisplayLabelFromData(data: ModuleGraphNodeData) {
+  const trimmedLabel = typeof data.label === 'string' ? data.label.trim() : ''
+  return trimmedLabel || data.module.name
+}
+
+/** Check whether a node is currently using one custom user-defined label. */
+export function hasCustomModuleNodeLabel(data: ModuleGraphNodeData) {
+  const trimmedLabel = typeof data.label === 'string' ? data.label.trim() : ''
+  return trimmedLabel.length > 0 && trimmedLabel !== data.module.name
+}
+
+/** Resolve the visible node name from one graph node. */
+export function getModuleNodeDisplayLabel(node: ModuleGraphNode) {
+  return getModuleNodeDisplayLabelFromData(node.data)
 }
 
 /** Format timestamps for compact execution history display. */
@@ -397,20 +434,26 @@ export function buildFlowFromGraphRecord(graph: GraphWorkflowRecord, modules: Mo
   const moduleMap = new Map(modules.map((module) => [module.id, module]))
 
   const baseNodes: ModuleGraphNode[] = graph.graph.nodes
-    .map((node) => {
+    .map<ModuleGraphNode | null>((node) => {
       const module = moduleMap.get(node.module_id)
       if (!module) {
         return null
+      }
+
+      const data: ModuleGraphNodeData = {
+        module,
+        inputValues: node.input_values || {},
+      }
+
+      if (typeof node.label === 'string' && node.label.trim().length > 0) {
+        data.label = node.label.trim()
       }
 
       return {
         id: node.id,
         type: 'module',
         position: node.position,
-        data: {
-          module,
-          inputValues: node.input_values || {},
-        },
+        data,
       }
     })
     .filter((node): node is ModuleGraphNode => node !== null)
@@ -443,7 +486,7 @@ export function buildGraphPayload(nodes: ModuleGraphNode[], edges: ModuleGraphEd
     nodes: nodes.map((node) => ({
       id: node.id,
       module_id: node.data.module.id,
-      label: node.data.module.name,
+      label: getModuleNodeDisplayLabel(node),
       position: node.position,
       input_values: node.data.inputValues || {},
     })),

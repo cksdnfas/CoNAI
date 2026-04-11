@@ -127,12 +127,17 @@ export interface GraphWorkflowFolderRecord {
 }
 
 export type GraphExecutionStatus = 'draft' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type GraphExecutionTriggerType = 'manual' | 'schedule'
+export type GraphWorkflowScheduleType = 'once' | 'interval' | 'daily'
+export type GraphWorkflowScheduleStatus = 'active' | 'paused' | 'error_stopped' | 'overlap_stopped' | 'completed'
 
 export interface GraphExecutionRecord {
   id: number
   graph_workflow_id: number
   graph_version: number
   status: GraphExecutionStatus
+  trigger_type?: GraphExecutionTriggerType
+  schedule_id?: number | null
   execution_plan?: string | null
   started_at?: string | null
   completed_at?: string | null
@@ -140,6 +145,29 @@ export interface GraphExecutionRecord {
   error_message?: string | null
   queue_position?: number | null
   cancel_requested?: boolean
+  created_date: string
+  updated_date: string
+}
+
+export interface GraphWorkflowScheduleRecord {
+  id: number
+  graph_workflow_id: number
+  name: string
+  schedule_type: GraphWorkflowScheduleType
+  status: GraphWorkflowScheduleStatus
+  timezone?: string | null
+  run_at?: string | null
+  interval_minutes?: number | null
+  daily_time?: string | null
+  max_run_count?: number | null
+  input_values?: string | null
+  confirmed_graph_version?: number | null
+  confirmed_input_signature?: string | null
+  stop_reason_code?: string | null
+  stop_reason_message?: string | null
+  last_execution_id?: number | null
+  next_run_at?: string | null
+  last_enqueued_at?: string | null
   created_date: string
   updated_date: string
 }
@@ -188,11 +216,13 @@ export interface GraphWorkflowBrowseContentRecord {
     folder_ids: number[] | null
     workflow_count: number
     execution_count: number
+    schedule_count: number
     artifact_count: number
     final_result_count: number
     empty_execution_count: number
   }
   workflows: GraphWorkflowRecord[]
+  schedules: GraphWorkflowScheduleRecord[]
   executions: GraphExecutionRecord[]
   artifacts: GraphExecutionArtifactRecord[]
   final_results: GraphExecutionFinalResultRecord[]
@@ -255,9 +285,25 @@ interface ApiEnvelope<T> {
   error?: string
 }
 
+export interface GraphWorkflowScheduleMaintenanceResult {
+  pausedScheduleCount?: number
+  deletedScheduleCount?: number
+  cancelled: number
+  runningCancellationRequested: number
+}
+
 interface CreateEnvelope {
   id: number
   message: string
+}
+
+export interface GraphWorkflowUpdateResult extends CreateEnvelope {
+  schedule_maintenance?: GraphWorkflowScheduleMaintenanceResult | null
+}
+
+export interface GraphWorkflowDeleteResult {
+  message: string
+  schedule_maintenance?: GraphWorkflowScheduleMaintenanceResult | null
 }
 
 /** Execute a JSON API request and surface backend error messages. */
@@ -420,7 +466,7 @@ export async function updateGraphWorkflow(workflowId: number, payload: {
   version?: number
   is_active?: boolean
 }) {
-  const response = await requestJson<ApiEnvelope<CreateEnvelope>>(`/api/graph-workflows/${workflowId}`, {
+  const response = await requestJson<ApiEnvelope<GraphWorkflowUpdateResult>>(`/api/graph-workflows/${workflowId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -433,7 +479,7 @@ export async function updateGraphWorkflow(workflowId: number, payload: {
 
 /** Delete one saved graph workflow document. */
 export async function deleteGraphWorkflow(workflowId: number) {
-  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/${workflowId}`, {
+  const response = await requestJson<ApiEnvelope<GraphWorkflowDeleteResult>>(`/api/graph-workflows/${workflowId}`, {
     method: 'DELETE',
   })
 
@@ -482,6 +528,103 @@ export async function cancelGraphExecution(executionId: number) {
     method: 'POST',
   })
 
+  return response.data
+}
+
+/** List saved workflow autorun schedules. */
+export async function getGraphWorkflowSchedules(params?: { workflowId?: number | null; folderId?: number | null }) {
+  const searchParams = new URLSearchParams()
+  if (typeof params?.workflowId === 'number') {
+    searchParams.set('workflow_id', String(params.workflowId))
+  }
+  if (typeof params?.folderId === 'number') {
+    searchParams.set('folder_id', String(params.folderId))
+  }
+
+  const response = await requestJson<ApiEnvelope<GraphWorkflowScheduleRecord[]>>(`/api/graph-workflows/schedules${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
+  return response.data
+}
+
+/** Create one saved workflow autorun schedule. */
+export async function createGraphWorkflowSchedule(payload: {
+  graph_workflow_id: number
+  name: string
+  schedule_type: GraphWorkflowScheduleType
+  status?: GraphWorkflowScheduleStatus
+  timezone?: string | null
+  run_at?: string | null
+  interval_minutes?: number | null
+  daily_time?: string | null
+  max_run_count?: number | null
+  input_values?: Record<string, unknown> | null
+}) {
+  const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/graph-workflows/schedules', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  return response.data
+}
+
+/** Update one saved workflow autorun schedule. */
+export async function updateGraphWorkflowSchedule(scheduleId: number, payload: {
+  name?: string
+  schedule_type?: GraphWorkflowScheduleType
+  status?: GraphWorkflowScheduleStatus
+  timezone?: string | null
+  run_at?: string | null
+  interval_minutes?: number | null
+  daily_time?: string | null
+  max_run_count?: number | null
+  input_values?: Record<string, unknown> | null
+}) {
+  const response = await requestJson<ApiEnvelope<CreateEnvelope>>(`/api/graph-workflows/schedules/${scheduleId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  return response.data
+}
+
+/** Pause one workflow autorun schedule. */
+export async function pauseGraphWorkflowSchedule(scheduleId: number) {
+  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/schedules/${scheduleId}/pause`, {
+    method: 'POST',
+  })
+  return response.data
+}
+
+/** Resume one workflow autorun schedule after review. */
+export async function resumeGraphWorkflowSchedule(scheduleId: number) {
+  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/schedules/${scheduleId}/resume`, {
+    method: 'POST',
+  })
+  return response.data
+}
+
+/** Enqueue one immediate run from a saved schedule definition. */
+export async function runGraphWorkflowScheduleNow(scheduleId: number) {
+  const response = await requestJson<ApiEnvelope<{
+    executionId: number
+    status: GraphExecutionStatus
+    message: string
+  }>>(`/api/graph-workflows/schedules/${scheduleId}/run-now`, {
+    method: 'POST',
+  })
+  return response.data
+}
+
+/** Delete one workflow autorun schedule. */
+export async function deleteGraphWorkflowSchedule(scheduleId: number) {
+  const response = await requestJson<ApiEnvelope<{ message: string }>>(`/api/graph-workflows/schedules/${scheduleId}`, {
+    method: 'DELETE',
+  })
   return response.data
 }
 

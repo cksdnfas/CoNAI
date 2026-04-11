@@ -6,7 +6,9 @@ import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphExecutionArtifactModel } from '../models/GraphExecutionArtifact'
 import { GraphExecutionFinalResultModel } from '../models/GraphExecutionFinalResult'
 import { GraphExecutionLogModel } from '../models/GraphExecutionLog'
+import { GraphWorkflowScheduleModel } from '../models/GraphWorkflowSchedule'
 import { GraphWorkflowExecutionQueue } from '../services/graphWorkflowExecutionQueue'
+import { GraphWorkflowScheduleService } from '../services/graphWorkflowScheduleService'
 import {
   buildGraphWorkflowBrowseContent,
   decorateGraphExecutionRecord,
@@ -17,10 +19,43 @@ import {
   copyGraphWorkflowArtifactsToWatchedFolder,
   deleteGraphExecutionArtifacts,
 } from '../services/graphWorkflowOutputManagementService'
-import { ModuleGraphResponse, GraphWorkflowCreateData, GraphWorkflowUpdateData } from '../types/moduleGraph'
+import {
+  ModuleGraphResponse,
+  GraphWorkflowCreateData,
+  GraphWorkflowUpdateData,
+  GraphWorkflowScheduleStatus,
+  GraphWorkflowScheduleType,
+} from '../types/moduleGraph'
 import { asyncHandler } from '../middleware/errorHandler'
 
 const router = Router()
+
+function parseScheduleType(value: unknown): GraphWorkflowScheduleType | null {
+  return value === 'once' || value === 'interval' || value === 'daily' ? value : null
+}
+
+function parseScheduleStatus(value: unknown): GraphWorkflowScheduleStatus | null {
+  return value === 'active' || value === 'paused' || value === 'error_stopped' || value === 'overlap_stopped' || value === 'completed'
+    ? value
+    : null
+}
+
+function parseOptionalTrimmedString(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+}
+
+function parseOptionalPositiveInteger(value: unknown) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const numericValue = Number(value)
+  return Number.isInteger(numericValue) && numericValue > 0 ? numericValue : null
+}
+
+function parseScheduleInputValues(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
 
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {
@@ -149,6 +184,293 @@ router.delete('/folders/:id', asyncHandler(async (req: Request, res: Response) =
     console.error('Error deleting graph workflow folder:', error)
     return res.status(500).json({ success: false, error: 'Failed to delete graph workflow folder' } as ModuleGraphResponse)
   }
+}))
+
+router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
+  const workflowIdParam = typeof req.query.workflow_id === 'string' ? Number(req.query.workflow_id) : null
+  const folderIdParam = typeof req.query.folder_id === 'string' ? Number(req.query.folder_id) : null
+
+  try {
+    if (workflowIdParam !== null && Number.isFinite(workflowIdParam)) {
+      return res.json({ success: true, data: GraphWorkflowScheduleModel.findByWorkflowId(workflowIdParam) } as ModuleGraphResponse)
+    }
+
+    if (folderIdParam !== null && Number.isFinite(folderIdParam)) {
+      const folder = GraphWorkflowFolderModel.findById(folderIdParam)
+      if (!folder) {
+        return res.status(404).json({ success: false, error: 'Graph workflow folder not found' } as ModuleGraphResponse)
+      }
+
+      const workflowIds = GraphWorkflowModel.findByFolderIds(GraphWorkflowFolderModel.getSubtreeFolderIds(folder.id), true).map((workflow) => workflow.id)
+      return res.json({ success: true, data: GraphWorkflowScheduleModel.findByWorkflowIds(workflowIds) } as ModuleGraphResponse)
+    }
+
+    return res.json({ success: true, data: GraphWorkflowScheduleModel.findAll() } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error getting graph workflow schedules:', error)
+    return res.status(500).json({ success: false, error: 'Failed to get graph workflow schedules' } as ModuleGraphResponse)
+  }
+}))
+
+router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
+  const workflowId = Number(req.body?.graph_workflow_id)
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
+  const scheduleType = parseScheduleType(req.body?.schedule_type)
+  const status = parseScheduleStatus(req.body?.status) ?? 'paused'
+  const runAt = parseOptionalTrimmedString(req.body?.run_at)
+  const intervalMinutes = parseOptionalPositiveInteger(req.body?.interval_minutes)
+  const dailyTime = parseOptionalTrimmedString(req.body?.daily_time)
+  const maxRunCount = parseOptionalPositiveInteger(req.body?.max_run_count)
+  const timezone = parseOptionalTrimmedString(req.body?.timezone)
+  const inputValues = parseScheduleInputValues(req.body?.input_values)
+
+  if (!Number.isFinite(workflowId)) {
+    return res.status(400).json({ success: false, error: 'graph_workflow_id is required' } as ModuleGraphResponse)
+  }
+
+  if (!name) {
+    return res.status(400).json({ success: false, error: 'name is required' } as ModuleGraphResponse)
+  }
+
+  if (!scheduleType) {
+    return res.status(400).json({ success: false, error: 'schedule_type must be once, interval, or daily' } as ModuleGraphResponse)
+  }
+
+  const workflow = GraphWorkflowModel.findById(workflowId)
+  if (!workflow) {
+    return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
+  }
+
+  if (scheduleType === 'once' && !runAt) {
+    return res.status(400).json({ success: false, error: 'run_at is required for one-time schedules' } as ModuleGraphResponse)
+  }
+
+  if (scheduleType === 'interval' && !intervalMinutes) {
+    return res.status(400).json({ success: false, error: 'interval_minutes is required for interval schedules' } as ModuleGraphResponse)
+  }
+
+  if (scheduleType === 'daily' && !dailyTime) {
+    return res.status(400).json({ success: false, error: 'daily_time is required for daily schedules' } as ModuleGraphResponse)
+  }
+
+  try {
+    const nextRunAt = status === 'active'
+      ? GraphWorkflowScheduleService.buildInitialNextRunAt({
+        scheduleType,
+        runAt,
+        intervalMinutes,
+        dailyTime,
+      })
+      : null
+
+    const scheduleId = GraphWorkflowScheduleModel.create({
+      graph_workflow_id: workflow.id,
+      name,
+      schedule_type: scheduleType,
+      status,
+      timezone,
+      run_at: runAt,
+      interval_minutes: intervalMinutes,
+      daily_time: dailyTime,
+      max_run_count: maxRunCount,
+      input_values: inputValues,
+      confirmed_graph_version: workflow.version,
+      confirmed_input_signature: GraphWorkflowScheduleService.buildInputSignature(inputValues),
+      next_run_at: nextRunAt,
+      stop_reason_code: status === 'active' ? null : 'manual_pause',
+      stop_reason_message: status === 'active' ? null : 'Schedule created in paused state.',
+    })
+
+    return res.status(201).json({ success: true, data: { id: scheduleId, message: 'Graph workflow schedule created successfully' } } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error creating graph workflow schedule:', error)
+    return res.status(500).json({ success: false, error: 'Failed to create graph workflow schedule' } as ModuleGraphResponse)
+  }
+}))
+
+router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Response) => {
+  const scheduleId = parseInt(routeParam(routeParam(req.params.scheduleId)))
+  if (isNaN(scheduleId)) {
+    return res.status(400).json({ success: false, error: 'Invalid schedule ID' } as ModuleGraphResponse)
+  }
+
+  const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
+  if (!schedule) {
+    return res.status(404).json({ success: false, error: 'Graph workflow schedule not found' } as ModuleGraphResponse)
+  }
+
+  const workflow = GraphWorkflowModel.findById(schedule.graph_workflow_id)
+  if (!workflow) {
+    return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
+  }
+
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined
+  const scheduleType = req.body?.schedule_type !== undefined ? parseScheduleType(req.body.schedule_type) : undefined
+  const requestedStatus = req.body?.status !== undefined ? parseScheduleStatus(req.body.status) : undefined
+  const runAt = req.body?.run_at !== undefined ? parseOptionalTrimmedString(req.body.run_at) : undefined
+  const intervalMinutes = req.body?.interval_minutes !== undefined ? parseOptionalPositiveInteger(req.body.interval_minutes) : undefined
+  const dailyTime = req.body?.daily_time !== undefined ? parseOptionalTrimmedString(req.body.daily_time) : undefined
+  const maxRunCount = req.body?.max_run_count !== undefined ? parseOptionalPositiveInteger(req.body.max_run_count) : undefined
+  const timezone = req.body?.timezone !== undefined ? parseOptionalTrimmedString(req.body.timezone) : undefined
+  const inputValues = req.body?.input_values !== undefined ? parseScheduleInputValues(req.body.input_values) : undefined
+
+  if (name !== undefined && !name) {
+    return res.status(400).json({ success: false, error: 'name is required' } as ModuleGraphResponse)
+  }
+
+  if (req.body?.schedule_type !== undefined && !scheduleType) {
+    return res.status(400).json({ success: false, error: 'schedule_type must be once, interval, or daily' } as ModuleGraphResponse)
+  }
+
+  try {
+    const finalScheduleType = scheduleType ?? schedule.schedule_type
+    const finalStatus = requestedStatus ?? schedule.status
+    const finalRunAt = runAt === undefined ? schedule.run_at ?? null : runAt
+    const finalIntervalMinutes = intervalMinutes === undefined ? schedule.interval_minutes ?? null : intervalMinutes
+    const finalDailyTime = dailyTime === undefined ? schedule.daily_time ?? null : dailyTime
+    const finalInputValues = inputValues === undefined
+      ? (schedule.input_values ? JSON.parse(schedule.input_values) as Record<string, unknown> : null)
+      : inputValues
+    const nextRunAt = finalStatus === 'active'
+      ? GraphWorkflowScheduleService.buildInitialNextRunAt({
+        scheduleType: finalScheduleType,
+        runAt: finalRunAt,
+        intervalMinutes: finalIntervalMinutes,
+        dailyTime: finalDailyTime,
+      })
+      : null
+
+    const updated = GraphWorkflowScheduleModel.update(scheduleId, {
+      name,
+      schedule_type: scheduleType ?? undefined,
+      status: finalStatus,
+      timezone,
+      run_at: runAt,
+      interval_minutes: intervalMinutes,
+      daily_time: dailyTime,
+      max_run_count: maxRunCount,
+      input_values: inputValues,
+      confirmed_graph_version: workflow.version,
+      confirmed_input_signature: GraphWorkflowScheduleService.buildInputSignature(finalInputValues),
+      next_run_at: nextRunAt,
+      stop_reason_code: finalStatus === 'active' ? null : schedule.stop_reason_code ?? 'manual_pause',
+      stop_reason_message: finalStatus === 'active' ? null : schedule.stop_reason_message ?? 'Schedule paused.',
+    })
+
+    return res.json({ success: updated, data: { id: scheduleId, message: updated ? 'Graph workflow schedule updated successfully' : 'No schedule changes applied' } } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error updating graph workflow schedule:', error)
+    return res.status(500).json({ success: false, error: 'Failed to update graph workflow schedule' } as ModuleGraphResponse)
+  }
+}))
+
+router.post('/schedules/:scheduleId/pause', asyncHandler(async (req: Request, res: Response) => {
+  const scheduleId = parseInt(routeParam(routeParam(req.params.scheduleId)))
+  if (isNaN(scheduleId)) {
+    return res.status(400).json({ success: false, error: 'Invalid schedule ID' } as ModuleGraphResponse)
+  }
+
+  const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
+  if (!schedule) {
+    return res.status(404).json({ success: false, error: 'Graph workflow schedule not found' } as ModuleGraphResponse)
+  }
+
+  const updated = GraphWorkflowScheduleModel.update(scheduleId, {
+    status: 'paused',
+    next_run_at: null,
+    stop_reason_code: 'manual_pause',
+    stop_reason_message: 'Schedule paused by user.',
+  })
+  const queueCleanup = GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds([scheduleId])
+
+  return res.json({ success: updated, data: { id: scheduleId, message: 'Graph workflow schedule paused', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
+}))
+
+router.post('/schedules/:scheduleId/resume', asyncHandler(async (req: Request, res: Response) => {
+  const scheduleId = parseInt(routeParam(routeParam(req.params.scheduleId)))
+  if (isNaN(scheduleId)) {
+    return res.status(400).json({ success: false, error: 'Invalid schedule ID' } as ModuleGraphResponse)
+  }
+
+  const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
+  if (!schedule) {
+    return res.status(404).json({ success: false, error: 'Graph workflow schedule not found' } as ModuleGraphResponse)
+  }
+
+  const workflow = GraphWorkflowModel.findById(schedule.graph_workflow_id)
+  if (!workflow) {
+    return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
+  }
+
+  const nextRunAt = GraphWorkflowScheduleService.buildInitialNextRunAt({
+    scheduleType: schedule.schedule_type,
+    runAt: schedule.run_at,
+    intervalMinutes: schedule.interval_minutes,
+    dailyTime: schedule.daily_time,
+  })
+
+  const updated = GraphWorkflowScheduleModel.update(scheduleId, {
+    status: 'active',
+    confirmed_graph_version: workflow.version,
+    next_run_at: nextRunAt,
+    stop_reason_code: null,
+    stop_reason_message: null,
+  })
+
+  return res.json({ success: updated, data: { id: scheduleId, message: 'Graph workflow schedule resumed' } } as ModuleGraphResponse)
+}))
+
+router.post('/schedules/:scheduleId/run-now', asyncHandler(async (req: Request, res: Response) => {
+  const scheduleId = parseInt(routeParam(routeParam(req.params.scheduleId)))
+  if (isNaN(scheduleId)) {
+    return res.status(400).json({ success: false, error: 'Invalid schedule ID' } as ModuleGraphResponse)
+  }
+
+  const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
+  if (!schedule) {
+    return res.status(404).json({ success: false, error: 'Graph workflow schedule not found' } as ModuleGraphResponse)
+  }
+
+  const workflow = GraphWorkflowModel.findById(schedule.graph_workflow_id)
+  if (!workflow) {
+    return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
+  }
+
+  try {
+    const result = GraphWorkflowExecutionQueue.enqueue(
+      schedule.graph_workflow_id,
+      schedule.input_values ? JSON.parse(schedule.input_values) as Record<string, unknown> : undefined,
+      undefined,
+      false,
+      { triggerType: 'schedule', scheduleId },
+    )
+
+    GraphWorkflowScheduleModel.update(scheduleId, {
+      last_execution_id: result.executionId,
+      last_enqueued_at: new Date().toISOString(),
+    })
+
+    return res.status(201).json({ success: true, data: { ...result, message: 'Graph workflow schedule run enqueued' } } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error running graph workflow schedule now:', error)
+    return res.status(500).json({ success: false, error: 'Failed to run graph workflow schedule now' } as ModuleGraphResponse)
+  }
+}))
+
+router.delete('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Response) => {
+  const scheduleId = parseInt(routeParam(routeParam(req.params.scheduleId)))
+  if (isNaN(scheduleId)) {
+    return res.status(400).json({ success: false, error: 'Invalid schedule ID' } as ModuleGraphResponse)
+  }
+
+  const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
+  if (!schedule) {
+    return res.status(404).json({ success: false, error: 'Graph workflow schedule not found' } as ModuleGraphResponse)
+  }
+
+  const queueCleanup = GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds([scheduleId])
+  const deleted = GraphWorkflowScheduleModel.delete(scheduleId)
+  return res.json({ success: deleted, data: { id: scheduleId, message: 'Graph workflow schedule deleted', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
 }))
 
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
@@ -391,7 +713,18 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     }
 
     const updated = GraphWorkflowModel.update(id, updateData)
-    return res.json({ success: updated, data: { id, message: updated ? 'Graph workflow updated successfully' : 'No changes applied' } } as ModuleGraphResponse)
+    const shouldPauseSchedulesForReview = Boolean(updateData.graph !== undefined || updateData.version !== undefined)
+    const scheduleMaintenance = updated && shouldPauseSchedulesForReview
+      ? GraphWorkflowScheduleService.pauseSchedulesForWorkflowChange(id)
+      : null
+    return res.json({
+      success: updated,
+      data: {
+        id,
+        message: updated ? 'Graph workflow updated successfully' : 'No changes applied',
+        schedule_maintenance: scheduleMaintenance,
+      },
+    } as ModuleGraphResponse)
   } catch (error) {
     console.error('Error updating graph workflow:', error)
     return res.status(500).json({ success: false, error: 'Failed to update graph workflow' } as ModuleGraphResponse)
@@ -405,12 +738,19 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
+    const scheduleMaintenance = GraphWorkflowScheduleService.deleteSchedulesForWorkflowDeletion(id)
     const deleted = GraphWorkflowModel.delete(id)
     if (!deleted) {
       return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
     }
 
-    return res.json({ success: true, data: { message: 'Graph workflow deleted successfully' } } as ModuleGraphResponse)
+    return res.json({
+      success: true,
+      data: {
+        message: 'Graph workflow deleted successfully',
+        schedule_maintenance: scheduleMaintenance,
+      },
+    } as ModuleGraphResponse)
   } catch (error) {
     console.error('Error deleting graph workflow:', error)
     return res.status(500).json({ success: false, error: 'Failed to delete graph workflow' } as ModuleGraphResponse)

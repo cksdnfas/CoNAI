@@ -1,5 +1,5 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
-import { GraphExecutionRecord, GraphExecutionStatus } from '../types/moduleGraph'
+import { GraphExecutionRecord, GraphExecutionStatus, GraphExecutionTriggerType } from '../types/moduleGraph'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
 
 export class GraphExecutionModel {
@@ -46,15 +46,19 @@ export class GraphExecutionModel {
     `).all(...workflowIds, limit) as GraphExecutionRecord[]
   }
 
+  /** Create one execution row for manual or schedule-triggered workflow execution. */
   static create(data: {
     graph_workflow_id: number
     graph_version: number
     status?: GraphExecutionStatus
+    trigger_type?: GraphExecutionTriggerType
+    schedule_id?: number | null
     execution_plan?: string | null
     started_at?: string | null
   }): number {
     const db = getUserSettingsDb()
     const status = data.status ?? 'running'
+    const triggerType = data.trigger_type ?? 'manual'
     const startedAt = data.started_at !== undefined
       ? data.started_at
       : status === 'running'
@@ -63,12 +67,14 @@ export class GraphExecutionModel {
 
     const info = db.prepare(`
       INSERT INTO graph_executions (
-        graph_workflow_id, graph_version, status, execution_plan, started_at
-      ) VALUES (?, ?, ?, ?, ?)
+        graph_workflow_id, graph_version, status, trigger_type, schedule_id, execution_plan, started_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.graph_workflow_id,
       data.graph_version,
       status,
+      triggerType,
+      data.schedule_id ?? null,
       data.execution_plan ?? null,
       startedAt,
     )
@@ -90,6 +96,22 @@ export class GraphExecutionModel {
       ORDER BY created_date DESC
       LIMIT ?
     `).all(workflowId, limit) as GraphExecutionRecord[]
+  }
+
+  /** List executions linked to one schedule id set, newest first. */
+  static findByScheduleIds(scheduleIds: number[], limit = 200): GraphExecutionRecord[] {
+    if (scheduleIds.length === 0) {
+      return []
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = scheduleIds.map(() => '?').join(', ')
+    return db.prepare(`
+      SELECT * FROM graph_executions
+      WHERE schedule_id IN (${placeholders})
+      ORDER BY created_date DESC, id DESC
+      LIMIT ?
+    `).all(...scheduleIds, limit) as GraphExecutionRecord[]
   }
 
   static update(id: number, data: Partial<GraphExecutionRecord>) {

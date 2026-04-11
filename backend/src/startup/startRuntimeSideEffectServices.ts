@@ -2,6 +2,7 @@ import { imageTaggerService } from '../services/imageTaggerService'
 import { settingsService } from '../services/settingsService'
 import { AutoScanScheduler } from '../services/autoScanScheduler'
 import { autoTagScheduler } from '../services/autoTagScheduler'
+import { GraphWorkflowScheduleService } from '../services/graphWorkflowScheduleService'
 
 /** Start runtime daemons, watchers, and schedulers after core startup succeeds. */
 export async function startRuntimeSideEffectServices(isSafeSmokeMode: boolean) {
@@ -43,6 +44,7 @@ export async function startRuntimeSideEffectServices(isSafeSmokeMode: boolean) {
   }
 
   AutoScanScheduler.start()
+  GraphWorkflowScheduleService.start()
 
   const autoTagSchedulerStarted = autoTagScheduler.start()
   if (!autoTagSchedulerStarted) {
