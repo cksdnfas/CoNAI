@@ -1,18 +1,16 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { WallpaperAnimationEasing, WallpaperImageHoverMotion, WallpaperImageTransitionStyle } from './wallpaper-types'
 import {
+  evaluateWallpaperAnimationEasingAtTime,
   getWallpaperAnimationEasingCss,
   getWallpaperHoverMotionAmount,
   getWallpaperImageTransitionDurationMs,
-  getWallpaperPresetBezierControlPoints,
   getWallpaperMotionStrengthMultiplier,
-  isWallpaperAnimationEasingPreset,
-  normalizeWallpaperAnimationEasing,
-  parseWallpaperCubicBezierEasing,
+  normalizeWallpaperEasingStopPoints,
   resolveWallpaperHoverMotionMetrics,
-  type WallpaperBezierControlPoints,
+  type WallpaperEasingStopPoint,
 } from './wallpaper-widget-utils'
 
 export type WallpaperEasingPreviewKind = 'transition' | 'hover' | 'motion'
@@ -46,9 +44,9 @@ export function formatWallpaperEasingGraphPointValue(value: number) {
   return Number(value.toFixed(3))
 }
 
-// Clamp one bezier control point based on its axis range.
-export function clampWallpaperBezierControlPointValue(key: keyof WallpaperBezierControlPoints, value: number) {
-  return key === 'x1' || key === 'x2'
+// Clamp one editable easing point value based on its axis range.
+export function clampWallpaperEasingStopPointValue(axis: 'x' | 'y', value: number) {
+  return axis === 'x'
     ? clampWallpaperEasingGraphValue(value, 0, 1)
     : clampWallpaperEasingGraphValue(value, WALLPAPER_EASING_GRAPH_RANGE_MIN_Y, WALLPAPER_EASING_GRAPH_RANGE_MAX_Y)
 }
@@ -211,72 +209,14 @@ function getWallpaperTransitionPreviewKeyframes(
       ]
 }
 
-// Evaluate one cubic-bezier component at a normalized parameter value.
-function evaluateWallpaperBezierComponent(p1: number, p2: number, time: number) {
-  const inverseTime = 1 - time
-  return (3 * inverseTime * inverseTime * time * p1) + (3 * inverseTime * time * time * p2) + (time * time * time)
-}
-
-// Solve one cubic-bezier timing curve into a graph Y value at the requested time.
-function evaluateWallpaperBezierEasingAtTime(points: WallpaperBezierControlPoints, time: number) {
-  let lowerBound = 0
-  let upperBound = 1
-
-  for (let iteration = 0; iteration < 18; iteration += 1) {
-    const parameter = (lowerBound + upperBound) / 2
-    const x = evaluateWallpaperBezierComponent(points.x1, points.x2, parameter)
-    if (x < time) {
-      lowerBound = parameter
-    }
-    else {
-      upperBound = parameter
-    }
-  }
-
-  return evaluateWallpaperBezierComponent(points.y1, points.y2, (lowerBound + upperBound) / 2)
-}
-
-// Sample one bounce easing curve for the compact preview graph.
-function evaluateWallpaperBounceEasingAtTime(time: number) {
-  const bounceFactor = 7.5625
-  const bounceStep = 2.75
-
-  if (time < 1 / bounceStep) {
-    return bounceFactor * time * time
-  }
-
-  if (time < 2 / bounceStep) {
-    const shifted = time - (1.5 / bounceStep)
-    return (bounceFactor * shifted * shifted) + 0.75
-  }
-
-  if (time < 2.5 / bounceStep) {
-    const shifted = time - (2.25 / bounceStep)
-    return (bounceFactor * shifted * shifted) + 0.9375
-  }
-
-  const shifted = time - (2.625 / bounceStep)
-  return (bounceFactor * shifted * shifted) + 0.984375
-}
-
 // Build sampled graph points for one easing preview thumbnail.
 function sampleWallpaperEasingPreviewPoints(easing: WallpaperAnimationEasing | undefined) {
-  const normalizedEasing = normalizeWallpaperAnimationEasing(easing)
-  const presetBezier = isWallpaperAnimationEasingPreset(normalizedEasing)
-    ? getWallpaperPresetBezierControlPoints(normalizedEasing)
-    : null
-  const customBezier = parseWallpaperCubicBezierEasing(normalizedEasing)
-  const bezierPoints = customBezier ?? presetBezier
-
   return Array.from({ length: WALLPAPER_EASING_PREVIEW_GRAPH_SAMPLES }, (_, index) => {
     const time = index / (WALLPAPER_EASING_PREVIEW_GRAPH_SAMPLES - 1)
-    const value = normalizedEasing === 'easeOutBounce'
-      ? evaluateWallpaperBounceEasingAtTime(time)
-      : bezierPoints
-        ? evaluateWallpaperBezierEasingAtTime(bezierPoints, time)
-        : time
-
-    return { x: time, y: value }
+    return {
+      x: time,
+      y: evaluateWallpaperAnimationEasingAtTime(easing, time),
+    }
   })
 }
 
@@ -345,17 +285,21 @@ export function WallpaperEasingGraphPreview({ easing, className }: { easing: Wal
   )
 }
 
-// Render the editable cubic-bezier graph with draggable control points.
+// Render the editable multi-point easing graph with draggable stop points.
 export function WallpaperEasingGraph({
   value,
   onChange,
+  selectedIndex = null,
+  onSelectIndex,
 }: {
-  value: WallpaperBezierControlPoints
-  onChange: (value: WallpaperBezierControlPoints) => void
+  value: WallpaperEasingStopPoint[]
+  onChange: (value: WallpaperEasingStopPoint[]) => void
+  selectedIndex?: number | null
+  onSelectIndex?: (index: number | null) => void
 }) {
   const graphRef = useRef<SVGSVGElement | null>(null)
   const [dragState, setDragState] = useState<{
-    handle: 'p1' | 'p2'
+    index: number
     pointerId: number
     offsetX: number
     offsetY: number
@@ -377,12 +321,20 @@ export function WallpaperEasingGraph({
       }
 
       const pointerPosition = getWallpaperEasingGraphPointerPosition(event, svgElement)
-      const nextX = unmapWallpaperEasingGraphX(pointerPosition.x - dragState.offsetX)
+      const previousPoint = value[dragState.index - 1]
+      const nextPoint = value[dragState.index + 1]
+      const nextX = clampWallpaperEasingGraphValue(
+        unmapWallpaperEasingGraphX(pointerPosition.x - dragState.offsetX),
+        (previousPoint?.x ?? 0) + 0.02,
+        (nextPoint?.x ?? 1) - 0.02,
+      )
       const nextY = unmapWallpaperEasingGraphY(pointerPosition.y - dragState.offsetY)
-      onChange({
-        ...value,
-        ...(dragState.handle === 'p1' ? { x1: nextX, y1: nextY } : { x2: nextX, y2: nextY }),
-      })
+
+      onChange(value.map((point, index) => (
+        index === dragState.index
+          ? { x: nextX, y: nextY }
+          : point
+      )))
     }
 
     const stopDragging = (event: PointerEvent) => {
@@ -399,22 +351,132 @@ export function WallpaperEasingGraph({
     }
   }, [dragState, onChange, value])
 
-  const startPoint = { x: mapWallpaperEasingGraphX(0), y: mapWallpaperEasingGraphY(0) }
-  const endPoint = { x: mapWallpaperEasingGraphX(1), y: mapWallpaperEasingGraphY(1) }
-  const controlOne = { x: mapWallpaperEasingGraphX(value.x1), y: mapWallpaperEasingGraphY(value.y1) }
-  const controlTwo = { x: mapWallpaperEasingGraphX(value.x2), y: mapWallpaperEasingGraphY(value.y2) }
-  const path = `M ${startPoint.x} ${startPoint.y} C ${controlOne.x} ${controlOne.y}, ${controlTwo.x} ${controlTwo.y}, ${endPoint.x} ${endPoint.y}`
+  const normalizedPoints = normalizeWallpaperEasingStopPoints(value)
+  const path = normalizedPoints
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${mapWallpaperEasingGraphX(point.x)} ${mapWallpaperEasingGraphY(point.y)}`)
+    .join(' ')
+
+  const handleAdjustSelectedPoint = (axis: 'x' | 'y', direction: -1 | 1, accelerated = false) => {
+    if (selectedIndex === null || selectedIndex <= 0 || selectedIndex >= normalizedPoints.length - 1) {
+      return
+    }
+
+    const step = axis === 'x'
+      ? accelerated ? 0.05 : 0.01
+      : accelerated ? 0.1 : 0.01
+    const currentPoint = normalizedPoints[selectedIndex]
+    const previousPoint = normalizedPoints[selectedIndex - 1]
+    const nextPoint = normalizedPoints[selectedIndex + 1]
+    const nextValue = currentPoint[axis] + (direction * step)
+
+    onChange(normalizedPoints.map((point, index) => {
+      if (index !== selectedIndex) {
+        return point
+      }
+
+      if (axis === 'x') {
+        return {
+          ...point,
+          x: clampWallpaperEasingGraphValue(nextValue, previousPoint.x + 0.02, nextPoint.x - 0.02),
+        }
+      }
+
+      return {
+        ...point,
+        y: clampWallpaperEasingStopPointValue('y', nextValue),
+      }
+    }))
+  }
+
+  const handleAddPoint = () => {
+    let widestSegmentIndex = 0
+    let widestSegmentWidth = 0
+
+    for (let index = 1; index < normalizedPoints.length; index += 1) {
+      const previous = normalizedPoints[index - 1]
+      const current = normalizedPoints[index]
+      const width = current.x - previous.x
+      if (width > widestSegmentWidth) {
+        widestSegmentWidth = width
+        widestSegmentIndex = index
+      }
+    }
+
+    const previous = normalizedPoints[widestSegmentIndex - 1] ?? normalizedPoints[0]
+    const current = normalizedPoints[widestSegmentIndex] ?? normalizedPoints[normalizedPoints.length - 1]
+    const insertedPoint = {
+      x: (previous.x + current.x) / 2,
+      y: (previous.y + current.y) / 2,
+    }
+
+    onChange([
+      ...normalizedPoints.slice(0, widestSegmentIndex),
+      insertedPoint,
+      ...normalizedPoints.slice(widestSegmentIndex),
+    ])
+    onSelectIndex?.(widestSegmentIndex)
+  }
+
+  const handleGraphDoubleClick = (event: ReactMouseEvent<SVGSVGElement>) => {
+    const svgElement = graphRef.current
+    if (!svgElement) {
+      return
+    }
+
+    const pointerPosition = getWallpaperEasingGraphPointerPosition(event, svgElement)
+    const insertedPoint = {
+      x: unmapWallpaperEasingGraphX(pointerPosition.x),
+      y: unmapWallpaperEasingGraphY(pointerPosition.y),
+    }
+
+    const nextPoints = normalizeWallpaperEasingStopPoints([...normalizedPoints, insertedPoint])
+    const insertedIndex = nextPoints.findIndex(
+      (point, index) => index > 0 && index < nextPoints.length - 1 && point.x >= insertedPoint.x,
+    )
+
+    onChange(nextPoints)
+    onSelectIndex?.(insertedIndex >= 0 ? insertedIndex : Math.max(1, nextPoints.length - 2))
+  }
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <span>그래프 편집</span>
-        <span>시작/끝점은 고정, P1/P2만 드래그해서 조절</span>
+        <div className="flex items-center gap-2">
+          <span>빈 곳 더블클릭 추가, 점 더블클릭/우클릭 삭제</span>
+          <Button type="button" size="xs" variant="ghost" onClick={handleAddPoint}>점 추가</Button>
+        </div>
       </div>
       <svg
         ref={graphRef}
         viewBox={`0 0 ${GRAPH_VIEWBOX_SIZE} ${GRAPH_VIEWBOX_SIZE}`}
         className="h-[352px] w-full rounded-sm border border-border bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_45%),var(--surface-low)]"
+        tabIndex={0}
+        onDoubleClick={handleGraphDoubleClick}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowLeft') {
+            event.preventDefault()
+            handleAdjustSelectedPoint('x', -1, event.shiftKey)
+          }
+          else if (event.key === 'ArrowRight') {
+            event.preventDefault()
+            handleAdjustSelectedPoint('x', 1, event.shiftKey)
+          }
+          else if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            handleAdjustSelectedPoint('y', 1, event.shiftKey)
+          }
+          else if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            handleAdjustSelectedPoint('y', -1, event.shiftKey)
+          }
+          else if ((event.key === 'Backspace' || event.key === 'Delete') && selectedIndex !== null && selectedIndex > 0 && selectedIndex < normalizedPoints.length - 1) {
+            event.preventDefault()
+            const nextPoints = normalizedPoints.filter((_, pointIndex) => pointIndex !== selectedIndex)
+            onChange(nextPoints)
+            onSelectIndex?.(nextPoints.length > 2 ? Math.min(selectedIndex, nextPoints.length - 2) : null)
+          }
+        }}
       >
         {[0, 0.25, 0.5, 0.75, 1].map((line) => {
           const x = mapWallpaperEasingGraphX(line)
@@ -431,55 +493,71 @@ export function WallpaperEasingGraph({
         <text x={GRAPH_PADDING} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-[11px]">눌림</text>
         <text x={GRAPH_SIZE + GRAPH_PADDING - 14} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-[11px]">시간</text>
 
-        <path d={`M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}`} stroke="color-mix(in srgb, var(--muted-foreground) 48%, transparent)" strokeDasharray="5 6" strokeWidth="1.5" fill="none" />
+        <path d={`M ${mapWallpaperEasingGraphX(0)} ${mapWallpaperEasingGraphY(0)} L ${mapWallpaperEasingGraphX(1)} ${mapWallpaperEasingGraphY(1)}`} stroke="color-mix(in srgb, var(--muted-foreground) 48%, transparent)" strokeDasharray="5 6" strokeWidth="1.5" fill="none" />
         <path d={path} stroke="var(--primary)" strokeWidth="4" fill="none" />
-        <line x1={startPoint.x} y1={startPoint.y} x2={controlOne.x} y2={controlOne.y} stroke="color-mix(in srgb, var(--secondary) 62%, transparent)" strokeWidth="2" />
-        <line x1={endPoint.x} y1={endPoint.y} x2={controlTwo.x} y2={controlTwo.y} stroke="color-mix(in srgb, var(--secondary) 62%, transparent)" strokeWidth="2" />
 
-        <circle cx={startPoint.x} cy={startPoint.y} r="6" fill="var(--muted-foreground)" opacity="0.72" />
-        <circle cx={endPoint.x} cy={endPoint.y} r="6" fill="var(--muted-foreground)" opacity="0.72" />
-        <text x={startPoint.x + 12} y={startPoint.y - 8} className="fill-muted-foreground text-[10px] font-medium">시작 (0, 0)</text>
-        <text x={endPoint.x - 12} y={endPoint.y - 8} textAnchor="end" className="fill-muted-foreground text-[10px] font-medium">끝 (1, 1)</text>
+        {normalizedPoints.map((point, index) => {
+          const pointX = mapWallpaperEasingGraphX(point.x)
+          const pointY = mapWallpaperEasingGraphY(point.y)
+          const isEndpoint = index === 0 || index === normalizedPoints.length - 1
+          const isSelected = selectedIndex === index
+          const label = index === 0 ? '시작' : index === normalizedPoints.length - 1 ? '끝' : `P${index}`
+          const valueText = `${formatWallpaperEasingGraphPointValue(point.x)}, ${formatWallpaperEasingGraphPointValue(point.y)}`
 
-        {[
-          { id: 'p1', point: controlOne, label: 'P1', valueText: `${formatWallpaperEasingGraphPointValue(value.x1)}, ${formatWallpaperEasingGraphPointValue(value.y1)}` },
-          { id: 'p2', point: controlTwo, label: 'P2', valueText: `${formatWallpaperEasingGraphPointValue(value.x2)}, ${formatWallpaperEasingGraphPointValue(value.y2)}` },
-        ].map((handle) => (
-          <g key={handle.id}>
-            <circle cx={handle.point.x} cy={handle.point.y} r="18" fill="color-mix(in srgb, var(--primary) 12%, transparent)" />
-            <circle cx={handle.point.x} cy={handle.point.y} r="12" fill="color-mix(in srgb, var(--primary) 22%, var(--background))" stroke="var(--primary)" strokeWidth="2.5" />
-            <circle
-              cx={handle.point.x}
-              cy={handle.point.y}
-              r="18"
-              fill="transparent"
-              className="cursor-grab touch-none active:cursor-grabbing"
-              onPointerDown={(event) => {
-                event.preventDefault()
-                const svgElement = graphRef.current
-                if (!svgElement) {
-                  return
-                }
+          return (
+            <g key={`${index}-${point.x}-${point.y}`}>
+              <circle cx={pointX} cy={pointY} r={isEndpoint ? 8 : isSelected ? 22 : 18} fill={isEndpoint ? 'color-mix(in srgb, var(--muted-foreground) 22%, transparent)' : isSelected ? 'color-mix(in srgb, var(--primary) 20%, transparent)' : 'color-mix(in srgb, var(--primary) 12%, transparent)'} />
+              <circle cx={pointX} cy={pointY} r={isEndpoint ? 6 : 12} fill={isEndpoint ? 'var(--muted-foreground)' : 'color-mix(in srgb, var(--primary) 22%, var(--background))'} stroke={isEndpoint ? 'transparent' : 'var(--primary)'} strokeWidth={isEndpoint ? 0 : isSelected ? 3.5 : 2.5} opacity={isEndpoint ? 0.72 : 1} />
+              {!isEndpoint ? (
+                <circle
+                  cx={pointX}
+                  cy={pointY}
+                  r="18"
+                  fill="transparent"
+                  className="cursor-grab touch-none active:cursor-grabbing"
+                  onDoubleClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    const nextPoints = normalizedPoints.filter((_, pointIndex) => pointIndex !== index)
+                    onChange(nextPoints)
+                    onSelectIndex?.(nextPoints.length > 2 ? Math.min(index, nextPoints.length - 2) : null)
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    const nextPoints = normalizedPoints.filter((_, pointIndex) => pointIndex !== index)
+                    onChange(nextPoints)
+                    onSelectIndex?.(nextPoints.length > 2 ? Math.min(index, nextPoints.length - 2) : null)
+                  }}
+                  onPointerDown={(event) => {
+                    event.preventDefault()
+                    const svgElement = graphRef.current
+                    if (!svgElement) {
+                      return
+                    }
 
-                const pointerPosition = getWallpaperEasingGraphPointerPosition(event, svgElement)
-                const currentPoint = handle.id === 'p1' ? controlOne : controlTwo
-                event.currentTarget.setPointerCapture?.(event.pointerId)
-                setDragState({
-                  handle: handle.id as 'p1' | 'p2',
-                  pointerId: event.pointerId,
-                  offsetX: pointerPosition.x - currentPoint.x,
-                  offsetY: pointerPosition.y - currentPoint.y,
-                })
-              }}
-            />
-            <text x={handle.point.x} y={handle.point.y - 24} textAnchor="middle" className="fill-foreground text-[11px] font-semibold">
-              {handle.label}
-            </text>
-            <text x={handle.point.x} y={handle.point.y + 31} textAnchor="middle" className="fill-muted-foreground text-[10px] font-medium">
-              {handle.valueText}
-            </text>
-          </g>
-        ))}
+                    const pointerPosition = getWallpaperEasingGraphPointerPosition(event, svgElement)
+                    onSelectIndex?.(index)
+                    graphRef.current?.focus()
+                    event.currentTarget.setPointerCapture?.(event.pointerId)
+                    setDragState({
+                      index,
+                      pointerId: event.pointerId,
+                      offsetX: pointerPosition.x - pointX,
+                      offsetY: pointerPosition.y - pointY,
+                    })
+                  }}
+                />
+              ) : null}
+              <text x={pointX} y={pointY - 24} textAnchor="middle" className={isSelected ? 'fill-primary text-[11px] font-semibold' : 'fill-foreground text-[11px] font-semibold'}>
+                {label}
+              </text>
+              <text x={pointX} y={pointY + 31} textAnchor="middle" className={isSelected ? 'fill-primary text-[10px] font-medium' : 'fill-muted-foreground text-[10px] font-medium'}>
+                {valueText}
+              </text>
+            </g>
+          )
+        })}
       </svg>
     </div>
   )

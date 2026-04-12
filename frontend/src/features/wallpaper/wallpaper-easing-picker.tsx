@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react'
+import { useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { Check, ChevronRight, Download, Pencil, Save, Star, Trash2, Upload, X } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { SettingsField } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { cn } from '@/lib/utils'
@@ -13,7 +14,7 @@ import {
   useWallpaperEasingPresetManager,
 } from './wallpaper-easing-picker-presets'
 import {
-  clampWallpaperBezierControlPointValue,
+  clampWallpaperEasingStopPointValue,
   formatWallpaperEasingGraphPointValue,
   WallpaperEasingGraph,
   WallpaperEasingGraphPreview,
@@ -23,12 +24,30 @@ import {
 } from './wallpaper-easing-picker-preview'
 import {
   WALLPAPER_ANIMATION_EASING_OPTIONS,
-  buildWallpaperCubicBezierEasing,
+  buildWallpaperLinearEasing,
   getWallpaperAnimationEasingLabel,
-  getWallpaperEditableBezierControlPoints,
+  getWallpaperEditableEasingStopPoints,
   normalizeWallpaperAnimationEasing,
-  type WallpaperBezierControlPoints,
+  type WallpaperEasingStopPoint,
 } from './wallpaper-widget-utils'
+
+// Pick a sensible default interior point when the custom editor opens.
+function getDefaultSelectedCustomPointIndex(points: WallpaperEasingStopPoint[]) {
+  return points.length > 2 ? 1 : null
+}
+
+// Keep the point selection on a valid interior stop after edits.
+function getNormalizedSelectedCustomPointIndex(index: number | null, points: WallpaperEasingStopPoint[]) {
+  if (points.length <= 2) {
+    return null
+  }
+
+  if (index === null) {
+    return getDefaultSelectedCustomPointIndex(points)
+  }
+
+  return Math.min(Math.max(index, 1), points.length - 2)
+}
 
 interface WallpaperEasingPickerProps {
   value: WallpaperAnimationEasing | undefined
@@ -270,11 +289,12 @@ function WallpaperSavedEasingPresetsSection({
 
 export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', previewKind = 'transition', summary, editorContent, previewConfig, onChange }: WallpaperEasingPickerProps) {
   const normalizedValue = normalizeWallpaperAnimationEasing(value, fallbackPreset)
-  const isCustom = normalizedValue.startsWith('cubic-bezier(')
+  const isCustom = normalizedValue.startsWith('cubic-bezier(') || normalizedValue.startsWith('linear(')
   const [open, setOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'preset' | 'custom'>(isCustom ? 'custom' : 'preset')
   const [draftPresetEasing, setDraftPresetEasing] = useState<WallpaperAnimationEasing>(normalizedValue)
-  const [customPoints, setCustomPoints] = useState<WallpaperBezierControlPoints>(() => getWallpaperEditableBezierControlPoints(normalizedValue, fallbackPreset))
+  const [customStops, setCustomStops] = useState<WallpaperEasingStopPoint[]>(() => getWallpaperEditableEasingStopPoints(normalizedValue, fallbackPreset))
+  const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(() => getDefaultSelectedCustomPointIndex(getWallpaperEditableEasingStopPoints(normalizedValue, fallbackPreset)))
   const [presetName, setPresetName] = useState('')
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null)
   const [editingPresetName, setEditingPresetName] = useState('')
@@ -295,30 +315,169 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
     importPresets,
   } = useWallpaperEasingPresetManager()
 
-  const customEasing = useMemo(() => buildWallpaperCubicBezierEasing(customPoints), [customPoints])
+  const customEasing = useMemo(() => buildWallpaperLinearEasing(customStops), [customStops])
   const previewEasing = activeTab === 'custom' ? customEasing : draftPresetEasing
+  const selectedPoint = selectedPointIndex === null ? null : customStops[selectedPointIndex] ?? null
   const matchingSavedPreset = useMemo(
     () => sortedSavedPresets.find((preset) => preset.easing === normalizedValue) ?? null,
     [normalizedValue, sortedSavedPresets],
   )
   const pickerLabel = matchingSavedPreset?.name ?? getWallpaperAnimationEasingLabel(normalizedValue)
 
-  const updateCustomPoint = (key: keyof WallpaperBezierControlPoints, nextValue: string) => {
+  const handleCustomStopsChange = (nextPoints: WallpaperEasingStopPoint[]) => {
+    setCustomStops(nextPoints)
+    setSelectedPointIndex((current) => getNormalizedSelectedCustomPointIndex(current, nextPoints))
+  }
+
+  const updateCustomPoint = (index: number, axis: 'x' | 'y', nextValue: string) => {
     const parsed = Number(nextValue)
     if (!Number.isFinite(parsed)) {
       return
     }
 
-    setCustomPoints((current) => ({
-      ...current,
-      [key]: clampWallpaperBezierControlPointValue(key, parsed),
-    }))
+    const nextPoints = customStops.map((point, pointIndex) => {
+      if (pointIndex !== index) {
+        return point
+      }
+
+      if (axis === 'x') {
+        if (pointIndex === 0 || pointIndex === customStops.length - 1) {
+          return point
+        }
+
+        const previousPoint = customStops[pointIndex - 1]
+        const nextPoint = customStops[pointIndex + 1]
+        return {
+          ...point,
+          x: Math.min((nextPoint?.x ?? 1) - 0.02, Math.max((previousPoint?.x ?? 0) + 0.02, clampWallpaperEasingStopPointValue('x', parsed))),
+        }
+      }
+
+      return {
+        ...point,
+        y: clampWallpaperEasingStopPointValue('y', parsed),
+      }
+    })
+
+    handleCustomStopsChange(nextPoints)
+    setSelectedPointIndex(index)
+  }
+
+  const handleRemoveCustomPoint = (index: number) => {
+    const nextPoints = customStops.filter((_, pointIndex) => pointIndex !== index)
+    handleCustomStopsChange(nextPoints)
+    setSelectedPointIndex((current) => getNormalizedSelectedCustomPointIndex(current === null ? null : Math.min(current, index), nextPoints))
+  }
+
+  const handleDuplicateSelectedPoint = () => {
+    if (selectedPointIndex === null || selectedPointIndex <= 0 || selectedPointIndex >= customStops.length - 1) {
+      return
+    }
+
+    const currentPoint = customStops[selectedPointIndex]
+    const nextPoint = customStops[selectedPointIndex + 1]
+    const previousPoint = customStops[selectedPointIndex - 1]
+    const duplicateRightX = (currentPoint.x + nextPoint.x) / 2
+    const duplicateLeftX = (previousPoint.x + currentPoint.x) / 2
+    const useRightSide = (nextPoint.x - currentPoint.x) >= (currentPoint.x - previousPoint.x)
+    const insertIndex = useRightSide ? selectedPointIndex + 1 : selectedPointIndex
+    const insertedPoint = {
+      x: useRightSide ? duplicateRightX : duplicateLeftX,
+      y: currentPoint.y,
+    }
+    const nextPoints = [
+      ...customStops.slice(0, insertIndex),
+      insertedPoint,
+      ...customStops.slice(insertIndex),
+    ]
+
+    handleCustomStopsChange(nextPoints)
+    setSelectedPointIndex(insertIndex)
+  }
+
+  const handleSplitSelectedSegment = () => {
+    if (selectedPointIndex === null || selectedPointIndex <= 0 || selectedPointIndex >= customStops.length - 1) {
+      return
+    }
+
+    const currentPoint = customStops[selectedPointIndex]
+    const nextPoint = customStops[selectedPointIndex + 1]
+    const previousPoint = customStops[selectedPointIndex - 1]
+    const rightGap = nextPoint.x - currentPoint.x
+    const leftGap = currentPoint.x - previousPoint.x
+    const splitLeftSide = leftGap > rightGap
+    const segmentStart = splitLeftSide ? previousPoint : currentPoint
+    const segmentEnd = splitLeftSide ? currentPoint : nextPoint
+    const insertIndex = splitLeftSide ? selectedPointIndex : selectedPointIndex + 1
+    const insertedPoint = {
+      x: (segmentStart.x + segmentEnd.x) / 2,
+      y: (segmentStart.y + segmentEnd.y) / 2,
+    }
+    const nextPoints = [
+      ...customStops.slice(0, insertIndex),
+      insertedPoint,
+      ...customStops.slice(insertIndex),
+    ]
+
+    handleCustomStopsChange(nextPoints)
+    setSelectedPointIndex(insertIndex)
+  }
+
+  const handleNudgeSelectedPoint = (axis: 'x' | 'y', direction: -1 | 1, accelerated = false) => {
+    if (selectedPointIndex === null || !selectedPoint) {
+      return
+    }
+
+    const step = axis === 'x'
+      ? accelerated ? 0.05 : 0.01
+      : accelerated ? 0.1 : 0.01
+
+    updateCustomPoint(selectedPointIndex, axis, String(selectedPoint[axis] + (direction * step)))
+  }
+
+  const handleSelectedPointKeyDown = (event: ReactKeyboardEvent<HTMLElement>, index: number) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      setSelectedPointIndex(index)
+      return
+    }
+
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      if (index > 0 && index < customStops.length - 1) {
+        event.preventDefault()
+        handleRemoveCustomPoint(index)
+      }
+      return
+    }
+
+    if (selectedPointIndex !== index) {
+      return
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      handleNudgeSelectedPoint('x', -1, event.shiftKey)
+    }
+    else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      handleNudgeSelectedPoint('x', 1, event.shiftKey)
+    }
+    else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      handleNudgeSelectedPoint('y', 1, event.shiftKey)
+    }
+    else if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      handleNudgeSelectedPoint('y', -1, event.shiftKey)
+    }
   }
 
   const handleOpenPicker = () => {
     setActiveTab(isCustom ? 'custom' : 'preset')
     setDraftPresetEasing(normalizedValue)
-    setCustomPoints(getWallpaperEditableBezierControlPoints(normalizedValue, fallbackPreset))
+    const nextPoints = getWallpaperEditableEasingStopPoints(normalizedValue, fallbackPreset)
+    setCustomStops(nextPoints)
+    setSelectedPointIndex(getDefaultSelectedCustomPointIndex(nextPoints))
     setPresetName(matchingSavedPreset?.name ?? '')
     reloadSavedPresets()
     setEditingPresetId(null)
@@ -375,7 +534,9 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
 
   const handleSelectPreset = (easing: WallpaperAnimationEasing) => {
     setDraftPresetEasing(easing)
-    setCustomPoints(getWallpaperEditableBezierControlPoints(easing, fallbackPreset))
+    const nextPoints = getWallpaperEditableEasingStopPoints(easing, fallbackPreset)
+    setCustomStops(nextPoints)
+    setSelectedPointIndex(getDefaultSelectedCustomPointIndex(nextPoints))
   }
 
   const handleApplySelection = () => {
@@ -459,24 +620,100 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
           ) : (
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_380px]">
               <div className="space-y-4">
-                <WallpaperEasingGraph value={customPoints} onChange={setCustomPoints} />
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {([
-                    ['x1', 'X1'],
-                    ['y1', 'Y1'],
-                    ['x2', 'X2'],
-                    ['y2', 'Y2'],
-                  ] as const).map(([key, label]) => (
-                    <SettingsField key={key} label={label}>
-                      <Input
-                        variant="settings"
-                        type="number"
-                        step="0.01"
-                        value={formatWallpaperEasingGraphPointValue(customPoints[key])}
-                        onChange={(event) => updateCustomPoint(key, event.target.value)}
-                      />
-                    </SettingsField>
-                  ))}
+                <WallpaperEasingGraph
+                  value={customStops}
+                  onChange={handleCustomStopsChange}
+                  selectedIndex={selectedPointIndex}
+                  onSelectIndex={setSelectedPointIndex}
+                />
+                <div className="rounded-sm border border-border/70 bg-surface-low px-3 py-2 text-xs text-muted-foreground">
+                  점을 클릭하면 아래 값이 같이 선택되고, 숫자는 좌우 드래그로도 조절돼. 선택된 점은 방향키로 미세 조정할 수 있어.
+                </div>
+                {selectedPointIndex !== null && selectedPointIndex > 0 && selectedPointIndex < customStops.length - 1 ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-2">
+                    <div className="mr-2 text-xs text-muted-foreground">선택된 점 {selectedPointIndex}</div>
+                    <Button type="button" size="xs" variant="secondary" onClick={handleDuplicateSelectedPoint}>
+                      복제
+                    </Button>
+                    <Button type="button" size="xs" variant="secondary" onClick={handleSplitSelectedSegment}>
+                      구간 분할
+                    </Button>
+                    <Button type="button" size="xs" variant="ghost" onClick={() => handleRemoveCustomPoint(selectedPointIndex)}>
+                      삭제
+                    </Button>
+                  </div>
+                ) : null}
+                <div className="space-y-2">
+                  {customStops.map((point, index) => {
+                    const isEndpoint = index === 0 || index === customStops.length - 1
+                    const isSelected = selectedPointIndex === index
+                    const pointLabel = index === 0 ? '시작' : index === customStops.length - 1 ? '끝' : `점 ${index}`
+
+                    return (
+                      <div
+                        key={`${index}-${point.x}-${point.y}`}
+                        role="button"
+                        tabIndex={0}
+                        className={cn(
+                          'grid w-full gap-2 rounded-sm border p-3 text-left transition sm:grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end',
+                          isSelected
+                            ? 'border-primary bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-low))]'
+                            : 'border-border/70 bg-surface-low hover:border-primary/40 hover:bg-surface-high',
+                        )}
+                        onClick={() => setSelectedPointIndex(index)}
+                        onKeyDown={(event) => handleSelectedPointKeyDown(event, index)}
+                        onContextMenu={(event) => {
+                          if (isEndpoint) {
+                            return
+                          }
+
+                          event.preventDefault()
+                          setSelectedPointIndex(index)
+                          handleRemoveCustomPoint(index)
+                        }}
+                      >
+                        <div className="text-sm font-medium text-foreground">{pointLabel}</div>
+                        <SettingsField label="시간 X">
+                          <ScrubbableNumberInput
+                            variant="settings"
+                            step={0.01}
+                            min={0}
+                            max={1}
+                            value={formatWallpaperEasingGraphPointValue(point.x)}
+                            disabled={isEndpoint}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(nextValue) => updateCustomPoint(index, 'x', nextValue)}
+                          />
+                        </SettingsField>
+                        <SettingsField label="값 Y">
+                          <ScrubbableNumberInput
+                            variant="settings"
+                            step={0.01}
+                            min={-3}
+                            max={3}
+                            value={formatWallpaperEasingGraphPointValue(point.y)}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(nextValue) => updateCustomPoint(index, 'y', nextValue)}
+                          />
+                        </SettingsField>
+                        {!isEndpoint ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              handleRemoveCustomPoint(index)
+                            }}
+                            title={`${pointLabel} 삭제`}
+                            aria-label={`${pointLabel} 삭제`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        ) : <div />}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 

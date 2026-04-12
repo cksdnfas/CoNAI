@@ -98,6 +98,11 @@ export interface WallpaperBezierControlPoints {
   y2: number
 }
 
+export interface WallpaperEasingStopPoint {
+  x: number
+  y: number
+}
+
 export const WALLPAPER_ANIMATION_EASING_OPTIONS: Array<{ value: WallpaperAnimationEasingPreset; label: string }> = [
   { value: 'linear', label: 'linear' },
   { value: 'easeInOutSine', label: 'easeInOutSine' },
@@ -115,6 +120,14 @@ const WALLPAPER_CUSTOM_EASING_FALLBACK: WallpaperBezierControlPoints = {
   y2: 1,
 }
 
+const WALLPAPER_CUSTOM_EASING_FALLBACK_STOPS: WallpaperEasingStopPoint[] = [
+  { x: 0, y: 0 },
+  { x: 0.18, y: 0.62 },
+  { x: 0.42, y: 0.92 },
+  { x: 0.72, y: 0.985 },
+  { x: 1, y: 1 },
+]
+
 function clampWallpaperNumericIntensity(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
@@ -124,8 +137,39 @@ function formatWallpaperBezierNumber(value: number) {
   return Number.isInteger(rounded) ? String(rounded) : String(rounded)
 }
 
+function clampWallpaperEasingStopPoint(point: WallpaperEasingStopPoint): WallpaperEasingStopPoint {
+  return {
+    x: clampWallpaperNumericIntensity(point.x, 0, 1),
+    y: clampWallpaperNumericIntensity(point.y, -3, 3),
+  }
+}
+
 export function isWallpaperAnimationEasingPreset(value: string): value is WallpaperAnimationEasingPreset {
   return WALLPAPER_ANIMATION_EASING_OPTIONS.some((option) => option.value === value)
+}
+
+export function normalizeWallpaperEasingStopPoints(points: WallpaperEasingStopPoint[]) {
+  const normalizedInterior = points
+    .map(clampWallpaperEasingStopPoint)
+    .filter((point) => point.x > 0 && point.x < 1)
+    .sort((left, right) => left.x - right.x)
+
+  const dedupedInterior: WallpaperEasingStopPoint[] = []
+  for (const point of normalizedInterior) {
+    const previous = dedupedInterior[dedupedInterior.length - 1]
+    if (previous && Math.abs(previous.x - point.x) < 0.001) {
+      dedupedInterior[dedupedInterior.length - 1] = point
+      continue
+    }
+
+    dedupedInterior.push(point)
+  }
+
+  return [
+    { x: 0, y: 0 },
+    ...dedupedInterior,
+    { x: 1, y: 1 },
+  ]
 }
 
 export function getWallpaperAnimationEasingLabel(easing: WallpaperAnimationEasing | undefined) {
@@ -137,7 +181,7 @@ export function getWallpaperAnimationEasingLabel(easing: WallpaperAnimationEasin
     return easing
   }
 
-  return parseWallpaperCubicBezierEasing(easing) ? '커스텀' : 'easeOutCubic'
+  return parseWallpaperCubicBezierEasing(easing) || parseWallpaperLinearEasing(easing) ? '커스텀' : 'easeOutCubic'
 }
 
 export function getWallpaperPresetBezierControlPoints(preset: WallpaperAnimationEasingPreset): WallpaperBezierControlPoints | null {
@@ -183,6 +227,46 @@ export function parseWallpaperCubicBezierEasing(easing: string | undefined): Wal
   }
 }
 
+export function parseWallpaperLinearEasing(easing: string | undefined): WallpaperEasingStopPoint[] | null {
+  if (!easing) {
+    return null
+  }
+
+  const match = /^linear\((.*)\)$/i.exec(easing.trim())
+  if (!match) {
+    return null
+  }
+
+  const rawStops = match[1]
+    .split(',')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  if (rawStops.length < 2) {
+    return null
+  }
+
+  const parsedStops: WallpaperEasingStopPoint[] = []
+  for (let index = 0; index < rawStops.length; index += 1) {
+    const stopMatch = /^(-?\d*\.?\d+)(?:\s+(-?\d*\.?\d+)%)?$/i.exec(rawStops[index])
+    if (!stopMatch) {
+      return null
+    }
+
+    const y = Number(stopMatch[1])
+    const explicitPercent = stopMatch[2] !== undefined ? Number(stopMatch[2]) / 100 : undefined
+    const fallbackPercent = rawStops.length === 1 ? 0 : index / (rawStops.length - 1)
+    const x = explicitPercent ?? fallbackPercent
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return null
+    }
+
+    parsedStops.push({ x, y })
+  }
+
+  return normalizeWallpaperEasingStopPoints(parsedStops)
+}
+
 export function buildWallpaperCubicBezierEasing(points: WallpaperBezierControlPoints): WallpaperAnimationEasing {
   const normalizedPoints = {
     x1: clampWallpaperNumericIntensity(points.x1, 0, 1),
@@ -194,9 +278,103 @@ export function buildWallpaperCubicBezierEasing(points: WallpaperBezierControlPo
   return `cubic-bezier(${formatWallpaperBezierNumber(normalizedPoints.x1)}, ${formatWallpaperBezierNumber(normalizedPoints.y1)}, ${formatWallpaperBezierNumber(normalizedPoints.x2)}, ${formatWallpaperBezierNumber(normalizedPoints.y2)})`
 }
 
+export function buildWallpaperLinearEasing(points: WallpaperEasingStopPoint[]): WallpaperAnimationEasing {
+  const normalizedPoints = normalizeWallpaperEasingStopPoints(points)
+  const formattedStops = normalizedPoints.map((point) => `${formatWallpaperBezierNumber(point.y)} ${formatWallpaperBezierNumber(point.x * 100)}%`)
+  return `linear(${formattedStops.join(', ')})`
+}
+
+function evaluateWallpaperBezierComponent(p1: number, p2: number, time: number) {
+  const inverseTime = 1 - time
+  return (3 * inverseTime * inverseTime * time * p1) + (3 * inverseTime * time * time * p2) + (time * time * time)
+}
+
+function evaluateWallpaperBezierEasingAtTime(points: WallpaperBezierControlPoints, time: number) {
+  let lowerBound = 0
+  let upperBound = 1
+
+  for (let iteration = 0; iteration < 18; iteration += 1) {
+    const parameter = (lowerBound + upperBound) / 2
+    const x = evaluateWallpaperBezierComponent(points.x1, points.x2, parameter)
+    if (x < time) {
+      lowerBound = parameter
+    }
+    else {
+      upperBound = parameter
+    }
+  }
+
+  return evaluateWallpaperBezierComponent(points.y1, points.y2, (lowerBound + upperBound) / 2)
+}
+
+function evaluateWallpaperBounceEasingAtTime(time: number) {
+  const bounceFactor = 7.5625
+  const bounceStep = 2.75
+
+  if (time < 1 / bounceStep) {
+    return bounceFactor * time * time
+  }
+
+  if (time < 2 / bounceStep) {
+    const shifted = time - (1.5 / bounceStep)
+    return (bounceFactor * shifted * shifted) + 0.75
+  }
+
+  if (time < 2.5 / bounceStep) {
+    const shifted = time - (2.25 / bounceStep)
+    return (bounceFactor * shifted * shifted) + 0.9375
+  }
+
+  const shifted = time - (2.625 / bounceStep)
+  return (bounceFactor * shifted * shifted) + 0.984375
+}
+
+function evaluateWallpaperLinearEasingAtTime(points: WallpaperEasingStopPoint[], time: number) {
+  const normalizedTime = clampWallpaperNumericIntensity(time, 0, 1)
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1]
+    const current = points[index]
+    if (normalizedTime <= current.x || index === points.length - 1) {
+      const segmentWidth = Math.max(current.x - previous.x, 0.0001)
+      const progress = clampWallpaperNumericIntensity((normalizedTime - previous.x) / segmentWidth, 0, 1)
+      return previous.y + ((current.y - previous.y) * progress)
+    }
+  }
+
+  return points[points.length - 1]?.y ?? 1
+}
+
+export function evaluateWallpaperAnimationEasingAtTime(easing: WallpaperAnimationEasing | undefined, time: number) {
+  const normalizedEasing = normalizeWallpaperAnimationEasing(easing)
+  if (normalizedEasing === 'easeOutBounce') {
+    return evaluateWallpaperBounceEasingAtTime(time)
+  }
+
+  const linearStops = parseWallpaperLinearEasing(normalizedEasing)
+  if (linearStops) {
+    return evaluateWallpaperLinearEasingAtTime(linearStops, time)
+  }
+
+  const customBezier = parseWallpaperCubicBezierEasing(normalizedEasing)
+  const presetBezier = isWallpaperAnimationEasingPreset(normalizedEasing)
+    ? getWallpaperPresetBezierControlPoints(normalizedEasing)
+    : null
+  const bezierPoints = customBezier ?? presetBezier
+  if (bezierPoints) {
+    return evaluateWallpaperBezierEasingAtTime(bezierPoints, time)
+  }
+
+  return clampWallpaperNumericIntensity(time, 0, 1)
+}
+
 export function normalizeWallpaperAnimationEasing(easing: string | undefined, fallback: WallpaperAnimationEasingPreset = 'easeOutCubic'): WallpaperAnimationEasing {
   if (easing && isWallpaperAnimationEasingPreset(easing)) {
     return easing
+  }
+
+  const customLinear = parseWallpaperLinearEasing(easing)
+  if (customLinear) {
+    return buildWallpaperLinearEasing(customLinear)
   }
 
   const customBezier = parseWallpaperCubicBezierEasing(easing)
@@ -223,7 +401,37 @@ export function getWallpaperEditableBezierControlPoints(
   return getWallpaperPresetBezierControlPoints(fallback) ?? WALLPAPER_CUSTOM_EASING_FALLBACK
 }
 
+export function getWallpaperEditableEasingStopPoints(
+  easing: WallpaperAnimationEasing | undefined,
+  fallback: WallpaperAnimationEasingPreset = 'easeOutCubic',
+): WallpaperEasingStopPoint[] {
+  const customLinear = parseWallpaperLinearEasing(easing)
+  if (customLinear) {
+    return customLinear
+  }
+
+  const normalizedEasing = normalizeWallpaperAnimationEasing(easing, fallback)
+  const sampleTimes = normalizedEasing === 'easeOutBounce'
+    ? [0, 0.08, 0.16, 0.28, 0.4, 0.56, 0.72, 0.86, 1]
+    : [0, 0.18, 0.36, 0.56, 0.78, 1]
+
+  return normalizeWallpaperEasingStopPoints(
+    sampleTimes.map((time, index) => (
+      index === 0
+        ? { x: 0, y: 0 }
+        : index === sampleTimes.length - 1
+          ? { x: 1, y: 1 }
+          : { x: time, y: evaluateWallpaperAnimationEasingAtTime(normalizedEasing, time) }
+    )),
+  )
+}
+
 export function getWallpaperAnimationEasingCss(easing: WallpaperAnimationEasing | undefined) {
+  const customLinear = parseWallpaperLinearEasing(easing)
+  if (customLinear) {
+    return buildWallpaperLinearEasing(customLinear)
+  }
+
   const customBezier = parseWallpaperCubicBezierEasing(easing)
   if (customBezier) {
     return buildWallpaperCubicBezierEasing(customBezier)
