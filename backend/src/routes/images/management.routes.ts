@@ -1,10 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { DeletionService } from '../../services/deletionService';
 import { ImageMetadataEditError, ImageMetadataEditService } from '../../services/imageMetadataEditService';
+import { ImageManagementService } from '../../services/imageManagementService';
 import { successResponse, errorResponse } from '@conai/shared';
-import { QueryCacheService } from '../../services/QueryCacheService';
 import { enrichImageWithFileView } from './utils';
 
 const router = Router();
@@ -80,15 +79,9 @@ router.patch('/:compositeHash/metadata', asyncHandler(async (req: Request, res: 
  */
 router.delete('/:compositeHash', asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = routeParam(req.params.compositeHash);
+  const result = await ImageManagementService.deleteImageByCompositeHash(compositeHash);
 
-  // 통합 삭제 서비스 호출
-  await DeletionService.deleteImage(compositeHash);
-
-  // 캐시 완전 무효화 (삭제는 모든 페이지에 영향)
-  QueryCacheService.invalidateImageCache(compositeHash, true);
-  console.log('🗑️ All caches invalidated for deleted image');
-
-  res.json(successResponse({ message: 'Image deleted successfully' }));
+  res.json(successResponse(result));
 }));
 
 /**
@@ -108,39 +101,9 @@ router.delete('/files/bulk', asyncHandler(async (req: Request, res: Response) =>
     return res.status(400).json(errorResponse('fileIds array is required'));
   }
 
-  console.log(`🗑️ Bulk file deletion requested: ${fileIds.length} files`);
+  const result = await ImageManagementService.deleteImageFilesBulk(fileIds);
 
-  const results = {
-    deleted: 0,
-    failed: 0,
-    errors: [] as string[]
-  };
-
-  // 각 file_id를 순차적으로 삭제
-  for (const fileId of fileIds) {
-    try {
-      const success = await DeletionService.deleteImageFile(fileId);
-      if (success) {
-        results.deleted++;
-      } else {
-        results.failed++;
-        results.errors.push(`File ${fileId} not found`);
-      }
-    } catch (error) {
-      results.failed++;
-      results.errors.push(`File ${fileId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      console.error(`❌ Failed to delete file ${fileId}:`, error);
-    }
-  }
-
-  // 캐시 완전 무효화
-  QueryCacheService.invalidateImageCache(undefined, true);
-  console.log('🗑️ All caches invalidated after bulk deletion');
-
-  return res.json(successResponse({
-    message: `Deleted ${results.deleted} file(s)`,
-    details: results
-  }));
+  return res.json(successResponse(result));
 }));
 
 export { router as managementRoutes };

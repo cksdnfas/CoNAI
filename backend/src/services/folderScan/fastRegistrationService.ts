@@ -19,6 +19,80 @@ interface FastRegistrationOptions {
   quietIfIdle?: boolean;
 }
 
+interface ExistingFileScanRecord {
+  id: number;
+  composite_hash: string | null;
+  file_status: string;
+}
+
+/** Load one existing image_files row by original path for scan reconciliation. */
+function findExistingFileByPath(filePath: string): ExistingFileScanRecord | undefined {
+  return db.prepare(
+    'SELECT id, composite_hash, file_status FROM image_files WHERE original_file_path = ?'
+  ).get(filePath) as ExistingFileScanRecord | undefined;
+}
+
+/** Reconcile one already-known file without reviving intentionally deleted rows. */
+function reconcileExistingFileDuringScan(existingFile: ExistingFileScanRecord, stats: fs.Stats, mimeType: string) {
+  if (existingFile.file_status === 'deleted') {
+    db.prepare(`
+      UPDATE image_files
+      SET last_verified_date = ?,
+          file_modified_date = ?,
+          file_size = ?,
+          mime_type = COALESCE(?, mime_type)
+      WHERE id = ?
+    `).run(
+      new Date().toISOString(),
+      stats.mtime.toISOString(),
+      stats.size,
+      mimeType,
+      existingFile.id
+    );
+    return;
+  }
+
+  db.prepare(`
+    UPDATE image_files
+    SET file_status = 'active',
+        last_verified_date = ?,
+        file_modified_date = ?,
+        file_size = ?,
+        mime_type = COALESCE(?, mime_type)
+    WHERE id = ?
+  `).run(
+    new Date().toISOString(),
+    stats.mtime.toISOString(),
+    stats.size,
+    mimeType,
+    existingFile.id
+  );
+}
+
+/** Register one new file with phase-1 lightweight scan data only. */
+function createFastRegisteredFile(input: {
+  filePath: string;
+  folderId: number;
+  fileType: FileType;
+  fileSize: number;
+  mimeType: string;
+  fileModifiedDate: string;
+}) {
+  db.prepare(`
+    INSERT INTO image_files (
+      composite_hash, file_type, original_file_path, folder_id,
+      file_status, file_size, mime_type, file_modified_date
+    ) VALUES (NULL, ?, ?, ?, 'active', ?, ?, ?)
+  `).run(
+    input.fileType,
+    input.filePath,
+    input.folderId,
+    input.fileSize,
+    input.mimeType,
+    input.fileModifiedDate
+  );
+}
+
 export class FastRegistrationService {
   private static readonly PROGRESS_LOG_INTERVAL = 50;
 
@@ -63,40 +137,10 @@ export class FastRegistrationService {
           const mimeType = FileDiscoveryService.getMimeType(filePath);
 
           // 1. 기존 파일 확인
-          const existingFile = db.prepare(
-            'SELECT id, composite_hash, file_status FROM image_files WHERE original_file_path = ?'
-          ).get(filePath) as { id: number; composite_hash: string | null; file_status: string } | undefined;
+          const existingFile = findExistingFileByPath(filePath);
 
           if (existingFile) {
-            if (existingFile.file_status === 'deleted') {
-              db.prepare(`
-                UPDATE image_files
-                SET last_verified_date = ?,
-                    file_modified_date = ?,
-                    file_size = ?
-                WHERE id = ?
-              `).run(
-                new Date().toISOString(),
-                stats.mtime.toISOString(),
-                stats.size,
-                existingFile.id
-              );
-            } else {
-              db.prepare(`
-                UPDATE image_files
-                SET file_status = 'active',
-                    last_verified_date = ?,
-                    file_modified_date = ?,
-                    file_size = ?
-                WHERE id = ?
-              `).run(
-                new Date().toISOString(),
-                stats.mtime.toISOString(),
-                stats.size,
-                existingFile.id
-              );
-            }
-
+            reconcileExistingFileDuringScan(existingFile, stats, mimeType);
             result.existingImages++;
             result.totalScanned++;
             return;
@@ -116,19 +160,14 @@ export class FastRegistrationService {
 
           // 3. composite_hash 없이 image_files에 등록
           const fileType = this.determineFileType(mimeType, filePath);
-          db.prepare(`
-            INSERT INTO image_files (
-              composite_hash, file_type, original_file_path, folder_id,
-              file_status, file_size, mime_type, file_modified_date
-            ) VALUES (NULL, ?, ?, ?, 'active', ?, ?, ?)
-          `).run(
-            fileType,
+          createFastRegisteredFile({
             filePath,
             folderId,
-            stats.size,
+            fileType,
+            fileSize: stats.size,
             mimeType,
-            stats.mtime.toISOString()
-          );
+            fileModifiedDate: stats.mtime.toISOString(),
+          });
 
           result.newImages++;
           result.totalScanned++;
