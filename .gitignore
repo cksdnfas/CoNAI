@@ -106,9 +106,11 @@ ehthumbs.db
 Thumbs.db
 
 # Temporary files
+.tmp/
 tmp/
 temp/
 _shots/
+*/Work_Plan/
 테스트/
 
 # Windows nul files
