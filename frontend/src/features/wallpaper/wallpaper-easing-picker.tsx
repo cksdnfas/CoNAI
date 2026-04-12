@@ -18,6 +18,7 @@ import {
   WallpaperEasingGraph,
   WallpaperEasingGraphPreview,
   WallpaperEasingPreviewPanel,
+  type WallpaperEasingPreviewConfig,
   type WallpaperEasingPreviewKind,
 } from './wallpaper-easing-picker-preview'
 import {
@@ -33,6 +34,9 @@ interface WallpaperEasingPickerProps {
   value: WallpaperAnimationEasing | undefined
   fallbackPreset?: WallpaperAnimationEasingPreset
   previewKind?: WallpaperEasingPreviewKind
+  summary?: ReactNode
+  editorContent?: ReactNode
+  previewConfig?: WallpaperEasingPreviewConfig
   onChange: (value: WallpaperAnimationEasing) => void
 }
 
@@ -45,6 +49,7 @@ function WallpaperEasingPreviewCard({
   leading,
   actions,
   interactive = true,
+  description,
   className,
 }: {
   label: string
@@ -54,6 +59,7 @@ function WallpaperEasingPreviewCard({
   leading?: ReactNode
   actions?: ReactNode
   interactive?: boolean
+  description?: ReactNode
   className?: string
 }) {
   const cardClassName = cn(
@@ -76,9 +82,10 @@ function WallpaperEasingPreviewCard({
           {interactive && onSelect ? (
             <button type="button" onClick={onSelect} className="min-w-0 flex-1 text-left">
               {titleContent}
+              {description ? <div className="mt-0.5 text-[11px] text-muted-foreground">{description}</div> : null}
             </button>
           ) : (
-            <div className="min-w-0 flex-1">{titleContent}</div>
+            <div className="min-w-0 flex-1">{titleContent}{description ? <div className="mt-0.5 text-[11px] text-muted-foreground">{description}</div> : null}</div>
           )}
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-0.5">{actions}</div> : null}
@@ -261,12 +268,11 @@ function WallpaperSavedEasingPresetsSection({
   )
 }
 
-export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', previewKind = 'transition', onChange }: WallpaperEasingPickerProps) {
+export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', previewKind = 'transition', summary, editorContent, previewConfig, onChange }: WallpaperEasingPickerProps) {
   const normalizedValue = normalizeWallpaperAnimationEasing(value, fallbackPreset)
   const isCustom = normalizedValue.startsWith('cubic-bezier(')
   const [open, setOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'preset' | 'custom'>(isCustom ? 'custom' : 'preset')
-  const [activePreviewKind, setActivePreviewKind] = useState<WallpaperEasingPreviewKind>(previewKind)
   const [draftPresetEasing, setDraftPresetEasing] = useState<WallpaperAnimationEasing>(normalizedValue)
   const [customPoints, setCustomPoints] = useState<WallpaperBezierControlPoints>(() => getWallpaperEditableBezierControlPoints(normalizedValue, fallbackPreset))
   const [presetName, setPresetName] = useState('')
@@ -311,7 +317,6 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
 
   const handleOpenPicker = () => {
     setActiveTab(isCustom ? 'custom' : 'preset')
-    setActivePreviewKind(previewKind)
     setDraftPresetEasing(normalizedValue)
     setCustomPoints(getWallpaperEditableBezierControlPoints(normalizedValue, fallbackPreset))
     setPresetName(matchingSavedPreset?.name ?? '')
@@ -383,6 +388,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
       <button type="button" className="block w-full text-left" onClick={handleOpenPicker}>
         <WallpaperEasingPreviewCard
           label={pickerLabel}
+          description={summary}
           easing={normalizedValue}
           selected={false}
           interactive={false}
@@ -444,9 +450,10 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
               </div>
 
               <WallpaperEasingPreviewPanel
-                activePreviewKind={activePreviewKind}
+                previewKind={previewKind}
                 easing={previewEasing}
-                onChangePreviewKind={setActivePreviewKind}
+                config={previewConfig}
+                editorContent={editorContent}
               />
             </div>
           ) : (
@@ -474,9 +481,10 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
               </div>
 
               <WallpaperEasingPreviewPanel
-                activePreviewKind={activePreviewKind}
+                previewKind={previewKind}
                 easing={previewEasing}
-                onChangePreviewKind={setActivePreviewKind}
+                config={previewConfig}
+                editorContent={editorContent}
                 extraContent={(
                   <>
                     <div className="theme-settings-panel rounded-sm bg-surface-container p-3">

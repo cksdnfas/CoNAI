@@ -4,9 +4,11 @@ import { cn } from '@/lib/utils'
 import {
   WallpaperInspectorDisclosure,
   WallpaperInspectorSectionCard,
+  WallpaperPreviewCloseAnimationEditorField,
+  WallpaperPreviewOpenAnimationEditorField,
 } from './wallpaper-widget-inspector-editor-shared'
 import { WallpaperWidgetTypeEditorFields } from './wallpaper-widget-inspector-editors'
-import { isWallpaperGroupSourceWidget, type WallpaperWidgetInstance } from './wallpaper-types'
+import { isWallpaperGroupSourceWidget, isWallpaperPreviewableImageWidget, type WallpaperWidgetInstance } from './wallpaper-types'
 
 interface WallpaperWidgetInspectorPatch {
   x?: number
@@ -45,6 +47,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
   }
 
   const isGroupSourceWidget = isWallpaperGroupSourceWidget(selectedWidget)
+  const isPreviewableImageWidget = isWallpaperPreviewableImageWidget(selectedWidget)
 
   return (
     <div className="space-y-3">
@@ -125,6 +128,40 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
               }}
             />
           </SettingsToggleRow>
+
+          {isPreviewableImageWidget ? (
+            <>
+              <WallpaperPreviewOpenAnimationEditorField
+                scalePercent={selectedWidget.settings.imagePreviewOpenScalePercent}
+                durationMs={selectedWidget.settings.imagePreviewOpenDurationMs}
+                easing={selectedWidget.settings.imagePreviewOpenEasing}
+                onScalePercentChange={(nextValue) => {
+                  updateWidgetSettings({ imagePreviewOpenScalePercent: nextValue })
+                }}
+                onDurationMsChange={(nextValue) => {
+                  updateWidgetSettings({ imagePreviewOpenDurationMs: nextValue })
+                }}
+                onEasingChange={(nextValue) => {
+                  updateWidgetSettings({ imagePreviewOpenEasing: nextValue })
+                }}
+              />
+
+              <WallpaperPreviewCloseAnimationEditorField
+                scalePercent={selectedWidget.settings.imagePreviewCloseScalePercent}
+                durationMs={selectedWidget.settings.imagePreviewCloseDurationMs}
+                easing={selectedWidget.settings.imagePreviewCloseEasing}
+                onScalePercentChange={(nextValue) => {
+                  updateWidgetSettings({ imagePreviewCloseScalePercent: nextValue })
+                }}
+                onDurationMsChange={(nextValue) => {
+                  updateWidgetSettings({ imagePreviewCloseDurationMs: nextValue })
+                }}
+                onEasingChange={(nextValue) => {
+                  updateWidgetSettings({ imagePreviewCloseEasing: nextValue })
+                }}
+              />
+            </>
+          ) : null}
 
           <SettingsToggleRow>
             <span className="flex-1">위젯 숨김</span>

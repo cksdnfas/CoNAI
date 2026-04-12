@@ -80,12 +80,13 @@ export function WallpaperImageWidgetEditorFields({
             <WallpaperTransitionAnimationEditorField
               transitionStyle={selectedWidget.settings.imageTransitionStyle}
               transitionSpeed={selectedWidget.settings.imageTransitionSpeed}
+              transitionDurationMs={selectedWidget.settings.imageTransitionDurationMs}
               transitionEasing={selectedWidget.settings.imageTransitionEasing}
               onTransitionStyleChange={(nextValue) => {
                 updateWidgetSettings({ imageTransitionStyle: nextValue })
               }}
-              onTransitionSpeedChange={(nextValue) => {
-                updateWidgetSettings({ imageTransitionSpeed: nextValue })
+              onTransitionDurationChange={(nextValue) => {
+                updateWidgetSettings({ imageTransitionDurationMs: nextValue })
               }}
               onTransitionEasingChange={(nextValue) => {
                 updateWidgetSettings({ imageTransitionEasing: nextValue })
@@ -127,6 +128,21 @@ export function WallpaperImageWidgetEditorFields({
             </SettingsField>
           </WallpaperInspectorSectionCard>
 
+          <WallpaperInspectorSectionCard title="재생">
+            <SettingsField label="교체 간격">
+              <Select
+                value={String(selectedWidget.settings.slideshowIntervalSec ?? 12)}
+                onChange={(event) => {
+                  updateWidgetSettings({ slideshowIntervalSec: Number(event.target.value) })
+                }}
+              >
+                {[5, 8, 10, 12, 15, 20, 30, 60].map((seconds) => (
+                  <option key={seconds} value={seconds}>{seconds}s</option>
+                ))}
+              </Select>
+            </SettingsField>
+          </WallpaperInspectorSectionCard>
+
           <WallpaperInspectorSectionCard title="모션">
             <SettingsField label="움직임">
               <Select
@@ -149,10 +165,7 @@ export function WallpaperImageWidgetEditorFields({
               motionStrength={selectedWidget.settings.motionStrength}
               editorContent={(
                 <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                  <div className="mb-2 space-y-1">
-                    <div className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">모션 옵션</div>
-                    <div className="text-[11px] leading-5 text-muted-foreground">미리보기 판단에 필요한 강도는 여기서 바로 같이 조절해.</div>
-                  </div>
+                  <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">모션 옵션</div>
                   <SettingsField label="강도">
                     <ScrubbableNumberInput
                       variant="settings"
@@ -180,12 +193,13 @@ export function WallpaperImageWidgetEditorFields({
             <WallpaperTransitionAnimationEditorField
               transitionStyle={selectedWidget.settings.imageTransitionStyle}
               transitionSpeed={selectedWidget.settings.imageTransitionSpeed}
+              transitionDurationMs={selectedWidget.settings.imageTransitionDurationMs}
               transitionEasing={selectedWidget.settings.imageTransitionEasing}
               onTransitionStyleChange={(nextValue) => {
                 updateWidgetSettings({ imageTransitionStyle: nextValue })
               }}
-              onTransitionSpeedChange={(nextValue) => {
-                updateWidgetSettings({ imageTransitionSpeed: nextValue })
+              onTransitionDurationChange={(nextValue) => {
+                updateWidgetSettings({ imageTransitionDurationMs: nextValue })
               }}
               onTransitionEasingChange={(nextValue) => {
                 updateWidgetSettings({ imageTransitionEasing: nextValue })
@@ -295,10 +309,7 @@ export function WallpaperImageWidgetEditorFields({
               motionSpeed={selectedWidget.settings.motionSpeed}
               editorContent={(
                 <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                  <div className="mb-2 space-y-1">
-                    <div className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">모션 옵션</div>
-                    <div className="text-[11px] leading-5 text-muted-foreground">강도와 속도를 이 안에서 바꾸면서 곡선 체감을 바로 비교해.</div>
-                  </div>
+                  <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">모션 옵션</div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <SettingsField label="움직임 강도">
                       <ScrubbableNumberInput
@@ -351,10 +362,7 @@ export function WallpaperImageWidgetEditorFields({
                 : `튕김 기준 · ${(selectedWidget.settings.swapBounceCount ?? 3)}회`}
               editorContent={(
                 <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                  <div className="mb-2 space-y-1">
-                    <div className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">교체 옵션</div>
-                    <div className="text-[11px] leading-5 text-muted-foreground">교체 기준과 간격도 이 안에서 같이 바꾸면서 전환 느낌을 판단해.</div>
-                  </div>
+                  <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">교체 옵션</div>
                   <SettingsField label="이미지 교체 기준">
                     <Select
                       value={selectedWidget.settings.imageSwapMode ?? 'bounce'}

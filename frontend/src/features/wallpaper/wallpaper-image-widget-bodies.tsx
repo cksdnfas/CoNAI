@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { formatDateTime, getArtifactPreviewUrl } from '@/features/module-graph/module-graph-shared'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
-import type { WallpaperWidgetInstance } from './wallpaper-types'
+import type { WallpaperImageTransitionStyle, WallpaperWidgetInstance } from './wallpaper-types'
 import { useWallpaperBrowseContentQuery, useWallpaperGroupPreviewImagesQuery } from './wallpaper-widget-data'
 import {
   getWallpaperArtifactPreviewImage,
@@ -20,6 +20,70 @@ import {
   useWallpaperRotatingIndex,
 } from './wallpaper-widget-utils'
 
+// Build one stack-card motion style so recent-results stack mode respects transition style choices.
+function getWallpaperStackCardStyle(
+  transitionStyle: WallpaperImageTransitionStyle,
+  order: number,
+  offsetX: number,
+  offsetY: number,
+  scale: number,
+  rotate: number,
+): CSSProperties {
+  if (transitionStyle === 'zoom') {
+    return {
+      transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${Math.max(0.72, scale - order * 0.04)})`,
+      filter: `blur(${Math.max(0, order * 1.6)}px)`,
+    }
+  }
+
+  if (transitionStyle === 'slide') {
+    return {
+      transform: `translate3d(${offsetX}px, ${offsetY + order * 12}px, 0) rotate(${rotate}deg) scale(${scale})`,
+      filter: `blur(${Math.max(0, order * 0.8)}px)`,
+    }
+  }
+
+  if (transitionStyle === 'blur') {
+    return {
+      transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${scale})`,
+      filter: `blur(${Math.max(0, order * 2.6)}px)`,
+    }
+  }
+
+  if (transitionStyle === 'flip') {
+    return {
+      transform: `perspective(1200px) translate3d(${offsetX}px, ${offsetY}px, 0) rotateX(${order * 12}deg) rotate(${rotate}deg) scale(${scale})`,
+      filter: `blur(${Math.max(0, order * 0.6)}px)`,
+      transformStyle: 'preserve-3d',
+    }
+  }
+
+  if (transitionStyle === 'shuffle') {
+    const shuffleX = offsetX + ((order % 2 === 0 ? -1 : 1) * order * 10)
+    const shuffleY = offsetY + order * 6
+    const shuffleRotate = rotate + ((order % 2 === 0 ? -1 : 1) * order * 3.5)
+    return {
+      transform: `translate3d(${shuffleX}px, ${shuffleY}px, 0) rotate(${shuffleRotate}deg) scale(${Math.max(0.8, scale - order * 0.015)})`,
+      filter: `blur(${Math.max(0, order * 1.1)}px)`,
+    }
+  }
+
+  return {
+    transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${scale})`,
+  }
+}
+
+function getWallpaperPreviewOpenSettings(widget: WallpaperWidgetInstance) {
+  return {
+    previewOpenScalePercent: widget.settings.imagePreviewOpenScalePercent,
+    previewOpenDurationMs: widget.settings.imagePreviewOpenDurationMs,
+    previewOpenEasing: widget.settings.imagePreviewOpenEasing,
+    previewCloseScalePercent: widget.settings.imagePreviewCloseScalePercent,
+    previewCloseDurationMs: widget.settings.imagePreviewCloseDurationMs,
+    previewCloseEasing: widget.settings.imagePreviewCloseEasing,
+  }
+}
+
 /** Render one recent-results widget using the latest graph outputs. */
 export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'recent-results' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
   const refreshInterval = Math.max(5, widget.settings.refreshIntervalSec) * 1000
@@ -28,6 +92,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
   const shiftInterval = Math.max(4, widget.settings.shiftIntervalSec ?? 8) * 1000
   const imageTransitionStyle = widget.settings.imageTransitionStyle ?? 'zoom'
   const imageTransitionSpeed = widget.settings.imageTransitionSpeed ?? 'normal'
+  const imageTransitionDurationMs = widget.settings.imageTransitionDurationMs
   const imageTransitionEasing = widget.settings.imageTransitionEasing ?? 'easeOutCubic'
   const imageHoverMotion = getWallpaperHoverMotionAmount(widget.settings.imageHoverMotion ?? 1)
   const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
@@ -136,7 +201,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
           const isFront = order === 0
           const cardStyle = {
             inset: `${offsetY}px ${offsetX}px ${Math.max(0, offsetY * 0.4)}px ${Math.max(0, offsetX * 0.35)}px`,
-            transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${scale})`,
+            ...getWallpaperStackCardStyle(imageTransitionStyle, order, offsetX, offsetY, scale, rotate),
             opacity,
             zIndex: 100 - order,
           }
@@ -168,7 +233,11 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
                 style={cardStyle}
                 onClick={(event) => {
                   event.stopPropagation()
-                  onOpenImage({ image: entry.previewImage, alt: entry.workflowName })
+                  onOpenImage({
+                    image: entry.previewImage,
+                    alt: entry.workflowName,
+                    ...getWallpaperPreviewOpenSettings(widget),
+                  })
                 }}
               >
                 {cardContent}
@@ -212,9 +281,11 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
           onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
           transitionStyle={imageTransitionStyle}
           transitionSpeed={imageTransitionSpeed}
+          transitionDurationMs={imageTransitionDurationMs}
           transitionEasing={imageTransitionEasing}
           hoverMotion={imageHoverMotion}
           hoverEasing={hoverEasing}
+          {...getWallpaperPreviewOpenSettings(widget)}
           className="relative overflow-hidden rounded-xl border border-border/70 bg-surface-low"
           imageClassName="h-full w-full object-cover"
         >
@@ -236,11 +307,14 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
   const visibleCount = Math.max(1, Math.min(9, widget.settings.visibleCount))
+  const slideshowInterval = Math.max(4, widget.settings.slideshowIntervalSec ?? 12) * 1000
+  const previewPoolCount = Math.max(visibleCount + 1, visibleCount * 3, 12)
   const motionMode = widget.settings.motionMode ?? 'static'
   const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 1)
   const motionEasing = widget.settings.motionEasing ?? 'easeOutCubic'
   const imageTransitionStyle = widget.settings.imageTransitionStyle ?? 'fade'
   const imageTransitionSpeed = widget.settings.imageTransitionSpeed ?? 'normal'
+  const imageTransitionDurationMs = widget.settings.imageTransitionDurationMs
   const imageTransitionEasing = widget.settings.imageTransitionEasing ?? 'easeOutCubic'
   const imageHoverMotion = getWallpaperHoverMotionAmount(widget.settings.imageHoverMotion ?? 1)
   const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
@@ -248,7 +322,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   const ambientTick = useWallpaperMotionTick(motionMode === 'ambient')
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null)
 
-  const previewQuery = useWallpaperGroupPreviewImagesQuery('group-image-view', groupId, includeChildren, visibleCount)
+  const previewQuery = useWallpaperGroupPreviewImagesQuery('group-image-view', groupId, includeChildren, previewPoolCount)
 
   if (groupId === null) {
     return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">설정에서 그룹을 선택해.</div>
@@ -263,8 +337,17 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   }
 
   const images = previewQuery.data ?? []
+  const rotationEnabled = images.length > visibleCount
+  const rotationIndex = useWallpaperRotatingIndex(images.length, slideshowInterval, rotationEnabled)
+  const visibleImages = useMemo(() => {
+    if (images.length <= visibleCount) {
+      return images.slice(0, visibleCount)
+    }
+
+    return Array.from({ length: visibleCount }, (_, index) => images[(rotationIndex + index) % images.length]).filter(Boolean)
+  }, [images, rotationIndex, visibleCount])
   const columnCount = visibleCount >= 6 ? 3 : visibleCount >= 4 ? 2 : 1
-  const rowCount = Math.max(1, Math.ceil(Math.max(images.length, 1) / columnCount))
+  const rowCount = Math.max(1, Math.ceil(Math.max(visibleImages.length, 1) / columnCount))
 
   return (
     <div
@@ -278,12 +361,12 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
       } : undefined}
       onPointerLeave={allowPointerMotion ? () => setPointerOffset(null) : undefined}
     >
-      {images.length === 0 ? (
+      {visibleImages.length === 0 ? (
         <div className="col-span-full flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
           이 그룹에는 아직 미리보기 이미지가 없어.
         </div>
       ) : null}
-      {images.map((image, index) => {
+      {visibleImages.map((image, index) => {
         const imageUrl = getWallpaperImageUrl(image)
         const columnIndex = index % columnCount
         const rowIndex = Math.floor(index / columnCount)
@@ -312,9 +395,11 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
             onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
             transitionStyle={imageTransitionStyle}
             transitionSpeed={imageTransitionSpeed}
+            transitionDurationMs={imageTransitionDurationMs}
             transitionEasing={imageTransitionEasing}
             hoverMotion={imageHoverMotion}
             hoverEasing={hoverEasing}
+            {...getWallpaperPreviewOpenSettings(widget)}
             className="overflow-hidden rounded-lg border border-border/70 bg-surface-low transition-transform duration-200 will-change-transform"
             imageClassName="h-full w-full object-cover"
             style={{
@@ -349,6 +434,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
   const slideshowInterval = Math.max(4, widget.settings.slideshowIntervalSec) * 1000
   const imageTransitionStyle = widget.settings.imageTransitionStyle ?? 'fade'
   const imageTransitionSpeed = widget.settings.imageTransitionSpeed ?? 'normal'
+  const imageTransitionDurationMs = widget.settings.imageTransitionDurationMs
   const imageTransitionEasing = widget.settings.imageTransitionEasing ?? 'easeOutCubic'
   const imageHoverMotion = getWallpaperHoverMotionAmount(widget.settings.imageHoverMotion ?? 1)
   const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
@@ -399,9 +485,11 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
       onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
       transitionStyle={imageTransitionStyle}
       transitionSpeed={imageTransitionSpeed}
+      transitionDurationMs={imageTransitionDurationMs}
       transitionEasing={imageTransitionEasing}
       hoverMotion={imageHoverMotion}
       hoverEasing={hoverEasing}
+      {...getWallpaperPreviewOpenSettings(widget)}
       className="relative h-full overflow-hidden rounded-xl border border-border/70 bg-surface-low"
       imageClassName={cn(
         'h-full w-full rounded-xl ease-out will-change-transform',

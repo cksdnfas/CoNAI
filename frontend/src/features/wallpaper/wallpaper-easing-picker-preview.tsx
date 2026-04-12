@@ -1,18 +1,29 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { WallpaperAnimationEasing } from './wallpaper-types'
+import type { WallpaperAnimationEasing, WallpaperImageHoverMotion, WallpaperImageTransitionStyle } from './wallpaper-types'
 import {
   getWallpaperAnimationEasingCss,
+  getWallpaperHoverMotionAmount,
+  getWallpaperImageTransitionDurationMs,
   getWallpaperPresetBezierControlPoints,
+  getWallpaperMotionStrengthMultiplier,
   isWallpaperAnimationEasingPreset,
   normalizeWallpaperAnimationEasing,
   parseWallpaperCubicBezierEasing,
+  resolveWallpaperHoverMotionMetrics,
   type WallpaperBezierControlPoints,
 } from './wallpaper-widget-utils'
 
 export type WallpaperEasingPreviewKind = 'transition' | 'hover' | 'motion'
+
+export interface WallpaperEasingPreviewConfig {
+  transitionDurationMs?: number
+  transitionStyle?: WallpaperImageTransitionStyle
+  hoverMotion?: WallpaperImageHoverMotion
+  motionStrength?: number
+  motionSpeed?: number
+}
 
 const GRAPH_SIZE = 304
 const GRAPH_PADDING = 24
@@ -87,20 +98,117 @@ function getWallpaperEasingPreviewMeta(kind: WallpaperEasingPreviewKind) {
     case 'hover':
       return {
         title: '호버 미리보기',
-        description: '살짝 닿았을 때 커지는 느낌과 반응 속도를 봐.',
       }
     case 'motion':
       return {
         title: '모션 미리보기',
-        description: '계속 움직이는 요소가 얼마나 밀고 당기는지 확인해.',
       }
     case 'transition':
     default:
       return {
         title: '전환 미리보기',
-        description: '이미지나 카드가 바뀔 때 들어오는 감각을 확인해.',
       }
   }
+}
+
+// Build preview keyframes per transition style so the modal matches runtime behavior more closely.
+function getWallpaperTransitionPreviewKeyframes(
+  transitionStyle: WallpaperImageTransitionStyle,
+  layer: 'current' | 'previous',
+): Array<Record<string, string | number>> {
+  if (transitionStyle === 'none') {
+    return layer === 'current'
+      ? [
+          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
+          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
+        ]
+      : [
+          { opacity: 0, transform: 'scale(1)', filter: 'blur(0px)' },
+          { opacity: 0, transform: 'scale(1)', filter: 'blur(0px)' },
+        ]
+  }
+
+  if (transitionStyle === 'fade') {
+    return layer === 'current'
+      ? [
+          { opacity: 0, transform: 'scale(1.02)', filter: 'blur(3px)' },
+          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
+        ]
+      : [
+          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
+          { opacity: 0, transform: 'scale(0.98)', filter: 'blur(4px)' },
+        ]
+  }
+
+  if (transitionStyle === 'zoom') {
+    return layer === 'current'
+      ? [
+          { opacity: 0, transform: 'scale(1.14)', filter: 'blur(2px)' },
+          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
+        ]
+      : [
+          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
+          { opacity: 0, transform: 'scale(0.86)', filter: 'blur(3px)' },
+        ]
+  }
+
+  if (transitionStyle === 'slide') {
+    return layer === 'current'
+      ? [
+          { opacity: 0, transform: 'translateY(12px) scale(0.985)', filter: 'blur(2px)' },
+          { opacity: 1, transform: 'translateY(0px) scale(1)', filter: 'blur(0px)' },
+        ]
+      : [
+          { opacity: 1, transform: 'translateY(0px) scale(1)', filter: 'blur(0px)' },
+          { opacity: 0, transform: 'translateY(-12px) scale(1.015)', filter: 'blur(4px)' },
+        ]
+  }
+
+  if (transitionStyle === 'blur') {
+    return layer === 'current'
+      ? [
+          { opacity: 0, transform: 'scale(1.035)', filter: 'blur(14px)' },
+          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
+        ]
+      : [
+          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
+          { opacity: 0, transform: 'scale(0.97)', filter: 'blur(18px)' },
+        ]
+  }
+
+  if (transitionStyle === 'flip') {
+    return layer === 'current'
+      ? [
+          { opacity: 0, transform: 'perspective(1200px) rotateX(-84deg) scale(0.96)', filter: 'blur(2px)' },
+          { opacity: 1, transform: 'perspective(1200px) rotateX(0deg) scale(1)', filter: 'blur(0px)' },
+        ]
+      : [
+          { opacity: 1, transform: 'perspective(1200px) rotateX(0deg) scale(1)', filter: 'blur(0px)' },
+          { opacity: 0, transform: 'perspective(1200px) rotateX(84deg) scale(1.03)', filter: 'blur(4px)' },
+        ]
+  }
+
+  if (transitionStyle === 'shuffle') {
+    return layer === 'current'
+      ? [
+          { opacity: 0, transform: 'translate(-12px, 8px) rotate(-3deg) scale(0.92)', filter: 'blur(4px)' },
+          { opacity: 1, transform: 'translate(0px, 0px) rotate(0deg) scale(1)', filter: 'blur(0px)' },
+        ]
+      : [
+          { opacity: 1, transform: 'translate(0px, 0px) rotate(0deg) scale(1)', filter: 'blur(0px)' },
+          { opacity: 0, transform: 'translate(12px, -8px) rotate(3deg) scale(1.05)', filter: 'blur(5px)' },
+        ]
+  }
+
+  return layer === 'current'
+    ? [
+        { opacity: 0, transform: 'translateY(2%) scale(0.9)', filter: 'blur(4px)' },
+        { opacity: 1, transform: 'translateY(0px) scale(1)', filter: 'blur(0px)' },
+      ]
+    : [
+        { opacity: 1, transform: 'translateY(0px) scale(1)', filter: 'blur(0px)' },
+        { opacity: 0, transform: 'translateY(-2%) scale(1.08)', filter: 'blur(6px)' },
+      ]
 }
 
 // Evaluate one cubic-bezier component at a normalized parameter value.
@@ -299,9 +407,9 @@ export function WallpaperEasingGraph({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <span>그래프 편집</span>
-        <span>드래그로 곡선 조절</span>
+        <span>시작/끝점은 고정, P1/P2만 드래그해서 조절</span>
       </div>
       <svg
         ref={graphRef}
@@ -330,6 +438,8 @@ export function WallpaperEasingGraph({
 
         <circle cx={startPoint.x} cy={startPoint.y} r="6" fill="var(--muted-foreground)" opacity="0.72" />
         <circle cx={endPoint.x} cy={endPoint.y} r="6" fill="var(--muted-foreground)" opacity="0.72" />
+        <text x={startPoint.x + 12} y={startPoint.y - 8} className="fill-muted-foreground text-[10px] font-medium">시작 (0, 0)</text>
+        <text x={endPoint.x - 12} y={endPoint.y - 8} textAnchor="end" className="fill-muted-foreground text-[10px] font-medium">끝 (1, 1)</text>
 
         {[
           { id: 'p1', point: controlOne, label: 'P1', valueText: `${formatWallpaperEasingGraphPointValue(value.x1)}, ${formatWallpaperEasingGraphPointValue(value.y1)}` },
@@ -376,7 +486,7 @@ export function WallpaperEasingGraph({
 }
 
 // Render one animated preview surface for the current easing value.
-function WallpaperEasingPreview({ easing, kind }: { easing: WallpaperAnimationEasing, kind: WallpaperEasingPreviewKind }) {
+function WallpaperEasingPreview({ easing, kind, config }: { easing: WallpaperAnimationEasing, kind: WallpaperEasingPreviewKind, config?: WallpaperEasingPreviewConfig }) {
   const [replayCount, setReplayCount] = useState(0)
   const easingCss = useMemo(() => getWallpaperAnimationEasingCss(easing), [easing])
   const motionTrackRef = useRef<HTMLDivElement | null>(null)
@@ -385,27 +495,35 @@ function WallpaperEasingPreview({ easing, kind }: { easing: WallpaperAnimationEa
   const transitionIncomingRef = useRef<HTMLDivElement | null>(null)
   const transitionOutgoingRef = useRef<HTMLDivElement | null>(null)
   const meta = getWallpaperEasingPreviewMeta(kind)
+  const transitionStyle = config?.transitionStyle ?? 'fade'
+  const transitionDurationMs = config?.transitionDurationMs ?? getWallpaperImageTransitionDurationMs('normal')
+  const hoverMetrics = useMemo(() => resolveWallpaperHoverMotionMetrics(config?.hoverMotion), [config?.hoverMotion])
+  const motionStrength = getWallpaperMotionStrengthMultiplier(config?.motionStrength ?? 1)
+  const motionSpeed = Math.min(20, Math.max(0.2, config?.motionSpeed ?? 1))
+  const motionDurationMs = Math.round(Math.min(2200, Math.max(320, 1100 / motionSpeed)))
+  const motionScale = 1 + (Math.min(motionStrength, 2.5) * 0.035)
+  const showCombinedMotionPreview = kind !== 'motion'
+  const primaryDurationMs = kind === 'transition' ? transitionDurationMs : kind === 'hover' ? 220 : motionDurationMs
 
   useEffect(() => {
-    if (kind === 'motion') {
-      const trackWidth = Math.max((motionTrackRef.current?.clientWidth ?? 0) - 24, 0)
-      const dotElement = motionDotRef.current
-      if (!dotElement) {
-        return
-      }
-
+    const trackWidth = Math.max((motionTrackRef.current?.clientWidth ?? 0) - 24, 0)
+    const dotElement = motionDotRef.current
+    if (dotElement) {
       dotElement.getAnimations().forEach((animation) => animation.cancel())
       dotElement.animate(
         [
           { transform: 'translate(0px, -50%) scale(1)' },
-          { transform: `translate(${trackWidth}px, -50%) scale(1.04)` },
+          { transform: `translate(${trackWidth}px, -50%) scale(${motionScale})` },
         ],
         {
-          duration: 950,
+          duration: primaryDurationMs,
           fill: 'forwards',
           easing: easingCss,
         },
       )
+    }
+
+    if (kind === 'motion') {
       return
     }
 
@@ -418,11 +536,11 @@ function WallpaperEasingPreview({ easing, kind }: { easing: WallpaperAnimationEa
       hoverCard.getAnimations().forEach((animation) => animation.cancel())
       hoverCard.animate(
         [
-          { transform: 'translate(-50%, -50%) scale(1)', boxShadow: '0 10px 24px rgba(0,0,0,0.18)' },
-          { transform: 'translate(-50%, -50%) scale(1.1)', boxShadow: '0 22px 52px rgba(0,0,0,0.3)' },
+          { transform: 'scale(1)', boxShadow: '0 10px 24px rgba(0,0,0,0.18)' },
+          { transform: `scale(${hoverMetrics.surfaceScale})`, boxShadow: hoverMetrics.surfaceShadow },
         ],
         {
-          duration: 780,
+          duration: 220,
           direction: 'alternate',
           fill: 'forwards',
           easing: easingCss,
@@ -441,45 +559,75 @@ function WallpaperEasingPreview({ easing, kind }: { easing: WallpaperAnimationEa
     outgoing.getAnimations().forEach((animation) => animation.cancel())
 
     outgoing.animate(
-      [
-        { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', filter: 'blur(0px)' },
-        { opacity: 0, transform: 'translate(-50%, -50%) scale(0.94)', filter: 'blur(10px)' },
-      ],
+      getWallpaperTransitionPreviewKeyframes(transitionStyle, 'previous'),
       {
-        duration: 820,
+        duration: transitionDurationMs,
         fill: 'forwards',
         easing: easingCss,
       },
     )
 
     incoming.animate(
-      [
-        { opacity: 0, transform: 'translate(-50%, -50%) scale(1.06)', filter: 'blur(8px)' },
-        { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', filter: 'blur(0px)' },
-      ],
+      getWallpaperTransitionPreviewKeyframes(transitionStyle, 'current'),
       {
-        duration: 820,
+        duration: transitionDurationMs,
         fill: 'forwards',
         easing: easingCss,
       },
     )
-  }, [easingCss, kind, replayCount])
+  }, [easingCss, hoverMetrics.surfaceScale, hoverMetrics.surfaceShadow, kind, motionDurationMs, motionScale, primaryDurationMs, replayCount, transitionDurationMs, transitionStyle])
 
   return (
     <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-medium text-foreground">{meta.title}</div>
-          <div className="text-[11px] text-muted-foreground">{meta.description}</div>
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-muted-foreground">
+            {kind === 'transition' ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{transitionDurationMs}ms</span> : null}
+            {kind === 'transition' && config?.transitionStyle ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{config.transitionStyle}</span> : null}
+            {kind === 'hover' ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">강도 {getWallpaperHoverMotionAmount(config?.hoverMotion ?? 1).toFixed(1)}</span> : null}
+            <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">모션 강도 {motionStrength.toFixed(1)}</span>
+            <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">모션 속도 {motionSpeed.toFixed(1)}</span>
+          </div>
         </div>
         <Button type="button" size="xs" variant="ghost" onClick={() => setReplayCount((current) => current + 1)}>
           다시 재생
         </Button>
       </div>
 
-      <div className="relative h-28 overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_45%),var(--background)]">
-        {kind === 'motion' ? (
-          <div ref={motionTrackRef} className="absolute inset-y-0 left-4 right-4">
+      <div className={cn(
+        'relative overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_45%),var(--background)]',
+        showCombinedMotionPreview ? 'h-44' : 'h-28',
+      )}>
+        {kind === 'hover' ? (
+          <div className="absolute inset-x-0 top-0 flex h-[64%] items-center justify-center">
+            <div className="relative h-16 w-24">
+              <div
+                ref={hoverCardRef}
+                className="absolute inset-0 rounded-xl border border-white/15 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--primary)_20%,transparent),color-mix(in_srgb,var(--secondary)_18%,transparent)),var(--surface-high)] shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {kind === 'transition' ? (
+          <div className="absolute inset-x-0 top-0 flex h-[64%] items-center justify-center">
+            <div className="relative h-16 w-24">
+              <div
+                ref={transitionOutgoingRef}
+                className="absolute inset-0 rounded-xl border border-white/12 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--muted)_18%,transparent),transparent),var(--surface-low)] shadow-[0_12px_28px_rgba(0,0,0,0.16)]"
+              />
+              <div
+                ref={transitionIncomingRef}
+                className="absolute inset-0 rounded-xl border border-white/15 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--primary)_22%,transparent),color-mix(in_srgb,var(--secondary)_16%,transparent)),var(--surface-high)] shadow-[0_12px_34px_rgba(0,0,0,0.22)]"
+                style={{ opacity: 0 }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        <div className={cn('absolute inset-x-0', showCombinedMotionPreview ? 'bottom-2 h-[36%]' : 'inset-y-0')}>
+          <div ref={motionTrackRef} className="absolute inset-x-4 top-1/2 h-10 -translate-y-1/2">
             <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-border/70" />
             <div
               ref={motionDotRef}
@@ -487,34 +635,7 @@ function WallpaperEasingPreview({ easing, kind }: { easing: WallpaperAnimationEa
               style={{ transform: 'translate(0px, -50%)' }}
             />
           </div>
-        ) : null}
-
-        {kind === 'hover' ? (
-          <div
-            ref={hoverCardRef}
-            className="absolute left-1/2 top-1/2 flex h-16 w-24 -translate-x-1/2 -translate-y-1/2 items-end rounded-xl border border-white/15 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--primary)_20%,transparent),color-mix(in_srgb,var(--secondary)_18%,transparent)),var(--surface-high)] p-3 text-xs font-medium text-foreground shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
-          >
-            Hover
-          </div>
-        ) : null}
-
-        {kind === 'transition' ? (
-          <>
-            <div
-              ref={transitionOutgoingRef}
-              className="absolute left-1/2 top-1/2 flex h-16 w-24 -translate-x-1/2 -translate-y-1/2 items-end rounded-xl border border-white/12 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--muted)_18%,transparent),transparent),var(--surface-low)] p-3 text-xs font-medium text-muted-foreground shadow-[0_12px_28px_rgba(0,0,0,0.16)]"
-            >
-              이전
-            </div>
-            <div
-              ref={transitionIncomingRef}
-              className="absolute left-1/2 top-1/2 flex h-16 w-24 -translate-x-1/2 -translate-y-1/2 items-end rounded-xl border border-white/15 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--primary)_22%,transparent),color-mix(in_srgb,var(--secondary)_16%,transparent)),var(--surface-high)] p-3 text-xs font-medium text-foreground shadow-[0_12px_34px_rgba(0,0,0,0.22)]"
-              style={{ opacity: 0 }}
-            >
-              현재
-            </div>
-          </>
-        ) : null}
+        </div>
       </div>
     </div>
   )
@@ -522,30 +643,22 @@ function WallpaperEasingPreview({ easing, kind }: { easing: WallpaperAnimationEa
 
 // Render the shared preview area and its mode switcher.
 export function WallpaperEasingPreviewPanel({
-  activePreviewKind,
+  previewKind,
   easing,
-  onChangePreviewKind,
+  config,
+  editorContent,
   extraContent,
 }: {
-  activePreviewKind: WallpaperEasingPreviewKind
+  previewKind: WallpaperEasingPreviewKind
   easing: WallpaperAnimationEasing
-  onChangePreviewKind: (kind: WallpaperEasingPreviewKind) => void
+  config?: WallpaperEasingPreviewConfig
+  editorContent?: ReactNode
   extraContent?: ReactNode
 }) {
   return (
     <div className="space-y-4">
-      <SegmentedTabBar
-        value={activePreviewKind}
-        onChange={(nextValue) => onChangePreviewKind(nextValue as WallpaperEasingPreviewKind)}
-        size="sm"
-        items={[
-          { value: 'transition', label: '전환' },
-          { value: 'hover', label: '호버' },
-          { value: 'motion', label: '모션' },
-        ]}
-      />
-
-      <WallpaperEasingPreview easing={easing} kind={activePreviewKind} />
+      {editorContent}
+      <WallpaperEasingPreview easing={easing} kind={previewKind} config={config} />
       {extraContent}
     </div>
   )

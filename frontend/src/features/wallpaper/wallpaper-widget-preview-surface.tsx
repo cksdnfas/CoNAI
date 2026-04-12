@@ -19,6 +19,12 @@ import {
 export interface WallpaperWidgetPreviewImage {
   image: ImageRecord
   alt: string
+  previewOpenScalePercent?: number
+  previewOpenDurationMs?: number
+  previewOpenEasing?: WallpaperAnimationEasing
+  previewCloseScalePercent?: number
+  previewCloseDurationMs?: number
+  previewCloseEasing?: WallpaperAnimationEasing
 }
 
 interface WallpaperPreviewImageSurfaceProps {
@@ -32,9 +38,16 @@ interface WallpaperPreviewImageSurfaceProps {
   onOpenImage?: (image: WallpaperWidgetPreviewImage) => void
   transitionStyle?: WallpaperImageTransitionStyle
   transitionSpeed?: WallpaperImageTransitionSpeed
+  transitionDurationMs?: number
   transitionEasing?: WallpaperAnimationEasing
   hoverMotion?: WallpaperImageHoverMotion
   hoverEasing?: WallpaperAnimationEasing
+  previewOpenScalePercent?: number
+  previewOpenDurationMs?: number
+  previewOpenEasing?: WallpaperAnimationEasing
+  previewCloseScalePercent?: number
+  previewCloseDurationMs?: number
+  previewCloseEasing?: WallpaperAnimationEasing
 }
 
 /** Build one preview record from artifact metadata for wallpaper image widgets. */
@@ -69,6 +82,13 @@ function getWallpaperTransitionStateClassName(transitionStyle: WallpaperImageTra
       return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[1.02] translate-y-0 blur-[3px]'
     }
     return isTransitionActive ? 'opacity-0 scale-[0.98] translate-y-0 blur-[4px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
+  }
+
+  if (transitionStyle === 'zoom') {
+    if (layer === 'current') {
+      return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[1.14] translate-y-0 blur-[2px]'
+    }
+    return isTransitionActive ? 'opacity-0 scale-[0.86] translate-y-0 blur-[3px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
   }
 
   if (transitionStyle === 'slide') {
@@ -107,14 +127,14 @@ function getWallpaperTransitionStateClassName(transitionStyle: WallpaperImageTra
 }
 
 /** Render one optionally clickable wallpaper image surface. */
-export function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal', transitionEasing = 'easeOutCubic', hoverMotion = 1, hoverEasing = 'easeOutCubic' }: WallpaperPreviewImageSurfaceProps) {
+export function WallpaperPreviewImageSurface({ image, alt, className, imageClassName, style, imageStyle, children, onOpenImage, transitionStyle = 'none', transitionSpeed = 'normal', transitionDurationMs: explicitTransitionDurationMs, transitionEasing = 'easeOutCubic', hoverMotion = 1, hoverEasing = 'easeOutCubic', previewOpenScalePercent, previewOpenDurationMs, previewOpenEasing, previewCloseScalePercent, previewCloseDurationMs, previewCloseEasing }: WallpaperPreviewImageSurfaceProps) {
   const [currentImage, setCurrentImage] = useState<WallpaperWidgetPreviewImage>({ image, alt })
   const [previousImage, setPreviousImage] = useState<WallpaperWidgetPreviewImage | null>(null)
   const [isTransitionActive, setIsTransitionActive] = useState(true)
   const [isHovered, setIsHovered] = useState(false)
   const currentImageRef = useRef<WallpaperWidgetPreviewImage>({ image, alt })
   const transitionTimeoutRef = useRef<number | null>(null)
-  const transitionDurationMs = getWallpaperImageTransitionDurationMs(transitionSpeed)
+  const transitionDurationMs = getWallpaperImageTransitionDurationMs(transitionSpeed, explicitTransitionDurationMs)
   const transitionTimingFunction = useMemo(() => getWallpaperAnimationEasingCss(transitionEasing), [transitionEasing])
   const hoverTimingFunction = useMemo(() => getWallpaperAnimationEasingCss(hoverEasing), [hoverEasing])
   const hoverMetrics = useMemo(() => resolveWallpaperHoverMotionMetrics(hoverMotion), [hoverMotion])
@@ -249,7 +269,16 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
       style={surfaceStyle}
       onClick={(event) => {
         event.stopPropagation()
-        onOpenImage({ image: currentImage.image, alt: currentImage.alt })
+        onOpenImage({
+          image: currentImage.image,
+          alt: currentImage.alt,
+          previewOpenScalePercent,
+          previewOpenDurationMs,
+          previewOpenEasing,
+          previewCloseScalePercent,
+          previewCloseDurationMs,
+          previewCloseEasing,
+        })
       }}
       onPointerEnter={() => {
         setIsHovered(true)

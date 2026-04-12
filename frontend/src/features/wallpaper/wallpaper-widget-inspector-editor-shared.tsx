@@ -32,10 +32,11 @@ interface WallpaperHoverInteractionEditorFieldsProps {
 interface WallpaperTransitionAnimationEditorFieldProps {
   transitionStyle: WallpaperImageTransitionStyle | undefined
   transitionSpeed: WallpaperImageTransitionSpeed | undefined
+  transitionDurationMs?: number
   transitionEasing: WallpaperAnimationEasing | undefined
   editorContent?: ReactNode
   onTransitionStyleChange: (nextValue: WallpaperImageTransitionStyle) => void
-  onTransitionSpeedChange: (nextValue: WallpaperImageTransitionSpeed) => void
+  onTransitionDurationChange: (nextValue: number) => void
   onTransitionEasingChange: (nextValue: WallpaperAnimationEasing) => void
 }
 
@@ -48,6 +49,24 @@ interface WallpaperMotionEasingEditorFieldProps {
   previewKind?: WallpaperEasingPreviewKind
   summary?: ReactNode
   editorContent?: ReactNode
+  onEasingChange: (nextValue: WallpaperAnimationEasing) => void
+}
+
+interface WallpaperPreviewOpenAnimationEditorFieldProps {
+  scalePercent?: number
+  durationMs?: number
+  easing: WallpaperAnimationEasing | undefined
+  onScalePercentChange: (nextValue: number) => void
+  onDurationMsChange: (nextValue: number) => void
+  onEasingChange: (nextValue: WallpaperAnimationEasing) => void
+}
+
+interface WallpaperPreviewCloseAnimationEditorFieldProps {
+  scalePercent?: number
+  durationMs?: number
+  easing: WallpaperAnimationEasing | undefined
+  onScalePercentChange: (nextValue: number) => void
+  onDurationMsChange: (nextValue: number) => void
   onEasingChange: (nextValue: WallpaperAnimationEasing) => void
 }
 
@@ -77,17 +96,6 @@ function normalizeWallpaperTransitionStyle(value: string): WallpaperImageTransit
   }
 }
 
-function normalizeWallpaperTransitionSpeed(value: string): WallpaperImageTransitionSpeed {
-  switch (value) {
-    case 'fast':
-    case 'slow':
-      return value
-    case 'normal':
-    default:
-      return 'normal'
-  }
-}
-
 function getWallpaperTransitionStyleLabel(style: WallpaperImageTransitionStyle | undefined) {
   switch (style ?? 'fade') {
     case 'zoom':
@@ -108,25 +116,11 @@ function getWallpaperTransitionStyleLabel(style: WallpaperImageTransitionStyle |
   }
 }
 
-function getWallpaperTransitionSpeedLabel(speed: WallpaperImageTransitionSpeed | undefined) {
-  switch (speed ?? 'normal') {
-    case 'fast':
-      return '빠름'
-    case 'slow':
-      return '느림'
-    case 'normal':
-    default:
-      return '보통'
-  }
-}
-
 function renderWallpaperAnimationEditorCard({
   title,
-  description,
   children,
 }: {
   title: string
-  description?: string
   children: ReactNode
 }) {
   return (
@@ -197,14 +191,15 @@ export function WallpaperInspectorDisclosure({
 export function WallpaperTransitionAnimationEditorField({
   transitionStyle,
   transitionSpeed,
+  transitionDurationMs,
   transitionEasing,
   editorContent,
   onTransitionStyleChange,
-  onTransitionSpeedChange,
+  onTransitionDurationChange,
   onTransitionEasingChange,
 }: WallpaperTransitionAnimationEditorFieldProps) {
-  const durationMs = getWallpaperImageTransitionDurationMs(transitionSpeed)
-  const summary = `${getWallpaperTransitionStyleLabel(transitionStyle)} · ${getWallpaperTransitionSpeedLabel(transitionSpeed)} · ${durationMs}ms`
+  const durationMs = getWallpaperImageTransitionDurationMs(transitionSpeed, transitionDurationMs)
+  const summary = `${getWallpaperTransitionStyleLabel(transitionStyle)} · ${durationMs}ms`
 
   return (
     <SettingsField label="전환 애니메이션">
@@ -221,7 +216,6 @@ export function WallpaperTransitionAnimationEditorField({
           <>
             {renderWallpaperAnimationEditorCard({
               title: '전환 옵션',
-              description: '곡선만 고르지 말고, 전환 방식과 속도도 여기서 같이 맞춰.',
               children: (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <SettingsField label="전환">
@@ -240,17 +234,18 @@ export function WallpaperTransitionAnimationEditorField({
                       <option value="none">없음</option>
                     </Select>
                   </SettingsField>
-                  <SettingsField label="속도">
-                    <Select
-                      value={transitionSpeed ?? 'normal'}
-                      onChange={(event) => {
-                        onTransitionSpeedChange(normalizeWallpaperTransitionSpeed(event.target.value))
+                  <SettingsField label="전환 시간 (ms)">
+                    <ScrubbableNumberInput
+                      variant="settings"
+                      min={80}
+                      max={4000}
+                      step={10}
+                      scrubRatio={0.35}
+                      value={durationMs}
+                      onChange={(nextValue) => {
+                        onTransitionDurationChange(clampWallpaperInspectorNumber(nextValue, durationMs, 80, 4000, 0))
                       }}
-                    >
-                      <option value="fast">빠름</option>
-                      <option value="normal">보통</option>
-                      <option value="slow">느림</option>
-                    </Select>
+                    />
                   </SettingsField>
                 </div>
               ),
@@ -283,7 +278,6 @@ export function WallpaperHoverInteractionEditorFields({
         previewConfig={{ hoverMotion }}
         editorContent={renderWallpaperAnimationEditorCard({
           title: '호버 옵션',
-          description: '호버 반응량까지 같이 맞춰야 미리보기가 실제 느낌에 가까워져.',
           children: (
             <SettingsField label="호버 반응">
               <ScrubbableNumberInput
@@ -331,6 +325,130 @@ export function WallpaperMotionEasingEditorField({
         summary={summaryText || undefined}
         previewConfig={{ motionStrength, motionSpeed }}
         editorContent={editorContent}
+        onChange={onEasingChange}
+      />
+    </SettingsField>
+  )
+}
+
+export function WallpaperPreviewOpenAnimationEditorField({
+  scalePercent,
+  durationMs,
+  easing,
+  onScalePercentChange,
+  onDurationMsChange,
+  onEasingChange,
+}: WallpaperPreviewOpenAnimationEditorFieldProps) {
+  const resolvedScalePercent = Math.min(100, Math.max(60, Math.round(scalePercent ?? 88)))
+  const resolvedDurationMs = Math.min(1200, Math.max(80, Math.round(durationMs ?? 260)))
+  const summary = `${resolvedScalePercent}% · ${resolvedDurationMs}ms`
+
+  return (
+    <SettingsField label="클릭 확대 애니메이션">
+      <WallpaperEasingPicker
+        value={easing}
+        fallbackPreset="easeOutCubic"
+        previewKind="transition"
+        summary={summary}
+        previewConfig={{
+          transitionStyle: 'zoom',
+          transitionDurationMs: resolvedDurationMs,
+        }}
+        editorContent={renderWallpaperAnimationEditorCard({
+          title: '확대 미리보기 옵션',
+          children: (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SettingsField label="시작 크기 (%)">
+                <ScrubbableNumberInput
+                  variant="settings"
+                  min={60}
+                  max={100}
+                  step={1}
+                  scrubRatio={0.35}
+                  value={resolvedScalePercent}
+                  onChange={(nextValue) => {
+                    onScalePercentChange(clampWallpaperInspectorNumber(nextValue, resolvedScalePercent, 60, 100, 0))
+                  }}
+                />
+              </SettingsField>
+              <SettingsField label="열림 시간 (ms)">
+                <ScrubbableNumberInput
+                  variant="settings"
+                  min={80}
+                  max={1200}
+                  step={10}
+                  scrubRatio={0.35}
+                  value={resolvedDurationMs}
+                  onChange={(nextValue) => {
+                    onDurationMsChange(clampWallpaperInspectorNumber(nextValue, resolvedDurationMs, 80, 1200, 0))
+                  }}
+                />
+              </SettingsField>
+            </div>
+          ),
+        })}
+        onChange={onEasingChange}
+      />
+    </SettingsField>
+  )
+}
+
+export function WallpaperPreviewCloseAnimationEditorField({
+  scalePercent,
+  durationMs,
+  easing,
+  onScalePercentChange,
+  onDurationMsChange,
+  onEasingChange,
+}: WallpaperPreviewCloseAnimationEditorFieldProps) {
+  const resolvedScalePercent = Math.min(100, Math.max(60, Math.round(scalePercent ?? 88)))
+  const resolvedDurationMs = Math.min(1200, Math.max(80, Math.round(durationMs ?? 260)))
+  const summary = `${resolvedScalePercent}% · ${resolvedDurationMs}ms`
+
+  return (
+    <SettingsField label="클릭 닫힘 애니메이션">
+      <WallpaperEasingPicker
+        value={easing}
+        fallbackPreset="easeInOutCubic"
+        previewKind="transition"
+        summary={summary}
+        previewConfig={{
+          transitionStyle: 'zoom',
+          transitionDurationMs: resolvedDurationMs,
+        }}
+        editorContent={renderWallpaperAnimationEditorCard({
+          title: '닫힘 미리보기 옵션',
+          children: (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SettingsField label="끝 크기 (%)">
+                <ScrubbableNumberInput
+                  variant="settings"
+                  min={60}
+                  max={100}
+                  step={1}
+                  scrubRatio={0.35}
+                  value={resolvedScalePercent}
+                  onChange={(nextValue) => {
+                    onScalePercentChange(clampWallpaperInspectorNumber(nextValue, resolvedScalePercent, 60, 100, 0))
+                  }}
+                />
+              </SettingsField>
+              <SettingsField label="닫힘 시간 (ms)">
+                <ScrubbableNumberInput
+                  variant="settings"
+                  min={80}
+                  max={1200}
+                  step={10}
+                  scrubRatio={0.35}
+                  value={resolvedDurationMs}
+                  onChange={(nextValue) => {
+                    onDurationMsChange(clampWallpaperInspectorNumber(nextValue, resolvedDurationMs, 80, 1200, 0))
+                  }}
+                />
+              </SettingsField>
+            </div>
+          ),
+        })}
         onChange={onEasingChange}
       />
     </SettingsField>

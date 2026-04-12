@@ -26,6 +26,12 @@ export interface WallpaperBaseWidgetSettings {
   showBackground: boolean
   showBorder?: boolean
   opacity?: number
+  imagePreviewOpenScalePercent?: number
+  imagePreviewOpenDurationMs?: number
+  imagePreviewOpenEasing?: WallpaperAnimationEasing
+  imagePreviewCloseScalePercent?: number
+  imagePreviewCloseDurationMs?: number
+  imagePreviewCloseEasing?: WallpaperAnimationEasing
 }
 
 export type WallpaperImageTransitionStyle = 'none' | 'fade' | 'zoom' | 'slide' | 'blur' | 'flip' | 'shuffle'
@@ -77,6 +83,7 @@ export interface WallpaperGroupSourceWidgetSettings extends WallpaperBaseWidgetS
 
 export interface WallpaperGroupImageViewWidgetSettings extends WallpaperGroupSourceWidgetSettings {
   visibleCount: number
+  slideshowIntervalSec: number
   motionMode: 'static' | 'ambient' | 'pointer'
   motionStrength: number
   motionEasing: WallpaperAnimationEasing
@@ -180,6 +187,10 @@ export type WallpaperTextNoteWidgetInstance = Extract<WallpaperWidgetInstance, {
 
 export function isWallpaperGroupSourceWidget(widget: WallpaperWidgetInstance): widget is WallpaperGroupSourceWidgetInstance {
   return widget.type === 'group-image-view' || widget.type === 'image-showcase' || widget.type === 'floating-collage'
+}
+
+export function isWallpaperPreviewableImageWidget(widget: WallpaperWidgetInstance): widget is Extract<WallpaperWidgetInstance, { type: 'recent-results' | 'group-image-view' | 'image-showcase' | 'floating-collage' }> {
+  return widget.type === 'recent-results' || widget.type === 'group-image-view' || widget.type === 'image-showcase' || widget.type === 'floating-collage'
 }
 
 export function isWallpaperTextNoteWidget(widget: WallpaperWidgetInstance): widget is WallpaperTextNoteWidgetInstance {

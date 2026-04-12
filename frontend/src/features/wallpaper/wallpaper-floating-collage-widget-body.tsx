@@ -402,6 +402,12 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
             transitionEasing={imageTransitionEasing}
             hoverMotion={imageHoverMotion}
             hoverEasing={hoverEasing}
+            previewOpenScalePercent={widget.settings.imagePreviewOpenScalePercent}
+            previewOpenDurationMs={widget.settings.imagePreviewOpenDurationMs}
+            previewOpenEasing={widget.settings.imagePreviewOpenEasing}
+            previewCloseScalePercent={widget.settings.imagePreviewCloseScalePercent}
+            previewCloseDurationMs={widget.settings.imagePreviewCloseDurationMs}
+            previewCloseEasing={widget.settings.imagePreviewCloseEasing}
             className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_18px_48px_rgba(0,0,0,0.30)] transition-transform duration-75 will-change-transform"
             imageClassName={cn('h-full w-full', fitMode === 'contain' ? 'object-contain' : 'object-cover')}
             style={{

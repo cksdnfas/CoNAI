@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ImageRecord } from '@/types/image'
 import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord } from '@/lib/api'
-import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset } from './wallpaper-types'
+import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset, WallpaperImageHoverMotion, WallpaperImageTransitionSpeed } from './wallpaper-types'
 
 /** Render one live clock string for the wallpaper clock widget. */
 export function useWallpaperClockText() {
@@ -248,6 +248,20 @@ export function getWallpaperAnimationEasingCss(easing: WallpaperAnimationEasing 
   }
 }
 
+export const WALLPAPER_IMAGE_TRANSITION_DURATIONS: Record<WallpaperImageTransitionSpeed, number> = {
+  fast: 220,
+  normal: 340,
+  slow: 520,
+}
+
+export function getWallpaperImageTransitionDurationMs(speed: WallpaperImageTransitionSpeed | undefined, explicitDurationMs?: number) {
+  if (typeof explicitDurationMs === 'number' && Number.isFinite(explicitDurationMs)) {
+    return Math.min(4000, Math.max(80, Math.round(explicitDurationMs)))
+  }
+
+  return WALLPAPER_IMAGE_TRANSITION_DURATIONS[speed ?? 'normal']
+}
+
 export function getWallpaperMotionStrengthMultiplier(strength: number | 'soft' | 'medium' | 'strong') {
   if (typeof strength === 'number' && Number.isFinite(strength)) {
     return clampWallpaperNumericIntensity(strength, 0, 2.5)
@@ -282,6 +296,19 @@ export function getWallpaperHoverMotionAmount(strength: number | 'none' | 'soft'
   }
 
   return 1
+}
+
+export function resolveWallpaperHoverMotionMetrics(hoverMotion: WallpaperImageHoverMotion | undefined) {
+  const intensity = getWallpaperHoverMotionAmount(hoverMotion ?? 1)
+
+  return {
+    intensity,
+    surfaceScale: 1 + (intensity * 0.018),
+    imageScale: 1 + (intensity * 0.03),
+    surfaceShadow: intensity <= 0
+      ? 'none'
+      : `0 ${Math.round(10 + intensity * 7)}px ${Math.round(26 + intensity * 18)}px rgba(0,0,0,${(0.14 + intensity * 0.07).toFixed(3)})`,
+  }
 }
 
 /** Resolve one image preview url from a generic ImageRecord. */

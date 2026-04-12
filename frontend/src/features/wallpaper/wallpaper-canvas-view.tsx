@@ -3,6 +3,7 @@ import { GripVertical } from 'lucide-react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { cn } from '@/lib/utils'
+import { getWallpaperAnimationEasingCss } from './wallpaper-widget-utils'
 import type {
   WallpaperCanvasPreset,
   WallpaperLayoutPreset,
@@ -186,8 +187,18 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const interactionPreviewRef = useRef<WallpaperInteractionPreview | null>(null)
   const previewCloseTimeoutRef = useRef<number | null>(null)
+  const previewAnimationPhaseRef = useRef<'open' | 'close'>('open')
   const isRuntimeMode = mode === 'runtime'
   const isCoarsePointer = useIsCoarsePointer()
+  const previewOpenDurationMs = Math.min(1200, Math.max(80, Math.round(previewImage?.previewOpenDurationMs ?? 260)))
+  const previewOpenScale = Math.min(1, Math.max(0.6, (previewImage?.previewOpenScalePercent ?? 88) / 100))
+  const previewOpenTimingFunction = getWallpaperAnimationEasingCss(previewImage?.previewOpenEasing ?? 'easeOutCubic')
+  const previewCloseDurationMs = Math.min(1200, Math.max(80, Math.round(previewImage?.previewCloseDurationMs ?? 260)))
+  const previewCloseScale = Math.min(1, Math.max(0.6, (previewImage?.previewCloseScalePercent ?? 88) / 100))
+  const previewCloseTimingFunction = getWallpaperAnimationEasingCss(previewImage?.previewCloseEasing ?? 'easeInOutCubic')
+  const previewTransitionDurationMs = previewAnimationPhaseRef.current === 'close' ? previewCloseDurationMs : previewOpenDurationMs
+  const previewTransitionTimingFunction = previewAnimationPhaseRef.current === 'close' ? previewCloseTimingFunction : previewOpenTimingFunction
+  const previewHiddenScale = previewAnimationPhaseRef.current === 'close' ? previewCloseScale : previewOpenScale
 
   const visibleWidgets = useMemo(
     () => layoutPreset.widgets.filter((widget) => !widget.hidden).sort((left, right) => left.zIndex - right.zIndex),
@@ -275,6 +286,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        previewAnimationPhaseRef.current = 'close'
         setIsPreviewVisible(false)
         if (previewCloseTimeoutRef.current !== null) {
           window.clearTimeout(previewCloseTimeoutRef.current)
@@ -282,7 +294,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
         previewCloseTimeoutRef.current = window.setTimeout(() => {
           setPreviewImage(null)
           previewCloseTimeoutRef.current = null
-        }, 240)
+        }, previewCloseDurationMs)
       }
     }
 
@@ -300,6 +312,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
       previewCloseTimeoutRef.current = null
     }
 
+    previewAnimationPhaseRef.current = 'open'
     setPreviewImage(image)
     window.requestAnimationFrame(() => {
       setIsPreviewVisible(true)
@@ -307,6 +320,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
   }
 
   const handleClosePreviewImage = () => {
+    previewAnimationPhaseRef.current = 'close'
     setIsPreviewVisible(false)
     if (previewCloseTimeoutRef.current !== null) {
       window.clearTimeout(previewCloseTimeoutRef.current)
@@ -314,7 +328,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
     previewCloseTimeoutRef.current = window.setTimeout(() => {
       setPreviewImage(null)
       previewCloseTimeoutRef.current = null
-    }, 240)
+    }, previewCloseDurationMs)
   }
 
   const canvasElement = (
@@ -421,9 +435,13 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
       {previewImage ? (
         <div
           className={cn(
-            'absolute inset-0 z-[120] flex items-center justify-center bg-[color-mix(in_srgb,var(--background)_68%,transparent)] p-6 backdrop-blur-md transition-opacity duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+            'absolute inset-0 z-[5000] flex items-center justify-center bg-[color-mix(in_srgb,var(--background)_68%,transparent)] p-6 backdrop-blur-md transition-opacity',
             isPreviewVisible ? 'opacity-100' : 'opacity-0',
           )}
+          style={{
+            transitionDuration: `${previewTransitionDurationMs}ms`,
+            transitionTimingFunction: previewTransitionTimingFunction,
+          }}
           onClick={handleClosePreviewImage}
         >
           <button
@@ -434,9 +452,16 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
               handleClosePreviewImage()
             }}
             className={cn(
-              'max-h-full max-w-full overflow-hidden rounded-[24px] border border-white/14 bg-black/14 shadow-[0_16px_40px_rgba(0,0,0,0.18),0_36px_96px_rgba(0,0,0,0.42)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-              isPreviewVisible ? 'translate-y-0 scale-100 opacity-100 rotate-0' : 'translate-y-5 scale-[0.88] opacity-0 -rotate-[1.4deg]',
+              'max-h-full max-w-full overflow-hidden rounded-[24px] border border-white/14 bg-black/14 shadow-[0_16px_40px_rgba(0,0,0,0.18),0_36px_96px_rgba(0,0,0,0.42)] transition-[transform,opacity,box-shadow] will-change-transform',
+              isPreviewVisible ? 'opacity-100' : 'opacity-0',
             )}
+            style={{
+              transitionDuration: `${previewTransitionDurationMs}ms`,
+              transitionTimingFunction: previewTransitionTimingFunction,
+              transform: isPreviewVisible
+                ? 'translate3d(0, 0, 0) scale(1)'
+                : `translate3d(0, 20px, 0) scale(${previewHiddenScale})`,
+            }}
           >
             <ImagePreviewMedia
               image={previewImage.image}
