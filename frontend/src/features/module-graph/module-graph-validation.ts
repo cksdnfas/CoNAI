@@ -146,23 +146,27 @@ export function buildWorkflowValidationIssues(params: {
 
       const exposedInput = exposedInputMap.get(buildWorkflowExposedInputId(node.id, port.key))
       const runtimeValue = exposedInput ? runtimeInputValues[exposedInput.id] : undefined
-      const satisfied = connectedInputKeys.has(port.key)
+      const hasConnectedValue = connectedInputKeys.has(port.key)
         || hasMeaningfulValue(node.inputValues?.[port.key])
         || hasMeaningfulValue(port.default_value)
         || hasMeaningfulValue(exposedInput?.default_value)
-        || hasMeaningfulValue(runtimeValue)
+      const hasRuntimeValue = hasMeaningfulValue(runtimeValue)
 
-      if (!satisfied) {
-        issues.push({
-          id: `missing-input:${node.id}:${port.key}`,
-          nodeId: node.id,
-          portKey: port.key,
-          nodeLabel,
-          severity: 'error',
-          title: `필수 입력 누락 · ${port.label}`,
-          detail: `${port.label} (${port.key}) 입력이 연결되지 않았고 값도 비어 있어.`,
-        })
+      if (hasConnectedValue || hasRuntimeValue) {
+        continue
       }
+
+      issues.push({
+        id: `missing-input:${node.id}:${port.key}`,
+        nodeId: node.id,
+        portKey: port.key,
+        nodeLabel,
+        severity: exposedInput ? 'warning' : 'error',
+        title: `${exposedInput ? '실행 입력 확인 필요' : '필수 입력 누락'} · ${port.label}`,
+        detail: exposedInput
+          ? `${port.label} (${port.key}) 입력은 실행 시 사용자 입력으로 채울 수 있어. 저장은 가능하지만 실행 전 값 확인이 필요해.`
+          : `${port.label} (${port.key}) 입력이 연결되지 않았고 값도 비어 있어. 이 상태로는 실행 경로가 고립돼.`,
+      })
     }
   }
 

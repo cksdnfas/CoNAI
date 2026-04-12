@@ -140,14 +140,14 @@ export function useModuleGraphExecutionActions({
   /** Save the current graph workflow draft and show one user-facing result message. */
   const handleSaveGraph = useCallback(async () => {
     if (isSavingGraph) {
-      return
+      return false
     }
 
     try {
       setIsSavingGraph(true)
       const saveResult = await persistCurrentGraph()
       if (!saveResult) {
-        return
+        return false
       }
 
       showSnackbar({
@@ -156,8 +156,10 @@ export function useModuleGraphExecutionActions({
           : `현재 그래프를 업데이트 저장했어. (${saveResult.name})`,
         tone: 'info',
       })
+      return true
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '그래프 저장에 실패했어.', tone: 'error' })
+      return false
     } finally {
       setIsSavingGraph(false)
     }

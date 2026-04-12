@@ -1,13 +1,14 @@
+/* eslint-disable react-refresh/only-export-components */
 import { Suspense, lazy, useMemo } from 'react'
 import type { Connection, OnEdgesChange, OnNodesChange } from '@xyflow/react'
 import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
+import { ModuleGraphWorkflowSaveModal } from './components/module-graph-workflow-save-modal'
 const ModuleGraphCanvasLazy = lazy(async () => {
   const module = await import('./components/module-graph-canvas')
   return { default: module.ModuleGraphCanvas }
 })
 import {
-  ModuleGraphEditorSupportSubtitle,
   ModuleGraphWorkflowBrowseSidePanel,
   ModuleGraphWorkflowEditorSupportPanels,
   ModuleGraphWorkflowSetupFolderPanel,
@@ -44,12 +45,9 @@ export function useModuleGraphPageEditorPanels({
   workflowName,
   workflowDescription,
   isDirty,
-  selectedNode,
-  selectedEdge,
   selectedExecutionId,
   isSavingGraph,
   cancellingExecutionId,
-  editorValidationIssues,
   executionList,
   executionListError,
   executionListIsError,
@@ -57,10 +55,9 @@ export function useModuleGraphPageEditorPanels({
   executionDetailError,
   executionDetailIsError,
   selectedExecutionStatus,
-  selectedValidationPortKey,
-  activeEditorSupportSection,
   reactFlowColorMode,
-  onSelectEditorSupportSection,
+  isWorkflowSaveModalOpen,
+  onCloseWorkflowSaveModal,
   onNodesChange,
   onEdgesChange,
   onDraftWorkflowFolderIdChange,
@@ -87,9 +84,7 @@ export function useModuleGraphPageEditorPanels({
   onNodeValueChange,
   onNodeValueClear,
   onNodeImageChange,
-  onExecuteSelectedNode,
   onSelectExecution,
-  onOpenEditorSupport,
   onRerunSelectedGraph,
   onRetrySelectedExecution,
   onCancelSelectedExecution,
@@ -121,12 +116,9 @@ export function useModuleGraphPageEditorPanels({
   workflowName: string
   workflowDescription: string
   isDirty: boolean
-  selectedNode: ModuleGraphNode | null
-  selectedEdge: ModuleGraphEdge | null
   selectedExecutionId: number | null
   isSavingGraph: boolean
   cancellingExecutionId: number | null
-  editorValidationIssues: WorkflowValidationIssue[]
   executionList: GraphExecutionRecord[]
   executionListError: string
   executionListIsError: boolean
@@ -134,10 +126,9 @@ export function useModuleGraphPageEditorPanels({
   executionDetailError: string
   executionDetailIsError: boolean
   selectedExecutionStatus: GraphExecutionRecord['status'] | null
-  selectedValidationPortKey: string | null
-  activeEditorSupportSection: EditorSupportSectionKey
   reactFlowColorMode: 'light' | 'dark' | 'system'
-  onSelectEditorSupportSection: (section: EditorSupportSectionKey) => void
+  isWorkflowSaveModalOpen: boolean
+  onCloseWorkflowSaveModal: () => void
   onNodesChange: OnNodesChange<ModuleGraphNode>
   onEdgesChange: OnEdgesChange<ModuleGraphEdge>
   onDraftWorkflowFolderIdChange: (folderId: number | null) => void
@@ -158,15 +149,13 @@ export function useModuleGraphPageEditorPanels({
   onValidationIssueSelect: (issue: WorkflowValidationIssue) => void
   onWorkflowNameChange: (value: string) => void
   onWorkflowDescriptionChange: (value: string) => void
-  onSaveGraph: () => void
+  onSaveGraph: () => Promise<boolean>
   setEditorSupportSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
   onNodeLabelChange: (nodeId: string, label: string) => void
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => void
-  onExecuteSelectedNode: (force: boolean) => void
   onSelectExecution: (executionId: number) => void
-  onOpenEditorSupport: (section?: EditorSupportSectionKey) => void
   onRerunSelectedGraph: () => void
   onRetrySelectedExecution: () => void
   onCancelSelectedExecution: () => void
@@ -197,12 +186,7 @@ export function useModuleGraphPageEditorPanels({
     [executingGraphId, nodes, onDisconnectNodeInput, onExecuteNodeById, onNodeImageChange, onNodeLabelChange, onNodeValueChange, onNodeValueClear],
   )
 
-  const editorSupportSubtitle = (
-    <ModuleGraphEditorSupportSubtitle
-      activeSection={activeEditorSupportSection}
-      onSelectSection={onSelectEditorSupportSection}
-    />
-  )
+  const editorSupportSubtitle = null
 
   const workflowSetupFolderPanel = (
     <ModuleGraphWorkflowSetupFolderPanel
@@ -227,6 +211,27 @@ export function useModuleGraphPageEditorPanels({
     />
   )
 
+  const workflowSaveModal = workflowView === 'edit' ? (
+    <ModuleGraphWorkflowSaveModal
+      open={isWorkflowSaveModalOpen}
+      workflowName={workflowName}
+      workflowDescription={workflowDescription}
+      selectedGraphName={selectedGraphRecord?.name ?? null}
+      selectedGraphVersion={selectedGraphRecord?.version ?? null}
+      isDirty={isDirty}
+      nodesCount={nodes.length}
+      edgesCount={edges.length}
+      selectedExecutionId={selectedExecutionId}
+      isSavingGraph={isSavingGraph}
+      hasNodes={nodes.length > 0}
+      folderPanel={workflowSetupFolderPanel}
+      onClose={onCloseWorkflowSaveModal}
+      onWorkflowNameChange={onWorkflowNameChange}
+      onWorkflowDescriptionChange={onWorkflowDescriptionChange}
+      onSave={onSaveGraph}
+    />
+  ) : null
+
   const workflowBrowseSidePanel = workflowView === 'browse' ? (
     <ModuleGraphWorkflowBrowseSidePanel
       selectedGraphRecord={selectedGraphRecord}
@@ -250,20 +255,11 @@ export function useModuleGraphPageEditorPanels({
 
   const workflowEditorSupportPanels = workflowView === 'edit' ? (
     <ModuleGraphWorkflowEditorSupportPanels
-      nodes={nodes}
-      edges={edges}
       selectedGraphId={selectedGraphId}
       selectedGraphRecord={selectedGraphRecord}
-      workflowName={workflowName}
-      workflowDescription={workflowDescription}
-      isDirty={isDirty}
-      selectedNode={selectedNode}
-      selectedEdge={selectedEdge}
       selectedExecutionId={selectedExecutionId}
-      isSavingGraph={isSavingGraph}
       executingGraphId={executingGraphId}
       cancellingExecutionId={cancellingExecutionId}
-      editorValidationIssues={editorValidationIssues}
       executionList={executionList}
       executionListError={executionListError}
       executionListIsError={executionListIsError}
@@ -271,23 +267,8 @@ export function useModuleGraphPageEditorPanels({
       executionDetailError={executionDetailError}
       executionDetailIsError={executionDetailIsError}
       selectedExecutionStatus={selectedExecutionStatus}
-      highlightedPortKey={selectedValidationPortKey}
-      folderPanel={workflowSetupFolderPanel}
-      onWorkflowNameChange={onWorkflowNameChange}
-      onWorkflowDescriptionChange={onWorkflowDescriptionChange}
-      onSaveGraph={onSaveGraph}
       setSectionRef={setEditorSupportSectionRef}
-      onNodeLabelChange={onNodeLabelChange}
-      onNodeValueChange={onNodeValueChange}
-      onNodeValueClear={onNodeValueClear}
-      onNodeImageChange={onNodeImageChange}
-      onExecuteSelectedNode={() => onExecuteSelectedNode(false)}
-      onForceExecuteSelectedNode={() => onExecuteSelectedNode(true)}
-      onValidationIssueSelect={onValidationIssueSelect}
-      onSelectExecution={(executionId) => {
-        onSelectExecution(executionId)
-        onOpenEditorSupport('results')
-      }}
+      onSelectExecution={onSelectExecution}
       onRerunGraph={onRerunSelectedGraph}
       onRetryExecution={onRetrySelectedExecution}
       onCancelExecution={onCancelSelectedExecution}
@@ -320,6 +301,7 @@ export function useModuleGraphPageEditorPanels({
     editorSupportSubtitle,
     workflowBrowseSidePanel,
     workflowEditorSupportPanels,
+    workflowSaveModal,
     graphCanvas,
   }
 }

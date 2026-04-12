@@ -1,5 +1,6 @@
 import { Suspense, lazy, type ReactNode } from 'react'
 import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowBrowseContentRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
+import type { WorkflowValidationIssue } from './workflow-validation-panel'
 import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
 import { ModuleWorkflowBrowseView } from './module-workflow-browse-view'
 import { ModuleWorkflowEditorView } from './module-workflow-editor-view'
@@ -125,17 +126,17 @@ export function ModuleGraphWorkflowEditorContent({
   isDesktopPageLayout,
   workflowListSidebar,
   nodesCount,
-  edgesCount,
   selectedNode,
   selectedEdge,
-  selectedExecutionId,
-  selectedGraphRecord,
-  workflowName,
   isEditorSupportOpen,
   editorSupportSubtitle,
   workflowEditorSupportPanels,
+  workflowSaveModal,
   graphCanvas,
+  validationIssues,
+  onValidationIssueSelect,
   onOpenModuleLibrary,
+  onOpenSaveModal,
   onAutoLayout,
   onDuplicateSelectedNode,
   onRemoveSelectedNode,
@@ -147,17 +148,17 @@ export function ModuleGraphWorkflowEditorContent({
   isDesktopPageLayout: boolean
   workflowListSidebar: ReactNode
   nodesCount: number
-  edgesCount: number
   selectedNode: ModuleGraphNode | null
   selectedEdge: ModuleGraphEdge | null
-  selectedExecutionId: number | null
-  selectedGraphRecord: GraphWorkflowRecord | null
-  workflowName: string
   isEditorSupportOpen: boolean
   editorSupportSubtitle: ReactNode
   workflowEditorSupportPanels: ReactNode
+  workflowSaveModal?: ReactNode
   graphCanvas: ReactNode
+  validationIssues: WorkflowValidationIssue[]
+  onValidationIssueSelect: (issue: WorkflowValidationIssue) => void
   onOpenModuleLibrary: () => void
+  onOpenSaveModal: () => void
   onAutoLayout: () => void
   onDuplicateSelectedNode: () => void
   onRemoveSelectedNode: () => void
@@ -171,10 +172,18 @@ export function ModuleGraphWorkflowEditorContent({
       isDesktopPageLayout={isDesktopPageLayout}
       workflowListSidebar={workflowListSidebar}
       nodesCount={nodesCount}
-      edgesCount={edgesCount}
       hasSelectedNode={Boolean(selectedNode)}
       hasSelectedEdge={Boolean(selectedEdge)}
+      isEditorSupportOpen={isEditorSupportOpen}
+      editorSupportTitle="Execution Results"
+      editorSupportSubtitle={editorSupportSubtitle}
+      workflowEditorSupportPanels={workflowEditorSupportPanels}
+      workflowSaveModal={workflowSaveModal}
+      graphCanvas={graphCanvas}
+      validationIssues={validationIssues}
+      onValidationIssueSelect={onValidationIssueSelect}
       onOpenModuleLibrary={onOpenModuleLibrary}
+      onOpenSaveModal={onOpenSaveModal}
       onAutoLayout={onAutoLayout}
       onDuplicateSelectedNode={onDuplicateSelectedNode}
       onRemoveSelectedNode={onRemoveSelectedNode}
@@ -182,11 +191,6 @@ export function ModuleGraphWorkflowEditorContent({
       onResetCanvas={onResetCanvas}
       onOpenEditorSupport={onOpenEditorSupport}
       onCloseEditorSupport={onCloseEditorSupport}
-      isEditorSupportOpen={isEditorSupportOpen}
-      editorSupportTitle={selectedGraphRecord?.name || workflowName || 'Workflow Draft'}
-      editorSupportSubtitle={editorSupportSubtitle}
-      workflowEditorSupportPanels={workflowEditorSupportPanels}
-      graphCanvas={graphCanvas}
     />
   )
 }

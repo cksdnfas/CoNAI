@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState } from 'react'
 import { useEdgesState, useNodesState } from '@xyflow/react'
 import type { GraphWorkflowExposedInput, GraphWorkflowFolderRecord } from '@/lib/api'
@@ -35,6 +36,7 @@ export function useModuleGraphPageState() {
   const [isBrowseManageModalOpen, setIsBrowseManageModalOpen] = useState(false)
   const [folderDeleteTarget, setFolderDeleteTarget] = useState<GraphWorkflowFolderRecord | null>(null)
   const [isEditorSupportOpen, setIsEditorSupportOpen] = useState(false)
+  const [isWorkflowSaveModalOpen, setIsWorkflowSaveModalOpen] = useState(false)
   const [activeEditorSupportSection, setActiveEditorSupportSection] = useState<EditorSupportSectionKey>('setup')
   const [workflowExposedInputs, setWorkflowExposedInputs] = useState<GraphWorkflowExposedInput[]>([])
   const [workflowRunInputValues, setWorkflowRunInputValues] = useState<Record<string, unknown>>({})
@@ -46,6 +48,12 @@ export function useModuleGraphPageState() {
       setDraftWorkflowFolderId(selectedFolderId)
     }
   }, [selectedFolderId, selectedGraphId])
+
+  useEffect(() => {
+    if (workflowView !== 'edit') {
+      setIsWorkflowSaveModalOpen(false)
+    }
+  }, [workflowView])
 
   useEffect(() => {
     if (selectedGraphId === null) {
@@ -96,6 +104,8 @@ export function useModuleGraphPageState() {
     setFolderDeleteTarget,
     isEditorSupportOpen,
     setIsEditorSupportOpen,
+    isWorkflowSaveModalOpen,
+    setIsWorkflowSaveModalOpen,
     activeEditorSupportSection,
     setActiveEditorSupportSection,
     workflowExposedInputs,

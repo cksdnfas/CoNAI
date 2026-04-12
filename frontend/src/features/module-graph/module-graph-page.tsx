@@ -63,7 +63,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     setSelectedNodeId,
     selectedEdgeId,
     setSelectedEdgeId,
-    selectedValidationPortKey,
     setSelectedValidationPortKey,
     lastSavedSnapshot,
     setLastSavedSnapshot,
@@ -79,7 +78,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     setFolderDeleteTarget,
     isEditorSupportOpen,
     setIsEditorSupportOpen,
-    activeEditorSupportSection,
+    isWorkflowSaveModalOpen,
+    setIsWorkflowSaveModalOpen,
     setActiveEditorSupportSection,
     workflowExposedInputs,
     setWorkflowExposedInputs,
@@ -168,7 +168,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     enterWorkflowEditor,
     focusValidationIssue,
     openEditorSupport,
-    scrollToEditorSupportSection,
     setEditorSupportSectionRef,
   } = useModuleGraphEditorShell({
     nodes,
@@ -221,7 +220,6 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     cancellingExecutionId,
     handleSaveGraph,
     handleExecuteNodeById,
-    handleExecuteSelectedNode,
     handleRunSelectedWorkflow,
     handleRerunSelectedGraph,
     handleCancelSelectedExecution,
@@ -324,6 +322,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     editorSupportSubtitle,
     workflowBrowseSidePanel,
     workflowEditorSupportPanels,
+    workflowSaveModal,
     graphCanvas,
   } = useModuleGraphPageEditorPanels({
     workflowView,
@@ -346,12 +345,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     workflowName,
     workflowDescription,
     isDirty,
-    selectedNode,
-    selectedEdge,
     selectedExecutionId,
     isSavingGraph,
     cancellingExecutionId,
-    editorValidationIssues,
     executionList,
     executionListError: graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.',
     executionListIsError: graphExecutionsQuery.isError,
@@ -359,10 +355,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     executionDetailError: executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.',
     executionDetailIsError: executionDetailQuery.isError,
     selectedExecutionStatus: selectedExecution?.status ?? null,
-    selectedValidationPortKey,
-    activeEditorSupportSection,
     reactFlowColorMode,
-    onSelectEditorSupportSection: scrollToEditorSupportSection,
+    isWorkflowSaveModalOpen,
+    onCloseWorkflowSaveModal: () => setIsWorkflowSaveModalOpen(false),
     onNodesChange,
     onEdgesChange,
     onDraftWorkflowFolderIdChange: setDraftWorkflowFolderId,
@@ -383,15 +378,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     onValidationIssueSelect: focusValidationIssue,
     onWorkflowNameChange: setWorkflowName,
     onWorkflowDescriptionChange: setWorkflowDescription,
-    onSaveGraph: () => void handleSaveGraph(),
+    onSaveGraph: handleSaveGraph,
     setEditorSupportSectionRef,
     onNodeLabelChange: handleNodeLabelChange,
     onNodeValueChange: handleNodeValueChange,
     onNodeValueClear: handleNodeValueClear,
     onNodeImageChange: handleNodeImageChange,
-    onExecuteSelectedNode: (force) => void handleExecuteSelectedNode(force),
     onSelectExecution: setSelectedExecutionId,
-    onOpenEditorSupport: openEditorSupport,
     onRerunSelectedGraph: () => void handleRerunSelectedGraph(),
     onRetrySelectedExecution: () => void handleRetrySelectedExecution(),
     onCancelSelectedExecution: () => void handleCancelSelectedExecution(),
@@ -460,23 +453,23 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             isDesktopPageLayout={isDesktopPageLayout}
             workflowListSidebar={workflowListSidebar}
             nodesCount={nodes.length}
-            edgesCount={edges.length}
             selectedNode={selectedNode}
             selectedEdge={selectedEdge}
-            selectedExecutionId={selectedExecutionId}
-            selectedGraphRecord={selectedGraphRecord}
-            workflowName={workflowName}
             isEditorSupportOpen={isEditorSupportOpen}
             editorSupportSubtitle={editorSupportSubtitle}
             workflowEditorSupportPanels={workflowEditorSupportPanels}
+            workflowSaveModal={workflowSaveModal}
             graphCanvas={graphCanvas}
+            validationIssues={editorValidationIssues}
+            onValidationIssueSelect={focusValidationIssue}
             onOpenModuleLibrary={() => setIsModuleLibraryOpen(true)}
+            onOpenSaveModal={() => setIsWorkflowSaveModalOpen(true)}
             onAutoLayout={handleAutoLayout}
             onDuplicateSelectedNode={handleDuplicateSelectedNode}
             onRemoveSelectedNode={handleRemoveSelectedNode}
             onRemoveSelectedEdge={handleRemoveSelectedEdge}
             onResetCanvas={handleResetCanvas}
-            onOpenEditorSupport={() => openEditorSupport(selectedNode ? 'inspector' : selectedExecutionId ? 'results' : 'setup')}
+            onOpenEditorSupport={() => openEditorSupport('results')}
             onCloseEditorSupport={closeEditorSupport}
           />
         </Suspense>

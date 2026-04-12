@@ -85,18 +85,18 @@ export function useModuleGraphEditorShell({
       setSelectedNodeId(targetNode.id)
       setSelectedEdgeId(null)
       setSelectedValidationPortKey(issue.portKey ?? null)
-      openEditorSupport('validation')
       void reactFlow.setCenter(targetNode.position.x + 180, targetNode.position.y + 80, { zoom: 1.1, duration: 220 })
     }
 
     if (workflowView !== 'edit') {
       setWorkflowView('edit')
+      setIsEditorSupportOpen(false)
       requestAnimationFrame(() => requestAnimationFrame(focusNode))
       return
     }
 
     focusNode()
-  }, [nodes, openEditorSupport, reactFlow, setSelectedEdgeId, setSelectedNodeId, setSelectedValidationPortKey, setWorkflowView, workflowView])
+  }, [nodes, reactFlow, setIsEditorSupportOpen, setSelectedEdgeId, setSelectedNodeId, setSelectedValidationPortKey, setWorkflowView, workflowView])
 
   useEffect(() => {
     if (workflowView !== 'edit') {

@@ -1,52 +1,20 @@
-import type { ReactNode } from 'react'
 import { Folder, FolderOpen, Plus } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import { getModuleNodeDisplayLabel, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import type { EditorSupportSectionKey } from './module-workflow-editor-support-panel'
 import { GraphExecutionPanel } from './graph-execution-panel'
-import { ModuleWorkflowEditorSupportPanel, type EditorSupportSectionKey } from './module-workflow-editor-support-panel'
-import { NodeInspectorPanel } from './node-inspector-panel'
+import { ModuleWorkflowEditorSupportPanel } from './module-workflow-editor-support-panel'
 import { WorkflowRunnerPanel } from './workflow-runner-panel'
-import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
+import { type WorkflowValidationIssue } from './workflow-validation-panel'
 
 export { ModuleGraphWorkflowListSidebar } from './module-graph-workflow-list-sidebar'
 export { ModuleGraphWorkflowBrowseContent, ModuleGraphWorkflowEditorContent } from './module-graph-workflow-content'
 export { ModuleGraphWorkspaceModals } from './module-graph-workspace-modals'
 
 type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
-
-/** Render the editor-support section tabs used by the workflow editor drawer. */
-export function ModuleGraphEditorSupportSubtitle({
-  activeSection,
-  onSelectSection,
-}: {
-  activeSection: EditorSupportSectionKey
-  onSelectSection: (section: EditorSupportSectionKey) => void
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {([
-        ['setup', '설정'],
-        ['inspector', '검사'],
-        ['validation', '검증'],
-        ['results', '결과'],
-      ] as const).map(([sectionKey, label]) => (
-        <Button
-          key={sectionKey}
-          type="button"
-          size="sm"
-          variant={activeSection === sectionKey ? 'default' : 'outline'}
-          onClick={() => onSelectSection(sectionKey)}
-        >
-          {label}
-        </Button>
-      ))}
-    </div>
-  )
-}
 
 /** Render the workflow-folder picker and child-folder creation tools for editor setup. */
 export function ModuleGraphWorkflowSetupFolderPanel({
@@ -163,22 +131,13 @@ export function ModuleGraphWorkflowBrowseSidePanel({
   )
 }
 
-/** Render the full editor-support drawer content for setup, inspector, inputs, validation, and results. */
+/** Render the execution-results-only support content for the workflow editor drawer. */
 export function ModuleGraphWorkflowEditorSupportPanels({
-  nodes,
-  edges,
   selectedGraphId,
   selectedGraphRecord,
-  workflowName,
-  workflowDescription,
-  isDirty,
-  selectedNode,
-  selectedEdge,
   selectedExecutionId,
-  isSavingGraph,
   executingGraphId,
   cancellingExecutionId,
-  editorValidationIssues,
   executionList,
   executionListError,
   executionListIsError,
@@ -186,38 +145,17 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   executionDetailError,
   executionDetailIsError,
   selectedExecutionStatus,
-  highlightedPortKey,
-  folderPanel,
-  onWorkflowNameChange,
-  onWorkflowDescriptionChange,
-  onSaveGraph,
   setSectionRef,
-  onNodeLabelChange,
-  onNodeValueChange,
-  onNodeValueClear,
-  onNodeImageChange,
-  onExecuteSelectedNode,
-  onForceExecuteSelectedNode,
-  onValidationIssueSelect,
   onSelectExecution,
   onRerunGraph,
   onRetryExecution,
   onCancelExecution,
 }: {
-  nodes: ModuleGraphNode[]
-  edges: ModuleGraphEdge[]
   selectedGraphId: number | null
   selectedGraphRecord: GraphWorkflowRecord | null
-  workflowName: string
-  workflowDescription: string
-  isDirty: boolean
-  selectedNode: ModuleGraphNode | null
-  selectedEdge: ModuleGraphEdge | null
   selectedExecutionId: number | null
-  isSavingGraph: boolean
   executingGraphId: number | null
   cancellingExecutionId: number | null
-  editorValidationIssues: WorkflowValidationIssue[]
   executionList: GraphExecutionRecord[]
   executionListError: string
   executionListIsError: boolean
@@ -225,19 +163,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   executionDetailError: string
   executionDetailIsError: boolean
   selectedExecutionStatus: GraphExecutionRecord['status'] | null
-  highlightedPortKey: string | null
-  folderPanel: ReactNode
-  onWorkflowNameChange: (value: string) => void
-  onWorkflowDescriptionChange: (value: string) => void
-  onSaveGraph: () => void
   setSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
-  onNodeLabelChange: (nodeId: string, label: string) => void
-  onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
-  onNodeValueClear: (nodeId: string, portKey: string) => void
-  onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => void
-  onExecuteSelectedNode: () => void
-  onForceExecuteSelectedNode: () => void
-  onValidationIssueSelect: (issue: WorkflowValidationIssue) => void
   onSelectExecution: (executionId: number) => void
   onRerunGraph: () => void
   onRetryExecution: () => void
@@ -245,50 +171,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
 }) {
   return (
     <ModuleWorkflowEditorSupportPanel
-      nodesCount={nodes.length}
-      edgesCount={edges.length}
-      selectedGraphName={selectedGraphRecord?.name ?? null}
-      selectedGraphVersion={selectedGraphRecord?.version ?? null}
-      workflowName={workflowName}
-      workflowDescription={workflowDescription}
-      isDirty={isDirty}
-      selectedNodeLabel={selectedNode ? getModuleNodeDisplayLabel(selectedNode) : null}
-      selectedExecutionId={selectedExecutionId}
-      isSavingGraph={isSavingGraph}
-      hasNodes={nodes.length > 0}
-      onWorkflowNameChange={onWorkflowNameChange}
-      onWorkflowDescriptionChange={onWorkflowDescriptionChange}
-      onSaveGraph={onSaveGraph}
       setSectionRef={setSectionRef}
-      folderPanel={folderPanel}
-      inspectorPanel={
-        <NodeInspectorPanel
-          nodes={nodes}
-          selectedNode={selectedNode}
-          selectedEdge={selectedEdge}
-          selectedExecutionId={selectedExecutionId}
-          selectedExecutionArtifacts={executionDetail?.artifacts}
-          onNodeLabelChange={onNodeLabelChange}
-          onNodeValueChange={onNodeValueChange}
-          onNodeValueClear={onNodeValueClear}
-          onNodeImageChange={onNodeImageChange}
-          onExecuteSelectedNode={onExecuteSelectedNode}
-          onForceExecuteSelectedNode={onForceExecuteSelectedNode}
-          executeSelectedNodeDisabled={!selectedNode || executingGraphId !== null}
-          executeSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '선택 노드 실행'}
-          forceExecuteSelectedNodeLabel={executingGraphId !== null ? '실행 요청 중…' : '강제 재실행'}
-          highlightedPortKey={highlightedPortKey}
-        />
-      }
-      inputsPanel={null}
-      validationPanel={
-        <WorkflowValidationPanel
-          issues={editorValidationIssues}
-          title="편집기 검증"
-          description="실행 전 확인"
-          onIssueSelect={onValidationIssueSelect}
-        />
-      }
       resultsPanel={
         <GraphExecutionPanel
           selectedGraphId={selectedGraphId}
@@ -307,6 +190,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
           onRerunGraph={onRerunGraph}
           onRetryExecution={onRetryExecution}
           onCancelExecution={onCancelExecution}
+          showHeader={false}
         />
       }
     />
