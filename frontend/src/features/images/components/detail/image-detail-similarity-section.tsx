@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Image as ImageIcon, Type, type LucideIcon } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { updateSimilaritySettings } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
-import type { SimilarImage } from '@/types/similarity'
+import type { PromptSimilarImage, SimilarImage } from '@/types/similarity'
 import type { RelatedImageCardAspectRatio, SimilaritySettings } from '@/types/settings'
 import {
   getValidImageRecords,
@@ -17,6 +15,7 @@ import {
 } from './image-detail-utils'
 import { PromptSimilaritySettingsPanel } from './prompt-similarity-settings-panel'
 import { RelatedImageGallerySection } from './related-image-gallery-section'
+import { PromptSimilarImageScoreOverlay, SimilarImageScoreOverlay } from './similarity-score-overlay'
 import { SimilaritySettingsPanel } from './similarity-settings-panel'
 
 interface ImageDetailSimilaritySectionProps {
@@ -25,6 +24,7 @@ interface ImageDetailSimilaritySectionProps {
   similarImageItems: SimilarImage[]
   similarImagesLoading: boolean
   similarImagesError: unknown
+  promptSimilarImageItems: PromptSimilarImage[]
   promptSimilarImages: ImageRecord[]
   promptSimilarImagesLoading: boolean
   promptSimilarImagesError: unknown
@@ -35,13 +35,6 @@ interface ImageDetailSimilaritySectionProps {
 
 type SimilarImageTab = 'image' | 'text'
 
-type SimilarityComponentScore = NonNullable<SimilarImage['componentScores']>[keyof NonNullable<SimilarImage['componentScores']>]
-
-interface SimilarityComponentRow {
-  key: string
-  label: string
-  score: SimilarityComponentScore
-}
 
 const SIMILAR_IMAGE_TABS: SimilarImageTab[] = ['image', 'text']
 
@@ -55,26 +48,6 @@ const SIMILAR_IMAGE_TAB_ICONS: Record<SimilarImageTab, LucideIcon> = {
   text: Type,
 }
 
-const SIMILARITY_COMPONENT_LABELS = {
-  perceptualHash: 'pHash',
-  dHash: 'dHash',
-  aHash: 'aHash',
-  color: '색상',
-} as const
-
-/** Format a similarity score for compact badge and detail-row display. */
-function formatSimilarityValue(value?: number) {
-  return typeof value === 'number' ? value.toFixed(1) : '—'
-}
-
-/** Map overall similarity scores to the existing badge color scale. */
-function getSimilarityBadgeClassName(similarity: number) {
-  if (similarity >= 92) return 'border border-emerald-300/45 bg-emerald-500/88 text-white'
-  if (similarity >= 82) return 'border border-sky-300/45 bg-sky-500/88 text-white'
-  if (similarity >= 68) return 'border border-violet-300/45 bg-violet-500/88 text-white'
-  if (similarity >= 52) return 'border border-amber-200/50 bg-amber-500/88 text-black'
-  return 'border border-rose-300/45 bg-rose-500/88 text-white'
-}
 
 /** Build the image-similarity draft from the current app settings when the flyout opens. */
 function buildSimilaritySettingsDraft(similarity?: SimilaritySettings | null): SimilaritySettingsDraft | null {
@@ -171,163 +144,6 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
-/** Build score rows for the hover popup from the component-level similarity result. */
-function getSimilarityComponentRows(item: SimilarImage): SimilarityComponentRow[] {
-  const rows: SimilarityComponentRow[] = []
-
-  const pushRow = (key: SimilarityComponentRow['key'], label: string, score?: SimilarityComponentScore) => {
-    if (!score || (!score.available && !score.used)) {
-      return
-    }
-    rows.push({ key, label, score })
-  }
-
-  pushRow('perceptualHash', SIMILARITY_COMPONENT_LABELS.perceptualHash, item.componentScores?.perceptualHash)
-  pushRow('dHash', SIMILARITY_COMPONENT_LABELS.dHash, item.componentScores?.dHash)
-  pushRow('aHash', SIMILARITY_COMPONENT_LABELS.aHash, item.componentScores?.aHash)
-  pushRow('color', SIMILARITY_COMPONENT_LABELS.color, item.componentScores?.color)
-
-  return rows
-}
-
-/** Render the persistent similarity badge and popup for each related-image card. */
-export function SimilarImageScoreOverlay({ item }: { item: SimilarImage }) {
-  const anchorRef = useRef<HTMLDivElement | null>(null)
-  const [isAnchorHovered, setIsAnchorHovered] = useState(false)
-  const [isPopupHovered, setIsPopupHovered] = useState(false)
-  const [isDismissed, setIsDismissed] = useState(false)
-  const [popupPosition, setPopupPosition] = useState<{ top: number; left: number; placement: 'top' | 'bottom'; width: number } | null>(null)
-  const componentRows = getSimilarityComponentRows(item)
-  const isOpen = (isAnchorHovered || isPopupHovered) && !isDismissed
-
-  useEffect(() => {
-    if (!isOpen || typeof window === 'undefined') {
-      return
-    }
-
-    const updatePosition = () => {
-      const anchor = anchorRef.current
-      if (!anchor) {
-        return
-      }
-
-      const rect = anchor.getBoundingClientRect()
-      const viewportPadding = 12
-      const popupGap = 8
-      const popupWidth = Math.min(240, window.innerWidth - viewportPadding * 2)
-      const estimatedPopupHeight = componentRows.length > 0 ? 180 : 116
-      const shouldOpenAbove = rect.bottom + popupGap + estimatedPopupHeight > window.innerHeight - viewportPadding && rect.top > estimatedPopupHeight + popupGap
-
-      let left = rect.left
-      if (left + popupWidth > window.innerWidth - viewportPadding) {
-        left = rect.right - popupWidth
-      }
-      left = Math.max(viewportPadding, left)
-
-      setPopupPosition({
-        top: shouldOpenAbove ? rect.top - popupGap : rect.bottom + popupGap,
-        left,
-        placement: shouldOpenAbove ? 'top' : 'bottom',
-        width: popupWidth,
-      })
-    }
-
-    updatePosition()
-    window.addEventListener('resize', updatePosition)
-    window.addEventListener('scroll', updatePosition, true)
-
-    return () => {
-      window.removeEventListener('resize', updatePosition)
-      window.removeEventListener('scroll', updatePosition, true)
-    }
-  }, [componentRows.length, isOpen])
-
-  const handleAnchorEnter = () => {
-    setIsAnchorHovered(true)
-    setIsDismissed(false)
-  }
-
-  const popup = isOpen && popupPosition && typeof document !== 'undefined'
-    ? createPortal(
-      <div
-        className="z-[120] rounded-sm border border-border bg-background/96 p-3 text-[11px] shadow-[0_12px_32px_rgba(0,0,0,0.34)] backdrop-blur-sm"
-        style={{
-          position: 'fixed',
-          top: popupPosition.top,
-          left: popupPosition.left,
-          width: popupPosition.width,
-          transform: popupPosition.placement === 'top' ? 'translateY(-100%)' : undefined,
-        }}
-        onMouseEnter={() => {
-          setIsPopupHovered(true)
-          setIsDismissed(false)
-        }}
-        onMouseLeave={() => setIsPopupHovered(false)}
-        onClick={(event) => {
-          event.stopPropagation()
-          setIsDismissed(true)
-        }}
-      >
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="font-semibold text-foreground">세부 점수</span>
-          <Badge variant="outline" className="px-2 py-0.5 tracking-normal normal-case">{item.matchType}</Badge>
-        </div>
-
-        <div className="grid gap-1.5">
-          {componentRows.length > 0 ? componentRows.map(({ key, label, score }) => (
-            <div key={key} className="flex items-start justify-between gap-2 leading-4">
-              <span className="text-muted-foreground">{label}</span>
-              <span className={cn('text-right', score.used && !score.passed ? 'text-destructive' : 'text-foreground')}>
-                {!score.available
-                  ? '데이터 없음'
-                  : 'distance' in score
-                    ? `유사 ${formatSimilarityValue(score.similarity)} · 거리 ${score.distance ?? '—'}/${score.threshold} · 비중 ${score.weight}`
-                    : `유사 ${formatSimilarityValue(score.similarity)} · 기준 ${score.threshold} · 비중 ${score.weight}`}
-              </span>
-            </div>
-          )) : (
-            <div className="flex items-start justify-between gap-2 leading-4">
-              <span className="text-muted-foreground">pHash</span>
-              <span className="text-right text-foreground">유사 {formatSimilarityValue(item.similarity)} · 거리 {item.hammingDistance}</span>
-            </div>
-          )}
-        </div>
-      </div>,
-      document.body,
-    )
-    : null
-
-  return (
-    <div className="flex justify-start">
-      <div
-        ref={anchorRef}
-        className="relative max-w-full"
-        onMouseEnter={handleAnchorEnter}
-        onMouseLeave={() => setIsAnchorHovered(false)}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <Badge
-          variant="secondary"
-          className={cn(
-            'max-w-full shadow-sm backdrop-blur-sm tracking-normal normal-case',
-            getSimilarityBadgeClassName(item.similarity),
-          )}
-          onMouseEnter={handleAnchorEnter}
-          onMouseMove={() => {
-            if (isDismissed) {
-              setIsDismissed(false)
-            }
-          }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          {formatSimilarityValue(item.similarity)}
-        </Badge>
-
-        {popup}
-      </div>
-    </div>
-  )
-}
 
 /** Render the similarity gallery area, including tabs, flyouts, and score overlays. */
 export function ImageDetailSimilaritySection({
@@ -336,6 +152,7 @@ export function ImageDetailSimilaritySection({
   similarImageItems,
   similarImagesLoading,
   similarImagesError,
+  promptSimilarImageItems,
   promptSimilarImages,
   promptSimilarImagesLoading,
   promptSimilarImagesError,
@@ -382,6 +199,11 @@ export function ImageDetailSimilaritySection({
   const similarImageItemByHash = useMemo(
     () => new Map(similarImageItems.map((item) => [String(item.image.composite_hash), item])),
     [similarImageItems],
+  )
+
+  const promptSimilarImageItemByHash = useMemo(
+    () => new Map(promptSimilarImageItems.map((item) => [String(item.image.composite_hash), item])),
+    [promptSimilarImageItems],
   )
 
   const similarSectionTitle = SIMILAR_IMAGE_SECTION_TITLE_LABELS[activeSimilarImageTab]
@@ -482,6 +304,17 @@ export function ImageDetailSimilaritySection({
     return item ? <SimilarImageScoreOverlay item={item} /> : null
   }
 
+  /** Render a prompt-similarity badge using the same shared overlay shell as image similarity. */
+  const renderPromptSimilarImageOverlay = (image: ImageRecord): ReactNode => {
+    const compositeHash = image.composite_hash
+    if (typeof compositeHash !== 'string' || compositeHash.length === 0) {
+      return null
+    }
+
+    const item = promptSimilarImageItemByHash.get(compositeHash)
+    return item ? <PromptSimilarImageScoreOverlay item={item} /> : null
+  }
+
   const similarSectionActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <div className="inline-flex items-center gap-0.5 rounded-sm border border-border bg-surface-container p-0.5 shadow-sm">
@@ -556,7 +389,7 @@ export function ImageDetailSimilaritySection({
       mobileCardColumns={mobileCardColumns}
       desktopCardColumns={desktopCardColumns}
       cardAspectRatio={cardAspectRatio}
-      renderItemPersistentOverlay={activeSimilarImageTab === 'image' ? renderSimilarImageOverlay : undefined}
+      renderItemPersistentOverlay={activeSimilarImageTab === 'image' ? renderSimilarImageOverlay : renderPromptSimilarImageOverlay}
     />
   )
 }

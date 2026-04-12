@@ -9,7 +9,8 @@ import type { ImageRecord } from '@/types/image'
 import type { SimilarImage } from '@/types/similarity'
 import { ImageDetailMedia } from './components/detail/image-detail-media'
 import { ImageDetailMetaCard } from './components/detail/image-detail-meta-card'
-import { ImageDetailSimilaritySection, SimilarImageScoreOverlay } from './components/detail/image-detail-similarity-section'
+import { ImageDetailSimilaritySection } from './components/detail/image-detail-similarity-section'
+import { SimilarImageScoreOverlay } from './components/detail/similarity-score-overlay'
 import {
   getDownloadName,
   getImageDetailDownloadUrl,
@@ -184,12 +185,18 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
     [duplicateHashSet, similarQuery.data?.similar],
   )
 
-  const promptSimilarImages = useMemo(
+  const promptSimilarImageItems = useMemo(
     () =>
-      getValidImageRecords((promptSimilarQuery.data?.items ?? []).map((item) => item.image)).filter(
-        (item) => !duplicateHashSet.has(item.composite_hash as string),
-      ),
+      (promptSimilarQuery.data?.items ?? []).filter((item) => {
+        const compositeHash = item.image.composite_hash
+        return typeof compositeHash === 'string' && compositeHash.length > 0 && !duplicateHashSet.has(compositeHash)
+      }),
     [duplicateHashSet, promptSimilarQuery.data?.items],
+  )
+
+  const promptSimilarImages = useMemo(
+    () => getValidImageRecords(promptSimilarImageItems.map((item) => item.image)),
+    [promptSimilarImageItems],
   )
 
   const renderDuplicateImageOverlay = (duplicateImage: ImageRecord): ReactNode => {
@@ -286,6 +293,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
                   similarImageItems={similarImageItems}
                   similarImagesLoading={similarQuery.isLoading || settingsQuery.isLoading}
                   similarImagesError={similarQuery.isError ? similarQuery.error : null}
+                  promptSimilarImageItems={promptSimilarImageItems}
                   promptSimilarImages={promptSimilarImages}
                   promptSimilarImagesLoading={promptSimilarQuery.isLoading || settingsQuery.isLoading}
                   promptSimilarImagesError={promptSimilarQuery.isError ? promptSimilarQuery.error : null}
