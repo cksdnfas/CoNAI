@@ -5,7 +5,7 @@ import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { ModuleGraphActionMenu, type ModuleGraphActionMenuState } from './module-graph-action-menu'
 import { ModuleGraphQuickCreateMenu } from './module-graph-quick-create-menu'
 import { ModuleGraphNodeCard } from './module-graph-node-card'
-import { buildHandleId, getModulePortCompatibility, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { buildHandleId, getModuleNodeDisplayLabel, getModulePortCompatibility, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 const MODULE_GRAPH_NODE_TYPES = { module: ModuleGraphNodeCard }
 const MOBILE_NODE_DRAG_HANDLE_SELECTOR = '.module-graph-drag-handle'
@@ -298,7 +298,7 @@ export function ModuleGraphCanvas({
       anchor,
       flowPosition,
       nodeId: node.id,
-      nodeName: node.data.module.name,
+      nodeName: getModuleNodeDisplayLabel(node),
     })
   }, [reactFlowInstance])
 

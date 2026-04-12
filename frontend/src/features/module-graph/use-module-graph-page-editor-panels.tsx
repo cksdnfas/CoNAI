@@ -1,6 +1,6 @@
 import { Suspense, lazy, useMemo } from 'react'
 import type { Connection, OnEdgesChange, OnNodesChange } from '@xyflow/react'
-import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 const ModuleGraphCanvasLazy = lazy(async () => {
   const module = await import('./components/module-graph-canvas')
@@ -31,6 +31,7 @@ export function useModuleGraphPageEditorPanels({
   draftChildFolderName,
   draftChildFolderDescription,
   selectedGraphRecord,
+  workflowExposedInputs,
   workflowRunInputValues,
   executingGraphId,
   latestExecution,
@@ -82,6 +83,7 @@ export function useModuleGraphPageEditorPanels({
   onWorkflowDescriptionChange,
   onSaveGraph,
   setEditorSupportSectionRef,
+  onNodeLabelChange,
   onNodeValueChange,
   onNodeValueClear,
   onNodeImageChange,
@@ -106,6 +108,7 @@ export function useModuleGraphPageEditorPanels({
   draftChildFolderName: string
   draftChildFolderDescription: string
   selectedGraphRecord: GraphWorkflowRecord | null
+  workflowExposedInputs: GraphWorkflowExposedInput[]
   workflowRunInputValues: Record<string, unknown>
   executingGraphId: number | null
   latestExecution: GraphExecutionRecord | null
@@ -157,6 +160,7 @@ export function useModuleGraphPageEditorPanels({
   onWorkflowDescriptionChange: (value: string) => void
   onSaveGraph: () => void
   setEditorSupportSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
+  onNodeLabelChange: (nodeId: string, label: string) => void
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => void
@@ -184,12 +188,13 @@ export function useModuleGraphPageEditorPanels({
           onExecuteNode: () => onExecuteNodeById(node.id, false),
           onForceExecuteNode: () => onExecuteNodeById(node.id, true),
           onDisconnectNodeInput,
+          onNodeLabelChange,
           onNodeValueChange,
           onNodeValueClear,
           onNodeImageChange,
         },
       })),
-    [executingGraphId, nodes, onDisconnectNodeInput, onExecuteNodeById, onNodeImageChange, onNodeValueChange, onNodeValueClear],
+    [executingGraphId, nodes, onDisconnectNodeInput, onExecuteNodeById, onNodeImageChange, onNodeLabelChange, onNodeValueChange, onNodeValueClear],
   )
 
   const editorSupportSubtitle = (
@@ -225,6 +230,7 @@ export function useModuleGraphPageEditorPanels({
   const workflowBrowseSidePanel = workflowView === 'browse' ? (
     <ModuleGraphWorkflowBrowseSidePanel
       selectedGraphRecord={selectedGraphRecord}
+      inputDefinitions={workflowExposedInputs}
       workflowRunInputValues={workflowRunInputValues}
       isExecuting={executingGraphId !== null}
       latestExecution={latestExecution}
@@ -271,6 +277,7 @@ export function useModuleGraphPageEditorPanels({
       onWorkflowDescriptionChange={onWorkflowDescriptionChange}
       onSaveGraph={onSaveGraph}
       setSectionRef={setEditorSupportSectionRef}
+      onNodeLabelChange={onNodeLabelChange}
       onNodeValueChange={onNodeValueChange}
       onNodeValueClear={onNodeValueClear}
       onNodeImageChange={onNodeImageChange}

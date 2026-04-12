@@ -40,6 +40,39 @@ function toTitleCase(rawValue: string) {
     .join(' ')
 }
 
+function getModuleOperationKey(module: ModuleDefinitionRecord) {
+  if (typeof module.internal_fixed_values?.operation_key === 'string') {
+    return module.internal_fixed_values.operation_key
+  }
+
+  if (typeof module.template_defaults?.operation_key === 'string') {
+    return module.template_defaults.operation_key
+  }
+
+  return null
+}
+
+export function shouldHideFromModuleLibrary(module: ModuleDefinitionRecord) {
+  const operationKey = getModuleOperationKey(module)
+  if (operationKey === 'system.constant_prompt') {
+    return true
+  }
+
+  const normalizedCategory = (module.category ?? '').trim().toLowerCase()
+  const inputPort = module.exposed_inputs[0]
+  const outputPort = module.output_ports[0]
+  const looksLikeLegacyPromptConstant = module.engine_type === 'system'
+    && normalizedCategory === 'input'
+    && module.exposed_inputs.length === 1
+    && module.output_ports.length === 1
+    && inputPort?.key === 'prompt'
+    && inputPort?.data_type === 'text'
+    && outputPort?.key === 'prompt'
+    && outputPort?.data_type === 'text'
+
+  return module.name.trim() === '상수 프롬프트' || looksLikeLegacyPromptConstant
+}
+
 /** Build one compact native hover tooltip for module-library rows. */
 function getModuleHoverTitle(module: ModuleDefinitionRecord) {
   if (!module.description?.trim()) {
@@ -105,8 +138,8 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
   const [activeTab, setActiveTab] = useState<ModuleLibraryTab>('custom')
   const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<string[]>([])
 
-  const customModules = useMemo(() => modules.filter((module) => module.engine_type !== 'system'), [modules])
-  const systemModules = useMemo(() => modules.filter((module) => module.engine_type === 'system'), [modules])
+  const customModules = useMemo(() => modules.filter((module) => module.engine_type !== 'system' && !shouldHideFromModuleLibrary(module)), [modules])
+  const systemModules = useMemo(() => modules.filter((module) => module.engine_type === 'system' && !shouldHideFromModuleLibrary(module)), [modules])
   const finalResultModule = useMemo(() => systemModules.find((module) => isFinalResultModule(module)) ?? null, [systemModules])
   const visibleModules = activeTab === 'system' ? systemModules : customModules
   const activeTabLabel = activeTab === 'system' ? '시스템 모듈' : '사용자 모듈'

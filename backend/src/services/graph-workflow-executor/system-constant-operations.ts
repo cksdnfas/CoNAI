@@ -23,18 +23,18 @@ function normalizeJsonConstantInput(value: unknown) {
   if (typeof value === 'string') {
     const trimmedValue = value.trim()
     if (trimmedValue.length === 0) {
-      throw new Error('상수 JSON 노드에는 JSON 값 1개가 필요해')
+      throw new Error('JSON 노드에는 JSON 값 1개가 필요해')
     }
 
     try {
       return JSON.parse(trimmedValue)
     } catch {
-      throw new Error('상수 JSON 노드에는 올바른 JSON 텍스트가 필요해')
+      throw new Error('JSON 노드에는 올바른 JSON 텍스트가 필요해')
     }
   }
 
   if (value === undefined) {
-    throw new Error('상수 JSON 노드에는 JSON 값 1개가 필요해')
+    throw new Error('JSON 노드에는 JSON 값 1개가 필요해')
   }
 
   return value
@@ -106,7 +106,7 @@ export function executeConstantTextNode(
   completeSystemNode(context, node, moduleDefinition, 'system.constant_text', nodeArtifacts)
 }
 
-/** Execute a constant prompt system node. */
+/** Execute a legacy prompt-key text system node. */
 export function executeConstantPromptNode(
   context: ExecutionContext,
   node: GraphWorkflowNode,
@@ -115,7 +115,7 @@ export function executeConstantPromptNode(
 ) {
   const value = normalizeRequiredStringInput(resolvedInputs.prompt, moduleDefinition.name)
   const nodeArtifacts = {
-    prompt: buildRuntimeArtifact(context.executionId, node.id, 'prompt', 'prompt', value, {
+    prompt: buildRuntimeArtifact(context.executionId, node.id, 'prompt', 'text', value, {
       kind: 'system-constant-input',
       operationKey: 'system.constant_prompt',
     }),
@@ -151,12 +151,12 @@ export async function executeConstantImageNode(
 ) {
   const imageValue = resolvedInputs.image
   if (typeof imageValue !== 'string' || !imageValue.startsWith('data:image/')) {
-    throw new Error('상수 이미지 노드에는 이미지 입력 1개가 필요해')
+    throw new Error('이미지 노드에는 이미지 입력 1개가 필요해')
   }
 
   const base64 = normalizeBase64ImageData(imageValue)
   if (!base64) {
-    throw new Error('상수 이미지 노드에는 올바른 이미지 data URL 입력이 필요해')
+    throw new Error('이미지 노드에는 올바른 이미지 data URL 입력이 필요해')
   }
 
   const mimeType = imageValue.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/)?.[1] ?? 'image/png'

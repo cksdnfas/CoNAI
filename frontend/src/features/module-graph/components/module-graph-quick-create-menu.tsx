@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { ModuleDefinitionRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { CUSTOM_GROUP_ORDER, getCustomModuleGroup, getSystemModuleGroup, SYSTEM_GROUP_ORDER } from './module-library-panel'
+import { CUSTOM_GROUP_ORDER, getCustomModuleGroup, getSystemModuleGroup, shouldHideFromModuleLibrary, SYSTEM_GROUP_ORDER } from './module-library-panel'
 import type { RecommendedModuleMatch } from './module-graph-canvas'
 
 type QuickCreateTab = 'recommended' | 'system' | 'other'
@@ -54,20 +54,22 @@ export function ModuleGraphQuickCreateMenu({
 
   const visibleModules = useMemo<ModuleListItem[]>(() => {
     if (activeTab === 'recommended') {
-      return recommendedModules.map((match) => ({
-        module: match.module,
-        recommendedCompatibility: match.compatibility,
-      }))
+      return recommendedModules
+        .filter((match) => !shouldHideFromModuleLibrary(match.module))
+        .map((match) => ({
+          module: match.module,
+          recommendedCompatibility: match.compatibility,
+        }))
     }
 
     if (activeTab === 'system') {
       return modules
-        .filter((module) => module.engine_type === 'system')
+        .filter((module) => module.engine_type === 'system' && !shouldHideFromModuleLibrary(module))
         .map((module) => ({ module }))
     }
 
     return modules
-      .filter((module) => module.engine_type !== 'system')
+      .filter((module) => module.engine_type !== 'system' && !shouldHideFromModuleLibrary(module))
       .map((module) => ({ module }))
   }, [activeTab, modules, recommendedModules])
 

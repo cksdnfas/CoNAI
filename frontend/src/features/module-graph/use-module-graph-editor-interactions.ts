@@ -155,6 +155,7 @@ export function useModuleGraphEditorInteractions({
         position: nextPosition,
         data: {
           module,
+          label: undefined,
           inputValues: {},
         },
       },
@@ -255,6 +256,7 @@ export function useModuleGraphEditorInteractions({
         },
         data: {
           module: nodeToDuplicate.data.module,
+          label: nodeToDuplicate.data.label,
           inputValues: duplicatedInputValues,
         },
       },
@@ -272,6 +274,26 @@ export function useModuleGraphEditorInteractions({
 
     handleDuplicateNodeById(selectedNode.id)
   }, [handleDuplicateNodeById, selectedNode])
+
+  /** Update one node label in local editor state. */
+  const handleNodeLabelChange = useCallback((nodeId: string, label: string) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => {
+        if (node.id !== nodeId) {
+          return node
+        }
+
+        const trimmedLabel = label.trim()
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            label: trimmedLabel.length > 0 && trimmedLabel !== node.data.module.name ? trimmedLabel : undefined,
+          },
+        }
+      }),
+    )
+  }, [setNodes])
 
   /** Update one node input value in local editor state. */
   const handleNodeValueChange = useCallback((nodeId: string, portKey: string, value: unknown) => {
@@ -473,6 +495,7 @@ export function useModuleGraphEditorInteractions({
     handleAddModuleFromLibrary,
     handleDuplicateNodeById,
     handleDuplicateSelectedNode,
+    handleNodeLabelChange,
     handleNodeValueChange,
     handleNodeValueClear,
     handleNodeImageChange,

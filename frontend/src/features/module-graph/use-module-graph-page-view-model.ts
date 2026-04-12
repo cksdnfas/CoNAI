@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
-import { getGraphExecution, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
 import type { AppSettings } from '@/types/settings'
 import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
-import { buildNodeArtifactGroups, buildNodeArtifactPreview, buildGraphEditorSnapshot, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
+import { buildNodeArtifactGroups, buildNodeArtifactPreview, buildGraphEditorSnapshot, getModuleNodeDisplayLabel, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
 import { buildWorkflowExposedInputId, buildWorkflowValidationIssues } from './module-graph-validation'
 
@@ -28,6 +28,7 @@ export function useModuleGraphPageViewModel({
   selectedEdgeId,
   executionDetail,
   settings,
+  workflowExposedInputs,
   workflowRunInputValues,
 }: {
   workflowName: string
@@ -47,6 +48,7 @@ export function useModuleGraphPageViewModel({
   selectedEdgeId: string | null
   executionDetail?: GraphExecutionDetailRecord
   settings?: AppSettings | null
+  workflowExposedInputs: GraphWorkflowExposedInput[]
   workflowRunInputValues: Record<string, unknown>
 }) {
   const nodeDerivedWorkflowExposedInputs = useMemo(
@@ -79,12 +81,13 @@ export function useModuleGraphPageViewModel({
       nodes.flatMap((node) =>
         node.data.module.exposed_inputs.map((port) => {
           const uiField = node.data.module.ui_schema?.find((field) => field.key === port.key)
+          const nodeDisplayLabel = getModuleNodeDisplayLabel(node)
 
           return {
             id: buildWorkflowExposedInputId(node.id, port.key),
             node_id: node.id,
             port_key: port.key,
-            label: `${node.data.module.name} · ${port.label}`,
+            label: `${nodeDisplayLabel} · ${port.label}`,
             data_type: port.data_type,
             ui_data_type: uiField?.data_type,
             description: port.description,
@@ -93,7 +96,7 @@ export function useModuleGraphPageViewModel({
             default_value: port.default_value,
             options: uiField?.options,
             module_id: node.data.module.id,
-            module_name: node.data.module.name,
+            module_name: nodeDisplayLabel,
           }
         }),
       ),
@@ -215,11 +218,11 @@ export function useModuleGraphPageViewModel({
         targetNodeId: edge.target_node_id,
         targetPortKey: edge.target_port_key,
       })),
-      exposedInputs: selectedGraphRecord.graph.metadata?.exposed_inputs ?? [],
+      exposedInputs: workflowExposedInputs,
       runtimeInputValues: workflowRunInputValues,
       settings,
     })
-  }, [moduleDefinitionById, selectedGraphRecord, settings, workflowRunInputValues])
+  }, [moduleDefinitionById, selectedGraphRecord, settings, workflowExposedInputs, workflowRunInputValues])
 
   const selectedWorkflowCanExecute = selectedWorkflowValidationIssues.every((issue) => issue.severity !== 'error')
 

@@ -3,9 +3,9 @@ import { Folder, FolderOpen, Plus } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
+import { getModuleNodeDisplayLabel, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 import { GraphExecutionPanel } from './graph-execution-panel'
 import { ModuleWorkflowEditorSupportPanel, type EditorSupportSectionKey } from './module-workflow-editor-support-panel'
 import { NodeInspectorPanel } from './node-inspector-panel'
@@ -102,6 +102,7 @@ export function ModuleGraphWorkflowSetupFolderPanel({
 /** Render the browse-mode runner side panel when one workflow is selected. */
 export function ModuleGraphWorkflowBrowseSidePanel({
   selectedGraphRecord,
+  inputDefinitions,
   workflowRunInputValues,
   isExecuting,
   latestExecution,
@@ -118,6 +119,7 @@ export function ModuleGraphWorkflowBrowseSidePanel({
   onValidationIssueSelect,
 }: {
   selectedGraphRecord: GraphWorkflowRecord | null
+  inputDefinitions: GraphWorkflowExposedInput[]
   workflowRunInputValues: Record<string, unknown>
   isExecuting: boolean
   latestExecution: GraphExecutionRecord | null
@@ -141,7 +143,7 @@ export function ModuleGraphWorkflowBrowseSidePanel({
     <WorkflowRunnerPanel
       showHeader={false}
       selectedGraph={selectedGraphRecord}
-      inputDefinitions={selectedGraphRecord.graph.metadata?.exposed_inputs ?? []}
+      inputDefinitions={inputDefinitions}
       inputValues={workflowRunInputValues}
       isExecuting={isExecuting}
       latestExecution={latestExecution}
@@ -190,6 +192,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   onWorkflowDescriptionChange,
   onSaveGraph,
   setSectionRef,
+  onNodeLabelChange,
   onNodeValueChange,
   onNodeValueClear,
   onNodeImageChange,
@@ -228,6 +231,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   onWorkflowDescriptionChange: (value: string) => void
   onSaveGraph: () => void
   setSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
+  onNodeLabelChange: (nodeId: string, label: string) => void
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => void
@@ -248,7 +252,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
       workflowName={workflowName}
       workflowDescription={workflowDescription}
       isDirty={isDirty}
-      selectedNodeLabel={selectedNode?.data.module.name ?? null}
+      selectedNodeLabel={selectedNode ? getModuleNodeDisplayLabel(selectedNode) : null}
       selectedExecutionId={selectedExecutionId}
       isSavingGraph={isSavingGraph}
       hasNodes={nodes.length > 0}
@@ -264,6 +268,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
           selectedEdge={selectedEdge}
           selectedExecutionId={selectedExecutionId}
           selectedExecutionArtifacts={executionDetail?.artifacts}
+          onNodeLabelChange={onNodeLabelChange}
           onNodeValueChange={onNodeValueChange}
           onNodeValueClear={onNodeValueClear}
           onNodeImageChange={onNodeImageChange}

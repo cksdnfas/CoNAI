@@ -98,8 +98,8 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
   };
 
   upsertBuiltinModule(
-    '상수 텍스트',
-    '워크플로우 실행 입력 없이, 노드에 저장된 고정 텍스트를 그대로 출력해.',
+    '텍스트',
+    '노드 안에 넣어둔 텍스트를 그대로 꺼내서 다음 단계로 넘겨줘.',
     'input',
     [
       {
@@ -109,7 +109,6 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         data_type: 'text',
         required: true,
         multiple: false,
-        description: '노드 내부에 저장된 고정 텍스트 값이야.',
       },
     ],
     [
@@ -128,33 +127,32 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         key: 'text',
         label: '텍스트',
         data_type: 'text',
-        placeholder: '고정 텍스트 입력',
+        placeholder: '텍스트 입력',
       },
     ],
     '#66bb6a',
   );
 
   upsertBuiltinModule(
-    '상수 프롬프트',
-    '워크플로우 실행 입력 없이, 노드에 저장된 고정 프롬프트를 그대로 출력해.',
+    '텍스트',
+    '노드 안에 넣어둔 텍스트를 그대로 꺼내서 다음 단계로 넘겨줘.',
     'input',
     [
       {
         key: 'prompt',
-        label: '프롬프트',
+        label: '텍스트',
         direction: 'input',
-        data_type: 'prompt',
+        data_type: 'text',
         required: true,
         multiple: false,
-        description: '노드 내부에 저장된 고정 프롬프트 값이야.',
       },
     ],
     [
       {
         key: 'prompt',
-        label: '프롬프트',
+        label: '텍스트',
         direction: 'output',
-        data_type: 'prompt',
+        data_type: 'text',
         required: true,
         multiple: false,
       },
@@ -163,17 +161,17 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
     [
       {
         key: 'prompt',
-        label: '프롬프트',
+        label: '텍스트',
         data_type: 'text',
-        placeholder: '고정 프롬프트 입력',
+        placeholder: '텍스트 입력',
       },
     ],
-    '#8e24aa',
+    '#66bb6a',
   );
 
   upsertBuiltinModule(
-    '상수 JSON',
-    '워크플로우 실행 입력 없이, 노드에 저장된 고정 JSON 값을 그대로 출력해.',
+    'JSON',
+    '노드 안에 넣어둔 JSON 값을 그대로 꺼내서 다음 단계로 넘겨줘.',
     'input',
     [
       {
@@ -183,7 +181,6 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         data_type: 'json',
         required: true,
         multiple: false,
-        description: '노드 내부에 저장된 고정 JSON 값이야.',
       },
     ],
     [
@@ -209,8 +206,8 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
   );
 
   upsertBuiltinModule(
-    '상수 이미지',
-    '워크플로우 실행 입력 없이, 노드에 저장된 고정 이미지를 그대로 출력해.',
+    '이미지',
+    '노드 안에 넣어둔 이미지를 그대로 꺼내서 다음 단계로 넘겨줘.',
     'input',
     [
       {
@@ -220,7 +217,6 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         data_type: 'image',
         required: true,
         multiple: false,
-        description: '노드 내부에 저장된 고정 이미지야.',
       },
     ],
     [
@@ -239,8 +235,8 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
   );
 
   upsertBuiltinModule(
-    '상수 숫자',
-    '워크플로우 실행 입력 없이, 노드에 저장된 고정 숫자 값을 그대로 출력해.',
+    '숫자',
+    '노드 안에 넣어둔 숫자 값을 그대로 꺼내서 다음 단계로 넘겨줘.',
     'input',
     [
       {
@@ -250,7 +246,6 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         data_type: 'number',
         required: true,
         multiple: false,
-        description: '노드 내부에 저장된 고정 숫자 값이야.',
       },
     ],
     [
@@ -275,8 +270,8 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
   );
 
   upsertBuiltinModule(
-    '상수 불리언',
-    '워크플로우 실행 입력 없이, 노드에 저장된 참/거짓 값을 그대로 출력해.',
+    '불리언',
+    '노드 안에 넣어둔 참/거짓 값을 그대로 꺼내서 다음 단계로 넘겨줘.',
     'input',
     [
       {
@@ -286,7 +281,6 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         data_type: 'boolean',
         required: true,
         multiple: false,
-        description: '노드 내부에 저장된 참/거짓 값이야.',
       },
     ],
     [

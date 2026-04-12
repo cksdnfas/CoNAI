@@ -17,7 +17,16 @@ import {
   isWorkflowInputEnabledForNode,
   isWorkflowInputSourceModule,
 } from '../module-graph-workflow-inputs'
-import { buildHandleId, getModuleColor, getPortTypeColor, isFinalResultModule, type ModuleGraphNode } from '../module-graph-shared'
+import {
+  buildHandleId,
+  getModuleColor,
+  getModuleNodeDisplayLabelFromData,
+  getPortTypeColor,
+  hasCustomModuleNodeLabel,
+  isFinalResultModule,
+  normalizeModulePortDescription,
+  type ModuleGraphNode,
+} from '../module-graph-shared'
 
 const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
   image: '이미지',
@@ -83,7 +92,7 @@ function buildPortTooltip(port: ModulePortDefinition, statusLabel: string) {
     isStringBridgePort(port.data_type) ? '브리지: 텍스트 ↔ 프롬프트' : null,
     port.required ? '필수' : null,
     port.multiple ? '다중' : null,
-    port.description || null,
+    normalizeModulePortDescription(port.description) || null,
   ]
     .filter(Boolean)
     .join('\n')
@@ -370,6 +379,8 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     return port.required && !connected && !explicitValue && !defaultValue
   }).length
 
+  const nodeDisplayLabel = getModuleNodeDisplayLabelFromData(data)
+  const usesCustomNodeLabel = hasCustomModuleNodeLabel(data)
   const missingStatusLabel = isWorkflowInputSource ? '값 필요' : '입력 필요'
   const statusLabel =
     executionStatus === 'completed'
@@ -408,7 +419,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         borderColor: selected ? accentColor : statusBorderColor,
         boxShadow: selected ? `0 0 0 2px ${accentColor}66, 0 0 0 1px ${accentColor}22` : `0 0 0 1px ${accentColor}22`,
       } as CSSProperties}
-      title={`${module.name}\n모듈 ID: ${module.id}${module.description ? `\n${module.description}` : ''}`}
+      title={`${nodeDisplayLabel}\n기본 타입: ${module.name}\n모듈 ID: ${module.id}${module.description ? `\n${module.description}` : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
@@ -416,7 +427,8 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             <GripVertical className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-foreground">{module.name}</div>
+            <div className="truncate text-sm font-semibold text-foreground">{nodeDisplayLabel}</div>
+            {usesCustomNodeLabel ? <div className="mt-0.5 truncate text-[11px] text-muted-foreground">기본 타입 · {module.name}</div> : null}
             <div className="mt-0.5 text-[11px] text-muted-foreground">
               {summaryText}
               {missingRequiredInputCount > 0 ? ` · 미설정 ${missingRequiredInputCount}` : ''}
@@ -430,6 +442,19 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
         </div>
       </div>
+
+      {selected ? (
+        <div className="nodrag nowheel mt-2.5 space-y-1 rounded-sm border border-border/70 bg-background/40 p-2.5" onMouseDown={stopNodeInteraction}>
+          <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">노드 이름</div>
+          <Input
+            value={data.label ?? ''}
+            onChange={(event) => data.onNodeLabelChange?.(id, event.target.value)}
+            onMouseDown={stopNodeInteraction}
+            placeholder={module.name}
+            className="h-8 text-sm"
+          />
+        </div>
+      ) : null}
 
       {(data.onExecuteNode || data.onForceExecuteNode) ? (
         <div className="nodrag nowheel mt-2 flex flex-wrap gap-1.5">

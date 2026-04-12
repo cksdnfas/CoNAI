@@ -1,6 +1,6 @@
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api'
 import { buildWorkflowExposedInputId } from './module-graph-validation'
-import type { ModuleGraphNode } from './module-graph-shared'
+import { getModuleNodeDisplayLabel, normalizeModulePortDescription, type ModuleGraphNode } from './module-graph-shared'
 
 export const WORKFLOW_INPUT_ENABLED_KEY = '__workflow_input_enabled'
 export const WORKFLOW_INPUT_LABEL_KEY = '__workflow_input_label'
@@ -74,10 +74,11 @@ export function buildWorkflowInputDefinitionFromNode(node: ModuleGraphNode): Gra
 
   const uiField = node.data.module.ui_schema?.find((field) => field.key === sourcePort.key)
   const required = normalizeBooleanFlag(node.data.inputValues?.[WORKFLOW_INPUT_REQUIRED_KEY])
+  const nodeDisplayLabel = getModuleNodeDisplayLabel(node)
   const label = normalizeOptionalString(node.data.inputValues?.[WORKFLOW_INPUT_LABEL_KEY])
-    ?? `${node.data.module.name} · ${sourcePort.label}`
+    ?? `${nodeDisplayLabel} · ${sourcePort.label}`
   const description = normalizeOptionalString(node.data.inputValues?.[WORKFLOW_INPUT_DESCRIPTION_KEY])
-    ?? sourcePort.description
+    ?? normalizeModulePortDescription(sourcePort.description)
     ?? undefined
 
   return {
@@ -89,8 +90,8 @@ export function buildWorkflowInputDefinitionFromNode(node: ModuleGraphNode): Gra
     ui_data_type: uiField?.data_type,
     description,
     required,
-    placeholder: uiField?.placeholder || description || sourcePort.label,
-    default_value: required ? undefined : node.data.inputValues?.[sourcePort.key],
+    placeholder: uiField?.placeholder || sourcePort.label,
+    default_value: node.data.inputValues?.[sourcePort.key],
     options: uiField?.options,
     module_id: node.data.module.id,
     module_name: node.data.module.name,
@@ -141,7 +142,7 @@ export function applySavedWorkflowInputMetadataToNodes(
       ...node.data.inputValues,
       [WORKFLOW_INPUT_ENABLED_KEY]: true,
       [WORKFLOW_INPUT_LABEL_KEY]: inputDefinition.label,
-      [WORKFLOW_INPUT_DESCRIPTION_KEY]: inputDefinition.description ?? '',
+      [WORKFLOW_INPUT_DESCRIPTION_KEY]: normalizeModulePortDescription(inputDefinition.description) ?? '',
       [WORKFLOW_INPUT_REQUIRED_KEY]: Boolean(inputDefinition.required),
     }
 

@@ -15,7 +15,7 @@ import { ExecutionArtifactCard } from './execution-artifact-card'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { getWorkflowInputSourcePort } from '../module-graph-workflow-inputs'
-import { parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { getModuleNodeDisplayLabel, normalizeModulePortDescription, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 type NodeInspectorPanelProps = {
   nodes: ModuleGraphNode[]
@@ -23,6 +23,7 @@ type NodeInspectorPanelProps = {
   selectedEdge: ModuleGraphEdge | null
   selectedExecutionId?: number | null
   selectedExecutionArtifacts?: GraphExecutionArtifactRecord[]
+  onNodeLabelChange: (nodeId: string, label: string) => void
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void
@@ -119,7 +120,7 @@ function PortHeader({
           <TechnicalReferenceHint title={`node ${nodeId}\nport ${port.key}`} label="포트 내부 키 보기" />
         </div>
         <PortBadges port={port} missingRequired={missingRequired} />
-        {port.description ? <div className="mt-1 text-xs text-muted-foreground">{port.description}</div> : null}
+        {normalizeModulePortDescription(port.description) ? <div className="mt-1 text-xs text-muted-foreground">{normalizeModulePortDescription(port.description)}</div> : null}
       </div>
       <Button type="button" size="sm" variant="ghost" onClick={onClear} disabled={!hasExplicitValue}>
         값 지우기
@@ -162,7 +163,7 @@ function EdgeEndpointCard({
     <div className="rounded-sm border border-border bg-surface-low px-3 py-3">
       <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{heading}</div>
       <div className="mt-2 flex items-center gap-1">
-        <div className="text-sm font-medium text-foreground">{endpoint.node?.data.module.name ?? endpoint.node?.id ?? '알 수 없는 노드'}</div>
+        <div className="text-sm font-medium text-foreground">{endpoint.node ? getModuleNodeDisplayLabel(endpoint.node) : '알 수 없는 노드'}</div>
         {endpoint.node?.id ? <TechnicalReferenceHint title={`node ${endpoint.node.id}`} label="노드 내부 식별자 보기" /> : null}
       </div>
       <div className="mt-3 text-xs font-medium text-foreground">{role} 포트</div>
@@ -173,7 +174,7 @@ function EdgeEndpointCard({
             <TechnicalReferenceHint title={`port ${endpoint.port.key}`} label="포트 내부 키 보기" />
           </div>
           <PortBadges port={endpoint.port} />
-          {endpoint.port.description ? <div className="mt-1 text-xs text-muted-foreground">{endpoint.port.description}</div> : null}
+          {normalizeModulePortDescription(endpoint.port.description) ? <div className="mt-1 text-xs text-muted-foreground">{normalizeModulePortDescription(endpoint.port.description)}</div> : null}
         </>
       ) : (
         <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
@@ -223,6 +224,7 @@ export function NodeInspectorPanel({
   selectedEdge,
   selectedExecutionId = null,
   selectedExecutionArtifacts,
+  onNodeLabelChange,
   onNodeValueChange,
   onNodeValueClear,
   onNodeImageChange,
@@ -249,6 +251,7 @@ export function NodeInspectorPanel({
   const renderPortInput = (node: ModuleGraphNode, port: ModulePortDefinition) => {
     const rawValue = node.data.inputValues?.[port.key]
     const uiField = findNodeUiField(node, port.key)
+    const normalizedDescription = normalizeModulePortDescription(port.description)
     const hasExplicitValue = hasMeaningfulValue(rawValue)
     const missingRequired = Boolean(port.required && !isNodeInputSatisfied(node, port))
     const isHighlightedPort = highlightedPortKey === port.key
@@ -311,7 +314,7 @@ export function NodeInspectorPanel({
             rows={port.data_type === 'json' ? 6 : 4}
             value={typeof rawValue === 'string' ? rawValue : rawValue ? JSON.stringify(rawValue, null, 2) : ''}
             onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
-            placeholder={port.description || port.label}
+            placeholder={normalizedDescription || port.label}
           />
         </div>
       )
@@ -378,7 +381,7 @@ export function NodeInspectorPanel({
         <Input
           value={typeof rawValue === 'string' ? rawValue : rawValue ? String(rawValue) : ''}
           onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
-          placeholder={uiField?.placeholder || port.description || port.label}
+          placeholder={uiField?.placeholder || normalizedDescription || port.label}
         />
       </div>
     )
@@ -465,9 +468,25 @@ export function NodeInspectorPanel({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-foreground">{selectedNode.data.module.name}</span>
+                    <span className="font-medium text-foreground">{getModuleNodeDisplayLabel(selectedNode)}</span>
                     <Badge variant="outline">{selectedNode.data.module.engine_type}</Badge>
                     <TechnicalReferenceHint title={`node ${selectedNode.id}`} label="노드 내부 식별자 보기" />
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className="space-y-1">
+                      <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">노드 이름</div>
+                      <Input
+                        value={selectedNode.data.label ?? ''}
+                        onChange={(event) => onNodeLabelChange(selectedNode.id, event.target.value)}
+                        placeholder={selectedNode.data.module.name}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">기본 타입</div>
+                      <div className="flex h-10 items-center rounded-sm border border-border bg-background/50 px-3 text-sm text-muted-foreground">
+                        {selectedNode.data.module.name}
+                      </div>
+                    </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                     <Badge variant="outline">입력 {(selectedNode.data.module.exposed_inputs ?? []).length}</Badge>
