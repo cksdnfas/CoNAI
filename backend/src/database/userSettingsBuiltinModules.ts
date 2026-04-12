@@ -7,10 +7,12 @@ type ExistingBuiltinModuleRow = {
   engine_type: string;
   authoring_source: string;
   internal_fixed_values?: string | null;
+  external_key?: string | null;
 };
 
 /** Seed built-in system-native workflow modules that should always be available. */
 export function ensureBuiltinSystemModules(db: Database.Database): void {
+  /** Upsert one built-in module using operation_key as the stable identity. */
   const upsertBuiltinModule = (
     name: string,
     description: string,
@@ -20,28 +22,32 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
     internalFixedValues: { operation_key: string } & Record<string, unknown>,
     uiSchema: unknown,
     color: string,
+    legacyNames: string[] = [],
   ) => {
+    const stableExternalKey = internalFixedValues.operation_key;
     const existingRows = db.prepare(`
-      SELECT id, name, category, engine_type, authoring_source, internal_fixed_values
+      SELECT id, name, category, engine_type, authoring_source, internal_fixed_values, external_key
       FROM module_definitions
       WHERE engine_type = 'system' AND authoring_source = 'manual'
     `).all() as ExistingBuiltinModuleRow[];
 
     const existing = existingRows.find((row) => {
-      if (row.name === name) {
+      if (row.external_key === stableExternalKey) {
         return true;
       }
 
-      if (!row.internal_fixed_values) {
-        return false;
+      if (row.internal_fixed_values) {
+        try {
+          const parsed = JSON.parse(row.internal_fixed_values) as { operation_key?: string };
+          if (parsed.operation_key === stableExternalKey) {
+            return true;
+          }
+        } catch {
+          // fall through to legacy name-based match
+        }
       }
 
-      try {
-        const parsed = JSON.parse(row.internal_fixed_values) as { operation_key?: string };
-        return parsed.operation_key === internalFixedValues.operation_key;
-      } catch {
-        return false;
-      }
+      return row.name === name || legacyNames.includes(row.name);
     });
 
     if (existing) {
@@ -57,6 +63,7 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
           internal_fixed_values = ?,
           ui_schema = ?,
           color = ?,
+          external_key = ?,
           updated_date = CURRENT_TIMESTAMP
         WHERE id = ?
       `).run(
@@ -69,6 +76,7 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         JSON.stringify(internalFixedValues),
         JSON.stringify(uiSchema),
         color,
+        stableExternalKey,
         existing.id,
       );
       return;
@@ -78,8 +86,23 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
       INSERT INTO module_definitions (
         name, description, engine_type, authoring_source, category,
         template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
-        version, is_active, color
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        version, is_active, color, external_key
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(name) DO UPDATE SET
+        description = excluded.description,
+        engine_type = excluded.engine_type,
+        authoring_source = excluded.authoring_source,
+        category = excluded.category,
+        template_defaults = excluded.template_defaults,
+        exposed_inputs = excluded.exposed_inputs,
+        output_ports = excluded.output_ports,
+        internal_fixed_values = excluded.internal_fixed_values,
+        ui_schema = excluded.ui_schema,
+        version = excluded.version,
+        is_active = excluded.is_active,
+        color = excluded.color,
+        external_key = excluded.external_key,
+        updated_date = CURRENT_TIMESTAMP
     `).run(
       name,
       description,
@@ -94,11 +117,12 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
       1,
       1,
       color,
+      stableExternalKey,
     );
   };
 
   upsertBuiltinModule(
-    '텍스트',
+    '상수 텍스트',
     '노드 안에 넣어둔 텍스트를 그대로 꺼내서 다음 단계로 넘겨줘.',
     'input',
     [
@@ -131,10 +155,11 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
       },
     ],
     '#66bb6a',
+    ['텍스트'],
   );
 
   upsertBuiltinModule(
-    '텍스트',
+    '상수 프롬프트',
     '노드 안에 넣어둔 텍스트를 그대로 꺼내서 다음 단계로 넘겨줘.',
     'input',
     [
@@ -167,6 +192,7 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
       },
     ],
     '#66bb6a',
+    ['텍스트', '상수 프롬프트'],
   );
 
   upsertBuiltinModule(
