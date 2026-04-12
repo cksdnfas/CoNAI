@@ -151,7 +151,7 @@ router.put(
         }
       }
 
-      const validateWeight = (value: unknown, label: string) => {
+      const validatePromptWeight = (value: unknown, label: string) => {
         if (value !== undefined && (!Number.isFinite(value as number) || Number(value) < 0 || Number(value) > 1)) {
           res.status(400).json({
             success: false,
@@ -163,15 +163,15 @@ router.put(
       };
 
       if (promptSimilarity.weights) {
-        if (!validateWeight(promptSimilarity.weights.positive, 'promptSimilarity.weights.positive')) return;
-        if (!validateWeight(promptSimilarity.weights.negative, 'promptSimilarity.weights.negative')) return;
-        if (!validateWeight(promptSimilarity.weights.auto, 'promptSimilarity.weights.auto')) return;
+        if (!validatePromptWeight(promptSimilarity.weights.positive, 'promptSimilarity.weights.positive')) return;
+        if (!validatePromptWeight(promptSimilarity.weights.negative, 'promptSimilarity.weights.negative')) return;
+        if (!validatePromptWeight(promptSimilarity.weights.auto, 'promptSimilarity.weights.auto')) return;
       }
 
       if (promptSimilarity.fieldThresholds) {
-        if (!validateWeight(promptSimilarity.fieldThresholds.positive, 'promptSimilarity.fieldThresholds.positive')) return;
-        if (!validateWeight(promptSimilarity.fieldThresholds.negative, 'promptSimilarity.fieldThresholds.negative')) return;
-        if (!validateWeight(promptSimilarity.fieldThresholds.auto, 'promptSimilarity.fieldThresholds.auto')) return;
+        if (!validateRange(promptSimilarity.fieldThresholds.positive, 'promptSimilarity.fieldThresholds.positive', 0, 100)) return;
+        if (!validateRange(promptSimilarity.fieldThresholds.negative, 'promptSimilarity.fieldThresholds.negative', 0, 100)) return;
+        if (!validateRange(promptSimilarity.fieldThresholds.auto, 'promptSimilarity.fieldThresholds.auto', 0, 100)) return;
       }
     }
 

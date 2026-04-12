@@ -10,6 +10,7 @@ import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult } from '@/lib/api'
 import type { ImageRecord } from '@/types/image'
 import { formatFileSize } from '../settings-utils'
+import { EnhancedVideoPlayer } from '@/features/images/components/detail/enhanced-video-player'
 import { SettingsField, SettingsValueTile } from './settings-primitives'
 
 interface AutoTestCardProps {
@@ -72,7 +73,7 @@ export function AutoTestCard({
             <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
               <div className="overflow-hidden rounded-sm bg-surface-low">
                 {autoTestMedia.fileType === 'video' && autoTestMedia.imageUrl ? (
-                  <video src={autoTestMedia.imageUrl} controls preload="metadata" className="aspect-square w-full bg-black object-contain" />
+                  <EnhancedVideoPlayer renderUrl={autoTestMedia.imageUrl} preload="metadata" className="aspect-square w-full" />
                 ) : autoTestMedia.thumbnailUrl || autoTestMedia.imageUrl ? (
                   <img
                     src={autoTestMedia.thumbnailUrl ?? autoTestMedia.imageUrl ?? undefined}
