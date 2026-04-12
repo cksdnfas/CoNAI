@@ -52,10 +52,27 @@ export function ImageViewModalOverlay({
   const mobileActionsRef = useRef<HTMLDivElement | null>(null)
   const isDesktopModalLayout = useMinWidth(1280)
   const [mobileActionsHeight, setMobileActionsHeight] = useState(0)
+  const [shouldRenderThumbnailStrip, setShouldRenderThumbnailStrip] = useState(viewMode !== 'full')
 
   useEffect(() => {
     containerRef.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
   }, [compositeHash])
+
+  useEffect(() => {
+    if (viewMode !== 'full') {
+      setShouldRenderThumbnailStrip(false)
+      return
+    }
+
+    setShouldRenderThumbnailStrip(false)
+    const timerId = window.setTimeout(() => {
+      setShouldRenderThumbnailStrip(true)
+    }, 120)
+
+    return () => {
+      window.clearTimeout(timerId)
+    }
+  }, [compositeHash, viewMode])
 
   useEffect(() => {
     if (isDesktopModalLayout || viewMode === 'minimal') {
@@ -87,7 +104,7 @@ export function ImageViewModalOverlay({
     }
   }, [isDesktopModalLayout, compositeHash, viewMode])
 
-  const showsThumbnailStrip = viewMode === 'full' && thumbnailStripItems.length > 1
+  const showsThumbnailStrip = viewMode === 'full' && shouldRenderThumbnailStrip && thumbnailStripItems.length > 1
 
   return createPortal(
     <div className={cn('fixed inset-0 z-[90] bg-black/72', viewMode === 'minimal' ? 'p-0' : 'p-4 md:p-6')} onMouseDown={onClose}>

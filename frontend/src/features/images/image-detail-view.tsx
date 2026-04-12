@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -43,10 +43,27 @@ function getErrorMessage(error: unknown, fallback: string) {
 export function ImageDetailView({ compositeHash, presentation = 'page', renderHeader }: ImageDetailViewProps) {
   const useSplitPaneScroll = presentation === 'modal' && useMinWidth(1280)
   const usesDesktopRelatedImageColumns = useMinWidth(768)
+  const [isModalSecondaryContentReady, setIsModalSecondaryContentReady] = useState(presentation !== 'modal')
 
   useEffect(() => {
     if (presentation === 'page') {
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
+    }
+  }, [compositeHash, presentation])
+
+  useEffect(() => {
+    if (presentation !== 'modal') {
+      setIsModalSecondaryContentReady(true)
+      return
+    }
+
+    setIsModalSecondaryContentReady(false)
+    const timerId = window.setTimeout(() => {
+      setIsModalSecondaryContentReady(true)
+    }, 120)
+
+    return () => {
+      window.clearTimeout(timerId)
     }
   }, [compositeHash, presentation])
 
@@ -76,7 +93,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
   const duplicatesQuery = useQuery({
     queryKey: ['image-duplicates', compositeHash],
     queryFn: () => getImageDuplicates(compositeHash, 5),
-    enabled: Boolean(compositeHash),
+    enabled: Boolean(compositeHash) && (presentation !== 'modal' || isModalSecondaryContentReady),
   })
 
   const similarQuery = useQuery({
@@ -116,7 +133,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
         sortBy: 'similarity',
         sortOrder: 'DESC',
       }),
-    enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings),
+    enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings) && (presentation !== 'modal' || isModalSecondaryContentReady),
   })
 
   const promptSimilarQuery = useQuery({
@@ -136,7 +153,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
       effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.auto ?? 50,
     ],
     queryFn: () => getPromptSimilarImages(compositeHash, promptSimilarLimit),
-    enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings),
+    enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings) && (presentation !== 'modal' || isModalSecondaryContentReady),
   })
 
   const image = imageQuery.data
@@ -246,34 +263,38 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
               </div>
             </div>
 
-            {duplicateImages.length > 0 ? (
-              <RelatedImageGallerySection
-                title="중복 이미지"
-                items={duplicateImages}
-                isLoading={false}
-                errorMessage={null}
-                emptyMessage="현재 중복 이미지가 없어."
-                activationMode={presentation === 'modal' ? 'modal' : 'navigate'}
-                mobileCardColumns={relatedImageMobileColumns}
-                desktopCardColumns={relatedImageDesktopColumns}
-                cardAspectRatio={relatedImageAspectRatio}
-                renderItemPersistentOverlay={renderDuplicateImageOverlay}
-              />
-            ) : null}
+            {presentation !== 'modal' || isModalSecondaryContentReady ? (
+              <>
+                {duplicateImages.length > 0 ? (
+                  <RelatedImageGallerySection
+                    title="중복 이미지"
+                    items={duplicateImages}
+                    isLoading={false}
+                    errorMessage={null}
+                    emptyMessage="현재 중복 이미지가 없어."
+                    activationMode={presentation === 'modal' ? 'modal' : 'navigate'}
+                    mobileCardColumns={relatedImageMobileColumns}
+                    desktopCardColumns={relatedImageDesktopColumns}
+                    cardAspectRatio={relatedImageAspectRatio}
+                    renderItemPersistentOverlay={renderDuplicateImageOverlay}
+                  />
+                ) : null}
 
-            <ImageDetailSimilaritySection
-              presentation={presentation}
-              currentSimilaritySettings={effectiveSimilaritySettings}
-              similarImageItems={similarImageItems}
-              similarImagesLoading={similarQuery.isLoading || settingsQuery.isLoading}
-              similarImagesError={similarQuery.isError ? similarQuery.error : null}
-              promptSimilarImages={promptSimilarImages}
-              promptSimilarImagesLoading={promptSimilarQuery.isLoading || settingsQuery.isLoading}
-              promptSimilarImagesError={promptSimilarQuery.isError ? promptSimilarQuery.error : null}
-              mobileCardColumns={relatedImageMobileColumns}
-              desktopCardColumns={relatedImageDesktopColumns}
-              cardAspectRatio={relatedImageAspectRatio}
-            />
+                <ImageDetailSimilaritySection
+                  presentation={presentation}
+                  currentSimilaritySettings={effectiveSimilaritySettings}
+                  similarImageItems={similarImageItems}
+                  similarImagesLoading={similarQuery.isLoading || settingsQuery.isLoading}
+                  similarImagesError={similarQuery.isError ? similarQuery.error : null}
+                  promptSimilarImages={promptSimilarImages}
+                  promptSimilarImagesLoading={promptSimilarQuery.isLoading || settingsQuery.isLoading}
+                  promptSimilarImagesError={promptSimilarQuery.isError ? promptSimilarQuery.error : null}
+                  mobileCardColumns={relatedImageMobileColumns}
+                  desktopCardColumns={relatedImageDesktopColumns}
+                  cardAspectRatio={relatedImageAspectRatio}
+                />
+              </>
+            ) : null}
           </div>
 
           <div

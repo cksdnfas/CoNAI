@@ -206,8 +206,6 @@ export function ImageViewThumbnailStrip({
                     src={previewUrl}
                     className="h-full w-full object-cover select-none"
                     muted
-                    loop
-                    autoPlay
                     playsInline
                     preload="metadata"
                     draggable={false}

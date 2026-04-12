@@ -86,7 +86,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   const thumbnailStripQuery = useQuery({
     queryKey: ['image-view-thumbnail-strip', missingThumbnailStripCompositeHashes],
     queryFn: () => getImagesBatch(missingThumbnailStripCompositeHashes),
-    enabled: missingThumbnailStripCompositeHashes.length > 0,
+    enabled: viewMode === 'full' && missingThumbnailStripCompositeHashes.length > 0,
     staleTime: 60_000,
   })
 
