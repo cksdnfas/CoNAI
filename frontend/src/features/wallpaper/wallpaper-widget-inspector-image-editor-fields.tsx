@@ -346,71 +346,77 @@ export function WallpaperImageWidgetEditorFields({
           </WallpaperInspectorSectionCard>
 
           <WallpaperInspectorSectionCard title="교체">
-            <WallpaperMotionEasingEditorField
+            <WallpaperTransitionAnimationEditorField
               label="교체 애니메이션"
-              easing={selectedWidget.settings.imageTransitionEasing}
-              fallbackPreset="easeOutCubic"
-              previewKind="transition"
-              summary={selectedWidget.settings.imageSwapMode === 'time'
-                ? `시간 기준 · ${(selectedWidget.settings.swapIntervalSec ?? 12)}s`
-                : `튕김 기준 · ${(selectedWidget.settings.swapBounceCount ?? 3)}회`}
+              transitionStyle={selectedWidget.settings.imageTransitionStyle}
+              transitionSpeed={undefined}
+              transitionDurationMs={selectedWidget.settings.imageTransitionDurationMs}
+              transitionEasing={selectedWidget.settings.imageTransitionEasing}
+              onTransitionStyleChange={(nextValue) => {
+                updateWidgetSettings({ imageTransitionStyle: nextValue })
+              }}
+              onTransitionDurationChange={(nextValue) => {
+                updateWidgetSettings({ imageTransitionDurationMs: nextValue })
+              }}
+              onTransitionEasingChange={(nextValue) => {
+                updateWidgetSettings({ imageTransitionEasing: nextValue })
+              }}
               editorContent={(
                 <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
                   <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">교체 옵션</div>
-                  <SettingsField label="이미지 교체 기준">
-                    <Select
-                      value={selectedWidget.settings.imageSwapMode ?? 'bounce'}
-                      onChange={(event) => {
-                        updateWidgetSettings({
-                          imageSwapMode: event.target.value === 'time' ? 'time' : 'bounce',
-                        })
-                      }}
-                    >
-                      <option value="bounce">튕김 횟수</option>
-                      <option value="time">시간</option>
-                    </Select>
-                  </SettingsField>
+                  <div className="space-y-3">
+                    <SettingsField label="이미지 교체 기준">
+                      <Select
+                        value={selectedWidget.settings.imageSwapMode ?? 'bounce'}
+                        onChange={(event) => {
+                          updateWidgetSettings({
+                            imageSwapMode: event.target.value === 'time' ? 'time' : 'bounce',
+                          })
+                        }}
+                      >
+                        <option value="bounce">튕김 횟수</option>
+                        <option value="time">시간</option>
+                      </Select>
+                    </SettingsField>
 
-                  {selectedWidget.settings.imageSwapMode === 'time' ? (
-                    <SettingsField label="교체 간격(초)">
-                      <ScrubbableNumberInput
-                        variant="settings"
-                        min={2}
-                        max={60}
-                        step={1}
-                        scrubRatio={0.35}
-                        value={selectedWidget.settings.swapIntervalSec ?? 12}
-                        onChange={(nextValue) => {
-                          const parsed = Number(nextValue)
-                          updateWidgetSettings({
-                            swapIntervalSec: Number.isFinite(parsed) ? Math.min(60, Math.max(2, Math.round(parsed))) : 12,
-                          })
-                        }}
-                      />
-                    </SettingsField>
-                  ) : (
-                    <SettingsField label="교체까지 튕김 수">
-                      <ScrubbableNumberInput
-                        variant="settings"
-                        min={1}
-                        max={12}
-                        step={1}
-                        scrubRatio={0.35}
-                        value={selectedWidget.settings.swapBounceCount ?? 3}
-                        onChange={(nextValue) => {
-                          const parsed = Number(nextValue)
-                          updateWidgetSettings({
-                            swapBounceCount: Number.isFinite(parsed) ? Math.min(12, Math.max(1, Math.round(parsed))) : 3,
-                          })
-                        }}
-                      />
-                    </SettingsField>
-                  )}
+                    {selectedWidget.settings.imageSwapMode === 'time' ? (
+                      <SettingsField label="교체 간격(초)">
+                        <ScrubbableNumberInput
+                          variant="settings"
+                          min={2}
+                          max={60}
+                          step={1}
+                          scrubRatio={0.35}
+                          value={selectedWidget.settings.swapIntervalSec ?? 12}
+                          onChange={(nextValue) => {
+                            const parsed = Number(nextValue)
+                            updateWidgetSettings({
+                              swapIntervalSec: Number.isFinite(parsed) ? Math.min(60, Math.max(2, Math.round(parsed))) : 12,
+                            })
+                          }}
+                        />
+                      </SettingsField>
+                    ) : (
+                      <SettingsField label="교체까지 튕김 수">
+                        <ScrubbableNumberInput
+                          variant="settings"
+                          min={1}
+                          max={12}
+                          step={1}
+                          scrubRatio={0.35}
+                          value={selectedWidget.settings.swapBounceCount ?? 3}
+                          onChange={(nextValue) => {
+                            const parsed = Number(nextValue)
+                            updateWidgetSettings({
+                              swapBounceCount: Number.isFinite(parsed) ? Math.min(12, Math.max(1, Math.round(parsed))) : 3,
+                            })
+                          }}
+                        />
+                      </SettingsField>
+                    )}
+                  </div>
                 </div>
               )}
-              onEasingChange={(nextValue) => {
-                updateWidgetSettings({ imageTransitionEasing: nextValue })
-              }}
             />
           </WallpaperInspectorSectionCard>
 

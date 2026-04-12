@@ -116,6 +116,8 @@ export interface WallpaperFloatingCollageWidgetSettings extends WallpaperGroupSo
   fitMode: 'cover' | 'contain'
   aspectMode: 'slot' | 'image'
   imageSwapMode: WallpaperFloatingCollageSwapMode
+  imageTransitionStyle?: WallpaperImageTransitionStyle
+  imageTransitionDurationMs?: number
   imageTransitionEasing: WallpaperAnimationEasing
   swapIntervalSec: number
   swapBounceCount: number

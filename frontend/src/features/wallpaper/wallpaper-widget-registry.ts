@@ -165,6 +165,8 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
       fitMode: 'cover',
       aspectMode: 'image',
       imageSwapMode: 'bounce',
+      imageTransitionStyle: 'fade',
+      imageTransitionDurationMs: 340,
       imageTransitionEasing: 'easeOutCubic',
       swapIntervalSec: 12,
       swapBounceCount: 3,

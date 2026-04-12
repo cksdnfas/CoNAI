@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { cn } from '@/lib/utils'
-import type { WallpaperWidgetInstance } from './wallpaper-types'
+import type { WallpaperImageTransitionStyle, WallpaperWidgetInstance } from './wallpaper-types'
 import { useWallpaperGroupPreviewImagesQuery } from './wallpaper-widget-data'
 import { type WallpaperWidgetPreviewImage } from './wallpaper-widget-preview-surface'
 import {
+  evaluateWallpaperAnimationEasingAtTime,
   getWallpaperAnimationEasingCss,
+  getWallpaperImageTransitionDurationMs,
   getWallpaperMotionStrengthMultiplier,
 } from './wallpaper-widget-utils'
 
@@ -50,6 +52,8 @@ interface WallpaperFloatingCollageCardState {
   aspectRatio: number
   wobblePhase: number
   imageIndex: number
+  previousImageIndex: number | null
+  transitionElapsedMs: number
   bounceCount: number
   elapsedSinceSwapMs: number
 }
@@ -146,6 +150,174 @@ function clampWallpaperFloatingCollageSwapBounceCount(value: number | undefined)
 /** Resolve the effective image scale for collage cards. */
 function clampWallpaperFloatingCollageScalePercent(value: number | undefined) {
   return clampWallpaperMetric(typeof value === 'number' && Number.isFinite(value) ? value : 100, 50, 200)
+}
+
+function clampWallpaperFloatingCollageTransitionDurationMs(value: number | undefined) {
+  return getWallpaperImageTransitionDurationMs(undefined, value)
+}
+
+function interpolateWallpaperFloatingCollageMetric(start: number, end: number, progress: number) {
+  return start + ((end - start) * progress)
+}
+
+function resolveWallpaperFloatingCollageTransitionLayerStyle(
+  transitionStyle: WallpaperImageTransitionStyle,
+  layer: 'current' | 'previous',
+  progress: number,
+): CSSProperties {
+  if (transitionStyle === 'none') {
+    return layer === 'current'
+      ? { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)', filter: 'blur(0px)' }
+      : { opacity: 0, transform: 'translate3d(0, 0, 0) scale(1)', filter: 'blur(0px)' }
+  }
+
+  const currentProgress = clampWallpaperMetric(progress, 0, 1)
+  const previousProgress = 1 - currentProgress
+
+  const buildStyle = ({
+    opacity,
+    translateX = 0,
+    translateY = 0,
+    scale = 1,
+    rotate = 0,
+    rotateX = 0,
+    blur = 0,
+  }: {
+    opacity: number
+    translateX?: number
+    translateY?: number
+    scale?: number
+    rotate?: number
+    rotateX?: number
+    blur?: number
+  }): CSSProperties => {
+    const transforms = [
+      rotateX !== 0 ? `perspective(1200px) rotateX(${rotateX}deg)` : null,
+      `translate3d(${translateX}px, ${translateY}px, 0)`,
+      rotate !== 0 ? `rotate(${rotate}deg)` : null,
+      `scale(${scale})`,
+    ].filter((value): value is string => Boolean(value))
+
+    return {
+      position: 'absolute',
+      inset: 0,
+      opacity,
+      transform: transforms.join(' '),
+      filter: `blur(${blur}px)`,
+      backfaceVisibility: 'hidden',
+      transformStyle: 'preserve-3d',
+      willChange: 'transform, opacity, filter',
+      pointerEvents: 'none',
+    }
+  }
+
+  if (transitionStyle === 'fade') {
+    return layer === 'current'
+      ? buildStyle({
+          opacity: currentProgress,
+          scale: interpolateWallpaperFloatingCollageMetric(1.02, 1, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(3, 0, currentProgress),
+        })
+      : buildStyle({
+          opacity: previousProgress,
+          scale: interpolateWallpaperFloatingCollageMetric(1, 0.98, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(0, 4, currentProgress),
+        })
+  }
+
+  if (transitionStyle === 'zoom') {
+    return layer === 'current'
+      ? buildStyle({
+          opacity: currentProgress,
+          scale: interpolateWallpaperFloatingCollageMetric(1.14, 1, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(2, 0, currentProgress),
+        })
+      : buildStyle({
+          opacity: previousProgress,
+          scale: interpolateWallpaperFloatingCollageMetric(1, 0.86, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(0, 3, currentProgress),
+        })
+  }
+
+  if (transitionStyle === 'slide') {
+    return layer === 'current'
+      ? buildStyle({
+          opacity: currentProgress,
+          translateY: interpolateWallpaperFloatingCollageMetric(12, 0, currentProgress),
+          scale: interpolateWallpaperFloatingCollageMetric(0.985, 1, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(2, 0, currentProgress),
+        })
+      : buildStyle({
+          opacity: previousProgress,
+          translateY: interpolateWallpaperFloatingCollageMetric(0, -12, currentProgress),
+          scale: interpolateWallpaperFloatingCollageMetric(1, 1.015, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(0, 4, currentProgress),
+        })
+  }
+
+  if (transitionStyle === 'blur') {
+    return layer === 'current'
+      ? buildStyle({
+          opacity: currentProgress,
+          scale: interpolateWallpaperFloatingCollageMetric(1.035, 1, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(14, 0, currentProgress),
+        })
+      : buildStyle({
+          opacity: previousProgress,
+          scale: interpolateWallpaperFloatingCollageMetric(1, 0.97, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(0, 18, currentProgress),
+        })
+  }
+
+  if (transitionStyle === 'flip') {
+    return layer === 'current'
+      ? buildStyle({
+          opacity: currentProgress,
+          rotateX: interpolateWallpaperFloatingCollageMetric(-84, 0, currentProgress),
+          scale: interpolateWallpaperFloatingCollageMetric(0.96, 1, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(2, 0, currentProgress),
+        })
+      : buildStyle({
+          opacity: previousProgress,
+          rotateX: interpolateWallpaperFloatingCollageMetric(0, 84, currentProgress),
+          scale: interpolateWallpaperFloatingCollageMetric(1, 1.03, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(0, 4, currentProgress),
+        })
+  }
+
+  if (transitionStyle === 'shuffle') {
+    return layer === 'current'
+      ? buildStyle({
+          opacity: currentProgress,
+          translateX: interpolateWallpaperFloatingCollageMetric(-12, 0, currentProgress),
+          translateY: interpolateWallpaperFloatingCollageMetric(8, 0, currentProgress),
+          rotate: interpolateWallpaperFloatingCollageMetric(-3, 0, currentProgress),
+          scale: interpolateWallpaperFloatingCollageMetric(0.92, 1, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(4, 0, currentProgress),
+        })
+      : buildStyle({
+          opacity: previousProgress,
+          translateX: interpolateWallpaperFloatingCollageMetric(0, 12, currentProgress),
+          translateY: interpolateWallpaperFloatingCollageMetric(0, -8, currentProgress),
+          rotate: interpolateWallpaperFloatingCollageMetric(0, 3, currentProgress),
+          scale: interpolateWallpaperFloatingCollageMetric(1, 1.05, currentProgress),
+          blur: interpolateWallpaperFloatingCollageMetric(0, 5, currentProgress),
+        })
+  }
+
+  return layer === 'current'
+    ? buildStyle({
+        opacity: currentProgress,
+        translateY: interpolateWallpaperFloatingCollageMetric(2, 0, currentProgress),
+        scale: interpolateWallpaperFloatingCollageMetric(0.9, 1, currentProgress),
+        blur: interpolateWallpaperFloatingCollageMetric(4, 0, currentProgress),
+      })
+    : buildStyle({
+        opacity: previousProgress,
+        translateY: interpolateWallpaperFloatingCollageMetric(0, -2, currentProgress),
+        scale: interpolateWallpaperFloatingCollageMetric(1, 1.08, currentProgress),
+        blur: interpolateWallpaperFloatingCollageMetric(0, 6, currentProgress),
+      })
 }
 
 /** Prefer the real image aspect ratio when the widget is configured to use it. */
@@ -411,6 +583,8 @@ function buildWallpaperFloatingCollageCardState(
     aspectRatio,
     wobblePhase: seed.wobblePhase,
     imageIndex,
+    previousImageIndex: null,
+    transitionElapsedMs: 0,
     bounceCount: 0,
     elapsedSinceSwapMs: 0,
   }
@@ -488,6 +662,9 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
   const aspectMode = widget.settings.aspectMode ?? 'image'
   const fitMode = widget.settings.fitMode ?? 'cover'
   const imageSwapMode = widget.settings.imageSwapMode ?? 'bounce'
+  const transitionStyle = widget.settings.imageTransitionStyle ?? 'fade'
+  const transitionDurationMs = clampWallpaperFloatingCollageTransitionDurationMs(widget.settings.imageTransitionDurationMs)
+  const swapTransitionEasing = widget.settings.imageTransitionEasing ?? 'easeOutCubic'
   const swapIntervalSec = clampWallpaperFloatingCollageSwapIntervalSec(widget.settings.swapIntervalSec)
   const swapBounceCount = clampWallpaperFloatingCollageSwapBounceCount(widget.settings.swapBounceCount)
   const previewPoolCount = Math.max(visibleCount * 4, 16)
@@ -680,6 +857,12 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
 
           const nextBounceCount = bounceEvents > 0 ? card.bounceCount + 1 : card.bounceCount
           const nextElapsedSinceSwapMs = imageSwapMode === 'time' ? card.elapsedSinceSwapMs + deltaMs : 0
+          const nextTransitionElapsedMs = card.previousImageIndex === null
+            ? card.transitionElapsedMs
+            : Math.min(transitionDurationMs, card.transitionElapsedMs + deltaMs)
+          const resolvedPreviousImageIndex = card.previousImageIndex !== null && nextTransitionElapsedMs < transitionDurationMs
+            ? card.previousImageIndex
+            : null
           const shouldSwapImage = images.length > 1 && (
             imageSwapMode === 'time'
               ? nextElapsedSinceSwapMs >= swapIntervalMs
@@ -697,6 +880,8 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
               aspectRatio: currentAspectRatio,
               vx: nextVx,
               vy: nextVy,
+              previousImageIndex: resolvedPreviousImageIndex,
+              transitionElapsedMs: resolvedPreviousImageIndex === null ? transitionDurationMs : nextTransitionElapsedMs,
               bounceCount: nextBounceCount,
               elapsedSinceSwapMs: nextElapsedSinceSwapMs,
             }
@@ -741,6 +926,8 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
             vx: nextVx,
             vy: nextVy,
             imageIndex: nextImageIndex,
+            previousImageIndex: card.imageIndex,
+            transitionElapsedMs: 0,
             bounceCount: 0,
             elapsedSinceSwapMs: 0,
           }
@@ -754,7 +941,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
     return () => {
       window.cancelAnimationFrame(frameId)
     }
-  }, [aspectMode, cardStates.length, containerSize.height, containerSize.width, imageScalePercent, imageSwapMode, images, swapBounceCount, swapIntervalSec])
+  }, [aspectMode, cardStates.length, containerSize.height, containerSize.width, imageScalePercent, imageSwapMode, images, swapBounceCount, swapIntervalSec, transitionDurationMs])
 
   if (groupId === null) {
     return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">설정에서 그룹을 선택해.</div>
@@ -776,7 +963,11 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
 
       {cardStates.map((card, index) => {
         const image = images[card.imageIndex % images.length] ?? images[index % images.length]
+        const previousImage = card.previousImageIndex !== null
+          ? (images[card.previousImageIndex % images.length] ?? null)
+          : null
         const previewUrl = image ? getImageListPreviewUrl(image) : null
+        const previousPreviewUrl = previousImage ? getImageListPreviewUrl(previousImage) : null
         const { scale, rotate } = resolveWallpaperFloatingCollageVisualMotion(card, motionStrength)
         const zIndex = 20 + (card.depth * 100) + index
         const spawnNow = spawnAnchor.active ? performance.now() : 0
@@ -795,16 +986,42 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
           transformStyle: 'preserve-3d' as const,
           transitionTimingFunction: getWallpaperAnimationEasingCss(motionEasing),
         }
-        const cardMedia = previewUrl ? (
-          <ImagePreviewMedia
-            image={image}
-            alt="플로팅 콜라주"
-            loading="eager"
-            draggable={false}
-            className={cn('h-full w-full select-none pointer-events-none', fitMode === 'contain' ? 'object-contain' : 'object-cover')}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">이미지 없음</div>
+        const mediaClassName = cn('h-full w-full select-none pointer-events-none', fitMode === 'contain' ? 'object-contain' : 'object-cover')
+        const easedTransitionProgress = previousImage
+          ? evaluateWallpaperAnimationEasingAtTime(swapTransitionEasing, clampWallpaperMetric(card.transitionElapsedMs / Math.max(transitionDurationMs, 1), 0, 1))
+          : 1
+        const currentLayerStyle = resolveWallpaperFloatingCollageTransitionLayerStyle(transitionStyle, 'current', easedTransitionProgress)
+        const previousLayerStyle = previousImage
+          ? resolveWallpaperFloatingCollageTransitionLayerStyle(transitionStyle, 'previous', easedTransitionProgress)
+          : null
+        const cardLayers = (
+          <>
+            {previousImage && previousPreviewUrl ? (
+              <div style={previousLayerStyle ?? undefined}>
+                <ImagePreviewMedia
+                  image={previousImage}
+                  alt="플로팅 콜라주"
+                  loading="eager"
+                  draggable={false}
+                  className={mediaClassName}
+                />
+              </div>
+            ) : null}
+
+            {previewUrl ? (
+              <div style={currentLayerStyle}>
+                <ImagePreviewMedia
+                  image={image}
+                  alt="플로팅 콜라주"
+                  loading="eager"
+                  draggable={false}
+                  className={mediaClassName}
+                />
+              </div>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">이미지 없음</div>
+            )}
+          </>
         )
 
         if (mode === 'runtime' && onOpenImage && image) {
@@ -828,7 +1045,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
                 })
               }}
             >
-              {cardMedia}
+              {cardLayers}
             </button>
           )
         }
@@ -839,7 +1056,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
             className="absolute overflow-hidden rounded-2xl border border-white/15 bg-surface-high shadow-[0_18px_48px_rgba(0,0,0,0.30)] will-change-transform"
             style={cardStyle}
           >
-            {cardMedia}
+            {cardLayers}
           </div>
         )
       })}

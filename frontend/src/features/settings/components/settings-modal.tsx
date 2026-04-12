@@ -48,7 +48,7 @@ export function SettingsModal({ open, title, description, headerContent, onClose
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[95] bg-black/72 p-4 md:p-6" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[6000] bg-black/72 p-4 md:p-6" onMouseDown={onClose}>
       <div
         ref={containerRef}
         role="dialog"

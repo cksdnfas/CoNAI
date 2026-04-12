@@ -30,6 +30,7 @@ interface WallpaperHoverInteractionEditorFieldsProps {
 }
 
 interface WallpaperTransitionAnimationEditorFieldProps {
+  label?: string
   transitionStyle: WallpaperImageTransitionStyle | undefined
   transitionSpeed: WallpaperImageTransitionSpeed | undefined
   transitionDurationMs?: number
@@ -189,6 +190,7 @@ export function WallpaperInspectorDisclosure({
 }
 
 export function WallpaperTransitionAnimationEditorField({
+  label = '전환 애니메이션',
   transitionStyle,
   transitionSpeed,
   transitionDurationMs,
@@ -202,7 +204,7 @@ export function WallpaperTransitionAnimationEditorField({
   const summary = `${getWallpaperTransitionStyleLabel(transitionStyle)} · ${durationMs}ms`
 
   return (
-    <SettingsField label="전환 애니메이션">
+    <SettingsField label={label}>
       <WallpaperEasingPicker
         value={transitionEasing}
         fallbackPreset="easeOutCubic"
