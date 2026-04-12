@@ -81,7 +81,7 @@ export function ModuleWorkflowEmptyRunsTab({
       />
 
       <Card>
-        <CardHeader className="space-y-0">
+        <CardHeader className="space-y-0 border-b border-border/70 pb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="min-w-0 flex-1 text-base">대기열 · 빈 실행</CardTitle>
             <div className="flex flex-wrap items-center justify-end gap-2">

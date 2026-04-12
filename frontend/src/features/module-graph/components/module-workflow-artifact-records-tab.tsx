@@ -53,7 +53,7 @@ export function ModuleWorkflowArtifactRecordsTab({
 
   return (
     <Card>
-      <CardHeader className="space-y-4">
+      <CardHeader className="space-y-4 border-b border-border/70 pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="min-w-0 flex-1 text-base">텍스트 · 중간 산출물</CardTitle>
           <div className="flex flex-wrap items-center justify-end gap-2">

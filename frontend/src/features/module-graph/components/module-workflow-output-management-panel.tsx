@@ -433,7 +433,7 @@ export function ModuleWorkflowOutputManagementPanel({
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
+        <CardHeader className="border-b border-border/70 pb-4">
           <CardTitle className="text-base">
             {selectedFolderRecord ? `${selectedFolderRecord.name} · 워크플로우 생성물` : '워크플로우 생성물'}
           </CardTitle>

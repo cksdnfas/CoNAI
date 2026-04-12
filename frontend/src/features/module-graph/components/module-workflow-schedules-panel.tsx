@@ -244,7 +244,7 @@ export function ModuleWorkflowSchedulesPanel({
   return (
     <>
       <Card>
-        <CardHeader className="space-y-0">
+        <CardHeader className="space-y-0 border-b border-border/70 pb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="min-w-0 flex-1 text-base">자동 실행</CardTitle>
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -378,29 +378,27 @@ export function ModuleWorkflowSchedulesPanel({
           {selectedInputDefinitions.length > 0 ? (
             <div className="space-y-3">
               <div className="text-sm font-medium text-foreground">저장 입력값</div>
-              <div className="theme-settings-panel space-y-3 rounded-sm bg-surface-container p-3">
-                <WorkflowInputFields
-                  inputDefinitions={selectedInputDefinitions}
-                  inputValues={draftInputValues}
-                  onInputValueChange={(inputId, value) => setDraftInputValues((current) => ({ ...current, [inputId]: value }))}
-                  onInputValueClear={(inputId) => setDraftInputValues((current) => {
+              <WorkflowInputFields
+                inputDefinitions={selectedInputDefinitions}
+                inputValues={draftInputValues}
+                onInputValueChange={(inputId, value) => setDraftInputValues((current) => ({ ...current, [inputId]: value }))}
+                onInputValueClear={(inputId) => setDraftInputValues((current) => {
+                  const next = { ...current }
+                  delete next[inputId]
+                  return next
+                })}
+                onInputImageChange={async (inputId: string, image?: SelectedImageDraft) => {
+                  setDraftInputValues((current) => {
                     const next = { ...current }
-                    delete next[inputId]
-                    return next
-                  })}
-                  onInputImageChange={async (inputId: string, image?: SelectedImageDraft) => {
-                    setDraftInputValues((current) => {
-                      const next = { ...current }
-                      if (!image) {
-                        delete next[inputId]
-                        return next
-                      }
-                      next[inputId] = image.dataUrl
+                    if (!image) {
+                      delete next[inputId]
                       return next
-                    })
-                  }}
-                />
-              </div>
+                    }
+                    next[inputId] = image.dataUrl
+                    return next
+                  })
+                }}
+              />
             </div>
           ) : null}
 
