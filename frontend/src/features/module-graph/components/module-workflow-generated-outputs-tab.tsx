@@ -52,11 +52,11 @@ export function ModuleWorkflowGeneratedOutputsTab({
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex flex-row items-start justify-between gap-3">
+      <CardHeader className="space-y-0">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="min-w-0 flex-1 text-base">생성 결과</CardTitle>
-          <div className="flex items-center gap-2">
-          <Badge variant="outline">{outputItems.length}</Badge>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Badge variant="outline">{outputItems.length}</Badge>
             <Button
               type="button"
               size="sm"

@@ -431,7 +431,7 @@ export function ModuleWorkflowOutputManagementPanel({
   const allQueueSelected = queueExecutions.length > 0 && selectedQueueExecutionIds.length === queueExecutions.length
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">

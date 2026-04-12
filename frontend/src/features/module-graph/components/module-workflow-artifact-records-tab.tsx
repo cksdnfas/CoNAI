@@ -54,9 +54,9 @@ export function ModuleWorkflowArtifactRecordsTab({
   return (
     <Card>
       <CardHeader className="space-y-4">
-        <div className="flex flex-row items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="min-w-0 flex-1 text-base">텍스트 · 중간 산출물</CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Badge variant="outline">{artifacts.length}</Badge>
             <Button
               type="button"

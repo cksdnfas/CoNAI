@@ -81,10 +81,10 @@ export function ModuleWorkflowEmptyRunsTab({
       />
 
       <Card>
-        <CardHeader>
-          <div className="flex flex-row items-start justify-between gap-3">
+        <CardHeader className="space-y-0">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="min-w-0 flex-1 text-base">대기열 · 빈 실행</CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <Badge variant="outline">{queueExecutions.length}</Badge>
               <Button
                 type="button"

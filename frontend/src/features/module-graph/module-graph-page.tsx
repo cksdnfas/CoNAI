@@ -417,7 +417,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   })
 
   return (
-    <div className="space-y-8">
+    <div className={embedded ? 'space-y-6' : 'space-y-8'}>
       {!embedded ? (
         <PageHeader
           eyebrow="Create"
