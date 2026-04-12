@@ -1,6 +1,6 @@
 {
   "name": "@conai/shared",
-  "version": "26.4.8",
+  "version": "26.4.13",
   "description": "Shared types, utilities, and constants for CoNAI",
   "type": "commonjs",
   "main": "dist/index.js",
