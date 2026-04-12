@@ -1,5 +1,6 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { formatDateTime, getArtifactPreviewUrl } from '@/features/module-graph/module-graph-shared'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -14,6 +15,7 @@ import {
   buildWallpaperFinalResultArtifact,
   getWallpaperAnimationEasingCss,
   getWallpaperHoverMotionAmount,
+  getWallpaperImageTransitionDurationMs,
   getWallpaperImageUrl,
   getWallpaperMotionStrengthMultiplier,
   useWallpaperMotionTick,
@@ -73,6 +75,45 @@ function getWallpaperStackCardStyle(
   }
 }
 
+function areSameWallpaperImageRecords(left: ImageRecord | undefined, right: ImageRecord | undefined) {
+  if (!left || !right) {
+    return false
+  }
+
+  return left.image_url === right.image_url
+    && left.thumbnail_url === right.thumbnail_url
+    && left.mime_type === right.mime_type
+}
+
+function preloadWallpaperImageRecord(image: ImageRecord | undefined) {
+  const previewUrl = image ? getImageListPreviewUrl(image) : null
+  if (!previewUrl) {
+    return Promise.resolve()
+  }
+
+  const mediaKind = image ? getImageListMediaKind(image) : 'image'
+  if (mediaKind === 'video') {
+    return Promise.resolve()
+  }
+
+  return new Promise<void>((resolve) => {
+    const preloader = new window.Image()
+    const finish = () => {
+      preloader.onload = null
+      preloader.onerror = null
+      resolve()
+    }
+
+    preloader.onload = finish
+    preloader.onerror = finish
+    preloader.src = previewUrl
+
+    if (preloader.complete) {
+      finish()
+    }
+  })
+}
+
 function getWallpaperPreviewOpenSettings(widget: WallpaperWidgetInstance) {
   return {
     previewOpenScalePercent: widget.settings.imagePreviewOpenScalePercent,
@@ -96,6 +137,8 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
   const imageTransitionEasing = widget.settings.imageTransitionEasing ?? 'easeOutCubic'
   const imageHoverMotion = getWallpaperHoverMotionAmount(widget.settings.imageHoverMotion ?? 1)
   const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
+  const stackTransitionDurationMs = getWallpaperImageTransitionDurationMs(imageTransitionSpeed, imageTransitionDurationMs)
+  const stackTransitionTimingFunction = getWallpaperAnimationEasingCss(imageTransitionEasing)
 
   const resultsQuery = useWallpaperBrowseContentQuery('recent-results', refreshInterval)
 
@@ -229,8 +272,12 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
               <button
                 key={entry.id}
                 type="button"
-                className="absolute inset-0 block overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-all duration-[1600ms] ease-out"
-                style={cardStyle}
+                className="absolute inset-0 block overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-[opacity,transform,filter,inset]"
+                style={{
+                  ...cardStyle,
+                  transitionDuration: `${stackTransitionDurationMs}ms`,
+                  transitionTimingFunction: stackTransitionTimingFunction,
+                }}
                 onClick={(event) => {
                   event.stopPropagation()
                   onOpenImage({
@@ -248,8 +295,12 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
           return (
             <div
               key={entry.id}
-              className="absolute inset-0 overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-all duration-[1600ms] ease-out"
-              style={cardStyle}
+              className="absolute inset-0 overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-[opacity,transform,filter,inset]"
+              style={{
+                ...cardStyle,
+                transitionDuration: `${stackTransitionDurationMs}ms`,
+                transitionTimingFunction: stackTransitionTimingFunction,
+              }}
             >
               {cardContent}
             </div>
@@ -323,6 +374,52 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null)
 
   const previewQuery = useWallpaperGroupPreviewImagesQuery('group-image-view', groupId, includeChildren, previewPoolCount)
+  const images = previewQuery.data ?? []
+  const rotationEnabled = images.length > visibleCount
+  const rotationIndex = useWallpaperRotatingIndex(images.length, slideshowInterval, rotationEnabled)
+  const targetVisibleImages = useMemo(() => {
+    if (images.length <= visibleCount) {
+      return images.slice(0, visibleCount)
+    }
+
+    const batchStartIndex = (rotationIndex * visibleCount) % images.length
+    return Array.from({ length: visibleCount }, (_, index) => images[(batchStartIndex + index) % images.length]).filter(Boolean)
+  }, [images, rotationIndex, visibleCount])
+  const [visibleImages, setVisibleImages] = useState<ImageRecord[]>(targetVisibleImages)
+  const visibleImageRequestRef = useRef(0)
+
+  useEffect(() => {
+    const isSameVisibleSet = visibleImages.length === targetVisibleImages.length
+      && visibleImages.every((image, index) => areSameWallpaperImageRecords(image, targetVisibleImages[index]))
+
+    if (isSameVisibleSet) {
+      return
+    }
+
+    if (visibleImages.length === 0 || targetVisibleImages.length === 0) {
+      setVisibleImages(targetVisibleImages)
+      return
+    }
+
+    const requestId = visibleImageRequestRef.current + 1
+    visibleImageRequestRef.current = requestId
+    let cancelled = false
+
+    void Promise.all(targetVisibleImages.map((image) => preloadWallpaperImageRecord(image))).then(() => {
+      if (cancelled || visibleImageRequestRef.current !== requestId) {
+        return
+      }
+
+      setVisibleImages(targetVisibleImages)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [targetVisibleImages, visibleImages])
+
+  const columnCount = visibleCount >= 6 ? 3 : visibleCount >= 4 ? 2 : 1
+  const rowCount = Math.max(1, Math.ceil(Math.max(visibleImages.length, 1) / columnCount))
 
   if (groupId === null) {
     return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">설정에서 그룹을 선택해.</div>
@@ -335,19 +432,6 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   if (previewQuery.isError) {
     return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">그룹 미리보기를 불러오지 못했어.</div>
   }
-
-  const images = previewQuery.data ?? []
-  const rotationEnabled = images.length > visibleCount
-  const rotationIndex = useWallpaperRotatingIndex(images.length, slideshowInterval, rotationEnabled)
-  const visibleImages = useMemo(() => {
-    if (images.length <= visibleCount) {
-      return images.slice(0, visibleCount)
-    }
-
-    return Array.from({ length: visibleCount }, (_, index) => images[(rotationIndex + index) % images.length]).filter(Boolean)
-  }, [images, rotationIndex, visibleCount])
-  const columnCount = visibleCount >= 6 ? 3 : visibleCount >= 4 ? 2 : 1
-  const rowCount = Math.max(1, Math.ceil(Math.max(visibleImages.length, 1) / columnCount))
 
   return (
     <div

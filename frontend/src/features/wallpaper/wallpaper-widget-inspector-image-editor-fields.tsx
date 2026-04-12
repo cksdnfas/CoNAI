@@ -25,7 +25,9 @@ export function WallpaperImageWidgetEditorFields({
   updateWidgetSettings,
 }: WallpaperImageWidgetEditorFieldsProps) {
   switch (selectedWidget.type) {
-    case 'image-showcase':
+    case 'image-showcase': {
+      const playbackMode = selectedWidget.settings.playbackMode ?? 'carousel'
+
       return (
         <>
           <WallpaperInspectorSectionCard title="레이아웃">
@@ -45,7 +47,7 @@ export function WallpaperImageWidgetEditorFields({
           <WallpaperInspectorSectionCard title="재생">
             <SettingsField label="재생 방식">
               <Select
-                value={selectedWidget.settings.playbackMode ?? 'carousel'}
+                value={playbackMode}
                 onChange={(event) => {
                   updateWidgetSettings({
                     playbackMode: event.target.value === 'static'
@@ -62,37 +64,41 @@ export function WallpaperImageWidgetEditorFields({
               </Select>
             </SettingsField>
 
-            <SettingsField label="간격">
-              <Select
-                value={String(selectedWidget.settings.slideshowIntervalSec ?? 20)}
-                onChange={(event) => {
-                  updateWidgetSettings({ slideshowIntervalSec: Number(event.target.value) })
-                }}
-              >
-                {[5, 10, 15, 20, 30, 60].map((seconds) => (
-                  <option key={seconds} value={seconds}>{seconds}s</option>
-                ))}
-              </Select>
-            </SettingsField>
+            {playbackMode !== 'static' ? (
+              <SettingsField label="간격">
+                <Select
+                  value={String(selectedWidget.settings.slideshowIntervalSec ?? 20)}
+                  onChange={(event) => {
+                    updateWidgetSettings({ slideshowIntervalSec: Number(event.target.value) })
+                  }}
+                >
+                  {[5, 10, 15, 20, 30, 60].map((seconds) => (
+                    <option key={seconds} value={seconds}>{seconds}s</option>
+                  ))}
+                </Select>
+              </SettingsField>
+            ) : null}
           </WallpaperInspectorSectionCard>
 
-          <WallpaperInspectorSectionCard title="전환">
-            <WallpaperTransitionAnimationEditorField
-              transitionStyle={selectedWidget.settings.imageTransitionStyle}
-              transitionSpeed={selectedWidget.settings.imageTransitionSpeed}
-              transitionDurationMs={selectedWidget.settings.imageTransitionDurationMs}
-              transitionEasing={selectedWidget.settings.imageTransitionEasing}
-              onTransitionStyleChange={(nextValue) => {
-                updateWidgetSettings({ imageTransitionStyle: nextValue })
-              }}
-              onTransitionDurationChange={(nextValue) => {
-                updateWidgetSettings({ imageTransitionDurationMs: nextValue })
-              }}
-              onTransitionEasingChange={(nextValue) => {
-                updateWidgetSettings({ imageTransitionEasing: nextValue })
-              }}
-            />
-          </WallpaperInspectorSectionCard>
+          {playbackMode !== 'static' ? (
+            <WallpaperInspectorSectionCard title="전환">
+              <WallpaperTransitionAnimationEditorField
+                transitionStyle={selectedWidget.settings.imageTransitionStyle}
+                transitionSpeed={selectedWidget.settings.imageTransitionSpeed}
+                transitionDurationMs={selectedWidget.settings.imageTransitionDurationMs}
+                transitionEasing={selectedWidget.settings.imageTransitionEasing}
+                onTransitionStyleChange={(nextValue) => {
+                  updateWidgetSettings({ imageTransitionStyle: nextValue })
+                }}
+                onTransitionDurationChange={(nextValue) => {
+                  updateWidgetSettings({ imageTransitionDurationMs: nextValue })
+                }}
+                onTransitionEasingChange={(nextValue) => {
+                  updateWidgetSettings({ imageTransitionEasing: nextValue })
+                }}
+              />
+            </WallpaperInspectorSectionCard>
+          ) : null}
 
           <WallpaperInspectorSectionCard title="상호작용">
             <WallpaperHoverInteractionEditorFields
@@ -108,6 +114,7 @@ export function WallpaperImageWidgetEditorFields({
           </WallpaperInspectorSectionCard>
         </>
       )
+    }
 
     case 'group-image-view':
       return (
@@ -159,34 +166,36 @@ export function WallpaperImageWidgetEditorFields({
               </Select>
             </SettingsField>
 
-            <WallpaperMotionEasingEditorField
-              easing={selectedWidget.settings.motionEasing}
-              fallbackPreset="easeOutCubic"
-              motionStrength={selectedWidget.settings.motionStrength}
-              editorContent={(
-                <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                  <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">모션 옵션</div>
-                  <SettingsField label="강도">
-                    <ScrubbableNumberInput
-                      variant="settings"
-                      min={0}
-                      max={2.5}
-                      step={0.1}
-                      scrubRatio={0.45}
-                      value={getWallpaperMotionStrengthMultiplier(selectedWidget.settings.motionStrength ?? 1)}
-                      onChange={(nextValue) => {
-                        updateWidgetSettings({
-                          motionStrength: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
-                        })
-                      }}
-                    />
-                  </SettingsField>
-                </div>
-              )}
-              onEasingChange={(nextValue) => {
-                updateWidgetSettings({ motionEasing: nextValue })
-              }}
-            />
+            {(selectedWidget.settings.motionMode ?? 'static') !== 'static' ? (
+              <WallpaperMotionEasingEditorField
+                easing={selectedWidget.settings.motionEasing}
+                fallbackPreset="easeOutCubic"
+                motionStrength={selectedWidget.settings.motionStrength}
+                editorContent={(
+                  <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
+                    <div className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">모션 옵션</div>
+                    <SettingsField label="강도">
+                      <ScrubbableNumberInput
+                        variant="settings"
+                        min={0}
+                        max={2.5}
+                        step={0.1}
+                        scrubRatio={0.45}
+                        value={getWallpaperMotionStrengthMultiplier(selectedWidget.settings.motionStrength ?? 1)}
+                        onChange={(nextValue) => {
+                          updateWidgetSettings({
+                            motionStrength: clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5),
+                          })
+                        }}
+                      />
+                    </SettingsField>
+                  </div>
+                )}
+                onEasingChange={(nextValue) => {
+                  updateWidgetSettings({ motionEasing: nextValue })
+                }}
+              />
+            ) : null}
           </WallpaperInspectorSectionCard>
 
           <WallpaperInspectorSectionCard title="전환">
@@ -237,21 +246,6 @@ export function WallpaperImageWidgetEditorFields({
                 {[2, 3, 4, 5, 6].map((count) => (
                   <option key={count} value={count}>{count}</option>
                 ))}
-              </Select>
-            </SettingsField>
-
-            <SettingsField label="초기 밀집도">
-              <Select
-                value={selectedWidget.settings.layoutSpread ?? 'compact'}
-                onChange={(event) => {
-                  updateWidgetSettings({
-                    layoutSpread: event.target.value === 'wide' ? 'wide' : event.target.value === 'balanced' ? 'balanced' : 'compact',
-                  })
-                }}
-              >
-                <option value="compact">조밀하게</option>
-                <option value="balanced">보통</option>
-                <option value="wide">넓게</option>
               </Select>
             </SettingsField>
 

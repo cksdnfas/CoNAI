@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { buildPreviewImageRecord } from '@/features/images/components/inline-media-preview'
 import { parseMetadataValue } from '@/features/module-graph/module-graph-shared'
 import { cn } from '@/lib/utils'
@@ -72,58 +74,154 @@ function isSameWallpaperPreviewImage(left: WallpaperWidgetPreviewImage, right: W
     && left.image.mime_type === right.image.mime_type
 }
 
-function getWallpaperTransitionStateClassName(transitionStyle: WallpaperImageTransitionStyle, layer: 'current' | 'previous', isTransitionActive: boolean) {
+function getWallpaperPreviewImageKey(previewImage: WallpaperWidgetPreviewImage) {
+  return previewImage.image.thumbnail_url
+    ?? previewImage.image.image_url
+    ?? `${previewImage.alt}:${previewImage.image.mime_type ?? 'unknown'}`
+}
+
+/** Combine one existing transform string with one extra transform without dropping either side. */
+function combineWallpaperTransforms(baseTransform: CSSProperties['transform'], extraTransform: string) {
+  const resolvedBase = typeof baseTransform === 'string' ? baseTransform.trim() : ''
+  return resolvedBase ? `${resolvedBase} ${extraTransform}` : extraTransform
+}
+
+function preloadWallpaperPreviewImage(previewImage: WallpaperWidgetPreviewImage) {
+  const previewUrl = getImageListPreviewUrl(previewImage.image)
+  if (!previewUrl) {
+    return Promise.resolve()
+  }
+
+  const mediaKind = getImageListMediaKind(previewImage.image)
+  if (mediaKind === 'video') {
+    return Promise.resolve()
+  }
+
+  return new Promise<void>((resolve) => {
+    const preloader = new window.Image()
+    let finished = false
+
+    const finish = () => {
+      if (finished) {
+        return
+      }
+      finished = true
+      preloader.onload = null
+      preloader.onerror = null
+      resolve()
+    }
+
+    const finishAfterDecode = () => {
+      if (typeof preloader.decode === 'function') {
+        void preloader.decode()
+          .catch(() => undefined)
+          .finally(() => {
+            finish()
+          })
+        return
+      }
+
+      finish()
+    }
+
+    preloader.onload = finishAfterDecode
+    preloader.onerror = finish
+    preloader.src = previewUrl
+
+    if (preloader.complete) {
+      finishAfterDecode()
+    }
+  })
+}
+
+function getWallpaperTransitionStateStyle(transitionStyle: WallpaperImageTransitionStyle, layer: 'current' | 'previous', isTransitionActive: boolean): CSSProperties {
+  const buildStyle = (opacity: number, transform: string, filter: string): CSSProperties => ({
+    opacity,
+    transform,
+    filter,
+    backfaceVisibility: 'hidden',
+    transformStyle: 'preserve-3d',
+  })
+
   if (transitionStyle === 'none') {
-    return layer === 'current' ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0'
+    return layer === 'current'
+      ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
+      : buildStyle(0, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
   }
 
   if (transitionStyle === 'fade') {
     if (layer === 'current') {
-      return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[1.02] translate-y-0 blur-[3px]'
+      return isTransitionActive
+        ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
+        : buildStyle(0, 'translate3d(0, 0, 0) scale(1.02)', 'blur(3px)')
     }
-    return isTransitionActive ? 'opacity-0 scale-[0.98] translate-y-0 blur-[4px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
+    return isTransitionActive
+      ? buildStyle(0, 'translate3d(0, 0, 0) scale(0.98)', 'blur(4px)')
+      : buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
   }
 
   if (transitionStyle === 'zoom') {
     if (layer === 'current') {
-      return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[1.14] translate-y-0 blur-[2px]'
+      return isTransitionActive
+        ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
+        : buildStyle(0, 'translate3d(0, 0, 0) scale(1.14)', 'blur(2px)')
     }
-    return isTransitionActive ? 'opacity-0 scale-[0.86] translate-y-0 blur-[3px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
+    return isTransitionActive
+      ? buildStyle(0, 'translate3d(0, 0, 0) scale(0.86)', 'blur(3px)')
+      : buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
   }
 
   if (transitionStyle === 'slide') {
     if (layer === 'current') {
-      return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[0.985] translate-y-3 blur-[2px]'
+      return isTransitionActive
+        ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
+        : buildStyle(0, 'translate3d(0, 12px, 0) scale(0.985)', 'blur(2px)')
     }
-    return isTransitionActive ? 'opacity-0 scale-[1.015] -translate-y-3 blur-[4px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
+    return isTransitionActive
+      ? buildStyle(0, 'translate3d(0, -12px, 0) scale(1.015)', 'blur(4px)')
+      : buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
   }
 
   if (transitionStyle === 'blur') {
     if (layer === 'current') {
-      return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[1.035] translate-y-0 blur-[14px]'
+      return isTransitionActive
+        ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
+        : buildStyle(0, 'translate3d(0, 0, 0) scale(1.035)', 'blur(14px)')
     }
-    return isTransitionActive ? 'opacity-0 scale-[0.97] translate-y-0 blur-[18px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
+    return isTransitionActive
+      ? buildStyle(0, 'translate3d(0, 0, 0) scale(0.97)', 'blur(18px)')
+      : buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
   }
 
   if (transitionStyle === 'flip') {
     if (layer === 'current') {
-      return isTransitionActive ? 'opacity-100 [transform:perspective(1200px)_rotateX(0deg)_scale(1)] blur-0' : 'opacity-0 [transform:perspective(1200px)_rotateX(-84deg)_scale(0.96)] blur-[2px]'
+      return isTransitionActive
+        ? buildStyle(1, 'perspective(1200px) rotateX(0deg) scale(1)', 'blur(0px)')
+        : buildStyle(0, 'perspective(1200px) rotateX(-84deg) scale(0.96)', 'blur(2px)')
     }
-    return isTransitionActive ? 'opacity-0 [transform:perspective(1200px)_rotateX(84deg)_scale(1.03)] blur-[4px]' : 'opacity-100 [transform:perspective(1200px)_rotateX(0deg)_scale(1)] blur-0'
+    return isTransitionActive
+      ? buildStyle(0, 'perspective(1200px) rotateX(84deg) scale(1.03)', 'blur(4px)')
+      : buildStyle(1, 'perspective(1200px) rotateX(0deg) scale(1)', 'blur(0px)')
   }
 
   if (transitionStyle === 'shuffle') {
     if (layer === 'current') {
-      return isTransitionActive ? 'opacity-100 scale-100 translate-x-0 translate-y-0 rotate-0 blur-0' : 'opacity-0 scale-[0.92] -translate-x-3 translate-y-2 -rotate-[3deg] blur-[4px]'
+      return isTransitionActive
+        ? buildStyle(1, 'translate3d(0, 0, 0) rotate(0deg) scale(1)', 'blur(0px)')
+        : buildStyle(0, 'translate3d(-12px, 8px, 0) rotate(-3deg) scale(0.92)', 'blur(4px)')
     }
-    return isTransitionActive ? 'opacity-0 scale-[1.05] translate-x-3 -translate-y-2 rotate-[3deg] blur-[5px]' : 'opacity-100 scale-100 translate-x-0 translate-y-0 rotate-0 blur-0'
+    return isTransitionActive
+      ? buildStyle(0, 'translate3d(12px, -8px, 0) rotate(3deg) scale(1.05)', 'blur(5px)')
+      : buildStyle(1, 'translate3d(0, 0, 0) rotate(0deg) scale(1)', 'blur(0px)')
   }
 
-  if (layer === 'current') {
-    return isTransitionActive ? 'opacity-100 scale-100 translate-y-0 blur-0' : 'opacity-0 scale-[0.9] translate-y-[2%] blur-[4px]'
-  }
-
-  return isTransitionActive ? 'opacity-0 scale-[1.08] translate-y-[-2%] blur-[6px]' : 'opacity-100 scale-100 translate-y-0 blur-0'
+  return layer === 'current'
+    ? (isTransitionActive
+      ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
+      : buildStyle(0, 'translate3d(0, 2%, 0) scale(0.9)', 'blur(4px)'))
+    : (isTransitionActive
+      ? buildStyle(0, 'translate3d(0, -2%, 0) scale(1.08)', 'blur(6px)')
+      : buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)'))
 }
 
 /** Render one optionally clickable wallpaper image surface. */
@@ -134,6 +232,9 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
   const [isHovered, setIsHovered] = useState(false)
   const currentImageRef = useRef<WallpaperWidgetPreviewImage>({ image, alt })
   const transitionTimeoutRef = useRef<number | null>(null)
+  const transitionFrameRef = useRef<number | null>(null)
+  const transitionPaintFrameRef = useRef<number | null>(null)
+  const transitionRequestRef = useRef(0)
   const transitionDurationMs = getWallpaperImageTransitionDurationMs(transitionSpeed, explicitTransitionDurationMs)
   const transitionTimingFunction = useMemo(() => getWallpaperAnimationEasingCss(transitionEasing), [transitionEasing])
   const hoverTimingFunction = useMemo(() => getWallpaperAnimationEasingCss(hoverEasing), [hoverEasing])
@@ -143,6 +244,12 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
     return () => {
       if (transitionTimeoutRef.current !== null) {
         window.clearTimeout(transitionTimeoutRef.current)
+      }
+      if (transitionFrameRef.current !== null) {
+        window.cancelAnimationFrame(transitionFrameRef.current)
+      }
+      if (transitionPaintFrameRef.current !== null) {
+        window.cancelAnimationFrame(transitionPaintFrameRef.current)
       }
     }
   }, [])
@@ -158,28 +265,74 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
       window.clearTimeout(transitionTimeoutRef.current)
       transitionTimeoutRef.current = null
     }
+    if (transitionFrameRef.current !== null) {
+      window.cancelAnimationFrame(transitionFrameRef.current)
+      transitionFrameRef.current = null
+    }
+    if (transitionPaintFrameRef.current !== null) {
+      window.cancelAnimationFrame(transitionPaintFrameRef.current)
+      transitionPaintFrameRef.current = null
+    }
 
-    currentImageRef.current = nextImage
-    queueMicrotask(() => {
-      setCurrentImage(nextImage)
+    const requestId = transitionRequestRef.current + 1
+    transitionRequestRef.current = requestId
+    let cancelled = false
 
-      if (transitionStyle === 'none') {
-        setPreviousImage(null)
-        setIsTransitionActive(true)
+    const commitTransition = () => {
+      if (cancelled || transitionRequestRef.current !== requestId) {
         return
       }
 
-      setPreviousImage(activeImage)
-      setIsTransitionActive(false)
-      window.requestAnimationFrame(() => {
-        setIsTransitionActive(true)
+      currentImageRef.current = nextImage
+
+      flushSync(() => {
+        setCurrentImage(nextImage)
+
+        if (transitionStyle === 'none') {
+          setPreviousImage(null)
+          setIsTransitionActive(true)
+          return
+        }
+
+        setPreviousImage(activeImage)
+        setIsTransitionActive(false)
+      })
+
+      if (transitionStyle === 'none') {
+        return
+      }
+
+      transitionFrameRef.current = window.requestAnimationFrame(() => {
+        transitionFrameRef.current = null
+        transitionPaintFrameRef.current = window.requestAnimationFrame(() => {
+          transitionPaintFrameRef.current = null
+          if (cancelled || transitionRequestRef.current !== requestId) {
+            return
+          }
+          flushSync(() => {
+            setIsTransitionActive(true)
+          })
+        })
       })
       transitionTimeoutRef.current = window.setTimeout(() => {
-        setPreviousImage(null)
-        setIsTransitionActive(true)
+        if (cancelled || transitionRequestRef.current !== requestId) {
+          return
+        }
+        flushSync(() => {
+          setPreviousImage(null)
+          setIsTransitionActive(true)
+        })
         transitionTimeoutRef.current = null
       }, transitionDurationMs)
+    }
+
+    void preloadWallpaperPreviewImage(nextImage).then(() => {
+      commitTransition()
     })
+
+    return () => {
+      cancelled = true
+    }
   }, [alt, image, transitionDurationMs, transitionStyle])
 
   const baseSurfaceZIndex = typeof style?.zIndex === 'number'
@@ -189,6 +342,7 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
       : null
   const raisedSurfaceZIndex = Number.isFinite(baseSurfaceZIndex) ? Number(baseSurfaceZIndex) + 1000 : 1000
   const imageLayerStyle = {
+    transitionProperty: 'opacity, transform, filter',
     transitionDuration: `${transitionDurationMs}ms`,
     transitionTimingFunction,
     ...imageStyle,
@@ -205,9 +359,11 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
     ...style,
     ...(onOpenImage
       ? {
-          transform: isHovered ? `scale(${hoverMetrics.surfaceScale})` : 'scale(1)',
-          boxShadow: isHovered ? hoverMetrics.surfaceShadow : 'none',
-          transitionTimingFunction: hoverTimingFunction,
+          transform: isHovered
+            ? combineWallpaperTransforms(style?.transform, `scale(${hoverMetrics.surfaceScale})`)
+            : style?.transform,
+          boxShadow: isHovered ? hoverMetrics.surfaceShadow : style?.boxShadow,
+          transitionTimingFunction: isHovered ? hoverTimingFunction : style?.transitionTimingFunction,
         }
       : null),
     zIndex: isHovered ? raisedSurfaceZIndex : style?.zIndex,
@@ -217,28 +373,34 @@ export function WallpaperPreviewImageSurface({ image, alt, className, imageClass
     <div className="absolute inset-0 will-change-transform" style={imageLayerWrapperStyle}>
       {previousImage ? (
         <ImagePreviewMedia
+          key={`previous:${getWallpaperPreviewImageKey(previousImage)}`}
           image={previousImage.image}
           alt={previousImage.alt}
           className={cn(
-            'absolute inset-0 h-full w-full transition-[opacity,transform,filter] will-change-transform',
+            'absolute inset-0 h-full w-full will-change-transform',
             imageClassName,
-            getWallpaperTransitionStateClassName(transitionStyle, 'previous', isTransitionActive),
           )}
-          style={imageLayerStyle}
-          loading="lazy"
+          style={{
+            ...imageLayerStyle,
+            ...getWallpaperTransitionStateStyle(transitionStyle, 'previous', isTransitionActive),
+          }}
+          loading="eager"
           draggable={false}
         />
       ) : null}
       <ImagePreviewMedia
+        key={`current:${getWallpaperPreviewImageKey(currentImage)}`}
         image={currentImage.image}
         alt={currentImage.alt}
         className={cn(
-          'absolute inset-0 h-full w-full transition-[opacity,transform,filter] will-change-transform',
+          'absolute inset-0 h-full w-full will-change-transform',
           imageClassName,
-          getWallpaperTransitionStateClassName(transitionStyle, 'current', isTransitionActive),
         )}
-        style={imageLayerStyle}
-        loading="lazy"
+        style={{
+          ...imageLayerStyle,
+          ...getWallpaperTransitionStateStyle(transitionStyle, 'current', isTransitionActive),
+        }}
+        loading="eager"
         draggable={false}
       />
     </div>

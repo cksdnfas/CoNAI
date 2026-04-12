@@ -164,7 +164,6 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
       imageScalePercent: 100,
       fitMode: 'cover',
       aspectMode: 'image',
-      layoutSpread: 'compact',
       imageSwapMode: 'bounce',
       imageTransitionEasing: 'easeOutCubic',
       swapIntervalSec: 12,
