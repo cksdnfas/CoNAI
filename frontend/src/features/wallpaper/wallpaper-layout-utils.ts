@@ -107,7 +107,7 @@ export function buildWallpaperLayoutDraft(canvasPresetId: string): WallpaperLayo
   const now = new Date().toISOString()
   return {
     id: 'wallpaper-layout-draft',
-    name: '월페이퍼 초안',
+    name: '새 월페이퍼',
     canvasPresetId,
     widgets: [],
     createdAt: now,

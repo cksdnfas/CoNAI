@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, Copy, ExternalLink, Eye, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Save, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Plus, Save, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
@@ -11,9 +11,7 @@ import { getAppSettings, updateAppearanceSettings } from '@/lib/api-settings'
 import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from './wallpaper-canvas-presets'
 import {
   appendWallpaperWidget,
-  buildWallpaperPresetQueryValue,
-  buildWallpaperRuntimeAbsoluteUrl,
-  buildWallpaperRuntimePath,
+  buildWallpaperLayoutDraft,
   buildWallpaperStarterLayout,
   clampWallpaperWidgetInstance,
   cloneWallpaperPresetToDraft,
@@ -133,9 +131,6 @@ export function WallpaperEditorPage() {
     [layoutPreset.widgets],
   )
   const draftRuntimePath = '/wallpaper/runtime'
-  const hasFixedRuntimeUrl = Boolean(activePreset)
-  const activeRuntimePath = useMemo(() => buildWallpaperRuntimePath(activePreset), [activePreset])
-  const activeRuntimeAbsoluteUrl = useMemo(() => buildWallpaperRuntimeAbsoluteUrl(activeRuntimePath), [activeRuntimePath])
 
   useEffect(() => {
     saveWallpaperLayoutDraft(layoutPreset)
@@ -240,18 +235,14 @@ export function WallpaperEditorPage() {
     syncWallpaperPresetState(nextPresets, null, '프리셋을 삭제했어.')
   }
 
-  const handleCopyRuntimeUrl = async () => {
-    if (!activePreset) {
-      notifyError('고정 runtime URL은 저장된 프리셋을 먼저 선택하거나 저장해야 해.')
-      return
-    }
-
-    try {
-      await navigator.clipboard.writeText(activeRuntimeAbsoluteUrl)
-      notifyInfo(`런타임 URL을 복사했어. (${buildWallpaperPresetQueryValue(activePreset)})`)
-    } catch {
-      notifyError('런타임 URL을 복사하지 못했어.')
-    }
+  const handleCreateBlankCanvas = () => {
+    const nextLayoutPreset = buildWallpaperLayoutDraft(layoutPreset.canvasPresetId)
+    setActivePresetId(null)
+    setLayoutPreset(nextLayoutPreset)
+    setSelectedWidgetId(null)
+    setSelectedLibraryWidgetType(null)
+    syncWallpaperPresetState(savedPresets, null)
+    notifyInfo('빈 신규 캔버스를 만들었어.')
   }
 
   const handleWidgetDrop = (targetWidgetId: string) => {
@@ -302,12 +293,12 @@ export function WallpaperEditorPage() {
           <div className="space-y-1">
             <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">프리셋</div>
             <Select
-              value={effectiveActivePresetId ?? ''}
+              value={effectiveActivePresetId ?? '__new__'}
               onChange={(event) => {
                 handleLoadPreset(event.target.value || null)
               }}
             >
-              <option value="">초안만</option>
+              <option value="__new__" hidden>미저장 새 캔버스</option>
               {savedPresets.map((preset) => (
                 <option key={preset.id} value={preset.id}>{preset.name}</option>
               ))}
@@ -330,6 +321,16 @@ export function WallpaperEditorPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              disabled={wallpaperPresetMutation.isPending}
+              onClick={handleCreateBlankCanvas}
+              aria-label="신규 캔버스"
+              title="신규 캔버스"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
             <Button
               variant="outline"
               size="icon-sm"
@@ -359,23 +360,6 @@ export function WallpaperEditorPage() {
               title="프리셋 삭제"
             >
               <Trash2 className="h-4 w-4" />
-            </Button>
-            {hasFixedRuntimeUrl ? (
-              <Button asChild variant="outline" size="icon-sm" aria-label="저장 프리셋 열기" title="저장 프리셋 열기">
-                <Link to={activeRuntimePath}>
-                  <ExternalLink className="h-4 w-4" />
-                </Link>
-              </Button>
-            ) : null}
-            <Button
-              variant="outline"
-              size="icon-sm"
-              disabled={!hasFixedRuntimeUrl}
-              onClick={() => { void handleCopyRuntimeUrl() }}
-              aria-label="고정 런타임 URL 복사"
-              title="고정 런타임 URL 복사"
-            >
-              <Copy className="h-4 w-4" />
             </Button>
           </div>
         </div>
