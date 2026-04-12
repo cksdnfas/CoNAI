@@ -8,6 +8,7 @@ import {
   buildGraphEditorSnapshot,
   buildModuleEdgePresentation,
   findNodePort,
+  getModuleBaseDisplayName,
   getModulePortCompatibility,
   parseHandleId,
   type ModuleGraphEdge,
@@ -288,7 +289,7 @@ export function useModuleGraphEditorInteractions({
           ...node,
           data: {
             ...node.data,
-            label: trimmedLabel.length > 0 && trimmedLabel !== node.data.module.name ? trimmedLabel : undefined,
+            label: trimmedLabel.length > 0 && trimmedLabel !== getModuleBaseDisplayName(node.data.module) ? trimmedLabel : undefined,
           },
         }
       }),

@@ -5,7 +5,7 @@ import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { ModuleGraphActionMenu, type ModuleGraphActionMenuState } from './module-graph-action-menu'
 import { ModuleGraphQuickCreateMenu } from './module-graph-quick-create-menu'
 import { ModuleGraphNodeCard } from './module-graph-node-card'
-import { buildHandleId, getModuleNodeDisplayLabel, getModulePortCompatibility, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { buildHandleId, getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModulePortCompatibility, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 const MODULE_GRAPH_NODE_TYPES = { module: ModuleGraphNodeCard }
 const MOBILE_NODE_DRAG_HANDLE_SELECTOR = '.module-graph-drag-handle'
@@ -124,7 +124,7 @@ function getRecommendedModulesFromConnectionStart(
       return compatibilityDelta
     }
 
-    return left.module.name.localeCompare(right.module.name, 'ko')
+    return getModuleBaseDisplayName(left.module).localeCompare(getModuleBaseDisplayName(right.module), 'ko')
   })
 }
 

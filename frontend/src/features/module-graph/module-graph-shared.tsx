@@ -151,16 +151,38 @@ export function normalizeModulePortDescription(description?: string | null) {
   return trimmedDescription
 }
 
+/** Normalize legacy/built-in system node names into the user-facing names we want to keep. */
+export function getModuleBaseDisplayName(module: ModuleDefinitionRecord) {
+  const operationKey = getModuleOperationKey(module)
+  if (operationKey === 'system.constant_text' || operationKey === 'system.constant_prompt') {
+    return '텍스트'
+  }
+  if (operationKey === 'system.constant_json') {
+    return 'JSON'
+  }
+  if (operationKey === 'system.constant_image') {
+    return '이미지'
+  }
+  if (operationKey === 'system.constant_number') {
+    return '숫자'
+  }
+  if (operationKey === 'system.constant_boolean') {
+    return '불리언'
+  }
+
+  return module.name
+}
+
 /** Resolve the user-visible node name, preferring one custom label when present. */
 export function getModuleNodeDisplayLabelFromData(data: ModuleGraphNodeData) {
   const trimmedLabel = typeof data.label === 'string' ? data.label.trim() : ''
-  return trimmedLabel || data.module.name
+  return trimmedLabel || getModuleBaseDisplayName(data.module)
 }
 
 /** Check whether a node is currently using one custom user-defined label. */
 export function hasCustomModuleNodeLabel(data: ModuleGraphNodeData) {
   const trimmedLabel = typeof data.label === 'string' ? data.label.trim() : ''
-  return trimmedLabel.length > 0 && trimmedLabel !== data.module.name
+  return trimmedLabel.length > 0 && trimmedLabel !== getModuleBaseDisplayName(data.module)
 }
 
 /** Resolve the visible node name from one graph node. */

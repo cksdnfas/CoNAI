@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import type { ModuleDefinitionRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { isFinalResultModule } from '../module-graph-shared'
+import { getModuleBaseDisplayName, isFinalResultModule } from '../module-graph-shared'
 
 type ModuleLibraryPanelProps = {
   modules: ModuleDefinitionRecord[]
@@ -54,6 +54,10 @@ function getModuleOperationKey(module: ModuleDefinitionRecord) {
 
 export function shouldHideFromModuleLibrary(module: ModuleDefinitionRecord) {
   const operationKey = getModuleOperationKey(module)
+  if (operationKey === 'system.constant_text') {
+    return false
+  }
+
   if (operationKey === 'system.constant_prompt') {
     return true
   }
@@ -79,13 +83,13 @@ function getModuleHoverTitle(module: ModuleDefinitionRecord) {
     return undefined
   }
 
-  return `${module.name}\n${module.description.trim()}`
+  return `${getModuleBaseDisplayName(module)}\n${module.description.trim()}`
 }
 
 /** Build a user-facing group for system modules based on practical workflow role. */
 export function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: string; label: string } {
   const category = (module.category ?? '').toLowerCase()
-  const name = module.name.toLowerCase()
+  const name = getModuleBaseDisplayName(module).toLowerCase()
 
   if (isFinalResultModule(module) || category === 'output') {
     return { key: 'output', label: 'Output' }
@@ -160,7 +164,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
     const matchedModules = query.length === 0
       ? visibleModules
       : visibleModules.filter((module) => {
-          const haystack = [module.name, module.description ?? '', module.engine_type, module.category ?? '', module.authoring_source].join(' ').toLowerCase()
+          const haystack = [getModuleBaseDisplayName(module), module.description ?? '', module.engine_type, module.category ?? '', module.authoring_source].join(' ').toLowerCase()
           return haystack.includes(query)
         })
 
@@ -170,7 +174,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         return finalResultDelta
       }
 
-      return left.name.localeCompare(right.name, 'ko')
+      return getModuleBaseDisplayName(left).localeCompare(getModuleBaseDisplayName(right), 'ko')
     })
   }, [searchQuery, visibleModules])
 
@@ -366,7 +370,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                       >
                         <div className={cn('min-w-0 space-y-1', module.description ? 'cursor-help' : undefined)} title={getModuleHoverTitle(module)}>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate text-sm font-medium text-foreground">{module.name}</span>
+                            <span className="truncate text-sm font-medium text-foreground">{getModuleBaseDisplayName(module)}</span>
                             <Badge variant="outline">{module.engine_type}</Badge>
                             {isFinalResult ? <Badge variant="secondary">최종 결과</Badge> : null}
                           </div>

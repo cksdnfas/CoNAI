@@ -15,7 +15,7 @@ import { ExecutionArtifactCard } from './execution-artifact-card'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { getWorkflowInputSourcePort } from '../module-graph-workflow-inputs'
-import { getModuleNodeDisplayLabel, normalizeModulePortDescription, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, normalizeModulePortDescription, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 type NodeInspectorPanelProps = {
   nodes: ModuleGraphNode[]
@@ -478,13 +478,13 @@ export function NodeInspectorPanel({
                       <Input
                         value={selectedNode.data.label ?? ''}
                         onChange={(event) => onNodeLabelChange(selectedNode.id, event.target.value)}
-                        placeholder={selectedNode.data.module.name}
+                        placeholder={getModuleBaseDisplayName(selectedNode.data.module)}
                       />
                     </div>
                     <div className="space-y-1">
                       <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">기본 타입</div>
                       <div className="flex h-10 items-center rounded-sm border border-border bg-background/50 px-3 text-sm text-muted-foreground">
-                        {selectedNode.data.module.name}
+                        {getModuleBaseDisplayName(selectedNode.data.module)}
                       </div>
                     </div>
                   </div>

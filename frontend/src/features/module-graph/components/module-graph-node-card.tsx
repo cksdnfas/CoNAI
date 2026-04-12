@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from 'react'
+import { useEffect, useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { ChevronDown, ChevronRight, GripVertical, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,7 @@ import {
 } from '../module-graph-workflow-inputs'
 import {
   buildHandleId,
+  getModuleBaseDisplayName,
   getModuleColor,
   getModuleNodeDisplayLabelFromData,
   getPortTypeColor,
@@ -380,8 +381,23 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   }).length
 
   const nodeDisplayLabel = getModuleNodeDisplayLabelFromData(data)
+  const moduleBaseLabel = getModuleBaseDisplayName(module)
   const usesCustomNodeLabel = hasCustomModuleNodeLabel(data)
+  const [isEditingLabel, setIsEditingLabel] = useState(false)
+  const [labelDraft, setLabelDraft] = useState(data.label ?? '')
   const missingStatusLabel = isWorkflowInputSource ? '값 필요' : '입력 필요'
+  useEffect(() => {
+    if (!isEditingLabel) {
+      setLabelDraft(data.label ?? '')
+    }
+  }, [data.label, isEditingLabel])
+
+  useEffect(() => {
+    if (!selected) {
+      setIsEditingLabel(false)
+    }
+  }, [selected])
+
   const statusLabel =
     executionStatus === 'completed'
       ? '완료'
@@ -419,7 +435,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         borderColor: selected ? accentColor : statusBorderColor,
         boxShadow: selected ? `0 0 0 2px ${accentColor}66, 0 0 0 1px ${accentColor}22` : `0 0 0 1px ${accentColor}22`,
       } as CSSProperties}
-      title={`${nodeDisplayLabel}\n기본 타입: ${module.name}\n모듈 ID: ${module.id}${module.description ? `\n${module.description}` : ''}`}
+      title={`${nodeDisplayLabel}\n기본 타입: ${moduleBaseLabel}\n모듈 ID: ${module.id}${module.description ? `\n${module.description}` : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
@@ -427,8 +443,51 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             <GripVertical className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-foreground">{nodeDisplayLabel}</div>
-            {usesCustomNodeLabel ? <div className="mt-0.5 truncate text-[11px] text-muted-foreground">기본 타입 · {module.name}</div> : null}
+            {isEditingLabel ? (
+              <Input
+                value={labelDraft}
+                autoFocus
+                onChange={(event) => setLabelDraft(event.target.value)}
+                onMouseDown={stopNodeInteraction}
+                onClick={stopNodeInteraction}
+                onBlur={() => {
+                  data.onNodeLabelChange?.(id, labelDraft)
+                  setIsEditingLabel(false)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    data.onNodeLabelChange?.(id, labelDraft)
+                    setIsEditingLabel(false)
+                  }
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setLabelDraft(data.label ?? '')
+                    setIsEditingLabel(false)
+                  }
+                }}
+                placeholder={moduleBaseLabel}
+                className="nodrag nowheel h-8 text-sm"
+              />
+            ) : (
+              <button
+                type="button"
+                className="max-w-full cursor-pointer truncate text-left text-sm font-semibold text-foreground transition-colors hover:text-primary"
+                onClick={(event) => {
+                  if (!selected) {
+                    return
+                  }
+                  stopNodeActionEvent(event)
+                  setIsEditingLabel(true)
+                }}
+                title={selected ? '클릭해서 이름 변경' : undefined}
+              >
+                {nodeDisplayLabel}
+              </button>
+            )}
+            {usesCustomNodeLabel ? <div className="mt-0.5 truncate text-[11px] text-muted-foreground">기본 타입 · {moduleBaseLabel}</div> : null}
             <div className="mt-0.5 text-[11px] text-muted-foreground">
               {summaryText}
               {missingRequiredInputCount > 0 ? ` · 미설정 ${missingRequiredInputCount}` : ''}
@@ -442,19 +501,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
         </div>
       </div>
-
-      {selected ? (
-        <div className="nodrag nowheel mt-2.5 space-y-1 rounded-sm border border-border/70 bg-background/40 p-2.5" onMouseDown={stopNodeInteraction}>
-          <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">노드 이름</div>
-          <Input
-            value={data.label ?? ''}
-            onChange={(event) => data.onNodeLabelChange?.(id, event.target.value)}
-            onMouseDown={stopNodeInteraction}
-            placeholder={module.name}
-            className="h-8 text-sm"
-          />
-        </div>
-      ) : null}
 
       {(data.onExecuteNode || data.onForceExecuteNode) ? (
         <div className="nodrag nowheel mt-2 flex flex-wrap gap-1.5">

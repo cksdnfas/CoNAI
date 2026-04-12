@@ -1,6 +1,6 @@
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api'
 import { buildWorkflowExposedInputId } from './module-graph-validation'
-import { getModuleNodeDisplayLabel, normalizeModulePortDescription, type ModuleGraphNode } from './module-graph-shared'
+import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, normalizeModulePortDescription, type ModuleGraphNode } from './module-graph-shared'
 
 export const WORKFLOW_INPUT_ENABLED_KEY = '__workflow_input_enabled'
 export const WORKFLOW_INPUT_LABEL_KEY = '__workflow_input_label'
@@ -94,7 +94,7 @@ export function buildWorkflowInputDefinitionFromNode(node: ModuleGraphNode): Gra
     default_value: node.data.inputValues?.[sourcePort.key],
     options: uiField?.options,
     module_id: node.data.module.id,
-    module_name: node.data.module.name,
+    module_name: getModuleBaseDisplayName(node.data.module),
   }
 }
 

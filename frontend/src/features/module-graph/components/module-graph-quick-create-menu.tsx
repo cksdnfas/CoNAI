@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { ModuleDefinitionRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { getModuleBaseDisplayName } from '../module-graph-shared'
 import { CUSTOM_GROUP_ORDER, getCustomModuleGroup, getSystemModuleGroup, shouldHideFromModuleLibrary, SYSTEM_GROUP_ORDER } from './module-library-panel'
 import type { RecommendedModuleMatch } from './module-graph-canvas'
 
@@ -78,7 +79,7 @@ export function ModuleGraphQuickCreateMenu({
     const matchedModules = normalizedQuery.length === 0
       ? visibleModules
       : visibleModules.filter((item) => {
-          const haystack = [item.module.name, item.module.description ?? '', item.module.engine_type, item.module.category ?? '', item.module.authoring_source].join(' ').toLowerCase()
+          const haystack = [getModuleBaseDisplayName(item.module), item.module.description ?? '', item.module.engine_type, item.module.category ?? '', item.module.authoring_source].join(' ').toLowerCase()
           return haystack.includes(normalizedQuery)
         })
 
@@ -86,7 +87,7 @@ export function ModuleGraphQuickCreateMenu({
       return matchedModules
     }
 
-    return [...matchedModules].sort((left, right) => left.module.name.localeCompare(right.module.name, 'ko'))
+    return [...matchedModules].sort((left, right) => getModuleBaseDisplayName(left.module).localeCompare(getModuleBaseDisplayName(right.module), 'ko'))
   }, [activeTab, searchQuery, visibleModules])
 
   const groupedModules = useMemo(() => {
@@ -226,7 +227,7 @@ export function ModuleGraphQuickCreateMenu({
                   {group.modules.map((item) => {
                     const module = item.module
                     const isActive = activeModuleId === module.id
-                    const itemTitle = [module.name, item.recommendedCompatibility ? `호환: ${item.recommendedCompatibility}` : null, module.description ?? null]
+                    const itemTitle = [getModuleBaseDisplayName(module), item.recommendedCompatibility ? `호환: ${item.recommendedCompatibility}` : null, module.description ?? null]
                       .filter(Boolean)
                       .join('\n')
 
@@ -243,7 +244,7 @@ export function ModuleGraphQuickCreateMenu({
                         onClick={() => onSelectModule(module)}
                         title={itemTitle || undefined}
                       >
-                        <span className="truncate">{module.name}</span>
+                        <span className="truncate">{getModuleBaseDisplayName(module)}</span>
                       </button>
                     )
                   })}

@@ -8,6 +8,7 @@ import { ImageAttachmentPickerButton } from '@/features/image-generation/compone
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { GraphWorkflowExposedInput } from '@/lib/api'
+import { normalizeModulePortDescription } from '../module-graph-shared'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 
@@ -93,6 +94,7 @@ export function WorkflowInputFields({
   const renderInputField = (inputDefinition: GraphWorkflowExposedInput) => {
     const rawValue = inputValues[inputDefinition.id]
     const explicitValue = hasExplicitValue(rawValue)
+    const normalizedDescription = normalizeModulePortDescription(inputDefinition.description)
 
     if (isNaiCharacterPromptPort(inputDefinition.port_key, inputDefinition.data_type)) {
       return (
@@ -107,7 +109,7 @@ export function WorkflowInputFields({
             </div>
             {renderInputActions(inputDefinition, rawValue, explicitValue)}
           </div>
-          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
           <NaiCharacterPromptsInput value={rawValue} onChange={(value) => onInputValueChange(inputDefinition.id, value)} />
         </div>
       )
@@ -126,7 +128,7 @@ export function WorkflowInputFields({
             </div>
             {renderInputActions(inputDefinition, rawValue, explicitValue)}
           </div>
-          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
           <NaiReusableAssetInput kind="vibes" value={rawValue} onChange={(value) => onInputValueChange(inputDefinition.id, value)} />
         </div>
       )
@@ -145,7 +147,7 @@ export function WorkflowInputFields({
             </div>
             {renderInputActions(inputDefinition, rawValue, explicitValue)}
           </div>
-          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
           <NaiReusableAssetInput kind="character_refs" value={rawValue} onChange={(value) => onInputValueChange(inputDefinition.id, value)} />
         </div>
       )
@@ -164,7 +166,7 @@ export function WorkflowInputFields({
             </div>
             {renderInputActions(inputDefinition, rawValue, explicitValue)}
           </div>
-          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
           <Select
             value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
             onChange={(event) => onInputValueChange(inputDefinition.id, event.target.value)}
@@ -191,7 +193,7 @@ export function WorkflowInputFields({
             </div>
             {renderInputActions(inputDefinition, rawValue, explicitValue)}
           </div>
-          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
           <Textarea
             rows={inputDefinition.data_type === 'json' ? 6 : 4}
             value={typeof rawValue === 'string' ? rawValue : rawValue ? JSON.stringify(rawValue, null, 2) : ''}
@@ -215,7 +217,7 @@ export function WorkflowInputFields({
             </div>
             {renderInputActions(inputDefinition, rawValue, explicitValue)}
           </div>
-          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
           <Input
             type="number"
             value={typeof rawValue === 'number' ? String(rawValue) : typeof rawValue === 'string' ? rawValue : ''}
@@ -239,7 +241,7 @@ export function WorkflowInputFields({
             </div>
             {renderInputActions(inputDefinition, rawValue, explicitValue)}
           </div>
-          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
           <Select
             value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
             onChange={(event) => onInputValueChange(inputDefinition.id, event.target.value === '' ? '' : event.target.value === 'true')}
@@ -265,7 +267,7 @@ export function WorkflowInputFields({
             </div>
             {renderInputActions(inputDefinition, rawValue, explicitValue)}
           </div>
-          {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+          {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
           <ImageAttachmentPickerButton label={explicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={inputDefinition.label} allowSaveDialog={false} onSelect={(image) => void onInputImageChange(inputDefinition.id, image)} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:') ? (
             <InlineMediaPreview src={rawValue} alt={inputDefinition.label} frameClassName="p-3" />
@@ -286,7 +288,7 @@ export function WorkflowInputFields({
           </div>
           {renderInputActions(inputDefinition, rawValue, explicitValue)}
         </div>
-        {inputDefinition.description ? <div className="text-xs text-muted-foreground">{inputDefinition.description}</div> : null}
+        {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
         <Input
           value={typeof rawValue === 'string' ? rawValue : rawValue ? String(rawValue) : ''}
           onChange={(event) => onInputValueChange(inputDefinition.id, event.target.value)}
