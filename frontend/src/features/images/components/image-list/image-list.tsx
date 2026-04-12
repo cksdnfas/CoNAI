@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { markHomeScrollRestorePending } from '@/features/home/use-home-scroll-restoration'
@@ -48,6 +48,8 @@ export function ImageList({
   const navigate = useNavigate()
   const location = useLocation()
   const imageViewModal = useImageViewModal()
+  const modalNavigationSourceId = useId()
+  const modalLoadMoreRequestKeyRef = useRef<string | null>(null)
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const selectionMode = selectable && (forceSelectionMode || selectedIds.length > 0)
@@ -104,6 +106,7 @@ export function ImageList({
               ? {
                   compositeHash: modalCompositeHash,
                   compositeHashes: itemCompositeHashes,
+                  sourceId: modalNavigationSourceId,
                 }
               : {
                   compositeHash: modalCompositeHash,
@@ -126,8 +129,58 @@ export function ImageList({
         })
       }
     },
-    [activationMode, imageViewModal, itemCompositeHashes, location.pathname, navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
+    [activationMode, imageViewModal, itemCompositeHashes, location.pathname, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
   )
+
+  const activeModalIndexInList = useMemo(() => {
+    const activeCompositeHash = imageViewModal?.activeCompositeHash
+    if (activationMode !== 'modal' || !activeCompositeHash) {
+      return -1
+    }
+
+    return itemCompositeHashes.indexOf(activeCompositeHash)
+  }, [activationMode, imageViewModal?.activeCompositeHash, itemCompositeHashes])
+
+  useEffect(() => {
+    if (activationMode !== 'modal' || !imageViewModal?.activeCompositeHash || activeModalIndexInList < 0) {
+      return
+    }
+
+    imageViewModal.syncImageViewSequence({
+      compositeHashes: itemCompositeHashes,
+      sourceId: modalNavigationSourceId,
+    })
+  }, [activationMode, activeModalIndexInList, imageViewModal, itemCompositeHashes, modalNavigationSourceId])
+
+  useEffect(() => {
+    if (activationMode !== 'modal') {
+      modalLoadMoreRequestKeyRef.current = null
+      return
+    }
+
+    const activeCompositeHash = imageViewModal?.activeCompositeHash
+    if (!activeCompositeHash) {
+      modalLoadMoreRequestKeyRef.current = null
+      return
+    }
+
+    if (activeModalIndexInList < 0 || !hasMore || isLoadingMore || !onLoadMore) {
+      return
+    }
+
+    const remainingItems = itemCompositeHashes.length - activeModalIndexInList - 1
+    if (remainingItems > 8) {
+      return
+    }
+
+    const requestKey = `${activeCompositeHash}:${itemCompositeHashes.length}`
+    if (modalLoadMoreRequestKeyRef.current === requestKey) {
+      return
+    }
+
+    modalLoadMoreRequestKeyRef.current = requestKey
+    void onLoadMore()
+  }, [activationMode, activeModalIndexInList, hasMore, imageViewModal?.activeCompositeHash, isLoadingMore, itemCompositeHashes.length, onLoadMore])
 
   return (
     <div

@@ -3,6 +3,12 @@ import { createContext, useContext } from 'react'
 export interface ImageViewModalOpenInput {
   compositeHash: string
   compositeHashes?: string[]
+  sourceId?: string
+}
+
+export interface ImageViewModalSyncInput {
+  compositeHashes: string[]
+  sourceId: string
 }
 
 export interface ImageViewModalApi {
@@ -12,6 +18,7 @@ export interface ImageViewModalApi {
   canViewPrevious: boolean
   canViewNext: boolean
   openImageView: (input: ImageViewModalOpenInput) => void
+  syncImageViewSequence: (input: ImageViewModalSyncInput) => void
   closeImageView: () => void
   viewPreviousImage: () => void
   viewNextImage: () => void

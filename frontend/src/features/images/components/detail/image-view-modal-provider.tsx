@@ -8,6 +8,7 @@ import type { ImageViewModalMode } from './image-view-modal-actions'
 interface ImageViewModalState {
   compositeHash: string | null
   compositeHashes: string[]
+  sourceId: string | null
 }
 
 const ImageViewModalOverlayLazy = lazy(async () => {
@@ -43,6 +44,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   const [modalState, setModalState] = useState<ImageViewModalState>({
     compositeHash: null,
     compositeHashes: [],
+    sourceId: null,
   })
   const [viewMode, setViewMode] = useState<ImageViewModalMode>(() => loadImageViewModalMode())
 
@@ -71,9 +73,35 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       ? compositeHashes
       : [input.compositeHash, ...compositeHashes]
 
-    setModalState({
+    setModalState((current) => ({
       compositeHash: input.compositeHash,
       compositeHashes: nextCompositeHashes,
+      sourceId: input.sourceId ?? current.sourceId ?? null,
+    }))
+  }, [])
+
+  const syncImageViewSequence = useCallback((input: { compositeHashes: string[]; sourceId: string }) => {
+    setModalState((current) => {
+      if (!current.compositeHash || !current.sourceId || current.sourceId !== input.sourceId) {
+        return current
+      }
+
+      const nextCompositeHashes = Array.from(new Set(input.compositeHashes.filter((value) => typeof value === 'string' && value.length > 0)))
+      if (!nextCompositeHashes.includes(current.compositeHash)) {
+        return current
+      }
+
+      if (
+        nextCompositeHashes.length === current.compositeHashes.length
+        && nextCompositeHashes.every((value, index) => value === current.compositeHashes[index])
+      ) {
+        return current
+      }
+
+      return {
+        ...current,
+        compositeHashes: nextCompositeHashes,
+      }
     })
   }, [])
 
@@ -81,6 +109,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     setModalState({
       compositeHash: null,
       compositeHashes: [],
+      sourceId: null,
     })
   }, [])
 
@@ -174,11 +203,12 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       canViewPrevious,
       canViewNext,
       openImageView,
+      syncImageViewSequence,
       closeImageView,
       viewPreviousImage,
       viewNextImage,
     }),
-    [activeIndex, canViewNext, canViewPrevious, closeImageView, modalState.compositeHash, modalState.compositeHashes, openImageView, viewNextImage, viewPreviousImage],
+    [activeIndex, canViewNext, canViewPrevious, closeImageView, modalState.compositeHash, modalState.compositeHashes, openImageView, syncImageViewSequence, viewNextImage, viewPreviousImage],
   )
 
   return (
