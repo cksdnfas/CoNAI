@@ -504,10 +504,19 @@ export class ImageGroupModel {
     includeChildren: boolean = true
   ): ImageWithFileView[] {
     // 1. 현재 그룹에서 랜덤 이미지 조회
-    // ✅ image_files 테이블과 JOIN하여 파일 정보 포함
+    // composite_hash 기준으로 먼저 샘플링해서 동일 이미지가 여러 active file row 때문에
+    // 미리보기 풀 안에서 중복 선택되지 않도록 한다.
     const query = `
-      SELECT DISTINCT
-        COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
+      WITH sampled_hashes AS (
+        SELECT ig.composite_hash
+        FROM image_groups ig
+        WHERE ig.group_id = ?
+        GROUP BY ig.composite_hash
+        ORDER BY RANDOM()
+        LIMIT ?
+      )
+      SELECT
+        COALESCE(im.composite_hash, sampled_hashes.composite_hash) as composite_hash,
         im.perceptual_hash,
         im.dhash,
         im.ahash,
@@ -545,14 +554,17 @@ export class ImageGroupModel {
         if.mime_type,
         if.folder_id,
         f.folder_name
-      FROM image_groups ig
-      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-      LEFT JOIN image_files if ON ig.composite_hash = if.composite_hash
-        AND if.file_status = 'active'
+      FROM sampled_hashes
+      LEFT JOIN media_metadata im ON sampled_hashes.composite_hash = im.composite_hash
+      LEFT JOIN image_files if ON if.id = (
+        SELECT if2.id
+        FROM image_files if2
+        WHERE if2.composite_hash = sampled_hashes.composite_hash
+          AND if2.file_status = 'active'
+        ORDER BY if2.id DESC
+        LIMIT 1
+      )
       LEFT JOIN watched_folders f ON if.folder_id = f.id
-      WHERE ig.group_id = ?
-      ORDER BY RANDOM()
-      LIMIT ?
     `;
 
     const rows = db.prepare(query).all(groupId, count) as ImageWithFileView[];

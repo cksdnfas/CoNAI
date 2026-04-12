@@ -54,6 +54,75 @@ interface WallpaperFloatingCollageCardState {
   elapsedSinceSwapMs: number
 }
 
+function getWallpaperFloatingCollageImageKey(image: { composite_hash?: string | null; id?: number | string | null; original_file_path?: string | null; image_url?: string | null; thumbnail_url?: string | null } | null | undefined) {
+  if (!image) {
+    return ''
+  }
+
+  return String(
+    image.composite_hash
+      ?? image.id
+      ?? image.original_file_path
+      ?? image.image_url
+      ?? image.thumbnail_url
+      ?? '',
+  )
+}
+
+function decrementWallpaperFloatingCollageImageUsage(usageByKey: Map<string, number>, imageKey: string) {
+  if (!imageKey) {
+    return
+  }
+
+  const nextCount = (usageByKey.get(imageKey) ?? 0) - 1
+  if (nextCount > 0) {
+    usageByKey.set(imageKey, nextCount)
+    return
+  }
+
+  usageByKey.delete(imageKey)
+}
+
+function incrementWallpaperFloatingCollageImageUsage(usageByKey: Map<string, number>, imageKey: string) {
+  if (!imageKey) {
+    return
+  }
+
+  usageByKey.set(imageKey, (usageByKey.get(imageKey) ?? 0) + 1)
+}
+
+function resolveNextWallpaperFloatingCollageImageIndex(
+  currentIndex: number,
+  images: Array<{ composite_hash?: string | null; id?: number | string | null; original_file_path?: string | null; image_url?: string | null; thumbnail_url?: string | null }>,
+  usedImageKeys: Map<string, number>,
+) {
+  if (images.length <= 1) {
+    return currentIndex
+  }
+
+  const currentKey = getWallpaperFloatingCollageImageKey(images[currentIndex] ?? null)
+  let fallbackIndex = currentIndex
+
+  for (let offset = 1; offset <= images.length; offset += 1) {
+    const candidateIndex = (currentIndex + offset) % images.length
+    const candidateKey = getWallpaperFloatingCollageImageKey(images[candidateIndex] ?? null)
+
+    if (!candidateKey || candidateKey === currentKey) {
+      continue
+    }
+
+    if (fallbackIndex === currentIndex) {
+      fallbackIndex = candidateIndex
+    }
+
+    if (!usedImageKeys.has(candidateKey)) {
+      return candidateIndex
+    }
+  }
+
+  return fallbackIndex
+}
+
 /** Clamp one numeric value into an inclusive range. */
 function clampWallpaperMetric(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -87,15 +156,6 @@ function resolveWallpaperFloatingCollageAspectRatio(
   return typeof image?.width === 'number' && image.width > 0 && typeof image?.height === 'number' && image.height > 0
     ? clampWallpaperMetric(image.width / image.height, 0.58, 1.9)
     : fallback
-}
-
-/** Advance one collage card to the next image index. */
-function getNextWallpaperFloatingCollageImageIndex(currentIndex: number, totalImages: number) {
-  if (totalImages <= 1) {
-    return currentIndex
-  }
-
-  return (currentIndex + 1) % totalImages
 }
 
 /** Preload one image URL so the first visible collage frame can appear in one batch. */
@@ -559,119 +619,133 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
         return
       }
 
-      setCardStates((currentCards) => currentCards.map((card, index) => {
-        const currentImage = images[card.imageIndex % images.length] ?? images[index % images.length]
-        const currentAspectRatio = aspectMode === 'image'
-          ? resolveWallpaperFloatingCollageAspectRatio(currentImage, card.aspectRatio)
-          : card.aspectRatio
-        const currentGeometry = resolveWallpaperFloatingCollageCardGeometry(
-          card.slotWidthPercent,
-          currentAspectRatio,
-          containerSize.width,
-          containerSize.height,
-          imageScalePercent,
-        )
-        const resizedCard = resizeWallpaperFloatingCollageCard(card, currentGeometry, containerSize.width, containerSize.height, motionStrength)
+      setCardStates((currentCards) => {
+        const usedImageKeys = new Map<string, number>()
+        currentCards.forEach((card, index) => {
+          const image = images[card.imageIndex % images.length] ?? images[index % images.length]
+          incrementWallpaperFloatingCollageImageUsage(usedImageKeys, getWallpaperFloatingCollageImageKey(image))
+        })
 
-        let nextX = resizedCard.x + ((card.vx * deltaMs) / 1000)
-        let nextY = resizedCard.y + ((card.vy * deltaMs) / 1000)
-        let nextVx = card.vx
-        let nextVy = card.vy
-        let bounceEvents = 0
+        return currentCards.map((card, index) => {
+          const currentImage = images[card.imageIndex % images.length] ?? images[index % images.length]
+          const currentImageKey = getWallpaperFloatingCollageImageKey(currentImage)
+          decrementWallpaperFloatingCollageImageUsage(usedImageKeys, currentImageKey)
+          const currentAspectRatio = aspectMode === 'image'
+            ? resolveWallpaperFloatingCollageAspectRatio(currentImage, card.aspectRatio)
+            : card.aspectRatio
+          const currentGeometry = resolveWallpaperFloatingCollageCardGeometry(
+            card.slotWidthPercent,
+            currentAspectRatio,
+            containerSize.width,
+            containerSize.height,
+            imageScalePercent,
+          )
+          const resizedCard = resizeWallpaperFloatingCollageCard(card, currentGeometry, containerSize.width, containerSize.height, motionStrength)
 
-        const bounds = resolveWallpaperFloatingCollageVisualBounds({
-          x: nextX,
-          y: nextY,
-          width: resizedCard.width,
-          height: resizedCard.height,
-          rotationBase: card.rotationBase,
-          depth: card.depth,
-          wobblePhase: card.wobblePhase,
-        }, containerSize.width, containerSize.height, motionStrength)
+          let nextX = resizedCard.x + ((card.vx * deltaMs) / 1000)
+          let nextY = resizedCard.y + ((card.vy * deltaMs) / 1000)
+          let nextVx = card.vx
+          let nextVy = card.vy
+          let bounceEvents = 0
 
-        if (nextX < bounds.minX) {
-          nextX = bounds.minX + (bounds.minX - nextX)
-          nextVx = Math.abs(nextVx)
-          bounceEvents += 1
-        } else if (nextX > bounds.maxX) {
-          nextX = bounds.maxX - (nextX - bounds.maxX)
-          nextVx = -Math.abs(nextVx)
-          bounceEvents += 1
-        }
+          const bounds = resolveWallpaperFloatingCollageVisualBounds({
+            x: nextX,
+            y: nextY,
+            width: resizedCard.width,
+            height: resizedCard.height,
+            rotationBase: card.rotationBase,
+            depth: card.depth,
+            wobblePhase: card.wobblePhase,
+          }, containerSize.width, containerSize.height, motionStrength)
 
-        if (nextY < bounds.minY) {
-          nextY = bounds.minY + (bounds.minY - nextY)
-          nextVy = Math.abs(nextVy)
-          bounceEvents += 1
-        } else if (nextY > bounds.maxY) {
-          nextY = bounds.maxY - (nextY - bounds.maxY)
-          nextVy = -Math.abs(nextVy)
-          bounceEvents += 1
-        }
+          if (nextX < bounds.minX) {
+            nextX = bounds.minX + (bounds.minX - nextX)
+            nextVx = Math.abs(nextVx)
+            bounceEvents += 1
+          } else if (nextX > bounds.maxX) {
+            nextX = bounds.maxX - (nextX - bounds.maxX)
+            nextVx = -Math.abs(nextVx)
+            bounceEvents += 1
+          }
 
-        const nextBounceCount = bounceEvents > 0 ? card.bounceCount + 1 : card.bounceCount
-        const nextElapsedSinceSwapMs = imageSwapMode === 'time' ? card.elapsedSinceSwapMs + deltaMs : 0
-        const shouldSwapImage = images.length > 1 && (
-          imageSwapMode === 'time'
-            ? nextElapsedSinceSwapMs >= swapIntervalMs
-            : bounceEvents > 0 && nextBounceCount >= swapBounceCount
-        )
+          if (nextY < bounds.minY) {
+            nextY = bounds.minY + (bounds.minY - nextY)
+            nextVy = Math.abs(nextVy)
+            bounceEvents += 1
+          } else if (nextY > bounds.maxY) {
+            nextY = bounds.maxY - (nextY - bounds.maxY)
+            nextVy = -Math.abs(nextVy)
+            bounceEvents += 1
+          }
 
-        if (!shouldSwapImage) {
+          const nextBounceCount = bounceEvents > 0 ? card.bounceCount + 1 : card.bounceCount
+          const nextElapsedSinceSwapMs = imageSwapMode === 'time' ? card.elapsedSinceSwapMs + deltaMs : 0
+          const shouldSwapImage = images.length > 1 && (
+            imageSwapMode === 'time'
+              ? nextElapsedSinceSwapMs >= swapIntervalMs
+              : bounceEvents > 0 && nextBounceCount >= swapBounceCount
+          )
+
+          if (!shouldSwapImage) {
+            incrementWallpaperFloatingCollageImageUsage(usedImageKeys, currentImageKey)
+            return {
+              ...card,
+              x: nextX,
+              y: nextY,
+              width: resizedCard.width,
+              height: resizedCard.height,
+              aspectRatio: currentAspectRatio,
+              vx: nextVx,
+              vy: nextVy,
+              bounceCount: nextBounceCount,
+              elapsedSinceSwapMs: nextElapsedSinceSwapMs,
+            }
+          }
+
+          const nextImageIndex = resolveNextWallpaperFloatingCollageImageIndex(card.imageIndex, images, usedImageKeys)
+          const nextImage = images[nextImageIndex] ?? currentImage
+          const nextImageKey = getWallpaperFloatingCollageImageKey(nextImage)
+          const nextAspectRatio = aspectMode === 'image'
+            ? resolveWallpaperFloatingCollageAspectRatio(nextImage, currentAspectRatio)
+            : currentAspectRatio
+          const nextGeometry = resolveWallpaperFloatingCollageCardGeometry(
+            card.slotWidthPercent,
+            nextAspectRatio,
+            containerSize.width,
+            containerSize.height,
+            imageScalePercent,
+          )
+          const nextSizedCard = resizeWallpaperFloatingCollageCard(
+            {
+              ...card,
+              x: nextX,
+              y: nextY,
+              width: resizedCard.width,
+              height: resizedCard.height,
+            },
+            nextGeometry,
+            containerSize.width,
+            containerSize.height,
+            motionStrength,
+          )
+
+          incrementWallpaperFloatingCollageImageUsage(usedImageKeys, nextImageKey)
+
           return {
             ...card,
-            x: nextX,
-            y: nextY,
-            width: resizedCard.width,
-            height: resizedCard.height,
-            aspectRatio: currentAspectRatio,
+            x: nextSizedCard.x,
+            y: nextSizedCard.y,
+            width: nextSizedCard.width,
+            height: nextSizedCard.height,
+            aspectRatio: nextAspectRatio,
             vx: nextVx,
             vy: nextVy,
-            bounceCount: nextBounceCount,
-            elapsedSinceSwapMs: nextElapsedSinceSwapMs,
+            imageIndex: nextImageIndex,
+            bounceCount: 0,
+            elapsedSinceSwapMs: 0,
           }
-        }
-
-        const nextImageIndex = getNextWallpaperFloatingCollageImageIndex(card.imageIndex, images.length)
-        const nextImage = images[nextImageIndex] ?? currentImage
-        const nextAspectRatio = aspectMode === 'image'
-          ? resolveWallpaperFloatingCollageAspectRatio(nextImage, currentAspectRatio)
-          : currentAspectRatio
-        const nextGeometry = resolveWallpaperFloatingCollageCardGeometry(
-          card.slotWidthPercent,
-          nextAspectRatio,
-          containerSize.width,
-          containerSize.height,
-          imageScalePercent,
-        )
-        const nextSizedCard = resizeWallpaperFloatingCollageCard(
-          {
-            ...card,
-            x: nextX,
-            y: nextY,
-            width: resizedCard.width,
-            height: resizedCard.height,
-          },
-          nextGeometry,
-          containerSize.width,
-          containerSize.height,
-          motionStrength,
-        )
-
-        return {
-          ...card,
-          x: nextSizedCard.x,
-          y: nextSizedCard.y,
-          width: nextSizedCard.width,
-          height: nextSizedCard.height,
-          aspectRatio: nextAspectRatio,
-          vx: nextVx,
-          vy: nextVy,
-          imageIndex: nextImageIndex,
-          bounceCount: 0,
-          elapsedSinceSwapMs: 0,
-        }
-      }))
+        })
+      })
 
       frameId = window.requestAnimationFrame(step)
     }
