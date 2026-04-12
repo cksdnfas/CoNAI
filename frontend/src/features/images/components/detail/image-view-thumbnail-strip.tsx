@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import {
@@ -10,6 +10,9 @@ import {
 interface ImageViewThumbnailStripProps {
   items: ImageRecord[]
   activeCompositeHash: string
+  initialScrollSessionId: number
+  focusRequestId: number
+  focusBehavior: ScrollBehavior | null
   onSelect: (compositeHash: string) => void
 }
 
@@ -17,6 +20,9 @@ interface ImageViewThumbnailStripProps {
 export function ImageViewThumbnailStrip({
   items,
   activeCompositeHash,
+  initialScrollSessionId,
+  focusRequestId,
+  focusBehavior,
   onSelect,
 }: ImageViewThumbnailStripProps) {
   const stripRef = useRef<HTMLDivElement | null>(null)
@@ -25,12 +31,59 @@ export function ImageViewThumbnailStrip({
   const dragStartXRef = useRef(0)
   const dragStartScrollLeftRef = useRef(0)
   const suppressClickRef = useRef(false)
+  const initialScrollAppliedSessionRef = useRef<number | null>(null)
+  const focusRequestAppliedRef = useRef<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
 
   const activeIndex = useMemo(
     () => items.findIndex((item) => item.composite_hash === activeCompositeHash),
     [activeCompositeHash, items],
   )
+
+  useEffect(() => {
+    if (items.length <= 1) {
+      return
+    }
+
+    if (initialScrollAppliedSessionRef.current === initialScrollSessionId) {
+      return
+    }
+
+    const activeButton = buttonRefs.current[activeCompositeHash]
+    if (!activeButton) {
+      return
+    }
+
+    activeButton.scrollIntoView({
+      behavior: 'auto',
+      block: 'nearest',
+      inline: 'center',
+    })
+    initialScrollAppliedSessionRef.current = initialScrollSessionId
+    focusRequestAppliedRef.current = focusRequestId
+  }, [activeCompositeHash, focusRequestId, initialScrollSessionId, items])
+
+  useEffect(() => {
+    if (items.length <= 1 || focusBehavior == null) {
+      return
+    }
+
+    if (focusRequestAppliedRef.current === focusRequestId) {
+      return
+    }
+
+    const activeButton = buttonRefs.current[activeCompositeHash]
+    if (!activeButton) {
+      return
+    }
+
+    activeButton.scrollIntoView({
+      behavior: focusBehavior,
+      block: 'nearest',
+      inline: 'center',
+    })
+    focusRequestAppliedRef.current = focusRequestId
+  }, [activeCompositeHash, focusBehavior, focusRequestId, items])
 
   if (items.length <= 1) {
     return null

@@ -107,6 +107,7 @@ export function ImageList({
                   compositeHash: modalCompositeHash,
                   compositeHashes: itemCompositeHashes,
                   sourceId: modalNavigationSourceId,
+                  sourceItems: items,
                 }
               : {
                   compositeHash: modalCompositeHash,
@@ -129,7 +130,7 @@ export function ImageList({
         })
       }
     },
-    [activationMode, imageViewModal, itemCompositeHashes, location.pathname, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
+    [activationMode, imageViewModal, itemCompositeHashes, items, location.pathname, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
   )
 
   const activeModalIndexInList = useMemo(() => {
@@ -149,8 +150,9 @@ export function ImageList({
     imageViewModal.syncImageViewSequence({
       compositeHashes: itemCompositeHashes,
       sourceId: modalNavigationSourceId,
+      sourceItems: items,
     })
-  }, [activationMode, activeModalIndexInList, imageViewModal, itemCompositeHashes, modalNavigationSourceId])
+  }, [activationMode, activeModalIndexInList, imageViewModal, itemCompositeHashes, items, modalNavigationSourceId])
 
   useEffect(() => {
     if (activationMode !== 'modal') {

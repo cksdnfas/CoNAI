@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { RefreshCw, Trash2 } from 'lucide-react'
-import { SectionHeading } from '@/components/common/section-heading'
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { ArrowLeft, RefreshCw, Trash2 } from 'lucide-react'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +9,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
 import { cleanupFailedGenerationHistory, deleteGenerationHistoryRecord, getGenerationHistory, getGenerationWorkflowHistory } from '@/lib/api'
+import type { GenerationHistoryResponse } from '@/lib/api-image-generation-history'
 import { cn } from '@/lib/utils'
 import {
   getErrorMessage,
@@ -21,17 +21,20 @@ type GenerationHistoryPanelProps = {
   serviceType: 'novelai' | 'comfyui'
   workflowId?: number | null
   splitPaneScroll?: boolean
+  onBack?: () => void
 }
 
-function hasInFlightHistory(records: Awaited<ReturnType<typeof getGenerationHistory>>['records']) {
+const GENERATION_HISTORY_PAGE_SIZE = 40
+
+function hasInFlightHistory(records: GenerationHistoryResponse['records']) {
   return records.some((record) => record.generation_status === 'pending' || record.generation_status === 'processing')
 }
 
-function getGenerationHistorySelectionId(record: Awaited<ReturnType<typeof getGenerationHistory>>['records'][number]) {
+function getGenerationHistorySelectionId(record: GenerationHistoryResponse['records'][number]) {
   return `generation-history-${record.id}`
 }
 
-function mapHistoryRecordToImageRecord(record: Awaited<ReturnType<typeof getGenerationHistory>>['records'][number]): ImageRecord {
+function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['records'][number]): ImageRecord {
   const compositeHash = record.actual_composite_hash || record.composite_hash || null
   const fallbackPreviewUrl = record.original_path ? `/api/images/by-path/${encodeURIComponent(record.original_path)}` : null
 
@@ -48,18 +51,28 @@ function mapHistoryRecordToImageRecord(record: Awaited<ReturnType<typeof getGene
 }
 
 /** Render generation history using the shared image-list surface instead of per-record cards. */
-export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, splitPaneScroll = false }: GenerationHistoryPanelProps) {
+export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [isCleaningFailed, setIsCleaningFailed] = useState(false)
 
   const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null] as const
-  const historyQuery = useQuery({
+  const historyQuery = useInfiniteQuery({
     queryKey: historyQueryKey,
-    queryFn: () => (serviceType === 'comfyui' && workflowId ? getGenerationWorkflowHistory(workflowId) : getGenerationHistory(serviceType)),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => (
+      serviceType === 'comfyui' && workflowId
+        ? getGenerationWorkflowHistory(workflowId, { limit: GENERATION_HISTORY_PAGE_SIZE, offset: pageParam })
+        : getGenerationHistory(serviceType, { limit: GENERATION_HISTORY_PAGE_SIZE, offset: pageParam })
+    ),
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.reduce((sum, page) => sum + page.records.length, 0)
+      return loadedCount < lastPage.total ? loadedCount : undefined
+    },
     refetchInterval: (query) => {
-      const records = query.state.data?.records ?? []
+      const pages = query.state.data?.pages ?? []
+      const records = pages.flatMap((page) => page.records)
       return hasInFlightHistory(records) ? 1500 : false
     },
   })
@@ -73,7 +86,10 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     void refetchHistory()
   }, [refreshNonce, refetchHistory])
 
-  const historyRecords = historyQuery.data?.records ?? []
+  const historyRecords = useMemo(
+    () => (historyQuery.data?.pages ?? []).flatMap((page) => page.records),
+    [historyQuery.data?.pages],
+  )
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
   const historyRecordMap = useMemo(
     () => new Map(historyRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
@@ -128,23 +144,37 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
   return (
     <section className={cn('space-y-4', splitPaneScroll && 'flex min-h-0 flex-1 flex-col')}>
-      <SectionHeading
-        className="border-b border-border/70 pb-4"
-        heading="생성 히스토리"
-        actions={(
-          <>
-            <Badge variant="outline">{historyLabel}</Badge>
-            <Badge variant="outline">{historyRecords.length}</Badge>
-            <Button type="button" size="sm" variant="outline" onClick={() => void handleCleanupFailed()} disabled={isCleaningFailed}>
-              <Trash2 className="h-4 w-4" />
-              {isCleaningFailed ? '실패 정리 중…' : '실패 항목 정리'}
-            </Button>
-            <Button type="button" size="icon-sm" variant="outline" onClick={() => void refetchHistory()} title="히스토리 새로고침" aria-label="히스토리 새로고침">
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-          </>
-        )}
-      />
+      <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {onBack ? (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                onClick={onBack}
+                aria-label="워크플로우 목록으로 돌아가기"
+                title="처음으로"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            ) : null}
+            <div className="text-xl font-semibold tracking-tight text-foreground">생성 히스토리</div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{historyLabel}</Badge>
+          <Badge variant="outline">{historyRecords.length}</Badge>
+          <Button type="button" size="sm" variant="outline" onClick={() => void handleCleanupFailed()} disabled={isCleaningFailed}>
+            <Trash2 className="h-4 w-4" />
+            {isCleaningFailed ? '실패 정리 중…' : '실패 항목 정리'}
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" onClick={() => void refetchHistory()} title="히스토리 새로고침" aria-label="히스토리 새로고침">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
 
       {historyQuery.isError ? (
         <Alert variant="destructive">
@@ -176,6 +206,9 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             className={cn(splitPaneScroll && 'h-full pr-3 pb-1')}
             scrollMode={splitPaneScroll ? 'container' : 'window'}
             viewportHeight={splitPaneScroll ? '100%' : undefined}
+            hasMore={Boolean(historyQuery.hasNextPage)}
+            isLoadingMore={historyQuery.isFetchingNextPage}
+            onLoadMore={historyQuery.fetchNextPage}
             renderItemOverlay={(image) => {
               const imageSelectionId = String(image?.id ?? '')
               if (!imageSelectionId) {

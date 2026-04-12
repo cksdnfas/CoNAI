@@ -16,6 +16,9 @@ interface ImageViewModalOverlayProps {
   totalCount: number
   thumbnailStripItems: ImageRecord[]
   thumbnailStripCompositeHashes: string[]
+  openSessionId: number
+  stripFocusRequestId: number
+  stripFocusBehavior: ScrollBehavior | null
   viewMode: ImageViewModalMode
   onChangeViewMode: (mode: ImageViewModalMode) => void
   canViewPrevious: boolean
@@ -33,6 +36,9 @@ export function ImageViewModalOverlay({
   totalCount,
   thumbnailStripItems,
   thumbnailStripCompositeHashes,
+  openSessionId,
+  stripFocusRequestId,
+  stripFocusBehavior,
   viewMode,
   onChangeViewMode,
   canViewPrevious,
@@ -206,10 +212,14 @@ export function ImageViewModalOverlay({
               <ImageViewThumbnailStrip
                 items={thumbnailStripItems}
                 activeCompositeHash={compositeHash}
+                initialScrollSessionId={openSessionId}
+                focusRequestId={stripFocusRequestId}
+                focusBehavior={stripFocusBehavior}
                 onSelect={(nextCompositeHash) =>
                   onSelectImage({
                     compositeHash: nextCompositeHash,
                     compositeHashes: thumbnailStripCompositeHashes,
+                    stripFocusBehavior: null,
                   })
                 }
               />

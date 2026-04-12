@@ -1,14 +1,18 @@
 import { createContext, useContext } from 'react'
+import type { ImageRecord } from '@/types/image'
 
 export interface ImageViewModalOpenInput {
   compositeHash: string
   compositeHashes?: string[]
   sourceId?: string
+  sourceItems?: ImageRecord[]
+  stripFocusBehavior?: ScrollBehavior | null
 }
 
 export interface ImageViewModalSyncInput {
   compositeHashes: string[]
   sourceId: string
+  sourceItems?: ImageRecord[]
 }
 
 export interface ImageViewModalApi {

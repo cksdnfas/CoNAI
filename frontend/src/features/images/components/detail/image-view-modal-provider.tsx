@@ -9,6 +9,10 @@ interface ImageViewModalState {
   compositeHash: string | null
   compositeHashes: string[]
   sourceId: string | null
+  sourceItemsByHash: Record<string, ImageRecord>
+  openSessionId: number
+  stripFocusRequestId: number
+  stripFocusBehavior: ScrollBehavior | null
 }
 
 const ImageViewModalOverlayLazy = lazy(async () => {
@@ -39,12 +43,27 @@ function ImageViewModalFallback() {
   return <div className="fixed inset-0 z-[90] bg-black/72" aria-hidden="true" />
 }
 
+function buildSourceItemsByHash(items?: ImageRecord[]) {
+  const entries = (items ?? [])
+    .map((item) => {
+      const compositeHash = item.composite_hash
+      return typeof compositeHash === 'string' && compositeHash.length > 0 ? ([compositeHash, item] as const) : null
+    })
+    .filter((entry): entry is readonly [string, ImageRecord] => entry !== null)
+
+  return Object.fromEntries(entries) as Record<string, ImageRecord>
+}
+
 /** Provide a global image view modal for app-shell image browsing flows. */
 export function ImageViewModalProvider({ children }: PropsWithChildren) {
   const [modalState, setModalState] = useState<ImageViewModalState>({
     compositeHash: null,
     compositeHashes: [],
     sourceId: null,
+    sourceItemsByHash: {},
+    openSessionId: 0,
+    stripFocusRequestId: 0,
+    stripFocusBehavior: null,
   })
   const [viewMode, setViewMode] = useState<ImageViewModalMode>(() => loadImageViewModalMode())
 
@@ -59,10 +78,15 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   const canViewPrevious = activeIndex > 0
   const canViewNext = activeIndex >= 0 && activeIndex < modalState.compositeHashes.length - 1
 
+  const missingThumbnailStripCompositeHashes = useMemo(
+    () => modalState.compositeHashes.filter((compositeHash) => !modalState.sourceItemsByHash[compositeHash]),
+    [modalState.compositeHashes, modalState.sourceItemsByHash],
+  )
+
   const thumbnailStripQuery = useQuery({
-    queryKey: ['image-view-thumbnail-strip', modalState.compositeHashes],
-    queryFn: () => getImagesBatch(modalState.compositeHashes),
-    enabled: modalState.compositeHashes.length > 0,
+    queryKey: ['image-view-thumbnail-strip', missingThumbnailStripCompositeHashes],
+    queryFn: () => getImagesBatch(missingThumbnailStripCompositeHashes),
+    enabled: missingThumbnailStripCompositeHashes.length > 0,
     staleTime: 60_000,
   })
 
@@ -72,15 +96,32 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     const nextCompositeHashes = compositeHashes.includes(input.compositeHash)
       ? compositeHashes
       : [input.compositeHash, ...compositeHashes]
+    const nextSourceItemsByHash = buildSourceItemsByHash(input.sourceItems)
 
-    setModalState((current) => ({
-      compositeHash: input.compositeHash,
-      compositeHashes: nextCompositeHashes,
-      sourceId: input.sourceId ?? current.sourceId ?? null,
-    }))
+    setModalState((current) => {
+      const isFreshOpen = !current.compositeHash
+      const isSourceChanged = Boolean(input.sourceId) && current.sourceId !== input.sourceId
+
+      const shouldFocusStrip = isFreshOpen || typeof input.stripFocusBehavior === 'string'
+      const nextStripFocusBehavior = isFreshOpen
+        ? (input.stripFocusBehavior ?? 'auto')
+        : (typeof input.stripFocusBehavior === 'string' ? input.stripFocusBehavior : current.stripFocusBehavior)
+
+      return {
+        compositeHash: input.compositeHash,
+        compositeHashes: nextCompositeHashes,
+        sourceId: input.sourceId ?? current.sourceId ?? null,
+        sourceItemsByHash: isFreshOpen || isSourceChanged
+          ? nextSourceItemsByHash
+          : { ...current.sourceItemsByHash, ...nextSourceItemsByHash },
+        openSessionId: isFreshOpen ? current.openSessionId + 1 : current.openSessionId,
+        stripFocusRequestId: shouldFocusStrip ? current.stripFocusRequestId + 1 : current.stripFocusRequestId,
+        stripFocusBehavior: nextStripFocusBehavior,
+      }
+    })
   }, [])
 
-  const syncImageViewSequence = useCallback((input: { compositeHashes: string[]; sourceId: string }) => {
+  const syncImageViewSequence = useCallback((input: { compositeHashes: string[]; sourceId: string; sourceItems?: ImageRecord[] }) => {
     setModalState((current) => {
       if (!current.compositeHash || !current.sourceId || current.sourceId !== input.sourceId) {
         return current
@@ -91,26 +132,37 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         return current
       }
 
-      if (
-        nextCompositeHashes.length === current.compositeHashes.length
+      const nextSourceItemsByHash = buildSourceItemsByHash(input.sourceItems)
+      const mergedSourceItemsByHash = Object.keys(nextSourceItemsByHash).length > 0
+        ? { ...current.sourceItemsByHash, ...nextSourceItemsByHash }
+        : current.sourceItemsByHash
+      const isSameSequence = nextCompositeHashes.length === current.compositeHashes.length
         && nextCompositeHashes.every((value, index) => value === current.compositeHashes[index])
-      ) {
+      const isSameItems = Object.keys(mergedSourceItemsByHash).length === Object.keys(current.sourceItemsByHash).length
+        && Object.entries(mergedSourceItemsByHash).every(([key, value]) => current.sourceItemsByHash[key] === value)
+
+      if (isSameSequence && isSameItems) {
         return current
       }
 
       return {
         ...current,
         compositeHashes: nextCompositeHashes,
+        sourceItemsByHash: mergedSourceItemsByHash,
       }
     })
   }, [])
 
   const closeImageView = useCallback(() => {
-    setModalState({
+    setModalState((current) => ({
       compositeHash: null,
       compositeHashes: [],
       sourceId: null,
-    })
+      sourceItemsByHash: {},
+      openSessionId: current.openSessionId,
+      stripFocusRequestId: current.stripFocusRequestId,
+      stripFocusBehavior: null,
+    }))
   }, [])
 
   const handleViewModeChange = useCallback((nextMode: ImageViewModalMode) => {
@@ -133,6 +185,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       return {
         ...current,
         compositeHash: current.compositeHashes[currentIndex - 1],
+        stripFocusRequestId: current.stripFocusRequestId + 1,
+        stripFocusBehavior: 'smooth',
       }
     })
   }, [])
@@ -152,6 +206,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       return {
         ...current,
         compositeHash: current.compositeHashes[currentIndex + 1],
+        stripFocusRequestId: current.stripFocusRequestId + 1,
+        stripFocusBehavior: 'smooth',
       }
     })
   }, [])
@@ -189,7 +245,22 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     }
   }, [closeImageView, modalState.compositeHash, viewNextImage, viewPreviousImage])
 
-  const thumbnailStripItems = (thumbnailStripQuery.data ?? []) as ImageRecord[]
+  const thumbnailStripFallbackItemsByHash = useMemo(
+    () => Object.fromEntries(((thumbnailStripQuery.data ?? []) as ImageRecord[])
+      .map((item) => {
+        const compositeHash = item.composite_hash
+        return typeof compositeHash === 'string' && compositeHash.length > 0 ? ([compositeHash, item] as const) : null
+      })
+      .filter((entry): entry is readonly [string, ImageRecord] => entry !== null)),
+    [thumbnailStripQuery.data],
+  )
+
+  const thumbnailStripItems = useMemo(
+    () => modalState.compositeHashes
+      .map((compositeHash) => modalState.sourceItemsByHash[compositeHash] ?? thumbnailStripFallbackItemsByHash[compositeHash] ?? null)
+      .filter((item): item is ImageRecord => item !== null),
+    [modalState.compositeHashes, modalState.sourceItemsByHash, thumbnailStripFallbackItemsByHash],
+  )
   const thumbnailStripCompositeHashes = useMemo(
     () => thumbnailStripItems.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
     [thumbnailStripItems],
@@ -224,6 +295,9 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
             thumbnailStripCompositeHashes={thumbnailStripCompositeHashes}
             viewMode={viewMode}
             onChangeViewMode={handleViewModeChange}
+            openSessionId={modalState.openSessionId}
+            stripFocusRequestId={modalState.stripFocusRequestId}
+            stripFocusBehavior={modalState.stripFocusBehavior}
             canViewPrevious={canViewPrevious}
             canViewNext={canViewNext}
             onClose={closeImageView}
