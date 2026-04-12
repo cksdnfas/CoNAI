@@ -68,6 +68,14 @@ function buildSimilaritySettingsDraft(similarity?: SimilaritySettings | null): S
 }
 
 /** Build the prompt-similarity draft from the current app settings when the flyout opens. */
+function clampPromptSimilarityWeight(value: number | undefined, fallback = 1) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback
+  }
+
+  return Math.max(0, Math.min(1, Math.round(value * 100) / 100))
+}
+
 function buildPromptSimilaritySettingsDraft(
   promptSimilarity?: SimilaritySettings['promptSimilarity'] | null,
 ): PromptSimilaritySettingsDraft | null {
@@ -79,9 +87,9 @@ function buildPromptSimilaritySettingsDraft(
     resultLimit: normalizeSimilarityResultRows(promptSimilarity.resultLimit),
     combinedThreshold: promptSimilarity.combinedThreshold,
     weights: {
-      positive: promptSimilarity.weights.positive,
-      negative: promptSimilarity.weights.negative,
-      auto: promptSimilarity.weights.auto,
+      positive: clampPromptSimilarityWeight(promptSimilarity.weights.positive),
+      negative: clampPromptSimilarityWeight(promptSimilarity.weights.negative),
+      auto: clampPromptSimilarityWeight(promptSimilarity.weights.auto),
     },
     fieldThresholds: {
       positive: promptSimilarity.fieldThresholds.positive,
@@ -127,9 +135,9 @@ function sanitizePromptSimilaritySettingsDraft(
     resultLimit: normalizeSimilarityResultRows(draft.resultLimit),
     combinedThreshold: Math.max(0, Math.min(100, Math.round(draft.combinedThreshold))),
     weights: {
-      positive: Math.max(0, Math.min(100, Number(draft.weights.positive))),
-      negative: Math.max(0, Math.min(100, Number(draft.weights.negative))),
-      auto: Math.max(0, Math.min(100, Number(draft.weights.auto))),
+      positive: clampPromptSimilarityWeight(Number(draft.weights.positive)),
+      negative: clampPromptSimilarityWeight(Number(draft.weights.negative)),
+      auto: clampPromptSimilarityWeight(Number(draft.weights.auto)),
     },
     fieldThresholds: {
       positive: Math.max(0, Math.min(100, Math.round(draft.fieldThresholds.positive))),

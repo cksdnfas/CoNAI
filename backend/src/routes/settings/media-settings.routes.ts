@@ -152,10 +152,10 @@ router.put(
       }
 
       const validateWeight = (value: unknown, label: string) => {
-        if (value !== undefined && (!Number.isFinite(value as number) || Number(value) < 0 || Number(value) > 100)) {
+        if (value !== undefined && (!Number.isFinite(value as number) || Number(value) < 0 || Number(value) > 1)) {
           res.status(400).json({
             success: false,
-            error: `${label} must be between 0 and 100`,
+            error: `${label} must be between 0 and 1`,
           });
           return false;
         }

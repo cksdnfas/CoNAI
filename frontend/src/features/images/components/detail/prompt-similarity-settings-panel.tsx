@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type PromptSimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
+import { NumberInputWithSuffix, SectionTitleWithTooltip } from './similarity-settings-panel-shared'
 
 interface PromptSimilaritySettingsPanelProps {
   isOpen: boolean
@@ -43,33 +44,33 @@ export function PromptSimilaritySettingsPanel({
               </div>
 
               <div className="space-y-2">
-                <label className={detailSettingsLabelClassName}>종합 유사도 기준</label>
-                <ScrubbableNumberInput min={0} max={100} step={1} variant="detail" value={draft.combinedThreshold} onChange={(value) => onPatchDraft({ combinedThreshold: Number(value) })} />
+                <label className={detailSettingsLabelClassName}>종합 점수 기준</label>
+                <NumberInputWithSuffix suffix="%" min={0} max={100} step={1} variant="detail" value={draft.combinedThreshold} onChange={(value) => onPatchDraft({ combinedThreshold: Number(value) })} />
               </div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
-                <h3 className="text-sm font-semibold text-foreground">가중치</h3>
+                <SectionTitleWithTooltip title="점수 가중치" tooltip="종합 점수 계산 때 곱해지는 비중" />
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Positive</label>
-                  <ScrubbableNumberInput min={0} max={100} step={0.1} variant="detailNested" value={draft.weights.positive} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, positive: Number(value) } })} />
+                  <ScrubbableNumberInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.positive} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, positive: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Negative</label>
-                  <ScrubbableNumberInput min={0} max={100} step={0.1} variant="detailNested" value={draft.weights.negative} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, negative: Number(value) } })} />
+                  <ScrubbableNumberInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.negative} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, negative: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Auto</label>
-                  <ScrubbableNumberInput min={0} max={100} step={0.1} variant="detailNested" value={draft.weights.auto} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, auto: Number(value) } })} />
+                  <ScrubbableNumberInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.auto} onChange={(value) => onPatchDraft({ weights: { ...draft.weights, auto: Number(value) } })} />
                 </div>
               </div>
 
               <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
-                <h3 className="text-sm font-semibold text-foreground">필드 임계값</h3>
+                <SectionTitleWithTooltip title="최소 필드 임계값" tooltip="각 필드가 이 점수 이상이어야 통과" />
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Positive</label>

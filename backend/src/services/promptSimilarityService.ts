@@ -74,10 +74,10 @@ function normalizeThreshold(value: number | undefined, fallback: number): number
 
 function normalizeWeight(value: number | undefined, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return fallback;
+    return Math.max(0, Math.min(1, roundScore(fallback)));
   }
 
-  return Math.max(0, roundScore(value));
+  return Math.max(0, Math.min(1, roundScore(value)));
 }
 
 export class PromptSimilarityService {

@@ -253,8 +253,8 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
         combinedThreshold: 50,
         weights: {
           positive: 1,
-          negative: 0,
-          auto: 0,
+          negative: 1,
+          auto: 1,
         },
         fieldThresholds: {
           positive: 50,

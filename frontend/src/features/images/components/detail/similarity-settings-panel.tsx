@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type SimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
+import { NumberInputWithSuffix, SectionTitleWithTooltip } from './similarity-settings-panel-shared'
 
 interface SimilaritySettingsPanelProps {
   isOpen: boolean
@@ -94,10 +95,10 @@ export function SimilaritySettingsPanel({
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
-                <h3 className="text-sm font-semibold text-foreground">혼합 비중</h3>
+                <SectionTitleWithTooltip title="점수 가중치" tooltip="최종 점수 계산에 반영되는 비중" />
 
                 <SimilarityNumberField
-                  label="pHash 비중"
+                  label="pHash 가중치"
                   min={0}
                   max={100}
                   value={draft.detailSimilarWeights.perceptualHash}
@@ -105,7 +106,7 @@ export function SimilaritySettingsPanel({
                 />
 
                 <SimilarityNumberField
-                  label="dHash 비중"
+                  label="dHash 가중치"
                   min={0}
                   max={100}
                   value={draft.detailSimilarWeights.dHash}
@@ -113,7 +114,7 @@ export function SimilaritySettingsPanel({
                 />
 
                 <SimilarityNumberField
-                  label="aHash 비중"
+                  label="aHash 가중치"
                   min={0}
                   max={100}
                   value={draft.detailSimilarWeights.aHash}
@@ -121,7 +122,7 @@ export function SimilaritySettingsPanel({
                 />
 
                 <SimilarityNumberField
-                  label="색상 비중"
+                  label="색상 가중치"
                   min={0}
                   max={100}
                   value={draft.detailSimilarWeights.color}
@@ -133,7 +134,7 @@ export function SimilaritySettingsPanel({
               </div>
 
               <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
-                <h3 className="text-sm font-semibold text-foreground">항목별 허용 범위</h3>
+                <SectionTitleWithTooltip title="항목별 허용 범위" tooltip="각 항목이 이 범위 안이어야 통과" />
 
                 <SimilarityNumberField
                   label="pHash 허용 거리"
@@ -162,16 +163,21 @@ export function SimilaritySettingsPanel({
                   onChange={(value) => onPatchDraft({ detailSimilarThresholds: { ...draft.detailSimilarThresholds, aHash: value } })}
                 />
 
-                <SimilarityNumberField
-                  label="색상 최소 유사도"
-                  min={0}
-                  max={100}
-                  value={draft.detailSimilarThresholds.color}
-                  onChange={(value) => onPatchDraft({
-                    detailSimilarIncludeColorSimilarity: value > 0 || draft.detailSimilarWeights.color > 0,
-                    detailSimilarThresholds: { ...draft.detailSimilarThresholds, color: value },
-                  })}
-                />
+                <div className="space-y-2">
+                  <label className={detailSettingsLabelClassName}>색상 최소 유사도</label>
+                  <NumberInputWithSuffix
+                    suffix="%"
+                    min={0}
+                    max={100}
+                    step={1}
+                    variant="detailNested"
+                    value={draft.detailSimilarThresholds.color}
+                    onChange={(nextValue) => onPatchDraft({
+                      detailSimilarIncludeColorSimilarity: Number(nextValue) > 0 || draft.detailSimilarWeights.color > 0,
+                      detailSimilarThresholds: { ...draft.detailSimilarThresholds, color: Number(nextValue) },
+                    })}
+                  />
+                </div>
               </div>
             </div>
 

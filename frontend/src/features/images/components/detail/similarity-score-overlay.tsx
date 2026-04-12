@@ -8,7 +8,7 @@ interface SimilarityOverlayRow {
   key: string
   label: string
   value: string
-  tone?: 'default' | 'danger'
+  tone?: 'default' | 'success' | 'danger'
 }
 
 interface SimilarityScoreOverlayCardProps {
@@ -124,7 +124,11 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: Simil
           {rows.map((row) => (
             <div key={row.key} className="flex items-start justify-between gap-2 leading-4">
               <span className="text-muted-foreground">{row.label}</span>
-              <span className={cn('text-right text-foreground', row.tone === 'danger' && 'text-destructive')}>
+              <span className={cn(
+                'text-right text-foreground',
+                row.tone === 'success' && 'text-emerald-400',
+                row.tone === 'danger' && 'text-destructive',
+              )}>
                 {row.value}
               </span>
             </div>
@@ -235,10 +239,16 @@ function buildPromptSimilarImageRows(item: PromptSimilarImage): SimilarityOverla
     .map(({ key, label, score }) => ({
       key,
       label,
-      tone: score.hasSource && score.hasTarget && !score.passed ? 'danger' : 'default',
+      tone: !score.hasSource || !score.hasTarget
+        ? 'default'
+        : score.exact
+          ? 'success'
+          : !score.passed
+            ? 'danger'
+            : 'default',
       value: !score.hasSource || !score.hasTarget
         ? '한쪽 텍스트 없음'
-        : `유사 ${formatSimilarityValue(score.similarity)} · 기준 ${score.threshold}${score.exact ? ' · 정확히 일치' : ''}`,
+        : `유사 ${formatSimilarityValue(score.similarity)} · 기준 ${score.threshold}`,
     }))
 
   if (rows.length === 0) {
