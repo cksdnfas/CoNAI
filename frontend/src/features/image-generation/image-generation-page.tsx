@@ -192,6 +192,7 @@ export function ImageGenerationPage() {
                 refreshNonce={historyRefreshNonce}
                 serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
                 workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
+                onBack={activeTab === 'comfyui' ? () => setSelectedComfyWorkflowId(null) : undefined}
               />
             </Suspense>
 
