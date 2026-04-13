@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
+import { getRatingTiers } from '@/lib/api-search'
+import { resolveImageFeedSafety } from '@/features/images/components/image-list/image-rating-safety'
 import {
   getImageListDisplayName,
   getImageListMediaKind,
@@ -35,9 +38,25 @@ export function ImageViewThumbnailStrip({
   const focusRequestAppliedRef = useRef<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
 
+  const ratingTiersQuery = useQuery({
+    queryKey: ['rating-tiers'],
+    queryFn: getRatingTiers,
+    staleTime: 60_000,
+  })
+
   const activeIndex = useMemo(
     () => items.findIndex((item) => item.composite_hash === activeCompositeHash),
     [activeCompositeHash, items],
+  )
+
+  const blurPreviewByHash = useMemo(
+    () => new Map(
+      items.map((item) => [
+        item.composite_hash,
+        resolveImageFeedSafety(item, ratingTiersQuery.data).visibility === 'blur',
+      ]),
+    ),
+    [items, ratingTiersQuery.data],
   )
 
   useEffect(() => {
@@ -171,6 +190,7 @@ export function ImageViewThumbnailStrip({
           const mediaKind = getImageListMediaKind(item)
           const displayName = getImageListDisplayName(item)
           const isActive = compositeHash === activeCompositeHash
+          const blurPreview = blurPreviewByHash.get(compositeHash) === true
 
           return (
             <button
@@ -201,25 +221,35 @@ export function ImageViewThumbnailStrip({
               aria-current={isActive ? 'true' : undefined}
             >
               {previewUrl ? (
-                mediaKind === 'video' ? (
-                  <video
-                    src={previewUrl}
-                    className="h-full w-full object-cover select-none"
-                    muted
-                    playsInline
-                    preload="metadata"
-                    draggable={false}
-                  />
-                ) : (
-                  <img src={previewUrl} alt={displayName} className="h-full w-full object-cover select-none" loading="lazy" draggable={false} />
-                )
+                <div className={cn('h-full w-full transition duration-300', blurPreview && 'scale-[1.03] blur-2xl saturate-[0.55]')}>
+                  {mediaKind === 'video' ? (
+                    <video
+                      src={previewUrl}
+                      className="h-full w-full object-cover select-none"
+                      muted
+                      playsInline
+                      preload="metadata"
+                      draggable={false}
+                    />
+                  ) : (
+                    <img src={previewUrl} alt={displayName} className="h-full w-full object-cover select-none" loading="lazy" draggable={false} />
+                  )}
+                </div>
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">없음</div>
               )}
 
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1 text-[10px] text-white/88">
+              {blurPreview ? <div className="pointer-events-none absolute inset-0 z-10 bg-black/18" /> : null}
+
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/70 to-transparent px-2 py-1 text-[10px] text-white/88">
                 {index + 1}
               </div>
+
+              {blurPreview ? (
+                <div className="pointer-events-none absolute left-1.5 top-1.5 z-10 rounded-full border border-white/18 bg-black/68 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em] text-white/88 backdrop-blur-sm">
+                  Blur
+                </div>
+              ) : null}
             </button>
           )
         })}

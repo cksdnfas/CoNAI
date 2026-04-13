@@ -82,9 +82,11 @@ Badge requirements:
 
 ### Blur rendering
 For `blur` tiers:
-- keep the card in the list
-- apply strong preview blur to the media surface
-- keep the rating badge visible above the blurred preview
+- keep the image visible in list-style surfaces
+- apply strong preview blur only to the list/media preview surface
+- keep the rating badge visible above the blurred preview when a badge is shown
+- do not block detail view, modal main content, original file access, or downloads
+- apply the same preview blur rule to thumbnail strips when they act as a navigable image list
 
 ### Hide rendering
 For `hide` tiers:

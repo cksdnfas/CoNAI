@@ -41,7 +41,7 @@
 - [x] Block hidden images from `/api/images/metadata/:composite_hash`
 
 ## Follow-up later
-- [ ] Decide whether `blur` should also restrict detail/original/download access
+- [x] Keep `blur` list-only, including thumbnail-strip style list surfaces
 - [ ] Define unrated fallback policy instead of rough `show`
 - [ ] Optional admin bypass
 - [ ] QA remaining external/share surfaces for hidden-image leaks
