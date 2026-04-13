@@ -5,7 +5,9 @@ import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpd
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
 import { ImageSafetyService } from '../services/imageSafetyService';
 
-const VISIBLE_GROUP_IMAGE_CONDITION = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+function getVisibleGroupImageCondition() {
+  return ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+}
 
 export class GroupModel {
   /**
@@ -299,7 +301,7 @@ export class ImageGroupModel {
       `SELECT COUNT(*) as total
        FROM image_groups ig
        LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-       ${whereClause} AND ${VISIBLE_GROUP_IMAGE_CONDITION}`
+       ${whereClause} AND ${getVisibleGroupImageCondition()}`
     ).get(...queryParams) as any;
     const total = countRow.total;
 
@@ -330,7 +332,7 @@ export class ImageGroupModel {
         ig.collection_type
       FROM image_groups ig
       LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-      ${whereClause} AND ${VISIBLE_GROUP_IMAGE_CONDITION}
+      ${whereClause} AND ${getVisibleGroupImageCondition()}
       GROUP BY ig.composite_hash
       ORDER BY ig.order_index ASC, ig.added_date DESC
       LIMIT ? OFFSET ?
@@ -376,7 +378,7 @@ export class ImageGroupModel {
       `SELECT COUNT(*) as total
        FROM image_groups ig
        INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-       ${whereClause} AND ${VISIBLE_GROUP_IMAGE_CONDITION}`
+       ${whereClause} AND ${getVisibleGroupImageCondition()}`
     ).get(...queryParams) as any;
     const total = countRow.total;
 
@@ -393,7 +395,7 @@ export class ImageGroupModel {
       INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
       LEFT JOIN image_files if ON if.composite_hash = im.composite_hash AND if.file_status = 'active'
       LEFT JOIN watched_folders wf ON if.folder_id = wf.id
-      ${whereClause} AND ${VISIBLE_GROUP_IMAGE_CONDITION}
+      ${whereClause} AND ${getVisibleGroupImageCondition()}
       ORDER BY ig.order_index ASC, ig.added_date DESC
       LIMIT ? OFFSET ?
     `;
@@ -494,7 +496,7 @@ export class ImageGroupModel {
         im.metadata_updated_date
       FROM image_groups ig
       LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-      WHERE ig.group_id = ? AND ${VISIBLE_GROUP_IMAGE_CONDITION}
+      WHERE ig.group_id = ? AND ${getVisibleGroupImageCondition()}
       ORDER BY RANDOM()
       LIMIT 1
     `;
@@ -520,7 +522,7 @@ export class ImageGroupModel {
         SELECT ig.composite_hash
         FROM image_groups ig
         LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-        WHERE ig.group_id = ? AND ${VISIBLE_GROUP_IMAGE_CONDITION}
+        WHERE ig.group_id = ? AND ${getVisibleGroupImageCondition()}
         GROUP BY ig.composite_hash
         ORDER BY RANDOM()
         LIMIT ?

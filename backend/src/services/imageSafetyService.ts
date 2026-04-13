@@ -2,6 +2,13 @@ import { RatingScoreModel } from '../models/RatingScore';
 
 export type ImageFeedVisibility = 'show' | 'blur' | 'hide';
 
+function toSqlNumberLiteral(value: number): string {
+  if (!Number.isFinite(value)) {
+    throw new Error(`Invalid numeric safety boundary: ${value}`);
+  }
+  return Number.isInteger(value) ? String(value) : String(value);
+}
+
 /** Resolve the current visibility policy from one image rating score. */
 export class ImageSafetyService {
   static resolveFeedVisibility(score: number | null | undefined): ImageFeedVisibility {
@@ -19,15 +26,20 @@ export class ImageSafetyService {
 
   /** Build an SQL condition that excludes images mapped to hidden rating tiers. */
   static buildVisibleScoreCondition(scoreExpression: string): string {
-    return `(
-      ${scoreExpression} IS NULL
-      OR NOT EXISTS (
-        SELECT 1
-        FROM rating_tiers rt
-        WHERE rt.feed_visibility = 'hide'
-          AND ${scoreExpression} >= rt.min_score
-          AND (rt.max_score IS NULL OR ${scoreExpression} < rt.max_score)
-      )
-    )`;
+    const hiddenRanges = RatingScoreModel.getAllTiers()
+      .filter(tier => tier.feed_visibility === 'hide')
+      .map(tier => {
+        const lowerBound = `${scoreExpression} >= ${toSqlNumberLiteral(tier.min_score)}`;
+        const upperBound = tier.max_score === null || tier.max_score === undefined
+          ? null
+          : `${scoreExpression} < ${toSqlNumberLiteral(tier.max_score)}`;
+        return upperBound ? `(${lowerBound} AND ${upperBound})` : `(${lowerBound})`;
+      });
+
+    if (hiddenRanges.length === 0) {
+      return '1=1';
+    }
+
+    return `(${scoreExpression} IS NULL OR NOT (${hiddenRanges.join(' OR ')}))`;
   }
 }

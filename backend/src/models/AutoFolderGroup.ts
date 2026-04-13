@@ -9,7 +9,9 @@ import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
  * 자동 폴더 그룹 모델
  * 파일 시스템 폴더 구조를 반영한 읽기 전용 그룹 관리
  */
-const VISIBLE_AUTO_FOLDER_IMAGE_CONDITION = ImageSafetyService.buildVisibleScoreCondition('m.rating_score');
+function getVisibleAutoFolderImageCondition() {
+  return ImageSafetyService.buildVisibleScoreCondition('m.rating_score');
+}
 
 export class AutoFolderGroupModel {
   /**
@@ -264,7 +266,7 @@ export class AutoFolderGroupImageModel {
       SELECT m.*
       FROM auto_folder_group_images afgi
       INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
-      WHERE afgi.group_id = ? AND ${VISIBLE_AUTO_FOLDER_IMAGE_CONDITION}
+      WHERE afgi.group_id = ? AND ${getVisibleAutoFolderImageCondition()}
       ORDER BY RANDOM()
       LIMIT 1
     `;
@@ -328,7 +330,7 @@ export class AutoFolderGroupImageModel {
       LEFT JOIN image_files if ON afgi.composite_hash = if.composite_hash
         AND if.file_status = 'active'
       LEFT JOIN watched_folders f ON if.folder_id = f.id
-      WHERE afgi.group_id = ? AND ${VISIBLE_AUTO_FOLDER_IMAGE_CONDITION}
+      WHERE afgi.group_id = ? AND ${getVisibleAutoFolderImageCondition()}
       ORDER BY RANDOM()
       LIMIT ?
     `;

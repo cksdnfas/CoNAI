@@ -21,7 +21,9 @@ import { buildComplexFilterAutoTagCondition } from './complexFilter/complexFilte
  *
  * Final result = (OR results ∩ AND results) - Exclude results
  */
-const VISIBLE_IMAGE_CONDITION = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+function getVisibleImageCondition() {
+  return ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+}
 
 export class ComplexFilterService {
 
@@ -115,7 +117,7 @@ export class ComplexFilterService {
     }
 
     // Build final query
-    const finalConditions: string[] = [VISIBLE_IMAGE_CONDITION];
+    const finalConditions: string[] = [getVisibleImageCondition()];
 
     if (hasOrGroup) {
       finalConditions.push('im.composite_hash IN (SELECT composite_hash FROM or_results)');
