@@ -21,6 +21,7 @@ interface ImageListItemProps {
   onActivate?: (image: ImageRecord, itemId: string, href?: string) => void
   renderOverlay?: ReactNode
   renderPersistentOverlay?: ReactNode
+  blurPreview?: boolean
 }
 
 /** Prevent native media dragging so drag gestures can be used for selection. */
@@ -40,6 +41,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   onActivate,
   renderOverlay,
   renderPersistentOverlay,
+  blurPreview = false,
 }: ImageListItemProps) {
   const previewUrl = getImageListPreviewUrl(image)
   const imageId = itemId ?? getImageListItemId(image)
@@ -122,7 +124,10 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       onKeyDown={handleKeyDown}
     >
       <div className="relative overflow-hidden rounded-sm bg-surface-lowest select-none">
-        {content}
+        <div className={cn('transition duration-300', blurPreview && 'scale-[1.03] blur-2xl saturate-[0.55]')}>
+          {content}
+        </div>
+        {blurPreview ? <div className="pointer-events-none absolute inset-0 z-10 bg-black/18" /> : null}
       </div>
       {renderPersistentOverlay ? <div className="absolute inset-x-0 bottom-0 z-30 p-2">{renderPersistentOverlay}</div> : null}
       {quickActions}

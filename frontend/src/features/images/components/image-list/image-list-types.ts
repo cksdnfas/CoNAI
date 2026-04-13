@@ -26,4 +26,6 @@ export interface ImageListProps {
   viewportHeight?: number | string
   selectionAreaClass?: string
   renderItemOverlay?: (image: ImageRecord) => ReactNode
+  renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  shouldBlurItemPreview?: (image: ImageRecord) => boolean
 }

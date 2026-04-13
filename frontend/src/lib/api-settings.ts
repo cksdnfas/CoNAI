@@ -21,6 +21,7 @@ export interface RatingTierUpdateInput {
   max_score: number | null
   tier_order: number
   color?: string | null
+  feed_visibility?: 'show' | 'blur' | 'hide'
 }
 
 export interface RatingWeightsRecord {
@@ -77,10 +78,23 @@ export interface AppearanceFontUploadResult {
   size: number
 }
 
+export interface WallpaperRuntimeSettings {
+  wallpaperLayoutPresets: AppearanceSettings['wallpaperLayoutPresets']
+  wallpaperActivePresetId: string | null
+}
+
 export async function getAppSettings() {
   const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings')
   if (!response.success) {
     throw new Error(response.error || '설정을 불러오지 못했어.')
+  }
+  return response.data
+}
+
+export async function getWallpaperRuntimeSettings() {
+  const response = await fetchJson<ApiResponse<WallpaperRuntimeSettings>>('/api/wallpaper-runtime/settings')
+  if (!response.success) {
+    throw new Error(response.error || '월페이퍼 라이브 설정을 불러오지 못했어.')
   }
   return response.data
 }

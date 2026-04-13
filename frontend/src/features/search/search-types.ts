@@ -31,6 +31,7 @@ export interface RatingTierRecord {
   max_score: number | null
   tier_order: number
   color?: string | null
+  feed_visibility?: 'show' | 'blur' | 'hide'
   created_at: string
   updated_at: string
 }

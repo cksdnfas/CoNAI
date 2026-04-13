@@ -44,6 +44,8 @@ export function ImageList({
   viewportHeight,
   selectionAreaClass = 'image-list-selection-area',
   renderItemOverlay,
+  renderItemPersistentOverlay,
+  shouldBlurItemPreview,
 }: ImageListProps) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -211,6 +213,8 @@ export function ImageList({
             viewportHeight={viewportHeight}
             onEndReached={handleEndReached}
             renderItemOverlay={renderItemOverlay}
+            renderItemPersistentOverlay={renderItemPersistentOverlay}
+            shouldBlurItemPreview={shouldBlurItemPreview}
           />
         ) : (
           <ImageListMasonryLazy
@@ -227,6 +231,8 @@ export function ImageList({
             scrollMode={scrollMode}
             viewportHeight={viewportHeight}
             renderItemOverlay={renderItemOverlay}
+            renderItemPersistentOverlay={renderItemPersistentOverlay}
+            shouldBlurItemPreview={shouldBlurItemPreview}
           />
         )}
       </Suspense>

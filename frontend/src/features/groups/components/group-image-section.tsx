@@ -1,10 +1,13 @@
-import type { ReactNode } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { ImageRatingSafetyBadge, resolveImageFeedSafety } from '@/features/images/components/image-list/image-rating-safety'
+import { getRatingTiers } from '@/lib/api-search'
 import type { GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 
@@ -42,13 +45,40 @@ export function GroupImageSection({
   renderItemOverlay,
 }: GroupImageSectionProps) {
   const shouldShowCollectionCounts = group.manual_added_count !== undefined || group.auto_collected_count !== undefined
+  const ratingTiersQuery = useQuery({
+    queryKey: ['rating-tiers'],
+    queryFn: getRatingTiers,
+    staleTime: 60_000,
+  })
+
+  const imageFeedSafetyById = useMemo(
+    () => new Map(groupImages.map((image) => [String(image.composite_hash ?? image.id), resolveImageFeedSafety(image, ratingTiersQuery.data)])),
+    [groupImages, ratingTiersQuery.data],
+  )
+
+  const visibleGroupImages = useMemo(
+    () => groupImages.filter((image) => imageFeedSafetyById.get(String(image.composite_hash ?? image.id))?.visibility !== 'hide'),
+    [groupImages, imageFeedSafetyById],
+  )
+
+  useEffect(() => {
+    if (isLoading || isError || isLoadingMore) {
+      return
+    }
+
+    if (groupImages.length === 0 || visibleGroupImages.length > 0 || !hasMore) {
+      return
+    }
+
+    onLoadMore()
+  }, [groupImages.length, hasMore, isError, isLoading, isLoadingMore, onLoadMore, visibleGroupImages.length])
 
   return (
     <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-4' : 'space-y-4'}>
       {!hideHeader ? (
         <SectionHeading
           heading="이미지"
-          description={`${group.image_count.toLocaleString('ko-KR')}개 항목`}
+          description={`${visibleGroupImages.length.toLocaleString('ko-KR')}개 항목`}
           actions={shouldShowCollectionCounts ? (
             <div className="flex items-center gap-2">
               <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
@@ -73,9 +103,9 @@ export function GroupImageSection({
         </Alert>
       ) : null}
 
-      {!isLoading && !isError && groupImages.length > 0 ? (
+      {!isLoading && !isError && visibleGroupImages.length > 0 ? (
         <ImageList
-          items={groupImages}
+          items={visibleGroupImages}
           layout="masonry"
           activationMode="modal"
           getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
@@ -94,12 +124,19 @@ export function GroupImageSection({
           className={presentation === 'drawer' ? 'min-h-0 flex-1' : undefined}
           selectionAreaClass={presentation === 'drawer' ? 'image-list-selection-area-hidden' : 'image-list-selection-area'}
           renderItemOverlay={renderItemOverlay}
+          renderItemPersistentOverlay={(image) => {
+            const safety = imageFeedSafetyById.get(String(image.composite_hash ?? image.id))
+            return safety?.tier ? <ImageRatingSafetyBadge tier={safety.tier} visibility={safety.visibility} /> : null
+          }}
+          shouldBlurItemPreview={(image) => imageFeedSafetyById.get(String(image.composite_hash ?? image.id))?.visibility === 'blur'}
         />
       ) : null}
 
-      {!isLoading && !isError && groupImages.length === 0 ? (
+      {!isLoading && !isError && visibleGroupImages.length === 0 ? (
         <Card >
-          <CardContent className="text-sm text-muted-foreground">표시할 이미지가 없어.</CardContent>
+          <CardContent className="text-sm text-muted-foreground">
+            {groupImages.length > 0 ? '현재 등급 표시 정책 때문에 이 목록에서는 숨겨진 상태야.' : '표시할 이미지가 없어.'}
+          </CardContent>
         </Card>
       ) : null}
     </section>

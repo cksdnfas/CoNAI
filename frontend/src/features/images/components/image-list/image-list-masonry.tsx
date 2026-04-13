@@ -19,6 +19,8 @@ interface ImageListMasonryProps {
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
   renderItemOverlay?: (image: ImageRecord) => ReactNode
+  renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  shouldBlurItemPreview?: (image: ImageRecord) => boolean
 }
 
 /** Render a reusable virtualized masonry layout with responsive column count. */
@@ -36,6 +38,8 @@ export function ImageListMasonry({
   scrollMode,
   viewportHeight,
   renderItemOverlay,
+  renderItemPersistentOverlay,
+  shouldBlurItemPreview,
 }: ImageListMasonryProps) {
   const columnCount = useImageListColumnCount(containerElement, minColumnWidth, columnGap)
   const usesWindowScroll = scrollMode === 'window'
@@ -70,6 +74,8 @@ export function ImageListMasonry({
               selectionMode={selectionMode}
               onActivate={onActivate}
               renderOverlay={renderItemOverlay?.(image)}
+              renderPersistentOverlay={renderItemPersistentOverlay?.(image)}
+              blurPreview={shouldBlurItemPreview?.(image) ?? false}
             />
           </div>
         )

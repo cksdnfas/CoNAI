@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Navigate } from 'react-router-dom'
 import {
   checkTaggerDependencies,
   getAppSettings,
@@ -38,6 +39,7 @@ import type {
 } from '@/types/settings'
 import { SettingsTabNav } from './components/settings-tab-nav'
 import type { SettingsTab } from './settings-tabs'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { applyAppearanceTheme } from '@/lib/appearance'
 import { buildAppearancePackage, restoreAppearancePackage } from '@/lib/appearance-package'
@@ -596,7 +598,7 @@ function useAutoSettingsSection({
 
   const patchRatingTierDraft = (
     tierId: number,
-    patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'max_score' | 'color'>>,
+    patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'max_score' | 'color' | 'feed_visibility'>>,
   ) => {
     if (!effectiveRatingTiersDraft) return
 
@@ -622,6 +624,7 @@ function useAutoSettingsSection({
           max_score: null,
           tier_order: 1,
           color: '#a78bfa',
+          feed_visibility: 'show',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
@@ -646,6 +649,7 @@ function useAutoSettingsSection({
         max_score: null,
         tier_order: currentTiers.length + 1,
         color: '#f43f5e',
+        feed_visibility: 'show',
         created_at: now,
         updated_at: now,
       },
@@ -721,6 +725,7 @@ function useAutoSettingsSection({
       max_score: index === effectiveRatingTiersDraft.length - 1 ? null : effectiveRatingTiersDraft[index + 1].min_score,
       tier_order: index + 1,
       color: tier.color?.trim() || null,
+      feed_visibility: tier.feed_visibility ?? 'show',
     }))
 
     void ratingTiersMutation.mutateAsync(normalizedTiers)
@@ -803,6 +808,7 @@ function useAutoSettingsSection({
 export function SettingsPage() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const authStatusQuery = useAuthStatusQuery()
   const [activeTab, setActiveTab] = useState<SettingsTab>('folders')
   const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
   const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
@@ -811,6 +817,7 @@ export function SettingsPage() {
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
     queryFn: getAppSettings,
+    enabled: authStatusQuery.data?.isAdmin === true,
   })
 
   const notifyInfo = (message: string) => {
@@ -882,6 +889,14 @@ export function SettingsPage() {
       notifyError(error instanceof Error ? error.message : '이미지 저장 설정 저장에 실패했어.')
     },
   })
+
+  if (authStatusQuery.isLoading) {
+    return <div className="min-h-screen bg-surface-low animate-pulse" />
+  }
+
+  if (!authStatusQuery.data?.isAdmin) {
+    return <Navigate to="/" replace />
+  }
 
   const patchMetadataDraft = (patch: Partial<MetadataExtractionSettings>) => {
     if (!effectiveMetadataDraft) return

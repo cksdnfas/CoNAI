@@ -92,6 +92,7 @@ export interface ImageRecord {
   file_type?: string | null
   file_size?: number | null
   first_seen_date?: string | null
+  rating_score?: number | null
   is_processing?: boolean
   ai_metadata?: ImageAiMetadata | null
   auto_tags?: ImageAutoTags | null

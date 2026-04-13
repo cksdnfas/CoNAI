@@ -19,6 +19,8 @@ interface ImageListGridProps {
   viewportHeight?: number | string
   onEndReached?: () => void
   renderItemOverlay?: (image: ImageRecord) => ReactNode
+  renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  shouldBlurItemPreview?: (image: ImageRecord) => boolean
 }
 
 /** Render a reusable virtualized grid layout with equally sized cards. */
@@ -37,6 +39,8 @@ export function ImageListGrid({
   viewportHeight,
   onEndReached,
   renderItemOverlay,
+  renderItemPersistentOverlay,
+  shouldBlurItemPreview,
 }: ImageListGridProps) {
   const usesWindowScroll = scrollMode === 'window'
 
@@ -77,6 +81,8 @@ export function ImageListGrid({
               gridItemHeight={gridItemHeight}
               onActivate={onActivate}
               renderOverlay={renderItemOverlay?.(image)}
+              renderPersistentOverlay={renderItemPersistentOverlay?.(image)}
+              blurPreview={shouldBlurItemPreview?.(image) ?? false}
             />
           )
         }}

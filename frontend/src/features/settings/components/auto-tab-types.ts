@@ -24,7 +24,7 @@ export interface AutoTabProps {
   onPatchRatingWeights: (patch: Partial<Pick<RatingWeightsRecord, 'general_weight' | 'sensitive_weight' | 'questionable_weight' | 'explicit_weight'>>) => void
   ratingTiersDraft: RatingTierRecord[] | null
   ratingTierValidationMessages: string[]
-  onPatchRatingTier: (tierId: number, patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'max_score' | 'color'>>) => void
+  onPatchRatingTier: (tierId: number, patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'max_score' | 'color' | 'feed_visibility'>>) => void
   onAddRatingTier: () => void
   onDeleteRatingTier: (tierId: number) => void
   onMoveRatingTierUp: (tierId: number) => void

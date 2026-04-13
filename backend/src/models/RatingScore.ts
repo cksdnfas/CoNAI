@@ -92,14 +92,15 @@ export class RatingScoreModel {
    */
   static createTier(tierData: RatingTierInput): RatingTier {
     const info = db.prepare(`
-      INSERT INTO rating_tiers (tier_name, min_score, max_score, tier_order, color)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO rating_tiers (tier_name, min_score, max_score, tier_order, color, feed_visibility)
+      VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       tierData.tier_name,
       tierData.min_score,
       tierData.max_score,
       tierData.tier_order,
-      tierData.color || null
+      tierData.color || null,
+      tierData.feed_visibility || 'show'
     );
 
     const result = this.getTierById(info.lastInsertRowid as number);
@@ -155,8 +156,8 @@ export class RatingScoreModel {
 
       // 새 등급들 삽입
       const insertStmt = db.prepare(`
-        INSERT INTO rating_tiers (tier_name, min_score, max_score, tier_order, color)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO rating_tiers (tier_name, min_score, max_score, tier_order, color, feed_visibility)
+        VALUES (?, ?, ?, ?, ?, ?)
       `);
 
       for (const tier of tiers) {
@@ -165,7 +166,8 @@ export class RatingScoreModel {
           tier.min_score,
           tier.max_score,
           tier.tier_order,
-          tier.color || null
+          tier.color || null,
+          tier.feed_visibility || 'show'
         );
       }
     });

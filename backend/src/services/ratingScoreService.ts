@@ -119,7 +119,8 @@ export class RatingScoreService {
         min_score: tierData.min_score ?? 0,
         max_score: tierData.max_score,
         tier_order: tierData.tier_order ?? 0,
-        color: tierData.color
+        color: tierData.color,
+        feed_visibility: tierData.feed_visibility,
       };
       this.validateTierData(partialTierData);
     }
@@ -210,6 +211,10 @@ export class RatingScoreService {
 
     if (tierData.tier_order < 0) {
       throw new Error('tier_order cannot be negative');
+    }
+
+    if (tierData.feed_visibility !== undefined && !['show', 'blur', 'hide'].includes(tierData.feed_visibility)) {
+      throw new Error('feed_visibility must be one of: show, blur, hide');
     }
   }
 

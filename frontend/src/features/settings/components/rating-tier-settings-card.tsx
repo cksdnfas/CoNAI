@@ -4,6 +4,7 @@ import { SectionHeading } from '@/components/common/section-heading'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import { SettingsField } from './settings-primitives'
 
@@ -14,7 +15,7 @@ interface RatingTierSettingsCardProps {
   validationMessages: string[]
   onPatchRatingTier: (
     tierId: number,
-    patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'max_score' | 'color'>>,
+    patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'max_score' | 'color' | 'feed_visibility'>>,
   ) => void
   onAddRatingTier: () => void
   onDeleteRatingTier: (tierId: number) => void
@@ -168,7 +169,7 @@ export function RatingTierSettingsCard({
                     </div>
                   </div>
 
-                  <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.6fr)_120px_120px_132px]">
+                  <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.6fr)_120px_120px_132px_140px]">
                     <SettingsField label="등급 이름">
                       <Input
                         variant="settings"
@@ -221,6 +222,18 @@ export function RatingTierSettingsCard({
                           placeholder={FALLBACK_TIER_COLOR}
                         />
                       </div>
+                    </SettingsField>
+
+                    <SettingsField label="피드 표시">
+                      <Select
+                        variant="settings"
+                        value={tier.feed_visibility ?? 'show'}
+                        onChange={(event) => onPatchRatingTier(tier.id, { feed_visibility: event.target.value as RatingTierRecord['feed_visibility'] })}
+                      >
+                        <option value="show">표시</option>
+                        <option value="blur">블러</option>
+                        <option value="hide">숨김</option>
+                      </Select>
                     </SettingsField>
                   </div>
 

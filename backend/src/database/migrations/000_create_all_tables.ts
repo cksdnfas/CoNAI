@@ -178,6 +178,7 @@ export const up = async (db: Database.Database): Promise<void> => {
       max_score REAL,
       tier_order INTEGER NOT NULL,
       color VARCHAR(20),
+      feed_visibility VARCHAR(10) NOT NULL DEFAULT 'show',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(tier_order)
@@ -192,19 +193,19 @@ export const up = async (db: Database.Database): Promise<void> => {
 
   // 기본 등급 삽입
   const defaultTiers = [
-    { tier_name: 'G', min_score: 0, max_score: 2, tier_order: 1, color: '#22c55e' },
-    { tier_name: 'Teen', min_score: 2, max_score: 6, tier_order: 2, color: '#3b82f6' },
-    { tier_name: 'SFW', min_score: 6, max_score: 15, tier_order: 3, color: '#f59e0b' },
-    { tier_name: 'NSFW', min_score: 15, max_score: null, tier_order: 4, color: '#ef4444' }
+    { tier_name: 'G', min_score: 0, max_score: 2, tier_order: 1, color: '#22c55e', feed_visibility: 'show' },
+    { tier_name: 'Teen', min_score: 2, max_score: 6, tier_order: 2, color: '#3b82f6', feed_visibility: 'show' },
+    { tier_name: 'SFW', min_score: 6, max_score: 15, tier_order: 3, color: '#f59e0b', feed_visibility: 'show' },
+    { tier_name: 'NSFW', min_score: 15, max_score: null, tier_order: 4, color: '#ef4444', feed_visibility: 'show' }
   ];
 
   const insertTier = db.prepare(`
-    INSERT OR IGNORE INTO rating_tiers (tier_name, min_score, max_score, tier_order, color)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO rating_tiers (tier_name, min_score, max_score, tier_order, color, feed_visibility)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   defaultTiers.forEach(tier => {
-    insertTier.run(tier.tier_name, tier.min_score, tier.max_score, tier.tier_order, tier.color);
+    insertTier.run(tier.tier_name, tier.min_score, tier.max_score, tier.tier_order, tier.color, tier.feed_visibility);
   });
 
   console.log('  ✅ 평가 테이블 2개 + 기본 데이터 생성 완료\n');
