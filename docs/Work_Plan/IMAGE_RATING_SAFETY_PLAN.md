@@ -118,10 +118,24 @@ For `hide` tiers:
 - frontend build passes
 - backend build passes
 
+## Status update after the first slice
+
+The original feed-first slice has already been extended with practical server-side hardening for `hide` tiers.
+
+Already added after the initial plan:
+- detail-page hard blocking for hidden images
+- raw file / thumbnail / original-download blocking for hidden images
+- batch download filtering for hidden images
+- SQL-level exclusion for hidden list items so pagination stays consistent
+- auto-folder preview/random filtering for hidden images
+- group ZIP path aligned with safety-filtered image loads
+- Civitai temp URL blocking for hidden images
+- metadata route blocking for hidden images
+
 ## Follow-up phase after this slice
 
-- detail-page safety gate
-- download/raw-file safety gate
+- decide whether `blur` should stay feed-only or also block detail/download surfaces
 - optional admin bypass / account-group policy
 - unrated-content policy
 - per-surface policy split if Home and Group need different rules later
+- final QA sweep for external/share/export paths that can still surface hidden media
