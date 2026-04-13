@@ -1,37 +1,24 @@
 import { Router, Request, Response } from 'express';
-import { routeParam } from '../routeParam';
 import path from 'path';
 import { asyncHandler } from '../../middleware/errorHandler';
-import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageSimilarityModel } from '../../models/Image/ImageSimilarityModel';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
-import {
-  SimilaritySearchResponse,
-  DuplicateSearchResponse,
-  SIMILARITY_THRESHOLDS
-} from '../../types/similarity';
+import { SIMILARITY_THRESHOLDS } from '../../types/similarity';
 import { runtimePaths } from '../../config/runtimePaths';
-import { validateId, successResponse, errorResponse, PAGINATION } from '@conai/shared';
+import { successResponse, errorResponse, PAGINATION } from '@conai/shared';
 import { db } from '../../database/init';
-import { enrichImageWithFileView } from './utils';
+import {
+  ensureImageFieldOrBlock,
+  enrichDuplicateGroups,
+  enrichSimilarityMatches,
+  getSimilarityErrorStatusCode,
+  getSimilarityRouteIdentifier,
+  parseIntegerWithFallback,
+  parseNumberWithFallback,
+} from './similarity-route-helpers';
 
 const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
-
-/**
- * ID 파라미터가 composite_hash인지 numeric ID인지 판별
- * @param id - URL 파라미터 값
- * @returns { isHash: boolean, value: string | number }
- */
-function parseImageIdentifier(id: string): { isHash: boolean; value: string | number } {
-  // composite_hash는 일반적으로 64자 16진수 문자열 (SHA256)
-  // 숫자만 있으면 imageId로 간주
-  const numericId = parseInt(id, 10);
-  if (!isNaN(numericId) && id === numericId.toString()) {
-    return { isHash: false, value: numericId };
-  }
-  return { isHash: true, value: id };
-}
 
 /**
  * GET /api/images/:id/duplicates
@@ -40,52 +27,29 @@ function parseImageIdentifier(id: string): { isHash: boolean; value: string | nu
  */
 router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { isHash, value } = parseImageIdentifier(routeParam(routeParam(req.params.id)));
+    const identifier = getSimilarityRouteIdentifier(req);
+    const { value } = identifier;
     const threshold = parseInt(req.query.threshold as string) || SIMILARITY_THRESHOLDS.NEAR_DUPLICATE;
     const includeMetadata = req.query.includeMetadata !== 'false';
 
-    let image;
-    let duplicates;
-
-    if (isHash) {
-      // 새 구조: composite_hash 기반
-      const compositeHash = value as string;
-      image = MediaMetadataModel.findByHash(compositeHash);
-      if (!image) {
-        return res.status(404).json(errorResponse('Image metadata not found'));
-      }
-
-      if (!image.perceptual_hash) {
-        return res.status(400).json(errorResponse('Image does not have perceptual hash. Please rebuild hashes.'));
-      }
-
-      duplicates = await ImageSimilarityModel.findDuplicates(compositeHash, {
-        threshold,
-        includeMetadata
-      });
-    } else {
-      // 레거시: imageId 기반
-      const imageId = value as number;
-      const legacyImage = db.prepare('SELECT perceptual_hash FROM images WHERE id = ?').get(imageId) as { perceptual_hash: string | null } | undefined;
-      if (!legacyImage) {
-        return res.status(404).json(errorResponse('Image not found'));
-      }
-
-      if (!legacyImage.perceptual_hash) {
-        return res.status(400).json(errorResponse('Image does not have perceptual hash. Please rebuild hashes.'));
-      }
-
-      duplicates = await ImageSimilarityModel.findDuplicatesByImageId(imageId, {
-        threshold,
-        includeMetadata
-      });
+    if (!ensureImageFieldOrBlock(res, identifier, {
+      field: 'perceptual_hash',
+      missingFieldMessage: 'Image does not have perceptual hash. Please rebuild hashes.'
+    })) {
+      return;
     }
 
-    // Enrich results with URLs
-    const enrichedDuplicates = duplicates.map(item => ({
-      ...item,
-      image: enrichImageWithFileView(item.image)
-    }));
+    const duplicates = identifier.isHash
+      ? await ImageSimilarityModel.findDuplicates(identifier.value, {
+        threshold,
+        includeMetadata
+      })
+      : await ImageSimilarityModel.findDuplicatesByImageId(identifier.value, {
+        threshold,
+        includeMetadata
+      });
+
+    const enrichedDuplicates = enrichSimilarityMatches(duplicates);
 
     return res.json(successResponse({
       similar: enrichedDuplicates,
@@ -98,8 +62,7 @@ router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) =
     }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to find duplicates';
-    const statusCode = errorMessage.includes('hidden by the current safety policy') ? 403 : (errorMessage.includes('Invalid') ? 400 : 500);
-    return res.status(statusCode).json(errorResponse(errorMessage));
+    return res.status(getSimilarityErrorStatusCode(error)).json(errorResponse(errorMessage));
   }
 }));
 
@@ -110,15 +73,8 @@ router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) =
  */
 router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { isHash, value } = parseImageIdentifier(routeParam(routeParam(req.params.id)));
-    const parseIntegerWithFallback = (value: unknown, fallback: number) => {
-      const parsed = Number.parseInt(String(value ?? ''), 10);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    };
-    const parseNumberWithFallback = (value: unknown, fallback: number) => {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    };
+    const identifier = getSimilarityRouteIdentifier(req);
+    const { value } = identifier;
 
     const threshold = parseIntegerWithFallback(req.query.threshold, SIMILARITY_THRESHOLDS.SIMILAR);
     const limit = parseIntegerWithFallback(req.query.limit, PAGINATION.GROUP_IMAGES_LIMIT);
@@ -139,60 +95,36 @@ router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
       color: parseNumberWithFallback(req.query.colorThreshold, 0),
     };
 
-    let image;
-    let similar;
-
-    if (isHash) {
-      // 새 구조: composite_hash 기반
-      const compositeHash = value as string;
-      image = MediaMetadataModel.findByHash(compositeHash);
-      if (!image) {
-        return res.status(404).json(errorResponse('Image metadata not found'));
-      }
-
-      if (!image.perceptual_hash) {
-        return res.status(400).json(errorResponse('Image does not have perceptual hash. Please rebuild hashes.'));
-      }
-
-      similar = await ImageSimilarityModel.findSimilar(compositeHash, {
-        threshold,
-        limit,
-        includeColorSimilarity,
-        weights,
-        thresholds,
-        useMetadataFilter,
-        sortBy,
-        sortOrder
-      });
-    } else {
-      // 레거시: imageId 기반
-      const imageId = value as number;
-      const legacyImage = db.prepare('SELECT perceptual_hash FROM images WHERE id = ?').get(imageId) as { perceptual_hash: string | null } | undefined;
-      if (!legacyImage) {
-        return res.status(404).json(errorResponse('Image not found'));
-      }
-
-      if (!legacyImage.perceptual_hash) {
-        return res.status(400).json(errorResponse('Image does not have perceptual hash. Please rebuild hashes.'));
-      }
-
-      similar = await ImageSimilarityModel.findSimilarByImageId(imageId, {
-        threshold,
-        limit,
-        includeColorSimilarity,
-        weights,
-        thresholds,
-        useMetadataFilter,
-        sortBy,
-        sortOrder
-      });
+    if (!ensureImageFieldOrBlock(res, identifier, {
+      field: 'perceptual_hash',
+      missingFieldMessage: 'Image does not have perceptual hash. Please rebuild hashes.'
+    })) {
+      return;
     }
 
-    // Enrich results with URLs
-    const enrichedSimilar = similar.map(item => ({
-      ...item,
-      image: enrichImageWithFileView(item.image)
-    }));
+    const similar = identifier.isHash
+      ? await ImageSimilarityModel.findSimilar(identifier.value, {
+        threshold,
+        limit,
+        includeColorSimilarity,
+        weights,
+        thresholds,
+        useMetadataFilter,
+        sortBy,
+        sortOrder
+      })
+      : await ImageSimilarityModel.findSimilarByImageId(identifier.value, {
+        threshold,
+        limit,
+        includeColorSimilarity,
+        weights,
+        thresholds,
+        useMetadataFilter,
+        sortBy,
+        sortOrder
+      });
+
+    const enrichedSimilar = enrichSimilarityMatches(similar);
 
     return res.json(successResponse({
       similar: enrichedSimilar,
@@ -205,8 +137,7 @@ router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
     }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to find similar images';
-    const statusCode = errorMessage.includes('hidden by the current safety policy') ? 403 : (errorMessage.includes('Invalid') ? 400 : 500);
-    return res.status(statusCode).json(errorResponse(errorMessage));
+    return res.status(getSimilarityErrorStatusCode(error)).json(errorResponse(errorMessage));
   }
 }));
 
@@ -217,46 +148,23 @@ router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { isHash, value } = parseImageIdentifier(routeParam(routeParam(req.params.id)));
+    const identifier = getSimilarityRouteIdentifier(req);
+    const { value } = identifier;
     const threshold = parseFloat(req.query.threshold as string) || (SIMILARITY_THRESHOLDS.COLOR_SIMILAR * 100);
     const limit = parseInt(req.query.limit as string) || PAGINATION.GROUP_IMAGES_LIMIT;
 
-    let image;
-    let similar;
-
-    if (isHash) {
-      // 새 구조: composite_hash 기반
-      const compositeHash = value as string;
-      image = MediaMetadataModel.findByHash(compositeHash);
-      if (!image) {
-        return res.status(404).json(errorResponse('Image metadata not found'));
-      }
-
-      if (!image.color_histogram) {
-        return res.status(400).json(errorResponse('Image does not have color histogram. Please rebuild hashes.'));
-      }
-
-      similar = await ImageSimilarityModel.findSimilarByColor(compositeHash, threshold, limit);
-    } else {
-      // 레거시: imageId 기반
-      const imageId = value as number;
-      const legacyImage = db.prepare('SELECT color_histogram FROM images WHERE id = ?').get(imageId) as { color_histogram: string | null } | undefined;
-      if (!legacyImage) {
-        return res.status(404).json(errorResponse('Image not found'));
-      }
-
-      if (!legacyImage.color_histogram) {
-        return res.status(400).json(errorResponse('Image does not have color histogram. Please rebuild hashes.'));
-      }
-
-      similar = await ImageSimilarityModel.findSimilarByColorByImageId(imageId, threshold, limit);
+    if (!ensureImageFieldOrBlock(res, identifier, {
+      field: 'color_histogram',
+      missingFieldMessage: 'Image does not have color histogram. Please rebuild hashes.'
+    })) {
+      return;
     }
 
-    // Enrich results with URLs
-    const enrichedSimilar = similar.map(item => ({
-      ...item,
-      image: enrichImageWithFileView(item.image)
-    }));
+    const similar = identifier.isHash
+      ? await ImageSimilarityModel.findSimilarByColor(identifier.value, threshold, limit)
+      : await ImageSimilarityModel.findSimilarByColorByImageId(identifier.value, threshold, limit);
+
+    const enrichedSimilar = enrichSimilarityMatches(similar);
 
     return res.json(successResponse({
       similar: enrichedSimilar,
@@ -269,8 +177,7 @@ router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response
     }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to find similar images by color';
-    const statusCode = errorMessage.includes('hidden by the current safety policy') ? 403 : (errorMessage.includes('Invalid') ? 400 : 500);
-    return res.status(statusCode).json(errorResponse(errorMessage));
+    return res.status(getSimilarityErrorStatusCode(error)).json(errorResponse(errorMessage));
   }
 }));
 
@@ -288,11 +195,7 @@ router.get('/duplicates/all', asyncHandler(async (req: Request, res: Response) =
       minGroupSize
     });
 
-    // Enrich all images in all groups with URLs
-    const enrichedGroups = groups.map(group => ({
-      ...group,
-      images: group.images.map(image => enrichImageWithFileView(image))
-    }));
+    const enrichedGroups = enrichDuplicateGroups(groups);
 
     const totalImages = enrichedGroups.reduce((sum, group) => sum + group.images.length, 0);
 
