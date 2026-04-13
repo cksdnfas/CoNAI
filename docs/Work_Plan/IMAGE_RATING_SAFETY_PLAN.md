@@ -135,6 +135,7 @@ Already added after the initial plan:
 - Civitai temp URL blocking for hidden images
 - metadata route blocking for hidden images
 - path-based file serving blocks hidden images when the served path maps to an active hidden media row
+- image-editor file-id routes block hidden images before original-file reads or temp/output derivation
 
 ## Follow-up phase after this slice
 

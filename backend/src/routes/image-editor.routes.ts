@@ -4,6 +4,8 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { ImageEditorService } from '../services/imageEditorService';
 import { TempImageService, EditOptions } from '../services/tempImageService';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
+import { ImageSafetyService } from '../services/imageSafetyService';
 import { runtimePaths } from '../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
@@ -12,6 +14,30 @@ import { WebPConversionService } from '../services/webpConversionService';
 import { buildImageEditorResultData, listSaveBrowserImages } from './imageEditorRouteHelpers';
 
 const router = Router();
+
+async function getAccessibleImageFileOrBlock(imageId: number, res: Response) {
+  const imageFile = ImageFileModel.findById(imageId);
+  if (!imageFile) {
+    res.status(404).json({
+      success: false,
+      error: 'Image file not found'
+    });
+    return null;
+  }
+
+  if (imageFile.composite_hash) {
+    const metadata = await MediaMetadataModel.findByHash(imageFile.composite_hash);
+    if (metadata && ImageSafetyService.isHidden(metadata.rating_score)) {
+      res.status(403).json({
+        success: false,
+        error: 'This image is hidden by the current safety policy'
+      });
+      return null;
+    }
+  }
+
+  return imageFile;
+}
 
 /**
  * List save-folder images for attachment picker UIs.
@@ -52,12 +78,9 @@ router.get('/:id/webp', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const imageFile = ImageFileModel.findById(imageId);
+    const imageFile = await getAccessibleImageFileOrBlock(imageId, res);
     if (!imageFile) {
-      return res.status(404).json({
-        success: false,
-        error: 'Image file not found'
-      });
+      return;
     }
 
     const originalPath = imageFile.original_file_path;
@@ -106,6 +129,10 @@ router.post('/:id/temp', asyncHandler(async (req: Request, res: Response) => {
   const editOptions: EditOptions = req.body;
 
   try {
+    if (!await getAccessibleImageFileOrBlock(imageId, res)) {
+      return;
+    }
+
     const result = await ImageEditorService.editImage(imageId, editOptions);
 
     return res.json({
@@ -146,6 +173,10 @@ router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
+    if (!await getAccessibleImageFileOrBlock(imageId, res)) {
+      return;
+    }
+
     // Convert base64 to Buffer
     const imageBuffer = Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ''), 'base64');
     const maskBuffer = maskData ? Buffer.from(maskData.replace(/^data:image\/\w+;base64,/, ''), 'base64') : undefined;
@@ -203,6 +234,10 @@ router.post('/:id/save-output', asyncHandler(async (req: Request, res: Response)
   }
 
   try {
+    if (!await getAccessibleImageFileOrBlock(imageId, res)) {
+      return;
+    }
+
     const result = await ImageEditorService.saveAsFormat(
       imageData,
       imageId,
@@ -248,6 +283,10 @@ router.post('/:id/save-webp', asyncHandler(async (req: Request, res: Response) =
   }
 
   try {
+    if (!await getAccessibleImageFileOrBlock(imageId, res)) {
+      return;
+    }
+
     const result = await ImageEditorService.saveAsWebP(
       imageData,
       imageId,
