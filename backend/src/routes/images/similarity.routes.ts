@@ -98,7 +98,7 @@ router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) =
     }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to find duplicates';
-    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    const statusCode = errorMessage.includes('hidden by the current safety policy') ? 403 : (errorMessage.includes('Invalid') ? 400 : 500);
     return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
@@ -205,7 +205,7 @@ router.get('/:id/similar', asyncHandler(async (req: Request, res: Response) => {
     }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to find similar images';
-    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    const statusCode = errorMessage.includes('hidden by the current safety policy') ? 403 : (errorMessage.includes('Invalid') ? 400 : 500);
     return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
@@ -269,7 +269,7 @@ router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response
     }));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to find similar images by color';
-    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    const statusCode = errorMessage.includes('hidden by the current safety policy') ? 403 : (errorMessage.includes('Invalid') ? 400 : 500);
     return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));

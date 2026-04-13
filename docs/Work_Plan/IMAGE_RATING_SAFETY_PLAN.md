@@ -136,6 +136,7 @@ Already added after the initial plan:
 - metadata route blocking for hidden images
 - path-based file serving blocks hidden images when the served path maps to an active hidden media row
 - image-editor file-id routes block hidden images before original-file reads or temp/output derivation
+- similarity/duplicate routes block hidden source images and exclude hidden candidates from result sets
 
 ## Follow-up phase after this slice
 

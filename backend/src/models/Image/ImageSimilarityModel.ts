@@ -10,6 +10,7 @@ import {
   SIMILARITY_THRESHOLDS
 } from '../../types/similarity';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
+import { ImageSafetyService } from '../../services/imageSafetyService';
 
 type SimilarityWeights = {
   perceptualHash: number;
@@ -63,6 +64,10 @@ export class ImageSimilarityModel {
     const targetImage = this.loadImageMetadata(compositeHash);
     if (!targetImage) {
       throw new Error('Image not found with the provided composite hash');
+    }
+
+    if (ImageSafetyService.isHidden(targetImage.rating_score)) {
+      throw new Error('This image is hidden by the current safety policy');
     }
 
     return targetImage;
@@ -196,7 +201,9 @@ export class ImageSimilarityModel {
         if.file_status
       FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
-      WHERE im.composite_hash != ? AND im.perceptual_hash IS NOT NULL
+      WHERE im.composite_hash != ?
+        AND im.perceptual_hash IS NOT NULL
+        AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
     `;
     const params: any[] = [targetImage.composite_hash];
     const metadataBounds = includeMetadata ? this.getMetadataBounds(targetImage) : null;
@@ -226,7 +233,9 @@ export class ImageSimilarityModel {
         if.file_status
       FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      WHERE im.composite_hash != ? AND im.perceptual_hash IS NOT NULL
+      WHERE im.composite_hash != ?
+        AND im.perceptual_hash IS NOT NULL
+        AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
     `;
     const params: any[] = [targetImage.composite_hash];
     const metadataBounds = useMetadataFilter ? this.getMetadataBounds(targetImage) : null;
@@ -257,7 +266,9 @@ export class ImageSimilarityModel {
           if.file_status
         FROM media_metadata im
         LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
-        WHERE im.composite_hash != ? AND im.color_histogram IS NOT NULL
+        WHERE im.composite_hash != ?
+          AND im.color_histogram IS NOT NULL
+          AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
       `,
       params: [compositeHash],
     };
@@ -775,6 +786,7 @@ export class ImageSimilarityModel {
       INNER JOIN image_files f ON m.composite_hash = f.composite_hash
       WHERE f.file_status = 'active'
         AND m.perceptual_hash IS NOT NULL
+        AND ${ImageSafetyService.buildVisibleScoreCondition('m.rating_score')}
       ORDER BY m.composite_hash
     `).all() as ImageMetadataRecord[];
 

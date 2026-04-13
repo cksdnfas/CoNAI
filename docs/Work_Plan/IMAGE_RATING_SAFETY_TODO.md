@@ -41,6 +41,7 @@
 - [x] Block hidden images from `/api/images/metadata/:composite_hash`
 - [x] Block hidden images from `/api/images/by-path/:encodedPath` when the path maps to an active hidden image row
 - [x] Block hidden images from image-editor routes that load or derive temp artifacts from original files by file id
+- [x] Exclude hidden images from similarity and duplicate route source/result flows
 
 ## Follow-up later
 - [x] Keep `blur` list-only, including thumbnail-strip style list surfaces
