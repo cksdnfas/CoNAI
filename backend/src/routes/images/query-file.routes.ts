@@ -7,6 +7,7 @@ import { asyncHandler } from '../../middleware/errorHandler';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
+import { ImageSafetyService } from '../../services/imageSafetyService';
 import { enrichImageWithFileView } from './utils';
 import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
 import { routeParam } from '../routeParam';
@@ -17,6 +18,28 @@ function generateETag(stats: fs.Stats): string {
   const hash = crypto.createHash('md5');
   hash.update(`${stats.mtime.getTime()}-${stats.size}`);
   return `"${hash.digest('hex')}"`;
+}
+
+async function getVisibleMetadataOrBlock(res: Response, compositeHash: string) {
+  const metadata = await MediaMetadataModel.findByHash(compositeHash);
+
+  if (!metadata) {
+    res.status(404).json({
+      success: false,
+      error: 'Metadata not found'
+    });
+    return null;
+  }
+
+  if (ImageSafetyService.isHidden(metadata.rating_score)) {
+    res.status(403).json({
+      success: false,
+      error: 'This image is hidden by the current safety policy'
+    });
+    return null;
+  }
+
+  return metadata;
 }
 
 router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) => {
@@ -39,13 +62,10 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
       });
     }
 
-    const metadata = await MediaMetadataModel.findByHash(compositeHash);
+    const metadata = await getVisibleMetadataOrBlock(res, compositeHash);
 
     if (!metadata) {
-      return res.status(404).json({
-        success: false,
-        error: 'Metadata not found'
-      });
+      return;
     }
 
     const imageWithFile = {
@@ -83,6 +103,12 @@ router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Respon
   }
 
   try {
+    const visibleMetadata = await getVisibleMetadataOrBlock(res, compositeHash);
+
+    if (!visibleMetadata) {
+      return;
+    }
+
     const files = await ImageFileModel.findActiveByHash(compositeHash);
 
     if (files.length === 0) {
@@ -177,13 +203,10 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
   }
 
   try {
-    const metadata = await MediaMetadataModel.findByHash(compositeHash);
+    const metadata = await getVisibleMetadataOrBlock(res, compositeHash);
 
     if (!metadata) {
-      return res.status(404).json({
-        success: false,
-        error: 'Image not found'
-      });
+      return;
     }
 
     const files = await ImageFileModel.findActiveByHash(compositeHash);
@@ -349,6 +372,11 @@ router.post('/download/batch', asyncHandler(async (req: Request, res: Response) 
     let addedCount = 0;
 
     for (const compositeHash of uniqueHashes) {
+      const metadata = MediaMetadataModel.findByHash(compositeHash);
+      if (!metadata || ImageSafetyService.isHidden(metadata.rating_score)) {
+        continue;
+      }
+
       const files = ImageFileModel.findActiveByHash(compositeHash);
       if (files.length === 0) {
         continue;
@@ -407,6 +435,12 @@ router.get('/:compositeHash/download/original', asyncHandler(async (req: Request
   }
 
   try {
+    const visibleMetadata = await getVisibleMetadataOrBlock(res, compositeHash);
+
+    if (!visibleMetadata) {
+      return;
+    }
+
     const files = await ImageFileModel.findActiveByHash(compositeHash);
 
     if (files.length === 0) {
