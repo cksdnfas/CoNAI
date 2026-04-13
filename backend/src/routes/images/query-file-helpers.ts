@@ -1,11 +1,14 @@
 import fs from 'fs';
 import crypto from 'crypto';
+import path from 'path';
+import AdmZip from 'adm-zip';
 import type { Request, Response } from 'express';
-import { resolveUploadsPath } from '../../config/runtimePaths';
+import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { ImageSafetyService } from '../../services/imageSafetyService';
-import type { ImageFileRecord } from '../../types/image';
+import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
+import type { ImageFileRecord, ImageMetadataRecord } from '../../types/image';
 import { routeParam } from '../routeParam';
 
 /** Build a stable ETag from file mtime and size. */
@@ -94,6 +97,18 @@ export function getExistingActiveFilePathOrBlock(
   return filePath;
 }
 
+/** Build the detail-route image payload from visible metadata and one active file. */
+export function buildImageWithFileViewData(metadata: ImageMetadataRecord, file: ImageFileRecord) {
+  return {
+    ...metadata,
+    file_id: file.id,
+    original_file_path: file.original_file_path,
+    file_size: file.file_size,
+    mime_type: file.mime_type || 'image/jpeg',
+    file_type: file.file_type
+  };
+}
+
 /** Stream a video-like file with range support and long-lived caching headers. */
 export function streamRangeFile(req: Request, res: Response, filePath: string, mimeType: string) {
   const stat = fs.statSync(filePath);
@@ -146,4 +161,147 @@ export async function streamCacheableFile(req: Request, res: Response, filePath:
 
   const fileStream = fs.createReadStream(filePath);
   fileStream.pipe(res);
+}
+
+/** Serve the thumbnail path, regenerate it when missing, or fall back to the original file. */
+export async function serveThumbnailOrOriginal(
+  req: Request,
+  res: Response,
+  compositeHash: string,
+  metadata: ImageMetadataRecord,
+  file: ImageFileRecord,
+) {
+  const mimeType = file.mime_type;
+  const fileType = file.file_type;
+
+  if ((mimeType && mimeType.startsWith('video/')) || fileType === 'animated') {
+    const originalPath = getExistingActiveFilePathOrBlock(res, file, {
+      missingError: 'Video file not found',
+      warnMessage: `[ImageServe] Video file missing on disk: ${resolveUploadsPath(file.original_file_path)}`,
+    });
+
+    if (!originalPath) {
+      return;
+    }
+
+    streamRangeFile(req, res, originalPath, mimeType);
+    return;
+  }
+
+  let thumbnailPath = metadata.thumbnail_path
+    ? path.join(runtimePaths.tempDir, metadata.thumbnail_path)
+    : null;
+
+  let serveOriginal = false;
+
+  if (!thumbnailPath || !fs.existsSync(thumbnailPath)) {
+    const originalPath = getExistingActiveFilePathOrBlock(res, file, {
+      missingError: 'Thumbnail and original file not found',
+      warnMessage: `[ImageServe] Both thumbnail and original missing: ${file.original_file_path}`,
+    });
+
+    if (!originalPath) {
+      return;
+    }
+
+    try {
+      console.log(`[ImageServe] Regenerating missing thumbnail for ${compositeHash}`);
+      const relativeThumbPath = await ThumbnailGenerator.generateThumbnail(originalPath, compositeHash);
+      MediaMetadataModel.update(compositeHash, { thumbnail_path: relativeThumbPath });
+      thumbnailPath = path.join(runtimePaths.tempDir, relativeThumbPath);
+
+      if (!fs.existsSync(thumbnailPath)) {
+        serveOriginal = true;
+      }
+    } catch (err) {
+      console.error(`[ImageServe] Failed to regenerate thumbnail: ${err}`);
+      serveOriginal = true;
+    }
+  }
+
+  if (serveOriginal) {
+    const originalPath = getExistingActiveFilePathOrBlock(res, file, {
+      missingError: 'Original file not found',
+    });
+
+    if (!originalPath) {
+      return;
+    }
+
+    await streamCacheableFile(req, res, originalPath, mimeType);
+    return;
+  }
+
+  if (!thumbnailPath) {
+    res.status(404).json({ success: false, error: 'Thumbnail path error' });
+    return;
+  }
+
+  await streamCacheableFile(req, res, thumbnailPath, 'image/webp');
+}
+
+/** Build a zip archive from visible active files for batch download. */
+export function buildBatchDownloadArchive(compositeHashes: string[]) {
+  const zip = new AdmZip();
+  const usedNames = new Map<string, number>();
+  let addedCount = 0;
+
+  for (const compositeHash of compositeHashes) {
+    const metadata = MediaMetadataModel.findByHash(compositeHash);
+    if (!metadata || ImageSafetyService.isHidden(metadata.rating_score)) {
+      continue;
+    }
+
+    const files = ImageFileModel.findActiveByHash(compositeHash);
+    if (files.length === 0) {
+      continue;
+    }
+
+    const file = files[0];
+    const filePath = resolveUploadsPath(file.original_file_path);
+    if (!fs.existsSync(filePath)) {
+      continue;
+    }
+
+    const parsedName = path.parse(file.original_file_path);
+    const originalName = parsedName.base || `${compositeHash}`;
+    const duplicateCount = usedNames.get(originalName) || 0;
+    usedNames.set(originalName, duplicateCount + 1);
+    const finalName = duplicateCount === 0
+      ? originalName
+      : `${parsedName.name}-${duplicateCount}${parsedName.ext}`;
+
+    zip.addLocalFile(filePath, '', finalName);
+    addedCount += 1;
+  }
+
+  if (addedCount === 0) {
+    return null;
+  }
+
+  return {
+    archiveName: `conai-images-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`,
+    zipBuffer: zip.toBuffer()
+  };
+}
+
+/** Resolve the content type for path-based file serving. */
+export function getMimeTypeFromFilePath(filePath: string) {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+    '.svg': 'image/svg+xml',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.mov': 'video/quicktime',
+    '.avi': 'video/x-msvideo',
+    '.mkv': 'video/x-matroska'
+  };
+
+  return mimeTypes[ext] || 'application/octet-stream';
 }
