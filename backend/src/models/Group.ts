@@ -3,11 +3,14 @@ import { GroupRecord, ImageGroupRecord, GroupCreateData, GroupUpdateData, GroupW
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
-import { ImageSafetyService } from '../services/imageSafetyService';
-
-function getVisibleGroupImageCondition() {
-  return ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
-}
+import {
+  findImagesByGroupQuery,
+  findImagesByGroupWithFilesQuery,
+  findRandomImageForGroupQuery,
+  findPreviewImagesQuery,
+  getCompositeHashesForGroupQuery,
+  getImageFileIdsForGroupQuery,
+} from './GroupImageQueries';
 
 export class GroupModel {
   /**
@@ -287,71 +290,7 @@ export class ImageGroupModel {
     limit: number = 20,
     collectionType?: 'manual' | 'auto'
   ): { images: ImageWithFileView[], total: number } {
-    const offset = (page - 1) * limit;
-    let whereClause = 'WHERE ig.group_id = ? AND ig.composite_hash IS NOT NULL';
-    let queryParams: (number | string)[] = [groupId];
-
-    if (collectionType) {
-      whereClause += ' AND ig.collection_type = ?';
-      queryParams.push(collectionType);
-    }
-
-    // 총 개수 조회 (composite_hash 있는 것만)
-    const countRow = db.prepare(
-      `SELECT COUNT(*) as total
-       FROM image_groups ig
-       LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-       ${whereClause} AND ${getVisibleGroupImageCondition()}`
-    ).get(...queryParams) as any;
-    const total = countRow.total;
-
-    // 메타데이터 조회 (composite_hash 기반, 해시 생성 완료된 이미지만)
-    // ✅ 해시당 1개 항목만 반환 (중복 제거)
-    // ✅ LEFT JOIN으로 비디오 파일도 포함 (메타데이터 없어도 조회 가능)
-    const query = `
-      SELECT
-        COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
-        im.width,
-        im.height,
-        im.thumbnail_path,
-        im.prompt,
-        im.negative_prompt,
-        im.seed,
-        im.steps,
-        im.cfg_scale,
-        im.sampler,
-        im.model_name as model,
-        im.first_seen_date as created_date,
-        im.rating_score,
-        (SELECT id FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as id,
-        (SELECT original_file_path FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as original_file_path,
-        (SELECT file_status FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as file_status,
-        (SELECT file_type FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as file_type,
-        (SELECT file_size FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as file_size,
-        (SELECT mime_type FROM image_files WHERE composite_hash = ig.composite_hash AND file_status = 'active' LIMIT 1) as mime_type,
-        ig.collection_type
-      FROM image_groups ig
-      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-      ${whereClause} AND ${getVisibleGroupImageCondition()}
-      GROUP BY ig.composite_hash
-      ORDER BY ig.order_index ASC, ig.added_date DESC
-      LIMIT ? OFFSET ?
-    `;
-
-    const rows = db.prepare(query).all(...queryParams, limit, offset) as ImageWithFileView[];
-
-    // 🔍 DEBUG: Check first row from database
-    if (rows.length > 0) {
-      console.log('[DEBUG Group.ts:findImagesByGroup] First row from DB:', {
-        composite_hash: rows[0].composite_hash,
-        id: rows[0].id,
-        file_type: rows[0].file_type,
-        mime_type: rows[0].mime_type,
-        file_size: rows[0].file_size
-      });
-    }
-
-    return { images: rows, total };
+    return findImagesByGroupQuery(groupId, page, limit, collectionType);
   }
 
   /**
@@ -364,45 +303,7 @@ export class ImageGroupModel {
     limit: number = 20,
     collectionType?: 'manual' | 'auto'
   ): { images: ImageWithFileView[], total: number } {
-    const offset = (page - 1) * limit;
-    let whereClause = 'WHERE ig.group_id = ? AND ig.composite_hash IS NOT NULL';
-    let queryParams: (number | string)[] = [groupId];
-
-    if (collectionType) {
-      whereClause += ' AND ig.collection_type = ?';
-      queryParams.push(collectionType);
-    }
-
-    // 총 개수 조회 (composite_hash 있는 것만)
-    const countRow = db.prepare(
-      `SELECT COUNT(*) as total
-       FROM image_groups ig
-       INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-       ${whereClause} AND ${getVisibleGroupImageCondition()}`
-    ).get(...queryParams) as any;
-    const total = countRow.total;
-
-    // 메타데이터 + 파일 정보 조회 (해시 생성 완료된 이미지만)
-    const query = `
-      SELECT
-        im.*,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_status,
-        if.folder_id,
-        wf.folder_name
-      FROM image_groups ig
-      INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-      LEFT JOIN image_files if ON if.composite_hash = im.composite_hash AND if.file_status = 'active'
-      LEFT JOIN watched_folders wf ON if.folder_id = wf.id
-      ${whereClause} AND ${getVisibleGroupImageCondition()}
-      ORDER BY ig.order_index ASC, ig.added_date DESC
-      LIMIT ? OFFSET ?
-    `;
-
-    const rows = db.prepare(query).all(...queryParams, limit, offset) as ImageWithFileView[];
-
-    return { images: rows, total };
+    return findImagesByGroupWithFilesQuery(groupId, page, limit, collectionType);
   }
 
   /**
@@ -457,52 +358,7 @@ export class ImageGroupModel {
    * 그룹의 랜덤 이미지 조회 (썸네일용)
    */
   static findRandomImageForGroup(groupId: number): ImageMetadataRecord | null {
-    // Keep this query aligned with the current media_metadata schema.
-    const query = `
-      SELECT
-        COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
-        im.perceptual_hash,
-        im.dhash,
-        im.ahash,
-        im.color_histogram,
-        im.width,
-        im.height,
-        im.thumbnail_path,
-        im.ai_tool,
-        im.model_name,
-        im.lora_models,
-        im.steps,
-        im.cfg_scale,
-        im.sampler,
-        im.seed,
-        im.scheduler,
-        im.prompt,
-        im.negative_prompt,
-        im.denoise_strength,
-        im.generation_time,
-        im.batch_size,
-        im.batch_index,
-        im.auto_tags,
-        im.model_references,
-        im.character_prompt_text,
-        im.raw_nai_parameters,
-        im.duration,
-        im.fps,
-        im.video_codec,
-        im.audio_codec,
-        im.bitrate,
-        im.rating_score,
-        im.first_seen_date,
-        im.metadata_updated_date
-      FROM image_groups ig
-      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-      WHERE ig.group_id = ? AND ${getVisibleGroupImageCondition()}
-      ORDER BY RANDOM()
-      LIMIT 1
-    `;
-
-    const row = db.prepare(query).get(groupId) as ImageMetadataRecord | undefined;
-    return row || null;
+    return findRandomImageForGroupQuery(groupId);
   }
 
   /**
@@ -514,111 +370,14 @@ export class ImageGroupModel {
     count: number = 8,
     includeChildren: boolean = true
   ): ImageWithFileView[] {
-    // 1. 현재 그룹에서 랜덤 이미지 조회
-    // composite_hash 기준으로 먼저 샘플링해서 동일 이미지가 여러 active file row 때문에
-    // 미리보기 풀 안에서 중복 선택되지 않도록 한다.
-    const query = `
-      WITH sampled_hashes AS (
-        SELECT ig.composite_hash
-        FROM image_groups ig
-        LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-        WHERE ig.group_id = ? AND ${getVisibleGroupImageCondition()}
-        GROUP BY ig.composite_hash
-        ORDER BY RANDOM()
-        LIMIT ?
-      )
-      SELECT
-        COALESCE(im.composite_hash, sampled_hashes.composite_hash) as composite_hash,
-        im.perceptual_hash,
-        im.dhash,
-        im.ahash,
-        im.color_histogram,
-        im.width,
-        im.height,
-        im.thumbnail_path,
-        im.ai_tool,
-        im.model_name,
-        im.lora_models,
-        im.steps,
-        im.cfg_scale,
-        im.sampler,
-        im.seed,
-        im.scheduler,
-        im.prompt,
-        im.negative_prompt,
-        im.denoise_strength,
-        im.generation_time,
-        im.batch_size,
-        im.batch_index,
-        im.auto_tags,
-        im.duration,
-        im.fps,
-        im.video_codec,
-        im.audio_codec,
-        im.bitrate,
-        im.rating_score,
-        im.first_seen_date,
-        im.metadata_updated_date,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_status,
-        if.file_type,
-        if.mime_type,
-        if.folder_id,
-        f.folder_name
-      FROM sampled_hashes
-      LEFT JOIN media_metadata im ON sampled_hashes.composite_hash = im.composite_hash
-      LEFT JOIN image_files if ON if.id = (
-        SELECT if2.id
-        FROM image_files if2
-        WHERE if2.composite_hash = sampled_hashes.composite_hash
-          AND if2.file_status = 'active'
-        ORDER BY if2.id DESC
-        LIMIT 1
-      )
-      LEFT JOIN watched_folders f ON if.folder_id = f.id
-    `;
-
-    const rows = db.prepare(query).all(groupId, count) as ImageWithFileView[];
-
-    // 이미지가 충분히 있거나, 자식 검색을 안 하면 바로 반환
-    if (rows.length > 0 || !includeChildren) {
-      return rows;
-    }
-
-    // 2. 이미지가 없으면 자식 그룹에서 검색 (재귀)
-    const children = GroupModel.findChildren(groupId);
-
-    // 자식이 없으면 빈 배열 반환
-    if (children.length === 0) {
-      return [];
-    }
-
-    // 첫 번째 이미지를 가진 자식 그룹 찾기
-    for (const child of children) {
-      const childImages = this.findPreviewImages(child.id, count, true);
-      if (childImages.length > 0) {
-        return childImages;
-      }
-    }
-
-    // 모든 자식 그룹에도 이미지가 없음
-    return [];
+    return findPreviewImagesQuery(groupId, count, includeChildren, childGroupId => GroupModel.findChildren(childGroupId));
   }
 
   /**
    * 그룹에 속한 모든 composite_hash 조회
    */
   static getCompositeHashesForGroup(groupId: number): string[] {
-    const query = `
-      SELECT composite_hash
-      FROM image_groups
-      WHERE group_id = ?
-      ORDER BY order_index ASC, added_date DESC
-    `;
-
-    const rows = db.prepare(query).all(groupId) as { composite_hash: string }[];
-    return rows.map(row => row.composite_hash);
+    return getCompositeHashesForGroupQuery(groupId);
   }
 
   /**
@@ -626,16 +385,6 @@ export class ImageGroupModel {
    * composite_hash가 같아도 서로 다른 파일로 구분됨
    */
   static getImageFileIdsForGroup(groupId: number): number[] {
-    const query = `
-      SELECT if.id
-      FROM image_groups ig
-      INNER JOIN image_files if ON ig.composite_hash = if.composite_hash
-      WHERE ig.group_id = ?
-        AND if.file_status = 'active'
-      ORDER BY ig.order_index ASC, ig.added_date DESC, if.id ASC
-    `;
-
-    const rows = db.prepare(query).all(groupId) as { id: number }[];
-    return rows.map(row => row.id);
+    return getImageFileIdsForGroupQuery(groupId);
   }
 }
