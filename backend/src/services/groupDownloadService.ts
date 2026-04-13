@@ -1,5 +1,6 @@
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { AutoFolderGroupModel, AutoFolderGroupImageModel } from '../models/AutoFolderGroup';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 import AdmZip from 'adm-zip';
 import path from 'path';
@@ -25,6 +26,11 @@ interface DownloadResult {
   zipPath: string;
   fileName: string;
   fileCount: number;
+}
+
+interface ResolvedDownloadFile {
+  filePath: string;
+  extension: string;
 }
 
 export class GroupDownloadService {
@@ -56,7 +62,8 @@ export class GroupDownloadService {
     // 선택된 이미지만 필터링 (선택 옵션이 있는 경우)
     let images = allImages;
     if (compositeHashes && compositeHashes.length > 0) {
-      images = allImages.filter(img => compositeHashes.includes(img.composite_hash));
+      const selectedHashes = new Set(compositeHashes);
+      images = allImages.filter((img) => selectedHashes.has(img.composite_hash));
     }
 
     if (images.length === 0) {
@@ -99,46 +106,49 @@ export class GroupDownloadService {
    * composite_hash 기준으로 중복 제거 (해시당 1개만)
    */
   private static async getAllImagesWithFiles(groupId: number, groupType: GroupType): Promise<ImageWithFileView[]> {
-    const images: ImageWithFileView[] = [];
-    let page = 1;
-    const limit = 1000; // 한 번에 1000개씩 조회
-    let hasMore = true;
+    const compositeHashes = groupType === 'custom'
+      ? ImageGroupModel.getCompositeHashesForGroup(groupId)
+      : AutoFolderGroupImageModel.getCompositeHashesForGroup(groupId);
 
-    if (groupType === 'custom') {
-      // 커스텀 그룹: image_groups 테이블 사용
-      while (hasMore) {
-        const result = await ImageGroupModel.findImagesByGroupWithFiles(groupId, page, limit);
-        images.push(...result.images);
+    return this.loadImagesByCompositeHashes(compositeHashes);
+  }
 
-        hasMore = result.images.length === limit;
-        page++;
+  /**
+   * composite_hash 목록을 배치 로드하고, 요청 순서를 최대한 유지하면서 중복을 제거한다.
+   */
+  private static loadImagesByCompositeHashes(compositeHashes: string[]): ImageWithFileView[] {
+    if (compositeHashes.length === 0) {
+      return [];
+    }
+
+    const uniqueHashes: string[] = [];
+    const seen = new Set<string>();
+
+    for (const hash of compositeHashes) {
+      if (!hash || seen.has(hash)) {
+        continue;
       }
-    } else {
-      // 자동 폴더 그룹: auto_folder_group_images 테이블 사용
-      while (hasMore) {
-        const pageImages = await AutoFolderGroupImageModel.findPreviewImages(groupId, limit, false);
-        images.push(...pageImages);
+      seen.add(hash);
+      uniqueHashes.push(hash);
+    }
 
-        hasMore = pageImages.length === limit;
-        page++;
+    const imagesByHash = new Map<string, ImageWithFileView>();
+    const batchSize = 500;
 
-        // 더 이상 데이터가 없으면 종료
-        if (pageImages.length < limit) {
-          hasMore = false;
+    for (let offset = 0; offset < uniqueHashes.length; offset += batchSize) {
+      const batch = uniqueHashes.slice(offset, offset + batchSize);
+      const rows = MediaMetadataModel.findByHashesWithFiles(batch) as ImageWithFileView[];
+
+      for (const row of rows) {
+        if (!imagesByHash.has(row.composite_hash)) {
+          imagesByHash.set(row.composite_hash, row);
         }
       }
     }
 
-    // 중복 제거: composite_hash당 첫 번째 파일만 선택
-    // LEFT JOIN image_files로 인해 같은 해시의 여러 파일이 조인될 수 있음
-    const uniqueImages = new Map<string, ImageWithFileView>();
-    for (const img of images) {
-      if (!uniqueImages.has(img.composite_hash)) {
-        uniqueImages.set(img.composite_hash, img);
-      }
-    }
-
-    return Array.from(uniqueImages.values());
+    return uniqueHashes
+      .map((hash) => imagesByHash.get(hash))
+      .filter((image): image is ImageWithFileView => !!image);
   }
 
   /**
@@ -149,83 +159,100 @@ export class GroupDownloadService {
     downloadType: DownloadType
   ): Array<{ filePath: string; originalName: string; compositeHash: string; captionContent?: string }> {
     const filesToZip: Array<{ filePath: string; originalName: string; compositeHash: string; captionContent?: string }> = [];
-    const usedNames = new Map<string, number>(); // 파일명 중복 카운터
+    const usedNames = new Map<string, number>();
 
     for (const image of images) {
-      let filePath: string | null = null;
-      let fileExtension = '.jpg'; // 기본 확장자
+      const resolvedFile = this.resolveDownloadFile(image, downloadType);
 
-      if (downloadType === 'thumbnail') {
-        // 썸네일 다운로드
-        if (image.thumbnail_path) {
-          filePath = path.join(runtimePaths.tempDir, image.thumbnail_path);
-          fileExtension = path.extname(image.thumbnail_path) || '.jpg';
-        }
-      } else if (downloadType === 'original') {
-        // 원본 이미지 다운로드 (image, animated 타입만)
-        // video 타입은 제외
-        if (image.original_file_path) {
-          const fullPath = resolveUploadsPath(image.original_file_path);
+      if (resolvedFile) {
+        const baseName = image.original_file_path
+          ? path.basename(image.original_file_path, path.extname(image.original_file_path))
+          : 'image';
 
-          // 파일 타입 확인 (확장자로 간접 확인)
-          const ext = path.extname(image.original_file_path).toLowerCase();
-          const isVideo = ['.mp4', '.webm', '.mov', '.avi', '.mkv'].includes(ext);
-
-          if (!isVideo) {
-            filePath = fullPath;
-            fileExtension = ext || '.jpg';
-          }
-        }
-
-        // 원본 파일이 없으면 썸네일로 대체
-        if (!filePath && image.thumbnail_path) {
-          filePath = path.join(runtimePaths.tempDir, image.thumbnail_path);
-          fileExtension = path.extname(image.thumbnail_path) || '.jpg';
-        }
-      } else if (downloadType === 'video') {
-        // 동영상 및 애니메이트 다운로드 (video, animated 타입만)
-        if (image.original_file_path) {
-          const fullPath = resolveUploadsPath(image.original_file_path);
-          const ext = path.extname(image.original_file_path).toLowerCase();
-
-          // 동영상 또는 GIF 파일만
-          const isVideoOrAnimated = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.gif'].includes(ext);
-
-          if (isVideoOrAnimated) {
-            filePath = fullPath;
-            fileExtension = ext;
-          }
-        }
-      }
-
-      // 파일이 실제로 존재하는지 확인
-      if (filePath && fs.existsSync(filePath)) {
-        // 원본 파일명 추출 (있으면)
-        let baseName = 'image';
-        if (image.original_file_path) {
-          baseName = path.basename(image.original_file_path, path.extname(image.original_file_path));
-        }
-
-        // 파일명 중복 처리
-        const finalName = this.getUniqueFileName(baseName, fileExtension, usedNames);
+        const finalName = this.getUniqueFileName(baseName, resolvedFile.extension, usedNames);
 
         filesToZip.push({
-          filePath,
+          filePath: resolvedFile.filePath,
           originalName: finalName,
           compositeHash: image.composite_hash
         });
-      } else {
-        // 디버깅: 파일을 찾지 못한 경우 로그
-        console.warn(`[GroupDownload] File not found for ${downloadType}:`, {
-          composite_hash: image.composite_hash,
-          filePath,
-          thumbnail_path: image.thumbnail_path,
-          original_file_path: image.original_file_path,
-        });
+        continue;
       }
+
+      console.warn(`[GroupDownload] File not found for ${downloadType}:`, {
+        composite_hash: image.composite_hash,
+        thumbnail_path: image.thumbnail_path,
+        original_file_path: image.original_file_path,
+      });
     }
 
     return filesToZip;
+  }
+
+  /**
+   * 다운로드 타입에 맞는 실제 파일 경로를 해석한다.
+   */
+  private static resolveDownloadFile(image: ImageWithFileView, downloadType: DownloadType): ResolvedDownloadFile | null {
+    const thumbnailPath = this.resolveExistingThumbnail(image);
+    const originalInfo = this.resolveExistingOriginal(image);
+
+    if (downloadType === 'thumbnail') {
+      return thumbnailPath
+        ? { filePath: thumbnailPath, extension: path.extname(thumbnailPath) || '.jpg' }
+        : null;
+    }
+
+    if (downloadType === 'original') {
+      if (originalInfo && !originalInfo.isVideo) {
+        return { filePath: originalInfo.filePath, extension: originalInfo.extension || '.jpg' };
+      }
+
+      return thumbnailPath
+        ? { filePath: thumbnailPath, extension: path.extname(thumbnailPath) || '.jpg' }
+        : null;
+    }
+
+    if (originalInfo && (originalInfo.isVideo || originalInfo.isAnimated)) {
+      return { filePath: originalInfo.filePath, extension: originalInfo.extension };
+    }
+
+    return null;
+  }
+
+  private static resolveExistingThumbnail(image: ImageWithFileView): string | null {
+    if (!image.thumbnail_path) {
+      return null;
+    }
+
+    const fullPath = path.join(runtimePaths.tempDir, image.thumbnail_path);
+    return fs.existsSync(fullPath) ? fullPath : null;
+  }
+
+  private static resolveExistingOriginal(image: ImageWithFileView): {
+    filePath: string;
+    extension: string;
+    isVideo: boolean;
+    isAnimated: boolean;
+  } | null {
+    if (!image.original_file_path) {
+      return null;
+    }
+
+    const filePath = resolveUploadsPath(image.original_file_path);
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+
+    const extension = path.extname(image.original_file_path).toLowerCase() || '.jpg';
+    const isVideo = ['.mp4', '.webm', '.mov', '.avi', '.mkv'].includes(extension);
+    const isAnimated = extension === '.gif';
+
+    return {
+      filePath,
+      extension,
+      isVideo,
+      isAnimated
+    };
   }
 
   /**
@@ -379,34 +406,16 @@ export class GroupDownloadService {
     let videoCount = 0;
 
     for (const image of images) {
-      // 썸네일 개수
-      if (image.thumbnail_path) {
-        const thumbPath = path.join(runtimePaths.tempDir, image.thumbnail_path);
-        if (fs.existsSync(thumbPath)) {
-          thumbnailCount++;
-        }
+      if (this.resolveDownloadFile(image, 'thumbnail')) {
+        thumbnailCount++;
       }
 
-      // 원본 이미지 개수
-      if (image.original_file_path) {
-        const fullPath = resolveUploadsPath(image.original_file_path);
-        const ext = path.extname(image.original_file_path).toLowerCase();
-        const isVideo = ['.mp4', '.webm', '.mov', '.avi', '.mkv'].includes(ext);
-        const isAnimated = ext === '.gif';
+      if (this.resolveDownloadFile(image, 'original')) {
+        originalCount++;
+      }
 
-        if (fs.existsSync(fullPath)) {
-          if (isVideo || isAnimated) {
-            videoCount++;
-          } else {
-            originalCount++;
-          }
-        }
-      } else if (image.thumbnail_path) {
-        // 원본 없으면 썸네일로 카운트
-        const thumbPath = path.join(runtimePaths.tempDir, image.thumbnail_path);
-        if (fs.existsSync(thumbPath)) {
-          originalCount++;
-        }
+      if (this.resolveDownloadFile(image, 'video')) {
+        videoCount++;
       }
     }
 
