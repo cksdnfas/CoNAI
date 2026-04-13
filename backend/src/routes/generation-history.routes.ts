@@ -3,7 +3,7 @@ import { routeParam } from './routeParam';
 import multer from 'multer';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { asyncHandler } from '../middleware/errorHandler';
-import { ServiceType } from '../models/GenerationHistory';
+import { GenerationHistoryModel, ServiceType } from '../models/GenerationHistory';
 
 const router = express.Router();
 
@@ -14,6 +14,19 @@ const upload = multer({
     fileSize: 50 * 1024 * 1024 // 50MB limit
   }
 });
+
+function parsePositiveIntegerQuery(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error('positive-integer');
+  }
+
+  return parsed;
+}
 
 /**
  * GET /api/generation-history
@@ -26,6 +39,11 @@ router.get(
     const {
       service_type,
       generation_status,
+      requested_by_account_id,
+      requested_by_account_type,
+      server_id,
+      queue_job_id,
+      mine,
       limit = '50',
       offset = '0'
     } = req.query;
@@ -41,6 +59,60 @@ router.get(
 
     if (generation_status) {
       filters.generation_status = generation_status;
+    }
+
+    try {
+      const requestedByAccountId = parsePositiveIntegerQuery(requested_by_account_id);
+      const serverId = parsePositiveIntegerQuery(server_id);
+      const queueJobId = parsePositiveIntegerQuery(queue_job_id);
+
+      if (requestedByAccountId !== undefined) {
+        filters.requested_by_account_id = requestedByAccountId;
+      }
+
+      if (serverId !== undefined) {
+        filters.server_id = serverId;
+      }
+
+      if (queueJobId !== undefined) {
+        filters.queue_job_id = queueJobId;
+      }
+    } catch {
+      res.status(400).json({
+        success: false,
+        error: 'requested_by_account_id, server_id, and queue_job_id must be positive integers'
+      });
+      return;
+    }
+
+    if (requested_by_account_type !== undefined) {
+      if (requested_by_account_type !== 'admin' && requested_by_account_type !== 'guest') {
+        res.status(400).json({
+          success: false,
+          error: 'requested_by_account_type must be either admin or guest'
+        });
+        return;
+      }
+
+      filters.requested_by_account_type = requested_by_account_type;
+    }
+
+    if (mine === 'true') {
+      if (typeof req.session?.accountId !== 'number') {
+        res.json({
+          success: true,
+          records: [],
+          total: 0,
+          limit: filters.limit,
+          offset: filters.offset
+        });
+        return;
+      }
+
+      filters.requested_by_account_id = req.session.accountId;
+      if (req.session.accountType === 'admin' || req.session.accountType === 'guest') {
+        filters.requested_by_account_type = req.session.accountType;
+      }
     }
 
     const result = await GenerationHistoryService.getAllHistory(filters);
@@ -90,13 +162,14 @@ router.get(
 
 /**
  * GET /api/generation-history/:id
- * Get specific generation history by ID
+ * Get one detail/compat generation-history record by ID.
+ * This is not the primary list surface used by the image-generation UI and should not grow into a new UI contract.
  */
 router.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const id = routeParam(req.params.id);
-    const record = await GenerationHistoryService.getHistory(parseInt(id));
+    const record = await GenerationHistoryService.getHistoryDetail(parseInt(id));
 
     if (!record) {
       res.status(404).json({
@@ -118,50 +191,38 @@ router.get(
  * Create ComfyUI generation history
  *
  * Body:
- * - workflow: object (substituted API workflow)
+ * - workflow?: object (legacy compatibility input, no longer required)
  * - workflowId: number
  * - workflowName: string
- * - promptId: string
- * - positivePrompt: string
- * - negativePrompt?: string
- * - width: number
- * - height: number
- * - metadata?: object
+ * - promptId?: string (legacy compatibility field)
+ * - positivePrompt?: string (legacy compatibility input)
+ * - negativePrompt?: string (legacy compatibility input)
+ * - width?: number (legacy compatibility input, no longer stored in history)
+ * - height?: number (legacy compatibility input, no longer stored in history)
+ * - metadata?: object (legacy compatibility input)
  */
 router.post(
   '/comfyui',
   asyncHandler(async (req: Request, res: Response) => {
     const {
-      workflow,
       workflowId,
       workflowName,
       promptId,
-      positivePrompt,
-      negativePrompt,
-      width,
-      height,
-      metadata
     } = req.body;
 
     // Validation
-    if (!workflow || !workflowId || !workflowName || !promptId || !positivePrompt || !width || !height) {
+    if (!workflowId || !workflowName) {
       res.status(400).json({
         success: false,
-        error: 'Missing required fields: workflow, workflowId, workflowName, promptId, positivePrompt, width, height'
+        error: 'Missing required fields: workflowId, workflowName'
       });
       return;
     }
 
     const historyId = await GenerationHistoryService.createComfyUIHistory({
-      workflow,
       workflowId,
       workflowName,
       promptId,
-      positivePrompt,
-      negativePrompt,
-      width,
-      height,
-      metadata
     });
 
     res.status(201).json({
@@ -178,55 +239,35 @@ router.post(
  *
  * Body:
  * - model: string
- * - sampler: string
- * - seed: number
- * - steps: number
- * - scale: number (CFG scale)
- * - parameters: object (full NAI parameters)
- * - positivePrompt: string
- * - negativePrompt?: string
- * - width: number
- * - height: number
- * - metadata?: object
+ * - sampler?: string (legacy compatibility input)
+ * - seed?: number (legacy compatibility input)
+ * - steps?: number (legacy compatibility input)
+ * - scale?: number (legacy compatibility input)
+ * - parameters?: object (legacy compatibility input)
+ * - positivePrompt?: string (legacy compatibility input)
+ * - negativePrompt?: string (legacy compatibility input)
+ * - width?: number (legacy compatibility input, no longer stored in history)
+ * - height?: number (legacy compatibility input, no longer stored in history)
+ * - metadata?: object (legacy compatibility input)
  */
 router.post(
   '/novelai',
   asyncHandler(async (req: Request, res: Response) => {
     const {
       model,
-      sampler,
-      seed,
-      steps,
-      scale,
-      parameters,
-      positivePrompt,
-      negativePrompt,
-      width,
-      height,
-      metadata
     } = req.body;
 
     // Validation
-    if (!model || !sampler || seed === undefined || !steps || !scale || !parameters || !positivePrompt || !width || !height) {
+    if (!model) {
       res.status(400).json({
         success: false,
-        error: 'Missing required fields: model, sampler, seed, steps, scale, parameters, positivePrompt, width, height'
+        error: 'Missing required fields: model'
       });
       return;
     }
 
     const historyId = await GenerationHistoryService.createNAIHistory({
       model,
-      sampler,
-      seed,
-      steps,
-      scale,
-      parameters,
-      positivePrompt,
-      negativePrompt,
-      width,
-      height,
-      metadata
     });
 
     res.status(201).json({
@@ -257,8 +298,8 @@ router.post(
       return;
     }
 
-    // Get history record to determine service type
-    const history = await GenerationHistoryService.getHistory(parseInt(id));
+    // Get the base history record only, because upload processing needs just the service type.
+    const history = GenerationHistoryModel.findById(parseInt(id));
     if (!history) {
       res.status(404).json({
         success: false,
@@ -325,6 +366,11 @@ router.get(
     const workflowId = routeParam(req.params.workflowId);
     const {
       generation_status,
+      requested_by_account_id,
+      requested_by_account_type,
+      server_id,
+      queue_job_id,
+      mine,
       limit = '50',
       offset = '0'
     } = req.query;
@@ -336,6 +382,61 @@ router.get(
 
     if (generation_status) {
       filters.generation_status = generation_status;
+    }
+
+    try {
+      const requestedByAccountId = parsePositiveIntegerQuery(requested_by_account_id);
+      const serverId = parsePositiveIntegerQuery(server_id);
+      const queueJobId = parsePositiveIntegerQuery(queue_job_id);
+
+      if (requestedByAccountId !== undefined) {
+        filters.requested_by_account_id = requestedByAccountId;
+      }
+
+      if (serverId !== undefined) {
+        filters.server_id = serverId;
+      }
+
+      if (queueJobId !== undefined) {
+        filters.queue_job_id = queueJobId;
+      }
+    } catch {
+      res.status(400).json({
+        success: false,
+        error: 'requested_by_account_id, server_id, and queue_job_id must be positive integers'
+      });
+      return;
+    }
+
+    if (requested_by_account_type !== undefined) {
+      if (requested_by_account_type !== 'admin' && requested_by_account_type !== 'guest') {
+        res.status(400).json({
+          success: false,
+          error: 'requested_by_account_type must be either admin or guest'
+        });
+        return;
+      }
+
+      filters.requested_by_account_type = requested_by_account_type;
+    }
+
+    if (mine === 'true') {
+      if (typeof req.session?.accountId !== 'number') {
+        res.json({
+          success: true,
+          records: [],
+          total: 0,
+          limit: filters.limit,
+          offset: filters.offset,
+          workflowId: parseInt(workflowId)
+        });
+        return;
+      }
+
+      filters.requested_by_account_id = req.session.accountId;
+      if (req.session.accountType === 'admin' || req.session.accountType === 'guest') {
+        filters.requested_by_account_type = req.session.accountType;
+      }
     }
 
     const result = await GenerationHistoryService.getHistoryByWorkflow(

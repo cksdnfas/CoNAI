@@ -496,10 +496,21 @@ export function buildWorkflowPromptData(fields: WorkflowMarkedField[], draft: Re
   }, {})
 }
 
+/** Resolve hash-first history image routes from the main image DB only. */
+export function resolveHistoryImageSource(record: GenerationHistoryRecord) {
+  const compositeHash = record.actual_composite_hash || record.composite_hash || null
+
+  return {
+    compositeHash,
+    detailHref: compositeHash ? `/images/${compositeHash}` : null,
+    thumbnailUrl: compositeHash ? `/api/images/${compositeHash}/thumbnail` : null,
+    imageUrl: compositeHash ? `/api/images/${compositeHash}/file` : null,
+  }
+}
+
 /** Resolve the most useful image detail route for a history item. */
 export function getHistoryDetailHref(record: GenerationHistoryRecord) {
-  const compositeHash = record.actual_composite_hash || record.composite_hash
-  return compositeHash ? `/images/${compositeHash}` : null
+  return resolveHistoryImageSource(record).detailHref
 }
 
 /** Resolve a compact label for the history service type. */

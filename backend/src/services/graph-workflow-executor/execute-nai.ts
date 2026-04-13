@@ -1,9 +1,6 @@
-import axios from 'axios'
-// @ts-ignore - no types available
-import AdmZip from 'adm-zip'
 import { getToken } from '../../utils/nai/auth'
-import { preprocessMetadata, type NAIMetadataInputParams } from '../../utils/nai/metadata'
-import { buildNaiRequestBody } from '../../utils/nai/requestBuilder'
+import { type NAIMetadataInputParams } from '../../utils/nai/metadata'
+import { executeNaiGeneration } from '../naiGenerationExecutor'
 import { saveArtifactBuffer, saveMetadataArtifact } from './artifacts'
 import {
   bufferToDataUrl,
@@ -32,31 +29,18 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
     throw new Error('NovelAI token is required before executing NAI modules')
   }
 
-  const metadata = preprocessMetadata(resolvedInputs as NAIMetadataInputParams)
-  const requestBody = await buildNaiRequestBody(metadata)
+  const { metadata, requestBody, imageBuffers } = await executeNaiGeneration(resolvedInputs as NAIMetadataInputParams, token)
 
-  const response = await axios.post('https://image.novelai.net/ai/generate-image', requestBody, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Origin: 'https://novelai.net',
-      Referer: 'https://novelai.net',
-    },
-    responseType: 'arraybuffer',
-    timeout: 120000,
-  })
-
-  const zip = new AdmZip(Buffer.from(response.data))
-  const firstEntry = zip.getEntries()[0]
+  const firstEntry = imageBuffers[0]
   if (!firstEntry) {
     throw new Error('NAI module execution returned no images')
   }
 
-  const imageBuffer = firstEntry.getData()
+  const imageBuffer = firstEntry
   const imageDataUrl = bufferToDataUrl(imageBuffer)
   const { storagePath, artifactRecordId } = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
     mimeType: 'image/png',
-    originalFileName: firstEntry.entryName,
+    originalFileName: `nai-${node.id}.png`,
   })
 
   const metadataValue = {

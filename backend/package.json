@@ -10,7 +10,8 @@
     "start": "node dist/backend/src/index.js",
     "db:migrate": "tsx src/database/migrate.ts",
     "validate:metadata": "tsx src/scripts/validateMetadataExtraction.ts",
-    "verify:user-db-smoke": "tsx src/scripts/verifyUserSettingsSchemaSmoke.ts"
+    "verify:user-db-smoke": "tsx src/scripts/verifyUserSettingsSchemaSmoke.ts",
+    "verify:queue-wakeup-smoke": "tsx src/scripts/verifyGenerationQueueWakeup.ts"
   },
   "dependencies": {
     "@conai/shared": "file:../shared",

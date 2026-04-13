@@ -283,6 +283,37 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // 18. Image generation queue jobs table (durable queue source of truth)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS generation_queue_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai')),
+      status TEXT NOT NULL CHECK(status IN ('queued', 'dispatching', 'running', 'completed', 'failed', 'cancelled')) DEFAULT 'queued',
+      priority INTEGER NOT NULL DEFAULT 100,
+      requested_by_account_id INTEGER,
+      requested_by_account_type TEXT,
+      workflow_id INTEGER,
+      workflow_name TEXT,
+      requested_group_id INTEGER,
+      requested_server_id INTEGER,
+      assigned_server_id INTEGER,
+      provider_job_id TEXT,
+      request_payload TEXT NOT NULL,
+      request_summary TEXT,
+      failure_code TEXT,
+      failure_message TEXT,
+      cancel_requested INTEGER NOT NULL DEFAULT 0,
+      queued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      started_at DATETIME,
+      completed_at DATETIME,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE SET NULL,
+      FOREIGN KEY (requested_server_id) REFERENCES comfyui_servers(id) ON DELETE SET NULL,
+      FOREIGN KEY (assigned_server_id) REFERENCES comfyui_servers(id) ON DELETE SET NULL
+    )
+  `);
+
   // ===== MIGRATION: Add missing columns BEFORE creating indexes =====
   // Helper function to check if column exists
   const hasColumn = (tableName: string, columnName: string): boolean => {
@@ -424,6 +455,44 @@ export function createUserSettingsSchema(db: Database.Database): void {
     `);
   }
 
+  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='generation_queue_jobs'").get()) {
+    console.log('  Migrating user settings: creating generation_queue_jobs table');
+    db.exec(`
+      CREATE TABLE generation_queue_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai')),
+        status TEXT NOT NULL CHECK(status IN ('queued', 'dispatching', 'running', 'completed', 'failed', 'cancelled')) DEFAULT 'queued',
+        priority INTEGER NOT NULL DEFAULT 100,
+        requested_by_account_id INTEGER,
+        requested_by_account_type TEXT,
+        workflow_id INTEGER,
+        workflow_name TEXT,
+        requested_group_id INTEGER,
+        requested_server_id INTEGER,
+        assigned_server_id INTEGER,
+        provider_job_id TEXT,
+        request_payload TEXT NOT NULL,
+        request_summary TEXT,
+        failure_code TEXT,
+        failure_message TEXT,
+        cancel_requested INTEGER NOT NULL DEFAULT 0,
+        queued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        started_at DATETIME,
+        completed_at DATETIME,
+        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE SET NULL,
+        FOREIGN KEY (requested_server_id) REFERENCES comfyui_servers(id) ON DELETE SET NULL,
+        FOREIGN KEY (assigned_server_id) REFERENCES comfyui_servers(id) ON DELETE SET NULL
+      )
+    `);
+  }
+
+  if (!hasColumn('generation_queue_jobs', 'provider_job_id')) {
+    console.log('  Migrating generation_queue_jobs: adding provider_job_id column');
+    db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN provider_job_id TEXT');
+  }
+
   // Create indexes (now safe - all columns exist)
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)',
@@ -463,6 +532,13 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_graph_workflow_schedules_workflow_id ON graph_workflow_schedules(graph_workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_workflow_schedules_status ON graph_workflow_schedules(status)',
     'CREATE INDEX IF NOT EXISTS idx_graph_workflow_schedules_next_run_at ON graph_workflow_schedules(next_run_at)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_status_priority ON generation_queue_jobs(status, priority ASC, queued_at ASC, id ASC)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_service_type ON generation_queue_jobs(service_type)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requested_by_account_id ON generation_queue_jobs(requested_by_account_id)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requested_server_id ON generation_queue_jobs(requested_server_id)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_assigned_server_id ON generation_queue_jobs(assigned_server_id)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_workflow_id ON generation_queue_jobs(workflow_id)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_cancel_requested ON generation_queue_jobs(cancel_requested)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_execution_id ON graph_execution_artifacts(execution_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_artifacts_node_port ON graph_execution_artifacts(node_id, port_key)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_logs_execution_id ON graph_execution_logs(execution_id)',
@@ -484,6 +560,6 @@ export function createUserSettingsSchema(db: Database.Database): void {
     VALUES (?, ?, ?)
   `).run('civitai', 'Civitai', 1);
 
-  console.log('  ✅ User settings tables created (17 tables + indexes)');
+  console.log('  ✅ User settings tables created (18 tables + indexes)');
 
 }

@@ -5,6 +5,7 @@ import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
@@ -14,6 +15,7 @@ import { cn } from '@/lib/utils'
 import {
   getErrorMessage,
   getHistoryStatusLabel,
+  resolveHistoryImageSource,
 } from '../image-generation-shared'
 
 type GenerationHistoryPanelProps = {
@@ -26,8 +28,22 @@ type GenerationHistoryPanelProps = {
 
 const GENERATION_HISTORY_PAGE_SIZE = 40
 
+function parsePositiveIntegerFilter(value: string) {
+  const trimmed = value.trim()
+  if (trimmed.length === 0) {
+    return undefined
+  }
+
+  const parsed = Number(trimmed)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
 function hasInFlightHistory(records: GenerationHistoryResponse['records']) {
   return records.some((record) => record.generation_status === 'pending' || record.generation_status === 'processing')
+}
+
+function isResultFocusedHistoryRecord(record: GenerationHistoryResponse['records'][number]) {
+  return record.generation_status === 'completed' || record.generation_status === 'failed'
 }
 
 function getGenerationHistorySelectionId(record: GenerationHistoryResponse['records'][number]) {
@@ -35,17 +51,16 @@ function getGenerationHistorySelectionId(record: GenerationHistoryResponse['reco
 }
 
 function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['records'][number]): ImageRecord {
-  const compositeHash = record.actual_composite_hash || record.composite_hash || null
-  const fallbackPreviewUrl = record.original_path ? `/api/images/by-path/${encodeURIComponent(record.original_path)}` : null
+  const imageSource = resolveHistoryImageSource(record)
 
   return {
     id: `generation-history-${record.id}`,
-    composite_hash: compositeHash,
-    original_file_path: record.original_path,
-    thumbnail_url: compositeHash ? `/api/images/${compositeHash}/thumbnail` : fallbackPreviewUrl,
-    image_url: compositeHash ? `/api/images/${compositeHash}/file` : fallbackPreviewUrl,
-    width: record.actual_width ?? record.width,
-    height: record.actual_height ?? record.height,
+    composite_hash: imageSource.compositeHash,
+    original_file_path: null,
+    thumbnail_url: imageSource.thumbnailUrl,
+    image_url: imageSource.imageUrl,
+    width: record.actual_width ?? null,
+    height: record.actual_height ?? null,
     is_processing: record.generation_status === 'pending' || record.generation_status === 'processing',
   }
 }
@@ -56,15 +71,33 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [isCleaningFailed, setIsCleaningFailed] = useState(false)
+  const [mineOnly, setMineOnly] = useState(false)
+  const [requestedByAccountIdInput, setRequestedByAccountIdInput] = useState('')
+  const [serverIdInput, setServerIdInput] = useState('')
 
-  const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null] as const
+  const requestedByAccountId = useMemo(() => parsePositiveIntegerFilter(requestedByAccountIdInput), [requestedByAccountIdInput])
+  const serverId = useMemo(() => parsePositiveIntegerFilter(serverIdInput), [serverIdInput])
+
+  const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null, mineOnly, requestedByAccountId ?? null, serverId ?? null] as const
   const historyQuery = useInfiniteQuery({
     queryKey: historyQueryKey,
     initialPageParam: 0,
     queryFn: ({ pageParam }) => (
       serviceType === 'comfyui' && workflowId
-        ? getGenerationWorkflowHistory(workflowId, { limit: GENERATION_HISTORY_PAGE_SIZE, offset: pageParam })
-        : getGenerationHistory(serviceType, { limit: GENERATION_HISTORY_PAGE_SIZE, offset: pageParam })
+        ? getGenerationWorkflowHistory(workflowId, {
+            limit: GENERATION_HISTORY_PAGE_SIZE,
+            offset: pageParam,
+            mine: mineOnly,
+            requestedByAccountId,
+            serverId,
+          })
+        : getGenerationHistory(serviceType, {
+            limit: GENERATION_HISTORY_PAGE_SIZE,
+            offset: pageParam,
+            mine: mineOnly,
+            requestedByAccountId,
+            serverId,
+          })
     ),
     getNextPageParam: (lastPage, allPages) => {
       const loadedCount = allPages.reduce((sum, page) => sum + page.records.length, 0)
@@ -90,10 +123,18 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => (historyQuery.data?.pages ?? []).flatMap((page) => page.records),
     [historyQuery.data?.pages],
   )
-  const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
-  const historyRecordMap = useMemo(
-    () => new Map(historyRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
+  const visibleHistoryRecords = useMemo(
+    () => historyRecords.filter((record) => isResultFocusedHistoryRecord(record)),
     [historyRecords],
+  )
+  const inFlightHistoryCount = useMemo(
+    () => historyRecords.filter((record) => !isResultFocusedHistoryRecord(record)).length,
+    [historyRecords],
+  )
+  const historyImages = useMemo(() => visibleHistoryRecords.map((record) => mapHistoryRecordToImageRecord(record)), [visibleHistoryRecords])
+  const historyRecordMap = useMemo(
+    () => new Map(visibleHistoryRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
+    [visibleHistoryRecords],
   )
   const selectedHistoryRecords = useMemo(
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
@@ -165,7 +206,8 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{historyLabel}</Badge>
-          <Badge variant="outline">{historyRecords.length}</Badge>
+          <Badge variant="outline">결과 {visibleHistoryRecords.length}</Badge>
+          {inFlightHistoryCount > 0 ? <Badge variant="secondary">진행 중 {inFlightHistoryCount}</Badge> : null}
           <Button type="button" size="sm" variant="outline" onClick={() => void handleCleanupFailed()} disabled={isCleaningFailed}>
             <Trash2 className="h-4 w-4" />
             {isCleaningFailed ? '실패 정리 중…' : '실패 항목 정리'}
@@ -183,11 +225,44 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         </Alert>
       ) : null}
 
+      <div className="flex flex-wrap items-end gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-3">
+        <div className="min-w-[9rem] flex-1">
+          <div className="mb-1 text-[11px] text-muted-foreground">Requester ID</div>
+          <Input value={requestedByAccountIdInput} onChange={(event) => setRequestedByAccountIdInput(event.target.value)} inputMode="numeric" placeholder="전체" />
+        </div>
+        <div className="min-w-[8rem] flex-1">
+          <div className="mb-1 text-[11px] text-muted-foreground">Server ID</div>
+          <Input value={serverIdInput} onChange={(event) => setServerIdInput(event.target.value)} inputMode="numeric" placeholder="전체" />
+        </div>
+        <Button type="button" size="sm" variant={mineOnly ? 'default' : 'outline'} onClick={() => setMineOnly((current) => !current)}>
+          내 요청만
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setMineOnly(false)
+            setRequestedByAccountIdInput('')
+            setServerIdInput('')
+          }}
+        >
+          필터 초기화
+        </Button>
+      </div>
+
       {historyQuery.isPending ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
+
+      {!historyQuery.isPending && inFlightHistoryCount > 0 ? (
+        <Alert>
+          <AlertTitle>진행 중 항목은 Queue에서 볼 수 있어</AlertTitle>
+          <AlertDescription>히스토리는 결과 중심으로만 보여주고 있어. 현재 진행 중 {inFlightHistoryCount}건은 위 Queue 패널에서 확인해줘.</AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className={cn(splitPaneScroll && 'min-h-0 flex-1')}>
         {!historyQuery.isPending && historyImages.length === 0 ? (
-          <div className="py-4 text-sm text-muted-foreground">아직 생성 이력이 없어.</div>
+          <div className="py-4 text-sm text-muted-foreground">아직 표시할 생성 결과가 없어. 진행 중 작업은 Queue에서 보면 돼.</div>
         ) : null}
 
         {!historyQuery.isPending && historyImages.length > 0 ? (
@@ -221,7 +296,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               }
 
               return (
-                <Badge variant={record.generation_status === 'failed' ? 'outline' : 'secondary'}>
+                <Badge variant="outline">
                   {getHistoryStatusLabel(record.generation_status)}
                 </Badge>
               )

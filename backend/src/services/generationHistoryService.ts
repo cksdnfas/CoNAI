@@ -1,7 +1,7 @@
-import { GenerationHistoryModel, GenerationHistoryRecord, ServiceType } from '../models/GenerationHistory';
+import { GenerationHistoryModel, GenerationHistoryRecord, GenerationHistoryListRecord, GenerationHistoryDetailRecord, ServiceType } from '../models/GenerationHistory';
+import type { AuthAccountType } from '../models/AuthAccount';
 import { APIImageProcessor } from './APIImageProcessor';
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver';
-import { ImageGroupModel } from '../models/Group';
 import axios from 'axios';
 import FormData from 'form-data';
 import path from 'path';
@@ -10,40 +10,35 @@ import { PORTS } from '@conai/shared';
 /**
  * GenerationHistoryService
  * Manages dual storage:
- * 1. user.db/api_generation_history - API generation history with workflow/parameters
- * 2. images.db - via existing image upload API (for search/management)
+ * 1. user.db/api_generation_history - lightweight generation result index
+ * 2. images.db - source of truth for searchable image metadata and file-backed rendering
  * Uses media_metadata table for unified metadata storage
  */
 export class GenerationHistoryService {
   /**
-   * Create ComfyUI generation history
-   * Stores workflow and generation parameters
+   * Create one lightweight ComfyUI history row.
    */
   static async createComfyUIHistory(data: {
-    workflow: object;
     workflowId: number;
     workflowName: string;
-    promptId: string;
-    positivePrompt: string;
-    negativePrompt?: string;
-    width: number;
-    height: number;
-    metadata?: object;
+    promptId?: string;
     groupId?: number;
+    queueJobId?: number;
+    requestedByAccountId?: number;
+    requestedByAccountType?: AuthAccountType;
+    serverId?: number;
   }): Promise<number> {
     const historyRecord: Omit<GenerationHistoryRecord, 'id'> = {
       service_type: 'comfyui',
       generation_status: 'pending',
-      comfyui_workflow: JSON.stringify(data.workflow),
-      comfyui_prompt_id: data.promptId,
+      comfyui_prompt_id: data.promptId?.trim() ? data.promptId : undefined,
       workflow_id: data.workflowId,
       workflow_name: data.workflowName,
-      positive_prompt: data.positivePrompt,
-      negative_prompt: data.negativePrompt,
-      width: data.width,
-      height: data.height,
       assigned_group_id: data.groupId,
-      metadata: data.metadata ? JSON.stringify(data.metadata) : undefined
+      queue_job_id: data.queueJobId,
+      requested_by_account_id: data.requestedByAccountId,
+      requested_by_account_type: data.requestedByAccountType,
+      server_id: data.serverId,
     };
 
     // Model calls are now synchronous
@@ -51,128 +46,29 @@ export class GenerationHistoryService {
   }
 
   /**
-   * Create NovelAI generation history
-   * Stores all generation parameters
+   * Create one lightweight NovelAI history row.
    */
   static async createNAIHistory(data: {
     model: string;
-    sampler: string;
-    seed: number;
-    steps: number;
-    scale: number;
-    parameters: object;
-    positivePrompt: string;
-    negativePrompt?: string;
-    width: number;
-    height: number;
-    metadata?: object;
     groupId?: number;
+    queueJobId?: number;
+    requestedByAccountId?: number;
+    requestedByAccountType?: AuthAccountType;
+    serverId?: number;
   }): Promise<number> {
     const historyRecord: Omit<GenerationHistoryRecord, 'id'> = {
       service_type: 'novelai',
       generation_status: 'pending',
       nai_model: data.model,
-      nai_sampler: data.sampler,
-      nai_seed: data.seed,
-      nai_steps: data.steps,
-      nai_scale: data.scale,
-      nai_parameters: JSON.stringify(data.parameters),
-      positive_prompt: data.positivePrompt,
-      negative_prompt: data.negativePrompt,
-      width: data.width,
-      height: data.height,
       assigned_group_id: data.groupId,
-      metadata: data.metadata ? JSON.stringify(data.metadata) : undefined
+      queue_job_id: data.queueJobId,
+      requested_by_account_id: data.requestedByAccountId,
+      requested_by_account_type: data.requestedByAccountType,
+      server_id: data.serverId,
     };
 
     // Model calls are now synchronous
     return GenerationHistoryModel.create(historyRecord);
-  }
-
-  /**
-   * Process ComfyUI image metadata only (skip main API upload - already done in workflow)
-   * ComfyUI images are already processed by ImageProcessor in workflow loop
-   */
-  static async processComfyUIHistoryMetadata(
-    historyId: number,
-    imageBuffer: Buffer,
-    linkedImageId: number
-  ): Promise<void> {
-    try {
-      // Update status to processing
-      GenerationHistoryModel.updateStatus(historyId, 'processing');
-
-      // Process image for API history storage
-      const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, 'comfyui');
-
-      // Update API history with image paths
-      GenerationHistoryModel.updateImagePaths(historyId, {
-        original: processedPaths.originalPath,
-        fileSize: processedPaths.fileSize,
-        compositeHash: processedPaths.compositeHash
-      });
-
-      // Extract and update metadata
-      try {
-        console.log(`🔍 Extracting metadata for ComfyUI history ${historyId}...`);
-        const extractedMetadata = await APIImageProcessor.extractMetadataFromBuffer(imageBuffer, 'comfyui');
-
-        GenerationHistoryModel.updateMetadata(historyId, {
-          positive_prompt: extractedMetadata.positive_prompt,
-          negative_prompt: extractedMetadata.negative_prompt,
-          width: extractedMetadata.width || processedPaths.width,
-          height: extractedMetadata.height || processedPaths.height,
-          metadata: JSON.stringify(extractedMetadata.metadata)
-        });
-
-        console.log(`✅ Metadata extracted and saved for history ${historyId}`);
-      } catch (metadataError) {
-        console.warn(`⚠️ Failed to extract metadata (non-critical):`, metadataError);
-      }
-
-
-      // Assign to group if groupId was specified (manual collection)
-      const history = GenerationHistoryModel.findById(historyId);
-      if (history?.assigned_group_id && linkedImageId) {
-        try {
-          console.log(`📁 Assigning image ${linkedImageId} to group ${history.assigned_group_id}...`);
-
-          // linkedImageId를 composite_hash로 변환
-          const { db } = await import('../database/init');
-          const file = db.prepare(`
-            SELECT if.composite_hash
-            FROM image_files if
-            JOIN images i ON if.original_file_path LIKE '%' || i.file_path
-            WHERE i.id = ?
-            LIMIT 1
-          `).get(linkedImageId) as { composite_hash: string } | undefined;
-
-          if (file) {
-            await ImageGroupModel.addImageToGroup(
-              history.assigned_group_id,
-              file.composite_hash,
-              'manual', // User-selected group = manual collection
-              0
-            );
-            console.log(`✓ Image assigned to group ${history.assigned_group_id}`);
-          } else {
-            console.warn(`⚠️ Could not find composite_hash for image ID ${linkedImageId}`);
-          }
-        } catch (groupError) {
-          console.warn(`⚠️ Failed to assign image to group (non-critical):`, groupError);
-        }
-      }
-
-      // Update status to completed
-      GenerationHistoryModel.updateStatus(historyId, 'completed');
-
-      console.log(`✓ ComfyUI history ${historyId} processed successfully (linked to image ${linkedImageId})`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      GenerationHistoryModel.recordError(historyId, errorMessage);
-      console.error(`✗ Failed to process ComfyUI history ${historyId}:`, errorMessage);
-      throw error;
-    }
   }
 
   /**
@@ -193,10 +89,8 @@ export class GenerationHistoryService {
       // Step 2: Save original file only to uploads/API/images/YYYY-MM-DD/
       const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, serviceType, saveOptions);
 
-      // Step 3: Update API history with original file path and composite_hash
+      // Step 3: Update API history with the main-DB linkage key only.
       GenerationHistoryModel.updateImagePaths(historyId, {
-        original: processedPaths.originalPath,
-        fileSize: processedPaths.fileSize,
         compositeHash: processedPaths.compositeHash
       });
 
@@ -262,80 +156,64 @@ export class GenerationHistoryService {
   }
 
   /**
-   * Get generation history by ID
-   * Returns history with actual composite_hash and thumbnails from image_files/media_metadata if available
+   * Get one generation-history detail/compat record by ID.
+   * This is broader than the main list surface and exists mainly for internal or compatibility consumers.
    */
-  static async getHistory(id: number): Promise<GenerationHistoryRecord | null> {
-    // Use JOIN query to get actual thumbnails and metadata
+  static async getHistoryDetail(id: number): Promise<GenerationHistoryDetailRecord | null> {
     return GenerationHistoryModel.findByIdWithMetadata(id);
   }
 
   /**
-   * Get all generation history with filters
-   * Returns history with actual composite_hash and thumbnails from image_files/media_metadata if available
+   * Get compact generation-history list records with filters.
+   * List responses stay hash-first and result-index focused for the image-generation UI.
    */
   static async getAllHistory(filters?: {
     service_type?: ServiceType;
     generation_status?: 'pending' | 'processing' | 'completed' | 'failed';
+    queue_job_id?: number;
+    requested_by_account_id?: number;
+    requested_by_account_type?: AuthAccountType;
+    server_id?: number;
     limit?: number;
     offset?: number;
-  }): Promise<{ records: GenerationHistoryRecord[]; total: number }> {
+  }): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
     // Use JOIN query to get actual thumbnails and metadata
     const records = GenerationHistoryModel.findAllWithMetadata(filters);
     const total = GenerationHistoryModel.count({
       service_type: filters?.service_type,
-      generation_status: filters?.generation_status
+      generation_status: filters?.generation_status,
+      queue_job_id: filters?.queue_job_id,
+      requested_by_account_id: filters?.requested_by_account_id,
+      requested_by_account_type: filters?.requested_by_account_type,
+      server_id: filters?.server_id,
     });
 
-    // Parse auto_tags JSON if it exists
-    const enrichedRecords = records.map(record => {
-      const enriched: any = { ...record };
-
-      // Parse actual_auto_tags from JSON string to object
-      if (enriched.actual_auto_tags && typeof enriched.actual_auto_tags === 'string') {
-        try {
-          enriched.actual_auto_tags = JSON.parse(enriched.actual_auto_tags);
-        } catch (e) {
-          // If parsing fails, leave as null
-          enriched.actual_auto_tags = null;
-        }
-      } else if (!enriched.actual_auto_tags) {
-        enriched.actual_auto_tags = null;
-      }
-
-      return enriched;
-    });
-
-    return { records: enrichedRecords, total };
+    return { records, total };
   }
 
   /**
-   * Get recent generation history (last 50)
+   * Get recent compact generation-history list records.
+   * Recent reads should stay aligned with the main hash-first list contract.
    */
-  static async getRecentHistory(limit: number = 50): Promise<GenerationHistoryRecord[]> {
-    // Model call is now synchronous
+  static async getRecentHistory(limit: number = 50): Promise<GenerationHistoryListRecord[]> {
     return GenerationHistoryModel.getRecent(limit);
   }
 
   /**
-   * Delete generation history
-   * Also deletes associated image files from uploads/API/images/
+   * Delete generation history.
+   * When image deletion is needed, resolve it from the main DB via composite_hash.
    */
   static async deleteHistory(id: number): Promise<void> {
-    // Get history record first (sync)
     const history = GenerationHistoryModel.findById(id);
     if (!history) {
       throw new Error(`Generation history ${id} not found`);
     }
 
-    // Delete image files if they exist
-    if (history.original_path) {
-      await APIImageProcessor.deleteGeneratedImages({
-        originalPath: history.original_path
-      });
+    if (history.composite_hash) {
+      const { DeletionService } = await import('./deletionService');
+      await DeletionService.deleteImage(history.composite_hash);
     }
 
-    // Delete history record (sync)
     GenerationHistoryModel.delete(id);
 
     console.log(`✓ Generation history ${id} deleted`);
@@ -351,6 +229,7 @@ export class GenerationHistoryService {
     completed: number;
     failed: number;
     pending: number;
+    processing: number;
   }> {
     // All model calls are now synchronous
     const total = GenerationHistoryModel.count();
@@ -359,27 +238,36 @@ export class GenerationHistoryService {
     const completed = GenerationHistoryModel.count({ generation_status: 'completed' });
     const failed = GenerationHistoryModel.count({ generation_status: 'failed' });
     const pending = GenerationHistoryModel.count({ generation_status: 'pending' });
+    const processing = GenerationHistoryModel.count({ generation_status: 'processing' });
 
-    return { total, comfyui, novelai, completed, failed, pending };
+    return { total, comfyui, novelai, completed, failed, pending, processing };
   }
 
   /**
-   * Get generation history by workflow ID
-   * Returns history with actual composite_hash and thumbnails from image_files/media_metadata if available
+   * Get compact generation-history list records by workflow ID.
+   * List responses stay hash-first and result-index focused for the image-generation UI.
    */
   static async getHistoryByWorkflow(
     workflowId: number,
     filters?: {
       generation_status?: 'pending' | 'processing' | 'completed' | 'failed';
+      queue_job_id?: number;
+      requested_by_account_id?: number;
+      requested_by_account_type?: AuthAccountType;
+      server_id?: number;
       limit?: number;
       offset?: number;
     }
-  ): Promise<{ records: GenerationHistoryRecord[]; total: number }> {
+  ): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
     // Use JOIN query to get actual thumbnails and metadata
     const records = GenerationHistoryModel.findAllWithMetadata({ ...filters, workflow_id: workflowId });
     const total = GenerationHistoryModel.count({
       workflow_id: workflowId,
-      generation_status: filters?.generation_status
+      generation_status: filters?.generation_status,
+      queue_job_id: filters?.queue_job_id,
+      requested_by_account_id: filters?.requested_by_account_id,
+      requested_by_account_type: filters?.requested_by_account_type,
+      server_id: filters?.server_id,
     });
 
     return { records, total };

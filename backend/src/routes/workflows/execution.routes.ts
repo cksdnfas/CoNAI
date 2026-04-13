@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
 import { WorkflowModel } from '../../models/Workflow';
 import { createComfyUIService } from '../../services/comfyuiService';
+import { prepareComfyPromptData } from '../../services/prepareComfyPromptData';
+import { executeComfyGeneration } from '../../services/comfyGenerationExecutor';
 import { WorkflowResponse, GenerationStatusResponse } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { runtimePaths, publicUrls } from '../../config/runtimePaths';
@@ -11,60 +13,10 @@ import { GenerationHistoryService } from '../../services/generationHistoryServic
 import type { GeneratedImageSaveOptions } from '../../utils/fileSaver';
 import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
+import { GenerationQueueModel } from '../../models/GenerationQueue';
 import { resolveWorkflowPromptValues } from '../../services/workflowPromptValueResolver';
 
 const router = Router();
-
-interface WorkflowImageFieldPayload {
-  fileName?: string;
-  dataUrl?: string;
-}
-
-/** Convert a data URL payload into a Buffer that can be uploaded to ComfyUI. */
-function parseImageFieldDataUrl(dataUrl: string): Buffer {
-  const sanitized = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-  return Buffer.from(sanitized, 'base64');
-}
-
-/** Create a safe upload filename for ComfyUI input images. */
-function buildWorkflowImageUploadName(fileName?: string): string {
-  const sourceName = (fileName || 'workflow-image.png').trim();
-  const ext = path.extname(sourceName) || '.png';
-  const baseName = path.basename(sourceName, ext).replace(/[^a-zA-Z0-9_-]/g, '_') || 'workflow-image';
-  return `${baseName}_${Date.now()}${ext}`;
-}
-
-/** Upload image marked-field payloads to ComfyUI and replace them with stored filenames. */
-async function prepareWorkflowPromptData(
-  comfyService: ReturnType<typeof createComfyUIService>,
-  markedFields: Array<{ id: string; type: string }>,
-  promptData: Record<string, any>,
-): Promise<Record<string, any>> {
-  const preparedPromptData = { ...promptData };
-
-  for (const field of markedFields) {
-    if (field.type !== 'image') {
-      continue;
-    }
-
-    const value = preparedPromptData[field.id];
-    if (!value || typeof value !== 'object') {
-      continue;
-    }
-
-    const payload = value as WorkflowImageFieldPayload;
-    if (typeof payload.dataUrl !== 'string' || payload.dataUrl.trim().length === 0) {
-      continue;
-    }
-
-    const fileName = buildWorkflowImageUploadName(payload.fileName);
-    const imageBuffer = parseImageFieldDataUrl(payload.dataUrl);
-    const uploadedName = await comfyService.uploadInputImage(fileName, imageBuffer);
-    preparedPromptData[field.id] = uploadedName;
-  }
-
-  return preparedPromptData;
-}
 
 /**
  * 이미지 생성 요청
@@ -79,6 +31,8 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
     source_image?: string;
     imageSaveOptions?: GeneratedImageSaveOptions;
   };
+  const requestedByAccountId = typeof req.session?.accountId === 'number' ? req.session.accountId : undefined;
+  const requestedByAccountType = req.session?.accountType;
 
   if (isNaN(id) || !prompt_data) {
     return res.status(400).json({
@@ -120,7 +74,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
 
     const comfyService = createComfyUIService(apiEndpoint);
     const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [];
-    const preparedPromptData = await prepareWorkflowPromptData(comfyService, markedFields, prompt_data);
+    const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, prompt_data);
     const resolvedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui');
     const substitutedWorkflow = comfyService.substitutePromptData(
       workflow.workflow_json,
@@ -154,23 +108,12 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
     let historyId: number | undefined;
     try {
       historyId = await GenerationHistoryService.createComfyUIHistory({
-        workflow: substitutedWorkflow,
         workflowId: id,
         workflowName: workflow.name,
-        promptId: '', // Will be updated after ComfyUI submission
-        positivePrompt: extractedParams.positivePrompt,
-        negativePrompt: extractedParams.negativePrompt,
-        width: extractedParams.width,
-        height: extractedParams.height,
         groupId: groupId !== undefined && groupId !== null ? Number(groupId) : undefined, // User-selected group for automatic assignment
-        metadata: {
-          server_endpoint: apiEndpoint,
-          server_name: serverName,
-          sampler: extractedParams.sampler,
-          steps: extractedParams.steps,
-          cfg_scale: extractedParams.cfg_scale,
-          model: extractedParams.model
-        }
+        requestedByAccountId,
+        requestedByAccountType,
+        serverId: server_id,
       });
       console.log(`✅ Generation history created: ${historyId}`);
     } catch (historyError) {
@@ -184,84 +127,41 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
       try {
         console.log(`📤 Sending to ComfyUI: ${apiEndpoint}`);
 
-        // 이미지 생성 (temp 폴더에 다운로드)
-        const { promptId, imagePaths: tempFilePaths } = await comfyService.generateImages(workflow, substitutedWorkflow);
-
-        // promptId 업데이트
-        if (historyId) {
-          try {
-            const history = await GenerationHistoryService.getHistory(historyId);
-            if (history) {
-              // JOIN으로 계산된 필드 제거 (actual_* 필드는 테이블에 없음)
-              const historyAny = history as any;
-              const { actual_composite_hash, actual_thumbnail_path, actual_width, actual_height, ...baseHistory } = historyAny;
-
-              const updatedRecord = {
-                ...baseHistory,
-                comfyui_prompt_id: promptId,
-                generation_status: 'processing' as const
-              };
-              GenerationHistoryModel.update(historyId, updatedRecord);
-              console.log(`✅ History ${historyId} updated with promptId: ${promptId}`);
-            }
-          } catch (e) {
-            console.error('⚠️ Failed to update history with promptId:', e);
-          }
-        }
-
-        let savedImageCount = 0;
-        let representativeImage: {
-          originalPath: string;
-          fileSize: number;
-          compositeHash: string;
-        } | null = null;
-
-        for (const tempPath of tempFilePaths) {
-          try {
-            // Read temp file
-            const imageBuffer = await fs.promises.readFile(tempPath);
-
-            const { APIImageProcessor } = await import('../../services/APIImageProcessor');
-            const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, 'comfyui', {
-              ...imageSaveOptions,
-              sourcePathForMetadata: tempPath,
-              originalFileName: path.basename(tempPath),
-            });
-
-            fs.unlinkSync(tempPath);
-            savedImageCount += 1;
-
-            if (!representativeImage) {
-              representativeImage = {
-                originalPath: processedPaths.originalPath,
-                fileSize: processedPaths.fileSize,
-                compositeHash: processedPaths.compositeHash,
-              };
+        const result = await executeComfyGeneration({
+          comfyService,
+          workflow: substitutedWorkflow,
+          imageSaveOptions,
+          onPromptSubmitted: async (promptId) => {
+            if (!historyId) {
+              return;
             }
 
-            console.log(`✅ ComfyUI image saved: ${processedPaths.originalPath}`);
-          } catch (error) {
-            console.error(`❌ Failed to save ComfyUI image ${tempPath}:`, error);
-          }
-        }
+            try {
+              GenerationHistoryModel.update(historyId, {
+                generation_status: 'processing',
+              });
+              console.log(`✅ History ${historyId} marked processing after prompt submit: ${promptId}`);
+            } catch (e) {
+              console.error('⚠️ Failed to update history processing status after prompt submit:', e);
+            }
+          },
+        });
 
         if (historyId) {
-          if (representativeImage) {
+          if (result.representativeImage) {
             GenerationHistoryModel.updateImagePaths(historyId, {
-              original: representativeImage.originalPath,
-              fileSize: representativeImage.fileSize,
-              compositeHash: representativeImage.compositeHash,
+              compositeHash: result.representativeImage.compositeHash,
             });
             GenerationHistoryModel.updateStatus(historyId, 'completed');
 
-            console.log(`✅ ComfyUI history ${historyId} linked to representative image: ${representativeImage.compositeHash.substring(0, 16)}...`);
-            console.log(`✅ Image generation completed for history ID ${historyId} (${savedImageCount}/${tempFilePaths.length} saved)`);
+            console.log(`✅ ComfyUI history ${historyId} linked to representative image: ${result.representativeImage.compositeHash.substring(0, 16)}...`);
+            console.log(`✅ Image generation completed for history ID ${historyId} (${result.savedImageCount}/${result.attemptedImageCount} saved)`);
           } else {
             GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no output image could be saved');
             console.error(`❌ ComfyUI history ${historyId} has no saved representative image after generation`);
           }
         } else {
-          console.log(`✅ Image generation completed without history tracking (${savedImageCount}/${tempFilePaths.length} saved)`);
+          console.log(`✅ Image generation completed without history tracking (${result.savedImageCount}/${result.attemptedImageCount} saved)`);
         }
       } catch (error) {
         console.error(`❌ Image generation failed for history ID ${historyId}:`, error);
@@ -269,7 +169,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
         // 실패 처리
         if (historyId) {
           try {
-            const history = await GenerationHistoryService.getHistory(historyId);
+            const history = GenerationHistoryModel.findById(historyId);
             if (history) {
               GenerationHistoryModel.recordError(historyId, (error as Error).message);
               console.log(`✅ History ${historyId} marked as failed`);
@@ -289,7 +189,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
       data: {
         history_id: historyId,
         status: 'pending',
-        message: 'Image generation started. Check status using /api/generation-history/:id'
+        message: `Image generation started. Check status using /api/workflows/history/${historyId}`
       }
     };
 
@@ -376,13 +276,17 @@ router.get('/history/:historyId', asyncHandler(async (req: Request, res: Respons
       } as WorkflowResponse);
     }
 
+    const queueJob = history.queue_job_id ? GenerationQueueModel.findById(history.queue_job_id) : null;
+    const providerJobId = queueJob?.provider_job_id ?? history.comfyui_prompt_id;
+
     // 생성된 이미지 정보 조회
     let generatedImage = null;
 
     const statusResponse: GenerationStatusResponse = {
       id: history.id!,
       status: history.generation_status,
-      comfyui_prompt_id: history.comfyui_prompt_id,
+      provider_job_id: providerJobId,
+      comfyui_prompt_id: providerJobId,
       generated_image_id: history.composite_hash,
       generated_image: generatedImage,
       error_message: history.error_message,

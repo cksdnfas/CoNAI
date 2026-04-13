@@ -76,6 +76,10 @@ const TABLE_EXPECTATIONS: TableExpectation[] = [
     table: 'graph_execution_final_results',
     requiredColumns: ['id', 'execution_id', 'final_node_id', 'source_artifact_id', 'source_node_id', 'source_port_key', 'artifact_type', 'created_date'],
   },
+  {
+    table: 'generation_queue_jobs',
+    requiredColumns: ['id', 'service_type', 'status', 'priority', 'requested_by_account_id', 'requested_by_account_type', 'workflow_id', 'workflow_name', 'requested_group_id', 'requested_server_id', 'assigned_server_id', 'provider_job_id', 'request_payload', 'request_summary', 'failure_code', 'failure_message', 'cancel_requested', 'queued_at', 'started_at', 'completed_at', 'created_date', 'updated_date'],
+  },
 ]
 
 async function main() {

@@ -1,28 +1,93 @@
 export type GenerationServiceType = 'novelai' | 'comfyui'
+export type GenerationQueueJobStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface GenerationQueueJobRecord {
+  id: number
+  service_type: GenerationServiceType
+  status: GenerationQueueJobStatus
+  priority: number
+  requested_by_account_id?: number | null
+  requested_by_account_type?: 'admin' | 'guest' | null
+  workflow_id?: number | null
+  workflow_name?: string | null
+  requested_group_id?: number | null
+  requested_server_id?: number | null
+  assigned_server_id?: number | null
+  provider_job_id?: string | null
+  request_payload: string
+  request_summary?: string | null
+  failure_code?: string | null
+  failure_message?: string | null
+  cancel_requested: number
+  queued_at: string
+  started_at?: string | null
+  completed_at?: string | null
+  created_date: string
+  updated_date: string
+  queue_position?: number | null
+  queue_position_scope?: 'service' | 'server' | 'auto' | null
+  queue_position_server_id?: number | null
+  estimated_wait_seconds?: number | null
+  estimated_total_seconds?: number | null
+  estimated_duration_seconds?: number | null
+  is_mine?: boolean
+}
+
+export interface CreateGenerationQueueJobPayload {
+  service_type: GenerationServiceType
+  priority?: number
+  workflow_id?: number | null
+  workflow_name?: string | null
+  requested_group_id?: number | null
+  requested_server_id?: number | null
+  request_payload: Record<string, unknown>
+  request_summary?: string | null
+}
+
+export interface GenerationQueueStatusCounts {
+  queued: number
+  dispatching: number
+  running: number
+  completed: number
+  failed: number
+  cancelled: number
+}
 
 export interface GenerationHistoryRecord {
   id: number
   service_type: GenerationServiceType
   generation_status: 'pending' | 'processing' | 'completed' | 'failed'
+
+  // Core result-index / operations fields
   workflow_id?: number | null
   workflow_name?: string | null
+  queue_job_id?: number | null
+  requested_by_account_id?: number | null
+  requested_by_account_type?: 'admin' | 'guest' | null
+  server_id?: number | null
   nai_model?: string | null
+  error_message?: string | null
+  composite_hash?: string | null
+  actual_composite_hash?: string | null
+  created_at?: string | null
+
+  // Main-DB resolved display fields
+  actual_width?: number | null
+  actual_height?: number | null
+
+  // Detail/compat-only legacy fields
+  width?: number | null
+  height?: number | null
+  original_path?: string | null
+
+  // Legacy compatibility fields, not preferred for result-focused history UI
   nai_sampler?: string | null
   nai_seed?: number | null
   nai_steps?: number | null
   nai_scale?: number | null
   positive_prompt?: string | null
   negative_prompt?: string | null
-  width?: number | null
-  height?: number | null
-  actual_width?: number | null
-  actual_height?: number | null
-  error_message?: string | null
-  original_path?: string | null
-  composite_hash?: string | null
-  actual_composite_hash?: string | null
   actual_thumbnail_path?: string | null
-  created_at?: string | null
 }
 
 export interface WorkflowMarkedField {

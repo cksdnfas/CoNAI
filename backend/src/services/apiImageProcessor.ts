@@ -116,7 +116,7 @@ export class APIImageProcessor {
     height?: number;
     metadata: any;
   }> {
-    // NovelAI는 이미 createNAIHistory()에서 메타데이터 저장됨
+    // NovelAI history is now kept minimal, so skip history-side metadata extraction here.
     if (serviceType === 'novelai') {
       return { metadata: {} };
     }

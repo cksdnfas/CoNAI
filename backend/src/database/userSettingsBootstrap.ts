@@ -94,9 +94,31 @@ export function ensureApiGenerationHistoryTable(userSettingsDb: Database.Databas
       assigned_group_id INTEGER,
       composite_hash TEXT,
       error_message TEXT,
-      metadata TEXT
+      metadata TEXT,
+      queue_job_id INTEGER,
+      requested_by_account_id INTEGER,
+      requested_by_account_type TEXT,
+      server_id INTEGER
     )
   `);
+
+  const hasColumn = (tableName: string, columnName: string): boolean => {
+    const pragma = userSettingsDb.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+    return pragma.some((column) => column.name === columnName);
+  };
+
+  if (!hasColumn('api_generation_history', 'queue_job_id')) {
+    userSettingsDb.exec('ALTER TABLE api_generation_history ADD COLUMN queue_job_id INTEGER');
+  }
+  if (!hasColumn('api_generation_history', 'requested_by_account_id')) {
+    userSettingsDb.exec('ALTER TABLE api_generation_history ADD COLUMN requested_by_account_id INTEGER');
+  }
+  if (!hasColumn('api_generation_history', 'requested_by_account_type')) {
+    userSettingsDb.exec('ALTER TABLE api_generation_history ADD COLUMN requested_by_account_type TEXT');
+  }
+  if (!hasColumn('api_generation_history', 'server_id')) {
+    userSettingsDb.exec('ALTER TABLE api_generation_history ADD COLUMN server_id INTEGER');
+  }
 
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_api_gen_service_type ON api_generation_history(service_type)',
@@ -105,6 +127,9 @@ export function ensureApiGenerationHistoryTable(userSettingsDb: Database.Databas
     'CREATE INDEX IF NOT EXISTS idx_api_gen_composite_hash ON api_generation_history(composite_hash)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_workflow_id ON api_generation_history(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_group_id ON api_generation_history(group_id)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_queue_job_id ON api_generation_history(queue_job_id)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_requested_by_account_id ON api_generation_history(requested_by_account_id)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_server_id ON api_generation_history(server_id)',
     'CREATE INDEX IF NOT EXISTS idx_api_generation_history_status_created ON api_generation_history(generation_status, created_at DESC)',
   ];
 

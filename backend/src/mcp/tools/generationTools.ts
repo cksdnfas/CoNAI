@@ -119,48 +119,23 @@ export function registerGenerationTools(server: McpServer): void {
           data
         );
 
-        // 워크플로우에서 생성 파라미터 추출 (웹 UI와 동일)
-        const workflowJson = JSON.parse(workflow.workflow_json);
-        const extractedParams = ComfyUIWorkflowParser.extractWithSubstitution(workflowJson, data);
-
         // 히스토리 생성 (생성 전에 먼저 생성 - 웹 UI와 동일)
         const historyId = await GenerationHistoryService.createComfyUIHistory({
-          workflow: substitutedWorkflow,
           workflowId: workflow_id,
           workflowName: workflow.name,
-          promptId: '',
-          positivePrompt: extractedParams.positivePrompt,
-          negativePrompt: extractedParams.negativePrompt,
-          width: extractedParams.width,
-          height: extractedParams.height,
           groupId: group_id,
-          metadata: {
-            server_endpoint: serverRecord.endpoint,
-            server_name: serverRecord.name,
-            sampler: extractedParams.sampler,
-            steps: extractedParams.steps,
-            cfg_scale: extractedParams.cfg_scale,
-            model: extractedParams.model
-          }
         });
 
         // 이미지 생성 (temp 폴더에 다운로드)
         const result = await comfyService.generateImages(workflow, substitutedWorkflow);
 
-        // promptId 업데이트
+        // submit 이후에는 history에 promptId를 쓰지 않고 상태만 올린다
         try {
-          const history = await GenerationHistoryService.getHistory(historyId);
-          if (history) {
-            const historyAny = history as any;
-            const { actual_composite_hash, actual_thumbnail_path, actual_width, actual_height, ...baseHistory } = historyAny;
-            GenerationHistoryModel.update(historyId, {
-              ...baseHistory,
-              comfyui_prompt_id: result.promptId,
-              generation_status: 'processing' as const
-            });
-          }
+          GenerationHistoryModel.update(historyId, {
+            generation_status: 'processing' as const
+          });
         } catch (e) {
-          console.error('[MCP ComfyUI] Failed to update history with promptId:', e);
+          console.error('[MCP ComfyUI] Failed to update history processing status:', e);
         }
 
         // temp → 영구 저장소로 이동 (웹 UI execution.routes.ts와 동일한 처리)
@@ -194,8 +169,6 @@ export function registerGenerationTools(server: McpServer): void {
             if (result.imagePaths.indexOf(tempPath) === 0) {
               const { hashes } = await ImageSimilarityService.generateHashAndHistogram(targetPath);
               GenerationHistoryModel.updateImagePaths(historyId, {
-                original: relativePath,
-                fileSize: imageBuffer.length,
                 compositeHash: hashes.compositeHash
               });
             }
@@ -270,10 +243,6 @@ export function registerGenerationTools(server: McpServer): void {
           data
         );
 
-        // 워크플로우에서 생성 파라미터 추출
-        const workflowJson = JSON.parse(workflow.workflow_json);
-        const extractedParams = ComfyUIWorkflowParser.extractWithSubstitution(workflowJson, data);
-
         // 모든 활성 서버에 병렬 생성 요청
         const servers = activeServers.map(s => ({ id: s.id!, name: s.name, endpoint: s.endpoint }));
         const parallelResults = await ParallelGenerationService.generateOnMultipleServers(
@@ -307,38 +276,14 @@ export function registerGenerationTools(server: McpServer): void {
           let historyId: number | undefined;
           try {
             historyId = await GenerationHistoryService.createComfyUIHistory({
-              workflow: substitutedWorkflow,
               workflowId: workflow_id,
               workflowName: workflow.name,
-              promptId: result.promptId || '',
-              positivePrompt: extractedParams.positivePrompt,
-              negativePrompt: extractedParams.negativePrompt,
-              width: extractedParams.width,
-              height: extractedParams.height,
               groupId: group_id,
-              metadata: {
-                server_endpoint: servers.find(s => s.id === result.serverId)?.endpoint,
-                server_name: result.serverName,
-                sampler: extractedParams.sampler,
-                steps: extractedParams.steps,
-                cfg_scale: extractedParams.cfg_scale,
-                model: extractedParams.model
-              }
             });
 
-            // promptId 업데이트
-            if (result.promptId) {
-              const history = await GenerationHistoryService.getHistory(historyId);
-              if (history) {
-                const historyAny = history as any;
-                const { actual_composite_hash, actual_thumbnail_path, actual_width, actual_height, ...baseHistory } = historyAny;
-                GenerationHistoryModel.update(historyId, {
-                  ...baseHistory,
-                  comfyui_prompt_id: result.promptId,
-                  generation_status: 'processing' as const
-                });
-              }
-            }
+            GenerationHistoryModel.update(historyId, {
+              generation_status: 'processing' as const
+            });
           } catch (historyError) {
             console.error(`[MCP ComfyUI Parallel] Failed to create history for server ${result.serverName}:`, historyError);
           }
@@ -369,8 +314,6 @@ export function registerGenerationTools(server: McpServer): void {
               if (historyId && result.imagePaths.indexOf(tempPath) === 0) {
                 const { hashes } = await ImageSimilarityService.generateHashAndHistogram(targetPath);
                 GenerationHistoryModel.updateImagePaths(historyId, {
-                  original: relativePath,
-                  fileSize: imageBuffer.length,
                   compositeHash: hashes.compositeHash
                 });
               }
@@ -613,15 +556,6 @@ export function registerGenerationTools(server: McpServer): void {
         for (let i = 0; i < images.length; i++) {
           const historyId = await GenerationHistoryService.createNAIHistory({
             model: metadata.model || 'unknown',
-            sampler: metadata.sampler || 'unknown',
-            seed: (metadata.seed || 0) + i,
-            steps: metadata.steps || 28,
-            scale: metadata.scale || 5.0,
-            parameters: requestBody.parameters,
-            positivePrompt: metadata.prompt,
-            negativePrompt: metadata.negative_prompt,
-            width: metadata.width || 1024,
-            height: metadata.height || 1024,
             groupId: group_id,
           });
           historyIds.push(historyId);

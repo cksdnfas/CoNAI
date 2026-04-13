@@ -3,10 +3,11 @@ import axios from 'axios'
 // @ts-ignore - no types available
 import AdmZip from 'adm-zip'
 import sharp from 'sharp'
-import { preprocessMetadata, type NAIMetadataInputParams, type NAIMetadataParams } from '../../utils/nai/metadata'
-import { buildNaiRequestBody, normalizeBase64ImageData } from '../../utils/nai/requestBuilder'
+import { type NAIMetadataInputParams, type NAIMetadataParams } from '../../utils/nai/metadata'
+import { normalizeBase64ImageData } from '../../utils/nai/requestBuilder'
 import { getToken } from '../../utils/nai/auth'
 import { GenerationHistoryService } from '../../services/generationHistoryService'
+import { executeNaiGeneration } from '../../services/naiGenerationExecutor'
 import type { GeneratedImageSaveOptions } from '../../utils/fileSaver'
 
 const router = Router()
@@ -72,15 +73,6 @@ function respondWithNaiError(res: Response, error: any, fallbackError: string) {
   })
 }
 
-/** Parse a zipped NovelAI image response into a base64 image list. */
-function unpackGeneratedImages(payload: Buffer) {
-  const zip = new AdmZip(payload)
-  return zip.getEntries().map((entry: any, index: number) => ({
-    filename: `nai_${Date.now()}_${index}.png`,
-    data: entry.getData().toString('base64'),
-  }))
-}
-
 router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }>, res: Response): Promise<void> => {
   try {
     const token = resolveToken(req)
@@ -89,13 +81,14 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams & { ima
       return
     }
 
-    const metadata = preprocessMetadata(req.body)
-    const requestBody = await buildNaiRequestBody(metadata)
+    const { metadata, imageBuffers } = await executeNaiGeneration(req.body, token)
+    const requestedByAccountId = typeof req.session?.accountId === 'number' ? req.session.accountId : undefined
+    const requestedByAccountType = req.session?.accountType
 
     console.log('[NAI Generate] Request params:', {
       resolution: `${metadata.width}x${metadata.height}`,
       steps: metadata.steps,
-      model: requestBody.model,
+      model: metadata.model,
       sampler: metadata.sampler,
       scheduler: metadata.noise_schedule,
       scale: metadata.scale,
@@ -107,47 +100,22 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams & { ima
       tokenPrefix: token.substring(0, 10) + '...',
     })
 
-    const response = await axios.post('https://image.novelai.net/ai/generate-image', requestBody, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        Origin: 'https://novelai.net',
-        Referer: 'https://novelai.net',
-      },
-      responseType: 'arraybuffer',
-      timeout: 120000,
-    })
-
-    const images = unpackGeneratedImages(Buffer.from(response.data))
     const historyIds: number[] = []
 
     try {
       const groupId = metadata.groupId
 
-      for (let index = 0; index < images.length; index += 1) {
+      for (let index = 0; index < imageBuffers.length; index += 1) {
         const historyId = await GenerationHistoryService.createNAIHistory({
           model: metadata.model || 'unknown',
-          sampler: metadata.sampler || 'unknown',
-          seed: (metadata.seed || 0) + index,
-          steps: metadata.steps || 28,
-          scale: metadata.scale || 7.0,
-          parameters: requestBody.parameters,
-          positivePrompt: metadata.prompt,
-          negativePrompt: metadata.negative_prompt,
-          width: metadata.width || 1024,
-          height: metadata.height || 1024,
           groupId,
-          metadata: {
-            action: metadata.action,
-            n_samples: metadata.n_samples,
-            batch_index: index,
-            noise_schedule: metadata.noise_schedule,
-          },
+          requestedByAccountId,
+          requestedByAccountType,
         })
 
         historyIds.push(historyId)
 
-        const imageBuffer = Buffer.from(images[index].data, 'base64')
+        const imageBuffer = imageBuffers[index]
         GenerationHistoryService.processAndUploadImage(historyId, imageBuffer, 'novelai', req.body.imageSaveOptions)
           .catch((historyError) => console.error(`[NAI Generate] Background upload failed for history ${historyId}:`, historyError))
       }
@@ -172,7 +140,7 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams & { ima
         scale: metadata.scale,
         sampler: metadata.sampler,
         scheduler: metadata.noise_schedule,
-        model: requestBody.model,
+        model: metadata.model,
       },
     })
   } catch (error: any) {

@@ -3,6 +3,7 @@ import { settingsService } from '../services/settingsService'
 import { AutoScanScheduler } from '../services/autoScanScheduler'
 import { autoTagScheduler } from '../services/autoTagScheduler'
 import { GraphWorkflowScheduleService } from '../services/graphWorkflowScheduleService'
+import { GenerationQueueService } from '../services/generationQueueService'
 
 /** Start runtime daemons, watchers, and schedulers after core startup succeeds. */
 export async function startRuntimeSideEffectServices(isSafeSmokeMode: boolean) {
@@ -45,6 +46,7 @@ export async function startRuntimeSideEffectServices(isSafeSmokeMode: boolean) {
 
   AutoScanScheduler.start()
   GraphWorkflowScheduleService.start()
+  GenerationQueueService.start()
 
   const autoTagSchedulerStarted = autoTagScheduler.start()
   if (!autoTagSchedulerStarted) {

@@ -1,8 +1,6 @@
 import { requestJson } from './api-image-generation-request'
 import type {
   ComfyUIModelFolderScanInput,
-  ComfyUIGenerationPayload,
-  ComfyUIGenerationResponse,
   ComfyUIServer,
   ComfyUIServerConnectionStatus,
   CreateComfyUIServerPayload,
@@ -257,13 +255,3 @@ export async function scanGenerationComfyUIModelDropdownLists(payload: {
   })
 }
 
-/** Start a ComfyUI workflow generation request. */
-export async function generateComfyUIImage(workflowId: number, payload: ComfyUIGenerationPayload) {
-  return requestJson<ComfyUIGenerationResponse>(`/api/workflows/${workflowId}/generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
-}

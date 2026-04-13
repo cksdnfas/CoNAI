@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { triggerBlobDownload } from '@/lib/api-client'
-import { createNaiModuleFromSnapshot, generateNaiImage, upscaleNaiImage } from '@/lib/api'
-import type { GenerationHistoryRecord, GenerationImageSaveOptions } from '@/lib/api-image-generation'
+import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
+import { createNaiModuleFromSnapshot, upscaleNaiImage } from '@/lib/api'
+import type { GenerationImageSaveOptions } from '@/lib/api-image-generation'
 import {
   buildNaiCharacterPromptPayload,
   buildNaiCharacterReferencePayload,
@@ -17,7 +17,6 @@ import {
   type NAIVibeDraft,
 } from '../image-generation-shared'
 import { decodeNaiBase64Png } from './nai-generation-panel-helpers'
-import { prependGenerationHistoryRecords } from '../generation-history-cache'
 
 /** Manage generation, upscale, and module-save actions for the NAI generation panel. */
 export function useNaiGenerationActions({
@@ -51,7 +50,6 @@ export function useNaiGenerationActions({
   closeModuleSaveModal: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
-  const queryClient = useQueryClient()
   const [isNaiGenerating, setIsNaiGenerating] = useState(false)
   const [isSavingNaiModule, setIsSavingNaiModule] = useState(false)
   const [isUpscaling, setIsUpscaling] = useState(false)
@@ -96,53 +94,38 @@ export function useNaiGenerationActions({
       }
 
       setIsNaiGenerating(true)
-      const response = await generateNaiImage({
-        prompt: naiForm.prompt.trim(),
-        negative_prompt: naiForm.negativePrompt.trim() || undefined,
-        model: naiForm.model,
-        action: naiForm.action,
-        sampler: naiForm.sampler,
-        noise_schedule: naiForm.scheduler,
-        width: Number(naiForm.width),
-        height: Number(naiForm.height),
-        steps: Number(naiForm.steps),
-        scale: Number(naiForm.scale),
-        n_samples: sampleCount,
-        seed: naiForm.seed.trim().length > 0 ? Number(naiForm.seed) : undefined,
-        use_coords: useCharacterPositions,
-        characters: supportsCharacterPrompts ? buildNaiCharacterPromptPayload(naiForm.characters) : undefined,
-        vibes: buildNaiVibePayload(encodedVibes),
-        character_refs: buildNaiCharacterReferencePayload(naiForm.characterReferences),
-        variety_plus: naiForm.varietyPlus,
-        image: naiForm.action !== 'generate' ? naiForm.sourceImage?.dataUrl : undefined,
-        mask: naiForm.action === 'infill' ? naiForm.maskImage?.dataUrl : undefined,
-        strength: naiForm.action !== 'generate' ? Number(naiForm.strength) : undefined,
-        noise: naiForm.action !== 'generate' ? Number(naiForm.noise) : undefined,
-        add_original_image: naiForm.action === 'infill' ? naiForm.addOriginalImage : undefined,
-        imageSaveOptions,
+      const response = await createGenerationQueueJob({
+        service_type: 'novelai',
+        request_summary: `NAI queue job · ${naiForm.prompt.trim().slice(0, 48)}`,
+        request_payload: {
+          prompt: naiForm.prompt.trim(),
+          negative_prompt: naiForm.negativePrompt.trim() || undefined,
+          model: naiForm.model,
+          action: naiForm.action,
+          sampler: naiForm.sampler,
+          noise_schedule: naiForm.scheduler,
+          width: Number(naiForm.width),
+          height: Number(naiForm.height),
+          steps: Number(naiForm.steps),
+          scale: Number(naiForm.scale),
+          n_samples: sampleCount,
+          seed: naiForm.seed.trim().length > 0 ? Number(naiForm.seed) : undefined,
+          use_coords: useCharacterPositions,
+          characters: supportsCharacterPrompts ? buildNaiCharacterPromptPayload(naiForm.characters) : undefined,
+          vibes: buildNaiVibePayload(encodedVibes),
+          character_refs: buildNaiCharacterReferencePayload(naiForm.characterReferences),
+          variety_plus: naiForm.varietyPlus,
+          image: naiForm.action !== 'generate' ? naiForm.sourceImage?.dataUrl : undefined,
+          mask: naiForm.action === 'infill' ? naiForm.maskImage?.dataUrl : undefined,
+          strength: naiForm.action !== 'generate' ? Number(naiForm.strength) : undefined,
+          noise: naiForm.action !== 'generate' ? Number(naiForm.noise) : undefined,
+          add_original_image: naiForm.action === 'infill' ? naiForm.addOriginalImage : undefined,
+          imageSaveOptions,
+        },
       })
 
-      const createdAt = new Date().toISOString()
-      const optimisticRecords: GenerationHistoryRecord[] = response.historyIds.map((historyId, index) => ({
-        id: historyId,
-        service_type: 'novelai',
-        generation_status: 'pending',
-        nai_model: naiForm.model,
-        nai_sampler: naiForm.sampler,
-        nai_seed: naiForm.seed.trim().length > 0 ? Number(naiForm.seed) + index : null,
-        nai_steps: Number(naiForm.steps),
-        nai_scale: Number(naiForm.scale),
-        positive_prompt: naiForm.prompt.trim(),
-        negative_prompt: naiForm.negativePrompt.trim() || null,
-        width: Number(naiForm.width),
-        height: Number(naiForm.height),
-        created_at: createdAt,
-      }))
-
-      prependGenerationHistoryRecords(queryClient, 'novelai', optimisticRecords)
-      await refetchUserData()
       onHistoryRefresh()
-      showSnackbar({ message: `NAI 생성 요청 완료. 히스토리 ${response.count}건 등록됐어.`, tone: 'info' })
+      showSnackbar({ message: response.message || 'NAI 큐에 생성 작업을 넣었어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'NAI 이미지 생성에 실패했어.'), tone: 'error' })
     } finally {

@@ -3,8 +3,6 @@ import type {
   NAICostEstimate,
   NAIEncodeVibePayload,
   NAIEncodeVibeResponse,
-  NAIImageGenerationPayload,
-  NAIImageGenerationResponse,
   NAILoginResponse,
   NAIUpscalePayload,
   NAIUpscaleResponse,
@@ -52,17 +50,6 @@ export async function getNaiCostEstimate(payload: {
   anlasBalance: number
 }) {
   return requestJson<NAICostEstimateResponse>('/api/nai/cost/calculate', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
-}
-
-/** Start a NovelAI image generation request. */
-export async function generateNaiImage(payload: NAIImageGenerationPayload) {
-  return requestJson<NAIImageGenerationResponse>('/api/nai/generate/image', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

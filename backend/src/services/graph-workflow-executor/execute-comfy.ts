@@ -1,11 +1,10 @@
 import fs from 'fs'
 import { createComfyUIService } from '../comfyuiService'
+import { prepareComfyPromptData } from '../prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
 import { saveArtifactBuffer, saveMetadataArtifact } from './artifacts'
 import {
   bufferToDataUrl,
-  normalizeBase64ImageData,
-  sanitizeFileSegment,
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
@@ -35,27 +34,9 @@ export async function executeComfyModule(context: ExecutionContext, node: GraphW
   }
 
   const comfyService = createComfyUIService(apiEndpoint)
-  const preparedPromptData = { ...resolvedInputs }
-
-  for (const field of markedFields as Array<{ id: string; type: string }>) {
-    if (field.type !== 'image') {
-      continue
-    }
-
-    const value = preparedPromptData[field.id]
-    if (!value || typeof value !== 'string') {
-      continue
-    }
-
-    const base64 = normalizeBase64ImageData(value)
-    if (!base64) {
-      continue
-    }
-
-    const uploadName = `${sanitizeFileSegment(node.id)}_${sanitizeFileSegment(field.id)}_${Date.now()}.png`
-    const uploadedName = await comfyService.uploadInputImage(uploadName, Buffer.from(base64, 'base64'))
-    preparedPromptData[field.id] = uploadedName
-  }
+  const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, resolvedInputs, {
+    uploadNameBase: node.id,
+  })
 
   const resolvedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui')
   const substitutedWorkflow = comfyService.substitutePromptData(
