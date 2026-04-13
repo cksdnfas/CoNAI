@@ -152,6 +152,7 @@ export class MediaMetadataFileQueries {
       ${ACTIVE_FILE_WITH_METADATA_SELECT}
       WHERE if.file_status = 'active'
         AND if.composite_hash IN (${placeholders})
+        AND ${VISIBLE_MEDIA_METADATA_CONDITION}
     `;
 
     return db.prepare(query).all(...compositeHashes);

@@ -8,6 +8,7 @@ import { ImageListResponse } from '../../types/image';
 import { resolveUploadsPath } from '../../config/runtimePaths';
 import { enrichImageWithFileView } from './utils';
 import { QueryCacheService } from '../../services/QueryCacheService';
+import { ImageSafetyService } from '../../services/imageSafetyService';
 import { logger } from '../../utils/logger';
 import { routeParam } from '../routeParam';
 
@@ -442,6 +443,11 @@ router.get('/batch/thumbnails', asyncHandler(async (req: Request, res: Response)
 
           if (!metadata) {
             results[hash] = { success: false, error: 'Not found' };
+            return;
+          }
+
+          if (ImageSafetyService.isHidden(metadata.rating_score)) {
+            results[hash] = { success: false, error: 'Hidden by safety policy' };
             return;
           }
 
