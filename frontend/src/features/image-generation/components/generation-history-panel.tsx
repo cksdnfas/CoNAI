@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
 import { cleanupFailedGenerationHistory, deleteGenerationHistoryRecord, getGenerationHistory, getGenerationWorkflowHistory } from '@/lib/api'
@@ -57,10 +58,13 @@ function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['record
 /** Render generation history using the shared image-list surface instead of per-record cards. */
 export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
+  const authStatusQuery = useAuthStatusQuery()
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [isCleaningFailed, setIsCleaningFailed] = useState(false)
-  const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null, 'mine-only'] as const
+  const isAdmin = authStatusQuery.data?.isAdmin === true
+  const historyScope = isAdmin ? 'all-users' : 'mine-only'
+  const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null, historyScope] as const
   const historyQuery = useInfiniteQuery({
     queryKey: historyQueryKey,
     initialPageParam: 0,
@@ -69,14 +73,15 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         ? getGenerationWorkflowHistory(workflowId, {
             limit: GENERATION_HISTORY_PAGE_SIZE,
             offset: pageParam,
-            mine: true,
+            ...(isAdmin ? {} : { mine: true }),
           })
         : getGenerationHistory(serviceType, {
             limit: GENERATION_HISTORY_PAGE_SIZE,
             offset: pageParam,
-            mine: true,
+            ...(isAdmin ? {} : { mine: true }),
           })
     ),
+    enabled: !authStatusQuery.isPending,
     getNextPageParam: (lastPage, allPages) => {
       const loadedCount = allPages.reduce((sum, page) => sum + page.records.length, 0)
       return loadedCount < lastPage.total ? loadedCount : undefined
@@ -97,6 +102,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     void refetchHistory()
   }, [refreshNonce, refetchHistory])
 
+  const isHistoryLoading = authStatusQuery.isPending || historyQuery.isPending
   const historyRecords = useMemo(
     () => (historyQuery.data?.pages ?? []).flatMap((page) => page.records),
     [historyQuery.data?.pages],
@@ -185,6 +191,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{historyLabel}</Badge>
           <Badge variant="outline">결과 {visibleHistoryRecords.length}</Badge>
+          <Badge variant="outline">{isAdmin ? '전체 사용자' : '내 기록'}</Badge>
           {inFlightHistoryCount > 0 ? <Badge variant="secondary">진행 중 {inFlightHistoryCount}</Badge> : null}
           <Button type="button" size="sm" variant="outline" onClick={() => void handleCleanupFailed()} disabled={isCleaningFailed}>
             <Trash2 className="h-4 w-4" />
@@ -203,14 +210,14 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         </Alert>
       ) : null}
 
-      {historyQuery.isPending ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
+      {isHistoryLoading ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
 
       <div className={cn(splitPaneScroll && 'min-h-0 flex-1')}>
-        {!historyQuery.isPending && historyImages.length === 0 ? (
+        {!isHistoryLoading && historyImages.length === 0 ? (
           <div className="py-4 text-sm text-muted-foreground">아직 표시할 생성 결과가 없어.</div>
         ) : null}
 
-        {!historyQuery.isPending && historyImages.length > 0 ? (
+        {!isHistoryLoading && historyImages.length > 0 ? (
           <ImageList
             items={historyImages}
             layout="masonry"

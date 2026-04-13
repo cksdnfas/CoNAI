@@ -28,6 +28,42 @@ function parsePositiveIntegerQuery(value: unknown): number | undefined {
   return parsed;
 }
 
+function isAdminRequest(req: Request) {
+  return req.session?.accountType === 'admin';
+}
+
+function getRequesterAccountId(req: Request) {
+  return typeof req.session?.accountId === 'number' ? req.session.accountId : null;
+}
+
+function applyHistoryAccessScope(req: Request, filters: Record<string, any>, mineOnly: boolean) {
+  const requesterAccountId = getRequesterAccountId(req);
+
+  if (!isAdminRequest(req)) {
+    if (requesterAccountId === null) {
+      return { forceEmpty: true } as const;
+    }
+
+    filters.requested_by_account_id = requesterAccountId;
+    if (req.session?.accountType === 'guest') {
+      filters.requested_by_account_type = 'guest';
+    }
+
+    return { forceEmpty: false } as const;
+  }
+
+  if (mineOnly) {
+    if (requesterAccountId === null) {
+      return { forceEmpty: true } as const;
+    }
+
+    filters.requested_by_account_id = requesterAccountId;
+    filters.requested_by_account_type = 'admin';
+  }
+
+  return { forceEmpty: false } as const;
+}
+
 /**
  * GET /api/generation-history
  * Get all generation history with optional filters
@@ -97,22 +133,16 @@ router.get(
       filters.requested_by_account_type = requested_by_account_type;
     }
 
-    if (mine === 'true') {
-      if (typeof req.session?.accountId !== 'number') {
-        res.json({
-          success: true,
-          records: [],
-          total: 0,
-          limit: filters.limit,
-          offset: filters.offset
-        });
-        return;
-      }
-
-      filters.requested_by_account_id = req.session.accountId;
-      if (req.session.accountType === 'admin' || req.session.accountType === 'guest') {
-        filters.requested_by_account_type = req.session.accountType;
-      }
+    const accessScope = applyHistoryAccessScope(req, filters, mine === 'true');
+    if (accessScope.forceEmpty) {
+      res.json({
+        success: true,
+        records: [],
+        total: 0,
+        limit: filters.limit,
+        offset: filters.offset
+      });
+      return;
     }
 
     const result = await GenerationHistoryService.getAllHistory(filters);
@@ -420,23 +450,17 @@ router.get(
       filters.requested_by_account_type = requested_by_account_type;
     }
 
-    if (mine === 'true') {
-      if (typeof req.session?.accountId !== 'number') {
-        res.json({
-          success: true,
-          records: [],
-          total: 0,
-          limit: filters.limit,
-          offset: filters.offset,
-          workflowId: parseInt(workflowId)
-        });
-        return;
-      }
-
-      filters.requested_by_account_id = req.session.accountId;
-      if (req.session.accountType === 'admin' || req.session.accountType === 'guest') {
-        filters.requested_by_account_type = req.session.accountType;
-      }
+    const accessScope = applyHistoryAccessScope(req, filters, mine === 'true');
+    if (accessScope.forceEmpty) {
+      res.json({
+        success: true,
+        records: [],
+        total: 0,
+        limit: filters.limit,
+        offset: filters.offset,
+        workflowId: parseInt(workflowId)
+      });
+      return;
     }
 
     const result = await GenerationHistoryService.getHistoryByWorkflow(
