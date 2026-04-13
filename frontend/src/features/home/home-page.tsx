@@ -14,10 +14,9 @@ import { useHomeSearch } from '@/features/home/home-search-context'
 import { buildComplexFilterPayload } from '@/features/search/search-utils'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
-import { ImageRatingSafetyBadge, resolveImageFeedSafety } from '@/features/images/components/image-list/image-rating-safety'
+import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
 import { addImagesToGroup, downloadImageSelection, getGroupsHierarchyAll, getImages, searchImagesComplex } from '@/lib/api'
-import { getRatingTiers } from '@/lib/api-search'
 
 /** Render the Home page with the reusable image list and header-driven search results. */
 export function HomePage() {
@@ -58,13 +57,6 @@ export function HomePage() {
     enabled: canViewHome && !isAnonymousSession,
   })
 
-  const ratingTiersQuery = useQuery({
-    queryKey: ['rating-tiers'],
-    queryFn: getRatingTiers,
-    enabled: canViewHome,
-    staleTime: 60_000,
-  })
-
   const assignToGroupMutation = useMutation({
     mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
     onSuccess: async (result) => {
@@ -87,31 +79,24 @@ export function HomePage() {
     [imagesQuery.data?.pages],
   )
 
-  const imageFeedSafetyById = useMemo(
-    () => new Map(images.map((image) => [String(image.composite_hash ?? image.id), resolveImageFeedSafety(image, ratingTiersQuery.data)])),
-    [images, ratingTiersQuery.data],
-  )
-
-  const visibleImages = useMemo(
-    () => images.filter((image) => imageFeedSafetyById.get(String(image.composite_hash ?? image.id))?.visibility !== 'hide'),
-    [imageFeedSafetyById, images],
-  )
+  const {
+    visibleItems: visibleImages,
+    hasOnlyHiddenItems,
+    renderItemPersistentOverlay,
+    shouldBlurItemPreview,
+  } = useImageFeedSafety({
+    items: images,
+    enabled: canViewHome,
+    hasMore: Boolean(imagesQuery.hasNextPage),
+    isLoading: imagesQuery.isPending,
+    isError: imagesQuery.isError,
+    isLoadingMore: imagesQuery.isFetchingNextPage,
+    onLoadMore: imagesQuery.fetchNextPage,
+  })
 
   useEffect(() => {
     setSelectedIds([])
   }, [appliedChips])
-
-  useEffect(() => {
-    if (imagesQuery.isPending || imagesQuery.isError || imagesQuery.isFetchingNextPage) {
-      return
-    }
-
-    if (images.length === 0 || visibleImages.length > 0 || !imagesQuery.hasNextPage) {
-      return
-    }
-
-    void imagesQuery.fetchNextPage()
-  }, [images.length, imagesQuery.fetchNextPage, imagesQuery.hasNextPage, imagesQuery.isError, imagesQuery.isFetchingNextPage, imagesQuery.isPending, visibleImages.length])
 
   useHomeScrollRestoration({
     enabled: !imagesQuery.isPending && !imagesQuery.isError,
@@ -187,7 +172,7 @@ export function HomePage() {
   }
 
   const emptyStateTitle = isSearchMode ? '검색 결과가 없어' : '표시할 이미지가 아직 없어'
-  const emptyStateDescription = images.length > 0 && visibleImages.length === 0
+  const emptyStateDescription = hasOnlyHiddenItems
     ? '현재 등급 표시 정책 때문에 이 목록에서는 숨겨진 상태야.'
     : isSearchMode
       ? '검색 조건을 바꿔봐.'
@@ -278,11 +263,8 @@ export function HomePage() {
             columnGap={24}
             rowGap={24}
             gridItemHeight={280}
-            renderItemPersistentOverlay={(image) => {
-              const safety = imageFeedSafetyById.get(String(image.composite_hash ?? image.id))
-              return safety?.tier ? <ImageRatingSafetyBadge tier={safety.tier} visibility={safety.visibility} /> : null
-            }}
-            shouldBlurItemPreview={(image) => imageFeedSafetyById.get(String(image.composite_hash ?? image.id))?.visibility === 'blur'}
+            renderItemPersistentOverlay={renderItemPersistentOverlay}
+            shouldBlurItemPreview={shouldBlurItemPreview}
           />
 
           <div className="flex flex-col items-center gap-3 pb-6">
