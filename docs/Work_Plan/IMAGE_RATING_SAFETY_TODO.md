@@ -39,6 +39,7 @@
 - [x] Keep group ZIP downloads aligned with safety-filtered hash loads
 - [x] Block hidden images from Civitai temp URLs
 - [x] Block hidden images from `/api/images/metadata/:composite_hash`
+- [x] Block hidden images from `/api/images/by-path/:encodedPath` when the path maps to an active hidden image row
 
 ## Follow-up later
 - [x] Keep `blur` list-only, including thumbnail-strip style list surfaces

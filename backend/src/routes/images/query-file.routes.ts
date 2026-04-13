@@ -330,6 +330,18 @@ router.get('/by-path/:encodedPath', asyncHandler(async (req: Request, res: Respo
 
   try {
     const filePath = decodeURIComponent(encodedPath);
+    const fileRecord = ImageFileModel.findByPath(filePath);
+
+    if (fileRecord?.file_status === 'active' && fileRecord.composite_hash) {
+      const metadata = await MediaMetadataModel.findByHash(fileRecord.composite_hash);
+      if (metadata && ImageSafetyService.isHidden(metadata.rating_score)) {
+        return res.status(403).json({
+          success: false,
+          error: 'This image is hidden by the current safety policy'
+        });
+      }
+    }
+
     const resolvedPath = resolveUploadsPath(filePath);
     if (!fs.existsSync(resolvedPath)) {
       return res.status(404).json({

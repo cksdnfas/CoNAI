@@ -134,6 +134,7 @@ Already added after the initial plan:
 - group ZIP path aligned with safety-filtered image loads
 - Civitai temp URL blocking for hidden images
 - metadata route blocking for hidden images
+- path-based file serving blocks hidden images when the served path maps to an active hidden media row
 
 ## Follow-up phase after this slice
 
