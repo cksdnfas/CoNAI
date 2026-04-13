@@ -42,6 +42,7 @@
 
 ## Follow-up later
 - [x] Keep `blur` list-only, including thumbnail-strip style list surfaces
-- [ ] Define unrated fallback policy instead of rough `show`
+- [x] Separate unrated/failed-rating writes from real score `0` by storing `NULL` on new write/recalc paths, while keeping rough `show` fallback for now
+- [ ] Decide whether rough `show` should remain the long-term unrated fallback
 - [ ] Optional admin bypass
 - [ ] QA remaining external/share surfaces for hidden-image leaks

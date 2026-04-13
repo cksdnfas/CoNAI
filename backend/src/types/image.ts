@@ -71,7 +71,7 @@ export interface ImageMetadataRecord {
   bitrate: number | null;
 
   // 평가 시스템
-  rating_score: number;
+  rating_score: number | null;
 
   // 타임스탬프
   first_seen_date: string;

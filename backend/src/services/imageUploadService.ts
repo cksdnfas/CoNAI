@@ -95,7 +95,7 @@ export class ImageUploadService {
         video_codec: imageData.videoCodec,
         audio_codec: imageData.audioCodec,
         bitrate: imageData.bitrate,
-        rating_score: 0,
+        rating_score: null,
         model_references: null,
         character_prompt_text: null,
         raw_nai_parameters: imageData.rawNaiParameters || null

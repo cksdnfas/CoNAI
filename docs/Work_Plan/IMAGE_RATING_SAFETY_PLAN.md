@@ -63,6 +63,7 @@ For each image card:
 4. render the card accordingly
 
 If `rating_score` is missing or no tier matches:
+- store that state as `NULL` where possible instead of conflating it with score `0`
 - phase 1 fallback: treat as `show`
 - document this clearly as an intentional rough default for the personal-server slice
 

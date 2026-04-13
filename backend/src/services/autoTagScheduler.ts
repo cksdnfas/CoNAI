@@ -251,9 +251,9 @@ export class AutoTagScheduler {
     await this.collectAutoPrompts(taggerTaglist);
   }
 
-  private async calculateRatingScore(ratingData: RatingData | null): Promise<number> {
+  private async calculateRatingScore(ratingData: RatingData | null): Promise<number | null> {
     if (!ratingData) {
-      return 0;
+      return null;
     }
 
     try {
@@ -261,11 +261,11 @@ export class AutoTagScheduler {
       return scoreResult.score;
     } catch (error) {
       console.error('[AutoTagScheduler] Failed to calculate rating_score:', error);
-      return 0;
+      return null;
     }
   }
 
-  private persistAutoTags(compositeHash: string, autoTags: string, ratingScore: number): void {
+  private persistAutoTags(compositeHash: string, autoTags: string, ratingScore: number | null): void {
     db.prepare(`
       UPDATE media_metadata
       SET auto_tags = ?, rating_score = ?

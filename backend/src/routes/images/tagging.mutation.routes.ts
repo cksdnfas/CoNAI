@@ -98,7 +98,7 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
       logger.verbose(`[ImageTag] Formatted JSON preview: ${autoTagsJson.substring(0, 100)}`);
     }
 
-    let ratingScore = 0;
+    let ratingScore: number | null = null;
     const ratingData = extractRatingData(taggerResult.rating);
     if (ratingData) {
       try {
@@ -198,7 +198,7 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
 
         const autoTagsJson = await buildMergedAutoTags(imageData.auto_tags || null, taggerResult, imagePath, mimeType);
 
-        let ratingScore = 0;
+        let ratingScore: number | null = null;
         const ratingData = extractRatingData(taggerResult.rating);
         if (ratingData) {
           try {
@@ -312,7 +312,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
 
         const autoTagsJson = await buildMergedAutoTags(image.auto_tags || null, taggerResult, imagePath, mimeType);
 
-        let ratingScore = 0;
+        let ratingScore: number | null = null;
         const ratingData = extractRatingData(taggerResult.rating);
         if (ratingData) {
           try {
@@ -450,7 +450,7 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
 
         const autoTagsJson = await buildMergedAutoTags(imageData.auto_tags || null, taggerResult, imagePath, mimeType);
 
-        let ratingScore = 0;
+        let ratingScore: number | null = null;
         const ratingData = extractRatingData(taggerResult.rating);
         if (ratingData) {
           try {
@@ -571,7 +571,7 @@ router.post('/recalculate-rating-scores', asyncHandler(async (req: Request, res:
         } else {
           db.prepare(`
             UPDATE media_metadata
-            SET rating_score = 0
+            SET rating_score = NULL
             WHERE composite_hash = ?
           `).run(image.composite_hash);
 
@@ -579,7 +579,7 @@ router.post('/recalculate-rating-scores', asyncHandler(async (req: Request, res:
           results.push({
             composite_hash: image.composite_hash,
             success: true,
-            rating_score: 0,
+            rating_score: null,
             note: 'No rating data available'
           });
         }

@@ -245,7 +245,7 @@ export const up = async (db: Database.Database): Promise<void> => {
       video_codec TEXT,
       audio_codec TEXT,
       bitrate INTEGER,
-      rating_score INTEGER DEFAULT 0,
+      rating_score INTEGER,
       first_seen_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       metadata_updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
     )
