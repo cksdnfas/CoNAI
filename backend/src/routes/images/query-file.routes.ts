@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import AdmZip from 'adm-zip';
 import path from 'path';
 import fs from 'fs';
-import crypto from 'crypto';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
@@ -10,56 +9,30 @@ import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { enrichImageWithFileView } from './utils';
 import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
+import {
+  getActiveFileOrBlock,
+  getCompositeHashOrBlock,
+  getExistingActiveFilePathOrBlock,
+  getVisibleMetadataOrBlock,
+  streamCacheableFile,
+  streamRangeFile,
+} from './query-file-helpers';
 import { routeParam } from '../routeParam';
 
 const router = Router();
 
-function generateETag(stats: fs.Stats): string {
-  const hash = crypto.createHash('md5');
-  hash.update(`${stats.mtime.getTime()}-${stats.size}`);
-  return `"${hash.digest('hex')}"`;
-}
-
-async function getVisibleMetadataOrBlock(res: Response, compositeHash: string) {
-  const metadata = await MediaMetadataModel.findByHash(compositeHash);
-
-  if (!metadata) {
-    res.status(404).json({
-      success: false,
-      error: 'Metadata not found'
-    });
-    return null;
-  }
-
-  if (ImageSafetyService.isHidden(metadata.rating_score)) {
-    res.status(403).json({
-      success: false,
-      error: 'This image is hidden by the current safety policy'
-    });
-    return null;
-  }
-
-  return metadata;
-}
-
 router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = routeParam(routeParam(req.params.compositeHash));
+  const compositeHash = getCompositeHashOrBlock(req, res);
 
-  if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid composite hash'
-    });
+  if (!compositeHash) {
+    return;
   }
 
   try {
-    const files = await ImageFileModel.findActiveByHash(compositeHash);
+    const file = await getActiveFileOrBlock(res, compositeHash, 'File not found');
 
-    if (!files || files.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'File not found'
-      });
+    if (!file) {
+      return;
     }
 
     const metadata = await getVisibleMetadataOrBlock(res, compositeHash);
@@ -70,11 +43,11 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
 
     const imageWithFile = {
       ...metadata,
-      file_id: files[0].id,
-      original_file_path: files[0].original_file_path,
-      file_size: files[0].file_size,
-      mime_type: files[0].mime_type || 'image/jpeg',
-      file_type: files[0].file_type
+      file_id: file.id,
+      original_file_path: file.original_file_path,
+      file_size: file.file_size,
+      mime_type: file.mime_type || 'image/jpeg',
+      file_type: file.file_type
     };
 
     res.json({
@@ -93,94 +66,40 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
 }));
 
 router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = routeParam(routeParam(req.params.compositeHash));
+  const compositeHash = getCompositeHashOrBlock(req, res);
 
-  if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid composite hash'
-    });
+  if (!compositeHash) {
+    return;
   }
 
   try {
-    const visibleMetadata = await getVisibleMetadataOrBlock(res, compositeHash);
-
-    if (!visibleMetadata) {
+    if (!(await getVisibleMetadataOrBlock(res, compositeHash))) {
       return;
     }
 
-    const files = await ImageFileModel.findActiveByHash(compositeHash);
+    const file = await getActiveFileOrBlock(res, compositeHash, 'File not found');
 
-    if (files.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'File not found'
-      });
+    if (!file) {
+      return;
     }
 
-    const originalPath = resolveUploadsPath(files[0].original_file_path);
+    const originalPath = getExistingActiveFilePathOrBlock(res, file, {
+      missingError: 'File not found on disk',
+      warnMessage: `[ImageServe] File missing on disk during raw file access: ${resolveUploadsPath(file.original_file_path)}`,
+    });
 
-    if (!fs.existsSync(originalPath)) {
-      console.warn(`[ImageServe] File missing on disk during raw file access: ${originalPath}`);
-      ImageFileModel.updateStatus(files[0].id, 'missing');
-
-      return res.status(404).json({
-        success: false,
-        error: 'File not found on disk'
-      });
+    if (!originalPath) {
+      return;
     }
 
-    const mimeType = files[0].mime_type;
+    const mimeType = file.mime_type;
 
     if (mimeType && mimeType.startsWith('video/')) {
-      const stat = fs.statSync(originalPath);
-      const fileSize = stat.size;
-      const range = req.headers.range;
-
-      if (range) {
-        const parts = range.replace(/bytes=/, '').split('-');
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunkSize = (end - start) + 1;
-        const fileStream = fs.createReadStream(originalPath, { start, end });
-
-        res.writeHead(206, {
-          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-          'Accept-Ranges': 'bytes',
-          'Content-Length': chunkSize,
-          'Content-Type': mimeType,
-          'Cache-Control': 'public, max-age=31536000, immutable'
-        });
-
-        fileStream.pipe(res);
-        return;
-      }
-
-      res.writeHead(200, {
-        'Content-Length': fileSize,
-        'Content-Type': mimeType,
-        'Accept-Ranges': 'bytes',
-        'Cache-Control': 'public, max-age=31536000, immutable'
-      });
-
-      const fileStream = fs.createReadStream(originalPath);
-      fileStream.pipe(res);
+      streamRangeFile(req, res, originalPath, mimeType);
       return;
     }
 
-    const stats = await fs.promises.stat(originalPath);
-    const etag = generateETag(stats);
-
-    if (req.headers['if-none-match'] === etag) {
-      return res.status(304).end();
-    }
-
-    res.setHeader('Content-Type', mimeType);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.setHeader('ETag', etag);
-
-    const fileStream = fs.createReadStream(originalPath);
-    fileStream.pipe(res);
+    await streamCacheableFile(req, res, originalPath, mimeType);
     return;
   } catch (error) {
     console.error('File serve error:', error);
@@ -193,13 +112,10 @@ router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Respon
 }));
 
 router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = routeParam(routeParam(req.params.compositeHash));
+  const compositeHash = getCompositeHashOrBlock(req, res);
 
-  if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid composite hash'
-    });
+  if (!compositeHash) {
+    return;
   }
 
   try {
@@ -209,61 +125,25 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
       return;
     }
 
-    const files = await ImageFileModel.findActiveByHash(compositeHash);
-    if (files.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Image file not found'
-      });
+    const file = await getActiveFileOrBlock(res, compositeHash, 'Image file not found');
+    if (!file) {
+      return;
     }
 
-    const mimeType = files[0].mime_type;
-    const fileType = files[0].file_type;
+    const mimeType = file.mime_type;
+    const fileType = file.file_type;
 
     if ((mimeType && mimeType.startsWith('video/')) || fileType === 'animated') {
-      const originalPath = resolveUploadsPath(files[0].original_file_path);
+      const originalPath = getExistingActiveFilePathOrBlock(res, file, {
+        missingError: 'Video file not found',
+        warnMessage: `[ImageServe] Video file missing on disk: ${resolveUploadsPath(file.original_file_path)}`,
+      });
 
-      if (!fs.existsSync(originalPath)) {
-        console.warn(`[ImageServe] Video file missing on disk: ${originalPath}`);
-        ImageFileModel.updateStatus(files[0].id, 'missing');
-
-        return res.status(404).json({
-          success: false,
-          error: 'Video file not found'
-        });
+      if (!originalPath) {
+        return;
       }
 
-      const stat = fs.statSync(originalPath);
-      const fileSize = stat.size;
-      const range = req.headers.range;
-
-      if (range) {
-        const parts = range.replace(/bytes=/, '').split('-');
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunkSize = (end - start) + 1;
-        const fileStream = fs.createReadStream(originalPath, { start, end });
-
-        res.writeHead(206, {
-          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-          'Accept-Ranges': 'bytes',
-          'Content-Length': chunkSize,
-          'Content-Type': mimeType,
-          'Cache-Control': 'public, max-age=31536000, immutable'
-        });
-
-        fileStream.pipe(res);
-      } else {
-        res.writeHead(200, {
-          'Content-Length': fileSize,
-          'Content-Type': mimeType,
-          'Accept-Ranges': 'bytes',
-          'Cache-Control': 'public, max-age=31536000, immutable'
-        });
-
-        const fileStream = fs.createReadStream(originalPath);
-        fileStream.pipe(res);
-      }
+      streamRangeFile(req, res, originalPath, mimeType);
       return;
     }
 
@@ -274,16 +154,13 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
     let serveOriginal = false;
 
     if (!thumbnailPath || !fs.existsSync(thumbnailPath)) {
-      const originalPath = resolveUploadsPath(files[0].original_file_path);
+      const originalPath = getExistingActiveFilePathOrBlock(res, file, {
+        missingError: 'Thumbnail and original file not found',
+        warnMessage: `[ImageServe] Both thumbnail and original missing: ${file.original_file_path}`,
+      });
 
-      if (!fs.existsSync(originalPath)) {
-        console.warn(`[ImageServe] Both thumbnail and original missing: ${files[0].original_file_path}`);
-        ImageFileModel.updateStatus(files[0].id, 'missing');
-
-        return res.status(404).json({
-          success: false,
-          error: 'Thumbnail and original file not found'
-        });
+      if (!originalPath) {
+        return;
       }
 
       try {
@@ -302,26 +179,14 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
     }
 
     if (serveOriginal) {
-      const originalPath = resolveUploadsPath(files[0].original_file_path);
-      if (!fs.existsSync(originalPath)) {
-        return res.status(404).json({
-          success: false,
-          error: 'Original file not found'
-        });
+      const originalPath = getExistingActiveFilePathOrBlock(res, file, {
+        missingError: 'Original file not found',
+      });
+      if (!originalPath) {
+        return;
       }
 
-      const stats = await fs.promises.stat(originalPath);
-      const etag = generateETag(stats);
-
-      if (req.headers['if-none-match'] === etag) {
-        return res.status(304).end();
-      }
-
-      res.setHeader('Content-Type', mimeType);
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      res.setHeader('ETag', etag);
-      const fileStream = fs.createReadStream(originalPath);
-      fileStream.pipe(res);
+      await streamCacheableFile(req, res, originalPath, mimeType);
       return;
     }
 
@@ -329,18 +194,7 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
       return res.status(404).json({ success: false, error: 'Thumbnail path error' });
     }
 
-    const stats = await fs.promises.stat(thumbnailPath);
-    const etag = generateETag(stats);
-
-    if (req.headers['if-none-match'] === etag) {
-      return res.status(304).end();
-    }
-
-    res.setHeader('Content-Type', 'image/webp');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.setHeader('ETag', etag);
-    const fileStream = fs.createReadStream(thumbnailPath);
-    fileStream.pipe(res);
+    await streamCacheableFile(req, res, thumbnailPath, 'image/webp');
     return;
   } catch (error) {
     console.error('Thumbnail error:', error);
@@ -425,47 +279,38 @@ router.post('/download/batch', asyncHandler(async (req: Request, res: Response) 
 }));
 
 router.get('/:compositeHash/download/original', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = routeParam(routeParam(req.params.compositeHash));
+  const compositeHash = getCompositeHashOrBlock(req, res);
 
-  if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid composite hash'
-    });
+  if (!compositeHash) {
+    return;
   }
 
   try {
-    const visibleMetadata = await getVisibleMetadataOrBlock(res, compositeHash);
-
-    if (!visibleMetadata) {
+    if (!(await getVisibleMetadataOrBlock(res, compositeHash))) {
       return;
     }
 
-    const files = await ImageFileModel.findActiveByHash(compositeHash);
+    const file = await getActiveFileOrBlock(res, compositeHash, 'Image file not found');
 
-    if (files.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Image file not found'
-      });
+    if (!file) {
+      return;
     }
 
-    const filePath = resolveUploadsPath(files[0].original_file_path);
+    const filePath = getExistingActiveFilePathOrBlock(res, file, {
+      missingError: 'File not found',
+    });
 
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        error: 'File not found'
-      });
+    if (!filePath) {
+      return;
     }
 
-    const filename = path.basename(files[0].original_file_path);
+    const filename = path.basename(file.original_file_path);
     const encodedFilename = encodeURIComponent(filename);
 
     res.setHeader('Content-Disposition',
       `attachment; filename="${filename}"; filename*=UTF-8''${encodedFilename}`
     );
-    res.setHeader('Content-Type', files[0].mime_type);
+    res.setHeader('Content-Type', file.mime_type);
 
     const fileStream = fs.createReadStream(filePath);
     fileStream.pipe(res);
