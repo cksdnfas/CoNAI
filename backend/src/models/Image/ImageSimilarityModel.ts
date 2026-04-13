@@ -6,33 +6,29 @@ import {
   SimilaritySearchOptions,
   DuplicateSearchOptions,
   SimilarityMatchType,
-  SimilarityComponentScores,
   SIMILARITY_THRESHOLDS
 } from '../../types/similarity';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
 import { ImageSafetyService } from '../../services/imageSafetyService';
-
-type SimilarityWeights = {
-  perceptualHash: number;
-  dHash: number;
-  aHash: number;
-  color: number;
-};
-
-type SimilarityThresholds = {
-  perceptualHash: number;
-  dHash: number;
-  aHash: number;
-  color: number;
-};
-
-type SimilarityCandidateRecord = ImageMetadataRecord & {
-  file_id?: number;
-  original_file_path?: string;
-  file_size?: number;
-  mime_type?: string;
-  file_status?: string;
-};
+import {
+  buildColorCandidateQuery,
+  buildDuplicateCandidateQuery,
+  buildDuplicateGroupFilesQuery,
+  buildDuplicateGroupMetadataQuery,
+  buildSimilarCandidateQuery,
+  SimilarityCandidateRecord,
+} from './ImageSimilarityQueryBuilder';
+import {
+  buildColorSimilarMatch,
+  buildDuplicateMatch,
+  buildSimilarMatch,
+  loadTargetHistogram,
+  SimilarityThresholds,
+  SimilarityWeights,
+  sortColorSimilarResults,
+  sortDuplicateResults,
+  sortSimilarResults,
+} from './ImageSimilarityMatchBuilder';
 
 /**
  * 이미지 유사도 검색 모델
@@ -91,20 +87,6 @@ export class ImageSimilarityModel {
     }
 
     return targetImage;
-  }
-
-  /** Build the shared +/-10% width and height filter when metadata is present. */
-  private static getMetadataBounds(targetImage: ImageMetadataRecord) {
-    if (!targetImage.width || !targetImage.height) {
-      return null;
-    }
-
-    return {
-      widthMin: targetImage.width * 0.9,
-      widthMax: targetImage.width * 1.1,
-      heightMin: targetImage.height * 0.9,
-      heightMax: targetImage.height * 1.1,
-    };
   }
 
   /**
@@ -189,483 +171,6 @@ export class ImageSimilarityModel {
     };
   }
 
-  /** Build the duplicate-search candidate query with the existing metadata filter. */
-  private static buildDuplicateCandidateQuery(targetImage: ImageMetadataRecord, includeMetadata: boolean) {
-    let query = `
-      SELECT
-        im.*,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_size,
-        if.mime_type,
-        if.file_status
-      FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
-      WHERE im.composite_hash != ?
-        AND im.perceptual_hash IS NOT NULL
-        AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
-    `;
-    const params: any[] = [targetImage.composite_hash];
-    const metadataBounds = includeMetadata ? this.getMetadataBounds(targetImage) : null;
-
-    if (metadataBounds) {
-      query += ' AND im.width BETWEEN ? AND ? AND im.height BETWEEN ? AND ?';
-      params.push(
-        metadataBounds.widthMin,
-        metadataBounds.widthMax,
-        metadataBounds.heightMin,
-        metadataBounds.heightMax,
-      );
-    }
-
-    return { query, params };
-  }
-
-  /** Build the hybrid similarity candidate query with the existing metadata filter. */
-  private static buildSimilarCandidateQuery(targetImage: ImageMetadataRecord, useMetadataFilter: boolean) {
-    let query = `
-      SELECT
-        im.*,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_size,
-        if.mime_type,
-        if.file_status
-      FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      WHERE im.composite_hash != ?
-        AND im.perceptual_hash IS NOT NULL
-        AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
-    `;
-    const params: any[] = [targetImage.composite_hash];
-    const metadataBounds = useMetadataFilter ? this.getMetadataBounds(targetImage) : null;
-
-    if (metadataBounds) {
-      query += ' AND im.width BETWEEN ? AND ? AND im.height BETWEEN ? AND ?';
-      params.push(
-        metadataBounds.widthMin,
-        metadataBounds.widthMax,
-        metadataBounds.heightMin,
-        metadataBounds.heightMax,
-      );
-    }
-
-    return { query, params };
-  }
-
-  /** Build the color-search candidate query without changing existing joins. */
-  private static buildColorCandidateQuery(compositeHash: string) {
-    return {
-      query: `
-        SELECT
-          im.*,
-          if.id as file_id,
-          if.original_file_path,
-          if.file_size,
-          if.mime_type,
-          if.file_status
-        FROM media_metadata im
-        LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
-        WHERE im.composite_hash != ?
-          AND im.color_histogram IS NOT NULL
-          AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
-      `,
-      params: [compositeHash],
-    };
-  }
-
-  /** Build the initial per-component score state for one candidate. */
-  private static buildSimilarityComponentScores(
-    targetImage: ImageMetadataRecord,
-    candidate: SimilarityCandidateRecord,
-    weights: SimilarityWeights,
-    thresholds: SimilarityThresholds,
-    targetHistogram: ReturnType<typeof ImageSimilarityService.deserializeHistogram> | null,
-  ): SimilarityComponentScores {
-    return {
-      perceptualHash: {
-        available: Boolean(targetImage.perceptual_hash && candidate.perceptual_hash),
-        used: false,
-        weight: weights.perceptualHash,
-        threshold: thresholds.perceptualHash,
-        passed: true,
-      },
-      dHash: {
-        available: Boolean(targetImage.dhash && candidate.dhash),
-        used: false,
-        weight: weights.dHash,
-        threshold: thresholds.dHash,
-        passed: true,
-      },
-      aHash: {
-        available: Boolean(targetImage.ahash && candidate.ahash),
-        used: false,
-        weight: weights.aHash,
-        threshold: thresholds.aHash,
-        passed: true,
-      },
-      color: {
-        available: Boolean(targetHistogram && candidate.color_histogram),
-        used: false,
-        weight: weights.color,
-        threshold: thresholds.color,
-        passed: true,
-      },
-    };
-  }
-
-  /** Score one hash component and report whether the candidate should be filtered out. */
-  private static scoreHashComponent(
-    componentScore: SimilarityComponentScores['perceptualHash'],
-    targetHash: string | null | undefined,
-    candidateHash: string | null | undefined,
-    weight: number,
-    threshold: number,
-  ) {
-    if (!targetHash || !candidateHash) {
-      return {
-        componentScore: {
-          ...componentScore,
-          passed: false,
-        },
-        shouldSkip: false,
-        distance: undefined as number | undefined,
-        weightedScore: 0,
-        activeWeight: 0,
-      };
-    }
-
-    const distance = ImageSimilarityService.calculateHammingDistance(targetHash, candidateHash);
-    const similarity = ImageSimilarityService.hammingDistanceToSimilarity(distance);
-    const nextComponentScore = {
-      ...componentScore,
-      used: weight > 0,
-      passed: distance <= threshold,
-      distance,
-      similarity,
-    };
-
-    if (weight <= 0) {
-      return {
-        componentScore: nextComponentScore,
-        shouldSkip: false,
-        distance,
-        weightedScore: 0,
-        activeWeight: 0,
-      };
-    }
-
-    if (distance > threshold) {
-      return {
-        componentScore: nextComponentScore,
-        shouldSkip: true,
-        distance,
-        weightedScore: 0,
-        activeWeight: 0,
-      };
-    }
-
-    return {
-      componentScore: nextComponentScore,
-      shouldSkip: false,
-      distance,
-      weightedScore: similarity * weight,
-      activeWeight: weight,
-    };
-  }
-
-  /** Load the target histogram only when the current search actually needs it. */
-  private static loadTargetHistogram(
-    targetImage: ImageMetadataRecord,
-    includeColorSimilarity: boolean,
-  ) {
-    if (!includeColorSimilarity || !targetImage.color_histogram) {
-      return null;
-    }
-
-    try {
-      return ImageSimilarityService.deserializeHistogram(targetImage.color_histogram);
-    } catch (error) {
-      console.warn('Failed to deserialize target color histogram:', error);
-      return null;
-    }
-  }
-
-  /** Build one duplicate-search result using pHash, dHash, and aHash together. */
-  private static buildDuplicateMatch(
-    targetImage: ImageMetadataRecord,
-    candidate: SimilarityCandidateRecord,
-    weights: SimilarityWeights,
-    thresholds: SimilarityThresholds,
-  ): SimilarImage | null {
-    if (!candidate.perceptual_hash) {
-      return null;
-    }
-
-    const componentScores = this.buildSimilarityComponentScores(targetImage, candidate, weights, thresholds, null);
-    let weightedScoreSum = 0;
-    let activeWeightSum = 0;
-    const distanceSamples: number[] = [];
-
-    const perceptualScore = this.scoreHashComponent(
-      componentScores.perceptualHash,
-      targetImage.perceptual_hash,
-      candidate.perceptual_hash,
-      weights.perceptualHash,
-      thresholds.perceptualHash,
-    );
-    componentScores.perceptualHash = perceptualScore.componentScore;
-    if (perceptualScore.shouldSkip) {
-      return null;
-    }
-    if (perceptualScore.distance !== undefined && weights.perceptualHash > 0) {
-      distanceSamples.push(perceptualScore.distance);
-      weightedScoreSum += perceptualScore.weightedScore;
-      activeWeightSum += perceptualScore.activeWeight;
-    }
-
-    const dHashScore = this.scoreHashComponent(
-      componentScores.dHash,
-      targetImage.dhash,
-      candidate.dhash,
-      weights.dHash,
-      thresholds.dHash,
-    );
-    componentScores.dHash = dHashScore.componentScore;
-    if (dHashScore.shouldSkip) {
-      return null;
-    }
-    if (dHashScore.distance !== undefined && weights.dHash > 0) {
-      distanceSamples.push(dHashScore.distance);
-      weightedScoreSum += dHashScore.weightedScore;
-      activeWeightSum += dHashScore.activeWeight;
-    }
-
-    const aHashScore = this.scoreHashComponent(
-      componentScores.aHash,
-      targetImage.ahash,
-      candidate.ahash,
-      weights.aHash,
-      thresholds.aHash,
-    );
-    componentScores.aHash = aHashScore.componentScore;
-    if (aHashScore.shouldSkip) {
-      return null;
-    }
-    if (aHashScore.distance !== undefined && weights.aHash > 0) {
-      distanceSamples.push(aHashScore.distance);
-      weightedScoreSum += aHashScore.weightedScore;
-      activeWeightSum += aHashScore.activeWeight;
-    }
-
-    if (activeWeightSum <= 0 || distanceSamples.length === 0) {
-      return null;
-    }
-
-    const averageDistance = distanceSamples.reduce((sum, value) => sum + value, 0) / distanceSamples.length;
-    const similarity = Math.round((weightedScoreSum / activeWeightSum) * 100) / 100;
-    const hammingDistance = Math.round(averageDistance * 100) / 100;
-    const matchType: SimilarityMatchType = ImageSimilarityService.determineMatchType(Math.round(averageDistance));
-
-    return {
-      image: candidate as any,
-      similarity,
-      hammingDistance,
-      matchType,
-      componentScores,
-    };
-  }
-
-  /** Score one hybrid similarity candidate and keep the public result shape unchanged. */
-  private static buildSimilarMatch(
-    targetImage: ImageMetadataRecord,
-    candidate: SimilarityCandidateRecord,
-    weights: SimilarityWeights,
-    thresholds: SimilarityThresholds,
-    targetHistogram: ReturnType<typeof ImageSimilarityService.deserializeHistogram> | null,
-  ): SimilarImage | null {
-    if (!candidate.perceptual_hash) {
-      return null;
-    }
-
-    let weightedScoreSum = 0;
-    let activeWeightSum = 0;
-    const distanceSamples: number[] = [];
-    let colorSimilarity: number | undefined;
-    const componentScores = this.buildSimilarityComponentScores(targetImage, candidate, weights, thresholds, targetHistogram);
-
-    const perceptualScore = this.scoreHashComponent(
-      componentScores.perceptualHash,
-      targetImage.perceptual_hash,
-      candidate.perceptual_hash,
-      weights.perceptualHash,
-      thresholds.perceptualHash,
-    );
-    componentScores.perceptualHash = perceptualScore.componentScore;
-    if (perceptualScore.shouldSkip) {
-      return null;
-    }
-    if (perceptualScore.distance !== undefined && weights.perceptualHash > 0) {
-      distanceSamples.push(perceptualScore.distance);
-      weightedScoreSum += perceptualScore.weightedScore;
-      activeWeightSum += perceptualScore.activeWeight;
-    }
-
-    const dHashScore = this.scoreHashComponent(
-      componentScores.dHash,
-      targetImage.dhash,
-      candidate.dhash,
-      weights.dHash,
-      thresholds.dHash,
-    );
-    componentScores.dHash = dHashScore.componentScore;
-    if (dHashScore.shouldSkip) {
-      return null;
-    }
-    if (dHashScore.distance !== undefined && weights.dHash > 0) {
-      distanceSamples.push(dHashScore.distance);
-      weightedScoreSum += dHashScore.weightedScore;
-      activeWeightSum += dHashScore.activeWeight;
-    }
-
-    const aHashScore = this.scoreHashComponent(
-      componentScores.aHash,
-      targetImage.ahash,
-      candidate.ahash,
-      weights.aHash,
-      thresholds.aHash,
-    );
-    componentScores.aHash = aHashScore.componentScore;
-    if (aHashScore.shouldSkip) {
-      return null;
-    }
-    if (aHashScore.distance !== undefined && weights.aHash > 0) {
-      distanceSamples.push(aHashScore.distance);
-      weightedScoreSum += aHashScore.weightedScore;
-      activeWeightSum += aHashScore.activeWeight;
-    }
-
-    if (targetHistogram && candidate.color_histogram) {
-      try {
-        const candidateHistogram = ImageSimilarityService.deserializeHistogram(candidate.color_histogram);
-        colorSimilarity = ImageSimilarityService.calculateColorSimilarity(targetHistogram, candidateHistogram);
-        componentScores.color = {
-          ...componentScores.color,
-          used: weights.color > 0,
-          passed: colorSimilarity >= thresholds.color,
-          similarity: colorSimilarity,
-        };
-
-        if (weights.color > 0) {
-          if (colorSimilarity < thresholds.color) {
-            return null;
-          }
-          weightedScoreSum += colorSimilarity * weights.color;
-          activeWeightSum += weights.color;
-        }
-      } catch (error) {
-        componentScores.color.passed = false;
-        console.warn('Failed to calculate color similarity:', error);
-      }
-    }
-
-    if (activeWeightSum <= 0) {
-      const fallbackDistance = ImageSimilarityService.calculateHammingDistance(
-        targetImage.perceptual_hash!,
-        candidate.perceptual_hash,
-      );
-      if (fallbackDistance > thresholds.perceptualHash) {
-        return null;
-      }
-      distanceSamples.push(fallbackDistance);
-      weightedScoreSum = ImageSimilarityService.hammingDistanceToSimilarity(fallbackDistance);
-      activeWeightSum = 1;
-    }
-
-    const averageDistance = distanceSamples.length > 0
-      ? distanceSamples.reduce((sum, value) => sum + value, 0) / distanceSamples.length
-      : 64;
-    const similarity = Math.round((weightedScoreSum / activeWeightSum) * 100) / 100;
-    const hammingDistance = Math.round(averageDistance * 100) / 100;
-    const matchType: SimilarityMatchType = distanceSamples.length > 0
-      ? ImageSimilarityService.determineMatchType(Math.round(averageDistance))
-      : 'color-similar';
-
-    return {
-      image: candidate as any,
-      similarity,
-      hammingDistance,
-      matchType,
-      ...(colorSimilarity !== undefined ? { colorSimilarity } : {}),
-      componentScores,
-    };
-  }
-
-  /** Sort hybrid similarity results using the existing API contract. */
-  private static sortSimilarResults(
-    results: SimilarImage[],
-    sortBy: NonNullable<SimilaritySearchOptions['sortBy']>,
-    sortOrder: NonNullable<SimilaritySearchOptions['sortOrder']>,
-  ) {
-    results.sort((a, b) => {
-      let comparison = 0;
-
-      if (sortBy === 'similarity') {
-        comparison = a.similarity - b.similarity;
-      } else if (sortBy === 'upload_date') {
-        const aDate = (a.image as any).first_seen_date || (a.image as any).upload_date;
-        const bDate = (b.image as any).first_seen_date || (b.image as any).upload_date;
-        comparison = new Date(aDate).getTime() - new Date(bDate).getTime();
-      } else if (sortBy === 'file_size') {
-        const aSize = Number((a.image as any).file_size || 0);
-        const bSize = Number((b.image as any).file_size || 0);
-        comparison = aSize - bSize;
-      }
-
-      return sortOrder === 'ASC' ? comparison : -comparison;
-    });
-  }
-
-  /** Build one color-search result while preserving the fallback hamming behavior. */
-  private static buildColorSimilarMatch(
-    targetImage: ImageMetadataRecord,
-    targetHistogram: ReturnType<typeof ImageSimilarityService.deserializeHistogram>,
-    candidate: SimilarityCandidateRecord,
-    threshold: number,
-  ): SimilarImage | null {
-    if (!candidate.color_histogram) {
-      return null;
-    }
-
-    try {
-      const candidateHistogram = ImageSimilarityService.deserializeHistogram(candidate.color_histogram);
-      const colorSimilarity = ImageSimilarityService.calculateColorSimilarity(targetHistogram, candidateHistogram);
-
-      if (colorSimilarity < threshold) {
-        return null;
-      }
-
-      let hammingDistance = 64;
-      if (targetImage.perceptual_hash && candidate.perceptual_hash) {
-        hammingDistance = ImageSimilarityService.calculateHammingDistance(
-          targetImage.perceptual_hash,
-          candidate.perceptual_hash,
-        );
-      }
-
-      return {
-        image: candidate as any,
-        similarity: colorSimilarity,
-        hammingDistance,
-        matchType: 'color-similar',
-        colorSimilarity,
-      };
-    } catch (error) {
-      console.warn('Failed to process color histogram:', error);
-      return null;
-    }
-  }
-
   /**
    * 특정 이미지의 중복 검색 (composite_hash 기반)
    */
@@ -680,20 +185,14 @@ export class ImageSimilarityModel {
     const weights = this.getDuplicateWeights(options);
     const thresholds = this.getDuplicateThresholds(options);
     const targetImage = this.requirePerceptualHashImage(compositeHash);
-    const { query, params } = this.buildDuplicateCandidateQuery(targetImage, includeMetadata);
+    const { query, params } = buildDuplicateCandidateQuery(targetImage, includeMetadata);
     const candidates = db.prepare(query).all(...params) as SimilarityCandidateRecord[];
 
     const results = candidates
-      .map(candidate => this.buildDuplicateMatch(targetImage, candidate, weights, thresholds))
+      .map(candidate => buildDuplicateMatch(targetImage, candidate, weights, thresholds))
       .filter((candidate): candidate is SimilarImage => candidate !== null);
 
-    return results.sort((a, b) => {
-      const similarityDiff = b.similarity - a.similarity;
-      if (similarityDiff !== 0) {
-        return similarityDiff;
-      }
-      return a.hammingDistance - b.hammingDistance;
-    });
+    return sortDuplicateResults(results);
   }
 
   /**
@@ -731,16 +230,16 @@ export class ImageSimilarityModel {
     const thresholds = this.getSimilarityThresholds(options);
     const useMetadataFilter = options.useMetadataFilter ?? false;
     const targetImage = this.requirePerceptualHashImage(compositeHash);
-    const { query, params } = this.buildSimilarCandidateQuery(targetImage, useMetadataFilter);
+    const { query, params } = buildSimilarCandidateQuery(targetImage, useMetadataFilter);
     const candidates = db.prepare(query).all(...params) as SimilarityCandidateRecord[];
 
     const includeColorSimilarity = Boolean(options.includeColorSimilarity || weights.color > 0 || thresholds.color > 0);
-    const targetHistogram = this.loadTargetHistogram(targetImage, includeColorSimilarity);
+    const targetHistogram = loadTargetHistogram(targetImage, includeColorSimilarity);
     const results = candidates
-      .map(candidate => this.buildSimilarMatch(targetImage, candidate, weights, thresholds, targetHistogram))
+      .map(candidate => buildSimilarMatch(targetImage, candidate, weights, thresholds, targetHistogram))
       .filter((candidate): candidate is SimilarImage => candidate !== null);
 
-    this.sortSimilarResults(results, sortBy, sortOrder);
+    sortSimilarResults(results, sortBy, sortOrder);
     return results.slice(0, limit);
   }
 
@@ -780,15 +279,7 @@ export class ImageSimilarityModel {
     } = options;
 
     // STEP 1: image_files에 실제 존재하는 파일의 메타데이터만 조회 (고아 데이터 제외)
-    const allMetadata = db.prepare(`
-      SELECT DISTINCT m.*
-      FROM media_metadata m
-      INNER JOIN image_files f ON m.composite_hash = f.composite_hash
-      WHERE f.file_status = 'active'
-        AND m.perceptual_hash IS NOT NULL
-        AND ${ImageSafetyService.buildVisibleScoreCondition('m.rating_score')}
-      ORDER BY m.composite_hash
-    `).all() as ImageMetadataRecord[];
+    const allMetadata = db.prepare(buildDuplicateGroupMetadataQuery()).all() as ImageMetadataRecord[];
 
     if (allMetadata.length === 0) {
       return [];
@@ -846,21 +337,8 @@ export class ImageSimilarityModel {
       const compositeHashes = metadataGroup.map(m => m.composite_hash);
 
       // image_files에서 해당 composite_hash를 가진 모든 파일 조회
-      const placeholders = compositeHashes.map(() => '?').join(',');
-      const fileRecords = db.prepare(`
-        SELECT
-          im.*,
-          if.id as file_id,
-          if.original_file_path,
-          if.file_size,
-          if.mime_type,
-          if.file_status
-        FROM image_files if
-        JOIN media_metadata im ON if.composite_hash = im.composite_hash
-        WHERE if.composite_hash IN (${placeholders})
-          AND if.file_status = 'active'
-        ORDER BY if.composite_hash, if.id
-      `).all(...compositeHashes) as any[];
+      const { query, params } = buildDuplicateGroupFilesQuery(compositeHashes);
+      const fileRecords = db.prepare(query).all(...params) as any[];
 
       // 실제 파일이 없는 경우 그룹에서 제외 (고아 메타데이터 필터링)
       if (fileRecords.length === 0) {
@@ -925,14 +403,14 @@ export class ImageSimilarityModel {
   ): Promise<SimilarImage[]> {
     const targetImage = this.requireColorHistogramImage(compositeHash);
     const targetHist = ImageSimilarityService.deserializeHistogram(targetImage.color_histogram!);
-    const { query, params } = this.buildColorCandidateQuery(compositeHash);
+    const { query, params } = buildColorCandidateQuery(compositeHash);
     const candidates = db.prepare(query).all(...params) as SimilarityCandidateRecord[];
 
     const results = candidates
-      .map(candidate => this.buildColorSimilarMatch(targetImage, targetHist, candidate, threshold))
+      .map(candidate => buildColorSimilarMatch(targetImage, targetHist, candidate, threshold))
       .filter((candidate): candidate is SimilarImage => candidate !== null);
 
-    results.sort((a, b) => (b.colorSimilarity || 0) - (a.colorSimilarity || 0));
+    sortColorSimilarResults(results);
     return results.slice(0, limit);
   }
 
