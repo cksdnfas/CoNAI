@@ -7,9 +7,12 @@ import { optionalAuth } from '../middleware/authMiddleware';
 import { CivitaiSettings } from '../models/CivitaiSettings';
 import { ModelInfo } from '../models/ModelInfo';
 import { ImageModel } from '../models/ImageModel';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { CivitaiTempUrl } from '../models/CivitaiTempUrl';
+import { resolveUploadsPath } from '../config/runtimePaths';
 import { CivitaiService } from '../services/civitaiService';
 import { CivitaiTempUrlService } from '../services/civitaiTempUrlService';
+import { ImageSafetyService } from '../services/imageSafetyService';
 import { db } from '../database/init';
 
 const router = Router();
@@ -262,6 +265,15 @@ router.get('/temp-image/:token', asyncHandler(async (req: Request, res: Response
     return;
   }
 
+  const metadata = MediaMetadataModel.findByHash(tempUrl.composite_hash);
+  if (!metadata || ImageSafetyService.isHidden(metadata.rating_score)) {
+    res.status(404).json({
+      success: false,
+      error: 'Image not found or expired'
+    });
+    return;
+  }
+
   // Increment access count
   CivitaiTempUrl.incrementAccessCount(token);
 
@@ -283,7 +295,7 @@ router.get('/temp-image/:token', asyncHandler(async (req: Request, res: Response
     return;
   }
 
-  const imagePath = imageData.original_file_path;
+  const imagePath = resolveUploadsPath(imageData.original_file_path);
 
   if (!fs.existsSync(imagePath)) {
     res.status(404).json({
