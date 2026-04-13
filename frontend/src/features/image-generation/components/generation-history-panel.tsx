@@ -5,7 +5,6 @@ import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
@@ -27,16 +26,6 @@ type GenerationHistoryPanelProps = {
 }
 
 const GENERATION_HISTORY_PAGE_SIZE = 40
-
-function parsePositiveIntegerFilter(value: string) {
-  const trimmed = value.trim()
-  if (trimmed.length === 0) {
-    return undefined
-  }
-
-  const parsed = Number(trimmed)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
-}
 
 function hasInFlightHistory(records: GenerationHistoryResponse['records']) {
   return records.some((record) => record.generation_status === 'pending' || record.generation_status === 'processing')
@@ -71,14 +60,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [isCleaningFailed, setIsCleaningFailed] = useState(false)
-  const [mineOnly, setMineOnly] = useState(false)
-  const [requestedByAccountIdInput, setRequestedByAccountIdInput] = useState('')
-  const [serverIdInput, setServerIdInput] = useState('')
-
-  const requestedByAccountId = useMemo(() => parsePositiveIntegerFilter(requestedByAccountIdInput), [requestedByAccountIdInput])
-  const serverId = useMemo(() => parsePositiveIntegerFilter(serverIdInput), [serverIdInput])
-
-  const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null, mineOnly, requestedByAccountId ?? null, serverId ?? null] as const
+  const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null, 'mine-only'] as const
   const historyQuery = useInfiniteQuery({
     queryKey: historyQueryKey,
     initialPageParam: 0,
@@ -87,16 +69,12 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         ? getGenerationWorkflowHistory(workflowId, {
             limit: GENERATION_HISTORY_PAGE_SIZE,
             offset: pageParam,
-            mine: mineOnly,
-            requestedByAccountId,
-            serverId,
+            mine: true,
           })
         : getGenerationHistory(serviceType, {
             limit: GENERATION_HISTORY_PAGE_SIZE,
             offset: pageParam,
-            mine: mineOnly,
-            requestedByAccountId,
-            serverId,
+            mine: true,
           })
     ),
     getNextPageParam: (lastPage, allPages) => {
@@ -224,32 +202,6 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           <AlertDescription>{getErrorMessage(historyQuery.error, '생성 히스토리 조회 실패')}</AlertDescription>
         </Alert>
       ) : null}
-
-      <div className="flex flex-wrap items-end gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-3">
-        <div className="min-w-[9rem] flex-1">
-          <div className="mb-1 text-[11px] text-muted-foreground">Requester ID</div>
-          <Input value={requestedByAccountIdInput} onChange={(event) => setRequestedByAccountIdInput(event.target.value)} inputMode="numeric" placeholder="전체" />
-        </div>
-        <div className="min-w-[8rem] flex-1">
-          <div className="mb-1 text-[11px] text-muted-foreground">Server ID</div>
-          <Input value={serverIdInput} onChange={(event) => setServerIdInput(event.target.value)} inputMode="numeric" placeholder="전체" />
-        </div>
-        <Button type="button" size="sm" variant={mineOnly ? 'default' : 'outline'} onClick={() => setMineOnly((current) => !current)}>
-          내 요청만
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            setMineOnly(false)
-            setRequestedByAccountIdInput('')
-            setServerIdInput('')
-          }}
-        >
-          필터 초기화
-        </Button>
-      </div>
 
       {historyQuery.isPending ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
 
