@@ -16,4 +16,18 @@ export class ImageSafetyService {
   static isHidden(score: number | null | undefined): boolean {
     return this.resolveFeedVisibility(score) === 'hide';
   }
+
+  /** Build an SQL condition that excludes images mapped to hidden rating tiers. */
+  static buildVisibleScoreCondition(scoreExpression: string): string {
+    return `(
+      ${scoreExpression} IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM rating_tiers rt
+        WHERE rt.feed_visibility = 'hide'
+          AND ${scoreExpression} >= rt.min_score
+          AND (rt.max_score IS NULL OR ${scoreExpression} < rt.max_score)
+      )
+    )`;
+  }
 }

@@ -8,6 +8,7 @@ import {
   mapGroupedImageRows,
   type ImageSearchParamsInput,
 } from './ImageSearchHelpers';
+import { ImageSafetyService } from '../../services/imageSafetyService';
 
 /**
  * 이미지 검색 모델 (새 구조 기반)
@@ -20,6 +21,8 @@ import {
  * - upload_date → first_seen_date
  * - 모든 기존 기능 유지
  */
+const VISIBLE_IMAGE_CONDITION = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+
 export class ImageSearchModel {
 
   /**
@@ -43,7 +46,8 @@ export class ImageSearchModel {
       requireActiveFile: true,
     });
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const safeConditions = [...conditions, VISIBLE_IMAGE_CONDITION];
+    const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
     const offset = (page - 1) * limit;
 
     // 총 개수 조회
@@ -194,7 +198,8 @@ export class ImageSearchModel {
         .replace(/\bi\.auto_tags\b/g, 'im.auto_tags');
     });
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const safeConditions = [...conditions, VISIBLE_IMAGE_CONDITION];
+    const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
     // 총 개수 조회
     const countQuery = `
@@ -266,7 +271,8 @@ export class ImageSearchModel {
       requireActiveFile: true,
     });
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const safeConditions = [...conditions, VISIBLE_IMAGE_CONDITION];
+    const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
     const query = `
       SELECT if.id
@@ -290,7 +296,8 @@ export class ImageSearchModel {
   ): Promise<string[]> {
     const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams);
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const safeConditions = [...conditions, VISIBLE_IMAGE_CONDITION];
+    const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
     const query = `
       SELECT DISTINCT im.composite_hash
@@ -314,7 +321,8 @@ export class ImageSearchModel {
   ): Promise<any | null> {
     const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams);
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const safeConditions = [...conditions, VISIBLE_IMAGE_CONDITION];
+    const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
     // First get the count
     const countQuery = `
