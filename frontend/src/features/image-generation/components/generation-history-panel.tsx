@@ -253,16 +253,9 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
       {historyQuery.isPending ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
 
-      {!historyQuery.isPending && inFlightHistoryCount > 0 ? (
-        <Alert>
-          <AlertTitle>진행 중 항목은 Queue에서 볼 수 있어</AlertTitle>
-          <AlertDescription>히스토리는 결과 중심으로만 보여주고 있어. 현재 진행 중 {inFlightHistoryCount}건은 위 Queue 패널에서 확인해줘.</AlertDescription>
-        </Alert>
-      ) : null}
-
       <div className={cn(splitPaneScroll && 'min-h-0 flex-1')}>
         {!historyQuery.isPending && historyImages.length === 0 ? (
-          <div className="py-4 text-sm text-muted-foreground">아직 표시할 생성 결과가 없어. 진행 중 작업은 Queue에서 보면 돼.</div>
+          <div className="py-4 text-sm text-muted-foreground">아직 표시할 생성 결과가 없어.</div>
         ) : null}
 
         {!historyQuery.isPending && historyImages.length > 0 ? (
