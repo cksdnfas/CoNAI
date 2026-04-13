@@ -1,16 +1,19 @@
 import { Router, Request, Response } from 'express';
-import fs from 'fs';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
-import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { ImageListResponse } from '../../types/image';
-import { resolveUploadsPath } from '../../config/runtimePaths';
 import { enrichImageWithFileView } from './utils';
 import { QueryCacheService } from '../../services/QueryCacheService';
-import { ImageSafetyService } from '../../services/imageSafetyService';
 import { logger } from '../../utils/logger';
 import { routeParam } from '../routeParam';
+import {
+  buildBatchImageListResponse,
+  buildBatchThumbnailLookupResults,
+  buildEnrichedImageListResponse,
+  buildImageListResponse,
+  buildImageSearchParams,
+} from './query-list-helpers';
 
 const router = Router();
 
@@ -41,19 +44,12 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
         cursorHash: cursorHash || undefined,
       });
 
-      const enrichedImages = result.items.map(enrichImageWithFileView);
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          images: enrichedImages,
-          total: result.total,
+      return res.status(200).json(
+        buildEnrichedImageListResponse(result.items, result.total, 0, limit, {
           hasMore: result.hasMore,
-          page: 0,
-          limit,
           totalPages: 0,
-        }
-      });
+        })
+      );
     }
 
     const cached = QueryCacheService.getGalleryCache(page, limit, sortBy, sortOrder);
@@ -88,17 +84,9 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    const response: ImageListResponse = {
-      success: true,
-      data: {
-        images: enrichedImages,
-        total: result.total,
-        page,
-        limit,
-        totalPages: Math.ceil(result.total / limit),
-        hasMore: (page * limit) < result.total
-      }
-    };
+    const response = buildImageListResponse(enrichedImages, result.total, page, limit, {
+      hasMore: (page * limit) < result.total
+    });
 
     QueryCacheService.setGalleryCache(page, limit, sortBy, sortOrder, response);
 
@@ -140,21 +128,7 @@ router.get('/random', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.post('/random-from-search', asyncHandler(async (req: Request, res: Response) => {
-  const searchParams = {
-    search_text: req.body.search_text,
-    negative_text: req.body.negative_text,
-    ai_tool: req.body.ai_tool,
-    model_name: req.body.model_name,
-    min_width: req.body.min_width ? parseInt(req.body.min_width) : undefined,
-    max_width: req.body.max_width ? parseInt(req.body.max_width) : undefined,
-    min_height: req.body.min_height ? parseInt(req.body.min_height) : undefined,
-    max_height: req.body.max_height ? parseInt(req.body.max_height) : undefined,
-    min_file_size: req.body.min_file_size ? parseInt(req.body.min_file_size) : undefined,
-    max_file_size: req.body.max_file_size ? parseInt(req.body.max_file_size) : undefined,
-    start_date: req.body.start_date,
-    end_date: req.body.end_date,
-    group_id: req.body.group_id !== undefined ? parseInt(req.body.group_id) : undefined
-  };
+  const searchParams = buildImageSearchParams(req.body);
 
   try {
     const image = await ImageSearchModel.getRandomFromSearch(searchParams);
@@ -203,21 +177,21 @@ router.post('/search', asyncHandler(async (req: Request, res: Response) => {
   } = req.body;
 
   try {
-    const searchParams = {
+    const searchParams = buildImageSearchParams({
       search_text,
       negative_text,
       ai_tool,
       model_name,
-      min_width: min_width ? parseInt(min_width) : undefined,
-      max_width: max_width ? parseInt(max_width) : undefined,
-      min_height: min_height ? parseInt(min_height) : undefined,
-      max_height: max_height ? parseInt(max_height) : undefined,
-      min_file_size: min_file_size ? parseInt(min_file_size) : undefined,
-      max_file_size: max_file_size ? parseInt(max_file_size) : undefined,
+      min_width,
+      max_width,
+      min_height,
+      max_height,
+      min_file_size,
+      max_file_size,
       start_date,
       end_date,
-      group_id: group_id !== undefined ? parseInt(group_id) : undefined
-    };
+      group_id
+    });
 
     const result = await ImageSearchModel.advancedSearch(
       searchParams,
@@ -227,20 +201,12 @@ router.post('/search', asyncHandler(async (req: Request, res: Response) => {
       sortOrder
     );
 
-    const enrichedImages = result.images.map(enrichImageWithFileView);
+    const pageNumber = parseInt(page);
+    const limitNumber = parseInt(limit);
 
-    const response: ImageListResponse = {
-      success: true,
-      data: {
-        images: enrichedImages,
-        total: result.total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(result.total / parseInt(limit))
-      }
-    };
-
-    return res.json(response);
+    return res.json(
+      buildEnrichedImageListResponse(result.images, result.total, pageNumber, limitNumber)
+    );
   } catch (error) {
     console.error('Advanced search error:', error);
     res.status(500).json({
@@ -269,21 +235,21 @@ router.post('/search/ids', asyncHandler(async (req: Request, res: Response) => {
   } = req.body;
 
   try {
-    const searchParams = {
+    const searchParams = buildImageSearchParams({
       search_text,
       negative_text,
       ai_tool,
       model_name,
-      min_width: min_width ? parseInt(min_width) : undefined,
-      max_width: max_width ? parseInt(max_width) : undefined,
-      min_height: min_height ? parseInt(min_height) : undefined,
-      max_height: max_height ? parseInt(max_height) : undefined,
-      min_file_size: min_file_size ? parseInt(min_file_size) : undefined,
-      max_file_size: max_file_size ? parseInt(max_file_size) : undefined,
+      min_width,
+      max_width,
+      min_height,
+      max_height,
+      min_file_size,
+      max_file_size,
       start_date,
       end_date,
-      group_id: group_id !== undefined ? parseInt(group_id) : undefined
-    };
+      group_id
+    });
 
     const ids = await ImageSearchModel.searchImageFileIds(searchParams);
 
@@ -314,18 +280,7 @@ router.get('/date/:startDate/:endDate', asyncHandler(async (req: Request, res: R
   try {
     const result = await MediaMetadataModel.findByDateRange(startDate, endDate, page, limit);
 
-    const enrichedImages = result.items.map(enrichImageWithFileView);
-
-    res.json({
-      success: true,
-      data: {
-        images: enrichedImages,
-        total: result.total,
-        page,
-        limit,
-        totalPages: Math.ceil(result.total / limit)
-      }
-    });
+    res.json(buildEnrichedImageListResponse(result.items, result.total, page, limit));
     return;
   } catch (error) {
     console.error('Get images by date error:', error);
@@ -348,16 +303,7 @@ router.post('/batch', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (composite_hashes.length === 0) {
-    return res.json({
-      success: true,
-      data: {
-        images: [],
-        total: 0,
-        page: 1,
-        limit: 0,
-        totalPages: 0
-      }
-    });
+    return res.json(buildImageListResponse([], 0, 1, 0));
   }
 
   if (composite_hashes.length > 500) {
@@ -369,22 +315,8 @@ router.post('/batch', asyncHandler(async (req: Request, res: Response) => {
 
   try {
     const images = MediaMetadataModel.findByHashesWithFiles(composite_hashes);
-    const enrichedImages = images.map(enrichImageWithFileView);
 
-    const sortedImages = composite_hashes
-      .map(hash => enrichedImages.find(img => img.composite_hash === hash))
-      .filter((img): img is any => !!img);
-
-    return res.json({
-      success: true,
-      data: {
-        images: sortedImages,
-        total: sortedImages.length,
-        page: 1,
-        limit: sortedImages.length,
-        totalPages: 1
-      }
-    });
+    return res.json(buildBatchImageListResponse(composite_hashes, images));
   } catch (error) {
     console.error('Batch fetch error:', error);
     return res.status(500).json({
@@ -421,73 +353,9 @@ router.get('/batch/thumbnails', asyncHandler(async (req: Request, res: Response)
   }
 
   try {
-    const results: Record<string, {
-      success: boolean;
-      thumbnailPath?: string;
-      mimeType?: string;
-      error?: string;
-    }> = {};
-
-    await Promise.all(
-      hashes.map(async (hash) => {
-        try {
-          const cached = QueryCacheService.getMetadataCache(hash);
-          let metadata = cached;
-
-          if (!metadata) {
-            metadata = await MediaMetadataModel.findByHash(hash);
-            if (metadata) {
-              QueryCacheService.setMetadataCache(hash, metadata);
-            }
-          }
-
-          if (!metadata) {
-            results[hash] = { success: false, error: 'Not found' };
-            return;
-          }
-
-          if (ImageSafetyService.isHidden(metadata.rating_score)) {
-            results[hash] = { success: false, error: 'Hidden by safety policy' };
-            return;
-          }
-
-          const files = await ImageFileModel.findActiveByHash(hash);
-          if (files.length === 0) {
-            results[hash] = { success: false, error: 'File not found' };
-            return;
-          }
-
-          const mimeType = files[0].mime_type;
-
-          if (mimeType && mimeType.startsWith('video/')) {
-            results[hash] = {
-              success: true,
-              thumbnailPath: files[0].original_file_path,
-              mimeType
-            };
-            return;
-          }
-
-          const thumbnailPath = (metadata.thumbnail_path && fs.existsSync(resolveUploadsPath(metadata.thumbnail_path)))
-            ? metadata.thumbnail_path
-            : files[0].original_file_path;
-          results[hash] = {
-            success: true,
-            thumbnailPath,
-            mimeType: 'image/webp'
-          };
-        } catch (error) {
-          results[hash] = {
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error'
-          };
-        }
-      })
-    );
-
     return res.json({
       success: true,
-      data: results
+      data: buildBatchThumbnailLookupResults(hashes)
     });
   } catch (error) {
     console.error('Batch thumbnails error:', error);
