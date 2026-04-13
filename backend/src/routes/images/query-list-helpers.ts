@@ -6,10 +6,10 @@ import type { ImageSearchParamsInput } from '../../models/Image/ImageSearchHelpe
 import { QueryCacheService } from '../../services/QueryCacheService';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import type { ImageFileRecord, ImageListResponse, ImageMetadataRecord } from '../../types/image';
-import { enrichImageWithFileView } from './utils';
+import { enrichCompactImageWithFileView, enrichImageWithFileView } from './utils';
 
 type ImageListData = NonNullable<ImageListResponse['data']>;
-type ImageListItem = ReturnType<typeof enrichImageWithFileView>;
+type ImageListItem = ReturnType<typeof enrichCompactImageWithFileView>;
 
 export interface BatchThumbnailLookupResult {
   success: boolean;
@@ -80,7 +80,7 @@ export function buildEnrichedImageListResponse(
   }
 ): ImageListResponse {
   return buildImageListResponse(
-    items.map(enrichImageWithFileView),
+    items.map(enrichCompactImageWithFileView),
     total,
     page,
     limit,
@@ -99,7 +99,7 @@ export function sortImagesByCompositeHashes(compositeHashes: string[], images: I
 
 /** Build the ordered batch-image response from one DB batch query result. */
 export function buildBatchImageListResponse(compositeHashes: string[], items: any[]): ImageListResponse {
-  const enrichedImages = items.map(enrichImageWithFileView);
+  const enrichedImages = items.map(enrichCompactImageWithFileView);
   const sortedImages = sortImagesByCompositeHashes(compositeHashes, enrichedImages);
 
   return buildImageListResponse(sortedImages, sortedImages.length, 1, sortedImages.length);

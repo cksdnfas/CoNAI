@@ -71,35 +71,29 @@ export function enrichImageRecord(image: any) {
  * composite_hash 기반 이미지 데이터 처리
  * Phase 1 지원: composite_hash가 NULL인 경우 원본 파일 사용
  */
-export function enrichImageWithFileView(image: any) {
-  // 외부 폴더 이미지인지 확인 (original_file_path가 절대 경로)
+function buildBaseImageWithFileView(image: any) {
   const isExternalImage = image.original_file_path && require('path').isAbsolute(image.original_file_path);
-
-  // Phase 1: composite_hash가 없는 경우 (빠른 등록만 완료)
-  // 모든 파일 타입이 composite_hash를 사용
   const isProcessing = !image.composite_hash;
 
-  const enriched = {
+  return {
     ...image,
-    // ✅ file_id를 id로 매핑 (프론트엔드 호환성)
     id: image.file_id || image.id,
-    // Phase 1 상태 플래그
     is_processing: isProcessing,
-
-    // 썸네일: composite_hash가 있으면 썸네일 API 엔드포인트 사용
     thumbnail_url: isProcessing
       ? `/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
       : `/api/images/${image.composite_hash}/thumbnail`,
-
-    // 원본 이미지
     image_url: isProcessing
       ? `/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
       : (isExternalImage
         ? `/api/images/${image.composite_hash}/download/original`
         : (image.original_file_path ? toUploadsUrl(image.original_file_path) : null)),
-
-    // 그룹 정보 (이미 있는 경우 그대로 유지)
     groups: image.groups || [],
+  };
+}
+
+export function enrichImageWithFileView(image: any) {
+  const enriched = {
+    ...buildBaseImageWithFileView(image),
 
     // 구조화된 AI 메타데이터
     ai_metadata: {
@@ -151,4 +145,26 @@ export function enrichImageWithFileView(image: any) {
   });
 
   return enriched;
+}
+
+
+export function enrichCompactImageWithFileView(image: any) {
+  return buildBaseImageWithFileView({
+    composite_hash: image.composite_hash,
+    width: image.width,
+    height: image.height,
+    thumbnail_path: image.thumbnail_path,
+    rating_score: image.rating_score,
+    first_seen_date: image.first_seen_date,
+    metadata_updated_date: image.metadata_updated_date,
+    file_id: image.file_id,
+    id: image.id,
+    original_file_path: image.original_file_path,
+    file_size: image.file_size,
+    mime_type: image.mime_type,
+    file_status: image.file_status,
+    scan_date: image.scan_date,
+    file_type: image.file_type,
+    groups: image.groups || [],
+  });
 }

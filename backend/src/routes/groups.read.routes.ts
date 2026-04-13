@@ -6,7 +6,7 @@ import { db } from '../database/init';
 import { GroupDownloadService, DownloadType, CaptionMode } from '../services/groupDownloadService';
 import { PAGINATION, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/errorHandler';
-import { enrichImageRecord, enrichImageWithFileView } from './images/utils';
+import { enrichCompactImageWithFileView, enrichImageRecord, enrichImageWithFileView } from './images/utils';
 
 const router = Router();
 
@@ -50,7 +50,7 @@ router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Respons
     const limitedCount = Math.min(Math.max(count, 1), 20);
 
     const images = await ImageGroupModel.findPreviewImages(id, limitedCount, includeChildren);
-    const enrichedImages = images.map(img => enrichImageWithFileView(img));
+    const enrichedImages = images.map(img => enrichCompactImageWithFileView(img));
 
     return res.json(successResponse(enrichedImages));
   } catch (error) {
@@ -103,7 +103,7 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
     const group = await GroupModel.findById(id);
 
     const enrichedImages = result.images.map(image => {
-      const enriched = enrichImageWithFileView(image);
+      const enriched = enrichCompactImageWithFileView(image);
       enriched.groups = [{
         id: group!.id,
         name: group!.name,

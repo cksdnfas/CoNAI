@@ -8,7 +8,7 @@ successResponse,
 errorResponse,
 PAGINATION } from '@conai/shared';
 import { asyncHandler } from '../middleware/errorHandler';
-import { enrichImageWithFileView } from './images/utils';
+import { enrichCompactImageWithFileView } from './images/utils';
 import fs from 'fs';
 
 const router = Router();
@@ -91,7 +91,7 @@ router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Respons
     const images = await AutoFolderGroupImageModel.findPreviewImages(id, limitedCount, includeChildren);
 
     // 이미지 경로 보강 (enrichImageWithFileView 사용)
-    const enrichedImages = images.map(img => enrichImageWithFileView(img));
+    const enrichedImages = images.map(img => enrichCompactImageWithFileView(img));
 
     return res.json(successResponse(enrichedImages));
   } catch (error) {
@@ -141,7 +141,7 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
     const result = await AutoFolderGroupService.getGroupImages(id, page, pageSize);
 
     // 이미지 메타데이터 보강 (URL 추가)
-    const enrichedImages = result.images.map(img => enrichImageWithFileView(img));
+    const enrichedImages = result.images.map(img => enrichCompactImageWithFileView(img));
 
     return res.json(successResponse({
       items: enrichedImages,

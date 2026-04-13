@@ -3,7 +3,7 @@ import { asyncHandler } from '../../middleware/errorHandler';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { ImageListResponse } from '../../types/image';
-import { enrichImageWithFileView } from './utils';
+import { enrichCompactImageWithFileView, enrichImageWithFileView } from './utils';
 import { QueryCacheService } from '../../services/QueryCacheService';
 import { logger } from '../../utils/logger';
 import { routeParam } from '../routeParam';
@@ -69,7 +69,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
       logger.debug(`  [${idx}] file_id=${item.id}, hash=${item.composite_hash?.substring(0, 8)}, path=${item.original_file_path}`);
     });
 
-    const enrichedImages = result.items.map(enrichImageWithFileView);
+    const enrichedImages = result.items.map(enrichCompactImageWithFileView);
 
     logger.debug('🔍 [QueryRoutes] Enriched result - first 3 records:');
     enrichedImages.slice(0, 3).forEach((item, idx) => {
