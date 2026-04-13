@@ -148,6 +148,76 @@ export class AutoFolderGroupService {
     }
   }
 
+  /** Ensure readable groups exist before running one read operation. */
+  private static async withReadableGroups<T>(operation: () => T | Promise<T>): Promise<T> {
+    await this.ensureReadableGroups();
+    return await operation();
+  }
+
+  /** Load watched folders and keep only existing directories that can be mirrored safely. */
+  private static loadReadableWatchedFolders(): WatchedFolderRow[] {
+    const watchedFolders = db.prepare(`
+      SELECT id, folder_path, folder_name, recursive
+      FROM watched_folders
+      ORDER BY created_date ASC, id ASC
+    `).all() as WatchedFolderRow[];
+
+    return watchedFolders.filter((watchedFolder) => {
+      const watchedFolderPath = normalizePath(watchedFolder.folder_path);
+      if (!fs.existsSync(watchedFolderPath)) {
+        console.warn(`[AutoFolderGroupService] Watched folder missing, skipping: ${watchedFolderPath}`);
+        return false;
+      }
+
+      try {
+        if (!fs.statSync(watchedFolderPath).isDirectory()) {
+          console.warn(`[AutoFolderGroupService] Watched folder is not a directory, skipping: ${watchedFolderPath}`);
+          return false;
+        }
+      } catch (error) {
+        console.warn(`[AutoFolderGroupService] Failed to stat watched folder: ${watchedFolderPath}`, error);
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  /** Persist one watched folder tree in stable parent-first order. */
+  private static async createGroupsFromNodes(
+    nodes: Map<string, FolderNode>,
+    pathToGroupId: Map<string, number>,
+  ) {
+    let groupsCreated = 0;
+    let imagesAssigned = 0;
+
+    const sortedNodes = Array.from(nodes.values())
+      .sort((left, right) => left.depth - right.depth || left.absolutePath.localeCompare(right.absolutePath));
+
+    for (const node of sortedNodes) {
+      const parentId = node.parentKey ? pathToGroupId.get(node.parentKey) : null;
+      const group = await AutoFolderGroupModel.create({
+        folder_path: node.key,
+        absolute_path: node.absolutePath,
+        display_name: node.displayName,
+        parent_id: parentId ?? undefined,
+        depth: node.depth,
+        has_images: node.compositeHashes.size > 0,
+        image_count: node.compositeHashes.size,
+      });
+
+      pathToGroupId.set(node.key, group.id);
+      groupsCreated++;
+
+      for (const hash of node.compositeHashes) {
+        await AutoFolderGroupImageModel.addImageToGroup(group.id, hash);
+        imagesAssigned++;
+      }
+    }
+
+    return { groupsCreated, imagesAssigned };
+  }
+
   /**
    * 모든 자동 폴더 그룹 재구축
    * - 감시 폴더를 루트 그룹으로 생성
@@ -165,11 +235,7 @@ export class AutoFolderGroupService {
       await AutoFolderGroupModel.deleteAll();
       console.log('  ✅ 기존 그룹 삭제 완료');
 
-      const watchedFolders = db.prepare(`
-        SELECT id, folder_path, folder_name, recursive
-        FROM watched_folders
-        ORDER BY created_date ASC, id ASC
-      `).all() as WatchedFolderRow[];
+      const watchedFolders = this.loadReadableWatchedFolders();
 
       if (watchedFolders.length === 0) {
         return {
@@ -189,54 +255,15 @@ export class AutoFolderGroupService {
       const pathToGroupId = new Map<string, number>();
 
       for (const watchedFolder of watchedFolders) {
-        const watchedFolderPath = normalizePath(watchedFolder.folder_path);
-        if (!fs.existsSync(watchedFolderPath)) {
-          console.warn(`[AutoFolderGroupService] Watched folder missing, skipping: ${watchedFolderPath}`);
-          continue;
-        }
-
-        let folderStats: fs.Stats;
-        try {
-          folderStats = fs.statSync(watchedFolderPath);
-        } catch (error) {
-          console.warn(`[AutoFolderGroupService] Failed to stat watched folder: ${watchedFolderPath}`, error);
-          continue;
-        }
-
-        if (!folderStats.isDirectory()) {
-          console.warn(`[AutoFolderGroupService] Watched folder is not a directory, skipping: ${watchedFolderPath}`);
-          continue;
-        }
-
         const nodes = new Map<string, FolderNode>();
         const folderImages = activeImages.filter((image) => image.folder_id === watchedFolder.id);
 
         this.collectDirectoryNodes(watchedFolder, nodes);
         this.attachImagesToNodes(watchedFolder, nodes, folderImages);
 
-        const sortedNodes = Array.from(nodes.values())
-          .sort((left, right) => left.depth - right.depth || left.absolutePath.localeCompare(right.absolutePath));
-
-        for (const node of sortedNodes) {
-          const parentId = node.parentKey ? pathToGroupId.get(node.parentKey) : null;
-          const group = await AutoFolderGroupModel.create({
-            folder_path: node.key,
-            absolute_path: node.absolutePath,
-            display_name: node.displayName,
-            parent_id: parentId ?? undefined,
-            depth: node.depth,
-            has_images: node.compositeHashes.size > 0,
-            image_count: node.compositeHashes.size,
-          });
-
-          pathToGroupId.set(node.key, group.id);
-          groupsCreated++;
-
-          for (const hash of node.compositeHashes) {
-            await AutoFolderGroupImageModel.addImageToGroup(group.id, hash);
-            imagesAssigned++;
-          }
-        }
+        const result = await this.createGroupsFromNodes(nodes, pathToGroupId);
+        groupsCreated += result.groupsCreated;
+        imagesAssigned += result.imagesAssigned;
       }
 
       const durationMs = Date.now() - startTime;
@@ -267,40 +294,28 @@ export class AutoFolderGroupService {
    * null = 루트 레벨
    */
   static async getChildGroups(parentId: number | null) {
-    await this.ensureReadableGroups();
-
-    if (parentId === null) {
-      return await AutoFolderGroupModel.findRoots();
-    }
-    return await AutoFolderGroupModel.findChildren(parentId);
+    return this.withReadableGroups(async () => {
+      if (parentId === null) {
+        return AutoFolderGroupModel.findRoots();
+      }
+      return AutoFolderGroupModel.findChildren(parentId);
+    });
   }
 
   /**
    * 그룹 상세 조회
    */
   static async getGroupById(id: number) {
-    await this.ensureReadableGroups();
-    return await AutoFolderGroupModel.findById(id);
+    return this.withReadableGroups(() => AutoFolderGroupModel.findById(id));
   }
 
   /**
    * 그룹의 이미지 조회 (페이징)
    */
   static async getGroupImages(groupId: number, page: number = 1, pageSize: number = 50) {
-    await this.ensureReadableGroups();
-
-    try {
-      console.log('[AutoFolderGroupService] getGroupImages called:', { groupId, page, pageSize });
-
+    return this.withReadableGroups(async () => {
       const images = await AutoFolderGroupImageModel.findImagesByGroup(groupId, page, pageSize);
       const total = await AutoFolderGroupImageModel.getImageCount(groupId);
-
-      console.log('[AutoFolderGroupService] getGroupImages result:', {
-        imagesCount: images.length,
-        total,
-        page,
-        pageSize
-      });
 
       return {
         images,
@@ -309,41 +324,34 @@ export class AutoFolderGroupService {
         pageSize,
         totalPages: Math.ceil(total / pageSize)
       };
-    } catch (error) {
-      console.error('[AutoFolderGroupService] Error in getGroupImages:', error);
-      throw error;
-    }
+    });
   }
 
   /**
    * 그룹의 랜덤 썸네일 조회
    */
   static async getRandomThumbnail(groupId: number) {
-    await this.ensureReadableGroups();
-    return await AutoFolderGroupImageModel.findRandomImageForGroup(groupId);
+    return this.withReadableGroups(() => AutoFolderGroupImageModel.findRandomImageForGroup(groupId));
   }
 
   /**
    * 브레드크럼 경로 조회
    */
   static async getBreadcrumbPath(groupId: number) {
-    await this.ensureReadableGroups();
-    return await AutoFolderGroupModel.getBreadcrumbPath(groupId);
+    return this.withReadableGroups(() => AutoFolderGroupModel.getBreadcrumbPath(groupId));
   }
 
   /**
    * 모든 그룹 조회 (통계 포함)
    */
   static async getAllGroups() {
-    await this.ensureReadableGroups();
-    return await AutoFolderGroupModel.findAllWithStats();
+    return this.withReadableGroups(() => AutoFolderGroupModel.findAllWithStats());
   }
 
   /**
    * 그룹의 composite_hash 목록 조회
    */
   static async getGroupHashes(groupId: number): Promise<string[]> {
-    await this.ensureReadableGroups();
-    return await AutoFolderGroupImageModel.getCompositeHashesForGroup(groupId);
+    return this.withReadableGroups(() => AutoFolderGroupImageModel.getCompositeHashesForGroup(groupId));
   }
 }
