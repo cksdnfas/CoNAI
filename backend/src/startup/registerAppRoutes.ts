@@ -158,6 +158,8 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     ? [path.resolve(process.env.FRONTEND_DIST_PATH)]
     : [
         path.resolve(process.cwd(), 'dist', 'frontend'),
+        path.resolve(process.cwd(), 'frontend'),
+        path.resolve(process.cwd(), 'app', 'frontend'),
         path.resolve(process.cwd(), '..', 'frontend', 'dist'),
         path.join(__dirname, '..', '..', '..', 'frontend'),
         path.join(__dirname, '..', '..', '..', '..', 'frontend', 'dist'),

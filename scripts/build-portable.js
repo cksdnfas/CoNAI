@@ -341,7 +341,7 @@ if (fs.existsSync(pythonSource)) {
   fs.ensureDirSync(pythonTarget);
 
   // Copy Python files
-  const pythonFiles = ['wdv3_tagger_daemon.py', 'requirements.txt', 'README.md'];
+  const pythonFiles = ['wdv3_tagger_daemon.py', 'kaloscope_tagger_daemon.py', 'requirements.txt', 'README.md'];
   let copiedCount = 0;
 
   for (const file of pythonFiles) {
