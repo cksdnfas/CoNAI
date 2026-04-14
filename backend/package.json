@@ -24,6 +24,7 @@
     "better-sqlite3": "^12.8.0",
     "better-sqlite3-session-store": "^0.1.0",
     "chokidar": "^5.0.0",
+    "compression": "^1.8.1",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
@@ -46,6 +47,7 @@
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
+    "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",
     "@types/express-session": "^1.18.2",
     "@types/form-data": "^2.2.1",

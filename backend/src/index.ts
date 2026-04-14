@@ -61,6 +61,7 @@ if (process.env.NODE_ENV === 'production' || isPackagedRuntime) {
 
 import https from 'https';
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -169,6 +170,9 @@ app.use(cors({
     callback(null, true);
   },
   credentials: true
+}));
+app.use(compression({
+  threshold: 1024,
 }));
 app.use(express.json({ limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb`, strict: false }));
 app.use(express.urlencoded({ extended: true, limit: `${IMAGE_PROCESSING.MAX_FILE_SIZE_MB}mb` }));
