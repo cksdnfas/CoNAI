@@ -5,9 +5,24 @@
  * Frontend + Backend 통합 빌드
  */
 
-const fs = require('fs-extra');
+const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+
+/** Remove a directory tree if it exists. */
+function removeDirSync(targetPath) {
+  fs.rmSync(targetPath, { recursive: true, force: true });
+}
+
+/** Ensure a directory exists before writing or copying into it. */
+function ensureDirSync(targetPath) {
+  fs.mkdirSync(targetPath, { recursive: true });
+}
+
+/** Copy one directory tree into another using built-in fs APIs only. */
+function copyDirSync(sourcePath, targetPath) {
+  fs.cpSync(sourcePath, targetPath, { recursive: true, force: true, dereference: true });
+}
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const SHARED_DIR = path.join(ROOT_DIR, 'shared');
@@ -23,9 +38,9 @@ console.log('🚀 CoNAI - Integrated Build\n');
 // Step 1: Clean previous builds
 console.log('🧹 Cleaning previous builds...');
 try {
-  fs.removeSync(SHARED_DIST);
-  fs.removeSync(FRONTEND_DIST);
-  fs.removeSync(BACKEND_DIST);
+  removeDirSync(SHARED_DIST);
+  removeDirSync(FRONTEND_DIST);
+  removeDirSync(BACKEND_DIST);
   console.log('✅ Cleaned successfully\n');
 } catch (error) {
   console.warn('⚠️  Clean failed (might be first build):', error.message, '\n');
@@ -77,11 +92,8 @@ try {
     throw new Error('Frontend dist not found');
   }
 
-  fs.ensureDirSync(INTEGRATED_DIST);
-  fs.copySync(FRONTEND_DIST, INTEGRATED_DIST, {
-    overwrite: true,
-    dereference: true
-  });
+  ensureDirSync(INTEGRATED_DIST);
+  copyDirSync(FRONTEND_DIST, INTEGRATED_DIST);
 
   const fileCount = fs.readdirSync(INTEGRATED_DIST).length;
   console.log(`✅ Copied ${fileCount} files/folders to backend/dist/frontend\n`);
