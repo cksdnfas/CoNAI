@@ -296,6 +296,9 @@ export function GenerationQueueHeaderWidget() {
                 const laneLabel = getQueueLaneLabel(record, queuePositionLabel)
                 const canManageRecord = !isCancelRequested && (authStatusQuery.data?.isAdmin === true || record.is_mine === true)
                 const isRunning = record.status === 'running'
+                const progressCaption = isRunning
+                  ? (progressPercent == null ? '계산 중' : `${progressPercent}%`)
+                  : getGenerationQueueStatusLabel(record)
 
                 return (
                   <div key={record.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
@@ -326,7 +329,7 @@ export function GenerationQueueHeaderWidget() {
                             />
                           </div>
                           <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-                            <span>{progressPercent == null ? '예측 중' : `${progressPercent}%`}</span>
+                            <span>{progressCaption}</span>
                             <span className="truncate">{isRunning ? '실행 진행도' : laneLabel}</span>
                           </div>
                         </div>
