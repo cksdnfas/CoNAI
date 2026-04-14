@@ -39,7 +39,7 @@ export class GenerationQueueModel {
         request_payload, request_summary,
         failure_code, failure_message,
         cancel_requested, queued_at, started_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.service_type,
       data.status ?? 'queued',
