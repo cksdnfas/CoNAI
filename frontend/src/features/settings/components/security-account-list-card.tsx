@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { SettingsField } from './settings-primitives'
+import { getAccountTypeLabel, getPermissionGroupDisplayName } from './security-ui-text'
 
 interface SecurityAccountListCardProps {
   accounts: AuthAccountListItem[]
@@ -50,8 +51,10 @@ export function SecurityAccountListCard({
                   <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="truncate text-sm font-semibold text-foreground">{account.username}</div>
-                      <Badge variant={account.accountType === 'admin' ? 'secondary' : 'outline'}>{account.accountType}</Badge>
-                      {account.syncedLegacyAdmin ? <Badge variant="outline">legacy</Badge> : null}
+                      <Badge variant={account.accountType === 'admin' ? 'secondary' : 'outline'}>
+                        {getAccountTypeLabel(account.accountType)}
+                      </Badge>
+                      {account.syncedLegacyAdmin ? <Badge variant="outline">레거시</Badge> : null}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {account.lastLoginAt
@@ -62,7 +65,7 @@ export function SecurityAccountListCard({
                       <div className="flex flex-wrap gap-2">
                         {account.groupKeys.map((groupKey) => (
                           <Badge key={groupKey} variant="outline">
-                            {groupKey}
+                            {getPermissionGroupDisplayName(groupKey, groupKey)}
                           </Badge>
                         ))}
                       </div>
@@ -84,7 +87,7 @@ export function SecurityAccountListCard({
                     >
                       {availableGroups.map((group) => (
                         <option key={group.groupKey} value={group.groupKey}>
-                          {group.name}
+                          {getPermissionGroupDisplayName(group.groupKey, group.name)}
                         </option>
                       ))}
                     </Select>

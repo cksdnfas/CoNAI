@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import type { AuthStatusRecord } from '@/lib/api-auth'
 import { SettingsValueTile } from './settings-primitives'
+import { getAccountTypeLabel } from './security-ui-text'
 
 interface SecurityStatusCardProps {
   authStatus: AuthStatusRecord | null
@@ -27,9 +28,7 @@ export function SecurityStatusCard({ authStatus, hasCredentials, currentUsername
           <SettingsValueTile label="현재 사용자" value={currentUsername ?? '없음'} valueClassName="break-all" />
           <SettingsValueTile
             label="권한 그룹"
-            value={authStatus?.accountType ?? '없음'}
-            className="capitalize"
-            valueClassName="capitalize"
+            value={getAccountTypeLabel(authStatus?.accountType)}
           />
         </div>
       </CardContent>

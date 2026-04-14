@@ -11,6 +11,13 @@ import type {
 } from '@/lib/api-auth'
 import { SettingsField } from './settings-primitives'
 import { SettingsModal } from './settings-modal'
+import {
+  getAccountStatusLabel,
+  getAccountTypeLabel,
+  getPagePermissionLabel,
+  getPermissionGroupDisplayName,
+  getPermissionGroupKindLabel,
+} from './security-ui-text'
 
 interface PermissionGroupDraft {
   name: string
@@ -75,9 +82,11 @@ export function SecurityPermissionGroupEditorModal({
   onRemoveMember,
 }: SecurityPermissionGroupEditorModalProps) {
   const isCreateMode = mode === 'create'
-  const isSystemGroup = group?.systemGroup === true
-  const isAdminSystemGroup = group?.groupKey === 'admin' && isSystemGroup
-  const title = isCreateMode ? '권한 그룹 생성' : group ? `${group.name} 관리` : '권한 그룹 관리'
+  const title = isCreateMode
+    ? '새 권한 그룹'
+    : group
+      ? getPermissionGroupDisplayName(group.groupKey, group.name)
+      : '권한 그룹'
   const isBusy = isSaving || isDeleting
 
   return (
@@ -85,20 +94,12 @@ export function SecurityPermissionGroupEditorModal({
       open={open}
       onClose={onClose}
       title={title}
-      description={
-        isCreateMode
-          ? '이름, 설명, 페이지 권한을 정해서 커스텀 그룹을 추가해.'
-          : isSystemGroup
-            ? '시스템 그룹은 안전하게 제한된 범위만 수정할 수 있어.'
-            : '권한과 그룹 멤버를 한 곳에서 정리해.'
-      }
       widthClassName="max-w-5xl"
       headerContent={
         !isCreateMode && group ? (
           <div className="flex flex-wrap gap-2">
-            <Badge variant={group.systemGroup ? 'secondary' : 'outline'}>{group.systemGroup ? 'system' : 'custom'}</Badge>
-            <Badge variant="outline">{group.groupKey}</Badge>
-            <Badge variant="outline">직접 권한 {draft.permissionKeys.length}</Badge>
+            <Badge variant={group.systemGroup ? 'secondary' : 'outline'}>{getPermissionGroupKindLabel(group.systemGroup)}</Badge>
+            <Badge variant="outline">권한 {draft.permissionKeys.length}</Badge>
             <Badge variant="outline">멤버 {members.length}</Badge>
           </div>
         ) : null
@@ -108,47 +109,34 @@ export function SecurityPermissionGroupEditorModal({
         <div className="min-h-[360px] rounded-sm bg-surface-low animate-pulse" />
       ) : (
         <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2">
-            <SettingsField label="그룹 이름">
-              <Input
-                variant="settings"
-                value={draft.name}
-                disabled={!canEditFields || isBusy}
-                onChange={(event) => onDraftChange({ name: event.target.value })}
-                placeholder="예: editors"
-              />
-            </SettingsField>
+          {canEditFields ? (
+            <>
+              <SettingsField label="그룹 이름">
+                <Input
+                  variant="settings"
+                  value={draft.name}
+                  disabled={isBusy}
+                  onChange={(event) => onDraftChange({ name: event.target.value })}
+                  placeholder="예: 편집팀"
+                />
+              </SettingsField>
 
-            <div className="rounded-sm border border-border bg-surface-container px-3 py-3 text-sm text-muted-foreground">
-              {isCreateMode
-                ? '새 커스텀 그룹은 시스템 그룹 위에 추가되는 운영용 그룹이야.'
-                : isAdminSystemGroup
-                  ? 'admin 시스템 그룹은 전체 권한 유지가 기본이라 여기서는 읽기 전용으로 보여줄게.'
-                  : group?.groupKey === 'anonymous'
-                    ? 'anonymous 시스템 그룹은 월페이퍼 라이브 접근만 열고 닫게 제한했어.'
-                    : isSystemGroup
-                      ? '시스템 그룹은 이름이나 멤버 구조는 고정하고, 필요한 범위만 조정해.'
-                      : '커스텀 그룹은 이름, 권한, 멤버를 모두 여기서 관리하면 돼.'}
-            </div>
-          </div>
-
-          <SettingsField label="설명">
-            <Textarea
-              variant="settings"
-              rows={3}
-              value={draft.description}
-              disabled={!canEditFields || isBusy}
-              onChange={(event) => onDraftChange({ description: event.target.value })}
-              placeholder="이 그룹이 어떤 용도인지 적어줘"
-            />
-          </SettingsField>
+              <SettingsField label="설명">
+                <Textarea
+                  variant="settings"
+                  rows={3}
+                  value={draft.description}
+                  disabled={isBusy}
+                  onChange={(event) => onDraftChange({ description: event.target.value })}
+                  placeholder="필요하면만 적어"
+                />
+              </SettingsField>
+            </>
+          ) : null}
 
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">페이지 권한</h3>
-                <p className="mt-1 text-xs text-muted-foreground">그룹 생성과 수정에서 바로 접근 권한을 조정할 수 있어.</p>
-              </div>
+              <h3 className="text-sm font-semibold text-foreground">페이지 권한</h3>
               {!canEditPermissions ? <Badge variant="secondary">읽기 전용</Badge> : null}
             </div>
 
@@ -164,8 +152,9 @@ export function SecurityPermissionGroupEditorModal({
                       className="flex items-start justify-between gap-4 rounded-sm border border-border/60 bg-background/40 px-3 py-3"
                     >
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-foreground">{permission.label}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">{permission.description ?? permission.permissionKey}</div>
+                        <div className="text-sm font-semibold text-foreground">
+                          {getPagePermissionLabel(permission.permissionKey, permission.label)}
+                        </div>
                       </div>
                       <input
                         type="checkbox"
@@ -184,16 +173,13 @@ export function SecurityPermissionGroupEditorModal({
           {!isCreateMode ? (
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">그룹 멤버</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">계정을 그룹에 추가하거나 빼서 권한을 묶어 관리해.</p>
-                </div>
+                <h3 className="text-sm font-semibold text-foreground">그룹 멤버</h3>
                 {!canManageMembers ? <Badge variant="secondary">읽기 전용</Badge> : null}
               </div>
 
               {canManageMembers ? (
                 <div className="grid gap-3 rounded-sm border border-border bg-surface-container p-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                  <SettingsField label="계정 추가">
+                  <SettingsField label="계정">
                     <Select
                       variant="settings"
                       value={selectedAddMemberAccountId === null ? '' : String(selectedAddMemberAccountId)}
@@ -203,7 +189,7 @@ export function SecurityPermissionGroupEditorModal({
                       <option value="">계정 선택</option>
                       {addableAccounts.map((account) => (
                         <option key={account.id} value={account.id}>
-                          {account.username} ({account.accountType})
+                          {account.username} ({getAccountTypeLabel(account.accountType)})
                         </option>
                       ))}
                     </Select>
@@ -224,7 +210,7 @@ export function SecurityPermissionGroupEditorModal({
 
               <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
                 {members.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">소속된 계정이 아직 없어.</div>
+                  <div className="text-sm text-muted-foreground">멤버가 없어.</div>
                 ) : (
                   members.map((member) => (
                     <div
@@ -234,8 +220,10 @@ export function SecurityPermissionGroupEditorModal({
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="truncate text-sm font-semibold text-foreground">{member.username}</div>
-                          <Badge variant={member.accountType === 'admin' ? 'secondary' : 'outline'}>{member.accountType}</Badge>
-                          <Badge variant="outline">{member.status}</Badge>
+                          <Badge variant={member.accountType === 'admin' ? 'secondary' : 'outline'}>
+                            {getAccountTypeLabel(member.accountType)}
+                          </Badge>
+                          <Badge variant="outline">{getAccountStatusLabel(member.status)}</Badge>
                         </div>
                       </div>
 
