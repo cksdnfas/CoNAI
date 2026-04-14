@@ -45,3 +45,19 @@ export function resolveEnvExamplePath(envPath: string, currentDir: string) {
 
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? siblingExamplePath
 }
+
+/** Directory that should anchor relative paths declared inside the resolved .env file. */
+export function resolveEnvBaseDir(currentDir: string) {
+  return path.dirname(resolveEnvPath(currentDir))
+}
+
+/** Resolve an env-provided path, anchoring relative values to the .env directory instead of process.cwd(). */
+export function resolveEnvConfiguredPath(value: string, currentDir: string) {
+  const trimmed = value.trim()
+
+  if (path.isAbsolute(trimmed)) {
+    return path.resolve(trimmed)
+  }
+
+  return path.resolve(resolveEnvBaseDir(currentDir), trimmed)
+}

@@ -1,5 +1,6 @@
 ﻿import fs from 'fs';
 import path from 'path';
+import { resolveEnvBaseDir, resolveEnvConfiguredPath } from '../utils/envPath';
 
 const overrideBasePath = process.env.RUNTIME_BASE_PATH;
 
@@ -9,7 +10,7 @@ const basePath = (() => {
     // Remove inline comments (anything after #) to prevent malformed paths
     const cleaned = overrideBasePath.trim().split('#')[0].trim();
     if (cleaned.length > 0) {
-      const resolved = path.resolve(cleaned);
+      const resolved = resolveEnvConfiguredPath(cleaned, __dirname);
       console.log(`[Config] Data root overridden by RUNTIME_BASE_PATH: ${resolved}`);
       return resolved;
     }
@@ -36,10 +37,10 @@ const basePath = (() => {
     return resolved;
   }
 
-  // 4. Default: Current working directory is the root
-  // This is the standard behavior for Docker volumes and correct production runs
-  const resolved = path.resolve(currentCwd, 'user');
-  console.log(`[Config] Data root defaulting to CWD/user: ${resolved}`);
+  // 4. Default: anchor to the resolved .env location when available
+  const envBaseDir = resolveEnvBaseDir(__dirname);
+  const resolved = path.resolve(envBaseDir, 'user');
+  console.log(`[Config] Data root defaulting to env-base/user: ${resolved}`);
   return resolved;
 })();
 
@@ -50,7 +51,7 @@ function resolvePath(envVar: string | undefined, defaultPath: string): string {
     const cleaned = envVar.trim().split('#')[0].trim();
 
     if (cleaned.length > 0) {
-      const resolved = path.resolve(cleaned);
+      const resolved = resolveEnvConfiguredPath(cleaned, __dirname);
       console.log(`✅ Using custom path: ${resolved}`);
       return resolved;
     }

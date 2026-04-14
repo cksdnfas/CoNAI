@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import { resolveEnvBaseDir, resolveEnvConfiguredPath } from '../../utils/envPath';
 
 /**
  * 통합 마이그레이션: 모든 필수 테이블 생성
@@ -383,7 +384,7 @@ export const up = async (db: Database.Database): Promise<void> => {
 
   const resolvedBasePath = (() => {
     if (explicitBasePath) {
-      return path.resolve(explicitBasePath);
+      return resolveEnvConfiguredPath(explicitBasePath, __dirname);
     }
 
     if (portableExecutableDir) {
@@ -396,11 +397,11 @@ export const up = async (db: Database.Database): Promise<void> => {
       return path.resolve(currentCwd, '..', 'user');
     }
 
-    return path.resolve(currentCwd, 'user');
+    return path.resolve(resolveEnvBaseDir(__dirname), 'user');
   })();
 
   const defaultUploadPath = explicitUploadsDir
-    ? path.resolve(explicitUploadsDir)
+    ? resolveEnvConfiguredPath(explicitUploadsDir, __dirname)
     : path.join(resolvedBasePath, 'uploads');
 
   db.prepare(`
