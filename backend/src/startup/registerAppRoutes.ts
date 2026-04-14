@@ -1,4 +1,4 @@
-import express, { type Express, type RequestHandler } from 'express';
+import express, { type Express, type Request, type RequestHandler } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { imageRoutes } from '../routes/images/index';
@@ -34,6 +34,7 @@ import { wallpaperRuntimeRoutes } from '../routes/wallpaperRuntime.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
 import { allowAnonymousPermission, optionalAuth, requirePermission } from '../middleware/authMiddleware';
+import { buildAuthStatusPayload } from '../routes/auth-route-helpers';
 
 export interface RegisterAppRoutesOptions {
   uploadsDir: string;
@@ -65,6 +66,21 @@ function registerRuntimeStaticDirectory(app: Express, mountPath: string, directo
     lastModified: true,
     maxAge: '1y',
   }));
+}
+
+/** Serialize one frontend bootstrap payload so it can be embedded into HTML safely. */
+function serializeFrontendBootstrap(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+/** Render the integrated frontend index with one auth bootstrap payload. */
+function renderIntegratedFrontendIndex(req: Request, htmlTemplate: string): string {
+  const authStatus = buildAuthStatusPayload(req);
+  const bootstrapScript = `<script>window.__CONAI_AUTH_STATUS__=${serializeFrontendBootstrap(authStatus)};</script>`;
+
+  return htmlTemplate.includes('</head>')
+    ? htmlTemplate.replace('</head>', `${bootstrapScript}</head>`)
+    : `${bootstrapScript}${htmlTemplate}`;
 }
 
 /** Register API routes, runtime static directories, frontend assets, and terminal handlers. */
@@ -147,8 +163,12 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   const frontendDistPath = frontendDistCandidates.find((candidate) => fs.existsSync(candidate));
 
   if (frontendDistPath) {
+    const indexPath = path.join(frontendDistPath, 'index.html');
+    const indexHtmlTemplate = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, 'utf8') : null;
+
     app.use(express.static(frontendDistPath, {
       etag: true,
+      index: false,
       lastModified: true,
       setHeaders: (res, filePath) => {
         const normalizedPath = filePath.replace(/\\/g, '/');
@@ -164,19 +184,23 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
       },
     }));
 
-    app.get('/{*path}', (req, res, next) => {
+    const handleFrontendIndex: RequestHandler = (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/temp') || req.path.startsWith('/save')) {
         next();
         return;
       }
 
-      const indexPath = path.join(frontendDistPath, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
+      if (!indexHtmlTemplate) {
         next();
+        return;
       }
-    });
+
+      res.setHeader('Cache-Control', 'no-cache');
+      res.type('html').send(renderIntegratedFrontendIndex(req, indexHtmlTemplate));
+    };
+
+    app.get('/', handleFrontendIndex);
+    app.get('/{*path}', handleFrontendIndex);
   } else {
     console.warn('⚠️  Frontend build not found. Backend is running in API-only mode.');
     console.warn('   Before integrated build, open the frontend dev server on http://localhost:1677');
