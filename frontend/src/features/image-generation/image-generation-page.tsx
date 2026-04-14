@@ -31,11 +31,6 @@ const GenerationHistoryPanelLazy = lazy(async () => {
   return { default: module.GenerationHistoryPanel }
 })
 
-const GenerationQueuePanelLazy = lazy(async () => {
-  const module = await import('./components/generation-queue-panel')
-  return { default: module.GenerationQueuePanel }
-})
-
 const ModuleWorkflowWorkspaceLazy = lazy(async () => {
   const module = await import('@/features/module-graph/module-graph-page')
   return { default: module.ModuleWorkflowWorkspace }
@@ -178,14 +173,7 @@ export function ImageGenerationPage() {
               </Suspense>
             </div>
             {shouldShowHistory ? (
-              <div className={cn('min-w-0 space-y-6', useWideNaiSplitPaneScroll && 'xl:flex xl:min-h-0 xl:flex-col xl:space-y-0 xl:gap-6')}>
-                <Suspense fallback={<PanelFallback />}>
-                  <GenerationQueuePanelLazy
-                    refreshNonce={historyRefreshNonce}
-                    serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
-                    workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
-                  />
-                </Suspense>
+              <div className={cn('min-w-0', useWideNaiSplitPaneScroll && 'xl:min-h-0 xl:flex xl:flex-col')}>
                 <div className={cn(useWideNaiSplitPaneScroll && 'xl:min-h-0 xl:flex-1')}>
                   <Suspense fallback={<PanelFallback />}>
                     <GenerationHistoryPanelLazy
@@ -202,14 +190,6 @@ export function ImageGenerationPage() {
         ) : shouldUseControllerDrawer && shouldShowHistory ? (
           <>
             <div className="space-y-6">
-              <Suspense fallback={<PanelFallback />}>
-                <GenerationQueuePanelLazy
-                  refreshNonce={historyRefreshNonce}
-                  serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
-                  workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
-                />
-              </Suspense>
-
               <Suspense fallback={<PanelFallback />}>
                 <GenerationHistoryPanelLazy
                   refreshNonce={historyRefreshNonce}
@@ -246,22 +226,13 @@ export function ImageGenerationPage() {
               </Suspense>
             </div>
             {shouldShowHistory ? (
-              <div className="space-y-6">
-                <Suspense fallback={<PanelFallback />}>
-                  <GenerationQueuePanelLazy
-                    refreshNonce={historyRefreshNonce}
-                    serviceType="comfyui"
-                    workflowId={selectedComfyWorkflowId}
-                  />
-                </Suspense>
-                <Suspense fallback={<PanelFallback />}>
-                  <GenerationHistoryPanelLazy
-                    refreshNonce={historyRefreshNonce}
-                    serviceType="comfyui"
-                    workflowId={selectedComfyWorkflowId}
-                  />
-                </Suspense>
-              </div>
+              <Suspense fallback={<PanelFallback />}>
+                <GenerationHistoryPanelLazy
+                  refreshNonce={historyRefreshNonce}
+                  serviceType="comfyui"
+                  workflowId={selectedComfyWorkflowId}
+                />
+              </Suspense>
             ) : null}
           </div>
         ) : (
