@@ -16,6 +16,7 @@ import { moduleDefinitionRoutes } from '../routes/moduleDefinitions';
 import { graphWorkflowRoutes } from '../routes/graphWorkflows';
 import naiRoutes from '../routes/nai';
 import generationHistoryRoutes from '../routes/generation-history.routes';
+import generationQueueRoutes from '../routes/generation-queue.routes';
 import wildcardRoutes from '../routes/wildcards';
 import { watchedFoldersRoutes } from '../routes/watchedFolders';
 import { backupSourcesRoutes } from '../routes/backupSources';
@@ -29,9 +30,10 @@ import externalApiRoutes from '../routes/externalApi.routes';
 import civitaiRoutes from '../routes/civitai.routes';
 import searchHistoryRoutes from '../routes/search-history.routes';
 import searchOptionsRoutes from '../routes/search-options.routes';
+import { wallpaperRuntimeRoutes } from '../routes/wallpaperRuntime.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
-import { optionalAuth } from '../middleware/authMiddleware';
+import { allowAnonymousPermission, optionalAuth, requirePermission } from '../middleware/authMiddleware';
 
 export interface RegisterAppRoutesOptions {
   uploadsDir: string;
@@ -82,22 +84,46 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/auth', authRoutes);
   app.use('/api/external-api', optionalAuth, externalApiRoutes);
   app.use('/api/civitai', options.readOnlyLimiter, optionalAuth, civitaiRoutes);
-  app.use('/api/images', options.readOnlyLimiter, optionalAuth, imageRoutes);
-  app.use('/api/prompt-collection', options.readOnlyLimiter, optionalAuth, promptCollectionRoutes);
-  app.use('/api/prompt-groups', options.readOnlyLimiter, optionalAuth, promptGroupRoutes);
-  app.use('/api/negative-prompt-groups', options.readOnlyLimiter, optionalAuth, negativePromptGroupRoutes);
-  app.use('/api/groups', options.readOnlyLimiter, optionalAuth, groupRoutes);
-  app.use('/api/auto-folder-groups', options.readOnlyLimiter, optionalAuth, autoFolderGroupRoutes);
-  app.use('/api/settings', optionalAuth, settingsRoutes);
-  app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, workflowRoutes);
-  app.use('/api/comfyui-servers', optionalAuth, comfyuiServerRoutes);
-  app.use('/api/custom-dropdown-lists', optionalAuth, customDropdownListRoutes);
-  app.use('/api/custom-nodes', optionalAuth, customNodeRoutes);
-  app.use('/api/module-definitions', optionalAuth, moduleDefinitionRoutes);
-  app.use('/api/graph-workflows', optionalAuth, graphWorkflowRoutes);
-  app.use('/api/nai', options.uploadLimiter, optionalAuth, naiRoutes);
-  app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, generationHistoryRoutes);
-  app.use('/api/wildcards', optionalAuth, wildcardRoutes);
+  app.use('/api/wallpaper-runtime', options.readOnlyLimiter, (req, res, next) => {
+    if (req.session?.authenticated === true) {
+      optionalAuth(req, res, next);
+      return;
+    }
+
+    allowAnonymousPermission('page.wallpaper.runtime.view')(req, res, next);
+  }, wallpaperRuntimeRoutes);
+  app.use('/api/images', options.readOnlyLimiter, (req, res, next) => {
+    const isWallpaperRuntimeThumbnailRequest = (req.method === 'GET' || req.method === 'HEAD')
+      && /^\/[^/]+\/thumbnail$/.test(req.path);
+
+    if (isWallpaperRuntimeThumbnailRequest) {
+      if (req.session?.authenticated === true) {
+        optionalAuth(req, res, next);
+        return;
+      }
+
+      allowAnonymousPermission('page.wallpaper.runtime.view')(req, res, next);
+      return;
+    }
+
+    optionalAuth(req, res, next);
+  }, imageRoutes);
+  app.use('/api/prompt-collection', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), promptCollectionRoutes);
+  app.use('/api/prompt-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), promptGroupRoutes);
+  app.use('/api/negative-prompt-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), negativePromptGroupRoutes);
+  app.use('/api/groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), groupRoutes);
+  app.use('/api/auto-folder-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), autoFolderGroupRoutes);
+  app.use('/api/settings', optionalAuth, requirePermission('page.settings.view'), settingsRoutes);
+  app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), workflowRoutes);
+  app.use('/api/comfyui-servers', optionalAuth, requirePermission('page.generation.view'), comfyuiServerRoutes);
+  app.use('/api/custom-dropdown-lists', optionalAuth, requirePermission('page.generation.view'), customDropdownListRoutes);
+  app.use('/api/custom-nodes', optionalAuth, requirePermission('page.generation.view'), customNodeRoutes);
+  app.use('/api/module-definitions', optionalAuth, requirePermission('page.generation.view'), moduleDefinitionRoutes);
+  app.use('/api/graph-workflows', optionalAuth, requirePermission('page.generation.view'), graphWorkflowRoutes);
+  app.use('/api/nai', options.uploadLimiter, optionalAuth, requirePermission('page.generation.view'), naiRoutes);
+  app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), generationHistoryRoutes);
+  app.use('/api/generation-queue', optionalAuth, requirePermission('page.generation.view'), generationQueueRoutes);
+  app.use('/api/wildcards', optionalAuth, requirePermission('page.generation.view'), wildcardRoutes);
   app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
   app.use('/api/backup-sources', optionalAuth, backupSourcesRoutes);
   app.use('/api/search-history', optionalAuth, searchHistoryRoutes);

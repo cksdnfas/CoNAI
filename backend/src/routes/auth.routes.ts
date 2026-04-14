@@ -1,44 +1,70 @@
-import { Router, Request, Response } from 'express';
+import { Router, type Request, type RequestHandler } from 'express';
 import rateLimit from 'express-rate-limit';
-import { AuthCredentials } from '../models/AuthCredentials';
-import { asyncHandler } from '../middleware/asyncHandler';
-import { requireAuth } from '../middleware/authMiddleware';
-import { getAuthDbPath } from '../database/authDb';
 import fs from 'fs';
+import { AuthCredentials } from '../models/AuthCredentials';
+import { AuthAccount, type AssignableSystemGroupKey } from '../models/AuthAccount';
+import { AuthPermissionGroup } from '../models/AuthPermissionGroup';
+import { asyncHandler } from '../middleware/asyncHandler';
+import { requireAdmin, requireAuth } from '../middleware/authMiddleware';
+import { getAuthDbPath, syncLegacyAuthCredentialToAccessControl } from '../database/authDb';
+import { buildAuthStatusPayload, hasConfiguredAuth, setAuthenticatedSession } from './auth-route-helpers';
 
 const router = Router();
 
-// Rate limiting for login endpoint (prevent brute-force attacks)
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15분
-  max: 5, // 최대 5회 시도
+  windowMs: 15 * 60 * 1000,
+  max: 5,
   message: 'Too many login attempts, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true // 성공한 요청은 카운트 제외
+  skipSuccessfulRequests: true,
 });
 
-/**
- * Check authentication status
- * GET /api/auth/status
- */
-router.get('/status', asyncHandler(async (req: Request, res: Response) => {
-  const hasCredentials = AuthCredentials.exists();
-  const isAuthenticated = req.session?.authenticated === true;
+type SessionResponseAccount = {
+  id: number | null;
+  username: string;
+  account_type: 'admin' | 'guest';
+};
 
+/** Build the shared authenticated-session response payload. */
+function buildSessionAccountResponse(req: Request, message: string, account: SessionResponseAccount) {
+  return {
+    success: true,
+    message,
+    username: account.username,
+    accountId: account.id,
+    accountType: account.account_type,
+    isAdmin: account.account_type === 'admin',
+    groupKeys: req.session.groupKeys ?? [],
+    permissionKeys: req.session.permissionKeys ?? [],
+  };
+}
+
+/** Format one page permission resource into the current UI label shape. */
+function formatPagePermissionLabel(resource: string): string {
+  return resource
+    .replace(/^page\./, '')
+    .replace(/\.runtime$/, ' runtime')
+    .split('.')
+    .join(' ')
+    .replace(/(^|\s)\w/g, (character) => character.toUpperCase());
+}
+
+/** Handle auth status reads. */
+const handleStatus: RequestHandler = async (req, res) => {
+  res.json(buildAuthStatusPayload(req));
+};
+
+/** Handle current-account reads for authenticated sessions. */
+const handleMe: RequestHandler = async (req, res) => {
   res.json({
-    hasCredentials,
-    authenticated: isAuthenticated,
-    username: req.session?.username || null
+    success: true,
+    data: buildAuthStatusPayload(req),
   });
-}));
+};
 
-/**
- * Get authentication database information
- * GET /api/auth/database-info
- * No authentication required (for account recovery purposes)
- */
-router.get('/database-info', asyncHandler(async (req: Request, res: Response) => {
+/** Handle auth database info reads for recovery guidance. */
+const handleDatabaseInfo: RequestHandler = async (_req, res) => {
   const authDbPath = getAuthDbPath();
   const exists = fs.existsSync(authDbPath);
 
@@ -47,54 +73,53 @@ router.get('/database-info', asyncHandler(async (req: Request, res: Response) =>
     exists,
     recoveryInstructions: {
       ko: '계정을 복구하려면: 1) 서버 중지, 2) auth.db 파일 삭제, 3) 서버 재시작',
-      en: 'To recover account: 1) Stop server, 2) Delete auth.db file, 3) Restart server'
-    }
+      en: 'To recover account: 1) Stop server, 2) Delete auth.db file, 3) Restart server',
+    },
   });
-}));
+};
 
-/**
- * Login
- * POST /api/auth/login
- */
-router.post('/login', loginLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const { username, password } = req.body;
+/** Handle username/password login for local accounts and legacy credentials. */
+const handleLogin: RequestHandler = async (req, res) => {
+  const username = String(req.body?.username || '').trim();
+  const password = String(req.body?.password || '');
 
-  // Validation
   if (!username || !password) {
     res.status(400).json({ error: 'Username and password are required' });
     return;
   }
 
-  // Check if credentials exist
-  if (!AuthCredentials.exists()) {
+  if (!hasConfiguredAuth()) {
     res.status(404).json({ error: 'Authentication not configured' });
     return;
   }
 
-  // Verify credentials
-  const isValid = await AuthCredentials.verify(username, password);
+  let account = await AuthAccount.verify(username, password);
 
-  if (!isValid) {
+  if (!account && AuthCredentials.exists()) {
+    const legacyValid = await AuthCredentials.verify(username, password);
+    if (legacyValid) {
+      syncLegacyAuthCredentialToAccessControl();
+      account = await AuthAccount.verify(username, password);
+    }
+  }
+
+  if (!account) {
     res.status(401).json({ error: 'Invalid username or password' });
     return;
   }
 
-  // Set session
-  req.session.authenticated = true;
-  req.session.username = username;
+  setAuthenticatedSession(req, account);
+  AuthAccount.touchLastLogin(account.id);
 
-  res.json({
-    success: true,
-    message: 'Login successful',
-    username
-  });
-}));
+  res.json(buildSessionAccountResponse(req, 'Login successful', {
+    id: account.id,
+    username: account.username,
+    account_type: account.account_type,
+  }));
+};
 
-/**
- * Logout
- * POST /api/auth/logout
- */
-router.post('/logout', asyncHandler(async (req: Request, res: Response) => {
+/** Handle logout by destroying the current session. */
+const handleLogout: RequestHandler = (req, res) => {
   req.session.destroy((err) => {
     if (err) {
       console.error('Error destroying session:', err);
@@ -104,99 +129,481 @@ router.post('/logout', asyncHandler(async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: 'Logout successful'
+      message: 'Logout successful',
     });
   });
-}));
+};
 
-/**
- * Setup authentication credentials (initial setup)
- * POST /api/auth/setup
- */
-router.post('/setup', asyncHandler(async (req: Request, res: Response) => {
-  const { username, password } = req.body;
+/** Handle the first-admin setup flow backed by legacy credentials. */
+const handleSetup: RequestHandler = async (req, res) => {
+  const username = String(req.body?.username || '').trim();
+  const password = String(req.body?.password || '');
 
-  // Validation
   if (!username || !password) {
     res.status(400).json({ error: 'Username and password are required' });
     return;
   }
 
-  // Check if credentials already exist
   if (AuthCredentials.exists()) {
     res.status(409).json({ error: 'Authentication already configured. Use update endpoint instead.' });
     return;
   }
 
-  // Create credentials
   try {
     await AuthCredentials.create(username, password);
+    syncLegacyAuthCredentialToAccessControl();
 
-    req.session.authenticated = true;
-    req.session.username = username;
+    const account = AuthAccount.findByUsername(username);
+    if (!account) {
+      res.status(500).json({ error: 'Failed to create the initial admin account' });
+      return;
+    }
 
-    res.json({
-      success: true,
-      message: 'Authentication configured successfully',
-      username
-    });
+    setAuthenticatedSession(req, account);
+
+    res.json(buildSessionAccountResponse(req, 'Authentication configured successfully', {
+      id: account.id,
+      username: account.username,
+      account_type: account.account_type,
+    }));
   } catch (error) {
     console.error('Error creating auth credentials:', error);
     res.status(500).json({ error: 'Failed to configure authentication' });
   }
-}));
+};
 
-/**
- * Update authentication credentials
- * PUT /api/auth/credentials
- */
-router.put('/credentials', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { currentPassword, newUsername, newPassword } = req.body;
+/** Handle legacy admin credential updates while keeping account sync intact. */
+const handleUpdateCredentials: RequestHandler = async (req, res) => {
+  const currentPassword = String(req.body?.currentPassword || '');
+  const newUsername = String(req.body?.newUsername || '').trim();
+  const newPassword = String(req.body?.newPassword || '');
 
-  // Validation
   if (!currentPassword || !newUsername || !newPassword) {
     res.status(400).json({ error: 'Current password, new username, and new password are required' });
     return;
   }
 
-  // Check if credentials exist
   if (!AuthCredentials.exists()) {
     res.status(404).json({ error: 'Authentication not configured' });
     return;
   }
 
-  // Get current credentials
   const current = AuthCredentials.get();
   if (!current) {
     res.status(500).json({ error: 'Failed to retrieve current credentials' });
     return;
   }
 
-  // Verify current password
   const isValid = await AuthCredentials.verify(current.username, currentPassword);
   if (!isValid) {
     res.status(401).json({ error: 'Invalid current password' });
     return;
   }
 
-  // Update credentials
   try {
-    await AuthCredentials.update(newUsername, newPassword);
+    const updated = await AuthCredentials.update(newUsername, newPassword);
+    const syncedAccount = AuthAccount.findByUsername(updated.username);
 
-    // Update session with new username
-    if (req.session.authenticated) {
-      req.session.username = newUsername;
+    req.session.username = updated.username;
+    if (syncedAccount) {
+      setAuthenticatedSession(req, syncedAccount);
     }
 
-    res.json({
-      success: true,
-      message: 'Credentials updated successfully',
-      username: newUsername
-    });
+    res.json(buildSessionAccountResponse(req, 'Credentials updated successfully', {
+      id: syncedAccount?.id ?? null,
+      username: updated.username,
+      account_type: syncedAccount?.account_type ?? 'admin',
+    }));
   } catch (error) {
     console.error('Error updating credentials:', error);
     res.status(500).json({ error: 'Failed to update credentials' });
   }
-}));
+};
+
+/** Handle guest account creation from the login page. */
+const handleGuestAccountCreate: RequestHandler = async (req, res) => {
+  const username = String(req.body?.username || '').trim();
+  const password = String(req.body?.password || '');
+
+  if (!username || !password) {
+    res.status(400).json({ error: 'Username and password are required' });
+    return;
+  }
+
+  if (!hasConfiguredAuth()) {
+    res.status(409).json({ error: 'Create the admin account first' });
+    return;
+  }
+
+  try {
+    const account = await AuthAccount.createGuest(username, password, null);
+    res.status(201).json({
+      success: true,
+      message: 'Guest account created successfully',
+      account: {
+        id: account.id,
+        username: account.username,
+        accountType: account.account_type,
+        status: account.status,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create guest account';
+    const statusCode = message === 'Username already exists' ? 409 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+};
+
+/** Handle account list reads for the admin review UI. */
+const handleAccountsList: RequestHandler = async (_req, res) => {
+  const accounts = AuthAccount.listAll();
+  res.json({
+    success: true,
+    data: accounts.map((account) => ({
+      id: account.id,
+      username: account.username,
+      accountType: account.account_type,
+      status: account.status,
+      groupKeys: account.group_keys,
+      createdByAccountId: account.created_by_account_id,
+      lastLoginAt: account.last_login_at,
+      createdAt: account.created_at,
+      updatedAt: account.updated_at,
+      syncedLegacyAdmin: account.sync_key === 'legacy-admin',
+    })),
+  });
+};
+
+/** Format one permission-group summary for the settings UI. */
+function formatPermissionGroupSummary(group: ReturnType<typeof AuthPermissionGroup.listAllGroups>[number]) {
+  return {
+    id: group.id,
+    groupKey: group.group_key,
+    name: group.name,
+    description: group.description,
+    parentGroupId: group.parent_group_id,
+    parentGroupKey: group.parent_group_key,
+    priority: group.priority,
+    systemGroup: group.system_group,
+    directPermissionKeys: group.direct_permission_keys,
+    memberCount: group.member_count,
+  };
+}
+
+/** Handle built-in or generic permission-group reads depending on the requested scope. */
+const handlePermissionGroups: RequestHandler = async (req, res) => {
+  const scope = String(req.query.scope || '').trim();
+
+  if (scope === 'all') {
+    res.json({
+      success: true,
+      data: AuthPermissionGroup.listAllGroups().map(formatPermissionGroupSummary),
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    data: AuthAccount.listAssignableSystemGroups().map((group) => ({
+      groupKey: group.group_key,
+      name: group.name,
+    })),
+  });
+};
+
+/** Handle one permission-group detail read with its current members. */
+const handlePermissionGroupDetail: RequestHandler = async (req, res) => {
+  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
+  if (!Number.isInteger(groupId)) {
+    res.status(400).json({ error: 'Invalid group id' });
+    return;
+  }
+
+  const group = AuthPermissionGroup.findGroupById(groupId);
+  if (!group) {
+    res.status(404).json({ error: 'Permission group not found' });
+    return;
+  }
+
+  const members = AuthPermissionGroup.listGroupMembers(groupId);
+  res.json({
+    success: true,
+    data: {
+      group: formatPermissionGroupSummary(group),
+      members: members.map((member) => ({
+        id: member.id,
+        username: member.username,
+        accountType: member.account_type,
+        status: member.status,
+      })),
+    },
+  });
+};
+
+/** Handle one custom permission-group creation. */
+const handlePermissionGroupCreate: RequestHandler = async (req, res) => {
+  const name = String(req.body?.name || '');
+  const description = req.body?.description == null ? null : String(req.body.description);
+  const permissionKeys = Array.isArray(req.body?.permissionKeys)
+    ? req.body.permissionKeys.map((value: unknown) => String(value || ''))
+    : [];
+
+  try {
+    const group = AuthPermissionGroup.createCustomGroup({ name, description, permissionKeys });
+    res.status(201).json({
+      success: true,
+      message: 'Permission group created successfully',
+      data: formatPermissionGroupSummary(group),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create permission group';
+    const statusCode = message === 'Group name is required' || message === 'One or more permission keys are invalid' ? 400 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+};
+
+/** Handle one custom permission-group update. */
+const handlePermissionGroupUpdate: RequestHandler = async (req, res) => {
+  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
+  if (!Number.isInteger(groupId)) {
+    res.status(400).json({ error: 'Invalid group id' });
+    return;
+  }
+
+  const name = String(req.body?.name || '');
+  const description = req.body?.description == null ? null : String(req.body.description);
+  const permissionKeys = Array.isArray(req.body?.permissionKeys)
+    ? req.body.permissionKeys.map((value: unknown) => String(value || ''))
+    : [];
+
+  try {
+    const group = AuthPermissionGroup.updateCustomGroup(groupId, { name, description, permissionKeys });
+    res.json({
+      success: true,
+      message: 'Permission group updated successfully',
+      data: formatPermissionGroupSummary(group),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update permission group';
+    const statusCode = (
+      message === 'Invalid group id'
+      || message === 'Group name is required'
+      || message === 'One or more permission keys are invalid'
+      || message === 'System groups cannot be modified through this endpoint'
+    ) ? 400 : message === 'Permission group not found' ? 404 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+};
+
+/** Handle one custom permission-group deletion. */
+const handlePermissionGroupDelete: RequestHandler = async (req, res) => {
+  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
+  if (!Number.isInteger(groupId)) {
+    res.status(400).json({ error: 'Invalid group id' });
+    return;
+  }
+
+  try {
+    AuthPermissionGroup.deleteCustomGroup(groupId);
+    res.json({
+      success: true,
+      message: 'Permission group deleted successfully',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete permission group';
+    const statusCode = (
+      message === 'System groups cannot be modified through this endpoint'
+    ) ? 400 : message === 'Permission group not found' ? 404 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+};
+
+/** Handle adding one account membership to one custom permission group. */
+const handlePermissionGroupMemberAdd: RequestHandler = async (req, res) => {
+  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
+  const accountId = Number.parseInt(String(req.body?.accountId || ''), 10);
+
+  if (!Number.isInteger(groupId)) {
+    res.status(400).json({ error: 'Invalid group id' });
+    return;
+  }
+
+  if (!Number.isInteger(accountId)) {
+    res.status(400).json({ error: 'Invalid account id' });
+    return;
+  }
+
+  try {
+    AuthPermissionGroup.addAccountMembership(groupId, accountId);
+    res.json({
+      success: true,
+      message: 'Group member added successfully',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to add group member';
+    const statusCode = (
+      message === 'System groups cannot be modified through this endpoint'
+    ) ? 400 : (message === 'Permission group not found' || message === 'Account not found') ? 404 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+};
+
+/** Handle removing one account membership from one custom permission group. */
+const handlePermissionGroupMemberRemove: RequestHandler = async (req, res) => {
+  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
+  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+
+  if (!Number.isInteger(groupId)) {
+    res.status(400).json({ error: 'Invalid group id' });
+    return;
+  }
+
+  if (!Number.isInteger(accountId)) {
+    res.status(400).json({ error: 'Invalid account id' });
+    return;
+  }
+
+  try {
+    AuthPermissionGroup.removeAccountMembership(groupId, accountId);
+    res.json({
+      success: true,
+      message: 'Group member removed successfully',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to remove group member';
+    const statusCode = (
+      message === 'System groups cannot be modified through this endpoint'
+    ) ? 400 : (message === 'Permission group not found' || message === 'Account not found') ? 404 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+};
+
+/** Handle built-in page-access matrix reads. */
+const handlePageAccessList: RequestHandler = async (_req, res) => {
+  const permissions = AuthPermissionGroup.listPagePermissions();
+  const groups = AuthPermissionGroup.listBuiltInPageAccess(['anonymous', 'guest', 'admin']);
+
+  res.json({
+    success: true,
+    data: {
+      permissions: permissions.map((permission) => ({
+        permissionKey: permission.permission_key,
+        label: formatPagePermissionLabel(permission.resource),
+        description: permission.description,
+      })),
+      groups: groups.map((group) => ({
+        groupKey: group.group_key,
+        name: group.name,
+        description: group.description,
+        permissionKeys: group.permission_keys,
+      })),
+    },
+  });
+};
+
+/** Handle built-in page-access replacements for anonymous or guest. */
+const handlePageAccessReplace: RequestHandler = async (req, res) => {
+  const groupKey = String(req.params.groupKey || '').trim();
+  const permissionKeys = Array.isArray(req.body?.permissionKeys)
+    ? req.body.permissionKeys.map((value: unknown) => String(value || ''))
+    : null;
+
+  if (groupKey !== 'anonymous' && groupKey !== 'guest') {
+    res.status(400).json({ error: 'groupKey must be one of: anonymous, guest' });
+    return;
+  }
+
+  if (!permissionKeys) {
+    res.status(400).json({ error: 'permissionKeys must be an array' });
+    return;
+  }
+
+  try {
+    const updatedGroup = AuthPermissionGroup.replaceBuiltInPageAccess(groupKey, permissionKeys);
+    res.json({
+      success: true,
+      message: `${updatedGroup.name} page access updated successfully`,
+      data: {
+        groupKey: updatedGroup.group_key,
+        name: updatedGroup.name,
+        description: updatedGroup.description,
+        permissionKeys: updatedGroup.permission_keys,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update page access';
+    const statusCode = message === 'One or more permission keys are invalid' ? 400 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+};
+
+/** Handle system-group changes for one local account. */
+const handleAccountSystemGroupUpdate: RequestHandler = async (req, res) => {
+  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+  const groupKey = String(req.body?.groupKey || '').trim() as AssignableSystemGroupKey;
+
+  if (!Number.isInteger(accountId)) {
+    res.status(400).json({ error: 'Invalid account id' });
+    return;
+  }
+
+  if (groupKey !== 'guest' && groupKey !== 'admin') {
+    res.status(400).json({ error: 'groupKey must be one of: guest, admin' });
+    return;
+  }
+
+  const targetAccount = AuthAccount.findById(accountId);
+  if (!targetAccount) {
+    res.status(404).json({ error: 'Account not found' });
+    return;
+  }
+
+  if (req.session.accountId === accountId && groupKey !== 'admin') {
+    res.status(400).json({ error: 'You cannot demote your current admin session' });
+    return;
+  }
+
+  if (targetAccount.account_type === 'admin' && groupKey !== 'admin' && AuthAccount.countActiveAdmins() <= 1) {
+    res.status(400).json({ error: 'At least one active admin account must remain' });
+    return;
+  }
+
+  try {
+    const updatedAccount = AuthAccount.assignSystemGroup(accountId, groupKey);
+    res.json({
+      success: true,
+      message: 'Account group updated successfully',
+      account: {
+        id: updatedAccount.id,
+        username: updatedAccount.username,
+        accountType: updatedAccount.account_type,
+        status: updatedAccount.status,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update account group';
+    res.status(500).json({ error: message });
+  }
+};
+
+router.get('/status', asyncHandler(handleStatus));
+router.get('/me', requireAuth, asyncHandler(handleMe));
+router.get('/database-info', asyncHandler(handleDatabaseInfo));
+router.post('/login', loginLimiter, asyncHandler(handleLogin));
+router.post('/logout', asyncHandler(handleLogout));
+router.post('/setup', asyncHandler(handleSetup));
+router.put('/credentials', requireAdmin, asyncHandler(handleUpdateCredentials));
+router.post('/guest-accounts', asyncHandler(handleGuestAccountCreate));
+router.get('/accounts', requireAdmin, asyncHandler(handleAccountsList));
+router.get('/permission-groups', requireAdmin, asyncHandler(handlePermissionGroups));
+router.post('/permission-groups', requireAdmin, asyncHandler(handlePermissionGroupCreate));
+router.get('/permission-groups/:groupId', requireAdmin, asyncHandler(handlePermissionGroupDetail));
+router.put('/permission-groups/:groupId', requireAdmin, asyncHandler(handlePermissionGroupUpdate));
+router.delete('/permission-groups/:groupId', requireAdmin, asyncHandler(handlePermissionGroupDelete));
+router.post('/permission-groups/:groupId/members', requireAdmin, asyncHandler(handlePermissionGroupMemberAdd));
+router.delete('/permission-groups/:groupId/members/:accountId', requireAdmin, asyncHandler(handlePermissionGroupMemberRemove));
+router.get('/page-access', requireAdmin, asyncHandler(handlePageAccessList));
+router.put('/page-access/:groupKey', requireAdmin, asyncHandler(handlePageAccessReplace));
+router.put('/accounts/:accountId/system-group', requireAdmin, asyncHandler(handleAccountSystemGroupUpdate));
 
 export const authRoutes = router;

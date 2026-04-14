@@ -2,36 +2,38 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { runtimePaths } from '../config/runtimePaths';
+import { createAuthTables } from './authDbSchema';
+import { seedAccessControlDefaults } from './authDbSeed';
 
 const AUTH_DB_PATH = path.join(runtimePaths.databaseDir, 'auth.db');
+const LEGACY_ADMIN_SYNC_KEY = 'legacy-admin';
+
+interface LegacyAuthCredentialRecord {
+  username: string;
+  password_hash: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
 /**
  * Authentication Database Instance
- * Separated from the unified user database for easy account recovery
- * Contains only: auth_credentials, sessions
+ * Separated from the unified user database for easy account recovery.
  *
- * Recovery: Simply delete auth.db and restart server
+ * Recovery: Simply delete auth.db and restart server.
  */
 export let authDb: Database.Database;
 
 /**
- * Initialize Authentication Database
- * - Creates database file if not exists
- * - Creates auth tables automatically
- * - Handles migration from legacy user database files if needed
+ * Initialize authentication storage and seed access-control foundations.
  */
 export function initializeAuthDb(): void {
   try {
-    // Ensure database directory exists
     const dbDir = path.dirname(AUTH_DB_PATH);
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
     }
 
-    // Check if database is new
     const isNewDatabase = !fs.existsSync(AUTH_DB_PATH);
-
-    // Create database connection
     authDb = new Database(AUTH_DB_PATH);
 
     if (isNewDatabase) {
@@ -40,45 +42,91 @@ export function initializeAuthDb(): void {
       console.log('✅ Connected to existing authentication database');
     }
 
-    // Create tables
-    createAuthTables();
-
-    // Migrate from legacy user database files if needed
+    createAuthTables(authDb);
     migrateFromLegacyUserDbs();
+    seedAccessControlDefaults(authDb);
+    syncLegacyAuthCredentialToAccessControl();
   } catch (error) {
     console.error('Failed to initialize authentication database:', error);
     throw error;
   }
 }
 
+/** Resolve one permission-group id by its stable key. */
+function getPermissionGroupIdByKey(groupKey: string): number | null {
+  const row = authDb.prepare('SELECT id FROM auth_permission_groups WHERE group_key = ?').get(groupKey) as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
 /**
- * Create authentication tables
+ * Mirror the legacy single-admin credential into the new account model.
  */
-function createAuthTables(): void {
-  // 1. Authentication credentials table (single user)
-  authDb.exec(`
-    CREATE TABLE IF NOT EXISTS auth_credentials (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      username TEXT NOT NULL,
-      password_hash TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
+export function syncLegacyAuthCredentialToAccessControl(): void {
+  try {
+    const legacyCredential = authDb.prepare(
+      'SELECT username, password_hash, created_at, updated_at FROM auth_credentials WHERE id = 1'
+    ).get() as LegacyAuthCredentialRecord | undefined;
 
-  // 2. Sessions table (express-session storage)
-  authDb.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      sid TEXT PRIMARY KEY,
-      sess TEXT NOT NULL,
-      expire INTEGER NOT NULL
-    )
-  `);
+    if (!legacyCredential) {
+      removeLegacySyncedAdminAccount();
+      return;
+    }
 
-  // Create index for session expiration
-  authDb.exec(`
-    CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire)
-  `);
+    const adminGroupId = getPermissionGroupIdByKey('admin');
+    if (adminGroupId === null) {
+      return;
+    }
+
+    const existingAccount = authDb.prepare(
+      'SELECT id FROM auth_accounts WHERE sync_key = ?'
+    ).get(LEGACY_ADMIN_SYNC_KEY) as { id: number } | undefined;
+
+    let accountId = existingAccount?.id ?? null;
+
+    if (existingAccount) {
+      authDb.prepare(`
+        UPDATE auth_accounts
+        SET username = ?, password_hash = ?, account_type = 'admin', status = 'active', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(legacyCredential.username, legacyCredential.password_hash, existingAccount.id);
+    } else {
+      const insertResult = authDb.prepare(`
+        INSERT INTO auth_accounts (
+          username, password_hash, account_type, status, sync_key, created_at, updated_at
+        ) VALUES (?, ?, 'admin', 'active', ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+      `).run(
+        legacyCredential.username,
+        legacyCredential.password_hash,
+        LEGACY_ADMIN_SYNC_KEY,
+        legacyCredential.created_at ?? null,
+        legacyCredential.updated_at ?? null,
+      );
+
+      accountId = insertResult.lastInsertRowid as number;
+    }
+
+    if (accountId !== null) {
+      authDb.prepare(`
+        INSERT OR IGNORE INTO auth_account_group_memberships (account_id, group_id, created_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+      `).run(accountId, adminGroupId);
+    }
+  } catch (error) {
+    console.error('  ⚠️  Failed to sync the legacy auth credential into access-control tables:', error);
+  }
+}
+
+/**
+ * Remove the mirrored legacy admin account when no legacy credential remains.
+ */
+function removeLegacySyncedAdminAccount(): void {
+  const row = authDb.prepare('SELECT id FROM auth_accounts WHERE sync_key = ?').get(LEGACY_ADMIN_SYNC_KEY) as { id: number } | undefined;
+  if (!row) {
+    return;
+  }
+
+  authDb.prepare('DELETE FROM auth_account_group_memberships WHERE account_id = ?').run(row.id);
+  authDb.prepare('DELETE FROM auth_accounts WHERE id = ?').run(row.id);
 }
 
 /**
@@ -150,12 +198,11 @@ function migrateFromLegacyUserDbs(): void {
     }
   } catch (error) {
     console.error('  ⚠️  Error during authentication data migration:', error);
-    // Don't throw - allow app to continue even if migration fails
   }
 }
 
 /**
- * Close database connection
+ * Close database connection.
  */
 export function closeAuthDb(): void {
   if (authDb) {
@@ -165,7 +212,7 @@ export function closeAuthDb(): void {
 }
 
 /**
- * Get database instance (use with caution)
+ * Get the live authentication database instance.
  */
 export function getAuthDb(): Database.Database {
   if (!authDb) {
@@ -175,7 +222,7 @@ export function getAuthDb(): Database.Database {
 }
 
 /**
- * Get authentication database file path
+ * Get the auth database file path.
  */
 export function getAuthDbPath(): string {
   return AUTH_DB_PATH;

@@ -1,4 +1,4 @@
-import { getAuthDb } from '../database/authDb';
+import { getAuthDb, syncLegacyAuthCredentialToAccessControl } from '../database/authDb';
 import { AuthService } from '../services/authService';
 
 export interface AuthCredential {
@@ -11,7 +11,7 @@ export interface AuthCredential {
 
 /**
  * AuthCredentials Model
- * Manages single user authentication credentials in auth.db
+ * Keeps the legacy single-admin credential flow alive while the new account model rolls out.
  */
 export class AuthCredentials {
   /**
@@ -41,15 +41,11 @@ export class AuthCredentials {
    * @returns Created credential
    */
   static async create(username: string, password: string): Promise<AuthCredential> {
-    // Check if credentials already exist
     if (this.exists()) {
       throw new Error('Authentication credentials already exist. Use update instead.');
     }
 
-    // Hash password
     const passwordHash = await AuthService.hashPassword(password);
-
-    // Insert credentials
     const db = getAuthDb();
     const stmt = db.prepare(`
       INSERT INTO auth_credentials (id, username, password_hash, created_at, updated_at)
@@ -57,8 +53,8 @@ export class AuthCredentials {
     `);
 
     stmt.run(username, passwordHash);
+    syncLegacyAuthCredentialToAccessControl();
 
-    // Return created credential
     const result = this.get();
     if (!result) {
       throw new Error('Failed to create authentication credentials');
@@ -74,10 +70,7 @@ export class AuthCredentials {
    * @returns Updated credential
    */
   static async update(username: string, password: string): Promise<AuthCredential> {
-    // Hash password
     const passwordHash = await AuthService.hashPassword(password);
-
-    // Update credentials
     const db = getAuthDb();
     const stmt = db.prepare(`
       UPDATE auth_credentials
@@ -91,7 +84,8 @@ export class AuthCredentials {
       throw new Error('Failed to update authentication credentials');
     }
 
-    // Return updated credential
+    syncLegacyAuthCredentialToAccessControl();
+
     const updated = this.get();
     if (!updated) {
       throw new Error('Failed to retrieve updated credentials');
@@ -113,12 +107,10 @@ export class AuthCredentials {
       return false;
     }
 
-    // Check username
     if (credential.username !== username) {
       return false;
     }
 
-    // Verify password
     return await AuthService.verifyPassword(credential.password_hash, password);
   }
 
@@ -128,5 +120,6 @@ export class AuthCredentials {
   static delete(): void {
     const db = getAuthDb();
     db.prepare('DELETE FROM auth_credentials WHERE id = 1').run();
+    syncLegacyAuthCredentialToAccessControl();
   }
 }

@@ -1,5 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
+import { hasAuthPermission } from './auth-permissions'
+import { resolveRoutePermissionKey } from './auth-route-permissions'
 import { useAuthStatusQuery } from './use-auth-status-query'
 
 /** Block app-shell routes until the local login requirement is satisfied. */
@@ -13,7 +15,10 @@ export function ProtectedAppShell() {
 
   if (authStatusQuery.data?.hasCredentials && !authStatusQuery.data.authenticated) {
     const nextPath = `${location.pathname}${location.search}` || '/'
-    return <Navigate to={`/login?next=${encodeURIComponent(nextPath)}`} replace />
+    const requiredPermissionKey = resolveRoutePermissionKey(location.pathname)
+    if (!requiredPermissionKey || !hasAuthPermission(authStatusQuery.data.permissionKeys, requiredPermissionKey)) {
+      return <Navigate to={`/login?next=${encodeURIComponent(nextPath)}`} replace />
+    }
   }
 
   return <AppShell />

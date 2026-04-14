@@ -1,5 +1,6 @@
 import { Navigate, createHashRouter } from 'react-router-dom'
 import { ProtectedAppShell } from '@/features/auth/protected-app-shell'
+import { RequireAuthPermission } from '@/features/auth/require-auth-permission'
 import {
   GroupRoute,
   HomeRoute,
@@ -30,19 +31,19 @@ export const appRouter = createHashRouter([
       },
       {
         path: 'groups',
-        element: <GroupRoute />,
+        element: <RequireAuthPermission permissionKey="page.groups.view"><GroupRoute /></RequireAuthPermission>,
       },
       {
         path: 'groups/:groupId',
-        element: <GroupRoute />,
+        element: <RequireAuthPermission permissionKey="page.groups.view"><GroupRoute /></RequireAuthPermission>,
       },
       {
         path: 'prompts',
-        element: <PromptRoute />,
+        element: <RequireAuthPermission permissionKey="page.prompts.view"><PromptRoute /></RequireAuthPermission>,
       },
       {
         path: 'generation',
-        element: <ImageGenerationRoute />,
+        element: <RequireAuthPermission permissionKey="page.generation.view"><ImageGenerationRoute /></RequireAuthPermission>,
       },
       {
         path: 'graph',
@@ -50,27 +51,27 @@ export const appRouter = createHashRouter([
       },
       {
         path: 'images/:compositeHash',
-        element: <ImageDetailRoute />,
+        element: <RequireAuthPermission permissionKey="page.image-detail.view"><ImageDetailRoute /></RequireAuthPermission>,
       },
       {
         path: 'images/:compositeHash/metadata',
-        element: <ImageMetadataEditRoute />,
+        element: <RequireAuthPermission permissionKey="page.metadata-editor.view"><ImageMetadataEditRoute /></RequireAuthPermission>,
       },
       {
         path: 'upload',
-        element: <UploadRoute />,
+        element: <RequireAuthPermission permissionKey="page.upload.view"><UploadRoute /></RequireAuthPermission>,
       },
       {
         path: 'settings',
-        element: <SettingsRoute />,
+        element: <RequireAuthPermission permissionKey="page.settings.view"><SettingsRoute /></RequireAuthPermission>,
       },
       {
         path: 'wallpaper',
-        element: <WallpaperEditorRoute />,
+        element: <RequireAuthPermission permissionKey="page.wallpaper.view"><WallpaperEditorRoute /></RequireAuthPermission>,
       },
       {
         path: 'wallpaper/runtime',
-        element: <WallpaperRuntimeRoute />,
+        element: <RequireAuthPermission permissionKey="page.wallpaper.runtime.view"><WallpaperRuntimeRoute /></RequireAuthPermission>,
       },
       {
         path: '*',
