@@ -25,7 +25,7 @@ export function Snackbar({ open, message, tone = 'info', onClose, durationMs = 2
   }, [durationMs, message, nonce, onClose, open])
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] flex justify-end p-4 sm:p-6">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[220] flex justify-end p-4 sm:p-6">
       <div
         className={cn(
           'max-w-md min-w-[240px] rounded-sm border px-4 py-3 text-sm shadow-2xl transition-all duration-200',
