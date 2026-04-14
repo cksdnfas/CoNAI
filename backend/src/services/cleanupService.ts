@@ -1,7 +1,5 @@
 import { GenerationHistoryModel, GenerationHistoryRecord, GenerationStatus } from '../models/GenerationHistory';
-import fs from 'fs';
-import path from 'path';
-import { runtimePaths } from '../config/runtimePaths';
+import { ImageFileModel } from '../models/Image/ImageFileModel';
 
 export interface CleanupDetail {
   id: number;
@@ -9,7 +7,6 @@ export interface CleanupDetail {
   service_type: string;
   created_at: string;
   generation_status: GenerationStatus;
-  original_path?: string;
   thumbnail_path?: string;
   composite_hash?: string;
   error_message?: string;
@@ -31,29 +28,11 @@ export interface CleanupReport {
  * CleanupService
  * Manages automatic cleanup of generation history records:
  * 1. Failed generations (status='failed')
- * 2. Orphaned records (files missing from disk)
+ * 2. Orphaned records (main DB hash linkage missing)
  * 3. Stale pending/processing records (stuck for >1 hour)
  * 4. Completed records without composite_hash (data corruption)
  */
 export class CleanupService {
-  private static uploadsDir = runtimePaths.uploadsDir;
-
-  /**
-   * Check if file exists on disk
-   */
-  private static async checkFileExists(relativePath: string | null | undefined): Promise<boolean> {
-    if (!relativePath) return false;
-
-    const fullPath = path.join(this.uploadsDir, relativePath);
-
-    try {
-      await fs.promises.access(fullPath, fs.constants.F_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   /**
    * Find failed generation records older than specified hours
    * These records never completed and should be cleaned up
@@ -65,23 +44,18 @@ export class CleanupService {
   }
 
   /**
-   * Find orphaned records - completed with hash but files missing from disk
-   * These records have database entries but the actual image files were deleted
+   * Find orphaned records - completed with hash but no active main-DB file linkage.
+   * History should follow the main image DB through composite_hash, not raw stored paths.
    */
   static async findOrphanedRecords(): Promise<GenerationHistoryRecord[]> {
-    // Get all completed records with composite_hash
     const allRecords = GenerationHistoryModel.findAll({
       generation_status: 'completed'
-    }).filter(record => record.composite_hash); // Must have hash (proof files were created)
+    }).filter(record => record.composite_hash);
 
     const orphaned: GenerationHistoryRecord[] = [];
 
     for (const record of allRecords) {
-      // Check if original file is missing
-      const originalExists = await this.checkFileExists(record.original_path);
-
-      // If composite_hash exists but original file is missing → orphaned
-      if (record.composite_hash && !originalExists) {
+      if (record.composite_hash && !ImageFileModel.hasActiveFiles(record.composite_hash)) {
         orphaned.push(record);
       }
     }
@@ -152,7 +126,7 @@ export class CleanupService {
       summary.failed_deleted++;
     }
 
-    // 2. Clean orphaned records (files missing from disk)
+    // 2. Clean orphaned records (main DB hash linkage missing)
     const orphanedRecords = await this.findOrphanedRecords();
     for (const record of orphanedRecords) {
       details.push({
@@ -161,7 +135,6 @@ export class CleanupService {
         service_type: record.service_type,
         created_at: record.created_at!,
         generation_status: record.generation_status,
-        original_path: record.original_path,
         composite_hash: record.composite_hash
       });
 
@@ -179,8 +152,7 @@ export class CleanupService {
         reason: 'no_hash',
         service_type: record.service_type,
         created_at: record.created_at!,
-        generation_status: record.generation_status,
-        original_path: record.original_path
+        generation_status: record.generation_status
       });
 
       if (!dryRun) {

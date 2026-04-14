@@ -78,12 +78,14 @@ function getServerRoutingTags(server: ComfyUIServerRecord) {
 
 function getWorkflowAllowedServerIds(workflowId: number | null | undefined, activeServers: ComfyUIServerRecord[]) {
   if (!workflowId) {
-    return []
+    return activeServers.map((server) => server.id)
   }
 
-  return WorkflowServerModel.findServersByWorkflow(workflowId, true)
+  const linkedServerIds = WorkflowServerModel.findServersByWorkflow(workflowId, true)
     .map((server) => Number(server.id))
     .filter((serverId) => Number.isInteger(serverId) && activeServers.some((server) => server.id === serverId))
+
+  return linkedServerIds.length > 0 ? linkedServerIds : activeServers.map((server) => server.id)
 }
 
 function isComfyJobCompatibleWithServer(job: GenerationQueueJobRecord, server: ComfyUIServerRecord, activeServers: ComfyUIServerRecord[]) {

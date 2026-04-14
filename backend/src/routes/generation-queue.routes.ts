@@ -494,6 +494,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
   let workflowIdNumber: number | null = null
   let workflowLinkedServers: Array<{ id: number; routing_tags?: string[] }> = []
+  let workflowHasServerLinks = false
 
   if (workflow_id !== undefined && workflow_id !== null) {
     workflowIdNumber = Number(workflow_id)
@@ -508,6 +509,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       return
     }
 
+    workflowHasServerLinks = WorkflowServerModel.findServersByWorkflow(workflowIdNumber, false).length > 0
     workflowLinkedServers = WorkflowServerModel.findServersByWorkflow(workflowIdNumber, true)
   }
 
@@ -525,7 +527,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       return
     }
 
-    if (workflowLinkedServers.length === 0) {
+    if (workflowHasServerLinks && workflowLinkedServers.length === 0) {
       res.status(400).json({ success: false, error: 'This workflow has no active linked ComfyUI servers' })
       return
     }
@@ -549,7 +551,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       return
     }
 
-    if (!workflowLinkedServers.some((linkedServer) => Number(linkedServer.id) === serverIdNumber)) {
+    if (workflowHasServerLinks && !workflowLinkedServers.some((linkedServer) => Number(linkedServer.id) === serverIdNumber)) {
       res.status(400).json({ success: false, error: 'requested_server_id is not linked to this workflow' })
       return
     }
@@ -565,9 +567,12 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     return
   }
 
-  if (parsedRequestedServerTag !== undefined && !workflowLinkedServers.some((linkedServer) => (linkedServer.routing_tags ?? []).includes(parsedRequestedServerTag))) {
-    res.status(400).json({ success: false, error: 'requested_server_tag does not match any linked workflow server' })
-    return
+  if (parsedRequestedServerTag !== undefined) {
+    const tagCandidateServers = workflowHasServerLinks ? workflowLinkedServers : ComfyUIServerModel.findActiveServers()
+    if (!tagCandidateServers.some((linkedServer) => (linkedServer.routing_tags ?? []).includes(parsedRequestedServerTag))) {
+      res.status(400).json({ success: false, error: workflowHasServerLinks ? 'requested_server_tag does not match any linked workflow server' : 'requested_server_tag does not match any active ComfyUI server' })
+      return
+    }
   }
 
   const requesterAccountId = getRequesterAccountId(req)

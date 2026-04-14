@@ -107,7 +107,8 @@ export interface WorkflowResponse {
 export interface GenerationStatusResponse {
   id: number;
   status: 'pending' | 'processing' | 'completed' | 'failed';
-  comfyui_prompt_id?: string;
+  provider_job_id?: string; // Preferred runtime-owned upstream job id (e.g. ComfyUI prompt id)
+  comfyui_prompt_id?: string; // Legacy alias for compatibility
   generated_image_id?: string; // composite_hash (48-character string)
   generated_image?: any; // enriched image record
   error_message?: string;
