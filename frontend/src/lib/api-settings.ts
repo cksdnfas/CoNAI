@@ -304,7 +304,7 @@ export async function loadKaloscopeModel() {
     method: 'POST',
   })
   if (!response.success) {
-    throw new Error(response.error || 'Kaloscope 모델을 캐시하지 못했어.')
+    throw new Error(response.error || 'Kaloscope 모델을 로드하지 못했어.')
   }
   return response.data
 }
@@ -314,7 +314,7 @@ export async function unloadKaloscopeModel() {
     method: 'POST',
   })
   if (!response.success) {
-    throw new Error(response.error || 'Kaloscope 모델 캐시를 제거하지 못했어.')
+    throw new Error(response.error || 'Kaloscope 모델을 언로드하지 못했어.')
   }
   return response.data
 }

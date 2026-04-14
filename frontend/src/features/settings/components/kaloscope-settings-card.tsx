@@ -62,6 +62,25 @@ export function KaloscopeSettingsCard({
                 <Input type="number" min={1} max={200} variant="settings" value={kaloscopeDraft.topK} onChange={(event) => onPatchKaloscope({ topK: Number(event.target.value) || 1 })} />
               </SettingsField>
 
+              <SettingsToggleRow>
+                <input
+                  type="checkbox"
+                  checked={kaloscopeDraft.keepModelLoaded}
+                  onChange={(event) => onPatchKaloscope({ keepModelLoaded: event.target.checked })}
+                />
+                모델 메모리 유지
+              </SettingsToggleRow>
+
+              <SettingsField label="자동 언로드(분)">
+                <Input
+                  type="number"
+                  min={1}
+                  variant="settings"
+                  value={kaloscopeDraft.autoUnloadMinutes}
+                  onChange={(event) => onPatchKaloscope({ autoUnloadMinutes: Number(event.target.value) || 1 })}
+                />
+              </SettingsField>
+
               <SettingsField label="Artist 링크 URL" className="md:col-span-2">
                 <div className="space-y-2">
                   <Input
@@ -81,12 +100,15 @@ export function KaloscopeSettingsCard({
               </SettingsField>
             </>
           ) : (
-            <Skeleton className="h-40 w-full rounded-sm md:col-span-2" />
+            <Skeleton className="h-56 w-full rounded-sm md:col-span-2" />
           )}
 
           <div className="flex flex-wrap gap-2 text-xs md:col-span-2">
             <span className="rounded-full bg-surface-low px-3 py-1.5 text-foreground">의존성 {formatKaloscopeDependencyLabel(kaloscopeStatus)}</span>
+            <span className="rounded-full bg-surface-low px-3 py-1.5 text-muted-foreground">daemon {kaloscopeStatus?.isRunning ? '실행 중' : '중지'}</span>
+            <span className="rounded-full bg-surface-low px-3 py-1.5 text-muted-foreground">loaded {kaloscopeStatus?.modelLoaded ? '예' : '아니오'}</span>
             <span className="rounded-full bg-surface-low px-3 py-1.5 text-muted-foreground">캐시 {kaloscopeStatus?.modelCached ? '준비됨' : '없음'}</span>
+            <span className="rounded-full bg-surface-low px-3 py-1.5 text-muted-foreground">model {kaloscopeStatus?.currentModel ?? '—'}</span>
             <span className="rounded-full bg-surface-low px-3 py-1.5 text-muted-foreground">device {kaloscopeStatus?.currentDevice ?? '—'}</span>
           </div>
         </div>

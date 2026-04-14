@@ -40,6 +40,8 @@ export interface KaloscopeSettings {
   autoTagOnUpload: boolean
   device: KaloscopeDevice
   topK: number
+  keepModelLoaded: boolean
+  autoUnloadMinutes: number
   artistLinkUrlTemplate: string
 }
 
@@ -223,8 +225,14 @@ export interface TaggerServerStatus {
 export interface KaloscopeServerStatus {
   enabled: boolean
   autoTagOnUpload: boolean
-  currentDevice: KaloscopeDevice
+  isRunning: boolean
+  modelLoaded: boolean
+  currentModel: string | null
+  currentDevice: string | null
+  lastUsedAt: string | null
   topK: number
+  keepModelLoaded: boolean
+  autoUnloadMinutes: number
   scriptExists: boolean
   modelCached: boolean
   modelRepo: string

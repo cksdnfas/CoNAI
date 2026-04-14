@@ -1,5 +1,5 @@
 import type { ChangeEvent, DragEvent, RefObject } from 'react'
-import { Download, Image as ImageIcon } from 'lucide-react'
+import { Copy, Download, Image as ImageIcon } from 'lucide-react'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
@@ -10,8 +10,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { MetadataRewriteForm } from '@/features/metadata/components/metadata-rewrite-form'
 import { formatBytes } from '@/features/images/components/detail/image-detail-utils'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import type { AutoTestKaloscopeResult, AutoTestTaggerResult, UploadBatchResult, UploadTransferProgress } from '@/lib/api'
@@ -29,10 +31,46 @@ function formatDimensions(width?: number | null, height?: number | null) {
 }
 
 /** Render a compact summary tile for upload or extraction metadata. */
-function SummaryTile({ label, value }: { label: string; value: string }) {
+function SummaryTile({
+  label,
+  value,
+  copyValue,
+}: {
+  label: string
+  value: string
+  copyValue?: string | null
+}) {
+  const { showSnackbar } = useSnackbar()
+
+  const handleCopy = async () => {
+    if (!copyValue) {
+      return
+    }
+
+    try {
+      await copyTextToClipboard(copyValue)
+      showSnackbar({ message: `${label} 값을 복사했어.`, tone: 'info' })
+    } catch {
+      showSnackbar({ message: `${label} 복사에 실패했어.`, tone: 'error' })
+    }
+  }
+
   return (
     <div className="min-w-0 rounded-sm bg-surface-container p-4">
-      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
+        {copyValue ? (
+          <button
+            type="button"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-primary"
+            onClick={() => void handleCopy()}
+            aria-label={`${label} 복사`}
+            title={`${label} 복사`}
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
       <div className="mt-2 min-w-0 whitespace-pre-wrap break-all text-sm text-foreground">{value}</div>
     </div>
   )
@@ -398,7 +436,7 @@ export function UploadPageExtractSection({
                         <SummaryTile label="tool" value={extractResult.ai_metadata?.ai_tool || '—'} />
                         <SummaryTile label="model" value={extractResult.ai_metadata?.model_name || '—'} />
                         {extractedGenerationParamItems.map((item) => (
-                          <SummaryTile key={item.id} label={item.label} value={item.value} />
+                          <SummaryTile key={item.id} label={item.label} value={item.value} copyValue={item.value} />
                         ))}
                       </div>
 

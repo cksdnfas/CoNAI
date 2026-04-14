@@ -49,6 +49,8 @@ export interface KaloscopeSettings {
   autoTagOnUpload: boolean;        // 업로드/스케줄러 자동 처리 여부
   device: KaloscopeDevice;         // 디바이스 선택 (auto/cpu/cuda)
   topK: number;                    // 추출할 아티스트 태그 수
+  keepModelLoaded: boolean;        // 메모리 유지 여부
+  autoUnloadMinutes: number;       // 자동 언로드 시간 (분)
   artistLinkUrlTemplate: string;   // Artist prompt 배지 외부 링크 템플릿 ({key} placeholder)
 }
 
@@ -269,8 +271,14 @@ export interface TaggerServerStatus {
 export interface KaloscopeServerStatus {
   enabled: boolean;
   autoTagOnUpload: boolean;
-  currentDevice: KaloscopeDevice;
+  isRunning: boolean;
+  modelLoaded: boolean;
+  currentModel: string | null;
+  currentDevice: string | null;
+  lastUsedAt: string | null;
   topK: number;
+  keepModelLoaded: boolean;
+  autoUnloadMinutes: number;
   scriptExists: boolean;
   modelCached: boolean;
   modelRepo: string;

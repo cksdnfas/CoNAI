@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import readline from 'readline';
+import { ChildProcess, spawn } from 'child_process';
 import { runtimePaths } from '../config/runtimePaths';
 import { settingsService } from './settingsService';
 import { KaloscopeResult } from './autoTagsComposeService';
@@ -25,22 +26,61 @@ interface KaloscopeModelCacheResult {
   removedPaths?: string[];
 }
 
+interface KaloscopeRuntimeStatus {
+  isRunning: boolean;
+  modelLoaded: boolean;
+  currentModel: string | null;
+  currentDevice: string | null;
+  lastUsedAt: string | null;
+}
+
+interface DaemonCommand {
+  action: 'load_model' | 'unload_model' | 'tag_image' | 'get_status' | 'shutdown';
+  repo?: string;
+  model_file?: string;
+  device?: string;
+  cache_dir?: string;
+  image_path?: string;
+  topk?: number;
+}
+
+interface DaemonResponse {
+  success: boolean;
+  model?: string;
+  device?: string;
+  model_loaded?: boolean;
+  current_model?: string;
+  status?: string;
+  error?: string;
+  error_type?: string;
+  [key: string]: any;
+}
+
 export class KaloscopeTaggerService {
-  private readonly scriptPath: string;
+  private readonly daemonScriptPath: string;
+  private process: ChildProcess | null = null;
+  private modelLoaded = false;
+  private currentModel: string | null = null;
+  private currentDevice: string | null = null;
+  private lastUsedAt: Date | null = null;
+  private autoUnloadTimer: NodeJS.Timeout | null = null;
+  private isReady = false;
+  private readyPromise: Promise<void> | null = null;
+  private responseQueue: ((response: DaemonResponse) => void)[] = [];
 
   constructor() {
-    this.scriptPath = this.findScriptPath();
+    this.daemonScriptPath = this.findDaemonScriptPath();
   }
 
-  /** Resolve the Kaloscope Python script path across dev and compiled layouts. */
-  private findScriptPath(): string {
+  /** Resolve the Kaloscope Python daemon path across dev and compiled layouts. */
+  private findDaemonScriptPath(): string {
     const possiblePaths = [
-      path.join(__dirname, 'python', 'kaloscope_tagger.py'),
-      path.join(__dirname, '..', '..', 'python', 'kaloscope_tagger.py'),
-      path.join(__dirname, '..', '..', '..', '..', 'python', 'kaloscope_tagger.py'),
-      path.join(__dirname, '..', '..', '..', 'python', 'kaloscope_tagger.py'),
-      path.join(__dirname, '..', 'python', 'kaloscope_tagger.py'),
-      path.join(process.cwd(), 'app', 'python', 'kaloscope_tagger.py'),
+      path.join(__dirname, 'python', 'kaloscope_tagger_daemon.py'),
+      path.join(__dirname, '..', '..', 'python', 'kaloscope_tagger_daemon.py'),
+      path.join(__dirname, '..', '..', '..', '..', 'python', 'kaloscope_tagger_daemon.py'),
+      path.join(__dirname, '..', '..', '..', 'python', 'kaloscope_tagger_daemon.py'),
+      path.join(__dirname, '..', 'python', 'kaloscope_tagger_daemon.py'),
+      path.join(process.cwd(), 'app', 'python', 'kaloscope_tagger_daemon.py'),
     ];
 
     const foundPath = possiblePaths.find((candidate) => fs.existsSync(candidate));
@@ -78,7 +118,7 @@ export class KaloscopeTaggerService {
   }
 
   private getRequirementsPath(): string {
-    return path.join(path.dirname(this.scriptPath), 'requirements.txt');
+    return path.join(path.dirname(this.daemonScriptPath), 'requirements.txt');
   }
 
   private getInstallCommand(): string {
@@ -127,13 +167,20 @@ export class KaloscopeTaggerService {
   async getServerStatus(): Promise<KaloscopeServerStatus> {
     const settings = this.getKaloscopeSettings();
     const dependencyStatus = await this.checkDependencies();
+    const runtimeStatus = await this.getStatus();
 
     return {
       enabled: settings.enabled,
       autoTagOnUpload: settings.autoTagOnUpload,
-      currentDevice: settings.device,
+      currentDevice: runtimeStatus.currentDevice,
+      currentModel: runtimeStatus.currentModel,
+      modelLoaded: runtimeStatus.modelLoaded,
+      isRunning: runtimeStatus.isRunning,
+      lastUsedAt: runtimeStatus.lastUsedAt,
       topK: settings.topK,
-      scriptExists: fs.existsSync(this.scriptPath),
+      keepModelLoaded: settings.keepModelLoaded,
+      autoUnloadMinutes: settings.autoUnloadMinutes,
+      scriptExists: fs.existsSync(this.daemonScriptPath),
       modelCached: this.isModelCached(),
       modelRepo: this.getModelRepo(),
       modelFile: this.getModelFile(),
@@ -153,7 +200,7 @@ export class KaloscopeTaggerService {
         pythonPath,
         ['-c', 'import importlib.util; import json; mods=["onnxruntime","numpy","PIL","huggingface_hub"]; missing=[m for m in mods if importlib.util.find_spec(m) is None]; print(json.dumps({"missing": missing}))'],
         {
-          cwd: path.dirname(this.scriptPath),
+          cwd: path.dirname(this.daemonScriptPath),
           env: this.createPythonEnv(),
         },
       );
@@ -245,7 +292,7 @@ export class KaloscopeTaggerService {
           runtimePaths.modelsDir,
         ],
         {
-          cwd: path.dirname(this.scriptPath),
+          cwd: path.dirname(this.daemonScriptPath),
           env: this.createPythonEnv({
             HF_HOME: runtimePaths.modelsDir,
             HUGGINGFACE_HUB_CACHE: runtimePaths.modelsDir,
@@ -319,10 +366,10 @@ export class KaloscopeTaggerService {
       };
     }
 
-    if (!fs.existsSync(this.scriptPath)) {
+    if (!fs.existsSync(this.daemonScriptPath)) {
       return {
         success: false,
-        error: `Kaloscope script not found: ${this.scriptPath}`,
+        error: `Kaloscope daemon script not found: ${this.daemonScriptPath}`,
         error_type: 'ScriptNotFound',
       };
     }
@@ -352,72 +399,227 @@ export class KaloscopeTaggerService {
     return options?.topk || this.getKaloscopeSettings().topK;
   }
 
-  /** Run the Python Kaloscope tagger for a single image file. */
-  private async runTagImage(imagePath: string, topk: number): Promise<KaloscopeResult> {
-    const pythonPath = this.getPythonPath();
-    const kaloscopeSettings = this.getKaloscopeSettings();
-    const args = [
-      this.scriptPath,
-      '--image', imagePath,
-      '--repo', this.getModelRepo(),
-      '--model-file', this.getModelFile(),
-      '--topk', String(topk),
-      '--device', kaloscopeSettings.device,
-      '--cache-dir', runtimePaths.modelsDir,
-    ];
+  /** Start daemon process. */
+  async startDaemon(): Promise<void> {
+    if (this.process && this.isReady) {
+      return;
+    }
 
-    return await new Promise<KaloscopeResult>((resolve) => {
-      const child = spawn(pythonPath, args, {
-        cwd: path.dirname(this.scriptPath),
-        env: this.createPythonEnv({
-          HF_HOME: runtimePaths.modelsDir,
-          HUGGINGFACE_HUB_CACHE: runtimePaths.modelsDir,
-          TRANSFORMERS_CACHE: runtimePaths.modelsDir,
-        }),
-      });
+    if (this.readyPromise) {
+      return this.readyPromise;
+    }
 
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout?.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      child.stderr?.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('error', (error) => {
-        resolve({
-          success: false,
-          error: error.message,
-          error_type: 'SpawnError',
-        });
-      });
-
-      child.on('close', (code) => {
-        const raw = stdout.trim();
-        if (!raw) {
-          resolve({
-            success: false,
-            error: stderr.trim() || `Kaloscope exited with code ${code}`,
-            error_type: 'EmptyOutput',
-          });
+    this.readyPromise = new Promise((resolve, reject) => {
+      try {
+        if (!fs.existsSync(this.daemonScriptPath)) {
+          reject(new Error(`Daemon script not found: ${this.daemonScriptPath}`));
           return;
         }
 
-        try {
-          const parsed = JSON.parse(raw) as KaloscopeResult;
-          resolve(parsed);
-        } catch {
-          resolve({
-            success: false,
-            error: stderr.trim() || `Invalid Kaloscope output: ${raw.slice(0, 300)}`,
-            error_type: 'ParseError',
-          });
+        this.process = spawn(this.getPythonPath(), [this.daemonScriptPath], {
+          cwd: path.dirname(this.daemonScriptPath),
+          env: this.createPythonEnv({
+            HF_HOME: runtimePaths.modelsDir,
+            HUGGINGFACE_HUB_CACHE: runtimePaths.modelsDir,
+            TRANSFORMERS_CACHE: runtimePaths.modelsDir,
+          }),
+        });
+
+        if (!this.process.stdout || !this.process.stderr) {
+          reject(new Error('Failed to capture daemon process streams'));
+          return;
         }
-      });
+
+        const rl = readline.createInterface({
+          input: this.process.stdout,
+          crlfDelay: Infinity,
+        });
+
+        rl.on('line', (line) => {
+          try {
+            const response: DaemonResponse = JSON.parse(line);
+
+            if (response.status === 'ready' && !this.isReady) {
+              this.isReady = true;
+              resolve();
+              return;
+            }
+
+            const callback = this.responseQueue.shift();
+            if (callback) {
+              callback(response);
+            }
+          } catch (error) {
+            console.error('[KaloscopeDaemon] Failed to parse response:', line, error);
+          }
+        });
+
+        this.process.stderr.on('data', (data) => {
+          console.error('[KaloscopeDaemon] stderr:', data.toString());
+        });
+
+        this.process.on('exit', (code, signal) => {
+          console.log('[KaloscopeDaemon] Process exited with code:', code, 'signal:', signal);
+          this.isReady = false;
+          this.process = null;
+          this.readyPromise = null;
+          this.modelLoaded = false;
+          this.currentModel = null;
+          this.currentDevice = null;
+        });
+
+        this.process.on('error', (error) => {
+          console.error('[KaloscopeDaemon] Process error:', error);
+          this.isReady = false;
+          this.process = null;
+          this.readyPromise = null;
+          reject(error);
+        });
+
+        setTimeout(() => {
+          if (!this.isReady) {
+            reject(new Error('Daemon failed to become ready within 30 seconds'));
+          }
+        }, 30000);
+      } catch (error) {
+        reject(error);
+      }
     });
+
+    return this.readyPromise;
+  }
+
+  /** Stop daemon process. */
+  async stopDaemon(): Promise<void> {
+    this.clearAutoUnloadTimer();
+
+    if (this.process) {
+      try {
+        await this.sendCommand({ action: 'shutdown' });
+      } catch (error) {
+        console.error('[KaloscopeDaemon] Error sending shutdown command:', error);
+      }
+
+      setTimeout(() => {
+        if (this.process) {
+          this.process.kill('SIGTERM');
+        }
+      }, 1000);
+    }
+
+    this.isReady = false;
+    this.process = null;
+    this.readyPromise = null;
+    this.modelLoaded = false;
+    this.currentModel = null;
+    this.currentDevice = null;
+  }
+
+  /** Send command to daemon. */
+  private async sendCommand(command: DaemonCommand): Promise<DaemonResponse> {
+    if (!this.isReady || !this.process || !this.process.stdin) {
+      throw new Error('Daemon is not running');
+    }
+
+    return await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Daemon command timeout'));
+      }, 120000);
+
+      this.responseQueue.push((response) => {
+        clearTimeout(timeout);
+        resolve(response);
+      });
+
+      this.process!.stdin!.write(`${JSON.stringify(command)}\n`);
+    });
+  }
+
+  /** Ensure daemon is started. */
+  private async ensureStarted(): Promise<void> {
+    if (!this.isReady) {
+      try {
+        await this.startDaemon();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Failed to start Kaloscope daemon: ${message}. Check Python installation and dependencies.`);
+      }
+    }
+  }
+
+  /** Load model into memory. */
+  async loadModel(device?: string): Promise<void> {
+    await this.ensureStarted();
+
+    const targetDevice = device || this.getKaloscopeSettings().device || 'auto';
+    const response = await this.sendCommand({
+      action: 'load_model',
+      repo: this.getModelRepo(),
+      model_file: this.getModelFile(),
+      device: targetDevice,
+      cache_dir: runtimePaths.modelsDir,
+    });
+
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to load Kaloscope model');
+    }
+
+    this.modelLoaded = true;
+    this.currentModel = response.model || 'kaloscope-onnx';
+    this.currentDevice = response.device || null;
+    this.lastUsedAt = new Date();
+  }
+
+  /** Unload model from memory. */
+  async unloadModel(): Promise<void> {
+    if (!this.modelLoaded || !this.isReady) {
+      return;
+    }
+
+    this.clearAutoUnloadTimer();
+
+    const response = await this.sendCommand({ action: 'unload_model' });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to unload Kaloscope model');
+    }
+
+    this.modelLoaded = false;
+    this.currentModel = null;
+    this.currentDevice = null;
+  }
+
+  /** Run the Kaloscope daemon for a single image file. */
+  async tagImage(imagePath: string, options?: KaloscopeServiceOptions): Promise<KaloscopeResult> {
+    const readyError = await this.ensureReady(imagePath, 'Image');
+    if (readyError) {
+      return readyError;
+    }
+
+    try {
+      await this.ensureStarted();
+
+      if (!this.modelLoaded) {
+        await this.loadModel();
+      }
+
+      this.lastUsedAt = new Date();
+
+      const response = await this.sendCommand({
+        action: 'tag_image',
+        image_path: imagePath,
+        topk: this.getEffectiveTopk(options),
+      });
+
+      this.resetAutoUnloadTimer();
+      return response as KaloscopeResult;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        success: false,
+        error: message,
+        error_type: 'DaemonException',
+      };
+    }
   }
 
   /** Merge multiple frame-level Kaloscope results into one video-level result. */
@@ -469,15 +671,6 @@ export class KaloscopeTaggerService {
     };
   }
 
-  async tagImage(imagePath: string, options?: KaloscopeServiceOptions): Promise<KaloscopeResult> {
-    const readyError = await this.ensureReady(imagePath, 'Image');
-    if (readyError) {
-      return readyError;
-    }
-
-    return await this.runTagImage(imagePath, this.getEffectiveTopk(options));
-  }
-
   async tagVideo(videoPath: string, options?: KaloscopeServiceOptions): Promise<KaloscopeResult> {
     const readyError = await this.ensureReady(videoPath, 'Video');
     if (readyError) {
@@ -492,7 +685,7 @@ export class KaloscopeTaggerService {
       const frameResults: KaloscopeResult[] = [];
 
       for (const framePath of framePaths) {
-        frameResults.push(await this.runTagImage(framePath, topk));
+        frameResults.push(await this.tagImage(framePath, { topk }));
       }
 
       return this.mergeVideoResults(frameResults, topk);
@@ -506,6 +699,72 @@ export class KaloscopeTaggerService {
       if (framePaths.length > 0) {
         await VideoFrameExtractor.cleanupTempFrames(framePaths);
       }
+    }
+  }
+
+  async getStatus(): Promise<KaloscopeRuntimeStatus> {
+    if (!this.isReady || !this.process) {
+      return {
+        isRunning: false,
+        modelLoaded: false,
+        currentModel: null,
+        currentDevice: null,
+        lastUsedAt: null,
+      };
+    }
+
+    try {
+      const response = await this.sendCommand({ action: 'get_status' });
+      return {
+        isRunning: true,
+        modelLoaded: response.model_loaded || false,
+        currentModel: typeof response.current_model === 'string' ? response.current_model : this.currentModel,
+        currentDevice: response.device || this.currentDevice,
+        lastUsedAt: this.lastUsedAt ? this.lastUsedAt.toISOString() : null,
+      };
+    } catch {
+      return {
+        isRunning: false,
+        modelLoaded: false,
+        currentModel: null,
+        currentDevice: null,
+        lastUsedAt: null,
+      };
+    }
+  }
+
+  /** Reload configuration. Daemon restarts lazily on next use. */
+  async reloadConfig(): Promise<void> {
+    if (this.isReady) {
+      await this.stopDaemon();
+    }
+  }
+
+  /** Reset auto-unload timer using the same semantics as WD tagger. */
+  private resetAutoUnloadTimer(): void {
+    this.clearAutoUnloadTimer();
+
+    const settings = this.getKaloscopeSettings();
+    if (!settings.keepModelLoaded) {
+      return;
+    }
+
+    if (settings.autoUnloadMinutes > 0) {
+      const timeoutMs = settings.autoUnloadMinutes * 60 * 1000;
+      this.autoUnloadTimer = setTimeout(async () => {
+        try {
+          await this.unloadModel();
+        } catch (error) {
+          console.error('[KaloscopeDaemon] Auto-unload failed:', error);
+        }
+      }, timeoutMs);
+    }
+  }
+
+  private clearAutoUnloadTimer(): void {
+    if (this.autoUnloadTimer) {
+      clearTimeout(this.autoUnloadTimer);
+      this.autoUnloadTimer = null;
     }
   }
 }

@@ -223,6 +223,8 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       autoTagOnUpload: false,
       device: ((process.env.KALOSCOPE_DEVICE as 'auto' | 'cpu' | 'cuda') || 'auto'),
       topK: Number.parseInt(process.env.KALOSCOPE_TOPK || '15', 10),
+      keepModelLoaded: true,
+      autoUnloadMinutes: 5,
       artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE,
     },
     similarity: {

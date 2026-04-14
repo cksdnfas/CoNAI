@@ -32,7 +32,7 @@ export function WDTaggerResultBlock({ result, title = 'WD Tagger 결과' }: WDTa
       {characterEntries.length > 0 || generalEntries.length > 0 ? (
         <div className="mt-4 space-y-3">
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Detailed scores</div>
-          <div className="grid gap-3 xl:grid-cols-2">
+          <div className="grid gap-3 grid-cols-1">
             <CharacterPromptSection entries={characterEntries} />
             <GeneralPromptSection tags={generalEntries.map(([tag]) => tag)} entries={generalEntries} collapsibleScores />
           </div>

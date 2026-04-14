@@ -121,6 +121,16 @@ router.put(
       }
     }
 
+    if (kaloscopeSettings.autoUnloadMinutes !== undefined) {
+      if (!Number.isInteger(kaloscopeSettings.autoUnloadMinutes) || kaloscopeSettings.autoUnloadMinutes < 1) {
+        res.status(400).json({
+          success: false,
+          error: 'autoUnloadMinutes must be an integer greater than or equal to 1',
+        });
+        return;
+      }
+    }
+
     if (kaloscopeSettings.artistLinkUrlTemplate !== undefined) {
       const normalizedTemplate = String(kaloscopeSettings.artistLinkUrlTemplate).trim();
 
@@ -143,7 +153,23 @@ router.put(
       kaloscopeSettings.artistLinkUrlTemplate = normalizedTemplate;
     }
 
+    const currentSettings = settingsService.loadSettings();
+    const nextEnabled = kaloscopeSettings.enabled ?? currentSettings.kaloscope.enabled;
+    const wasEnabled = currentSettings.kaloscope.enabled;
+
+    if (!wasEnabled && nextEnabled) {
+      const dependencyStatus = await kaloscopeTaggerService.checkDependencies();
+      if (!dependencyStatus.available) {
+        res.status(400).json({
+          success: false,
+          error: dependencyStatus.message,
+        });
+        return;
+      }
+    }
+
     const updatedSettings = settingsService.updateKaloscopeSettings(kaloscopeSettings);
+    await kaloscopeTaggerService.reloadConfig();
     autoTagScheduler.restart();
 
     res.json({
@@ -174,25 +200,16 @@ router.get(
 
 /**
  * POST /api/settings/kaloscope/load-model
- * Cache the Kaloscope model locally
+ * Load the Kaloscope model into memory
  */
 router.post(
   '/kaloscope/load-model',
   asyncHandler(async (req: Request, res: Response) => {
-    const result = await kaloscopeTaggerService.ensureModelCached();
-
-    if (!result.success) {
-      res.status(400).json({
-        success: false,
-        error: result.message,
-      });
-      return;
-    }
+    await kaloscopeTaggerService.loadModel();
 
     res.json({
       success: true,
-      data: result,
-      message: result.message,
+      message: 'Model loaded successfully',
     });
     return;
   })
@@ -200,17 +217,16 @@ router.post(
 
 /**
  * POST /api/settings/kaloscope/unload-model
- * Remove the cached Kaloscope model files
+ * Unload the Kaloscope model from memory
  */
 router.post(
   '/kaloscope/unload-model',
   asyncHandler(async (req: Request, res: Response) => {
-    const result = kaloscopeTaggerService.clearModelCache();
+    await kaloscopeTaggerService.unloadModel();
 
     res.json({
       success: true,
-      data: result,
-      message: result.message,
+      message: 'Model unloaded successfully',
     });
     return;
   })
