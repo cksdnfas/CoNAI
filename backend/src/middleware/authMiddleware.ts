@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthCredentials } from '../models/AuthCredentials';
 import { AuthAccount } from '../models/AuthAccount';
+import { hasConfiguredAuth } from '../routes/auth-route-helpers';
 import { AuthAccessControlService } from '../services/authAccessControlService';
 
 /**
@@ -59,7 +59,7 @@ function refreshSessionAccess(req: Request): string[] {
 
 /** Resolve the current request as bootstrap, authenticated, or anonymous access. */
 function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[]; authenticated: boolean } {
-  const hasCredentials = AuthCredentials.exists() || AuthAccount.exists();
+  const hasCredentials = hasConfiguredAuth();
 
   if (!hasCredentials) {
     const resolvedAccess = AuthAccessControlService.resolveBootstrapAccess();
@@ -83,7 +83,7 @@ function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[];
  * Returns 403 when the authenticated session lacks the permission.
  */
 export const requirePermission = (permissionKey: string) => (req: Request, res: Response, next: NextFunction): void => {
-  const hasCredentials = AuthCredentials.exists() || AuthAccount.exists();
+  const hasCredentials = hasConfiguredAuth();
 
   if (!hasCredentials) {
     const resolvedAccess = AuthAccessControlService.resolveBootstrapAccess();
@@ -139,7 +139,7 @@ export const allowAnonymousPermission = (permissionKey: string) => (req: Request
  * - If auth credentials ARE configured: require authentication.
  */
 export const optionalAuth = (req: Request, res: Response, next: NextFunction): void => {
-  const hasCredentials = AuthCredentials.exists() || AuthAccount.exists();
+  const hasCredentials = hasConfiguredAuth();
 
   if (!hasCredentials) {
     next();
@@ -147,9 +147,9 @@ export const optionalAuth = (req: Request, res: Response, next: NextFunction): v
   }
 
   if (req.session?.authenticated === true) {
-    refreshSessionAccess(req);
     next();
-  } else {
-    res.status(401).json({ error: 'Unauthorized' });
+    return;
   }
+
+  res.status(401).json({ error: 'Unauthorized' });
 };

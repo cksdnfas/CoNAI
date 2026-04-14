@@ -3,6 +3,8 @@ import { AuthCredentials } from '../models/AuthCredentials';
 import { AuthAccount, type AuthAccountRecord } from '../models/AuthAccount';
 import { AuthAccessControlService } from '../services/authAccessControlService';
 
+let configuredAuthCache: boolean | null = null;
+
 export type SessionAuthAccount = Pick<AuthAccountRecord, 'id' | 'username' | 'account_type'>;
 
 export interface AuthStatusPayload {
@@ -16,9 +18,19 @@ export interface AuthStatusPayload {
   permissionKeys: string[];
 }
 
+/** Clear the cached configured-auth flag after bootstrap/auth mutations. */
+export function invalidateConfiguredAuthCache(): void {
+  configuredAuthCache = null;
+}
+
 /** Check whether any auth credential or auth account is configured. */
 export function hasConfiguredAuth(): boolean {
-  return AuthCredentials.exists() || AuthAccount.exists();
+  if (configuredAuthCache !== null) {
+    return configuredAuthCache;
+  }
+
+  configuredAuthCache = AuthCredentials.exists() || AuthAccount.exists();
+  return configuredAuthCache;
 }
 
 /** Populate the current session from one verified auth account. */

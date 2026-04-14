@@ -7,7 +7,7 @@ import { AuthPermissionGroup } from '../models/AuthPermissionGroup';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAdmin, requireAuth } from '../middleware/authMiddleware';
 import { getAuthDbPath, syncLegacyAuthCredentialToAccessControl } from '../database/authDb';
-import { buildAuthStatusPayload, hasConfiguredAuth, setAuthenticatedSession } from './auth-route-helpers';
+import { buildAuthStatusPayload, hasConfiguredAuth, invalidateConfiguredAuthCache, setAuthenticatedSession } from './auth-route-helpers';
 
 const router = Router();
 
@@ -151,6 +151,7 @@ const handleSetup: RequestHandler = async (req, res) => {
 
   try {
     await AuthCredentials.create(username, password);
+    invalidateConfiguredAuthCache();
     syncLegacyAuthCredentialToAccessControl();
 
     const account = AuthAccount.findByUsername(username);
