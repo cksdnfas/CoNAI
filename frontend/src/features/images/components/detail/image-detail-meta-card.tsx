@@ -16,6 +16,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { getAppSettings, resolvePromptGroups, updateKaloscopeSettings } from '@/lib/api'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
@@ -151,7 +152,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     }
 
     try {
-      await navigator.clipboard.writeText(autoPromptCopyText)
+      await copyTextToClipboard(autoPromptCopyText)
       showSnackbar({ message: 'Auto prompt를 복사했어.', tone: 'info' })
     } catch {
       showSnackbar({ message: 'Auto prompt 복사에 실패했어.', tone: 'error' })

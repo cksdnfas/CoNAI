@@ -1,4 +1,5 @@
 import type { WildcardRecord } from '@/lib/api'
+import { copyTextToClipboard } from '@/lib/clipboard'
 
 export type WildcardWorkspaceTab = 'wildcards' | 'preprocess' | 'lora'
 
@@ -86,5 +87,5 @@ export function formatWildcardDateTime(value?: string | null) {
 
 /** Copy text into the clipboard for wildcard syntax and preview samples. */
 export async function copyWildcardText(text: string) {
-  await navigator.clipboard.writeText(text)
+  await copyTextToClipboard(text)
 }

@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/common/page-header'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { exportPromptGroups } from '@/lib/api'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import type { PromptCollectionItem, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
@@ -28,40 +29,6 @@ type GroupEditorState =
   | { mode: 'create'; defaultParentId?: number | null }
   | { mode: 'edit'; group: PromptGroupRecord }
   | null
-
-async function copyTextWithFallback(text: string) {
-  if (typeof navigator !== 'undefined' && typeof window !== 'undefined' && window.isSecureContext && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text)
-    return
-  }
-
-  if (typeof document === 'undefined') {
-    throw new Error('Clipboard is not available')
-  }
-
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', '')
-  textarea.style.position = 'fixed'
-  textarea.style.top = '0'
-  textarea.style.left = '0'
-  textarea.style.opacity = '0'
-  textarea.style.pointerEvents = 'none'
-  document.body.appendChild(textarea)
-
-  try {
-    textarea.focus({ preventScroll: true })
-    textarea.select()
-    textarea.setSelectionRange(0, textarea.value.length)
-
-    const copied = document.execCommand('copy')
-    if (!copied) {
-      throw new Error('Clipboard copy failed')
-    }
-  } finally {
-    document.body.removeChild(textarea)
-  }
-}
 
 export function PromptPage() {
   const { showSnackbar } = useSnackbar()
@@ -172,7 +139,7 @@ export function PromptPage() {
 
   const handleCopyPrompt = async (text: string) => {
     try {
-      await copyTextWithFallback(text)
+      await copyTextToClipboard(text)
       showSnackbar({ message: '복사했어.', tone: 'info' })
     } catch {
       showSnackbar({ message: '복사에 실패했어.', tone: 'error' })

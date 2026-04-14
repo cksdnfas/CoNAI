@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ChevronDown, Copy, FolderTree, GitBranch } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Badge } from '@/components/ui/badge'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneStyle, getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import type { ExtractedPromptCardItem, ExtractedPromptGroupedSection } from '@/lib/image-extracted-prompts'
@@ -87,7 +88,7 @@ function ExtractedPromptCard({ item }: ExtractedPromptCardProps) {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(item.text)
+      await copyTextToClipboard(item.text)
       showSnackbar({ message: `${item.title}를 클립보드에 복사했어.`, tone: 'info' })
     } catch {
       showSnackbar({ message: `${item.title} 복사에 실패했어.`, tone: 'error' })

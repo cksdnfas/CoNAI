@@ -20,6 +20,7 @@ import {
   type CustomNodeScaffoldTemplate,
   type CustomNodeTestResult,
 } from '@/lib/api'
+import { copyTextToClipboard } from '@/lib/clipboard'
 
 type CustomNodeManagementPanelProps = {
   onModulesChanged?: () => Promise<unknown> | void
@@ -323,8 +324,12 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                               size="sm"
                               variant="outline"
                               onClick={async () => {
-                                await navigator.clipboard.writeText(node.folderPath)
-                                showSnackbar({ message: '폴더 경로를 복사했어.', tone: 'info' })
+                                try {
+                                  await copyTextToClipboard(node.folderPath)
+                                  showSnackbar({ message: '폴더 경로를 복사했어.', tone: 'info' })
+                                } catch {
+                                  showSnackbar({ message: '폴더 경로 복사에 실패했어.', tone: 'error' })
+                                }
                               }}
                             >
                               경로 복사
@@ -448,8 +453,12 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                       size="sm"
                       variant="outline"
                       onClick={async () => {
-                        await navigator.clipboard.writeText(selectedNodeSourceQuery.data.entryPath)
-                        showSnackbar({ message: 'entry 경로를 복사했어.', tone: 'info' })
+                        try {
+                          await copyTextToClipboard(selectedNodeSourceQuery.data.entryPath)
+                          showSnackbar({ message: 'entry 경로를 복사했어.', tone: 'info' })
+                        } catch {
+                          showSnackbar({ message: 'entry 경로 복사에 실패했어.', tone: 'error' })
+                        }
                       }}
                     >
                       Entry 경로 복사
