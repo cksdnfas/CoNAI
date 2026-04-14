@@ -35,6 +35,7 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
   const appSettingsQuery = useQuery({
     queryKey: ['app-settings'],
     queryFn: getAppSettings,
+    enabled: canEditImage && (isEditorOpen || pendingCanvasSaveDataUrl !== null),
   })
 
   const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS

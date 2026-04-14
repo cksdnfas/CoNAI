@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getGraphWorkflowBrowseContent, getGroupPreviewImages } from '@/lib/api'
+import { getWallpaperRuntimeBrowseContent, getWallpaperRuntimeGroupPreviewImages } from '@/lib/api-wallpaper-runtime'
 import type { ImageRecord } from '@/types/image'
 
 function getWallpaperPreviewImageKey(image: ImageRecord) {
@@ -30,7 +30,7 @@ function dedupeWallpaperPreviewImages(images: ImageRecord[]) {
 export function useWallpaperBrowseContentQuery(scope: string, refreshIntervalMs: number) {
   return useQuery({
     queryKey: ['wallpaper-widget', scope, 'browse-content', refreshIntervalMs],
-    queryFn: () => getGraphWorkflowBrowseContent(),
+    queryFn: () => getWallpaperRuntimeBrowseContent(),
     staleTime: Math.max(1_000, refreshIntervalMs - 1_000),
     refetchInterval: refreshIntervalMs,
   })
@@ -41,7 +41,7 @@ export function useWallpaperGroupPreviewImagesQuery(scope: string, groupId: numb
   return useQuery({
     queryKey: ['wallpaper-widget', scope, groupId, includeChildren, count],
     queryFn: async () => {
-      const images = await getGroupPreviewImages(groupId as number, { includeChildren, count })
+      const images = await getWallpaperRuntimeGroupPreviewImages(groupId as number, { includeChildren, count })
       return dedupeWallpaperPreviewImages(images)
     },
     enabled: groupId !== null,

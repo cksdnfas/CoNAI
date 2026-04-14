@@ -21,7 +21,8 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
   const groupsQuery = useQuery({
     queryKey: ['groups-hierarchy-all', 'custom'],
     queryFn: getGroupsHierarchyAll,
-    enabled: Boolean(compositeHash),
+    enabled: false,
+    staleTime: 60_000,
   })
 
   const assignMutation = useMutation({
@@ -45,18 +46,30 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
     return null
   }
 
-  const handleOpenModal = () => {
-    if (groupsQuery.isPending) {
+  const handleOpenModal = async () => {
+    if (!compositeHash) {
+      return
+    }
+
+    if (groupsQuery.isFetching) {
       showSnackbar({ message: '커스텀 그룹 목록을 불러오는 중이야.', tone: 'info' })
       return
     }
 
-    if (groupsQuery.isError) {
-      showSnackbar({ message: groupsQuery.error instanceof Error ? groupsQuery.error.message : '그룹 목록을 불러오지 못했어.', tone: 'error' })
-      return
+    let groups = groupsQuery.data ?? null
+    if (!groups) {
+      showSnackbar({ message: '커스텀 그룹 목록을 불러오는 중이야.', tone: 'info' })
+      const result = await groupsQuery.refetch()
+
+      if (result.error) {
+        showSnackbar({ message: result.error instanceof Error ? result.error.message : '그룹 목록을 불러오지 못했어.', tone: 'error' })
+        return
+      }
+
+      groups = result.data ?? []
     }
 
-    if ((groupsQuery.data?.length ?? 0) === 0) {
+    if (groups.length === 0) {
       showSnackbar({ message: '먼저 커스텀 그룹을 하나 만들어줘.', tone: 'error' })
       return
     }
@@ -66,7 +79,7 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
 
   return (
     <>
-      <Button size="icon-sm" variant="outline" onClick={handleOpenModal} disabled={assignMutation.isPending} aria-label="그룹에 추가" title="그룹에 추가">
+      <Button size="icon-sm" variant="outline" onClick={() => void handleOpenModal()} disabled={assignMutation.isPending || groupsQuery.isFetching} aria-label="그룹에 추가" title="그룹에 추가">
         <FolderPlus className="h-4 w-4" />
       </Button>
 
