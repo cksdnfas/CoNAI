@@ -1,3 +1,4 @@
+import { Loader2, Plus, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AutoOverviewCard } from './auto-overview-card'
 import { AutoTestCard } from './auto-test-card'
@@ -68,8 +69,14 @@ export function AutoTab({
         <KaloscopeSettingsCard
           heading="Kaloscope"
           actions={
-            <Button size="sm" onClick={onSaveKaloscope} disabled={!kaloscopeDraft || isSavingKaloscope}>
-              저장
+            <Button
+              size="icon-sm"
+              onClick={onSaveKaloscope}
+              disabled={!kaloscopeDraft || isSavingKaloscope}
+              aria-label="Kaloscope 저장"
+              title="Kaloscope 저장"
+            >
+              <Save className="h-4 w-4" />
             </Button>
           }
           kaloscopeDraft={kaloscopeDraft}
@@ -82,8 +89,14 @@ export function AutoTab({
         <TaggerSettingsCard
           heading="WD Tagger"
           actions={
-            <Button size="sm" onClick={onSaveTagger} disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies}>
-              {isCheckingTaggerDependencies ? '의존성 확인 중…' : '저장'}
+            <Button
+              size="icon-sm"
+              onClick={onSaveTagger}
+              disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies}
+              aria-label={isCheckingTaggerDependencies ? 'WD Tagger 의존성 확인 중' : 'WD Tagger 저장'}
+              title={isCheckingTaggerDependencies ? 'WD Tagger 의존성 확인 중' : 'WD Tagger 저장'}
+            >
+              {isCheckingTaggerDependencies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             </Button>
           }
           taggerDraft={taggerDraft}
@@ -96,8 +109,14 @@ export function AutoTab({
         <RatingWeightSettingsCard
           heading="평가 가중치"
           actions={
-            <Button size="sm" onClick={onSaveRatingWeights} disabled={!ratingWeightsDraft || isSavingRatingWeights || ratingWeightValidationMessages.length > 0}>
-              저장
+            <Button
+              size="icon-sm"
+              onClick={onSaveRatingWeights}
+              disabled={!ratingWeightsDraft || isSavingRatingWeights || ratingWeightValidationMessages.length > 0}
+              aria-label="평가 가중치 저장"
+              title="평가 가중치 저장"
+            >
+              <Save className="h-4 w-4" />
             </Button>
           }
           ratingWeightsDraft={ratingWeightsDraft}
@@ -111,14 +130,31 @@ export function AutoTab({
         <RatingTierSettingsCard
           heading="평가 등급"
           actions={
-            <Button size="sm" onClick={onSaveRatingTiers} disabled={!ratingTiersDraft || isSavingRatingTiers || ratingTierValidationMessages.length > 0}>
-              저장
-            </Button>
+            <>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                onClick={onAddRatingTier}
+                aria-label="등급 추가"
+                title="등급 추가"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon-sm"
+                onClick={onSaveRatingTiers}
+                disabled={!ratingTiersDraft || isSavingRatingTiers || ratingTierValidationMessages.length > 0}
+                aria-label="평가 등급 저장"
+                title="평가 등급 저장"
+              >
+                <Save className="h-4 w-4" />
+              </Button>
+            </>
           }
           ratingTiersDraft={ratingTiersDraft}
           validationMessages={ratingTierValidationMessages}
           onPatchRatingTier={onPatchRatingTier}
-          onAddRatingTier={onAddRatingTier}
           onDeleteRatingTier={onDeleteRatingTier}
           onMoveRatingTierUp={onMoveRatingTierUp}
           onMoveRatingTierDown={onMoveRatingTierDown}

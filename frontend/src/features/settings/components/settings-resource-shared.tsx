@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
-import { FolderPlus, LoaderCircle, Settings2 } from 'lucide-react'
+import { FolderPlus, LoaderCircle, Save, Settings2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CardTitle } from '@/components/ui/card'
@@ -217,8 +217,14 @@ export function SettingsResourceFooterActions({
         {dangerLabel}
       </Button>
 
-      <Button size="sm" disabled={primaryDisabled} onClick={onPrimary}>
-        {primaryLabel}
+      <Button
+        size="icon-sm"
+        disabled={primaryDisabled}
+        onClick={onPrimary}
+        aria-label={typeof primaryLabel === 'string' ? primaryLabel : '저장'}
+        title={typeof primaryLabel === 'string' ? primaryLabel : '저장'}
+      >
+        {primaryDisabled ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
       </Button>
     </div>
   )

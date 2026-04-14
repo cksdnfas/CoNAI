@@ -1,8 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Button } from '@/components/ui/button'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { RatingWeightsRecord } from '@/lib/api'
 import { SettingsField } from './settings-primitives'
@@ -31,12 +30,6 @@ const DEFAULT_PREVIEW_STATE: RatingPreviewState = {
   questionable: 0.02,
   explicit: 0.01,
 }
-
-const RATING_PREVIEW_PRESETS: Array<{ label: string; values: RatingPreviewState }> = [
-  { label: '대체로 일반', values: { general: 0.9, sensitive: 0.07, questionable: 0.02, explicit: 0.01 } },
-  { label: '경계선', values: { general: 0.2, sensitive: 0.34, questionable: 0.26, explicit: 0.2 } },
-  { label: '높은 explicit', values: { general: 0.04, sensitive: 0.08, questionable: 0.18, explicit: 0.7 } },
-]
 
 export function RatingWeightSettingsCard({
   heading,
@@ -79,10 +72,6 @@ export function RatingWeightSettingsCard({
       <CardContent className="space-y-4">
         <SectionHeading variant="inside" heading={heading} actions={actions} />
 
-        <div className="text-xs text-muted-foreground">
-          WD Tagger의 rating 확률을 하나의 score로 합산할 때 쓰는 가중치야. 높일수록 해당 항목 영향이 더 커져.
-        </div>
-
         {validationMessages.length > 0 ? (
           <div className="rounded-sm border border-[#ffb4ab]/40 bg-[#93000a]/10 px-3 py-2 text-sm text-[#ffb4ab]">
             <div className="font-medium">저장 전에 확인해줘</div>
@@ -98,77 +87,61 @@ export function RatingWeightSettingsCard({
           <>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SettingsField label="General weight">
-                <Input
-                  type="number"
+                <ScrubbableNumberInput
                   min={0}
                   step={0.1}
                   variant="settings"
                   value={ratingWeightsDraft.general_weight}
-                  onChange={(event) => onPatchRatingWeights({ general_weight: Number(event.target.value) || 0 })}
+                  onChange={(value) => onPatchRatingWeights({ general_weight: Number(value) || 0 })}
                 />
               </SettingsField>
 
               <SettingsField label="Sensitive weight">
-                <Input
-                  type="number"
+                <ScrubbableNumberInput
                   min={0}
                   step={0.1}
                   variant="settings"
                   value={ratingWeightsDraft.sensitive_weight}
-                  onChange={(event) => onPatchRatingWeights({ sensitive_weight: Number(event.target.value) || 0 })}
+                  onChange={(value) => onPatchRatingWeights({ sensitive_weight: Number(value) || 0 })}
                 />
               </SettingsField>
 
               <SettingsField label="Questionable weight">
-                <Input
-                  type="number"
+                <ScrubbableNumberInput
                   min={0}
                   step={0.1}
                   variant="settings"
                   value={ratingWeightsDraft.questionable_weight}
-                  onChange={(event) => onPatchRatingWeights({ questionable_weight: Number(event.target.value) || 0 })}
+                  onChange={(value) => onPatchRatingWeights({ questionable_weight: Number(value) || 0 })}
                 />
               </SettingsField>
 
               <SettingsField label="Explicit weight">
-                <Input
-                  type="number"
+                <ScrubbableNumberInput
                   min={0}
                   step={0.1}
                   variant="settings"
                   value={ratingWeightsDraft.explicit_weight}
-                  onChange={(event) => onPatchRatingWeights({ explicit_weight: Number(event.target.value) || 0 })}
+                  onChange={(value) => onPatchRatingWeights({ explicit_weight: Number(value) || 0 })}
                 />
               </SettingsField>
             </div>
 
             <div className="space-y-3 rounded-sm border border-border bg-surface-container p-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">score 미리보기</div>
-                  <div className="text-xs text-muted-foreground">샘플 rating 값을 넣으면 현재 가중치와 등급 기준으로 어디에 들어가는지 바로 보여줘.</div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {RATING_PREVIEW_PRESETS.map((preset) => (
-                    <Button key={preset.label} type="button" size="xs" variant="outline" onClick={() => setPreviewState(preset.values)}>
-                      {preset.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
+              <div className="text-sm font-semibold text-foreground">score 미리보기</div>
 
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <SettingsField label="General score">
-                  <Input type="number" min={0} step={0.01} variant="settings" value={previewState.general} onChange={(event) => handlePreviewPatch('general', event.target.value)} />
+                  <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.general} onChange={(value) => handlePreviewPatch('general', value)} />
                 </SettingsField>
                 <SettingsField label="Sensitive score">
-                  <Input type="number" min={0} step={0.01} variant="settings" value={previewState.sensitive} onChange={(event) => handlePreviewPatch('sensitive', event.target.value)} />
+                  <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.sensitive} onChange={(value) => handlePreviewPatch('sensitive', value)} />
                 </SettingsField>
                 <SettingsField label="Questionable score">
-                  <Input type="number" min={0} step={0.01} variant="settings" value={previewState.questionable} onChange={(event) => handlePreviewPatch('questionable', event.target.value)} />
+                  <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.questionable} onChange={(value) => handlePreviewPatch('questionable', value)} />
                 </SettingsField>
                 <SettingsField label="Explicit score">
-                  <Input type="number" min={0} step={0.01} variant="settings" value={previewState.explicit} onChange={(event) => handlePreviewPatch('explicit', event.target.value)} />
+                  <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.explicit} onChange={(value) => handlePreviewPatch('explicit', value)} />
                 </SettingsField>
               </div>
 

@@ -33,9 +33,14 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
               variant="inside"
               heading="이미지 저장"
               actions={
-                <Button size="sm" onClick={onSave} disabled={!imageSaveDraft || isSaving}>
+                <Button
+                  size="icon-sm"
+                  onClick={onSave}
+                  disabled={!imageSaveDraft || isSaving}
+                  aria-label="이미지 저장 설정 저장"
+                  title="이미지 저장 설정 저장"
+                >
                   <Save className="h-4 w-4" />
-                  저장
                 </Button>
               }
             />

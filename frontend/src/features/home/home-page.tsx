@@ -1,6 +1,4 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FolderPlus } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { FolderPlus, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -8,177 +6,42 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
-import { hasAuthPermission } from '@/features/auth/auth-permissions'
-import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { useHomeSearch } from '@/features/home/home-search-context'
-import { buildComplexFilterPayload } from '@/features/search/search-utils'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
-import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
-import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
-import { addImagesToGroup, downloadImageSelection, getGroupsHierarchyAll, getImages, searchImagesComplex } from '@/lib/api'
+import { useHomePageData } from './use-home-page-data'
 
 /** Render the Home page with the reusable image list and header-driven search results. */
 export function HomePage() {
-  const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
-  const authStatusQuery = useAuthStatusQuery()
-  const { appliedChips } = useHomeSearch()
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [isDownloading, setIsDownloading] = useState(false)
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
-
-  const canViewHome = hasAuthPermission(authStatusQuery.data?.permissionKeys, 'page.home.view')
-  const hasCredentials = authStatusQuery.data?.hasCredentials === true
-  const isAuthenticated = authStatusQuery.data?.authenticated === true
-  const isAnonymousSession = hasCredentials && !isAuthenticated
-  const isSearchMode = !isAnonymousSession && appliedChips.length > 0
-
-  const imagesQuery = useInfiniteQuery({
-    queryKey: ['home-images', appliedChips],
-    initialPageParam: 1,
-    queryFn: ({ pageParam }) =>
-      isSearchMode
-        ? searchImagesComplex({
-            complex_filter: buildComplexFilterPayload(appliedChips),
-            page: pageParam,
-            limit: 40,
-            sortBy: 'upload_date',
-            sortOrder: 'DESC',
-          })
-        : getImages({ page: pageParam, limit: 40 }),
-    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
-    enabled: canViewHome,
-  })
-
-  const groupsQuery = useQuery({
-    queryKey: ['groups-hierarchy-all', 'custom'],
-    queryFn: getGroupsHierarchyAll,
-    enabled: canViewHome && !isAnonymousSession,
-  })
-
-  const assignToGroupMutation = useMutation({
-    mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
-    onSuccess: async (result) => {
-      setIsAssignModalOpen(false)
-      setSelectedIds([])
-      showSnackbar({ message: result.message, tone: 'info' })
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
-        queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
-        queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
-      ])
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '그룹 할당에 실패했어.', tone: 'error' })
-    },
-  })
-
-  const images = useMemo(
-    () => (imagesQuery.data?.pages ?? []).flatMap((page) => page.images),
-    [imagesQuery.data?.pages],
-  )
-
   const {
-    visibleItems: visibleImages,
-    hasOnlyHiddenItems,
+    authStatusQuery,
+    canViewHome,
+    isAnonymousSession,
+    imagesQuery,
+    groupsQuery,
+    assignToGroupMutation,
+    visibleImages,
     renderItemPersistentOverlay,
     shouldBlurItemPreview,
-  } = useImageFeedSafety({
-    items: images,
-    enabled: canViewHome,
-    hasMore: Boolean(imagesQuery.hasNextPage),
-    isLoading: imagesQuery.isPending,
-    isError: imagesQuery.isError,
-    isLoadingMore: imagesQuery.isFetchingNextPage,
-    onLoadMore: imagesQuery.fetchNextPage,
+    selectedIds,
+    setSelectedIds,
+    selectedCompositeHashes,
+    isDownloading,
+    isAssignModalOpen,
+    setIsAssignModalOpen,
+    emptyStateTitle,
+    emptyStateDescription,
+    errorTitle,
+    loadMoreErrorMessage,
+    handleRetryInitialLoad,
+    handleRetryNextPage,
+    handleDownloadSelected,
+    handleOpenAssignModal,
+    handleAssignToGroup,
+  } = useHomePageData({
+    notifyInfo: (message) => showSnackbar({ message, tone: 'info' }),
+    notifyError: (message) => showSnackbar({ message, tone: 'error' }),
   })
-
-  useEffect(() => {
-    setSelectedIds([])
-  }, [appliedChips])
-
-  useHomeScrollRestoration({
-    enabled: !imagesQuery.isPending && !imagesQuery.isError,
-    itemCount: visibleImages.length,
-    canLoadMore: Boolean(imagesQuery.hasNextPage),
-    isLoadingMore: imagesQuery.isFetchingNextPage,
-    onLoadMore: imagesQuery.fetchNextPage,
-  })
-
-  const selectedCompositeHashes = useMemo(
-    () =>
-      visibleImages
-        .filter((image) => selectedIds.includes(String(image.composite_hash ?? image.id)))
-        .map((image) => image.composite_hash)
-        .filter((value): value is string => typeof value === 'string' && value.length > 0),
-    [visibleImages, selectedIds],
-  )
-
-  const loadMoreErrorMessage =
-    imagesQuery.error instanceof Error
-      ? imagesQuery.error.message
-      : '다음 이미지 묶음을 불러오는 중 문제가 생겼어.'
-
-  const handleRetryInitialLoad = () => {
-    void imagesQuery.refetch()
-  }
-
-  const handleRetryNextPage = () => {
-    void imagesQuery.fetchNextPage()
-  }
-
-  const handleDownloadSelected = async () => {
-    if (selectedCompositeHashes.length === 0 || isDownloading) {
-      return
-    }
-
-    try {
-      setIsDownloading(true)
-      await downloadImageSelection(selectedCompositeHashes)
-    } finally {
-      setIsDownloading(false)
-    }
-  }
-
-  const handleOpenAssignModal = () => {
-    if (selectedCompositeHashes.length === 0) {
-      return
-    }
-
-    if (groupsQuery.isPending) {
-      showSnackbar({ message: '커스텀 그룹 목록을 불러오는 중이야.', tone: 'info' })
-      return
-    }
-
-    if (groupsQuery.isError) {
-      showSnackbar({ message: groupsQuery.error instanceof Error ? groupsQuery.error.message : '그룹 목록을 불러오지 못했어.', tone: 'error' })
-      return
-    }
-
-    if ((groupsQuery.data?.length ?? 0) === 0) {
-      showSnackbar({ message: '먼저 커스텀 그룹을 하나 만들어줘.', tone: 'error' })
-      return
-    }
-
-    setIsAssignModalOpen(true)
-  }
-
-  const handleAssignToGroup = async (groupId: number) => {
-    await assignToGroupMutation.mutateAsync({
-      groupId,
-      compositeHashes: selectedCompositeHashes,
-    })
-  }
-
-  const emptyStateTitle = isSearchMode ? '검색 결과가 없어' : '표시할 이미지가 아직 없어'
-  const emptyStateDescription = hasOnlyHiddenItems
-    ? '현재 등급 표시 정책 때문에 이 목록에서는 숨겨진 상태야.'
-    : isSearchMode
-      ? '검색 조건을 바꿔봐.'
-      : '업로드나 데이터 상태를 확인해.'
-
-  const errorTitle = isSearchMode ? '검색 결과를 불러오지 못했어' : '홈 피드를 불러오지 못했어'
 
   if (authStatusQuery.isLoading) {
     return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
@@ -215,6 +78,7 @@ export function HomePage() {
           </CardHeader>
         </Card>
       ) : null}
+
       {imagesQuery.isError ? (
         <Alert variant="destructive">
           <AlertTitle>{errorTitle}</AlertTitle>
@@ -238,7 +102,7 @@ export function HomePage() {
       ) : null}
 
       {!imagesQuery.isPending && !imagesQuery.isError && visibleImages.length === 0 ? (
-        <Card >
+        <Card>
           <CardHeader>
             <CardTitle>{emptyStateTitle}</CardTitle>
             <CardDescription>{emptyStateDescription}</CardDescription>
@@ -269,13 +133,14 @@ export function HomePage() {
 
           <div className="flex flex-col items-center gap-3 pb-6">
             {imagesQuery.isFetchingNextPage ? (
-              <div className="theme-floating-panel rounded-full px-4 py-2 text-xs text-muted-foreground">
-                이미지를 더 불러오는 중…
+              <div className="inline-flex items-center gap-2 rounded-sm border border-border bg-surface-container/92 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>이미지를 더 불러오는 중…</span>
               </div>
             ) : null}
 
             {imagesQuery.isFetchNextPageError ? (
-              <div className="theme-floating-panel flex flex-col items-center gap-2 rounded-2xl px-5 py-4 text-center">
+              <div className="flex flex-col items-center gap-2 rounded-sm border border-border bg-surface-container/92 px-5 py-4 text-center shadow-sm backdrop-blur-sm">
                 <p className="text-sm font-semibold">목록을 끝까지 불러오지 못했어</p>
                 <p className="max-w-xl text-xs text-muted-foreground">{loadMoreErrorMessage}</p>
                 <Button size="sm" variant="outline" onClick={handleRetryNextPage}>

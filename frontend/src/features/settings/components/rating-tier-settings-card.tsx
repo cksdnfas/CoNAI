@@ -1,9 +1,10 @@
 import { useState, type DragEvent, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, GripVertical, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import { SettingsField } from './settings-primitives'
@@ -17,7 +18,6 @@ interface RatingTierSettingsCardProps {
     tierId: number,
     patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'max_score' | 'color' | 'feed_visibility'>>,
   ) => void
-  onAddRatingTier: () => void
   onDeleteRatingTier: (tierId: number) => void
   onMoveRatingTierUp: (tierId: number) => void
   onMoveRatingTierDown: (tierId: number) => void
@@ -32,7 +32,6 @@ export function RatingTierSettingsCard({
   ratingTiersDraft,
   validationMessages,
   onPatchRatingTier,
-  onAddRatingTier,
   onDeleteRatingTier,
   onMoveRatingTierUp,
   onMoveRatingTierDown,
@@ -40,6 +39,7 @@ export function RatingTierSettingsCard({
 }: RatingTierSettingsCardProps) {
   const [draggedTierId, setDraggedTierId] = useState<number | null>(null)
   const [dragOverTierId, setDragOverTierId] = useState<number | null>(null)
+  const [expandedTierState, setExpandedTierState] = useState<Record<number, boolean>>({})
 
   const handleTierDragStart = (tierId: number) => (event: DragEvent<HTMLButtonElement>) => {
     event.dataTransfer.effectAllowed = 'move'
@@ -71,20 +71,18 @@ export function RatingTierSettingsCard({
     setDraggedTierId(null)
     setDragOverTierId(null)
   }
+
+  const handleToggleTier = (tierId: number) => {
+    setExpandedTierState((current) => ({
+      ...current,
+      [tierId]: !(current[tierId] ?? false),
+    }))
+  }
+
   return (
     <Card>
       <CardContent className="space-y-4">
         <SectionHeading variant="inside" heading={heading} actions={actions} />
-
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-          <div>
-            WD Tagger rating score를 사람이 읽는 평가 등급으로 바꾸는 구간이야. 마지막 등급은 자동으로 <span className="font-mono">∞</span> 처리돼.
-          </div>
-          <Button type="button" size="sm" variant="outline" onClick={onAddRatingTier}>
-            <Plus className="h-4 w-4" />
-            등급 추가
-          </Button>
-        </div>
 
         {validationMessages.length > 0 ? (
           <div className="rounded-sm border border-[#ffb4ab]/40 bg-[#93000a]/10 px-3 py-2 text-sm text-[#ffb4ab]">
@@ -99,10 +97,10 @@ export function RatingTierSettingsCard({
 
         {ratingTiersDraft ? (
           <div className="space-y-3">
-            <div className="text-xs text-muted-foreground">왼쪽 핸들을 드래그해서 순서를 바로 바꿀 수 있어.</div>
             {ratingTiersDraft.map((tier, index) => {
               const isFirst = index === 0
               const isLast = index === ratingTiersDraft.length - 1
+              const isExpanded = expandedTierState[tier.id] ?? false
               const colorValue = tier.color ?? FALLBACK_TIER_COLOR
 
               return (
@@ -114,8 +112,8 @@ export function RatingTierSettingsCard({
                     ? 'rounded-sm border border-primary bg-surface-container p-3 ring-1 ring-primary/35'
                     : 'rounded-sm border border-border bg-surface-container p-3'}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 pb-3">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className={isExpanded ? 'flex flex-wrap items-center justify-between gap-2 border-b border-border/70 pb-3' : 'flex flex-wrap items-center justify-between gap-2'}>
+                    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                       <button
                         type="button"
                         draggable
@@ -127,9 +125,21 @@ export function RatingTierSettingsCard({
                       >
                         <GripVertical className="h-4 w-4" />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTier(tier.id)}
+                        className="inline-flex items-center justify-center rounded-sm border border-border bg-surface-low p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
+                        title={isExpanded ? '접기' : '펼치기'}
+                        aria-label={isExpanded ? '접기' : '펼치기'}
+                      >
+                        <ChevronDown className={isExpanded ? 'h-4 w-4' : 'h-4 w-4 -rotate-90'} />
+                      </button>
                       <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colorValue }} />
                       <span className="font-mono">#{index + 1}</span>
-                      <span>{tier.tier_name || `Tier ${index + 1}`}</span>
+                      <span className="truncate">{tier.tier_name || `Tier ${index + 1}`}</span>
+                      <span className="shrink-0">
+                        {tier.min_score}~{isLast ? '∞' : tier.max_score ?? '—'}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -169,80 +179,79 @@ export function RatingTierSettingsCard({
                     </div>
                   </div>
 
-                  <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.6fr)_120px_120px_132px_140px]">
-                    <SettingsField label="등급 이름">
-                      <Input
-                        variant="settings"
-                        value={tier.tier_name}
-                        onChange={(event) => onPatchRatingTier(tier.id, { tier_name: event.target.value })}
-                        placeholder={`Tier ${index + 1}`}
-                      />
-                    </SettingsField>
+                  {isExpanded ? (
+                    <>
+                      <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.6fr)_120px_120px_132px_140px]">
+                        <SettingsField label="등급 이름">
+                          <Input
+                            variant="settings"
+                            value={tier.tier_name}
+                            onChange={(event) => onPatchRatingTier(tier.id, { tier_name: event.target.value })}
+                            placeholder={`Tier ${index + 1}`}
+                          />
+                        </SettingsField>
 
-                    <SettingsField label="최소 점수">
-                      <Input
-                        type="number"
-                        min={0}
-                        step={0.1}
-                        variant="settings"
-                        value={tier.min_score}
-                        onChange={(event) => onPatchRatingTier(tier.id, { min_score: Number(event.target.value) || 0 })}
-                      />
-                    </SettingsField>
+                        <SettingsField label="최소 점수">
+                          <ScrubbableNumberInput
+                            min={0}
+                            step={0.1}
+                            variant="settings"
+                            value={tier.min_score}
+                            onChange={(value) => onPatchRatingTier(tier.id, { min_score: Number(value) || 0 })}
+                          />
+                        </SettingsField>
 
-                    <SettingsField label="최대 점수">
-                      {isLast ? (
-                        <Input variant="settings" value="∞" disabled />
-                      ) : (
-                        <Input
-                          type="number"
-                          min={0}
-                          step={0.1}
-                          variant="settings"
-                          value={tier.max_score ?? ''}
-                          onChange={(event) => onPatchRatingTier(tier.id, {
-                            max_score: event.target.value === '' ? null : Number(event.target.value),
-                          })}
-                        />
-                      )}
-                    </SettingsField>
+                        <SettingsField label="최대 점수">
+                          {isLast ? (
+                            <Input variant="settings" value="∞" disabled />
+                          ) : (
+                            <ScrubbableNumberInput
+                              min={0}
+                              step={0.1}
+                              variant="settings"
+                              value={tier.max_score ?? ''}
+                              onChange={(value) => onPatchRatingTier(tier.id, {
+                                max_score: value === '' ? null : Number(value),
+                              })}
+                            />
+                          )}
+                        </SettingsField>
 
-                    <SettingsField label="색상">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={colorValue}
-                          onChange={(event) => onPatchRatingTier(tier.id, { color: event.target.value })}
-                          className="h-10 w-12 cursor-pointer rounded-sm border border-border bg-transparent p-1"
-                        />
-                        <Input
-                          variant="settings"
-                          value={colorValue}
-                          onChange={(event) => onPatchRatingTier(tier.id, { color: event.target.value })}
-                          placeholder={FALLBACK_TIER_COLOR}
-                        />
+                        <SettingsField label="색상">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={colorValue}
+                              onChange={(event) => onPatchRatingTier(tier.id, { color: event.target.value })}
+                              className="h-10 w-12 cursor-pointer rounded-sm border border-border bg-transparent p-1"
+                            />
+                            <Input
+                              variant="settings"
+                              value={colorValue}
+                              onChange={(event) => onPatchRatingTier(tier.id, { color: event.target.value })}
+                              placeholder={FALLBACK_TIER_COLOR}
+                            />
+                          </div>
+                        </SettingsField>
+
+                        <SettingsField label="피드 표시">
+                          <Select
+                            variant="settings"
+                            value={tier.feed_visibility ?? 'show'}
+                            onChange={(event) => onPatchRatingTier(tier.id, { feed_visibility: event.target.value as RatingTierRecord['feed_visibility'] })}
+                          >
+                            <option value="show">표시</option>
+                            <option value="blur">블러</option>
+                            <option value="hide">숨김</option>
+                          </Select>
+                        </SettingsField>
                       </div>
-                    </SettingsField>
 
-                    <SettingsField label="피드 표시">
-                      <Select
-                        variant="settings"
-                        value={tier.feed_visibility ?? 'show'}
-                        onChange={(event) => onPatchRatingTier(tier.id, { feed_visibility: event.target.value as RatingTierRecord['feed_visibility'] })}
-                      >
-                        <option value="show">표시</option>
-                        <option value="blur">블러</option>
-                        <option value="hide">숨김</option>
-                      </Select>
-                    </SettingsField>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                    <span>
-                      {tier.tier_name || `Tier ${index + 1}`} · {tier.min_score}~{isLast ? '∞' : tier.max_score ?? '—'}
-                    </span>
-                    <span className="font-mono">order={index + 1}</span>
-                  </div>
+                      <div className="mt-3 flex items-center justify-end gap-3 text-xs text-muted-foreground">
+                        <span className="font-mono">order={index + 1}</span>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               )
             })}

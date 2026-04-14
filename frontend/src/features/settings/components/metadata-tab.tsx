@@ -25,9 +25,14 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }
               variant="inside"
               heading="메타데이터"
               actions={
-                <Button size="sm" onClick={onSave} disabled={!metadataDraft || isSaving}>
+                <Button
+                  size="icon-sm"
+                  onClick={onSave}
+                  disabled={!metadataDraft || isSaving}
+                  aria-label="메타데이터 저장"
+                  title="메타데이터 저장"
+                >
                   <Save className="h-4 w-4" />
-                  저장
                 </Button>
               }
             />
