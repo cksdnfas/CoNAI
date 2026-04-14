@@ -139,8 +139,10 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   const frontendDistCandidates = process.env.FRONTEND_DIST_PATH
     ? [path.resolve(process.env.FRONTEND_DIST_PATH)]
     : [
-        path.join(__dirname, 'frontend'),
-        path.join(__dirname, '..', '..', 'frontend'),
+        path.resolve(process.cwd(), 'dist', 'frontend'),
+        path.resolve(process.cwd(), '..', 'frontend', 'dist'),
+        path.join(__dirname, '..', '..', '..', 'frontend'),
+        path.join(__dirname, '..', '..', '..', '..', 'frontend', 'dist'),
       ];
   const frontendDistPath = frontendDistCandidates.find((candidate) => fs.existsSync(candidate));
 
