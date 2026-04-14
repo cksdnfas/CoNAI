@@ -12,6 +12,7 @@ export interface GenerationQueueJobRecord {
   workflow_name?: string | null
   requested_group_id?: number | null
   requested_server_id?: number | null
+  requested_server_tag?: string | null
   assigned_server_id?: number | null
   provider_job_id?: string | null
   request_payload: string
@@ -25,8 +26,9 @@ export interface GenerationQueueJobRecord {
   created_date: string
   updated_date: string
   queue_position?: number | null
-  queue_position_scope?: 'service' | 'server' | 'auto' | null
+  queue_position_scope?: 'service' | 'server' | 'tag' | 'auto' | null
   queue_position_server_id?: number | null
+  queue_position_server_tag?: string | null
   estimated_wait_seconds?: number | null
   estimated_total_seconds?: number | null
   estimated_duration_seconds?: number | null
@@ -40,6 +42,7 @@ export interface CreateGenerationQueueJobPayload {
   workflow_name?: string | null
   requested_group_id?: number | null
   requested_server_id?: number | null
+  requested_server_tag?: string | null
   request_payload: Record<string, unknown>
   request_summary?: string | null
 }
@@ -65,6 +68,11 @@ export interface GenerationHistoryRecord {
   requested_by_account_id?: number | null
   requested_by_account_type?: 'admin' | 'guest' | null
   server_id?: number | null
+  requested_server_id?: number | null
+  requested_server_name?: string | null
+  requested_server_tag?: string | null
+  assigned_server_id?: number | null
+  assigned_server_name?: string | null
   nai_model?: string | null
   error_message?: string | null
   composite_hash?: string | null
@@ -124,6 +132,7 @@ export interface ComfyUIServer {
   name: string
   endpoint: string
   description?: string
+  routing_tags?: string[]
   is_active: boolean
 }
 
@@ -148,12 +157,14 @@ export interface CreateComfyUIServerPayload {
   name: string
   endpoint: string
   description?: string
+  routing_tags?: string[]
 }
 
 export interface UpdateComfyUIServerPayload {
   name?: string
   endpoint?: string
   description?: string
+  routing_tags?: string[]
   is_active?: boolean
 }
 
@@ -164,6 +175,10 @@ export interface ComfyUIServerConnectionStatus {
   is_connected: boolean
   response_time?: number
   error_message?: string
+  is_idle?: boolean
+  pending_count?: number
+  running_count?: number
+  observed_at?: string
 }
 
 export interface NAIUserData {

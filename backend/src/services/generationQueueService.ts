@@ -3,9 +3,9 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { WorkflowModel } from '../models/Workflow'
 import { GenerationHistoryModel, type ServiceType } from '../models/GenerationHistory'
 import { GenerationQueueModel } from '../models/GenerationQueue'
-import { ComfyUIServerModel } from '../models/ComfyUIServer'
+import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer'
 import { GenerationHistoryService } from './generationHistoryService'
-import { createComfyUIService } from './comfyuiService'
+import { createComfyUIService, getComfyUIServerRuntimeStatuses } from './comfyuiService'
 import { prepareComfyPromptData } from './prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from './workflowPromptValueResolver'
 import { executeComfyGeneration } from './comfyGenerationExecutor'
@@ -26,7 +26,6 @@ const ALLOWED_TRANSITIONS: Record<GenerationQueueJobStatus, GenerationQueueJobSt
 }
 
 const DISPATCH_INTERVAL_MS = 3000
-const DEFAULT_COMFY_WORKER_KEY = 'default-comfy'
 const NAI_WORKER_KEY = 'novelai'
 
 function parseStoredRequestPayload(record: GenerationQueueJobRecord) {
@@ -67,6 +66,45 @@ function parseComfyQueuePayload(record: GenerationQueueJobRecord) {
 function parseNaiQueuePayload(record: GenerationQueueJobRecord) {
   const payload = parseStoredRequestPayload(record)
   return payload as unknown as NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }
+}
+
+function hasQueuedComfyJobs() {
+  return GenerationQueueModel.findAll(['queued']).some((record) => record.service_type === 'comfyui' && record.cancel_requested === 0)
+}
+
+function getServerRoutingTags(server: ComfyUIServerRecord) {
+  return new Set((server.routing_tags ?? []).map((tag) => tag.trim().toLowerCase()).filter((tag) => tag.length > 0))
+}
+
+function getWorkflowAllowedServerIds(workflowId: number | null | undefined, activeServers: ComfyUIServerRecord[]) {
+  if (!workflowId) {
+    return []
+  }
+
+  return WorkflowServerModel.findServersByWorkflow(workflowId, true)
+    .map((server) => Number(server.id))
+    .filter((serverId) => Number.isInteger(serverId) && activeServers.some((server) => server.id === serverId))
+}
+
+function isComfyJobCompatibleWithServer(job: GenerationQueueJobRecord, server: ComfyUIServerRecord, activeServers: ComfyUIServerRecord[]) {
+  if (job.service_type !== 'comfyui' || job.cancel_requested > 0) {
+    return false
+  }
+
+  const allowedServerIds = getWorkflowAllowedServerIds(job.workflow_id, activeServers)
+  if (!allowedServerIds.includes(server.id)) {
+    return false
+  }
+
+  if (job.requested_server_id !== null && job.requested_server_id !== undefined) {
+    return job.requested_server_id === server.id
+  }
+
+  if (job.requested_server_tag) {
+    return getServerRoutingTags(server).has(job.requested_server_tag)
+  }
+
+  return true
 }
 
 export class GenerationQueueService {
@@ -237,6 +275,7 @@ export class GenerationQueueService {
           values.push(assignedServerId)
         } else {
           whereClauses.push('requested_server_id IS NULL')
+          whereClauses.push('requested_server_tag IS NULL')
         }
       }
 
@@ -275,6 +314,26 @@ export class GenerationQueueService {
     return claimTransaction(params?.serviceType, params?.assignedServerId ?? null)
   }
 
+  /** Claim one specific queued job for dispatch if it is still available. */
+  static claimQueuedJobForDispatch(id: number, assignedServerId: number | null) {
+    const db = getUserSettingsDb()
+    const info = db.prepare(`
+      UPDATE generation_queue_jobs
+      SET status = 'dispatching',
+          assigned_server_id = ?,
+          updated_date = CURRENT_TIMESTAMP
+      WHERE id = ?
+        AND status = 'queued'
+        AND cancel_requested = 0
+    `).run(assignedServerId, id)
+
+    if (info.changes === 0) {
+      return null
+    }
+
+    return GenerationQueueModel.findById(id)
+  }
+
   /** Create a new queued retry job from one finished failed/cancelled job. */
   static retryJob(id: number) {
     const existing = GenerationQueueModel.findById(id)
@@ -300,6 +359,7 @@ export class GenerationQueueService {
       workflow_name: existing.workflow_name ?? null,
       requested_group_id: existing.requested_group_id ?? null,
       requested_server_id: existing.requested_server_id ?? null,
+      requested_server_tag: existing.requested_server_tag ?? null,
       request_payload: requestPayload,
       request_summary: retrySummary,
     })
@@ -359,7 +419,7 @@ export class GenerationQueueService {
     }
 
     this.tryStartNovelAiWorker()
-    this.tryStartComfyWorkers()
+    await this.tryStartComfyWorkers()
   }
 
   private static tryStartNovelAiWorker() {
@@ -383,30 +443,39 @@ export class GenerationQueueService {
       })
   }
 
-  private static tryStartComfyWorkers() {
+  private static async tryStartComfyWorkers() {
     const activeServers = ComfyUIServerModel.findActiveServers()
 
     if (activeServers.length === 0) {
-      if (this.activeWorkerKeys.has(DEFAULT_COMFY_WORKER_KEY)) {
-        return
-      }
-
-      const job = this.claimNextDispatchableJob({ serviceType: 'comfyui', assignedServerId: null })
-      if (!job) {
-        return
-      }
-
-      this.activeWorkerKeys.add(DEFAULT_COMFY_WORKER_KEY)
-      void this.runClaimedJob(job)
-        .catch((error) => {
-          console.error(`❌ Default ComfyUI queue worker failed for job ${job.id}:`, error)
-        })
-        .finally(() => {
-          this.activeWorkerKeys.delete(DEFAULT_COMFY_WORKER_KEY)
-          this.requestDispatch()
-        })
       return
     }
+
+    if (!hasQueuedComfyJobs()) {
+      return
+    }
+
+    const queuedJobs = GenerationQueueModel.findAll(['queued']).filter((record) => record.service_type === 'comfyui' && record.cancel_requested === 0)
+    if (queuedJobs.length === 0) {
+      return
+    }
+
+    for (const job of queuedJobs) {
+      const hasCompatibleServer = activeServers.some((server) => isComfyJobCompatibleWithServer(job, server, activeServers))
+      if (hasCompatibleServer) {
+        continue
+      }
+
+      await this.failJobIfActive(job.id, new Error(`No active linked ComfyUI server matches this job target for workflow ${job.workflow_id ?? 'unknown'}`))
+    }
+
+    const runnableQueuedJobs = GenerationQueueModel.findAll(['queued']).filter((record) => record.service_type === 'comfyui' && record.cancel_requested === 0)
+    if (runnableQueuedJobs.length === 0) {
+      return
+    }
+
+    const runtimeStatuses = await getComfyUIServerRuntimeStatuses(activeServers)
+    const statusByServerId = new Map(runtimeStatuses.map((status) => [status.server_id, status]))
+    const reservedJobIds = new Set<number>()
 
     for (const server of activeServers) {
       const workerKey = `comfyui:${server.id}`
@@ -414,11 +483,30 @@ export class GenerationQueueService {
         continue
       }
 
-      const job = this.claimNextDispatchableJob({ serviceType: 'comfyui', assignedServerId: server.id })
+      const runtimeStatus = statusByServerId.get(server.id)
+      if (!runtimeStatus?.is_connected) {
+        console.log(`⏭️ Skipping ComfyUI server ${server.name} (${server.id}), unreachable`)
+        continue
+      }
+
+      if (runtimeStatus.is_idle !== true) {
+        console.log(
+          `⏭️ Skipping ComfyUI server ${server.name} (${server.id}), busy (running=${runtimeStatus.running_count ?? 0}, pending=${runtimeStatus.pending_count ?? 0})`,
+        )
+        continue
+      }
+
+      const candidateJob = runnableQueuedJobs.find((job) => !reservedJobIds.has(job.id) && isComfyJobCompatibleWithServer(job, server, activeServers))
+      if (!candidateJob) {
+        continue
+      }
+
+      const job = this.claimQueuedJobForDispatch(candidateJob.id, server.id)
       if (!job) {
         continue
       }
 
+      reservedJobIds.add(job.id)
       this.activeWorkerKeys.add(workerKey)
       void this.runClaimedJob(job, server)
         .catch((error) => {

@@ -81,6 +81,11 @@ function getQueuePositionLabel(record: GenerationQueueJobRecord) {
     return serverId != null ? `서버 ${serverId} 대기열 ${record.queue_position}` : `서버 대기열 ${record.queue_position}`
   }
 
+  if (record.queue_position_scope === 'tag') {
+    const serverTag = record.queue_position_server_tag ?? record.requested_server_tag ?? null
+    return serverTag ? `태그 #${serverTag} 대기열 ${record.queue_position}` : `태그 대기열 ${record.queue_position}`
+  }
+
   if (record.queue_position_scope === 'auto') {
     return `자동 분산 ${record.queue_position}`
   }

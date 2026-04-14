@@ -6,6 +6,8 @@ export interface ComfyUIServerRecord {
   name: string;
   endpoint: string;
   description?: string;
+  routing_tags_json?: string | null;
+  routing_tags?: string[];
   is_active: boolean;
   created_date: string;
   updated_date: string;
@@ -18,6 +20,7 @@ export interface ComfyUIServerCreateData {
   name: string;
   endpoint: string;
   description?: string;
+  routing_tags_json?: string | null;
   is_active?: boolean;
 }
 
@@ -28,6 +31,7 @@ export interface ComfyUIServerUpdateData {
   name?: string;
   endpoint?: string;
   description?: string;
+  routing_tags_json?: string | null;
   is_active?: boolean;
 }
 
@@ -52,6 +56,27 @@ export interface ServerStatus {
   is_connected: boolean;
   response_time?: number; // ms
   error_message?: string;
+}
+
+/**
+ * Normalized upstream ComfyUI occupancy snapshot.
+ */
+export interface ComfyUIQueueState {
+  pending_count: number;
+  running_count: number;
+  pending_prompt_ids?: string[];
+  running_prompt_ids?: string[];
+  is_idle: boolean;
+}
+
+/**
+ * Runtime status combining connectivity and current upstream occupancy.
+ */
+export interface ComfyUIServerRuntimeStatus extends ServerStatus {
+  is_idle?: boolean;
+  pending_count?: number;
+  running_count?: number;
+  observed_at?: string;
 }
 
 /**

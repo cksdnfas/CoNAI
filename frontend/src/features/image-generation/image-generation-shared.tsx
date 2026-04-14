@@ -102,6 +102,7 @@ export type ComfyUIServerFormDraft = {
   name: string
   endpoint: string
   description: string
+  routingTags: string
 }
 
 export type ComfyUIServerTestState = {
@@ -191,6 +192,7 @@ export const DEFAULT_COMFYUI_SERVER_FORM: ComfyUIServerFormDraft = {
   name: '',
   endpoint: 'http://127.0.0.1:8188',
   description: '',
+  routingTags: '',
 }
 
 const NAI_FORM_DRAFT_STORAGE_KEY = 'conai:image-generation:nai-form-draft:v1'

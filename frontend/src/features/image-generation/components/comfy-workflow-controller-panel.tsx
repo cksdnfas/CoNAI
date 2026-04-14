@@ -18,12 +18,12 @@ type ComfyWorkflowControllerPanelProps = {
   workflowFields: WorkflowMarkedField[]
   servers: ComfyUIServer[]
   serverTests: Record<number, ComfyUIServerTestState>
-  selectedServerId: string
+  selectedTarget: string
   workflowDraft: Record<string, WorkflowFieldDraftValue>
   isGenerating: boolean
   headerPortalTargetId?: string
   onBack: () => void
-  onSelectServer: (serverId: string) => void
+  onSelectTarget: (target: string) => void
   onFieldChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
   onResetDraft: () => void
@@ -40,12 +40,12 @@ export function ComfyWorkflowControllerPanel({
   workflowFields,
   servers,
   serverTests,
-  selectedServerId,
+  selectedTarget,
   workflowDraft,
   isGenerating,
   headerPortalTargetId,
   onBack,
-  onSelectServer,
+  onSelectTarget,
   onFieldChange,
   onImageChange,
   onResetDraft,
@@ -55,7 +55,10 @@ export function ComfyWorkflowControllerPanel({
   onGenerateAll,
 }: ComfyWorkflowControllerPanelProps) {
   const connectedServers = servers.filter((server) => serverTests[server.id]?.status?.is_connected === true)
-  const selectedServer = servers.find((server) => String(server.id) === selectedServerId) ?? null
+  const routingTags = Array.from(new Set(servers.flatMap((server) => server.routing_tags ?? []))).sort((left, right) => left.localeCompare(right))
+  const selectedServer = selectedTarget.startsWith('server:')
+    ? servers.find((server) => server.id === Number(selectedTarget.slice('server:'.length))) ?? null
+    : null
   const [, setHeaderPortalRevision] = useState(0)
   const useDrawerCompactChrome = Boolean(headerPortalTargetId)
 
@@ -76,15 +79,36 @@ export function ComfyWorkflowControllerPanel({
 
   const selectedServerStatus = selectedServer ? serverTests[selectedServer.id] : undefined
   const selectedServerConnection = selectedServerStatus?.status
-  const selectedServerBadgeLabel = !selectedServer
-    ? '선택 안 됨'
-    : selectedServerStatus?.isLoading
-      ? '확인 중'
-      : selectedServerConnection?.is_connected
-        ? '연결됨'
-        : selectedServerConnection
-          ? '연결 실패'
-          : '미확인'
+  const selectedTag = selectedTarget.startsWith('tag:') ? selectedTarget.slice('tag:'.length) : null
+  const selectedTagConnectedServers = selectedTag
+    ? connectedServers.filter((server) => (server.routing_tags ?? []).includes(selectedTag))
+    : []
+  const canGenerateSelected = selectedTarget === 'auto'
+    ? connectedServers.length > 0
+    : selectedTag !== null
+      ? selectedTagConnectedServers.length > 0
+      : selectedServer
+        ? serverTests[selectedServer.id]?.status?.is_connected === true
+        : false
+  const selectedServerBadgeLabel = selectedTarget === 'auto'
+    ? connectedServers.length > 0
+      ? `auto · ${connectedServers.length}`
+      : 'auto · 연결 없음'
+    : selectedTag !== null
+      ? selectedTagConnectedServers.length > 0
+        ? `#${selectedTag} · ${selectedTagConnectedServers.length}`
+        : `#${selectedTag} · 연결 없음`
+      : !selectedServer
+        ? '선택 안 됨'
+        : selectedServerStatus?.isLoading
+          ? '확인 중'
+          : selectedServerConnection?.is_connected
+            ? selectedServerConnection.is_idle === true
+              ? 'idle'
+              : 'busy'
+            : selectedServerConnection
+              ? '연결 실패'
+              : '미확인'
 
   const actionButtons = (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -117,23 +141,34 @@ export function ComfyWorkflowControllerPanel({
 
         <Select
           variant="detail"
-          className="h-9 w-[96px] shrink-0 px-2 text-xs sm:w-[108px]"
-          value={selectedServerId}
-          onChange={(event) => onSelectServer(event.target.value)}
+          className="h-9 w-[168px] shrink-0 px-2 text-xs sm:w-[220px]"
+          value={selectedTarget}
+          onChange={(event) => onSelectTarget(event.target.value)}
           disabled={servers.length === 0 || isGenerating}
-          aria-label="생성 서버 선택"
+          aria-label="생성 타겟 선택"
         >
-          {servers.length === 0 ? <option value="">서버 없음</option> : null}
+          {servers.length === 0 ? <option value="auto">서버 없음</option> : null}
+          <option value="auto">자동 분산</option>
+          {routingTags.map((tag) => {
+            const connectedCount = connectedServers.filter((server) => (server.routing_tags ?? []).includes(tag)).length
+            return (
+              <option key={`tag:${tag}`} value={`tag:${tag}`}>
+                #{tag} · 연결 {connectedCount}
+              </option>
+            )
+          })}
           {servers.map((server) => {
             const connectionStatus = serverTests[server.id]?.status
             const statusLabel = connectionStatus?.is_connected === true
-              ? '연결'
+              ? connectionStatus.is_idle
+                ? 'idle'
+                : `실행 ${connectionStatus.running_count ?? 0} · 대기 ${connectionStatus.pending_count ?? 0}`
               : connectionStatus
                 ? '실패'
                 : '미확인'
 
             return (
-              <option key={server.id} value={String(server.id)}>
+              <option key={server.id} value={`server:${server.id}`}>
                 {server.name} · {statusLabel}
               </option>
             )
@@ -145,7 +180,7 @@ export function ComfyWorkflowControllerPanel({
           size="icon-sm"
           variant="outline"
           onClick={onGenerateSelected}
-          disabled={isGenerating || workflowFields.length === 0 || !selectedServer || serverTests[selectedServer.id]?.status?.is_connected !== true}
+          disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
           aria-label={isGenerating ? '생성 요청 중' : '선택 서버 생성'}
           title={isGenerating ? '생성 요청 중' : '선택 서버 생성'}
         >
@@ -197,7 +232,7 @@ export function ComfyWorkflowControllerPanel({
           <Badge variant="outline">필드 {workflowFields.length}</Badge>
           <Badge variant="outline">활성 서버 {servers.length}</Badge>
           <Badge variant="outline">연결 서버 {connectedServers.length}</Badge>
-          {servers.length > 0 ? <Badge variant={selectedServerConnection?.is_connected ? 'secondary' : 'outline'}>{selectedServerBadgeLabel}</Badge> : null}
+          {servers.length > 0 ? <Badge variant={canGenerateSelected ? (selectedServerConnection?.is_connected && selectedServerConnection.is_idle === false ? 'secondary' : 'outline') : 'outline'}>{selectedServerBadgeLabel}</Badge> : null}
         </div>
       </div>
 

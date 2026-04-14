@@ -3,7 +3,78 @@ import * as path from 'path';
 import * as fs from 'fs';
 import FormData from 'form-data';
 import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse } from '../types/workflow';
+import type { ComfyUIQueueState, ComfyUIServerRecord, ComfyUIServerRuntimeStatus } from '../types/comfyuiServer';
 import { runtimePaths } from '../config/runtimePaths';
+
+type ComfyUIQueueResponse = {
+  queue_running?: unknown;
+  queue_pending?: unknown;
+};
+
+function normalizeQueueEntries(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>);
+  }
+
+  return [];
+}
+
+function extractPromptIdFromQueueEntry(entry: unknown): string | null {
+  if (Array.isArray(entry)) {
+    if (typeof entry[1] === 'string' && entry[1].trim().length > 0) {
+      return entry[1].trim();
+    }
+
+    for (const item of entry) {
+      const nested = extractPromptIdFromQueueEntry(item);
+      if (nested) {
+        return nested;
+      }
+    }
+    return null;
+  }
+
+  if (entry && typeof entry === 'object') {
+    const record = entry as Record<string, unknown>;
+    if (typeof record.prompt_id === 'string' && record.prompt_id.trim().length > 0) {
+      return record.prompt_id.trim();
+    }
+    if (typeof record.id === 'string' && record.id.trim().length > 0) {
+      return record.id.trim();
+    }
+
+    for (const value of Object.values(record)) {
+      const nested = extractPromptIdFromQueueEntry(value);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return null;
+}
+
+function collectPromptIds(entries: unknown[]) {
+  const promptIds = new Set<string>();
+  for (const entry of entries) {
+    const promptId = extractPromptIdFromQueueEntry(entry);
+    if (promptId) {
+      promptIds.add(promptId);
+    }
+  }
+  return [...promptIds];
+}
+
+function resolveAxiosErrorMessage(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    return error.message;
+  }
+  return error instanceof Error ? error.message : 'Unknown error';
+}
 
 /**
  * ComfyUI API 서비스
@@ -324,6 +395,64 @@ export class ComfyUIService {
   }
 
   /**
+   * Read the current upstream ComfyUI queue state.
+   */
+  async getQueueState(timeout: number = 5000): Promise<ComfyUIQueueState> {
+    try {
+      const response = await this.axiosInstance.get<ComfyUIQueueResponse>('/queue', { timeout });
+      const runningEntries = normalizeQueueEntries(response.data?.queue_running);
+      const pendingEntries = normalizeQueueEntries(response.data?.queue_pending);
+
+      return {
+        pending_count: pendingEntries.length,
+        running_count: runningEntries.length,
+        pending_prompt_ids: collectPromptIds(pendingEntries),
+        running_prompt_ids: collectPromptIds(runningEntries),
+        is_idle: pendingEntries.length === 0 && runningEntries.length === 0,
+      };
+    } catch (error) {
+      throw new Error(`ComfyUI queue API error: ${resolveAxiosErrorMessage(error)}`);
+    }
+  }
+
+  /**
+   * Combine reachability and queue occupancy into one runtime status payload.
+   */
+  async getRuntimeStatus(serverMeta?: Pick<ComfyUIServerRecord, 'id' | 'name' | 'endpoint'>): Promise<ComfyUIServerRuntimeStatus> {
+    const startedAt = Date.now();
+    const observedAt = new Date().toISOString();
+
+    try {
+      const queueState = await this.getQueueState();
+      return {
+        server_id: serverMeta?.id ?? 0,
+        server_name: serverMeta?.name ?? '',
+        endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
+        is_connected: true,
+        response_time: Date.now() - startedAt,
+        error_message: undefined,
+        is_idle: queueState.is_idle,
+        pending_count: queueState.pending_count,
+        running_count: queueState.running_count,
+        observed_at: observedAt,
+      };
+    } catch (error) {
+      return {
+        server_id: serverMeta?.id ?? 0,
+        server_name: serverMeta?.name ?? '',
+        endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
+        is_connected: false,
+        response_time: Date.now() - startedAt,
+        error_message: resolveAxiosErrorMessage(error),
+        is_idle: false,
+        pending_count: undefined,
+        running_count: undefined,
+        observed_at: observedAt,
+      };
+    }
+  }
+
+  /**
    * ComfyUI 서버 연결 테스트
    * @returns 연결 가능 여부
    */
@@ -342,6 +471,38 @@ export class ComfyUIService {
  */
 export function createComfyUIService(apiEndpoint: string): ComfyUIService {
   return new ComfyUIService(apiEndpoint);
+}
+
+/**
+ * Collect runtime occupancy status for multiple ComfyUI servers in parallel.
+ */
+export async function getComfyUIServerRuntimeStatuses(servers: ComfyUIServerRecord[]): Promise<ComfyUIServerRuntimeStatus[]> {
+  const results = await Promise.allSettled(
+    servers.map(async (server) => {
+      const comfyService = new ComfyUIService(server.endpoint);
+      return comfyService.getRuntimeStatus(server);
+    })
+  );
+
+  return results.map((result, index) => {
+    const server = servers[index];
+    if (result.status === 'fulfilled') {
+      return result.value;
+    }
+
+    return {
+      server_id: server.id,
+      server_name: server.name,
+      endpoint: server.endpoint,
+      is_connected: false,
+      response_time: undefined,
+      error_message: resolveAxiosErrorMessage(result.reason),
+      is_idle: false,
+      pending_count: undefined,
+      running_count: undefined,
+      observed_at: new Date().toISOString(),
+    };
+  });
 }
 
 /**

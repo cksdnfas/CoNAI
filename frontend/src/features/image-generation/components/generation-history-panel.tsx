@@ -40,6 +40,46 @@ function getGenerationHistorySelectionId(record: GenerationHistoryResponse['reco
   return `generation-history-${record.id}`
 }
 
+function getRequestedTargetLabel(record: GenerationHistoryResponse['records'][number]) {
+  if (record.service_type !== 'comfyui') {
+    return null
+  }
+
+  if (record.requested_server_tag) {
+    return `요청 #${record.requested_server_tag}`
+  }
+
+  if (record.requested_server_name) {
+    return `요청 ${record.requested_server_name}`
+  }
+
+  if (record.requested_server_id != null) {
+    return `요청 서버 ${record.requested_server_id}`
+  }
+
+  return '요청 자동 분산'
+}
+
+function getAssignedServerLabel(record: GenerationHistoryResponse['records'][number]) {
+  if (record.service_type !== 'comfyui') {
+    return null
+  }
+
+  if (record.assigned_server_name) {
+    return `배정 ${record.assigned_server_name}`
+  }
+
+  if (record.assigned_server_id != null) {
+    return `배정 서버 ${record.assigned_server_id}`
+  }
+
+  if (record.server_id != null) {
+    return `배정 서버 ${record.server_id}`
+  }
+
+  return record.generation_status === 'failed' ? '배정 실패' : null
+}
+
 function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['records'][number]): ImageRecord {
   const imageSource = resolveHistoryImageSource(record)
 
@@ -251,6 +291,30 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
                 <Badge variant="outline">
                   {getHistoryStatusLabel(record.generation_status)}
                 </Badge>
+              )
+            }}
+            renderItemPersistentOverlay={(image) => {
+              const imageSelectionId = String(image?.id ?? '')
+              if (!imageSelectionId) {
+                return null
+              }
+
+              const record = historyRecordMap.get(String(imageSelectionId))
+              if (!record || record.service_type !== 'comfyui') {
+                return null
+              }
+
+              const requestedTargetLabel = getRequestedTargetLabel(record)
+              const assignedServerLabel = getAssignedServerLabel(record)
+              if (!requestedTargetLabel && !assignedServerLabel) {
+                return null
+              }
+
+              return (
+                <div className="flex flex-wrap gap-1 rounded-sm bg-black/55 p-1.5 backdrop-blur-sm">
+                  {requestedTargetLabel ? <Badge variant="secondary">{requestedTargetLabel}</Badge> : null}
+                  {assignedServerLabel ? <Badge variant="outline">{assignedServerLabel}</Badge> : null}
+                </div>
               )
             }}
           />

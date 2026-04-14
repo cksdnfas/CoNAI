@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import type { GenerationImageSaveOptions, WorkflowMarkedField } from '@/lib/api-image-generation'
 import {
@@ -8,9 +9,10 @@ import {
   type WorkflowFieldDraftValue,
 } from '../image-generation-shared'
 
-type ConnectedServerLike = {
+type ServerLike = {
   id: number
   name: string
+  routing_tags?: string[]
 }
 
 type ComfyServerTestLike = {
@@ -19,12 +21,16 @@ type ComfyServerTestLike = {
   }
 }
 
+function normalizeRoutingTag(value: string) {
+  return value.trim().toLowerCase()
+}
+
 /** Manage workflow validation and ComfyUI generation requests for one or many servers. */
 export function useComfyGenerationActions({
   selectedWorkflow,
   selectedWorkflowFields,
   workflowDraft,
-  selectedServerId,
+  selectedTarget,
   activeServers,
   connectedServers,
   comfyServerTests,
@@ -32,17 +38,18 @@ export function useComfyGenerationActions({
   onHistoryRefresh,
   showSnackbar,
 }: {
-  selectedWorkflow: { id: number } | null
+  selectedWorkflow: { id: number; name?: string | null } | null
   selectedWorkflowFields: WorkflowMarkedField[]
   workflowDraft: Record<string, WorkflowFieldDraftValue>
-  selectedServerId: string
-  activeServers: ConnectedServerLike[]
-  connectedServers: ConnectedServerLike[]
+  selectedTarget: string
+  activeServers: ServerLike[]
+  connectedServers: ServerLike[]
   comfyServerTests: Record<number, ComfyServerTestLike>
   imageSaveOptions?: GenerationImageSaveOptions
   onHistoryRefresh: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const queryClient = useQueryClient()
   const [isComfyGenerating, setIsComfyGenerating] = useState(false)
 
   /** Validate the currently selected workflow fields before any generation request. */
@@ -61,54 +68,122 @@ export function useComfyGenerationActions({
     return true
   }
 
-  /** Queue one generation job for a specific ComfyUI server. */
-  const handleGenerateOnServer = async (serverId: number) => {
+  /** Build the shared request payload for one ComfyUI queue job. */
+  const buildQueuePayload = () => {
     if (!selectedWorkflow) {
       return null
     }
 
     const promptData = buildWorkflowPromptData(selectedWorkflowFields, workflowDraft)
-    return createGenerationQueueJob({
-      service_type: 'comfyui',
+    return {
+      service_type: 'comfyui' as const,
       workflow_id: selectedWorkflow.id,
-      workflow_name: 'name' in selectedWorkflow ? String(selectedWorkflow.name ?? '') : null,
-      requested_server_id: serverId,
-      request_summary: 'name' in selectedWorkflow ? `${String(selectedWorkflow.name ?? 'ComfyUI workflow')} queue job` : `ComfyUI workflow ${selectedWorkflow.id} queue job`,
+      workflow_name: selectedWorkflow.name ?? null,
+      request_summary: `${selectedWorkflow.name ?? `ComfyUI workflow ${selectedWorkflow.id}`} queue job`,
       request_payload: {
         prompt_data: promptData,
         imageSaveOptions,
       },
+    }
+  }
+
+  /** Queue one generation job for a specific ComfyUI server. */
+  const handleGenerateOnServer = async (serverId: number) => {
+    const basePayload = buildQueuePayload()
+    if (!basePayload) {
+      return null
+    }
+
+    return createGenerationQueueJob({
+      ...basePayload,
+      requested_server_id: serverId,
     })
   }
 
-  /** Generate once on the currently selected server. */
+  /** Queue one generation job using automatic idle-server routing. */
+  const handleGenerateAuto = async () => {
+    const basePayload = buildQueuePayload()
+    if (!basePayload) {
+      return null
+    }
+
+    return createGenerationQueueJob(basePayload)
+  }
+
+  /** Queue one generation job that targets a specific routing tag. */
+  const handleGenerateOnTag = async (serverTag: string) => {
+    const basePayload = buildQueuePayload()
+    if (!basePayload) {
+      return null
+    }
+
+    return createGenerationQueueJob({
+      ...basePayload,
+      requested_server_tag: serverTag,
+    })
+  }
+
+  /** Generate once on the currently selected routing target. */
   const handleGenerateSelected = async () => {
     if (isComfyGenerating || !validateComfyGeneration()) {
       return
     }
 
-    const serverId = Number(selectedServerId)
-    if (!Number.isFinite(serverId)) {
-      showSnackbar({ message: '생성할 서버를 먼저 골라줘.', tone: 'error' })
-      return
-    }
-
-    const server = activeServers.find((item) => item.id === serverId)
-    if (!server) {
-      showSnackbar({ message: '선택한 서버를 찾지 못했어.', tone: 'error' })
-      return
-    }
-
-    if (comfyServerTests[serverId]?.status?.is_connected !== true) {
-      showSnackbar({ message: '선택한 서버가 아직 연결 확인되지 않았어.', tone: 'error' })
-      return
-    }
-
     try {
       setIsComfyGenerating(true)
-      const response = await handleGenerateOnServer(serverId)
+
+      let response: Awaited<ReturnType<typeof createGenerationQueueJob>> | null = null
+      let successMessage = 'ComfyUI 큐에 생성 작업을 넣었어.'
+
+      if (selectedTarget === 'auto') {
+        if (connectedServers.length === 0) {
+          showSnackbar({ message: '연결된 ComfyUI 서버가 없어.', tone: 'error' })
+          return
+        }
+
+        response = await handleGenerateAuto()
+        successMessage = response?.message || '자동 분산 큐에 생성 작업을 넣었어.'
+      } else if (selectedTarget.startsWith('tag:')) {
+        const selectedTag = normalizeRoutingTag(selectedTarget.slice('tag:'.length))
+        const matchingConnectedServers = connectedServers.filter((server) => (server.routing_tags ?? []).includes(selectedTag))
+        if (matchingConnectedServers.length === 0) {
+          showSnackbar({ message: `연결된 #${selectedTag} 서버가 없어.`, tone: 'error' })
+          return
+        }
+
+        response = await handleGenerateOnTag(selectedTag)
+        successMessage = response?.message || `태그 #${selectedTag} 큐에 생성 작업을 넣었어.`
+      } else if (selectedTarget.startsWith('server:')) {
+        const serverId = Number(selectedTarget.slice('server:'.length))
+        if (!Number.isFinite(serverId)) {
+          showSnackbar({ message: '생성할 서버를 먼저 골라줘.', tone: 'error' })
+          return
+        }
+
+        const server = activeServers.find((item) => item.id === serverId)
+        if (!server) {
+          showSnackbar({ message: '선택한 서버를 찾지 못했어.', tone: 'error' })
+          return
+        }
+
+        if (comfyServerTests[serverId]?.status?.is_connected !== true) {
+          showSnackbar({ message: '선택한 서버가 아직 연결 확인되지 않았어.', tone: 'error' })
+          return
+        }
+
+        response = await handleGenerateOnServer(serverId)
+        successMessage = response?.message || `${server.name} 큐에 생성 작업을 넣었어.`
+      } else {
+        showSnackbar({ message: '생성 타겟이 올바르지 않아.', tone: 'error' })
+        return
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
+      ])
       onHistoryRefresh()
-      showSnackbar({ message: response?.message || `${server.name} 큐에 생성 작업을 넣었어.`, tone: 'info' })
+      showSnackbar({ message: successMessage, tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'ComfyUI 생성에 실패했어.'), tone: 'error' })
     } finally {
@@ -133,6 +208,10 @@ export function useComfyGenerationActions({
       const successCount = results.filter((result) => result.status === 'fulfilled').length
       const failedCount = results.length - successCount
 
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
+      ])
       onHistoryRefresh()
 
       if (failedCount === 0) {

@@ -27,6 +27,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
       name VARCHAR(255) NOT NULL UNIQUE,
       endpoint VARCHAR(500) NOT NULL,
       description TEXT,
+      routing_tags_json TEXT,
       is_active BOOLEAN DEFAULT 1,
       is_default BOOLEAN DEFAULT 0,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -333,6 +334,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     console.log('  Migrating comfyui_servers: adding description column');
     db.exec('ALTER TABLE comfyui_servers ADD COLUMN description TEXT');
   }
+  if (!hasColumn('comfyui_servers', 'routing_tags_json')) {
+    console.log('  Migrating comfyui_servers: adding routing_tags_json column');
+    db.exec('ALTER TABLE comfyui_servers ADD COLUMN routing_tags_json TEXT');
+  }
 
   // Migrate workflow_servers table
   if (!hasColumn('workflow_servers', 'is_enabled')) {
@@ -469,6 +474,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
         workflow_name TEXT,
         requested_group_id INTEGER,
         requested_server_id INTEGER,
+        requested_server_tag TEXT,
         assigned_server_id INTEGER,
         provider_job_id TEXT,
         request_payload TEXT NOT NULL,
@@ -488,6 +494,11 @@ export function createUserSettingsSchema(db: Database.Database): void {
     `);
   }
 
+  if (!hasColumn('generation_queue_jobs', 'requested_server_tag')) {
+    console.log('  Migrating generation_queue_jobs: adding requested_server_tag column');
+    db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN requested_server_tag TEXT');
+  }
+
   if (!hasColumn('generation_queue_jobs', 'provider_job_id')) {
     console.log('  Migrating generation_queue_jobs: adding provider_job_id column');
     db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN provider_job_id TEXT');
@@ -500,6 +511,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_workflows_created_date ON workflows(created_date)',
     'CREATE INDEX IF NOT EXISTS idx_comfyui_servers_name ON comfyui_servers(name)',
     'CREATE INDEX IF NOT EXISTS idx_comfyui_servers_active ON comfyui_servers(is_active)',
+    'CREATE INDEX IF NOT EXISTS idx_comfyui_servers_routing_tags_json ON comfyui_servers(routing_tags_json)',
     'CREATE INDEX IF NOT EXISTS idx_workflow_servers_workflow ON workflow_servers(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_workflow_servers_server ON workflow_servers(server_id)',
     'CREATE INDEX IF NOT EXISTS idx_user_preferences_key ON user_preferences(key)',
@@ -536,6 +548,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_service_type ON generation_queue_jobs(service_type)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requested_by_account_id ON generation_queue_jobs(requested_by_account_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requested_server_id ON generation_queue_jobs(requested_server_id)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requested_server_tag ON generation_queue_jobs(requested_server_tag)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_assigned_server_id ON generation_queue_jobs(assigned_server_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_workflow_id ON generation_queue_jobs(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_cancel_requested ON generation_queue_jobs(cancel_requested)',

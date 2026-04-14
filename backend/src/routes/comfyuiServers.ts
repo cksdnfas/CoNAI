@@ -1,11 +1,44 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer';
-import { ParallelGenerationService } from '../services/comfyuiService';
+import { createComfyUIService, getComfyUIServerRuntimeStatuses, ParallelGenerationService } from '../services/comfyuiService';
 import { ComfyUIServerResponse, ComfyUIServerCreateData, ComfyUIServerUpdateData } from '../types/comfyuiServer';
 import { asyncHandler } from '../middleware/errorHandler';
 
 const router = Router();
+
+function normalizeRoutingTag(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function parseRoutingTagsInput(value: unknown) {
+  if (value === undefined) {
+    return { provided: false, tags: [] as string[] };
+  }
+
+  if (value === null) {
+    return { provided: true, tags: [] as string[] };
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error('routing_tags must be an array of strings');
+  }
+
+  const tags = Array.from(new Set(value.map((entry) => {
+    if (typeof entry !== 'string') {
+      throw new Error('routing_tags must contain only strings');
+    }
+
+    const normalized = normalizeRoutingTag(entry);
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(normalized)) {
+      throw new Error(`Invalid routing tag: ${entry}`);
+    }
+
+    return normalized;
+  }).filter((entry) => entry.length > 0)));
+
+  return { provided: true, tags };
+}
 
 /**
  * 모든 서버 조회
@@ -67,6 +100,70 @@ router.get('/test-all-connections', asyncHandler(async (req: Request, res: Respo
       error: 'Failed to test connections'
     };
     return res.status(500).json(response);
+  }
+}));
+
+/**
+ * 서버 런타임 상태 조회
+ * GET /api/comfyui-servers/status
+ * NOTE: Must be defined before /:id route
+ */
+router.get('/status', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const activeOnly = req.query.active !== 'false';
+    const servers = activeOnly
+      ? await ComfyUIServerModel.findActiveServers()
+      : await ComfyUIServerModel.findAll(false);
+
+    const statuses = await getComfyUIServerRuntimeStatuses(servers);
+    return res.json({
+      success: true,
+      data: statuses,
+    } as ComfyUIServerResponse);
+  } catch (error) {
+    console.error('Error getting runtime statuses:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get runtime statuses'
+    } as ComfyUIServerResponse);
+  }
+}));
+
+/**
+ * 단일 서버 런타임 상태 조회
+ * GET /api/comfyui-servers/:id/status
+ * NOTE: Must be defined before /:id route
+ */
+router.get('/:id/status', asyncHandler(async (req: Request, res: Response) => {
+  const id = parseInt(routeParam(routeParam(req.params.id)));
+
+  if (isNaN(id)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid server ID'
+    } as ComfyUIServerResponse);
+  }
+
+  try {
+    const server = await ComfyUIServerModel.findById(id);
+    if (!server) {
+      return res.status(404).json({
+        success: false,
+        error: 'Server not found'
+      } as ComfyUIServerResponse);
+    }
+
+    const status = await createComfyUIService(server.endpoint).getRuntimeStatus(server);
+    return res.json({
+      success: true,
+      data: status,
+    } as ComfyUIServerResponse);
+  } catch (error) {
+    console.error('Error getting runtime status:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get runtime status'
+    } as ComfyUIServerResponse);
   }
 }));
 
@@ -219,10 +316,12 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       } as ComfyUIServerResponse);
     }
 
+    const parsedRoutingTags = parseRoutingTagsInput(req.body?.routing_tags);
     const serverData: ComfyUIServerCreateData = {
       name,
       endpoint,
       description,
+      routing_tags_json: parsedRoutingTags.provided ? JSON.stringify(parsedRoutingTags.tags) : null,
       is_active
     };
 
@@ -238,6 +337,13 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
     return res.status(201).json(response);
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('routing_tags') || error.message.includes('routing tag'))) {
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      } as ComfyUIServerResponse);
+    }
+
     console.error('Error creating server:', error);
     const response: ComfyUIServerResponse = {
       success: false,
@@ -274,10 +380,12 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
+    const parsedRoutingTags = parseRoutingTagsInput(req.body?.routing_tags);
     const serverData: ComfyUIServerUpdateData = {
       name,
       endpoint,
       description,
+      routing_tags_json: parsedRoutingTags.provided ? JSON.stringify(parsedRoutingTags.tags) : undefined,
       is_active
     };
 
@@ -299,6 +407,13 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 
     return res.json(response);
   } catch (error) {
+    if (error instanceof Error && (error.message.includes('routing_tags') || error.message.includes('routing tag'))) {
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      } as ComfyUIServerResponse);
+    }
+
     console.error('Error updating server:', error);
     const response: ComfyUIServerResponse = {
       success: false,

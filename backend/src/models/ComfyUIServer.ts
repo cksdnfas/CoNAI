@@ -8,6 +8,34 @@ import {
 } from '../types/comfyuiServer';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
+function parseRoutingTagsJson(value: unknown): string[] {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter((entry): entry is string => typeof entry === 'string');
+  } catch {
+    return [];
+  }
+}
+
+function normalizeServerRecord(row: ComfyUIServerRecord | undefined | null): ComfyUIServerRecord | null {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    routing_tags: parseRoutingTagsJson(row.routing_tags_json),
+  };
+}
+
 export class ComfyUIServerModel {
   /**
    * 새 서버 생성
@@ -15,12 +43,13 @@ export class ComfyUIServerModel {
   static create(serverData: ComfyUIServerCreateData): number {
     const info = userSettingsDb.prepare(`
       INSERT INTO comfyui_servers (
-        name, endpoint, description, is_active
-      ) VALUES (?, ?, ?, ?)
+        name, endpoint, description, routing_tags_json, is_active
+      ) VALUES (?, ?, ?, ?, ?)
     `).run(
       serverData.name,
       serverData.endpoint,
       serverData.description || null,
+      serverData.routing_tags_json ?? null,
       serverData.is_active !== undefined ? (serverData.is_active ? 1 : 0) : 1
     );
 
@@ -32,7 +61,7 @@ export class ComfyUIServerModel {
    */
   static findById(id: number): ComfyUIServerRecord | null {
     const row = userSettingsDb.prepare('SELECT * FROM comfyui_servers WHERE id = ?').get(id) as ComfyUIServerRecord | undefined;
-    return row || null;
+    return normalizeServerRecord(row);
   }
 
   /**
@@ -46,7 +75,7 @@ export class ComfyUIServerModel {
     query += ' ORDER BY created_date DESC';
 
     const rows = userSettingsDb.prepare(query).all() as ComfyUIServerRecord[];
-    return rows || [];
+    return (rows || []).map((row) => normalizeServerRecord(row)).filter((row): row is ComfyUIServerRecord => row !== null);
   }
 
   /**
@@ -56,7 +85,7 @@ export class ComfyUIServerModel {
     const rows = userSettingsDb.prepare(
       'SELECT * FROM comfyui_servers WHERE is_active = 1 ORDER BY id ASC'
     ).all() as ComfyUIServerRecord[];
-    return rows || [];
+    return (rows || []).map((row) => normalizeServerRecord(row)).filter((row): row is ComfyUIServerRecord => row !== null);
   }
 
   /**
@@ -175,7 +204,10 @@ export class WorkflowServerModel {
     query += ' ORDER BY s.id ASC';
 
     const rows = userSettingsDb.prepare(query).all(workflowId) as any[];
-    return rows || [];
+    return (rows || []).map((row) => ({
+      ...row,
+      routing_tags: parseRoutingTagsJson(row.routing_tags_json),
+    }));
   }
 
   /**

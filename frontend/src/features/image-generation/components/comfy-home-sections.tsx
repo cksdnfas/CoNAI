@@ -202,10 +202,27 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                               {connectionStatus.is_connected ? '연결됨' : '실패'}
                             </Badge>
                           ) : null}
+                          {connectionStatus?.is_connected ? (
+                            <Badge variant={connectionStatus.is_idle ? 'outline' : 'secondary'}>
+                              {connectionStatus.is_idle ? 'idle' : 'busy'}
+                            </Badge>
+                          ) : null}
                         </div>
                         <div className="mt-1 break-all text-[11px]">{server.endpoint}</div>
                         {server.description ? <div className="mt-1 text-[11px]">{server.description}</div> : null}
+                        {server.routing_tags && server.routing_tags.length > 0 ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {server.routing_tags.map((tag) => (
+                              <Badge key={`${server.id}:${tag}`} variant="outline">#{tag}</Badge>
+                            ))}
+                          </div>
+                        ) : null}
                         {connectionStatus?.response_time !== undefined ? <div className="mt-1 text-[11px]">{connectionStatus.response_time}ms</div> : null}
+                        {connectionStatus?.is_connected ? (
+                          <div className="mt-1 text-[11px]">
+                            running {connectionStatus.running_count ?? 0} · pending {connectionStatus.pending_count ?? 0}
+                          </div>
+                        ) : null}
                         {connectionStatus?.error_message ? <div className="mt-1 text-[11px] text-[#ffb4ab]">{connectionStatus.error_message}</div> : null}
                         {testState?.error ? <div className="mt-1 text-[11px] text-[#ffb4ab]">{testState.error}</div> : null}
                       </div>

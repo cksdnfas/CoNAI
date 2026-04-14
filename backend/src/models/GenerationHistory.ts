@@ -50,6 +50,11 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
   actual_composite_hash?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
+  requested_server_id?: number | null;
+  requested_server_name?: string | null;
+  requested_server_tag?: string | null;
+  assigned_server_id?: number | null;
+  assigned_server_name?: string | null;
 }
 
 export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
@@ -58,6 +63,11 @@ export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
   actual_composite_hash?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
+  requested_server_id?: number | null;
+  requested_server_name?: string | null;
+  requested_server_tag?: string | null;
+  assigned_server_id?: number | null;
+  assigned_server_name?: string | null;
 }
 
 export interface FilterOptions {
@@ -351,10 +361,18 @@ export class GenerationHistoryModel {
         gh.requested_by_account_id,
         gh.requested_by_account_type,
         gh.server_id,
+        qj.requested_server_id,
+        qj.requested_server_tag,
+        requested_server.name as requested_server_name,
+        qj.assigned_server_id,
+        assigned_server.name as assigned_server_name,
         matched_file.composite_hash as actual_composite_hash,
         im.width as actual_width,
         im.height as actual_height
       FROM api_generation_history gh
+      LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
+      LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id
+      LEFT JOIN comfyui_servers assigned_server ON assigned_server.id = qj.assigned_server_id
       LEFT JOIN main_db.image_files matched_file ON matched_file.id = (
         SELECT if2.id
         FROM main_db.image_files if2
@@ -395,10 +413,18 @@ export class GenerationHistoryModel {
         gh.requested_by_account_id,
         gh.requested_by_account_type,
         gh.server_id,
+        qj.requested_server_id,
+        qj.requested_server_tag,
+        requested_server.name as requested_server_name,
+        qj.assigned_server_id,
+        assigned_server.name as assigned_server_name,
         matched_file.composite_hash as actual_composite_hash,
         im.width as actual_width,
         im.height as actual_height
       FROM api_generation_history gh
+      LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
+      LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id
+      LEFT JOIN comfyui_servers assigned_server ON assigned_server.id = qj.assigned_server_id
       LEFT JOIN main_db.image_files matched_file ON matched_file.id = (
         SELECT if2.id
         FROM main_db.image_files if2

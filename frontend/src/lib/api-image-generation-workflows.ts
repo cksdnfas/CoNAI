@@ -77,6 +77,26 @@ function normalizeComfyUIServerStatus(payload: Record<string, unknown>): ComfyUI
       : typeof payload.error === 'string'
         ? payload.error
         : undefined,
+    is_idle: typeof payload.is_idle === 'boolean'
+      ? payload.is_idle
+      : typeof payload.isIdle === 'boolean'
+        ? payload.isIdle
+        : undefined,
+    pending_count: typeof payload.pending_count === 'number'
+      ? payload.pending_count
+      : typeof payload.pendingCount === 'number'
+        ? payload.pendingCount
+        : undefined,
+    running_count: typeof payload.running_count === 'number'
+      ? payload.running_count
+      : typeof payload.runningCount === 'number'
+        ? payload.runningCount
+        : undefined,
+    observed_at: typeof payload.observed_at === 'string'
+      ? payload.observed_at
+      : typeof payload.observedAt === 'string'
+        ? payload.observedAt
+        : undefined,
   }
 }
 
@@ -184,9 +204,9 @@ export async function unlinkGenerationWorkflowServer(workflowId: number, serverI
   })
 }
 
-/** Test whether a ComfyUI server endpoint is reachable. */
+/** Load one ComfyUI server runtime status, including connectivity and current occupancy. */
 export async function testGenerationComfyUIServer(serverId: number) {
-  const response = await requestJson<TestComfyUIServerResponse>(`/api/comfyui-servers/${serverId}/test-connection`)
+  const response = await requestJson<TestComfyUIServerResponse>(`/api/comfyui-servers/${serverId}/status`)
   return normalizeComfyUIServerStatus(response.data as unknown as Record<string, unknown>)
 }
 

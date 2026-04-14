@@ -137,8 +137,8 @@ export function ComfyGenerationPanel({
     comfyServerForm,
     editingServerId,
     comfyServerTests,
-    selectedServerId,
-    setSelectedServerId,
+    selectedTarget,
+    setSelectedTarget,
     isServerModalOpen,
     handleComfyServerFieldChange,
     resetComfyServerEditor,
@@ -150,7 +150,6 @@ export function ComfyGenerationPanel({
     handleDeleteServer,
   } = useComfyServerController({
     activeServers,
-    selectedWorkflowId,
     refetchServers: serversQuery.refetch,
     showSnackbar,
   })
@@ -171,7 +170,7 @@ export function ComfyGenerationPanel({
     selectedWorkflow,
     selectedWorkflowFields,
     workflowDraft,
-    selectedServerId,
+    selectedTarget,
     activeServers,
     connectedServers,
     comfyServerTests,
@@ -507,12 +506,12 @@ export function ComfyGenerationPanel({
             workflowFields={selectedWorkflowFields}
             servers={activeServers}
             serverTests={comfyServerTests}
-            selectedServerId={selectedServerId}
+            selectedTarget={selectedTarget}
             workflowDraft={workflowDraft}
             isGenerating={isComfyGenerating}
             headerPortalTargetId={headerPortalTargetId}
             onBack={() => onSelectedWorkflowChange(null)}
-            onSelectServer={setSelectedServerId}
+            onSelectTarget={setSelectedTarget}
             onFieldChange={handleWorkflowFieldChange}
             onImageChange={handleWorkflowImageChange}
             onResetDraft={() => {

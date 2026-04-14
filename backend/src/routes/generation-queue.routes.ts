@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express'
 import { asyncHandler } from '../middleware/errorHandler'
 import { GenerationQueueModel } from '../models/GenerationQueue'
-import { ComfyUIServerModel } from '../models/ComfyUIServer'
+import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer'
 import { WorkflowModel } from '../models/Workflow'
 import { GenerationQueueService } from '../services/generationQueueService'
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../types/generationQueue'
@@ -10,8 +10,8 @@ const router = express.Router()
 
 const ACTIVE_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['queued', 'dispatching', 'running']
 const TERMINAL_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['completed', 'failed', 'cancelled']
-type QueuePositionScope = 'service' | 'server' | 'auto'
-type QueuePositionEntry = { position: number; scope: QueuePositionScope; serverId: number | null }
+type QueuePositionScope = 'service' | 'server' | 'tag' | 'auto'
+type QueuePositionEntry = { position: number; scope: QueuePositionScope; serverId: number | null; serverTag: string | null }
 type QueueEtaEntry = { waitSeconds: number | null; totalSeconds: number | null; durationSeconds: number | null }
 
 function parseStatusList(value: unknown): GenerationQueueJobStatus[] | undefined {
@@ -58,6 +58,27 @@ function parsePositiveIntegerQuery(value: unknown, name: string): number | undef
   return parsed
 }
 
+function normalizeRoutingTag(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function parseRequestedServerTag(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return undefined
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error('requested_server_tag must be a string')
+  }
+
+  const normalized = normalizeRoutingTag(value)
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(normalized)) {
+    throw new Error('requested_server_tag must match /^[a-z0-9][a-z0-9._-]{0,63}$/')
+  }
+
+  return normalized
+}
+
 function isAdminRequest(req: Request) {
   return req.session?.accountType === 'admin'
 }
@@ -98,6 +119,7 @@ function getQueuePositionMeta(record: GenerationQueueJobRecord) {
       laneKey: 'novelai',
       scope: 'service' as QueuePositionScope,
       serverId: null,
+      serverTag: null,
     }
   }
 
@@ -107,6 +129,16 @@ function getQueuePositionMeta(record: GenerationQueueJobRecord) {
       laneKey: `comfyui:server:${serverId}`,
       scope: 'server' as QueuePositionScope,
       serverId,
+      serverTag: null,
+    }
+  }
+
+  if (record.requested_server_tag) {
+    return {
+      laneKey: `comfyui:tag:${record.requested_server_tag}`,
+      scope: 'tag' as QueuePositionScope,
+      serverId: null,
+      serverTag: record.requested_server_tag,
     }
   }
 
@@ -114,6 +146,7 @@ function getQueuePositionMeta(record: GenerationQueueJobRecord) {
     laneKey: 'comfyui:auto',
     scope: 'auto' as QueuePositionScope,
     serverId: null,
+    serverTag: null,
   }
 }
 
@@ -132,6 +165,7 @@ function computeQueuePositions(records: GenerationQueueJobRecord[]) {
       position: nextPosition,
       scope: lane.scope,
       serverId: lane.serverId,
+      serverTag: lane.serverTag,
     })
     nextByLane.set(lane.laneKey, nextPosition + 1)
   }
@@ -410,6 +444,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
         queue_position: queuePosition?.position ?? null,
         queue_position_scope: queuePosition?.scope ?? null,
         queue_position_server_id: queuePosition?.serverId ?? null,
+        queue_position_server_tag: queuePosition?.serverTag ?? null,
         estimated_wait_seconds: queueEta?.waitSeconds ?? null,
         estimated_total_seconds: queueEta?.totalSeconds ?? null,
         estimated_duration_seconds: queueEta?.durationSeconds ?? null,
@@ -429,6 +464,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     workflow_name,
     requested_group_id,
     requested_server_id,
+    requested_server_tag,
     request_payload,
     request_summary,
   } = req.body ?? {}
@@ -448,8 +484,19 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     return
   }
 
+  let parsedRequestedServerTag: string | undefined
+  try {
+    parsedRequestedServerTag = parseRequestedServerTag(requested_server_tag)
+  } catch (error) {
+    res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'requested_server_tag is invalid' })
+    return
+  }
+
+  let workflowIdNumber: number | null = null
+  let workflowLinkedServers: Array<{ id: number; routing_tags?: string[] }> = []
+
   if (workflow_id !== undefined && workflow_id !== null) {
-    const workflowIdNumber = Number(workflow_id)
+    workflowIdNumber = Number(workflow_id)
     if (!Number.isInteger(workflowIdNumber) || workflowIdNumber <= 0) {
       res.status(400).json({ success: false, error: 'workflow_id must be a positive integer' })
       return
@@ -460,12 +507,26 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       res.status(404).json({ success: false, error: 'Referenced workflow not found' })
       return
     }
+
+    workflowLinkedServers = WorkflowServerModel.findServersByWorkflow(workflowIdNumber, true)
   }
 
   if (requested_group_id !== undefined && requested_group_id !== null) {
     const groupIdNumber = Number(requested_group_id)
     if (!Number.isInteger(groupIdNumber) || groupIdNumber <= 0) {
       res.status(400).json({ success: false, error: 'requested_group_id must be a positive integer' })
+      return
+    }
+  }
+
+  if (service_type === 'comfyui') {
+    if (workflowIdNumber === null) {
+      res.status(400).json({ success: false, error: 'workflow_id is required for comfyui jobs' })
+      return
+    }
+
+    if (workflowLinkedServers.length === 0) {
+      res.status(400).json({ success: false, error: 'This workflow has no active linked ComfyUI servers' })
       return
     }
   }
@@ -487,16 +548,37 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       res.status(400).json({ success: false, error: 'requested_server_id is only valid for comfyui jobs' })
       return
     }
+
+    if (!workflowLinkedServers.some((linkedServer) => Number(linkedServer.id) === serverIdNumber)) {
+      res.status(400).json({ success: false, error: 'requested_server_id is not linked to this workflow' })
+      return
+    }
+  }
+
+  if (parsedRequestedServerTag !== undefined && service_type !== 'comfyui') {
+    res.status(400).json({ success: false, error: 'requested_server_tag is only valid for comfyui jobs' })
+    return
+  }
+
+  if (requested_server_id !== undefined && requested_server_id !== null && parsedRequestedServerTag !== undefined) {
+    res.status(400).json({ success: false, error: 'requested_server_id and requested_server_tag cannot be combined' })
+    return
+  }
+
+  if (parsedRequestedServerTag !== undefined && !workflowLinkedServers.some((linkedServer) => (linkedServer.routing_tags ?? []).includes(parsedRequestedServerTag))) {
+    res.status(400).json({ success: false, error: 'requested_server_tag does not match any linked workflow server' })
+    return
   }
 
   const requesterAccountId = getRequesterAccountId(req)
   const jobId = GenerationQueueModel.create({
     service_type,
     priority,
-    workflow_id: workflow_id !== undefined && workflow_id !== null ? Number(workflow_id) : null,
+    workflow_id: workflowIdNumber,
     workflow_name: typeof workflow_name === 'string' && workflow_name.trim().length > 0 ? workflow_name.trim() : null,
     requested_group_id: requested_group_id !== undefined && requested_group_id !== null ? Number(requested_group_id) : null,
     requested_server_id: requested_server_id !== undefined && requested_server_id !== null ? Number(requested_server_id) : null,
+    requested_server_tag: parsedRequestedServerTag ?? null,
     request_payload,
     request_summary: typeof request_summary === 'string' && request_summary.trim().length > 0 ? request_summary.trim() : null,
     requested_by_account_id: requesterAccountId,

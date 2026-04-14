@@ -14,6 +14,7 @@ export interface GenerationQueueJobRecord {
   workflow_name?: string | null
   requested_group_id?: number | null
   requested_server_id?: number | null
+  requested_server_tag?: string | null
   assigned_server_id?: number | null
   provider_job_id?: string | null
   request_payload: string
@@ -27,8 +28,9 @@ export interface GenerationQueueJobRecord {
   created_date: string
   updated_date: string
   queue_position?: number | null
-  queue_position_scope?: 'service' | 'server' | 'auto' | null
+  queue_position_scope?: 'service' | 'server' | 'tag' | 'auto' | null
   queue_position_server_id?: number | null
+  queue_position_server_tag?: string | null
   estimated_wait_seconds?: number | null
   estimated_total_seconds?: number | null
   estimated_duration_seconds?: number | null
@@ -45,6 +47,7 @@ export interface GenerationQueueJobCreateData {
   workflow_name?: string | null
   requested_group_id?: number | null
   requested_server_id?: number | null
+  requested_server_tag?: string | null
   assigned_server_id?: number | null
   provider_job_id?: string | null
   request_payload: Record<string, unknown>
@@ -66,6 +69,7 @@ export interface GenerationQueueJobUpdateData {
   workflow_name?: string | null
   requested_group_id?: number | null
   requested_server_id?: number | null
+  requested_server_tag?: string | null
   assigned_server_id?: number | null
   provider_job_id?: string | null
   request_payload?: Record<string, unknown>

@@ -43,6 +43,10 @@ export function ComfyServerRegistrationModal({
           <Input value={form.description} onChange={(event) => onFieldChange('description', event.target.value)} placeholder="메인 GPU 서버" />
         </FormField>
 
+        <FormField label="Routing Tags" hint="쉼표로 구분">
+          <Input value={form.routingTags} onChange={(event) => onFieldChange('routingTags', event.target.value)} placeholder="gpu4090, high-vram, fast-lane" />
+        </FormField>
+
         <div className="flex justify-end gap-2 border-t border-border/70 pt-4">
           <Button type="button" variant="ghost" onClick={onReset} disabled={isSubmitting}>
             초기화

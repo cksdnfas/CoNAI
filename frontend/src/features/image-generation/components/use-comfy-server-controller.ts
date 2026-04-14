@@ -13,15 +13,17 @@ import {
   type ComfyUIServerTestState,
 } from '../image-generation-shared'
 
+function parseRoutingTagsCsv(value: string) {
+  return Array.from(new Set(value.split(',').map((entry) => entry.trim().toLowerCase()).filter((entry) => entry.length > 0)))
+}
+
 /** Manage ComfyUI server selection, registration, editing, deletion, and connectivity tests for the panel. */
 export function useComfyServerController({
   activeServers,
-  selectedWorkflowId,
   refetchServers,
   showSnackbar,
 }: {
   activeServers: ComfyUIServer[]
-  selectedWorkflowId: number | null
   refetchServers: () => Promise<unknown>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
@@ -29,7 +31,7 @@ export function useComfyServerController({
   const [comfyServerForm, setComfyServerForm] = useState<ComfyUIServerFormDraft>(DEFAULT_COMFYUI_SERVER_FORM)
   const [editingServerId, setEditingServerId] = useState<number | null>(null)
   const [comfyServerTests, setComfyServerTests] = useState<Record<number, ComfyUIServerTestState>>({})
-  const [selectedServerId, setSelectedServerId] = useState<string>('')
+  const [selectedTarget, setSelectedTarget] = useState<string>('auto')
   const [isServerModalOpen, setIsServerModalOpen] = useState(false)
 
   /** Update one editable ComfyUI server form field. */
@@ -99,21 +101,24 @@ export function useComfyServerController({
   }, [showSnackbar])
 
   useEffect(() => {
-    if (activeServers.length === 0) {
-      if (selectedServerId.length > 0) {
-        setSelectedServerId('')
-      }
+    if (selectedTarget === 'auto' || selectedTarget.startsWith('tag:')) {
       return
     }
 
-    const stillExists = activeServers.some((server) => String(server.id) === selectedServerId)
-    if (!stillExists) {
-      setSelectedServerId(String(activeServers[0].id))
+    if (!selectedTarget.startsWith('server:')) {
+      setSelectedTarget('auto')
+      return
     }
-  }, [activeServers, selectedServerId])
+
+    const selectedServerId = Number(selectedTarget.slice('server:'.length))
+    const stillExists = activeServers.some((server) => server.id === selectedServerId)
+    if (!stillExists) {
+      setSelectedTarget('auto')
+    }
+  }, [activeServers, selectedTarget])
 
   useEffect(() => {
-    if (selectedWorkflowId === null || activeServers.length === 0) {
+    if (activeServers.length === 0) {
       return
     }
 
@@ -125,7 +130,7 @@ export function useComfyServerController({
     for (const server of untestedServers) {
       void handleTestComfyServer(server.id, { silent: true })
     }
-  }, [activeServers, comfyServerTests, handleTestComfyServer, selectedWorkflowId])
+  }, [activeServers, comfyServerTests, handleTestComfyServer])
 
   /** Submit the current server create/edit form and refresh server state. */
   const handleSubmitComfyServer = async () => {
@@ -149,11 +154,12 @@ export function useComfyServerController({
           name,
           endpoint,
           description: comfyServerForm.description.trim() || undefined,
+          routing_tags: parseRoutingTagsCsv(comfyServerForm.routingTags),
           is_active: true,
         })
 
         await refetchServers()
-        setSelectedServerId(String(editingServerId))
+        setSelectedTarget(`server:${editingServerId}`)
         handleCloseServerModal()
         showSnackbar({ message: 'ComfyUI 서버를 수정했어.', tone: 'info' })
         await handleTestComfyServer(editingServerId)
@@ -162,10 +168,11 @@ export function useComfyServerController({
           name,
           endpoint,
           description: comfyServerForm.description.trim() || undefined,
+          routing_tags: parseRoutingTagsCsv(comfyServerForm.routingTags),
         })
 
         await refetchServers()
-        setSelectedServerId(String(response.data.id))
+        setSelectedTarget(`server:${response.data.id}`)
         handleCloseServerModal()
         showSnackbar({ message: 'ComfyUI 서버를 등록했어.', tone: 'info' })
         await handleTestComfyServer(response.data.id)
@@ -189,6 +196,7 @@ export function useComfyServerController({
       name: server.name,
       endpoint: server.endpoint,
       description: server.description ?? '',
+      routingTags: (server.routing_tags ?? []).join(', '),
     })
     setIsServerModalOpen(true)
   }
@@ -213,8 +221,8 @@ export function useComfyServerController({
         delete next[serverId]
         return next
       })
-      if (selectedServerId === String(serverId)) {
-        setSelectedServerId('')
+      if (selectedTarget === `server:${serverId}`) {
+        setSelectedTarget('auto')
       }
       showSnackbar({ message: 'ComfyUI 서버를 삭제했어.', tone: 'info' })
     } catch (error) {
@@ -227,8 +235,8 @@ export function useComfyServerController({
     comfyServerForm,
     editingServerId,
     comfyServerTests,
-    selectedServerId,
-    setSelectedServerId,
+    selectedTarget,
+    setSelectedTarget,
     isServerModalOpen,
     handleComfyServerFieldChange,
     resetComfyServerEditor,
