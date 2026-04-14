@@ -112,44 +112,24 @@ export function getGenerationQueueRemainingLabel(record: GenerationQueueJobRecor
   return formatGenerationQueueEtaSeconds(record.estimated_total_seconds)
 }
 
-/** Estimate one playful queue progress percentage for the compact queue cards. */
+/** Render progress only for jobs that actually started upstream execution. */
 export function getGenerationQueueProgressPercent(record: GenerationQueueJobRecord, nowMs = Date.now()) {
-  if (record.status === 'running') {
-    const durationSeconds = record.estimated_duration_seconds
-    if (durationSeconds == null || durationSeconds <= 0) {
-      return record.estimated_total_seconds === 0 ? 100 : null
-    }
-
-    const startedAtMs = parseQueueTimestampMs(record.started_at)
-    const elapsedSeconds = startedAtMs == null ? 0 : Math.max(0, (nowMs - startedAtMs) / 1000)
-    const percent = Math.round((elapsedSeconds / durationSeconds) * 100)
-    if ((record.estimated_total_seconds ?? 0) <= 0) {
-      return 100
-    }
-    return Math.max(0, Math.min(percent, 99))
+  if (record.status !== 'running') {
+    return null
   }
 
-  if (record.status === 'queued' || record.status === 'dispatching') {
-    const remainingSeconds = record.estimated_total_seconds
-    const queuedAtMs = parseQueueTimestampMs(record.queued_at)
-    if (remainingSeconds == null || queuedAtMs == null) {
-      return null
-    }
-
-    const elapsedSeconds = Math.max(0, (nowMs - queuedAtMs) / 1000)
-    const projectedTotalSeconds = elapsedSeconds + Math.max(remainingSeconds, 0)
-    if (projectedTotalSeconds <= 0) {
-      return 0
-    }
-
-    const percent = Math.round((elapsedSeconds / projectedTotalSeconds) * 100)
-    if (remainingSeconds <= 0) {
-      return 100
-    }
-    return Math.max(3, Math.min(percent, 99))
+  const durationSeconds = record.estimated_duration_seconds
+  if (durationSeconds == null || durationSeconds <= 0) {
+    return record.estimated_total_seconds === 0 ? 100 : null
   }
 
-  return null
+  const startedAtMs = parseQueueTimestampMs(record.started_at)
+  const elapsedSeconds = startedAtMs == null ? 0 : Math.max(0, (nowMs - startedAtMs) / 1000)
+  const percent = Math.round((elapsedSeconds / durationSeconds) * 100)
+  if ((record.estimated_total_seconds ?? 0) <= 0) {
+    return 100
+  }
+  return Math.max(0, Math.min(percent, 99))
 }
 
 /** Render the shared queue lane and position label for active jobs. */
