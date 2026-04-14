@@ -89,6 +89,6 @@ export async function cleanupFailedGenerationHistory() {
 
 /** Load browser-ready image entries from the runtime save directory. */
 export async function listGenerationSaveImages() {
-  const response = await requestJson<{ items: SaveBrowserImageRecord[]; total: number }>('/api/image-editor/save-images')
-  return response.items
+  const response = await requestJson<{ success: boolean; data: { items: SaveBrowserImageRecord[]; total: number } }>('/api/image-editor/save-images')
+  return response.data.items
 }

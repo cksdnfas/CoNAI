@@ -436,7 +436,9 @@ export async function buildSelectedImageDraftFromFile(file: File): Promise<Selec
 
 /** Build one selected-image draft by fetching an existing image URL. */
 export async function buildSelectedImageDraftFromUrl(url: string, fileName?: string): Promise<SelectedImageDraft> {
-  const response = await fetch(url)
+  const response = await fetch(url, {
+    credentials: 'include',
+  })
   if (!response.ok) {
     throw new Error(`Failed to fetch image: ${response.status}`)
   }

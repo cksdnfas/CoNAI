@@ -395,7 +395,14 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
   const finalizeSelectedImage = async (fileName: string, input: ImageSaveOutputInput) => {
     if (!effectiveImageSaveSettings.applyToGenerationAttachments) {
       const sourceBlob = typeof input.source === 'string'
-        ? await fetch(input.source).then((response) => response.blob())
+        ? await fetch(input.source, {
+            credentials: 'include',
+          }).then(async (response) => {
+            if (!response.ok) {
+              throw new Error(`Failed to fetch image: ${response.status}`)
+            }
+            return response.blob()
+          })
         : input.source
       onSelect(await buildRawSelectedImageDraft(sourceBlob, fileName))
       setIsOpen(false)
@@ -468,7 +475,9 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
     try {
       setIsImporting(true)
-      const response = await fetch(sourceUrl)
+      const response = await fetch(sourceUrl, {
+        credentials: 'include',
+      })
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.status}`)
       }
