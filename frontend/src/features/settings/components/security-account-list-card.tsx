@@ -1,103 +1,214 @@
-import { Users } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Clock3, KeyRound, Palette, Search, Shield, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Select } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
-import { SettingsField } from './settings-primitives'
-import { getAccountTypeLabel, getPermissionGroupDisplayName } from './security-ui-text'
+import { cn } from '@/lib/utils'
+import { SecurityAccountEditorModal, type SecurityAccountEditorSection } from './security-account-editor-modal'
+import { getAccountStatusLabel, getPermissionGroupDisplayName } from './security-ui-text'
+import { getSecurityGroupBadgeStyle, getSecurityGroupColor, type SecurityGroupColorMap } from './security-group-color-utils'
 
 interface SecurityAccountListCardProps {
   accounts: AuthAccountListItem[]
   availableGroups: PermissionGroupListItem[]
   isLoading: boolean
   isUpdatingAccountGroup: boolean
-  onAccountGroupChange: (accountId: number, groupKey: 'admin' | 'guest') => void
+  isUpdatingAccountPassword: boolean
+  isDeletingAccount: boolean
+  groupColors: SecurityGroupColorMap
+  groupLabels: Record<string, string>
+  onOpenGroupColors: () => void
+  onAccountGroupChange: (accountId: number, groupKey: 'admin' | 'guest') => Promise<boolean>
+  onAccountPasswordChange: (accountId: number, password: string) => Promise<boolean>
+  onAccountDelete: (accountId: number) => Promise<boolean>
 }
 
-/** Render the admin-facing account review list and built-in group selector. */
+/** Render the admin-facing account review list in a denser searchable layout. */
 export function SecurityAccountListCard({
   accounts,
   availableGroups,
   isLoading,
   isUpdatingAccountGroup,
+  isUpdatingAccountPassword,
+  isDeletingAccount,
+  groupColors,
+  groupLabels,
+  onOpenGroupColors,
   onAccountGroupChange,
+  onAccountPasswordChange,
+  onAccountDelete,
 }: SecurityAccountListCardProps) {
+  const [query, setQuery] = useState('')
+  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
+  const [modalSection, setModalSection] = useState<SecurityAccountEditorSection>('group')
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const filteredAccounts = useMemo(() => {
+    if (!normalizedQuery) {
+      return accounts
+    }
+
+    return accounts.filter((account) => {
+      const searchableGroups = account.groupKeys
+        .map((groupKey) => getPermissionGroupDisplayName(groupKey, groupLabels[groupKey] ?? groupKey).toLowerCase())
+        .join(' ')
+
+      return account.username.toLowerCase().includes(normalizedQuery)
+        || searchableGroups.includes(normalizedQuery)
+    })
+  }, [accounts, normalizedQuery])
+
+  const selectedAccount = useMemo(
+    () => accounts.find((account) => account.id === selectedAccountId) ?? null,
+    [accounts, selectedAccountId],
+  )
+
+  const openAccountEditor = (accountId: number, section: SecurityAccountEditorSection) => {
+    setSelectedAccountId(accountId)
+    setModalSection(section)
+  }
+
+  const closeAccountEditor = () => {
+    setSelectedAccountId(null)
+    setModalSection('group')
+  }
+
   return (
-    <Card>
-      <CardContent className="space-y-4">
-        <SectionHeading
-          variant="inside"
-          heading="계정"
-          actions={
-            <div className="rounded-sm bg-primary/10 p-2 text-primary">
-              <Users className="h-4 w-4" />
-            </div>
-          }
-        />
+    <>
+      <Card>
+        <CardContent className="space-y-4">
+          <SectionHeading
+            variant="inside"
+            heading="계정"
+            actions={(
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                onClick={onOpenGroupColors}
+                aria-label="그룹 색상"
+                title="그룹 색상"
+              >
+                <Palette className="h-4 w-4" />
+              </Button>
+            )}
+          />
 
-        {isLoading ? (
-          <div className="min-h-[180px] rounded-sm bg-surface-low animate-pulse" />
-        ) : (
-          <div className="space-y-3">
-            {accounts.map((account) => {
-              const groupValue = account.accountType
-
-              return (
-                <div
-                  key={account.id}
-                  className="grid gap-3 rounded-sm border border-border bg-surface-container p-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-center"
-                >
-                  <div className="min-w-0 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="truncate text-sm font-semibold text-foreground">{account.username}</div>
-                      <Badge variant={account.accountType === 'admin' ? 'secondary' : 'outline'}>
-                        {getAccountTypeLabel(account.accountType)}
-                      </Badge>
-                      {account.syncedLegacyAdmin ? <Badge variant="outline">레거시</Badge> : null}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {account.lastLoginAt
-                        ? `최근 로그인 ${new Date(account.lastLoginAt).toLocaleString('ko-KR')}`
-                        : '로그인 기록 없음'}
-                    </div>
-                    {account.groupKeys.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {account.groupKeys.map((groupKey) => (
-                          <Badge key={groupKey} variant="outline">
-                            {getPermissionGroupDisplayName(groupKey, groupKey)}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <SettingsField label="그룹">
-                    <Select
-                      variant="settings"
-                      value={groupValue}
-                      disabled={isUpdatingAccountGroup}
-                      onChange={(event) => {
-                        const nextGroupKey = event.target.value as 'admin' | 'guest'
-                        if (nextGroupKey === groupValue) {
-                          return
-                        }
-                        onAccountGroupChange(account.id, nextGroupKey)
-                      }}
-                    >
-                      {availableGroups.map((group) => (
-                        <option key={group.groupKey} value={group.groupKey}>
-                          {getPermissionGroupDisplayName(group.groupKey, group.name)}
-                        </option>
-                      ))}
-                    </Select>
-                  </SettingsField>
+          {isLoading ? (
+            <div className="min-h-[180px] rounded-sm bg-surface-low animate-pulse" />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[220px] flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    variant="settings"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="계정 검색"
+                    className="pl-9"
+                  />
                 </div>
-              )
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                <Badge variant="secondary">{filteredAccounts.length}</Badge>
+              </div>
+
+              {filteredAccounts.length === 0 ? (
+                <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">
+                  맞는 계정이 없어. 검색어를 조금 바꿔봐.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredAccounts.map((account) => (
+                    <div
+                      key={account.id}
+                      className="flex flex-col gap-2 rounded-sm border border-border bg-surface-container px-3 py-2.5 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="min-w-0 truncate text-sm font-semibold text-foreground">{account.username}</div>
+                          {account.groupKeys.map((groupKey) => (
+                            <Badge
+                              key={groupKey}
+                              className="border-0 normal-case tracking-normal"
+                              style={getSecurityGroupBadgeStyle(getSecurityGroupColor(groupKey, groupColors))}
+                            >
+                              {getPermissionGroupDisplayName(groupKey, groupLabels[groupKey] ?? groupKey)}
+                            </Badge>
+                          ))}
+                          {account.status !== 'active' ? <Badge variant="outline">{getAccountStatusLabel(account.status)}</Badge> : null}
+                          {account.syncedLegacyAdmin ? <Badge variant="secondary">레거시</Badge> : null}
+                          <span
+                            className={cn(
+                              'inline-flex items-center text-muted-foreground',
+                              account.lastLoginAt ? 'cursor-help' : 'opacity-50',
+                            )}
+                            title={account.lastLoginAt ? `최근 로그인 ${new Date(account.lastLoginAt).toLocaleString('ko-KR')}` : '로그인 기록 없음'}
+                            aria-label={account.lastLoginAt ? '최근 로그인 있음' : '로그인 기록 없음'}
+                          >
+                            <Clock3 className="h-4 w-4" />
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 justify-end gap-1">
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={() => openAccountEditor(account.id, 'group')}
+                          title="그룹 설정"
+                          aria-label="그룹 설정"
+                        >
+                          <Shield className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={() => openAccountEditor(account.id, 'password')}
+                          title="비밀번호 변경"
+                          aria-label="비밀번호 변경"
+                        >
+                          <KeyRound className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={() => openAccountEditor(account.id, 'danger')}
+                          title="계정 삭제"
+                          aria-label="계정 삭제"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <SecurityAccountEditorModal
+        open={selectedAccount !== null}
+        account={selectedAccount}
+        initialSection={modalSection}
+        availableGroups={availableGroups}
+        groupColors={groupColors}
+        groupLabels={groupLabels}
+        isUpdatingGroup={isUpdatingAccountGroup}
+        isUpdatingPassword={isUpdatingAccountPassword}
+        isDeletingAccount={isDeletingAccount}
+        onClose={closeAccountEditor}
+        onAccountGroupChange={onAccountGroupChange}
+        onAccountPasswordChange={onAccountPasswordChange}
+        onAccountDelete={onAccountDelete}
+      />
+    </>
   )
 }

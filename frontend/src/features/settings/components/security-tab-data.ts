@@ -4,6 +4,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   addAuthPermissionGroupMember,
   createAuthPermissionGroup,
+  deleteAuthAccount,
   deleteAuthPermissionGroup,
   getAuthDatabaseInfo,
   getAuthPermissionGroupDetail,
@@ -13,6 +14,7 @@ import {
   listPermissionGroups,
   removeAuthPermissionGroupMember,
   setupLocalAccount,
+  updateAuthAccountPassword,
   updateAuthAccountSystemGroup,
   updateAuthPermissionGroup,
   updateBuiltInPageAccess,
@@ -200,6 +202,7 @@ export function useSecurityTabData() {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: AUTH_ACCOUNTS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: AUTH_PERMISSION_GROUPS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: AUTH_STATUS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['auth-permission-group-detail'] }),
       ])
@@ -207,6 +210,36 @@ export function useSecurityTabData() {
     },
     onError: (error) => {
       showSnackbar({ message: error instanceof Error ? error.message : '권한 그룹 변경에 실패했어.', tone: 'error' })
+    },
+  })
+
+  const accountPasswordMutation = useMutation({
+    mutationFn: ({ accountId, password }: { accountId: number; password: string }) => updateAuthAccountPassword(accountId, password),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: AUTH_ACCOUNTS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: AUTH_STATUS_QUERY_KEY }),
+      ])
+      showSnackbar({ message: '계정 비밀번호를 바꿨어.', tone: 'info' })
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '계정 비밀번호 변경에 실패했어.', tone: 'error' })
+    },
+  })
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: (accountId: number) => deleteAuthAccount(accountId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: AUTH_ACCOUNTS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: AUTH_PERMISSION_GROUPS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: AUTH_STATUS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['auth-permission-group-detail'] }),
+      ])
+      showSnackbar({ message: '계정을 삭제했어.', tone: 'info' })
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '계정 삭제에 실패했어.', tone: 'error' })
     },
   })
 
@@ -377,8 +410,31 @@ export function useSecurityTabData() {
     })
   }
 
-  const updateAccountGroup = (accountId: number, groupKey: 'admin' | 'guest') => {
-    void accountGroupMutation.mutateAsync({ accountId, groupKey })
+  const updateAccountGroup = async (accountId: number, groupKey: 'admin' | 'guest') => {
+    try {
+      await accountGroupMutation.mutateAsync({ accountId, groupKey })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const updateAccountPassword = async (accountId: number, password: string) => {
+    try {
+      await accountPasswordMutation.mutateAsync({ accountId, password })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const deleteAccount = async (accountId: number) => {
+    try {
+      await deleteAccountMutation.mutateAsync(accountId)
+      return true
+    } catch {
+      return false
+    }
   }
 
   const submitPermissionGroupEditor = () => {
@@ -453,7 +509,11 @@ export function useSecurityTabData() {
     isLoadingAccounts: accountsQuery.isLoading,
     availableGroups: permissionGroupsLegacyQuery.data ?? [],
     updateAccountGroup,
+    updateAccountPassword,
+    deleteAccount,
     isUpdatingAccountGroup: accountGroupMutation.isPending,
+    isUpdatingAccountPassword: accountPasswordMutation.isPending,
+    isDeletingAccount: deleteAccountMutation.isPending,
     permissionGroups: permissionGroupsQuery.data ?? [],
     isLoadingPermissionGroups: permissionGroupsQuery.isLoading,
     pagePermissionCatalog: editablePermissionCatalog,

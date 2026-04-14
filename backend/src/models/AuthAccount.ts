@@ -205,6 +205,57 @@ export class AuthAccount {
     return updatedAccount;
   }
 
+  /** Change one removable account password from the admin UI. */
+  static async updatePassword(accountId: number, password: string): Promise<AuthAccountRecord> {
+    const db = getAuthDb();
+    const account = this.findById(accountId);
+    if (!account) {
+      throw new Error('Account not found');
+    }
+    if (!password.trim()) {
+      throw new Error('Password is required');
+    }
+    if (account.sync_key) {
+      throw new Error('Synced legacy admin passwords must be changed from the main credentials form');
+    }
+
+    const passwordHash = await AuthService.hashPassword(password);
+    db.prepare(`
+      UPDATE auth_accounts
+      SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(passwordHash, accountId);
+
+    const updatedAccount = this.findById(accountId);
+    if (!updatedAccount) {
+      throw new Error('Failed to update account password');
+    }
+
+    return updatedAccount;
+  }
+
+  /** Delete one removable local account and its memberships. */
+  static delete(accountId: number): void {
+    const db = getAuthDb();
+    const account = this.findById(accountId);
+    if (!account) {
+      throw new Error('Account not found');
+    }
+    if (account.sync_key) {
+      throw new Error('Synced legacy admin accounts cannot be deleted');
+    }
+    if (account.account_type === 'admin' && account.status === 'active' && this.countActiveAdmins() <= 1) {
+      throw new Error('At least one active admin account must remain');
+    }
+
+    const deleteTransaction = db.transaction(() => {
+      db.prepare('DELETE FROM auth_account_group_memberships WHERE account_id = ?').run(accountId);
+      db.prepare('DELETE FROM auth_accounts WHERE id = ?').run(accountId);
+    });
+
+    deleteTransaction();
+  }
+
   /** Count active admin accounts for lockout protection. */
   static countActiveAdmins(): number {
     const db = getAuthDb();

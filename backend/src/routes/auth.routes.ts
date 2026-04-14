@@ -587,6 +587,67 @@ const handleAccountSystemGroupUpdate: RequestHandler = async (req, res) => {
   }
 };
 
+/** Handle admin-side password changes for one local account. */
+const handleAccountPasswordUpdate: RequestHandler = async (req, res) => {
+  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+  const newPassword = String(req.body?.newPassword || '');
+
+  if (!Number.isInteger(accountId)) {
+    res.status(400).json({ error: 'Invalid account id' });
+    return;
+  }
+
+  if (!newPassword.trim()) {
+    res.status(400).json({ error: 'newPassword is required' });
+    return;
+  }
+
+  try {
+    await AuthAccount.updatePassword(accountId, newPassword);
+    res.json({
+      success: true,
+      message: 'Account password updated successfully',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update account password';
+    const statusCode = (
+      message === 'Password is required'
+      || message === 'Synced legacy admin passwords must be changed from the main credentials form'
+    ) ? 400 : message === 'Account not found' ? 404 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+};
+
+/** Handle one removable account deletion from the admin UI. */
+const handleAccountDelete: RequestHandler = async (req, res) => {
+  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+
+  if (!Number.isInteger(accountId)) {
+    res.status(400).json({ error: 'Invalid account id' });
+    return;
+  }
+
+  if (req.session.accountId === accountId) {
+    res.status(400).json({ error: 'You cannot delete your current session account' });
+    return;
+  }
+
+  try {
+    AuthAccount.delete(accountId);
+    res.json({
+      success: true,
+      message: 'Account deleted successfully',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete account';
+    const statusCode = (
+      message === 'Synced legacy admin accounts cannot be deleted'
+      || message === 'At least one active admin account must remain'
+    ) ? 400 : message === 'Account not found' ? 404 : 500;
+    res.status(statusCode).json({ error: message });
+  }
+};
+
 router.get('/status', asyncHandler(handleStatus));
 router.get('/me', requireAuth, asyncHandler(handleMe));
 router.get('/database-info', asyncHandler(handleDatabaseInfo));
@@ -606,5 +667,7 @@ router.delete('/permission-groups/:groupId/members/:accountId', requireAdmin, as
 router.get('/page-access', requireAdmin, asyncHandler(handlePageAccessList));
 router.put('/page-access/:groupKey', requireAdmin, asyncHandler(handlePageAccessReplace));
 router.put('/accounts/:accountId/system-group', requireAdmin, asyncHandler(handleAccountSystemGroupUpdate));
+router.put('/accounts/:accountId/password', requireAdmin, asyncHandler(handleAccountPasswordUpdate));
+router.delete('/accounts/:accountId', requireAdmin, asyncHandler(handleAccountDelete));
 
 export const authRoutes = router;

@@ -262,6 +262,24 @@ export function updateAuthAccountSystemGroup(accountId: number, groupKey: 'admin
   })
 }
 
+/** Change one account password from the admin security UI. */
+export function updateAuthAccountPassword(accountId: number, newPassword: string) {
+  return requestAuthJson<{ success: true; message: string }>(`/api/auth/accounts/${accountId}/password`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ newPassword }),
+  })
+}
+
+/** Delete one removable local account from the admin security UI. */
+export function deleteAuthAccount(accountId: number) {
+  return requestAuthJson<{ success: true; message: string }>(`/api/auth/accounts/${accountId}`, {
+    method: 'DELETE',
+  })
+}
+
 /** Load the current built-in page access matrix. */
 export async function getPageAccessMatrix() {
   const payload = await requestAuthJson<{ success: true; data: PageAccessMatrixRecord }>('/api/auth/page-access')
