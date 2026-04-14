@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import type { GenerationImageSaveOptions, WorkflowMarkedField } from '@/lib/api-image-generation'
+import { refreshGenerationQueueViews } from './generation-queue-actions'
 import {
   buildWorkflowPromptData,
   getErrorMessage,
@@ -176,11 +177,7 @@ export function useComfyGenerationActions({
         return
       }
 
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
-        queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
-      ])
-      onHistoryRefresh()
+      void refreshGenerationQueueViews(queryClient, onHistoryRefresh)
       showSnackbar({ message: successMessage, tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'ComfyUI 생성에 실패했어.'), tone: 'error' })
@@ -204,11 +201,7 @@ export function useComfyGenerationActions({
       const successCount = results.filter((result) => result.status === 'fulfilled').length
       const failedCount = results.length - successCount
 
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
-        queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
-      ])
-      onHistoryRefresh()
+      void refreshGenerationQueueViews(queryClient, onHistoryRefresh)
 
       if (failedCount === 0) {
         showSnackbar({ message: `${successCount}개 서버 큐에 생성 작업을 넣었어.`, tone: 'info' })

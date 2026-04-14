@@ -10,6 +10,13 @@ import { cancelGenerationQueueJob, getGenerationQueue } from '@/lib/api-image-ge
 import type { GenerationQueueJobRecord, GenerationWorkflow } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '../image-generation-shared'
+import { runGenerationQueueMutation } from './generation-queue-actions'
+import {
+  formatGenerationQueueTimestamp,
+  getGenerationQueueEtaLabel,
+  getGenerationQueuePositionLabel,
+  getGenerationQueueStatusLabel,
+} from './generation-queue-ui'
 
 const ACTIVE_QUEUE_STATUSES: Array<GenerationQueueJobRecord['status']> = ['queued', 'dispatching', 'running']
 const LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY = 'conai:image-generation-queue:last-seen-job-id'
@@ -36,87 +43,6 @@ function persistLastSeenQueueJobId(value: number) {
   }
 
   window.sessionStorage.setItem(LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY, String(Math.max(0, Math.trunc(value))))
-}
-
-function getQueueStatusLabel(record: GenerationQueueJobRecord) {
-  switch (record.status) {
-    case 'queued':
-      return '대기 중'
-    case 'dispatching':
-      return '전송 중'
-    case 'running':
-      return '실행 중'
-    default:
-      return record.status
-  }
-}
-
-function formatQueueTimestamp(value?: string | null) {
-  if (!value) {
-    return null
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
-
-function formatEtaSeconds(value?: number | null) {
-  if (value === undefined || value === null || value < 0) {
-    return null
-  }
-
-  if (value < 60) {
-    return `${Math.max(1, Math.round(value))}초`
-  }
-
-  const minutes = Math.round(value / 60)
-  if (minutes < 60) {
-    return `${minutes}분`
-  }
-
-  const hours = Math.floor(minutes / 60)
-  const remainMinutes = minutes % 60
-  return remainMinutes > 0 ? `${hours}시간 ${remainMinutes}분` : `${hours}시간`
-}
-
-function getQueuePositionLabel(record: GenerationQueueJobRecord) {
-  if (record.queue_position == null || (record.status !== 'queued' && record.status !== 'dispatching')) {
-    return null
-  }
-
-  if (record.queue_position_scope === 'server') {
-    const serverId = record.queue_position_server_id ?? record.requested_server_id ?? record.assigned_server_id ?? null
-    return serverId != null ? `서버 ${serverId} · ${record.queue_position}번째` : `서버 대기열 · ${record.queue_position}번째`
-  }
-
-  if (record.queue_position_scope === 'tag') {
-    const serverTag = record.queue_position_server_tag ?? record.requested_server_tag ?? null
-    return serverTag ? `태그 #${serverTag} · ${record.queue_position}번째` : `태그 대기열 · ${record.queue_position}번째`
-  }
-
-  if (record.queue_position_scope === 'auto') {
-    return `자동 분산 · ${record.queue_position}번째`
-  }
-
-  return `대기열 · ${record.queue_position}번째`
-}
-
-function getQueueEtaLabel(record: GenerationQueueJobRecord) {
-  const eta = formatEtaSeconds(record.estimated_total_seconds)
-  if (!eta) {
-    return null
-  }
-
-  return record.status === 'running' ? `남은 시간 약 ${eta}` : `완료까지 약 ${eta}`
 }
 
 function parseQueueFilter(value: QueueFilterValue) {
@@ -246,11 +172,13 @@ export function GenerationQueueHeaderWidget() {
 
     try {
       setPendingJobId(jobId)
-      const result = await cancelGenerationQueueJob(jobId)
-      await handleRefresh()
-      showSnackbar({ message: result.message || '큐 작업을 정리했어.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '큐 작업 취소에 실패했어.'), tone: 'error' })
+      await runGenerationQueueMutation({
+        execute: () => cancelGenerationQueueJob(jobId),
+        refresh: handleRefresh,
+        showSnackbar,
+        successMessage: '큐 작업을 정리했어.',
+        failureMessage: '큐 작업 취소에 실패했어.',
+      })
     } finally {
       setPendingJobId(null)
     }
@@ -319,10 +247,10 @@ export function GenerationQueueHeaderWidget() {
             <div className="space-y-2">
               {records.map((record) => {
                 const isBusy = pendingJobId === record.id
-                const queuePositionLabel = getQueuePositionLabel(record)
-                const queueEtaLabel = getQueueEtaLabel(record)
-                const queuedAt = formatQueueTimestamp(record.queued_at)
-                const startedAt = formatQueueTimestamp(record.started_at)
+                const queuePositionLabel = getGenerationQueuePositionLabel(record)
+                const queueEtaLabel = getGenerationQueueEtaLabel(record)
+                const queuedAt = formatGenerationQueueTimestamp(record.queued_at)
+                const startedAt = formatGenerationQueueTimestamp(record.started_at)
                 const isCancelRequested = record.cancel_requested > 0
 
                 return (
@@ -331,7 +259,7 @@ export function GenerationQueueHeaderWidget() {
                       <div className="min-w-0 flex-1 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="truncate text-sm font-medium text-foreground">{record.request_summary || record.workflow_name || `${record.service_type} job #${record.id}`}</div>
-                          <Badge variant="secondary">{getQueueStatusLabel(record)}</Badge>
+                          <Badge variant="secondary">{getGenerationQueueStatusLabel(record)}</Badge>
                           <Badge variant="outline">{record.service_type === 'novelai' ? 'NAI' : record.workflow_name ? `WF · ${record.workflow_name}` : 'ComfyUI'}</Badge>
                           {queuePositionLabel ? <Badge variant="outline">{queuePositionLabel}</Badge> : null}
                           {queueEtaLabel ? <Badge variant="outline">{queueEtaLabel}</Badge> : null}

@@ -132,7 +132,7 @@ function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstanc
   )
 }
 
-/** Render one queue status widget using existing graph browse-content APIs. */
+/** Render one graph execution status widget using existing browse-content APIs. */
 function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'queue-status' }> }) {
   const refreshInterval = Math.max(2, widget.settings.refreshIntervalSec) * 1000
   const visualMode = widget.settings.visualMode ?? 'tiles'
@@ -150,11 +150,11 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   }, [queueQuery.data])
 
   if (queueQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">큐 상태 불러오는 중…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">워크플로 상태 불러오는 중…</div>
   }
 
   if (queueQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">큐 상태를 불러오지 못했어.</div>
+    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">워크플로 상태를 불러오지 못했어.</div>
   }
 
   const queueItems = [
@@ -171,7 +171,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
       <div className="flex h-full flex-col justify-center gap-3 rounded-sm bg-[linear-gradient(180deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_55%)] px-1 py-1 text-xs sm:text-sm">
         <div className="mb-0.5 flex items-center justify-between gap-2 rounded-sm border border-border/60 bg-background/45 px-3 py-2 backdrop-blur-sm">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">큐</div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">실행</div>
             <div className="text-sm font-semibold text-foreground">{totalActive.toLocaleString('ko-KR')} 진행 중</div>
           </div>
           <div className="rounded-full border border-border/70 bg-surface-low px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -263,7 +263,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   )
 }
 
-/** Render one subtle activity pulse widget from shared queue and result activity. */
+/** Render one subtle graph execution pulse widget from execution and result activity. */
 function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'activity-pulse' }> }) {
   const refreshInterval = Math.max(2, widget.settings.refreshIntervalSec) * 1000
   const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 1)
@@ -377,7 +377,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
       </div>
 
       <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-        <span>{emphasis === 'queue' ? '큐 중심' : emphasis === 'results' ? '결과 중심' : '혼합'}</span>
+        <span>{emphasis === 'queue' ? '실행 중심' : emphasis === 'results' ? '결과 중심' : '혼합'}</span>
         <span>{summary.lastUpdated ? formatDateTime(summary.lastUpdated) : '업데이트 없음'}</span>
       </div>
     </div>

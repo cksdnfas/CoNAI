@@ -172,7 +172,7 @@ export function WallpaperStatusWidgetEditorFields({
               }}
             >
               <option value="mixed">혼합</option>
-              <option value="queue">큐</option>
+              <option value="queue">실행</option>
               <option value="results">결과</option>
             </Select>
           </SettingsField>

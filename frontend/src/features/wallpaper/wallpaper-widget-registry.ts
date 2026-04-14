@@ -20,13 +20,13 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
   },
   {
     type: 'queue-status',
-    title: '큐 상태',
-    description: '생성 대기열과 실행 상태를 보여줘.',
+    title: '워크플로 상태',
+    description: '그래프 실행의 대기, 실행, 실패 상태를 보여줘.',
     defaultSize: { w: 8, h: 5 },
     minSize: { w: 6, h: 4 },
     maxSize: { w: 12, h: 8 },
     defaultSettings: {
-      title: '큐 상태',
+      title: '워크플로 상태',
       showTitle: false,
       showBackground: false,
       showBorder: false,
@@ -66,13 +66,13 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
   },
   {
     type: 'activity-pulse',
-    title: '활동 펄스',
-    description: '큐와 결과 흐름을 잔잔하게 시각화해.',
+    title: '실행 펄스',
+    description: '그래프 실행과 최근 결과 흐름을 잔잔하게 시각화해.',
     defaultSize: { w: 10, h: 5 },
     minSize: { w: 7, h: 4 },
     maxSize: { w: 16, h: 8 },
     defaultSettings: {
-      title: '활동 펄스',
+      title: '실행 펄스',
       showTitle: false,
       showBackground: false,
       showBorder: false,

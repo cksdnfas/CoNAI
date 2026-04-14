@@ -13,117 +13,21 @@ import {
   getGenerationQueueStats,
   retryGenerationQueueJob,
 } from '@/lib/api-image-generation-queue'
-import type { GenerationQueueJobRecord, GenerationServiceType } from '@/lib/api-image-generation-types'
+import type { GenerationServiceType } from '@/lib/api-image-generation-types'
 import { getErrorMessage } from '../image-generation-shared'
+import { runGenerationQueueMutation } from './generation-queue-actions'
+import {
+  formatGenerationQueueTimestamp,
+  getGenerationQueueEtaLabel,
+  getGenerationQueuePositionLabel,
+  getGenerationQueueStatusLabel,
+  isActiveGenerationQueueStatus,
+} from './generation-queue-ui'
 
 type GenerationQueuePanelProps = {
   refreshNonce: number
   serviceType: GenerationServiceType
   workflowId?: number | null
-}
-
-function isActiveQueueStatus(status: GenerationQueueJobRecord['status']) {
-  return status === 'queued' || status === 'dispatching' || status === 'running'
-}
-
-function getQueueStatusLabel(record: GenerationQueueJobRecord) {
-  if (record.cancel_requested > 0 && record.status === 'completed') {
-    return '취소 요청 후 완료'
-  }
-
-  if (record.cancel_requested > 0 && record.status === 'failed') {
-    return '취소 요청 후 실패'
-  }
-
-  switch (record.status) {
-    case 'queued':
-      return '대기 중'
-    case 'dispatching':
-      return '전송 중'
-    case 'running':
-      return '실행 중'
-    case 'completed':
-      return '완료'
-    case 'failed':
-      return '실패'
-    case 'cancelled':
-      return '취소됨'
-    default:
-      return record.status
-  }
-}
-
-function formatQueueTimestamp(value?: string | null) {
-  if (!value) {
-    return null
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
-
-function getQueuePositionLabel(record: GenerationQueueJobRecord) {
-  if (record.queue_position == null || (record.status !== 'queued' && record.status !== 'dispatching')) {
-    return null
-  }
-
-  if (record.queue_position_scope === 'server') {
-    const serverId = record.queue_position_server_id ?? record.requested_server_id ?? record.assigned_server_id ?? null
-    return serverId != null ? `서버 ${serverId} 대기열 ${record.queue_position}` : `서버 대기열 ${record.queue_position}`
-  }
-
-  if (record.queue_position_scope === 'tag') {
-    const serverTag = record.queue_position_server_tag ?? record.requested_server_tag ?? null
-    return serverTag ? `태그 #${serverTag} 대기열 ${record.queue_position}` : `태그 대기열 ${record.queue_position}`
-  }
-
-  if (record.queue_position_scope === 'auto') {
-    return `자동 분산 ${record.queue_position}`
-  }
-
-  return `대기열 ${record.queue_position}`
-}
-
-function formatEtaSeconds(value?: number | null) {
-  if (value === undefined || value === null || value < 0) {
-    return null
-  }
-
-  if (value < 60) {
-    return `${Math.max(1, Math.round(value))}초`
-  }
-
-  const minutes = Math.round(value / 60)
-  if (minutes < 60) {
-    return `${minutes}분`
-  }
-
-  const hours = Math.floor(minutes / 60)
-  const remainMinutes = minutes % 60
-  return remainMinutes > 0 ? `${hours}시간 ${remainMinutes}분` : `${hours}시간`
-}
-
-function getQueueEtaLabel(record: GenerationQueueJobRecord) {
-  if (record.status === 'running') {
-    const remaining = formatEtaSeconds(record.estimated_total_seconds)
-    return remaining ? `남은 시간 약 ${remaining}` : null
-  }
-
-  if (record.status === 'queued' || record.status === 'dispatching') {
-    const totalEta = formatEtaSeconds(record.estimated_total_seconds)
-    return totalEta ? `완료까지 약 ${totalEta}` : null
-  }
-
-  return null
 }
 
 /** Render a lightweight queue operations panel for image-generation jobs. */
@@ -139,7 +43,7 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
     }),
     refetchInterval: (query) => {
       const records = query.state.data?.records ?? []
-      return records.some((record) => isActiveQueueStatus(record.status)) ? 1500 : false
+      return records.some((record) => isActiveGenerationQueueStatus(record.status)) ? 1500 : false
     },
   })
 
@@ -165,7 +69,7 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
 
   const visibleRecords = useMemo(() => queueQuery.data?.records ?? [], [queueQuery.data?.records])
 
-  const activeCount = visibleRecords.filter((record) => isActiveQueueStatus(record.status)).length
+  const activeCount = visibleRecords.filter((record) => isActiveGenerationQueueStatus(record.status)).length
 
   const handleRefresh = async () => {
     await Promise.all([queueQuery.refetch(), queueStatsQuery.refetch()])
@@ -178,11 +82,13 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
 
     try {
       setPendingJobId(jobId)
-      const result = await cancelGenerationQueueJob(jobId)
-      await handleRefresh()
-      showSnackbar({ message: result.message || '큐 작업을 정리했어.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '큐 작업 취소에 실패했어.'), tone: 'error' })
+      await runGenerationQueueMutation({
+        execute: () => cancelGenerationQueueJob(jobId),
+        refresh: handleRefresh,
+        showSnackbar,
+        successMessage: '큐 작업을 정리했어.',
+        failureMessage: '큐 작업 취소에 실패했어.',
+      })
     } finally {
       setPendingJobId(null)
     }
@@ -195,11 +101,13 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
 
     try {
       setPendingJobId(jobId)
-      const result = await retryGenerationQueueJob(jobId)
-      await handleRefresh()
-      showSnackbar({ message: result.message || '큐 작업을 다시 넣었어.', tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '큐 작업 재시도에 실패했어.'), tone: 'error' })
+      await runGenerationQueueMutation({
+        execute: () => retryGenerationQueueJob(jobId),
+        refresh: handleRefresh,
+        showSnackbar,
+        successMessage: '큐 작업을 다시 넣었어.',
+        failureMessage: '큐 작업 재시도에 실패했어.',
+      })
     } finally {
       setPendingJobId(null)
     }
@@ -241,18 +149,18 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
           {visibleRecords.length > 0 ? (
             <div className="space-y-2">
               {visibleRecords.map((record) => {
-                const queuedAt = formatQueueTimestamp(record.queued_at)
-                const startedAt = formatQueueTimestamp(record.started_at)
-                const completedAt = formatQueueTimestamp(record.completed_at)
+                const queuedAt = formatGenerationQueueTimestamp(record.queued_at)
+                const startedAt = formatGenerationQueueTimestamp(record.started_at)
+                const completedAt = formatGenerationQueueTimestamp(record.completed_at)
                 const hasCancelRequest = record.cancel_requested > 0
-                const isCancelRequested = hasCancelRequest && isActiveQueueStatus(record.status)
+                const isCancelRequested = hasCancelRequest && isActiveGenerationQueueStatus(record.status)
                 const completedAfterCancel = hasCancelRequest && record.status === 'completed'
                 const failedAfterCancel = hasCancelRequest && record.status === 'failed'
                 const canCancel = (record.status === 'queued' || record.status === 'dispatching' || record.status === 'running') && !isCancelRequested
                 const canRetry = record.status === 'failed' || record.status === 'cancelled'
                 const isBusy = pendingJobId === record.id
-                const queuePositionLabel = getQueuePositionLabel(record)
-                const queueEtaLabel = getQueueEtaLabel(record)
+                const queuePositionLabel = getGenerationQueuePositionLabel(record)
+                const queueEtaLabel = getGenerationQueueEtaLabel(record)
 
                 return (
                   <div key={record.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
@@ -260,7 +168,7 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
                       <div className="min-w-0 flex-1 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="text-sm font-medium text-foreground">{record.request_summary || record.workflow_name || `${record.service_type} job #${record.id}`}</div>
-                          <Badge variant={isActiveQueueStatus(record.status) ? 'secondary' : 'outline'}>{getQueueStatusLabel(record)}</Badge>
+                          <Badge variant={isActiveGenerationQueueStatus(record.status) ? 'secondary' : 'outline'}>{getGenerationQueueStatusLabel(record)}</Badge>
                           {queuePositionLabel ? (
                             <Badge variant="outline">{queuePositionLabel}</Badge>
                           ) : null}

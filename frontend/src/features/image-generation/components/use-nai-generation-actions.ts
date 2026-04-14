@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import { createNaiModuleFromSnapshot, upscaleNaiImage } from '@/lib/api'
+import { refreshGenerationQueueViews } from './generation-queue-actions'
 import type { GenerationImageSaveOptions } from '@/lib/api-image-generation'
 import {
   buildNaiCharacterPromptPayload,
@@ -126,11 +127,7 @@ export function useNaiGenerationActions({
         },
       })
 
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
-        queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
-      ])
-      onHistoryRefresh()
+      void refreshGenerationQueueViews(queryClient, onHistoryRefresh)
       showSnackbar({ message: response.message || 'NAI 큐에 생성 작업을 넣었어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'NAI 이미지 생성에 실패했어.'), tone: 'error' })
