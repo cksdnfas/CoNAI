@@ -91,9 +91,13 @@ const publicBaseUrl = (() => {
     return stripTrailingSlash(ensureProtocol(explicit.trim()));
   }
 
-  const host = process.env.BACKEND_HOST || 'localhost';
-  const protocol = process.env.BACKEND_PROTOCOL || 'http';
-  return `${protocol}://${host}:${resolvedPort}`;
+  if (process.env.BACKEND_HOST || process.env.BACKEND_PROTOCOL) {
+    const host = process.env.BACKEND_HOST || 'localhost';
+    const protocol = process.env.BACKEND_PROTOCOL || 'http';
+    return `${protocol}://${host}:${resolvedPort}`;
+  }
+
+  return '';
 })();
 
 const uploadsPublicBase = `${publicBaseUrl}/uploads`;
