@@ -1,15 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { ArrowLeft, RefreshCw, Trash2 } from 'lucide-react'
-import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { ImageRecord } from '@/types/image'
-import { cleanupFailedGenerationHistory, deleteGenerationHistoryRecord, getGenerationHistory, getGenerationWorkflowHistory } from '@/lib/api'
+import {
+  cleanupFailedGenerationHistory,
+  cleanupPublicGenerationWorkflowFailedHistory,
+  deleteGenerationHistoryRecord,
+  downloadImageSelection,
+  getGenerationHistory,
+  getGenerationWorkflowHistory,
+  getPublicGenerationWorkflowHistory,
+} from '@/lib/api'
 import type { GenerationHistoryResponse } from '@/lib/api-image-generation-history'
 import { cn } from '@/lib/utils'
 import {
@@ -22,6 +30,7 @@ type GenerationHistoryPanelProps = {
   refreshNonce: number
   serviceType: 'novelai' | 'comfyui'
   workflowId?: number | null
+  publicWorkflowSlug?: string | null
   splitPaneScroll?: boolean
   onBack?: () => void
 }
@@ -56,30 +65,39 @@ function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['record
 }
 
 /** Render generation history using the shared image-list surface instead of per-record cards. */
-export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
+export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
   const authStatusQuery = useAuthStatusQuery()
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
+  const [isDownloadingSelection, setIsDownloadingSelection] = useState(false)
   const [isCleaningFailed, setIsCleaningFailed] = useState(false)
   const isAdmin = authStatusQuery.data?.isAdmin === true
-  const historyScope = isAdmin ? 'all-users' : 'mine-only'
-  const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null, historyScope] as const
+  const requesterAccountId = authStatusQuery.data?.accountId ?? null
+  const requesterAccountType = authStatusQuery.data?.accountType ?? null
+  const isPublicView = Boolean(publicWorkflowSlug)
+  const historyScope = isPublicView ? 'public-workflow' : (isAdmin ? 'all-users' : 'mine-only')
+  const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null, publicWorkflowSlug ?? null, historyScope, requesterAccountId, requesterAccountType] as const
   const historyQuery = useInfiniteQuery({
     queryKey: historyQueryKey,
     initialPageParam: 0,
     queryFn: ({ pageParam }) => (
-      serviceType === 'comfyui' && workflowId
-        ? getGenerationWorkflowHistory(workflowId, {
+      isPublicView && publicWorkflowSlug
+        ? getPublicGenerationWorkflowHistory(publicWorkflowSlug, {
             limit: GENERATION_HISTORY_PAGE_SIZE,
             offset: pageParam,
-            ...(isAdmin ? {} : { mine: true }),
           })
-        : getGenerationHistory(serviceType, {
-            limit: GENERATION_HISTORY_PAGE_SIZE,
-            offset: pageParam,
-            ...(isAdmin ? {} : { mine: true }),
-          })
+        : serviceType === 'comfyui' && workflowId
+          ? getGenerationWorkflowHistory(workflowId, {
+              limit: GENERATION_HISTORY_PAGE_SIZE,
+              offset: pageParam,
+              ...(isAdmin ? {} : { mine: true }),
+            })
+          : getGenerationHistory(serviceType, {
+              limit: GENERATION_HISTORY_PAGE_SIZE,
+              offset: pageParam,
+              ...(isAdmin ? {} : { mine: true }),
+            })
     ),
     enabled: !authStatusQuery.isPending,
     getNextPageParam: (lastPage, allPages) => {
@@ -115,6 +133,10 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => historyRecords.filter((record) => !isResultFocusedHistoryRecord(record)).length,
     [historyRecords],
   )
+  const failedHistoryCount = useMemo(
+    () => historyRecords.filter((record) => record.generation_status === 'failed').length,
+    [historyRecords],
+  )
   const historyImages = useMemo(() => visibleHistoryRecords.map((record) => mapHistoryRecordToImageRecord(record)), [visibleHistoryRecords])
   const historyRecordMap = useMemo(
     () => new Map(visibleHistoryRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
@@ -124,7 +146,11 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
     [historyRecordMap, selectedHistoryIds],
   )
-  const historyLabel = serviceType === 'novelai' ? 'NAI' : workflowId ? 'ComfyUI Workflow' : 'ComfyUI'
+  const downloadableCompositeHashes = useMemo(
+    () => Array.from(new Set(selectedHistoryRecords.map((record) => record.composite_hash).filter((hash): hash is string => typeof hash === 'string' && hash.length > 0))),
+    [selectedHistoryRecords],
+  )
+  const historyLabel = isPublicView ? 'Public Workflow' : serviceType === 'novelai' ? 'NAI' : workflowId ? 'ComfyUI Workflow' : 'ComfyUI'
   const getHistoryImageHref = (image: ImageRecord) => (image?.composite_hash ? `/images/${image.composite_hash}` : undefined)
 
   useEffect(() => {
@@ -156,7 +182,9 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
     try {
       setIsCleaningFailed(true)
-      const result = await cleanupFailedGenerationHistory()
+      const result = isPublicView && publicWorkflowSlug
+        ? await cleanupPublicGenerationWorkflowFailedHistory(publicWorkflowSlug)
+        : await cleanupFailedGenerationHistory()
       setSelectedHistoryIds([])
       await refetchHistory()
       showSnackbar({ message: result.message || '실패한 히스토리를 정리했어.', tone: 'info' })
@@ -164,6 +192,21 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       showSnackbar({ message: getErrorMessage(error, '실패 히스토리 정리에 실패했어.'), tone: 'error' })
     } finally {
       setIsCleaningFailed(false)
+    }
+  }
+
+  const handleDownloadSelected = async (type: 'thumbnail' | 'original') => {
+    if (downloadableCompositeHashes.length === 0 || isDownloadingSelection) {
+      return
+    }
+
+    try {
+      setIsDownloadingSelection(true)
+      await downloadImageSelection(downloadableCompositeHashes, type)
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, '선택한 이미지 다운로드에 실패했어.'), tone: 'error' })
+    } finally {
+      setIsDownloadingSelection(false)
     }
   }
 
@@ -191,9 +234,15 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{historyLabel}</Badge>
           <Badge variant="outline">결과 {visibleHistoryRecords.length}</Badge>
-          <Badge variant="outline">{isAdmin ? '전체 사용자' : '내 기록'}</Badge>
+          {!isPublicView ? <Badge variant="outline">{isAdmin ? '전체 사용자' : '내 기록'}</Badge> : null}
           {inFlightHistoryCount > 0 ? <Badge variant="secondary">진행 중 {inFlightHistoryCount}</Badge> : null}
-          <Button type="button" size="sm" variant="outline" onClick={() => void handleCleanupFailed()} disabled={isCleaningFailed}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void handleCleanupFailed()}
+            disabled={isCleaningFailed || failedHistoryCount === 0}
+          >
             <Trash2 className="h-4 w-4" />
             {isCleaningFailed ? '실패 정리 중…' : '실패 항목 정리'}
           </Button>
@@ -225,6 +274,11 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             getItemHref={getHistoryImageHref}
             getItemId={(image) => String(image.id)}
             selectable
+            modalAccessOptions={isPublicView ? {
+              allowDetailNavigation: false,
+              allowEditAction: false,
+              allowGroupAssignAction: false,
+            } : undefined}
             selectedIds={selectedHistoryIds}
             onSelectedIdsChange={setSelectedHistoryIds}
             minColumnWidth={220}
@@ -257,16 +311,21 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         ) : null}
       </div>
 
-      <SelectionActionBar
+      <ImageSelectionBar
         selectedCount={selectedHistoryRecords.length}
-        description="드래그로 고른 히스토리를 삭제할 수 있어"
-        onClear={() => setSelectedHistoryIds([])}
-        actions={(
+        downloadableCount={downloadableCompositeHashes.length}
+        isDownloading={isDownloadingSelection}
+        statusText={downloadableCompositeHashes.length > 0
+          ? `${downloadableCompositeHashes.length.toLocaleString('ko-KR')}개 다운로드 가능`
+          : '다운로드 가능한 결과가 없어'}
+        extraActions={!isPublicView ? (
           <Button size="sm" onClick={() => void handleDeleteSelected()} disabled={selectedHistoryRecords.length === 0 || isDeletingSelection} data-no-select-drag="true">
             <Trash2 className="h-4 w-4" />
             {isDeletingSelection ? '삭제 중…' : '선택 삭제'}
           </Button>
-        )}
+        ) : undefined}
+        onDownloadSelect={handleDownloadSelected}
+        onClear={() => setSelectedHistoryIds([])}
       />
     </section>
   )

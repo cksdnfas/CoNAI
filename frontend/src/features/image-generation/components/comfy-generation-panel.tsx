@@ -61,6 +61,7 @@ export function ComfyGenerationPanel({
 }: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
+  const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
@@ -165,12 +166,12 @@ export function ComfyGenerationPanel({
   const {
     isComfyGenerating,
     handleGenerateSelected,
-    handleGenerateAllServers,
   } = useComfyGenerationActions({
     selectedWorkflow,
     selectedWorkflowFields,
     workflowDraft,
     selectedTarget,
+    queueRegistrationCount,
     activeServers,
     connectedServers,
     comfyServerTests,
@@ -508,10 +509,12 @@ export function ComfyGenerationPanel({
             serverTests={comfyServerTests}
             selectedTarget={selectedTarget}
             workflowDraft={workflowDraft}
+            queueRegistrationCount={queueRegistrationCount}
             isGenerating={isComfyGenerating}
             headerPortalTargetId={headerPortalTargetId}
             onBack={() => onSelectedWorkflowChange(null)}
             onSelectTarget={setSelectedTarget}
+            onQueueRegistrationCountChange={setQueueRegistrationCount}
             onFieldChange={handleWorkflowFieldChange}
             onImageChange={handleWorkflowImageChange}
             onResetDraft={() => {
@@ -523,7 +526,6 @@ export function ComfyGenerationPanel({
             onOpenModuleSave={() => selectedWorkflow ? handleOpenModuleSave(selectedWorkflow.id) : undefined}
             onOpenSaveOptions={() => setIsGenerationSaveOptionsOpen(true)}
             onGenerateSelected={() => void handleGenerateSelected()}
-            onGenerateAll={() => void handleGenerateAllServers()}
           />
         ) : null}
       </div>

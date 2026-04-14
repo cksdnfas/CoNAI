@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { SettingsField } from '@/features/settings/components/settings-primitives'
+import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
@@ -66,6 +66,16 @@ function readTextFile(file: File) {
   })
 }
 
+function slugifyPublicWorkflow(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
 export function ComfyWorkflowAuthoringModal({
   open,
   mode = 'create',
@@ -83,6 +93,8 @@ export function ComfyWorkflowAuthoringModal({
   const [workflowDescription, setWorkflowDescription] = useState('')
   const [workflowJson, setWorkflowJson] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
+  const [isPublicPage, setIsPublicPage] = useState(false)
+  const [publicSlug, setPublicSlug] = useState('')
   const [markedFields, setMarkedFields] = useState<WorkflowMarkedField[]>([])
   const [expandedFieldIds, setExpandedFieldIds] = useState<string[]>([])
   const [workflowEditorTab, setWorkflowEditorTab] = useState<'json' | 'graph'>('json')
@@ -102,6 +114,8 @@ export function ComfyWorkflowAuthoringModal({
       setWorkflowDescription(initialData.workflow.description ?? '')
       setWorkflowJson(initialData.workflow.workflow_json)
       setJsonError(null)
+      setIsPublicPage(Boolean(initialData.workflow.is_public_page))
+      setPublicSlug(initialData.workflow.public_slug ?? '')
       setMarkedFields(initialData.workflow.marked_fields ?? [])
       setExpandedFieldIds([])
       setWorkflowEditorTab('graph')
@@ -115,6 +129,8 @@ export function ComfyWorkflowAuthoringModal({
     setWorkflowDescription('')
     setWorkflowJson('')
     setJsonError(null)
+    setIsPublicPage(false)
+    setPublicSlug('')
     setMarkedFields([])
     setExpandedFieldIds([])
     setWorkflowEditorTab('json')
@@ -122,6 +138,24 @@ export function ComfyWorkflowAuthoringModal({
     setGraphSearchIndex(0)
     setIsSaving(false)
   }, [initialData, mode, open])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    if (!isPublicPage) {
+      if (publicSlug.length > 0) {
+        setPublicSlug('')
+      }
+      return
+    }
+
+    setPublicSlug((current) => {
+      const nextSlug = slugifyPublicWorkflow(current.length > 0 ? current : workflowName)
+      return nextSlug === current ? current : nextSlug
+    })
+  }, [isPublicPage, open, publicSlug.length, workflowName])
 
   const handleWorkflowJsonChange = (nextValue: string) => {
     setWorkflowJson(nextValue)
@@ -289,6 +323,12 @@ export function ComfyWorkflowAuthoringModal({
       return
     }
 
+    const normalizedPublicSlug = slugifyPublicWorkflow(publicSlug)
+    if (isPublicPage && normalizedPublicSlug.length === 0) {
+      showSnackbar({ message: '공용 페이지 slug가 필요해.', tone: 'error' })
+      return
+    }
+
     try {
       setIsSaving(true)
 
@@ -298,6 +338,8 @@ export function ComfyWorkflowAuthoringModal({
         workflow_json: workflowJson,
         marked_fields: markedFields,
         is_active: initialData?.workflow.is_active ?? true,
+        is_public_page: isPublicPage,
+        public_slug: isPublicPage ? normalizedPublicSlug : null,
         color: initialData?.workflow.color ?? '#2196f3',
       }
 
@@ -355,6 +397,28 @@ export function ComfyWorkflowAuthoringModal({
                     placeholder="선택"
                   />
                 </SettingsField>
+
+                <SettingsToggleRow>
+                  <input
+                    type="checkbox"
+                    checked={isPublicPage}
+                    onChange={(event) => setIsPublicPage(event.target.checked)}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-foreground">공용 페이지 사용</div>
+                  </div>
+                </SettingsToggleRow>
+
+                {isPublicPage ? (
+                  <SettingsField label="Public slug">
+                    <Input
+                      variant="settings"
+                      value={publicSlug}
+                      onChange={(event) => setPublicSlug(slugifyPublicWorkflow(event.target.value))}
+                      placeholder="character-poster-generator"
+                    />
+                  </SettingsField>
+                ) : null}
               </div>
             </section>
 

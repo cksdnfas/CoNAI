@@ -1,3 +1,4 @@
+import { CircleQuestionMark } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -16,11 +17,20 @@ type WorkflowFieldInputProps = {
 
 /** Render a single marked-field editor for a ComfyUI workflow. */
 export function WorkflowFieldInput({ field, value, onChange, onImageChange }: WorkflowFieldInputProps) {
-  const hint = [field.type, field.required ? 'required' : null].filter(Boolean).join(' · ')
+  const fieldLabel = field.required ? `${field.label} *` : field.label
+  const labelAccessory = field.description ? (
+    <span
+      className="inline-flex cursor-help text-muted-foreground"
+      title={field.description}
+      aria-label={`${field.label} 설명`}
+    >
+      <CircleQuestionMark className="h-3.5 w-3.5" />
+    </span>
+  ) : null
 
   if (field.type === 'textarea') {
     return (
-      <FormField label={field.label} hint={[hint, '`++` wildcard'].filter(Boolean).join(' · ')}>
+      <FormField label={fieldLabel} labelAccessory={labelAccessory}>
         <WildcardInlinePickerField
           tool="comfyui"
           multiline
@@ -29,14 +39,13 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
           placeholder={field.placeholder || ''}
           onChange={onChange}
         />
-        {field.description ? <div className="text-xs text-muted-foreground">{field.description}</div> : null}
       </FormField>
     )
   }
 
   if (field.type === 'select') {
     return (
-      <FormField label={field.label} hint={hint}>
+      <FormField label={fieldLabel} labelAccessory={labelAccessory}>
         <Select value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)}>
           <option value="">선택</option>
           {(field.options ?? []).map((option) => (
@@ -45,7 +54,6 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
             </option>
           ))}
         </Select>
-        {field.description ? <div className="text-xs text-muted-foreground">{field.description}</div> : null}
       </FormField>
     )
   }
@@ -54,7 +62,7 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
     const imageValue = typeof value === 'string' ? null : value
 
     return (
-      <FormField label={field.label} hint={hint}>
+      <FormField label={fieldLabel} labelAccessory={labelAccessory}>
         <div className="space-y-3">
           <ImageAttachmentPickerButton label={imageValue ? '이미지 변경' : '이미지 선택'} modalTitle={field.label} allowSaveDialog={false} onSelect={(image) => void onImageChange(image)} />
           {imageValue ? (
@@ -75,27 +83,25 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
             </div>
           ) : null}
         </div>
-        {field.description ? <div className="text-xs text-muted-foreground">{field.description}</div> : null}
       </FormField>
     )
   }
 
   if (field.type === 'text') {
     return (
-      <FormField label={field.label} hint={[hint, '`++` wildcard'].filter(Boolean).join(' · ')}>
+      <FormField label={fieldLabel} labelAccessory={labelAccessory}>
         <WildcardInlinePickerField
           tool="comfyui"
           value={typeof value === 'string' ? value : ''}
           placeholder={field.placeholder || ''}
           onChange={onChange}
         />
-        {field.description ? <div className="text-xs text-muted-foreground">{field.description}</div> : null}
       </FormField>
     )
   }
 
   return (
-    <FormField label={field.label} hint={hint}>
+    <FormField label={fieldLabel} labelAccessory={labelAccessory}>
       <Input
         type={field.type === 'number' ? 'number' : 'text'}
         min={field.type === 'number' ? field.min : undefined}
@@ -104,7 +110,6 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
         placeholder={field.placeholder || ''}
         onChange={(event) => onChange(event.target.value)}
       />
-      {field.description ? <div className="text-xs text-muted-foreground">{field.description}</div> : null}
     </FormField>
   )
 }

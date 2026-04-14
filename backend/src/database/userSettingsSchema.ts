@@ -14,12 +14,13 @@ export function createUserSettingsSchema(db: Database.Database): void {
       marked_fields TEXT,
       api_endpoint VARCHAR(500) DEFAULT 'http://127.0.0.1:8188',
       is_active BOOLEAN DEFAULT 1,
+      is_public_page BOOLEAN DEFAULT 0,
+      public_slug VARCHAR(255),
       color VARCHAR(10) DEFAULT '#2196f3',
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-
   // 2. ComfyUI servers table
   db.exec(`
     CREATE TABLE IF NOT EXISTS comfyui_servers (
@@ -322,6 +323,16 @@ export function createUserSettingsSchema(db: Database.Database): void {
     return pragma.some((col: any) => col.name === columnName);
   };
 
+  // Migrate workflows table
+  if (!hasColumn('workflows', 'is_public_page')) {
+    console.log('  Migrating workflows: adding is_public_page column');
+    db.exec('ALTER TABLE workflows ADD COLUMN is_public_page BOOLEAN DEFAULT 0');
+  }
+  if (!hasColumn('workflows', 'public_slug')) {
+    console.log('  Migrating workflows: adding public_slug column');
+    db.exec('ALTER TABLE workflows ADD COLUMN public_slug VARCHAR(255)');
+  }
+
   // Migrate comfyui_servers table
   if (!hasColumn('comfyui_servers', 'endpoint')) {
     console.log('  Migrating comfyui_servers: adding endpoint column');
@@ -508,6 +519,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)',
     'CREATE INDEX IF NOT EXISTS idx_workflows_is_active ON workflows(is_active)',
+    'CREATE INDEX IF NOT EXISTS idx_workflows_is_public_page ON workflows(is_public_page)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_public_slug ON workflows(public_slug)',
     'CREATE INDEX IF NOT EXISTS idx_workflows_created_date ON workflows(created_date)',
     'CREATE INDEX IF NOT EXISTS idx_comfyui_servers_name ON comfyui_servers(name)',
     'CREATE INDEX IF NOT EXISTS idx_comfyui_servers_active ON comfyui_servers(is_active)',

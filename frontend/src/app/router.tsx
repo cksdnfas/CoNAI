@@ -9,6 +9,7 @@ import {
   ImageGenerationRoute,
   ImageMetadataEditRoute,
   LoginRoute,
+  PublicComfyWorkflowRoute,
   NotFoundRoute,
   PromptRoute,
   SettingsRoute,
@@ -49,6 +50,10 @@ export const appRouter = createHashRouter([
       {
         path: 'generation',
         element: <RequireAuthPermission permissionKey="page.generation.view"><ImageGenerationRoute /></RequireAuthPermission>,
+      },
+      {
+        path: 'public/workflows/:slug',
+        element: <PublicComfyWorkflowRoute />,
       },
       {
         path: 'graph',

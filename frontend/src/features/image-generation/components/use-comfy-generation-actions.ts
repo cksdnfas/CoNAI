@@ -7,6 +7,7 @@ import {
   buildWorkflowPromptData,
   getErrorMessage,
   hasWorkflowFieldValue,
+  parseNumberInput,
   type WorkflowFieldDraftValue,
 } from '../image-generation-shared'
 
@@ -22,8 +23,17 @@ type ComfyServerTestLike = {
   }
 }
 
+const COMFY_QUEUE_REGISTRATION_COUNT_MIN = 1
+const COMFY_QUEUE_REGISTRATION_COUNT_MAX = 32
+
 function normalizeRoutingTag(value: string) {
   return value.trim().toLowerCase()
+}
+
+/** Clamp the requested ComfyUI queue registration count into a safe integer range. */
+function clampComfyQueueRegistrationCount(value: string) {
+  const parsed = Math.trunc(parseNumberInput(value, COMFY_QUEUE_REGISTRATION_COUNT_MIN))
+  return Math.min(COMFY_QUEUE_REGISTRATION_COUNT_MAX, Math.max(COMFY_QUEUE_REGISTRATION_COUNT_MIN, parsed))
 }
 
 /** Manage workflow validation and ComfyUI generation requests for one or many servers. */
@@ -32,6 +42,7 @@ export function useComfyGenerationActions({
   selectedWorkflowFields,
   workflowDraft,
   selectedTarget,
+  queueRegistrationCount,
   activeServers,
   connectedServers,
   comfyServerTests,
@@ -43,6 +54,7 @@ export function useComfyGenerationActions({
   selectedWorkflowFields: WorkflowMarkedField[]
   workflowDraft: Record<string, WorkflowFieldDraftValue>
   selectedTarget: string
+  queueRegistrationCount: string
   activeServers: ServerLike[]
   connectedServers: ServerLike[]
   comfyServerTests: Record<number, ComfyServerTestLike>
@@ -124,15 +136,17 @@ export function useComfyGenerationActions({
     })
   }
 
-  /** Generate once on the currently selected routing target. */
+  /** Generate one or many queue jobs on the current routing target. */
   const handleGenerateSelected = async () => {
-    if (!validateComfyGeneration()) {
+    if (isComfyGenerating || !validateComfyGeneration()) {
       return
     }
 
+    const registrationCount = clampComfyQueueRegistrationCount(queueRegistrationCount)
+
     try {
-      let response: Awaited<ReturnType<typeof createGenerationQueueJob>> | null = null
-      let successMessage = 'ComfyUI 큐에 생성 작업을 넣었어.'
+      let enqueueJob: (() => Promise<Awaited<ReturnType<typeof createGenerationQueueJob>> | null>) | null = null
+      let targetLabel = 'ComfyUI'
 
       if (selectedTarget === 'auto') {
         if (connectedServers.length === 0) {
@@ -140,8 +154,8 @@ export function useComfyGenerationActions({
           return
         }
 
-        response = await handleGenerateAuto()
-        successMessage = response?.message || '자동 분산 큐에 생성 작업을 넣었어.'
+        enqueueJob = () => handleGenerateAuto()
+        targetLabel = '자동 분산'
       } else if (selectedTarget.startsWith('tag:')) {
         const selectedTag = normalizeRoutingTag(selectedTarget.slice('tag:'.length))
         const matchingConnectedServers = connectedServers.filter((server) => (server.routing_tags ?? []).includes(selectedTag))
@@ -150,8 +164,8 @@ export function useComfyGenerationActions({
           return
         }
 
-        response = await handleGenerateOnTag(selectedTag)
-        successMessage = response?.message || `태그 #${selectedTag} 큐에 생성 작업을 넣었어.`
+        enqueueJob = () => handleGenerateOnTag(selectedTag)
+        targetLabel = `#${selectedTag}`
       } else if (selectedTarget.startsWith('server:')) {
         const serverId = Number(selectedTarget.slice('server:'.length))
         if (!Number.isFinite(serverId)) {
@@ -170,48 +184,34 @@ export function useComfyGenerationActions({
           return
         }
 
-        response = await handleGenerateOnServer(serverId)
-        successMessage = response?.message || `${server.name} 큐에 생성 작업을 넣었어.`
+        enqueueJob = () => handleGenerateOnServer(serverId)
+        targetLabel = server.name
       } else {
         showSnackbar({ message: '생성 타겟이 올바르지 않아.', tone: 'error' })
         return
       }
 
-      void refreshGenerationQueueViews(queryClient, onHistoryRefresh)
-      showSnackbar({ message: successMessage, tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'ComfyUI 생성에 실패했어.'), tone: 'error' })
-    }
-  }
+      if (!enqueueJob) {
+        showSnackbar({ message: '생성 타겟이 올바르지 않아.', tone: 'error' })
+        return
+      }
 
-  /** Generate once on every connected server in parallel. */
-  const handleGenerateAllServers = async () => {
-    if (isComfyGenerating || !validateComfyGeneration()) {
-      return
-    }
-
-    if (connectedServers.length === 0) {
-      showSnackbar({ message: '연결된 ComfyUI 서버가 없어.', tone: 'error' })
-      return
-    }
-
-    try {
       setIsComfyGenerating(true)
-      const results = await Promise.allSettled(connectedServers.map((server) => handleGenerateOnServer(server.id)))
+      const results = await Promise.allSettled(Array.from({ length: registrationCount }, () => enqueueJob()))
       const successCount = results.filter((result) => result.status === 'fulfilled').length
       const failedCount = results.length - successCount
 
       void refreshGenerationQueueViews(queryClient, onHistoryRefresh)
 
       if (failedCount === 0) {
-        showSnackbar({ message: `${successCount}개 서버 큐에 생성 작업을 넣었어.`, tone: 'info' })
+        showSnackbar({ message: `${targetLabel} 큐에 ${successCount}건 등록했어.`, tone: 'info' })
       } else if (successCount === 0) {
-        showSnackbar({ message: '모든 서버 큐 등록이 실패했어.', tone: 'error' })
+        showSnackbar({ message: `${targetLabel} 큐 등록이 전부 실패했어.`, tone: 'error' })
       } else {
-        showSnackbar({ message: `${successCount}개 서버 큐 등록 성공, ${failedCount}개 서버 실패.`, tone: 'error' })
+        showSnackbar({ message: `${targetLabel} 큐 등록 ${successCount}건 성공, ${failedCount}건 실패.`, tone: 'error' })
       }
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '전체 서버 생성 요청에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, 'ComfyUI 생성에 실패했어.'), tone: 'error' })
     } finally {
       setIsComfyGenerating(false)
     }
@@ -221,6 +221,5 @@ export function useComfyGenerationActions({
     isComfyGenerating,
     handleGenerateOnServer,
     handleGenerateSelected,
-    handleGenerateAllServers,
   }
 }

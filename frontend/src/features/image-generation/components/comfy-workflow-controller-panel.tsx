@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ImagePlus, Layers3, RotateCcw, Save, Settings2 } from 'lucide-react'
+import { ArrowLeft, Play, RotateCcw, Save, Settings2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
+import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
@@ -20,17 +21,18 @@ type ComfyWorkflowControllerPanelProps = {
   serverTests: Record<number, ComfyUIServerTestState>
   selectedTarget: string
   workflowDraft: Record<string, WorkflowFieldDraftValue>
+  queueRegistrationCount: string
   isGenerating: boolean
   headerPortalTargetId?: string
   onBack: () => void
   onSelectTarget: (target: string) => void
+  onQueueRegistrationCountChange: (value: string) => void
   onFieldChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
   onResetDraft: () => void
   onOpenModuleSave: () => void
   onOpenSaveOptions: () => void
   onGenerateSelected: () => void
-  onGenerateAll: () => void
 }
 
 /** Render the ComfyUI workflow form with compact top actions and simplified server targeting. */
@@ -42,17 +44,18 @@ export function ComfyWorkflowControllerPanel({
   serverTests,
   selectedTarget,
   workflowDraft,
+  queueRegistrationCount,
   isGenerating,
   headerPortalTargetId,
   onBack,
   onSelectTarget,
+  onQueueRegistrationCountChange,
   onFieldChange,
   onImageChange,
   onResetDraft,
   onOpenModuleSave,
   onOpenSaveOptions,
   onGenerateSelected,
-  onGenerateAll,
 }: ComfyWorkflowControllerPanelProps) {
   const connectedServers = servers.filter((server) => serverTests[server.id]?.status?.is_connected === true)
   const routingTags = Array.from(new Set(servers.flatMap((server) => server.routing_tags ?? []))).sort((left, right) => left.localeCompare(right))
@@ -175,27 +178,30 @@ export function ComfyWorkflowControllerPanel({
           })}
         </Select>
 
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="outline"
-          onClick={onGenerateSelected}
-          disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
-          aria-label={isGenerating ? '생성 요청 중' : '선택 서버 생성'}
-          title={isGenerating ? '생성 요청 중' : '선택 서버 생성'}
-        >
-          <ImagePlus className="h-4 w-4" />
-        </Button>
+        <ScrubbableNumberInput
+          min={1}
+          max={32}
+          step={1}
+          scrubRatio={1}
+          variant="detail"
+          className="h-9 w-[72px] shrink-0 px-2 text-center text-xs"
+          value={queueRegistrationCount}
+          onChange={onQueueRegistrationCountChange}
+          disabled={isGenerating || workflowFields.length === 0}
+          aria-label="큐 등록 개수"
+          inputMode="numeric"
+        />
 
         <Button
           type="button"
           size="icon-sm"
-          onClick={onGenerateAll}
-          disabled={isGenerating || workflowFields.length === 0 || connectedServers.length === 0}
-          aria-label={isGenerating ? '전체 생성 요청 중' : `모두 생성${connectedServers.length > 0 ? ` (${connectedServers.length})` : ''}`}
-          title={isGenerating ? '전체 생성 요청 중' : `모두 생성${connectedServers.length > 0 ? ` (${connectedServers.length})` : ''}`}
+          onClick={onGenerateSelected}
+          disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
+          aria-label={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+          title={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+          className="shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_18%,transparent)]"
         >
-          <Layers3 className="h-4 w-4" />
+          <Play className="h-4 w-4 fill-current" />
         </Button>
 
         <Button
@@ -270,15 +276,16 @@ export function ComfyWorkflowControllerPanel({
               />
 
               {workflowFields.length > 0 ? (
-                <div className="grid gap-4">
+                <div className="overflow-hidden rounded-sm border border-border/70 divide-y divide-border/70">
                   {workflowFields.map((field) => (
-                    <WorkflowFieldInput
-                      key={field.id}
-                      field={field}
-                      value={workflowDraft[field.id] ?? ''}
-                      onChange={(value) => onFieldChange(field.id, value)}
-                      onImageChange={(image) => onImageChange(field.id, image)}
-                    />
+                    <div key={field.id} className="bg-background/20 px-4 py-4">
+                      <WorkflowFieldInput
+                        field={field}
+                        value={workflowDraft[field.id] ?? ''}
+                        onChange={(value) => onFieldChange(field.id, value)}
+                        onImageChange={(image) => onImageChange(field.id, image)}
+                      />
+                    </div>
                   ))}
                 </div>
               ) : (

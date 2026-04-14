@@ -25,6 +25,11 @@ const ImageGenerationPageLazy = lazy(async () => {
   return { default: module.ImageGenerationPage }
 })
 
+const PublicComfyWorkflowPageLazy = lazy(async () => {
+  const module = await import('@/features/image-generation/public-comfy-workflow-page')
+  return { default: module.PublicComfyWorkflowPage }
+})
+
 const ModuleGraphPageLazy = lazy(async () => {
   const module = await import('@/features/module-graph/module-graph-page')
   return { default: module.ModuleGraphPage }
@@ -96,6 +101,10 @@ export function HomeRoute() {
 
 export function ImageGenerationRoute() {
   return withSuspense(<ImageGenerationPageLazy />)
+}
+
+export function PublicComfyWorkflowRoute() {
+  return withSuspense(<PublicComfyWorkflowPageLazy />)
 }
 
 export function ModuleGraphRoute() {

@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express'
 import { asyncHandler } from '../middleware/errorHandler'
+import { AuthAccount } from '../models/AuthAccount'
 import { GenerationQueueModel } from '../models/GenerationQueue'
 import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer'
 import { WorkflowModel } from '../models/Workflow'
@@ -8,6 +9,7 @@ import {
   resolveGenerationQueueLaneMeta,
 } from '../services/generationQueueRouting'
 import { GenerationQueueService } from '../services/generationQueueService'
+import { AuthAccessControlService } from '../services/authAccessControlService'
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../types/generationQueue'
 
 const router = express.Router()
@@ -94,6 +96,29 @@ function canAccessJob(req: Request, job: GenerationQueueJobRecord) {
 
   const accountId = getRequesterAccountId(req)
   return accountId !== null && job.requested_by_account_id === accountId
+}
+
+function hasGenerationPageAccess(req: Request) {
+  const accountId = getRequesterAccountId(req)
+  return AuthAccessControlService.hasPermission(accountId, 'page.generation.view')
+}
+
+function buildQueueRequesterUsernameMap(records: GenerationQueueJobRecord[]) {
+  const usernameByAccountId = new Map<number, string>()
+  const accountIds = Array.from(new Set(
+    records
+      .map((record) => record.requested_by_account_id)
+      .filter((accountId): accountId is number => typeof accountId === 'number' && accountId > 0),
+  ))
+
+  for (const accountId of accountIds) {
+    const account = AuthAccount.findById(accountId)
+    if (account?.username) {
+      usernameByAccountId.set(accountId, account.username)
+    }
+  }
+
+  return usernameByAccountId
 }
 
 function filterQueueRecords(records: GenerationQueueJobRecord[], filters: {
@@ -417,6 +442,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const activeComfyServerCount = activeComfyServers.length
   const queuePositions = computeQueuePositions(activeRelevantRecords, activeComfyServers)
   const queueEtas = computeQueueEtas(activeRelevantRecords, queuePositions, completedRelevantRecords, activeComfyServerCount)
+  const requesterUsernames = buildQueueRequesterUsernameMap(records)
 
   res.json({
     success: true,
@@ -425,6 +451,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
       const queueEta = queueEtas.get(record.id)
       return {
         ...record,
+        requested_by_username: record.requested_by_account_id != null ? (requesterUsernames.get(record.requested_by_account_id) ?? null) : null,
         queue_position: queuePosition?.position ?? null,
         queue_position_scope: queuePosition?.scope ?? null,
         queue_position_server_id: queuePosition?.serverId ?? null,
@@ -441,6 +468,11 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
 /** POST /api/generation-queue */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
+  if (!hasGenerationPageAccess(req)) {
+    res.status(403).json({ success: false, error: 'Generation workspace permission is required to create queue jobs here' })
+    return
+  }
+
   const {
     service_type,
     priority,
@@ -585,6 +617,11 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
 /** POST /api/generation-queue/:id/retry */
 router.post('/:id/retry', asyncHandler(async (req: Request, res: Response) => {
+  if (!hasGenerationPageAccess(req)) {
+    res.status(403).json({ success: false, error: 'Generation workspace permission is required to retry queue jobs here' })
+    return
+  }
+
   const jobId = Number(req.params.id)
   if (!Number.isInteger(jobId) || jobId <= 0) {
     res.status(400).json({ success: false, error: 'Invalid queue job id' })

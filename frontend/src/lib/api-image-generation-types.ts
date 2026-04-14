@@ -7,6 +7,7 @@ export interface GenerationQueueJobRecord {
   status: GenerationQueueJobStatus
   priority: number
   requested_by_account_id?: number | null
+  requested_by_username?: string | null
   requested_by_account_type?: 'admin' | 'guest' | null
   workflow_id?: number | null
   workflow_name?: string | null
@@ -119,6 +120,8 @@ export interface GenerationWorkflow {
   description?: string
   api_endpoint: string
   is_active: boolean
+  is_public_page?: boolean
+  public_slug?: string | null
   color: string
   marked_fields: WorkflowMarkedField[]
 }
@@ -350,6 +353,17 @@ export interface ComfyUIGenerationResponse {
   }
 }
 
+export interface PublicGenerationWorkflow {
+  id: number
+  name: string
+  description?: string | null
+  color: string
+  is_active: boolean
+  is_public_page: boolean
+  public_slug?: string | null
+  marked_fields: WorkflowMarkedField[]
+}
+
 export interface CreateGenerationWorkflowPayload {
   name: string
   description?: string
@@ -357,5 +371,7 @@ export interface CreateGenerationWorkflowPayload {
   marked_fields?: WorkflowMarkedField[]
   api_endpoint?: string
   is_active?: boolean
+  is_public_page?: boolean
+  public_slug?: string | null
   color?: string
 }

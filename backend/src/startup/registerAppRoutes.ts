@@ -31,9 +31,10 @@ import civitaiRoutes from '../routes/civitai.routes';
 import searchHistoryRoutes from '../routes/search-history.routes';
 import searchOptionsRoutes from '../routes/search-options.routes';
 import { wallpaperRuntimeRoutes } from '../routes/wallpaperRuntime.routes';
+import publicWorkflowRoutes from '../routes/public-workflows.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
-import { allowAnonymousPermission, optionalAuth, requirePermission } from '../middleware/authMiddleware';
+import { allowAnonymousPermission, optionalAuth, requireAuth, requirePermission } from '../middleware/authMiddleware';
 import { buildAuthStatusPayload } from '../routes/auth-route-helpers';
 
 export interface RegisterAppRoutesOptions {
@@ -131,6 +132,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/auto-folder-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), autoFolderGroupRoutes);
   app.use('/api/settings', optionalAuth, requirePermission('page.settings.view'), settingsRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), workflowRoutes);
+  app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);
   app.use('/api/comfyui-servers', optionalAuth, requirePermission('page.generation.view'), comfyuiServerRoutes);
   app.use('/api/custom-dropdown-lists', optionalAuth, requirePermission('page.generation.view'), customDropdownListRoutes);
   app.use('/api/custom-nodes', optionalAuth, requirePermission('page.generation.view'), customNodeRoutes);
@@ -138,7 +140,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/graph-workflows', optionalAuth, requirePermission('page.generation.view'), graphWorkflowRoutes);
   app.use('/api/nai', options.uploadLimiter, optionalAuth, requirePermission('page.generation.view'), naiRoutes);
   app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), generationHistoryRoutes);
-  app.use('/api/generation-queue', optionalAuth, requirePermission('page.generation.view'), generationQueueRoutes);
+  app.use('/api/generation-queue', requireAuth, generationQueueRoutes);
   app.use('/api/wildcards', optionalAuth, requirePermission('page.generation.view'), wildcardRoutes);
   app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
   app.use('/api/backup-sources', optionalAuth, backupSourcesRoutes);

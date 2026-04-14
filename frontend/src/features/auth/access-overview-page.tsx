@@ -1,6 +1,8 @@
-import { ArrowRight, ShieldCheck, type LucideIcon } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowRight, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
+import { getPublicGenerationWorkflows } from '@/lib/api-public-workflows'
 import { cn } from '@/lib/utils'
 import { listAccessiblePageAccessItems } from './page-access-catalog'
 import { useAuthStatusQuery } from './use-auth-status-query'
@@ -52,7 +54,14 @@ export function AccessOverviewPage() {
 
   const authStatus = authStatusQuery.data
   const accessibleItems = listAccessiblePageAccessItems(authStatus?.permissionKeys ?? [])
-  const totalVisibleEntries = accessibleItems.length
+  const publicWorkflowsQuery = useQuery({
+    queryKey: ['public-generation-workflows', 'access-overview'],
+    queryFn: getPublicGenerationWorkflows,
+    enabled: authStatus?.hasCredentials === true && authStatus?.authenticated === true,
+    staleTime: 30_000,
+  })
+  const publicWorkflows = publicWorkflowsQuery.data ?? []
+  const totalVisibleEntries = accessibleItems.length + publicWorkflows.length
   const accountTypeLabel = authStatus?.accountType === 'admin'
     ? '관리자'
     : authStatus?.accountType === 'guest'
@@ -73,7 +82,7 @@ export function AccessOverviewPage() {
         </div>
       </div>
 
-      {accessibleItems.length === 0 ? (
+      {accessibleItems.length === 0 && publicWorkflows.length === 0 ? (
         <div className="flex items-center gap-3 rounded-sm border border-border bg-surface-container/72 px-4 py-3 text-foreground">
           <div className="rounded-sm bg-primary/10 p-2 text-primary">
             <ShieldCheck className="h-4 w-4" />
@@ -81,23 +90,52 @@ export function AccessOverviewPage() {
           <div className="text-sm font-semibold">지금 열 수 있는 페이지가 없어.</div>
         </div>
       ) : (
-        <section className="space-y-2.5">
-          <div className="flex items-center gap-2">
-            <div className="text-sm font-semibold text-foreground">기본 페이지</div>
-            <div className="text-xs text-muted-foreground">{accessibleItems.length}</div>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {accessibleItems.map(({ path, label, description, icon }) => (
-              <AccessEntryCard
-                key={path}
-                href={path}
-                label={label}
-                description={description}
-                icon={icon}
-              />
-            ))}
-          </div>
-        </section>
+        <div className="space-y-5">
+          {accessibleItems.length > 0 ? (
+            <section className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-semibold text-foreground">기본 페이지</div>
+                <div className="text-xs text-muted-foreground">{accessibleItems.length}</div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {accessibleItems.map(({ path, label, description, icon }) => (
+                  <AccessEntryCard
+                    key={path}
+                    href={path}
+                    label={label}
+                    description={description}
+                    icon={icon}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {publicWorkflowsQuery.isLoading ? (
+            <div className="text-sm text-muted-foreground">공용 워크플로우 불러오는 중…</div>
+          ) : null}
+
+          {publicWorkflows.length > 0 ? (
+            <section className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-semibold text-foreground">공용 워크플로우</div>
+                <div className="text-xs text-muted-foreground">{publicWorkflows.length}</div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {publicWorkflows.map((workflow) => (
+                  <AccessEntryCard
+                    key={workflow.id}
+                    href={`/public/workflows/${workflow.public_slug}`}
+                    label={workflow.name}
+                    description={workflow.description?.trim() || '공용 생성 페이지'}
+                    icon={Sparkles}
+                    badge="공용"
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
       )}
     </div>
   )

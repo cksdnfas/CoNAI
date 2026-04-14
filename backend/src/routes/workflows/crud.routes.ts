@@ -6,6 +6,22 @@ import { asyncHandler } from '../../middleware/errorHandler';
 
 const router = Router();
 
+function normalizePublicSlug(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  return normalized.length > 0 ? normalized : null;
+}
+
 /**
  * 모든 워크플로우 조회
  * GET /api/workflows
@@ -88,7 +104,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/workflows
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, color } = req.body;
+  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, color } = req.body;
 
   if (!name || !workflow_json) {
     return res.status(400).json({
@@ -117,6 +133,23 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       } as WorkflowResponse);
     }
 
+    const isPublicPage = is_public_page === true;
+    const normalizedPublicSlug = normalizePublicSlug(public_slug);
+
+    if (isPublicPage && !normalizedPublicSlug) {
+      return res.status(400).json({
+        success: false,
+        error: 'public_slug is required when is_public_page is enabled'
+      } as WorkflowResponse);
+    }
+
+    if (normalizedPublicSlug && WorkflowModel.existsByPublicSlug(normalizedPublicSlug)) {
+      return res.status(409).json({
+        success: false,
+        error: 'Workflow public slug already exists'
+      } as WorkflowResponse);
+    }
+
     const workflowData: WorkflowCreateData = {
       name,
       description,
@@ -124,6 +157,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       marked_fields,
       api_endpoint,
       is_active,
+      is_public_page: isPublicPage,
+      public_slug: isPublicPage ? normalizedPublicSlug : null,
       color
     };
 
@@ -154,7 +189,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
-  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, color } = req.body;
+  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, color } = req.body;
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -187,6 +222,23 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
+    const normalizedPublicSlug = public_slug !== undefined ? normalizePublicSlug(public_slug) : undefined;
+    const isPublicPage = is_public_page === undefined ? undefined : is_public_page === true;
+
+    if (isPublicPage === true && !normalizedPublicSlug) {
+      return res.status(400).json({
+        success: false,
+        error: 'public_slug is required when is_public_page is enabled'
+      } as WorkflowResponse);
+    }
+
+    if (normalizedPublicSlug && WorkflowModel.existsByPublicSlug(normalizedPublicSlug, id)) {
+      return res.status(409).json({
+        success: false,
+        error: 'Workflow public slug already exists'
+      } as WorkflowResponse);
+    }
+
     const workflowData: WorkflowUpdateData = {
       name,
       description,
@@ -194,6 +246,8 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       marked_fields,
       api_endpoint,
       is_active,
+      is_public_page: isPublicPage,
+      public_slug: isPublicPage === undefined ? normalizedPublicSlug : (isPublicPage ? normalizedPublicSlug : null),
       color
     };
 

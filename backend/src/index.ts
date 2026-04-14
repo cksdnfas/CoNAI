@@ -151,8 +151,8 @@ app.use(helmet({
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
       'upgrade-insecure-requests': null, // HTTP 접속 허용
       'connect-src': ["'self'", 'http://localhost:*', 'ws:', 'wss:'], // API 연결 허용
-      'img-src': ["'self'", 'data:', 'http:', 'https:'], // 외부 네트워크 이미지 로딩 허용
-      'media-src': ["'self'", 'http:', 'https:'], // 비디오/오디오 미디어 로딩 허용
+      'img-src': ["'self'", 'data:', 'blob:', 'http:', 'https:'], // 외부 네트워크 이미지 + 로컬 blob 미리보기 허용
+      'media-src': ["'self'", 'blob:', 'http:', 'https:'], // 비디오/오디오 미디어 + 로컬 blob 미리보기 허용
     },
   },
 

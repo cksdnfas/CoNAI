@@ -70,23 +70,18 @@ function readBlobAsDataUrl(blob: Blob) {
 
 /** Load one browser image element from either a Blob or a data URL source. */
 async function loadImageElement(input: ImageSaveOutputInput) {
-  const objectUrl = typeof input.source === 'string' ? null : URL.createObjectURL(input.source)
-  const src = typeof input.source === 'string' ? input.source : objectUrl!
+  const src = typeof input.source === 'string'
+    ? input.source
+    : await readBlobAsDataUrl(input.source)
 
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image()
-      element.onload = () => resolve(element)
-      element.onerror = () => reject(new Error('Failed to load image source'))
-      element.src = src
-    })
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image()
+    element.onload = () => resolve(element)
+    element.onerror = () => reject(new Error('Failed to load image source'))
+    element.src = src
+  })
 
-    return image
-  } finally {
-    if (objectUrl) {
-      URL.revokeObjectURL(objectUrl)
-    }
-  }
+  return image
 }
 
 /** Resolve one save format using the requested format and source mime type. */

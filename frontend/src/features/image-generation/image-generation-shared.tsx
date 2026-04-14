@@ -539,12 +539,25 @@ export function getHistoryTitle(record: GenerationHistoryRecord) {
   return record.workflow_name || 'ComfyUI 워크플로우'
 }
 
-export function FormField({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+export function FormField({
+  label,
+  children,
+  hint,
+  labelAccessory,
+}: {
+  label: string
+  children: ReactNode
+  hint?: string
+  labelAccessory?: ReactNode
+}) {
   return (
     <label className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+        <div className="min-w-0 flex items-center gap-2">
+          <span className="text-sm font-medium text-foreground">{label}</span>
+          {labelAccessory}
+        </div>
+        {hint ? <span className="shrink-0 text-xs text-muted-foreground">{hint}</span> : null}
       </div>
       {children}
     </label>

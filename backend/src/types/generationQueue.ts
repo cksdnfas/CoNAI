@@ -9,6 +9,7 @@ export interface GenerationQueueJobRecord {
   status: GenerationQueueJobStatus
   priority: number
   requested_by_account_id?: number | null
+  requested_by_username?: string | null
   requested_by_account_type?: AuthAccountType | null
   workflow_id?: number | null
   workflow_name?: string | null
