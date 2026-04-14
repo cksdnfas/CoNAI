@@ -24,6 +24,16 @@ function copyDirSync(sourcePath, targetPath) {
   fs.cpSync(sourcePath, targetPath, { recursive: true, force: true, dereference: true });
 }
 
+/** Check whether a package can be resolved from a workspace path. */
+function canResolveFrom(baseDir, request) {
+  try {
+    require.resolve(request, { paths: [baseDir] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const ROOT_DIR = path.resolve(__dirname, '..');
 const SHARED_DIR = path.join(ROOT_DIR, 'shared');
 const FRONTEND_DIR = path.join(ROOT_DIR, 'frontend');
@@ -33,7 +43,48 @@ const FRONTEND_DIST = path.join(FRONTEND_DIR, 'dist');
 const BACKEND_DIST = path.join(BACKEND_DIR, 'dist');
 const INTEGRATED_DIST = path.join(BACKEND_DIST, 'frontend');
 
+/** Install workspace dependencies when a cloned checkout is missing frontend build packages. */
+function ensureWorkspaceBuildDependencies() {
+  const missingDependencies = [];
+
+  if (!canResolveFrom(ROOT_DIR, 'typescript/package.json')) {
+    missingDependencies.push('typescript');
+  }
+
+  if (!canResolveFrom(FRONTEND_DIR, 'vite/package.json')) {
+    missingDependencies.push('vite');
+  }
+
+  if (!canResolveFrom(FRONTEND_DIR, '@types/node/package.json')) {
+    missingDependencies.push('@types/node');
+  }
+
+  if (missingDependencies.length === 0) {
+    return;
+  }
+
+  console.log(`📥 Missing workspace build dependencies detected: ${missingDependencies.join(', ')}`);
+  console.log('📦 Running npm install at the repository root...\n');
+
+  execSync('npm install', {
+    cwd: ROOT_DIR,
+    stdio: 'inherit'
+  });
+
+  console.log('\n✅ Workspace dependencies restored\n');
+}
+
 console.log('🚀 CoNAI - Integrated Build\n');
+
+// Step 0: Restore missing workspace build dependencies
+console.log('🔎 Checking workspace build dependencies...');
+try {
+  ensureWorkspaceBuildDependencies();
+  console.log('✅ Workspace build dependencies ready\n');
+} catch (error) {
+  console.error('❌ Workspace dependency check failed:', error.message);
+  process.exit(1);
+}
 
 // Step 1: Clean previous builds
 console.log('🧹 Cleaning previous builds...');
