@@ -147,7 +147,22 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   const frontendDistPath = frontendDistCandidates.find((candidate) => fs.existsSync(candidate));
 
   if (frontendDistPath) {
-    app.use(express.static(frontendDistPath));
+    app.use(express.static(frontendDistPath, {
+      etag: true,
+      lastModified: true,
+      setHeaders: (res, filePath) => {
+        const normalizedPath = filePath.replace(/\\/g, '/');
+
+        if (normalizedPath.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          return;
+        }
+
+        if (normalizedPath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
+      },
+    }));
 
     app.get('/{*path}', (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/temp') || req.path.startsWith('/save')) {
