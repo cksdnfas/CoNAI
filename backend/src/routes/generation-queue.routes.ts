@@ -3,6 +3,10 @@ import { asyncHandler } from '../middleware/errorHandler'
 import { GenerationQueueModel } from '../models/GenerationQueue'
 import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer'
 import { WorkflowModel } from '../models/Workflow'
+import {
+  normalizeGenerationQueueRoutingTag,
+  resolveGenerationQueueLaneMeta,
+} from '../services/generationQueueRouting'
 import { GenerationQueueService } from '../services/generationQueueService'
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../types/generationQueue'
 
@@ -11,7 +15,7 @@ const router = express.Router()
 const ACTIVE_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['queued', 'dispatching', 'running']
 const TERMINAL_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['completed', 'failed', 'cancelled']
 type QueuePositionScope = 'service' | 'server' | 'tag' | 'auto'
-type QueuePositionEntry = { position: number; scope: QueuePositionScope; serverId: number | null; serverTag: string | null }
+type QueuePositionEntry = { position: number; scope: QueuePositionScope; serverId: number | null; serverTag: string | null; eligibleServerIds: number[] }
 type QueueEtaEntry = { waitSeconds: number | null; totalSeconds: number | null; durationSeconds: number | null }
 
 function parseStatusList(value: unknown): GenerationQueueJobStatus[] | undefined {
@@ -58,10 +62,6 @@ function parsePositiveIntegerQuery(value: unknown, name: string): number | undef
   return parsed
 }
 
-function normalizeRoutingTag(value: string) {
-  return value.trim().toLowerCase()
-}
-
 function parseRequestedServerTag(value: unknown) {
   if (value === undefined || value === null || value === '') {
     return undefined
@@ -71,7 +71,7 @@ function parseRequestedServerTag(value: unknown) {
     throw new Error('requested_server_tag must be a string')
   }
 
-  const normalized = normalizeRoutingTag(value)
+  const normalized = normalizeGenerationQueueRoutingTag(value)
   if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(normalized)) {
     throw new Error('requested_server_tag must match /^[a-z0-9][a-z0-9._-]{0,63}$/')
   }
@@ -113,44 +113,7 @@ function filterQueueRecords(records: GenerationQueueJobRecord[], filters: {
   })
 }
 
-function getQueuePositionMeta(record: GenerationQueueJobRecord) {
-  if (record.service_type === 'novelai') {
-    return {
-      laneKey: 'novelai',
-      scope: 'service' as QueuePositionScope,
-      serverId: null,
-      serverTag: null,
-    }
-  }
-
-  const serverId = record.requested_server_id ?? record.assigned_server_id ?? null
-  if (serverId !== null) {
-    return {
-      laneKey: `comfyui:server:${serverId}`,
-      scope: 'server' as QueuePositionScope,
-      serverId,
-      serverTag: null,
-    }
-  }
-
-  if (record.requested_server_tag) {
-    return {
-      laneKey: `comfyui:tag:${record.requested_server_tag}`,
-      scope: 'tag' as QueuePositionScope,
-      serverId: null,
-      serverTag: record.requested_server_tag,
-    }
-  }
-
-  return {
-    laneKey: 'comfyui:auto',
-    scope: 'auto' as QueuePositionScope,
-    serverId: null,
-    serverTag: null,
-  }
-}
-
-function computeQueuePositions(records: GenerationQueueJobRecord[]) {
+function computeQueuePositions(records: GenerationQueueJobRecord[], activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>) {
   const positions = new Map<number, QueuePositionEntry>()
   const nextByLane = new Map<string, number>()
 
@@ -159,13 +122,14 @@ function computeQueuePositions(records: GenerationQueueJobRecord[]) {
       continue
     }
 
-    const lane = getQueuePositionMeta(record)
+    const lane = resolveGenerationQueueLaneMeta(record, activeComfyServers)
     const nextPosition = nextByLane.get(lane.laneKey) ?? 1
     positions.set(record.id, {
       position: nextPosition,
       scope: lane.scope,
       serverId: lane.serverId,
       serverTag: lane.serverTag,
+      eligibleServerIds: lane.eligibleServerIds,
     })
     nextByLane.set(lane.laneKey, nextPosition + 1)
   }
@@ -262,7 +226,18 @@ function getRunningWorkerCount(record: GenerationQueueJobRecord, queuePosition: 
     )).length
   }
 
-  return activeRecords.filter((candidate) => candidate.service_type === 'comfyui' && candidate.status === 'running').length
+  if (!queuePosition || queuePosition.eligibleServerIds.length === 0) {
+    return activeRecords.filter((candidate) => candidate.service_type === 'comfyui' && candidate.status === 'running').length
+  }
+
+  return activeRecords.filter((candidate) => {
+    if (candidate.service_type !== 'comfyui' || candidate.status !== 'running') {
+      return false
+    }
+
+    const candidateServerId = candidate.assigned_server_id ?? candidate.requested_server_id ?? null
+    return candidateServerId !== null && queuePosition.eligibleServerIds.includes(candidateServerId)
+  }).length
 }
 
 function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeComfyServerCount: number) {
@@ -270,11 +245,19 @@ function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueueP
     return 1
   }
 
-  if (queuePosition?.scope === 'auto') {
+  if (!queuePosition) {
     return Math.max(activeComfyServerCount, 1)
   }
 
-  return 1
+  if (queuePosition.scope === 'server') {
+    return 1
+  }
+
+  if (queuePosition.eligibleServerIds.length > 0) {
+    return Math.max(queuePosition.eligibleServerIds.length, 1)
+  }
+
+  return Math.max(activeComfyServerCount, 1)
 }
 
 function estimateQueueEta(
@@ -430,8 +413,9 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     serviceType,
     workflowId,
   })
-  const activeComfyServerCount = ComfyUIServerModel.findActiveServers().length
-  const queuePositions = computeQueuePositions(activeRelevantRecords)
+  const activeComfyServers = ComfyUIServerModel.findActiveServers()
+  const activeComfyServerCount = activeComfyServers.length
+  const queuePositions = computeQueuePositions(activeRelevantRecords, activeComfyServers)
   const queueEtas = computeQueueEtas(activeRelevantRecords, queuePositions, completedRelevantRecords, activeComfyServerCount)
 
   res.json({

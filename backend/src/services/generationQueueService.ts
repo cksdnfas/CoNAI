@@ -3,9 +3,10 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { WorkflowModel } from '../models/Workflow'
 import { GenerationHistoryModel, type ServiceType } from '../models/GenerationHistory'
 import { GenerationQueueModel } from '../models/GenerationQueue'
-import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer'
+import { ComfyUIServerModel } from '../models/ComfyUIServer'
 import { GenerationHistoryService } from './generationHistoryService'
 import { createComfyUIService, getComfyUIServerRuntimeStatuses } from './comfyuiService'
+import { isGenerationQueueComfyJobCompatibleWithServer } from './generationQueueRouting'
 import { prepareComfyPromptData } from './prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from './workflowPromptValueResolver'
 import { executeComfyGeneration } from './comfyGenerationExecutor'
@@ -72,42 +73,6 @@ function hasQueuedComfyJobs() {
   return GenerationQueueModel.findAll(['queued']).some((record) => record.service_type === 'comfyui' && record.cancel_requested === 0)
 }
 
-function getServerRoutingTags(server: ComfyUIServerRecord) {
-  return new Set((server.routing_tags ?? []).map((tag) => tag.trim().toLowerCase()).filter((tag) => tag.length > 0))
-}
-
-function getWorkflowAllowedServerIds(workflowId: number | null | undefined, activeServers: ComfyUIServerRecord[]) {
-  if (!workflowId) {
-    return activeServers.map((server) => server.id)
-  }
-
-  const linkedServerIds = WorkflowServerModel.findServersByWorkflow(workflowId, true)
-    .map((server) => Number(server.id))
-    .filter((serverId) => Number.isInteger(serverId) && activeServers.some((server) => server.id === serverId))
-
-  return linkedServerIds.length > 0 ? linkedServerIds : activeServers.map((server) => server.id)
-}
-
-function isComfyJobCompatibleWithServer(job: GenerationQueueJobRecord, server: ComfyUIServerRecord, activeServers: ComfyUIServerRecord[]) {
-  if (job.service_type !== 'comfyui' || job.cancel_requested > 0) {
-    return false
-  }
-
-  const allowedServerIds = getWorkflowAllowedServerIds(job.workflow_id, activeServers)
-  if (!allowedServerIds.includes(server.id)) {
-    return false
-  }
-
-  if (job.requested_server_id !== null && job.requested_server_id !== undefined) {
-    return job.requested_server_id === server.id
-  }
-
-  if (job.requested_server_tag) {
-    return getServerRoutingTags(server).has(job.requested_server_tag)
-  }
-
-  return true
-}
 
 export class GenerationQueueService {
   private static started = false
@@ -462,7 +427,7 @@ export class GenerationQueueService {
     }
 
     for (const job of queuedJobs) {
-      const hasCompatibleServer = activeServers.some((server) => isComfyJobCompatibleWithServer(job, server, activeServers))
+      const hasCompatibleServer = activeServers.some((server) => isGenerationQueueComfyJobCompatibleWithServer(job, server, activeServers))
       if (hasCompatibleServer) {
         continue
       }
@@ -498,7 +463,7 @@ export class GenerationQueueService {
         continue
       }
 
-      const candidateJob = runnableQueuedJobs.find((job) => !reservedJobIds.has(job.id) && isComfyJobCompatibleWithServer(job, server, activeServers))
+      const candidateJob = runnableQueuedJobs.find((job) => !reservedJobIds.has(job.id) && isGenerationQueueComfyJobCompatibleWithServer(job, server, activeServers))
       if (!candidateJob) {
         continue
       }

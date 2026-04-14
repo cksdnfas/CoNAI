@@ -128,7 +128,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/backup-sources', optionalAuth, backupSourcesRoutes);
   app.use('/api/search-history', optionalAuth, searchHistoryRoutes);
   app.use('/api/search-options', options.readOnlyLimiter, optionalAuth, searchOptionsRoutes);
-  app.use('/api/background-queue', optionalAuth, backgroundQueueRoutes);
+  app.use('/api/background-queue', optionalAuth, requirePermission('page.generation.view'), backgroundQueueRoutes);
   app.use('/api/system', optionalAuth, systemRoutes);
   app.use('/api/image-editor', options.uploadLimiter, optionalAuth, imageEditorRoutes);
   app.use('/api/file-verification', optionalAuth, fileVerificationRoutes);

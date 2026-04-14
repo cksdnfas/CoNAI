@@ -1,3 +1,4 @@
+import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import { GraphWorkflowExecutor } from './graphWorkflowExecutor'
@@ -23,11 +24,64 @@ type CancelExecutionResult = {
   message: string
 }
 
+type InterruptedExecutionRecoverySummary = {
+  failedQueued: number
+  failedRunning: number
+}
+
+const QUEUED_EXECUTION_RESTART_MESSAGE = 'Backend restarted before this queued graph execution could begin. Re-run is required.'
+const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
+
 /** Manage graph workflow executions through a simple in-memory background queue. */
 export class GraphWorkflowExecutionQueue {
+  private static initialized = false
   private static queue: QueuedExecutionJob[] = []
   private static runningExecutionId: number | null = null
   private static cancelRequestedExecutionIds = new Set<number>()
+
+  /** Apply one conservative startup recovery pass before new executions are queued. */
+  static start() {
+    if (this.initialized) {
+      return false
+    }
+
+    const recovery = this.recoverInterruptedExecutions()
+    this.initialized = true
+    console.log(`🧩 Graph workflow execution queue ready (failed_queued=${recovery.failedQueued}, failed_running=${recovery.failedRunning})`)
+    return true
+  }
+
+  /** Fail stale queued/running executions after backend restart instead of leaving them stranded. */
+  static recoverInterruptedExecutions(): InterruptedExecutionRecoverySummary {
+    const db = getUserSettingsDb()
+
+    const recoverTransaction = db.transaction(() => {
+      const failedQueued = db.prepare(`
+        UPDATE graph_executions
+        SET status = 'failed',
+            error_message = COALESCE(error_message, ?),
+            updated_date = CURRENT_TIMESTAMP,
+            completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+        WHERE status = 'queued'
+      `).run(QUEUED_EXECUTION_RESTART_MESSAGE).changes
+
+      const failedRunning = db.prepare(`
+        UPDATE graph_executions
+        SET status = 'failed',
+            error_message = COALESCE(error_message, ?),
+            updated_date = CURRENT_TIMESTAMP,
+            completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+        WHERE status = 'running'
+      `).run(RUNNING_EXECUTION_RESTART_MESSAGE).changes
+
+      return {
+        failedQueued,
+        failedRunning,
+      }
+    })
+
+    return recoverTransaction()
+  }
 
   /** Enqueue a workflow execution and start the worker if idle. */
   static enqueue(
