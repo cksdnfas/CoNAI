@@ -20,5 +20,5 @@ export function RequireAuthPermission({ permissionKey, children }: RequireAuthPe
     return <>{children}</>
   }
 
-  return <Navigate to="/" replace />
+  return <Navigate to="/access" replace />
 }

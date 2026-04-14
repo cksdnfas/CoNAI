@@ -2,6 +2,7 @@ import { Navigate, createHashRouter } from 'react-router-dom'
 import { ProtectedAppShell } from '@/features/auth/protected-app-shell'
 import { RequireAuthPermission } from '@/features/auth/require-auth-permission'
 import {
+  AccessOverviewRoute,
   GroupRoute,
   HomeRoute,
   ImageDetailRoute,
@@ -25,6 +26,10 @@ export const appRouter = createHashRouter([
     path: '/',
     element: <ProtectedAppShell />,
     children: [
+      {
+        path: 'access',
+        element: <AccessOverviewRoute />,
+      },
       {
         index: true,
         element: <HomeRoute />,

@@ -1,23 +1,24 @@
-import { ChevronLeft, ChevronRight, FolderTree, House, Image, LayoutGrid, MessageSquareText, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Image, ShieldCheck, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
 import { HomeSearchDrawer, HomeSearchHeaderBox } from '@/features/home/components/home-search-ui'
 import { HeaderAccountMenu } from '@/features/auth/header-account-menu'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
+import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { GenerationQueueHeaderWidget } from '@/features/image-generation/components/generation-queue-header-widget'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import { cn } from '@/lib/utils'
 import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
 
-const navItems: Array<{ to: string; label: string; icon: LucideIcon; permissionKey: string }> = [
-  { to: '/', label: 'Home', icon: House, permissionKey: 'page.home.view' },
-  { to: '/groups', label: 'Group', icon: FolderTree, permissionKey: 'page.groups.view' },
-  { to: '/prompts', label: 'Prompt', icon: MessageSquareText, permissionKey: 'page.prompts.view' },
-  { to: '/generation', label: 'Generate', icon: Sparkles, permissionKey: 'page.generation.view' },
-  { to: '/wallpaper', label: 'Wallpaper', icon: LayoutGrid, permissionKey: 'page.wallpaper.view' },
-  { to: '/upload', label: 'Upload', icon: Upload, permissionKey: 'page.upload.view' },
-  { to: '/settings', label: 'Settings', icon: Settings2, permissionKey: 'page.settings.view' },
+const navItems: Array<{ to: string; label: string; icon: LucideIcon; permissionKey: string | null }> = [
+  { to: '/access', label: '이용 가능 페이지', icon: ShieldCheck, permissionKey: null },
+  ...PAGE_ACCESS_CATALOG.map(({ path, label, icon, permissionKey }) => ({
+    to: path,
+    label,
+    icon,
+    permissionKey,
+  })),
 ]
 
 export function AppShell() {
@@ -36,7 +37,10 @@ function AppShellLayout() {
   const authStatusQuery = useAuthStatusQuery()
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
-  const visibleNavItems = navItems.filter((item) => hasAuthPermission(permissionKeys, item.permissionKey))
+  const shouldShowAccessOverviewNav = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated === true
+  const visibleNavItems = navItems.filter((item) => item.permissionKey === null
+    ? shouldShowAccessOverviewNav
+    : hasAuthPermission(permissionKeys, item.permissionKey))
   const isWallpaperRuntime = location.pathname === '/wallpaper/runtime'
   const shouldShowGenerationQueueWidget = !isAnonymousSession && hasAuthPermission(permissionKeys, 'page.generation.view') && location.pathname.startsWith('/generation')
   const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')

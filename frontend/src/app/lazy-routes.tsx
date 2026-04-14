@@ -5,6 +5,11 @@ const LoginPageLazy = lazy(async () => {
   return { default: module.LoginPage }
 })
 
+const AccessOverviewPageLazy = lazy(async () => {
+  const module = await import('@/features/auth/access-overview-page')
+  return { default: module.AccessOverviewPage }
+})
+
 const GroupPageLazy = lazy(async () => {
   const module = await import('@/features/groups/group-page')
   return { default: module.GroupPage }
@@ -75,6 +80,10 @@ function withSuspense(element: ReactNode) {
 
 export function LoginRoute() {
   return withSuspense(<LoginPageLazy />)
+}
+
+export function AccessOverviewRoute() {
+  return withSuspense(<AccessOverviewPageLazy />)
 }
 
 export function GroupRoute() {

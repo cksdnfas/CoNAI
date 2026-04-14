@@ -14,7 +14,7 @@ import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-que
 
 /** Sanitize one post-login redirect target to local app paths only. */
 function resolveNextPath(rawNext: string | null) {
-  if (!rawNext || !rawNext.startsWith('/')) {
+  if (!rawNext || !rawNext.startsWith('/') || rawNext === '/login') {
     return '/'
   }
 
@@ -41,6 +41,7 @@ export function LoginPage() {
     const params = new URLSearchParams(location.search)
     return resolveNextPath(params.get('next'))
   }, [location.search])
+  const defaultPostLoginPath = nextPath === '/' ? '/access' : nextPath
 
   const loginMutation = useMutation({
     mutationFn: ({ nextUsername, nextPassword }: { nextUsername: string; nextPassword: string }) =>
@@ -58,7 +59,7 @@ export function LoginPage() {
       })
       setPassword('')
       showSnackbar({ message: '로그인됐어.', tone: 'info' })
-      navigate(nextPath, { replace: true })
+      navigate(defaultPostLoginPath, { replace: true })
     },
     onError: (error) => {
       setPassword('')
@@ -85,7 +86,7 @@ export function LoginPage() {
   }
 
   if (authStatusQuery.data?.authenticated) {
-    return <Navigate to={nextPath} replace />
+    return <Navigate to={defaultPostLoginPath} replace />
   }
 
   const hasCredentials = authStatusQuery.data?.hasCredentials === true
