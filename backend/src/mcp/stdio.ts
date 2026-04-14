@@ -13,18 +13,9 @@
  */
 
 import dotenv from 'dotenv';
-import path from 'path';
+import { resolveEnvPath } from '../utils/envPath';
 
-// .env 로드
-const getEnvPath = () => {
-  if (process.env.PORTABLE_EXECUTABLE_DIR) {
-    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, '.env');
-  }
-  // backend/src/mcp/stdio.ts → 루트는 3레벨 위
-  return path.resolve(__dirname, '../../../.env');
-};
-
-dotenv.config({ path: getEnvPath(), quiet: true });
+dotenv.config({ path: resolveEnvPath(__dirname), quiet: true });
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createMcpServer } from './server';

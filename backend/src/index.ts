@@ -3,39 +3,10 @@
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
-
-const packagedExecutableNames = new Set(['conai', 'conai.exe']);
-const isPackagedRuntime = packagedExecutableNames.has(path.basename(process.execPath).toLowerCase());
-
-// Resolve path to root .env file
-// Robust path resolution for Dev, Portable, and SEA (Single Executable Application)
-const getEnvPath = () => {
-  // 1. Portable mode executable directory
-  if (process.env.PORTABLE_EXECUTABLE_DIR) {
-    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, '.env');
-  }
-
-  // 2. SEA / Packaged Executable detection
-  // In SEA, __dirname is inside the blob, but .env should be next to the executable
-  if (isPackagedRuntime || process.env.NODE_ENV === 'production') {
-    return path.join(path.dirname(process.execPath), '.env');
-  }
-
-  // 3. Development/Standard Node detection (assuming we are in backend/src or backend/dist)
-  // Root is two levels up from backend/src or backend/dist
-  return path.resolve(__dirname, '../../.env');
-};
-
-function getEnvExamplePath(envPath: string): string {
-  if (process.env.NODE_ENV === 'production' || process.env.PORTABLE_EXECUTABLE_DIR) {
-    return path.join(path.dirname(envPath), '.env.example');
-  }
-
-  return path.join(__dirname, '../.env.example');
-}
+import { resolveEnvExamplePath, resolveEnvPath, isPackagedRuntime } from './utils/envPath';
 
 function ensureEnvFileExists(envPath: string): void {
-  const envExamplePath = getEnvExamplePath(envPath);
+  const envExamplePath = resolveEnvExamplePath(envPath, __dirname);
 
   if (!fs.existsSync(envPath) && fs.existsSync(envExamplePath)) {
     fs.copyFileSync(envExamplePath, envPath);
@@ -43,7 +14,7 @@ function ensureEnvFileExists(envPath: string): void {
   }
 }
 
-const rootEnvPath = getEnvPath();
+const rootEnvPath = resolveEnvPath(__dirname);
 ensureEnvFileExists(rootEnvPath);
 dotenv.config({ path: rootEnvPath, quiet: true });
 console.log(`[Config] Loaded environment from: ${rootEnvPath}`);
@@ -51,7 +22,7 @@ console.log(`[Config] Loaded environment from: ${rootEnvPath}`);
 
 // Configure NODE_PATH for native modules in SEA (Single Executable Application)
 // This must be done before any imports that depend on native modules
-if (process.env.NODE_ENV === 'production' || isPackagedRuntime) {
+if (process.env.NODE_ENV === 'production' || isPackagedRuntime()) {
   const nativeModulesPath = path.join(__dirname, '..', 'node_modules');
   if (require('fs').existsSync(nativeModulesPath)) {
     process.env.NODE_PATH = nativeModulesPath;

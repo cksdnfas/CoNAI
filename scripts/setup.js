@@ -28,14 +28,9 @@ console.log('\n🔧 환경 설정 파일을 생성합니다...');
 
 const envFiles = [
   {
-    source: './backend/.env.example',
+    source: './.env.example',
     target: './.env',
     name: 'Root .env'
-  },
-  {
-    source: './frontend/.env.example',
-    target: './frontend/.env',
-    name: 'Frontend .env'
   }
 ];
 
