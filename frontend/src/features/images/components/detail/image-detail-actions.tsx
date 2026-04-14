@@ -1,6 +1,7 @@
-import { ArrowLeft, Download, RefreshCcw } from 'lucide-react'
+import { ArrowLeft, RefreshCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ImageRecord } from '@/types/image'
+import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 
@@ -24,13 +25,7 @@ export function ImageDetailActions({ downloadUrl, downloadName, image, isRefresh
       </Button>
       <ImageEditAction image={image} />
       <ImageGroupAssignAction image={image} />
-      {downloadUrl ? (
-        <Button size="icon-sm" asChild aria-label="다운로드" title="다운로드">
-          <a href={downloadUrl} download={downloadName} aria-label="다운로드" title="다운로드">
-            <Download className="h-4 w-4" />
-          </a>
-        </Button>
-      ) : null}
+      {downloadUrl ? <ImageDownloadTriggerButton image={image} /> : null}
     </div>
   )
 }

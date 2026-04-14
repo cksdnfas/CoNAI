@@ -170,7 +170,7 @@ export function HomePage() {
                 {assignToGroupMutation.isPending ? '그룹 추가 중…' : '그룹에 추가'}
               </Button>
             }
-            onDownload={handleDownloadSelected}
+            onDownloadSelect={handleDownloadSelected}
             onClear={() => setSelectedIds([])}
           />
 

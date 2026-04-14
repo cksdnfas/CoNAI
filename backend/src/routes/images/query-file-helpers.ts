@@ -11,6 +11,8 @@ import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
 import type { ImageFileRecord, ImageMetadataRecord } from '../../types/image';
 import { routeParam } from '../routeParam';
 
+export type ImageDownloadType = 'original' | 'thumbnail';
+
 /** Build a stable ETag from file mtime and size. */
 export function generateETag(stats: fs.Stats): string {
   const hash = crypto.createHash('md5');
@@ -240,8 +242,63 @@ export async function serveThumbnailOrOriginal(
   await streamCacheableFile(req, res, thumbnailPath, 'image/webp');
 }
 
+async function resolveThumbnailDownloadFile(compositeHash: string, metadata: ImageMetadataRecord, file: ImageFileRecord) {
+  let thumbnailPath = metadata.thumbnail_path
+    ? path.join(runtimePaths.tempDir, metadata.thumbnail_path)
+    : null;
+
+  if (thumbnailPath && fs.existsSync(thumbnailPath)) {
+    return {
+      filePath: thumbnailPath,
+      extension: path.extname(thumbnailPath) || '.webp',
+    };
+  }
+
+  const originalPath = resolveUploadsPath(file.original_file_path);
+  if (!fs.existsSync(originalPath)) {
+    return null;
+  }
+
+  try {
+    const relativeThumbPath = await ThumbnailGenerator.generateThumbnail(originalPath, compositeHash);
+    MediaMetadataModel.update(compositeHash, { thumbnail_path: relativeThumbPath });
+    const regeneratedPath = path.join(runtimePaths.tempDir, relativeThumbPath);
+    if (fs.existsSync(regeneratedPath)) {
+      return {
+        filePath: regeneratedPath,
+        extension: path.extname(regeneratedPath) || '.webp',
+      };
+    }
+  } catch (error) {
+    console.error(`[ImageDownload] Failed to regenerate thumbnail for ${file.composite_hash}:`, error);
+  }
+
+  return null;
+}
+
+export async function resolveDownloadFileForType(
+  compositeHash: string,
+  metadata: ImageMetadataRecord,
+  file: ImageFileRecord,
+  downloadType: ImageDownloadType,
+) {
+  if (downloadType === 'thumbnail') {
+    return resolveThumbnailDownloadFile(compositeHash, metadata, file);
+  }
+
+  const originalPath = resolveUploadsPath(file.original_file_path);
+  if (!fs.existsSync(originalPath)) {
+    return null;
+  }
+
+  return {
+    filePath: originalPath,
+    extension: path.extname(file.original_file_path) || '.bin',
+  };
+}
+
 /** Build a zip archive from visible active files for batch download. */
-export function buildBatchDownloadArchive(compositeHashes: string[]) {
+export async function buildBatchDownloadArchive(compositeHashes: string[], downloadType: ImageDownloadType = 'original') {
   const zip = new AdmZip();
   const usedNames = new Map<string, number>();
   let addedCount = 0;
@@ -258,20 +315,24 @@ export function buildBatchDownloadArchive(compositeHashes: string[]) {
     }
 
     const file = files[0];
-    const filePath = resolveUploadsPath(file.original_file_path);
-    if (!fs.existsSync(filePath)) {
+    const resolved = await resolveDownloadFileForType(compositeHash, metadata, file, downloadType);
+    if (!resolved) {
       continue;
     }
 
     const parsedName = path.parse(file.original_file_path);
-    const originalName = parsedName.base || `${compositeHash}`;
-    const duplicateCount = usedNames.get(originalName) || 0;
-    usedNames.set(originalName, duplicateCount + 1);
+    const baseName = parsedName.name || `${compositeHash}`;
+    const extension = downloadType === 'thumbnail'
+      ? resolved.extension || '.webp'
+      : (parsedName.ext || resolved.extension || '.bin');
+    const candidateName = `${baseName}${extension}`;
+    const duplicateCount = usedNames.get(candidateName) || 0;
+    usedNames.set(candidateName, duplicateCount + 1);
     const finalName = duplicateCount === 0
-      ? originalName
-      : `${parsedName.name}-${duplicateCount}${parsedName.ext}`;
+      ? candidateName
+      : `${baseName}-${duplicateCount}${extension}`;
 
-    zip.addLocalFile(filePath, '', finalName);
+    zip.addLocalFile(resolved.filePath, '', finalName);
     addedCount += 1;
   }
 
@@ -280,7 +341,7 @@ export function buildBatchDownloadArchive(compositeHashes: string[]) {
   }
 
   return {
-    archiveName: `conai-images-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`,
+    archiveName: `conai-images-${downloadType}-${new Date().toISOString().replace(/[:.]/g, '-')}.zip`,
     zipBuffer: zip.toBuffer()
   };
 }

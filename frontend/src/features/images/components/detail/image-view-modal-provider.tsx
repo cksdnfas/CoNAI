@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type PropsWi
 import { useQuery } from '@tanstack/react-query'
 import { getImagesBatch } from '@/lib/api'
 import type { ImageRecord } from '@/types/image'
-import { ImageViewModalContext, type ImageViewModalOpenInput } from './image-view-modal-context'
+import { ImageViewModalContext, type ImageViewModalAccessOptions, type ImageViewModalOpenInput } from './image-view-modal-context'
 import type { ImageViewModalMode } from './image-view-modal-actions'
 
 interface ImageViewModalState {
@@ -13,6 +13,7 @@ interface ImageViewModalState {
   openSessionId: number
   stripFocusRequestId: number
   stripFocusBehavior: ScrollBehavior | null
+  accessOptions: ImageViewModalAccessOptions
 }
 
 const ImageViewModalOverlayLazy = lazy(async () => {
@@ -64,6 +65,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     openSessionId: 0,
     stripFocusRequestId: 0,
     stripFocusBehavior: null,
+    accessOptions: {},
   })
   const [viewMode, setViewMode] = useState<ImageViewModalMode>(() => loadImageViewModalMode())
 
@@ -117,6 +119,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         openSessionId: isFreshOpen ? current.openSessionId + 1 : current.openSessionId,
         stripFocusRequestId: shouldFocusStrip ? current.stripFocusRequestId + 1 : current.stripFocusRequestId,
         stripFocusBehavior: nextStripFocusBehavior,
+        accessOptions: input.accessOptions ?? current.accessOptions,
       }
     })
   }, [])
@@ -162,6 +165,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       openSessionId: current.openSessionId,
       stripFocusRequestId: current.stripFocusRequestId,
       stripFocusBehavior: null,
+      accessOptions: {},
     }))
   }, [])
 
@@ -300,6 +304,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
             stripFocusBehavior={modalState.stripFocusBehavior}
             canViewPrevious={canViewPrevious}
             canViewNext={canViewNext}
+            accessOptions={modalState.accessOptions}
             onClose={closeImageView}
             onViewPrevious={viewPreviousImage}
             onViewNext={viewNextImage}

@@ -1,12 +1,19 @@
 import { createContext, useContext } from 'react'
 import type { ImageRecord } from '@/types/image'
 
+export interface ImageViewModalAccessOptions {
+  allowDetailNavigation?: boolean
+  allowEditAction?: boolean
+  allowGroupAssignAction?: boolean
+}
+
 export interface ImageViewModalOpenInput {
   compositeHash: string
   compositeHashes?: string[]
   sourceId?: string
   sourceItems?: ImageRecord[]
   stripFocusBehavior?: ScrollBehavior | null
+  accessOptions?: ImageViewModalAccessOptions
 }
 
 export interface ImageViewModalSyncInput {

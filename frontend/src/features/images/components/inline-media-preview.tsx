@@ -1,5 +1,5 @@
-import { ImageOff } from 'lucide-react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 
@@ -91,10 +91,7 @@ export function InlineMediaPreview({
           className={cn(fitToMedia ? 'max-h-40 max-w-full w-auto object-contain' : 'max-h-40 w-full object-contain', mediaClassName)}
         />
       ) : (
-        <div className="flex flex-col items-center justify-center gap-2 px-3 py-6 text-center text-xs text-muted-foreground">
-          <ImageOff className="h-5 w-5 opacity-70" />
-          <span>{emptyLabel}</span>
-        </div>
+        <ImagePreviewPlaceholder label={emptyLabel} compact className="min-h-24 text-xs" iconClassName="h-5 w-5" labelClassName="text-xs" />
       )}
     </div>
   )

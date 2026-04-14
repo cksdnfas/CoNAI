@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Download, ExternalLink, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ExternalLink, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,6 +9,7 @@ import { getImage } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { ImageDetailMedia } from './image-detail-media'
+import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
 import { ImageViewModeSwitcher, type ImageViewModalMode } from './image-view-modal-actions'
 import { getDownloadName, getImageDetailDownloadUrl, getImageDetailRenderUrl } from './image-detail-utils'
 
@@ -176,11 +177,14 @@ export function ImageViewMinimalContent({
               <ExternalLink className="h-4 w-4" />
             </Button>
             {downloadUrl ? (
-              <Button size="icon-sm" variant="outline" className={overlayButtonClassName} asChild aria-label="다운로드" title="다운로드">
-                <a href={downloadUrl} download={downloadName} aria-label="다운로드" title="다운로드">
-                  <Download className="h-4 w-4" />
-                </a>
-              </Button>
+              <ImageDownloadTriggerButton
+                image={image}
+                size="icon-sm"
+                variant="outline"
+                className={overlayButtonClassName}
+                ariaLabel="다운로드"
+                title="다운로드"
+              />
             ) : null}
           </div>
         </div>

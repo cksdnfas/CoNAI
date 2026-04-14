@@ -131,14 +131,14 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     void imagesQuery.fetchNextPage()
   }
 
-  const handleDownloadSelected = async () => {
+  const handleDownloadSelected = async (type: 'thumbnail' | 'original') => {
     if (selectedCompositeHashes.length === 0 || isDownloading) {
       return
     }
 
     try {
       setIsDownloading(true)
-      await downloadImageSelection(selectedCompositeHashes)
+      await downloadImageSelection(selectedCompositeHashes, type)
     } finally {
       setIsDownloading(false)
     }

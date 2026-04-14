@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -8,7 +8,7 @@ import { ImageDetailView } from '@/features/images/image-detail-view'
 import { ImageViewThumbnailStrip } from './image-view-thumbnail-strip'
 import { ImageViewModalActions, type ImageViewModalMode } from './image-view-modal-actions'
 import { ImageViewMediumContent, ImageViewMinimalContent } from './image-view-modal-surfaces'
-import type { ImageViewModalOpenInput } from './image-view-modal-context'
+import type { ImageViewModalAccessOptions, ImageViewModalOpenInput } from './image-view-modal-context'
 
 interface ImageViewModalOverlayProps {
   compositeHash: string
@@ -23,6 +23,7 @@ interface ImageViewModalOverlayProps {
   onChangeViewMode: (mode: ImageViewModalMode) => void
   canViewPrevious: boolean
   canViewNext: boolean
+  accessOptions: ImageViewModalAccessOptions
   onClose: () => void
   onViewPrevious: () => void
   onViewNext: () => void
@@ -43,6 +44,7 @@ export function ImageViewModalOverlay({
   onChangeViewMode,
   canViewPrevious,
   canViewNext,
+  accessOptions,
   onClose,
   onViewPrevious,
   onViewNext,
@@ -54,9 +56,37 @@ export function ImageViewModalOverlay({
   const [mobileActionsHeight, setMobileActionsHeight] = useState(0)
   const [shouldRenderThumbnailStrip, setShouldRenderThumbnailStrip] = useState(viewMode !== 'full')
 
+  useLayoutEffect(() => {
+    const containerElement = containerRef.current
+    if (!containerElement || viewMode === 'minimal') {
+      return
+    }
+
+    containerElement.scrollTop = 0
+    containerElement.scrollLeft = 0
+    containerElement.focus({ preventScroll: true })
+  }, [compositeHash, openSessionId, viewMode])
+
   useEffect(() => {
-    containerRef.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })
-  }, [compositeHash])
+    const containerElement = containerRef.current
+    if (!containerElement || viewMode === 'minimal') {
+      return
+    }
+
+    const resetScroll = () => {
+      containerElement.scrollTop = 0
+      containerElement.scrollLeft = 0
+    }
+
+    resetScroll()
+    const frameId = window.requestAnimationFrame(resetScroll)
+    const timeoutId = window.setTimeout(resetScroll, 180)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [compositeHash, openSessionId, viewMode, shouldRenderThumbnailStrip, mobileActionsHeight])
 
   useEffect(() => {
     if (viewMode !== 'full') {
@@ -171,11 +201,15 @@ export function ImageViewModalOverlay({
           role="dialog"
           aria-modal="true"
           aria-label="이미지 보기"
-          className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-6 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-6"
+          tabIndex={-1}
+          className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] outline-none md:p-6 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-6"
           style={
             isDesktopModalLayout
-              ? undefined
-              : { paddingBottom: `calc(env(safe-area-inset-bottom) + ${Math.ceil(mobileActionsHeight) + 16}px)` }
+              ? { overflowAnchor: 'none' }
+              : {
+                  paddingBottom: `calc(env(safe-area-inset-bottom) + ${Math.ceil(mobileActionsHeight) + 16}px)`,
+                  overflowAnchor: 'none',
+                }
           }
           onMouseDown={(event) => event.stopPropagation()}
         >
@@ -195,6 +229,7 @@ export function ImageViewModalOverlay({
                     canViewNext={canViewNext}
                     controls={controls}
                     mobileActionsRef={mobileActionsRef}
+                    accessOptions={accessOptions}
                     onClose={onClose}
                     onViewPrevious={onViewPrevious}
                     onViewNext={onViewNext}
@@ -215,6 +250,7 @@ export function ImageViewModalOverlay({
                     canViewNext={canViewNext}
                     controls={controls}
                     mobileActionsRef={mobileActionsRef}
+                    accessOptions={accessOptions}
                     onClose={onClose}
                     onViewPrevious={onViewPrevious}
                     onViewNext={onViewNext}

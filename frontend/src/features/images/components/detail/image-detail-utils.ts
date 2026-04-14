@@ -1,5 +1,6 @@
 import type { ImageRecord } from '@/types/image'
 import type { SimilaritySettings } from '@/types/settings'
+import { buildImageDownloadUrl } from '@/lib/api'
 import { getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 
 export function formatBytes(value?: number | null) {
@@ -40,7 +41,7 @@ export function getImageDetailDownloadUrl(image?: ImageRecord | null) {
   }
 
   if (image.composite_hash) {
-    return `/api/images/${image.composite_hash}/download/original`
+    return buildImageDownloadUrl(image.composite_hash, 'original')
   }
 
   return image.image_url || image.thumbnail_url || null

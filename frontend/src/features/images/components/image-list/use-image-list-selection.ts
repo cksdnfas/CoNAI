@@ -34,6 +34,7 @@ export function useImageListSelection({
   const selectionRef = useRef<SelectionArea | null>(null)
   const previewElementsRef = useRef<Set<HTMLElement>>(new Set())
   const suppressClickUntilRef = useRef(0)
+  const didDragSelectionRef = useRef(false)
 
   useEffect(() => {
     const container = containerElement
@@ -95,9 +96,11 @@ export function useImageListSelection({
         }
       })
       .on('start', () => {
+        didDragSelectionRef.current = false
         onDragStateChange?.(true)
       })
       .on('move', ({ store }) => {
+        didDragSelectionRef.current = true
         applyPreviewElements(store.selected as HTMLElement[])
       })
       .on('stop', ({ store }) => {
@@ -109,9 +112,16 @@ export function useImageListSelection({
           ),
         )
 
-        suppressClickUntilRef.current = performance.now() + 180
+        const shouldCommitSelectionDrag = didDragSelectionRef.current
+        didDragSelectionRef.current = false
         clearPreviewElements()
         onDragStateChange?.(false)
+
+        if (!shouldCommitSelectionDrag) {
+          return
+        }
+
+        suppressClickUntilRef.current = performance.now() + 180
         onSelectedIdsChange(nextSelectedIds)
       })
 

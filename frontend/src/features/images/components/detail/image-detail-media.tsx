@@ -241,6 +241,10 @@ function InteractiveImageDetailMedia({
       return
     }
 
+    if (!isWheelZoomEnabled && (event.pointerType === 'touch' || event.pointerType === 'pen')) {
+      return
+    }
+
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
@@ -353,8 +357,8 @@ function InteractiveImageDetailMedia({
             variant="outline"
             className={cn('bg-surface-container hover:bg-surface-high', isWheelZoomEnabled && 'border-primary/40 text-primary')}
             onClick={toggleWheelZoomEnabled}
-            title={isWheelZoomEnabled ? '휠 확대/축소 잠금' : '휠 확대/축소 허용'}
-            aria-label={isWheelZoomEnabled ? '휠 확대 및 축소 잠금' : '휠 확대 및 축소 허용'}
+            title={isWheelZoomEnabled ? '확대/축소 잠금' : '확대/축소 허용'}
+            aria-label={isWheelZoomEnabled ? '확대 및 축소 잠금' : '확대 및 축소 허용'}
           >
             {isWheelZoomEnabled ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
           </Button>
@@ -399,8 +403,12 @@ function InteractiveImageDetailMedia({
           'flex h-full w-full items-center justify-center overflow-hidden select-none',
           isPannable ? 'cursor-grab active:cursor-grabbing' : isWheelZoomEnabled ? 'cursor-zoom-in' : 'cursor-default',
         )}
-        style={{ touchAction: 'none', overscrollBehavior: isWheelZoomEnabled ? 'contain' : 'auto' }}
+        style={{ touchAction: isWheelZoomEnabled ? 'none' : 'pan-y', overscrollBehavior: isWheelZoomEnabled ? 'contain' : 'auto' }}
         onDoubleClick={() => {
+          if (!isWheelZoomEnabled) {
+            return
+          }
+
           if (scaleRef.current > MIN_SCALE + 0.001) {
             resetView()
             return

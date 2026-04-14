@@ -1,11 +1,13 @@
 import type { RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Download, ExternalLink, RefreshCcw, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ExternalLink, RefreshCcw, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
+import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
+import type { ImageViewModalAccessOptions } from './image-view-modal-context'
 
 export type ImageViewModalMode = 'full' | 'medium' | 'minimal'
 
@@ -46,6 +48,7 @@ interface ImageViewModalActionsProps {
   canViewNext: boolean
   controls: ImageDetailViewHeaderControls
   mobileActionsRef: RefObject<HTMLDivElement | null>
+  accessOptions?: ImageViewModalAccessOptions
   onClose: () => void
   onViewPrevious: () => void
   onViewNext: () => void
@@ -62,12 +65,17 @@ export function ImageViewModalActions({
   canViewNext,
   controls,
   mobileActionsRef,
+  accessOptions,
   onClose,
   onViewPrevious,
   onViewNext,
 }: ImageViewModalActionsProps) {
   const navigate = useNavigate()
   const showCounter = totalCount > 1 && activeIndex >= 0
+
+  const allowDetailNavigation = accessOptions?.allowDetailNavigation !== false
+  const allowEditAction = accessOptions?.allowEditAction !== false
+  const allowGroupAssignAction = accessOptions?.allowGroupAssignAction !== false
 
   const openDetailPage = () => {
     navigate(`/images/${compositeHash}`)
@@ -86,25 +94,22 @@ export function ImageViewModalActions({
         <ChevronRight className="h-4 w-4" />
       </Button>
       {showCounter ? <div className="px-2 text-xs text-muted-foreground">{activeIndex + 1} / {totalCount}</div> : null}
-      <Button size="icon-sm" variant="outline" onClick={openDetailPage} aria-label="상세 페이지 열기" title="상세 페이지">
-        <ExternalLink className="h-4 w-4" />
-      </Button>
+      {allowDetailNavigation ? (
+        <Button size="icon-sm" variant="outline" onClick={openDetailPage} aria-label="상세 페이지 열기" title="상세 페이지">
+          <ExternalLink className="h-4 w-4" />
+        </Button>
+      ) : null}
       <Button size="icon-sm" variant="outline" onClick={controls.refresh} disabled={controls.isRefreshing} aria-label="새로고침" title="새로고침">
         <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
       </Button>
     </>
   )
 
-  const groupAssignButton = <ImageGroupAssignAction image={controls.image} />
+  const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} /> : null
+  const editButton = allowEditAction ? <ImageEditAction image={controls.image} /> : null
   const modeSwitcher = <ImageViewModeSwitcher viewMode={viewMode} onChangeViewMode={onChangeViewMode} />
 
-  const downloadButton = controls.downloadUrl ? (
-    <Button size="icon-sm" asChild aria-label="다운로드" title="다운로드">
-      <a href={controls.downloadUrl} download={controls.downloadName} aria-label="다운로드" title="다운로드">
-        <Download className="h-4 w-4" />
-      </a>
-    </Button>
-  ) : null
+  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} /> : null
 
   return (
     <>
@@ -114,7 +119,7 @@ export function ImageViewModalActions({
           {modeSwitcher}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ImageEditAction image={controls.image} />
+          {editButton}
           {groupAssignButton}
           {downloadButton}
         </div>
@@ -129,7 +134,7 @@ export function ImageViewModalActions({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
               {navigationButtons}
-              <ImageEditAction image={controls.image} />
+              {editButton}
               {groupAssignButton}
               {downloadButton}
             </div>

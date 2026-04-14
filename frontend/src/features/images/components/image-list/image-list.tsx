@@ -46,6 +46,7 @@ export function ImageList({
   renderItemOverlay,
   renderItemPersistentOverlay,
   shouldBlurItemPreview,
+  modalAccessOptions,
 }: ImageListProps) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -110,9 +111,11 @@ export function ImageList({
                   compositeHashes: itemCompositeHashes,
                   sourceId: modalNavigationSourceId,
                   sourceItems: items,
+                  accessOptions: modalAccessOptions,
                 }
               : {
                   compositeHash: modalCompositeHash,
+                  accessOptions: modalAccessOptions,
                 },
           )
           return
@@ -132,7 +135,7 @@ export function ImageList({
         })
       }
     },
-    [activationMode, imageViewModal, itemCompositeHashes, items, location.pathname, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
+    [activationMode, imageViewModal, itemCompositeHashes, items, location.pathname, modalAccessOptions, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
   )
 
   const activeModalIndexInList = useMemo(() => {

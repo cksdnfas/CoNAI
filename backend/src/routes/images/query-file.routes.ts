@@ -15,13 +15,62 @@ import {
   getExistingActiveFilePathOrBlock,
   getMimeTypeFromFilePath,
   getVisibleMetadataOrBlock,
+  resolveDownloadFileForType,
   serveThumbnailOrOriginal,
   streamCacheableFile,
   streamRangeFile,
+  type ImageDownloadType,
 } from './query-file-helpers';
 import { routeParam } from '../routeParam';
 
 const router = Router();
+
+function parseImageDownloadType(value: unknown): ImageDownloadType {
+  return value === 'thumbnail' ? 'thumbnail' : 'original';
+}
+
+async function handleTypedImageDownload(req: Request, res: Response, forcedType?: ImageDownloadType) {
+  const compositeHash = getCompositeHashOrBlock(req, res);
+
+  if (!compositeHash) {
+    return;
+  }
+
+  const metadata = await getVisibleMetadataOrBlock(res, compositeHash);
+  if (!metadata) {
+    return;
+  }
+
+  const file = await getActiveFileOrBlock(res, compositeHash, 'Image file not found');
+  if (!file) {
+    return;
+  }
+
+  const downloadType = forcedType ?? parseImageDownloadType(req.query.type);
+  const resolved = await resolveDownloadFileForType(compositeHash, metadata, file, downloadType);
+  if (!resolved) {
+    res.status(404).json({
+      success: false,
+      error: `Requested ${downloadType} file not found`
+    });
+    return;
+  }
+
+  const parsedOriginalName = path.parse(file.original_file_path);
+  const filename = downloadType === 'thumbnail'
+    ? `${parsedOriginalName.name || compositeHash}${resolved.extension || '.webp'}`
+    : (parsedOriginalName.base || `${compositeHash}${resolved.extension || '.bin'}`);
+  const encodedFilename = encodeURIComponent(filename);
+  const contentType = downloadType === 'thumbnail' ? 'image/webp' : (file.mime_type || getMimeTypeFromFilePath(resolved.filePath));
+
+  res.setHeader('Content-Disposition',
+    `attachment; filename="${filename}"; filename*=UTF-8''${encodedFilename}`
+  );
+  res.setHeader('Content-Type', contentType);
+
+  const fileStream = fs.createReadStream(resolved.filePath);
+  fileStream.pipe(res);
+}
 
 router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = getCompositeHashOrBlock(req, res);
@@ -139,6 +188,7 @@ router.post('/download/batch', asyncHandler(async (req: Request, res: Response) 
   const compositeHashes = Array.isArray(req.body?.compositeHashes)
     ? req.body.compositeHashes.filter((value: unknown): value is string => typeof value === 'string')
     : [];
+  const downloadType = parseImageDownloadType(req.body?.type);
 
   const uniqueHashes = Array.from(new Set<string>(compositeHashes)).filter((hash: string) => hash.length === 48 || hash.length === 32);
 
@@ -150,12 +200,12 @@ router.post('/download/batch', asyncHandler(async (req: Request, res: Response) 
   }
 
   try {
-    const archive = buildBatchDownloadArchive(uniqueHashes);
+    const archive = await buildBatchDownloadArchive(uniqueHashes, downloadType);
 
     if (!archive) {
       return res.status(404).json({
         success: false,
-        error: 'No downloadable files were found'
+        error: `No downloadable ${downloadType} files were found`
       });
     }
 
@@ -173,42 +223,23 @@ router.post('/download/batch', asyncHandler(async (req: Request, res: Response) 
   }
 }));
 
-router.get('/:compositeHash/download/original', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = getCompositeHashOrBlock(req, res);
-
-  if (!compositeHash) {
+router.get('/:compositeHash/download', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    await handleTypedImageDownload(req, res);
+    return;
+  } catch (error) {
+    console.error('Typed download error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to download image'
+    });
     return;
   }
+}));
 
+router.get('/:compositeHash/download/original', asyncHandler(async (req: Request, res: Response) => {
   try {
-    if (!(await getVisibleMetadataOrBlock(res, compositeHash))) {
-      return;
-    }
-
-    const file = await getActiveFileOrBlock(res, compositeHash, 'Image file not found');
-
-    if (!file) {
-      return;
-    }
-
-    const filePath = getExistingActiveFilePathOrBlock(res, file, {
-      missingError: 'File not found',
-    });
-
-    if (!filePath) {
-      return;
-    }
-
-    const filename = path.basename(file.original_file_path);
-    const encodedFilename = encodeURIComponent(filename);
-
-    res.setHeader('Content-Disposition',
-      `attachment; filename="${filename}"; filename*=UTF-8''${encodedFilename}`
-    );
-    res.setHeader('Content-Type', file.mime_type);
-
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(res);
+    await handleTypedImageDownload(req, res, 'original');
     return;
   } catch (error) {
     console.error('Original download error:', error);

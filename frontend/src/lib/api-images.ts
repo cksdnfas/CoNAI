@@ -199,23 +199,32 @@ export function getExistingImageEditorSourceUrl(image?: ImageRecord | null) {
   return image.image_url || image.thumbnail_url || null
 }
 
-export async function downloadImageSelection(compositeHashes: string[]) {
+export type ImageDownloadType = 'thumbnail' | 'original'
+
+export function buildImageDownloadUrl(compositeHash: string, type: ImageDownloadType = 'original') {
+  const searchParams = new URLSearchParams()
+  searchParams.set('type', type)
+  return buildApiUrl(`/api/images/${compositeHash}/download?${searchParams.toString()}`)
+}
+
+export async function downloadImageSelection(compositeHashes: string[], type: ImageDownloadType = 'original') {
   if (compositeHashes.length === 0) {
     return
   }
 
   if (compositeHashes.length === 1) {
-    triggerBrowserDownload(buildApiUrl(`/api/images/${compositeHashes[0]}/download/original`))
+    triggerBrowserDownload(buildImageDownloadUrl(compositeHashes[0], type))
     return
   }
 
   const response = await fetch(buildApiUrl('/api/images/download/batch'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/zip',
     },
-    body: JSON.stringify({ compositeHashes }),
+    body: JSON.stringify({ compositeHashes, type }),
   })
 
   if (!response.ok) {
@@ -223,7 +232,7 @@ export async function downloadImageSelection(compositeHashes: string[]) {
   }
 
   const blob = await response.blob()
-  triggerBlobDownload(blob, `conai-images-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`)
+  triggerBlobDownload(blob, `conai-images-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`)
 }
 
 export interface UploadBatchResultItem {
@@ -271,6 +280,7 @@ function uploadFormDataWithProgress<T>(path: string, formData: FormData, onProgr
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', buildApiUrl(path))
+    xhr.withCredentials = true
     xhr.setRequestHeader('Accept', 'application/json')
 
     xhr.upload.onprogress = (event) => {
@@ -349,6 +359,7 @@ export async function extractImageMetadataPreview(file: File) {
 
   const response = await fetch(buildApiUrl('/api/images/extract-metadata'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
     },
@@ -364,6 +375,7 @@ export async function extractImageTaggerPreview(file: File) {
 
   const response = await fetch(buildApiUrl('/api/images/extract-tagger'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
     },
@@ -379,6 +391,7 @@ export async function extractImageKaloscopePreview(file: File) {
 
   const response = await fetch(buildApiUrl('/api/images/extract-kaloscope'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
     },
@@ -429,6 +442,7 @@ export async function downloadConvertedWebP(file: File, options?: { quality?: nu
 
   const response = await fetch(buildApiUrl('/api/images/convert-webp'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Accept: 'image/webp',
     },
@@ -473,6 +487,7 @@ export async function downloadRewrittenImage(
 
   const response = await fetch(buildApiUrl('/api/images/rewrite-metadata'), {
     method: 'POST',
+    credentials: 'include',
     body: formData,
   })
 
@@ -510,6 +525,7 @@ export async function downloadExistingImageWithRewrittenMetadata(
 ) {
   const response = await fetch(buildApiUrl(`/api/images/${compositeHash}/rewrite-metadata/download`), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Accept: 'application/octet-stream',
       'Content-Type': 'application/json',
@@ -547,6 +563,7 @@ export async function downloadExistingImageWithRewrittenMetadata(
 export async function saveImageMetadata(compositeHash: string, metadataPatch: MetadataPatchPayload) {
   const response = await fetch(buildApiUrl(`/api/images/${compositeHash}/metadata`), {
     method: 'PATCH',
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',

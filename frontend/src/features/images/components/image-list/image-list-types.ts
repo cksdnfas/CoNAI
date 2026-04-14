@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { ImageViewModalAccessOptions } from '@/features/images/components/detail/image-view-modal-context'
 import type { ImageRecord } from '@/types/image'
 
 export type ImageListLayoutMode = 'grid' | 'masonry'
@@ -28,4 +29,5 @@ export interface ImageListProps {
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
+  modalAccessOptions?: ImageViewModalAccessOptions
 }

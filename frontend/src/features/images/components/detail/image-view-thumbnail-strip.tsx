@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { getRatingTiers } from '@/lib/api-search'
@@ -10,6 +11,21 @@ import {
   getImageListPreviewUrl,
 } from '@/features/images/components/image-list/image-list-utils'
 
+function scrollThumbnailStripToActive(
+  stripElement: HTMLDivElement,
+  activeButton: HTMLButtonElement,
+  behavior: ScrollBehavior,
+) {
+  const targetLeft = activeButton.offsetLeft - ((stripElement.clientWidth - activeButton.clientWidth) / 2)
+  const maxScrollLeft = Math.max(0, stripElement.scrollWidth - stripElement.clientWidth)
+  const nextScrollLeft = Math.min(Math.max(0, targetLeft), maxScrollLeft)
+
+  stripElement.scrollTo({
+    left: nextScrollLeft,
+    behavior,
+  })
+}
+
 interface ImageViewThumbnailStripProps {
   items: ImageRecord[]
   activeCompositeHash: string
@@ -17,6 +33,51 @@ interface ImageViewThumbnailStripProps {
   focusRequestId: number
   focusBehavior: ScrollBehavior | null
   onSelect: (compositeHash: string) => void
+}
+
+function ThumbnailStripPreview({ item, displayName, blurPreview }: { item: ImageRecord, displayName: string, blurPreview: boolean }) {
+  const previewUrl = getImageListPreviewUrl(item)
+  const mediaKind = getImageListMediaKind(item)
+  const [hasPreviewError, setHasPreviewError] = useState(false)
+
+  useEffect(() => {
+    setHasPreviewError(false)
+  }, [previewUrl, item.composite_hash, item.original_file_path, item.is_processing])
+
+  if (!previewUrl || hasPreviewError) {
+    return (
+      <ImagePreviewPlaceholder
+        label={item.is_processing ? '처리 중' : '미리보기 없음'}
+        compact
+        className="text-[10px]"
+      />
+    )
+  }
+
+  return (
+    <div className={cn('h-full w-full transition duration-300', blurPreview && 'scale-[1.03] blur-2xl saturate-[0.55]')}>
+      {mediaKind === 'video' ? (
+        <video
+          src={previewUrl}
+          className="h-full w-full object-cover select-none"
+          muted
+          playsInline
+          preload="metadata"
+          draggable={false}
+          onError={() => setHasPreviewError(true)}
+        />
+      ) : (
+        <img
+          src={previewUrl}
+          alt={displayName}
+          className="h-full w-full object-cover select-none"
+          loading="lazy"
+          draggable={false}
+          onError={() => setHasPreviewError(true)}
+        />
+      )}
+    </div>
+  )
 }
 
 /** Render a horizontal thumbnail strip for fast modal image navigation. */
@@ -69,15 +130,12 @@ export function ImageViewThumbnailStrip({
     }
 
     const activeButton = buttonRefs.current[activeCompositeHash]
-    if (!activeButton) {
+    const stripElement = stripRef.current
+    if (!activeButton || !stripElement) {
       return
     }
 
-    activeButton.scrollIntoView({
-      behavior: 'auto',
-      block: 'nearest',
-      inline: 'center',
-    })
+    scrollThumbnailStripToActive(stripElement, activeButton, 'auto')
     initialScrollAppliedSessionRef.current = initialScrollSessionId
     focusRequestAppliedRef.current = focusRequestId
   }, [activeCompositeHash, focusRequestId, initialScrollSessionId, items])
@@ -92,15 +150,12 @@ export function ImageViewThumbnailStrip({
     }
 
     const activeButton = buttonRefs.current[activeCompositeHash]
-    if (!activeButton) {
+    const stripElement = stripRef.current
+    if (!activeButton || !stripElement) {
       return
     }
 
-    activeButton.scrollIntoView({
-      behavior: focusBehavior,
-      block: 'nearest',
-      inline: 'center',
-    })
+    scrollThumbnailStripToActive(stripElement, activeButton, focusBehavior)
     focusRequestAppliedRef.current = focusRequestId
   }, [activeCompositeHash, focusBehavior, focusRequestId, items])
 
@@ -186,8 +241,6 @@ export function ImageViewThumbnailStrip({
             return null
           }
 
-          const previewUrl = getImageListPreviewUrl(item)
-          const mediaKind = getImageListMediaKind(item)
           const displayName = getImageListDisplayName(item)
           const isActive = compositeHash === activeCompositeHash
           const blurPreview = blurPreviewByHash.get(compositeHash) === true
@@ -220,24 +273,7 @@ export function ImageViewThumbnailStrip({
               aria-label={`${index + 1}. ${displayName}`}
               aria-current={isActive ? 'true' : undefined}
             >
-              {previewUrl ? (
-                <div className={cn('h-full w-full transition duration-300', blurPreview && 'scale-[1.03] blur-2xl saturate-[0.55]')}>
-                  {mediaKind === 'video' ? (
-                    <video
-                      src={previewUrl}
-                      className="h-full w-full object-cover select-none"
-                      muted
-                      playsInline
-                      preload="metadata"
-                      draggable={false}
-                    />
-                  ) : (
-                    <img src={previewUrl} alt={displayName} className="h-full w-full object-cover select-none" loading="lazy" draggable={false} />
-                  )}
-                </div>
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">없음</div>
-              )}
+              <ThumbnailStripPreview item={item} displayName={displayName} blurPreview={blurPreview} />
 
               {blurPreview ? <div className="pointer-events-none absolute inset-0 z-10 bg-black/18" /> : null}
 

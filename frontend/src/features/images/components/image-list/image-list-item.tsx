@@ -1,6 +1,6 @@
-import { ImageOff } from 'lucide-react'
 import { memo, type DragEvent, type KeyboardEvent, type ReactNode, useEffect, useState } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { ImageEditAction } from '@/features/images/components/detail/image-edit-action'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -78,13 +78,13 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       onError={() => setHasPreviewError(true)}
     />
   ) : (
-    <div
-      className="flex flex-col items-center justify-center gap-2 bg-surface-lowest px-4 text-center text-sm text-muted-foreground"
+    <ImagePreviewPlaceholder
+      label={placeholderLabel}
+      className="text-sm"
+      iconClassName="h-10 w-10"
+      labelClassName="text-sm"
       style={mediaFrameStyle}
-    >
-      <ImageOff className="h-10 w-10 opacity-70" />
-      <span>{placeholderLabel}</span>
-    </div>
+    />
   )
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
