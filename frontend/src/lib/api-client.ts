@@ -4,6 +4,7 @@ export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T>
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: init?.credentials ?? 'include',
+    cache: init?.cache ?? 'no-store',
     headers: {
       Accept: 'application/json',
       ...(init?.headers ?? {}),

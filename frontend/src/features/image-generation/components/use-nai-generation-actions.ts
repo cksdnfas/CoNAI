@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import { createNaiModuleFromSnapshot, upscaleNaiImage } from '@/lib/api'
@@ -50,6 +51,7 @@ export function useNaiGenerationActions({
   closeModuleSaveModal: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const queryClient = useQueryClient()
   const [isNaiGenerating, setIsNaiGenerating] = useState(false)
   const [isSavingNaiModule, setIsSavingNaiModule] = useState(false)
   const [isUpscaling, setIsUpscaling] = useState(false)
@@ -124,6 +126,10 @@ export function useNaiGenerationActions({
         },
       })
 
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
+        queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
+      ])
       onHistoryRefresh()
       showSnackbar({ message: response.message || 'NAI 큐에 생성 작업을 넣었어.', tone: 'info' })
     } catch (error) {

@@ -5,6 +5,7 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
   const response = await fetch(buildApiUrl(path), {
     ...init,
     credentials: init?.credentials ?? 'include',
+    cache: init?.cache ?? 'no-store',
     headers: {
       Accept: 'application/json',
       ...(init?.headers ?? {}),

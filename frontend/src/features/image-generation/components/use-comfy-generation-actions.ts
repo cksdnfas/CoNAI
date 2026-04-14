@@ -125,13 +125,11 @@ export function useComfyGenerationActions({
 
   /** Generate once on the currently selected routing target. */
   const handleGenerateSelected = async () => {
-    if (isComfyGenerating || !validateComfyGeneration()) {
+    if (!validateComfyGeneration()) {
       return
     }
 
     try {
-      setIsComfyGenerating(true)
-
       let response: Awaited<ReturnType<typeof createGenerationQueueJob>> | null = null
       let successMessage = 'ComfyUI 큐에 생성 작업을 넣었어.'
 
@@ -178,7 +176,7 @@ export function useComfyGenerationActions({
         return
       }
 
-      await Promise.all([
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
         queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
       ])
@@ -186,8 +184,6 @@ export function useComfyGenerationActions({
       showSnackbar({ message: successMessage, tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'ComfyUI 생성에 실패했어.'), tone: 'error' })
-    } finally {
-      setIsComfyGenerating(false)
     }
   }
 
@@ -208,7 +204,7 @@ export function useComfyGenerationActions({
       const successCount = results.filter((result) => result.status === 'fulfilled').length
       const failedCount = results.length - successCount
 
-      await Promise.all([
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
         queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
       ])
