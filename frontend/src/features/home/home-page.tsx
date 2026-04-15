@@ -2,9 +2,10 @@ import { FolderPlus, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useAuthPermissionRedirect } from '@/features/auth/use-auth-permission-redirect'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
@@ -43,19 +44,17 @@ export function HomePage() {
     notifyError: (message) => showSnackbar({ message, tone: 'error' }),
   })
 
+  useAuthPermissionRedirect({
+    enabled: !authStatusQuery.isLoading && !canViewHome,
+    permissionKey: 'page.home.view',
+  })
+
   if (authStatusQuery.isLoading) {
     return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
   }
 
   if (!canViewHome) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>승인 대기 중</CardTitle>
-          <CardDescription>관리자가 페이지 권한을 열어야 해.</CardDescription>
-        </CardHeader>
-      </Card>
-    )
+    return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
   }
 
   return (
