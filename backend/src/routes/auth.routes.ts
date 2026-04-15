@@ -26,6 +26,17 @@ type SessionResponseAccount = {
   account_type: 'admin' | 'guest';
 };
 
+/** Normalize SQLite UTC timestamps into ISO strings so clients parse them consistently. */
+function formatSqliteUtcTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+    ? `${value.replace(' ', 'T')}Z`
+    : value;
+}
+
 /** Build the shared authenticated-session response payload. */
 function buildSessionAccountResponse(req: Request, message: string, account: SessionResponseAccount) {
   return {
@@ -275,9 +286,9 @@ const handleAccountsList: RequestHandler = async (_req, res) => {
       status: account.status,
       groupKeys: account.group_keys,
       createdByAccountId: account.created_by_account_id,
-      lastLoginAt: account.last_login_at,
-      createdAt: account.created_at,
-      updatedAt: account.updated_at,
+      lastLoginAt: formatSqliteUtcTimestamp(account.last_login_at),
+      createdAt: formatSqliteUtcTimestamp(account.created_at),
+      updatedAt: formatSqliteUtcTimestamp(account.updated_at),
       syncedLegacyAdmin: account.sync_key === 'legacy-admin',
     })),
   });

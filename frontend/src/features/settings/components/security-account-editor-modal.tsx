@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
-import { SettingsField } from './settings-primitives'
+import { formatDateTime } from '../settings-utils'
+import { SettingsField, SettingsValueTile } from './settings-primitives'
 import { SettingsModal } from './settings-modal'
 import { getAccountStatusLabel, getPermissionGroupDisplayName } from './security-ui-text'
 import { getSecurityGroupBadgeStyle, type SecurityGroupColorMap, getSecurityGroupColor } from './security-group-color-utils'
@@ -128,6 +129,12 @@ export function SecurityAccountEditorModal({
       )}
     >
       <div className="space-y-5">
+        <div className="grid gap-3 md:grid-cols-3">
+          <SettingsValueTile label="생성일" value={formatDateTime(account.createdAt)} className="px-3 py-3" valueClassName="text-sm font-medium" />
+          <SettingsValueTile label="수정일" value={formatDateTime(account.updatedAt)} className="px-3 py-3" valueClassName="text-sm font-medium" />
+          <SettingsValueTile label="최근 로그인" value={formatDateTime(account.lastLoginAt)} className="px-3 py-3" valueClassName="text-sm font-medium" />
+        </div>
+
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant={activeSection === 'group' ? 'default' : 'secondary'} size="sm" onClick={() => setActiveSection('group')}>
             <Shield className="h-4 w-4" />

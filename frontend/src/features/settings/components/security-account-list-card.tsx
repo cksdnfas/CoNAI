@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { cn } from '@/lib/utils'
+import { formatDateTime } from '../settings-utils'
 import { SecurityAccountEditorModal, type SecurityAccountEditorSection } from './security-account-editor-modal'
 import { getAccountStatusLabel, getPermissionGroupDisplayName } from './security-ui-text'
 import { getSecurityGroupBadgeStyle, getSecurityGroupColor, type SecurityGroupColorMap } from './security-group-color-utils'
@@ -145,7 +146,7 @@ export function SecurityAccountListCard({
                               'inline-flex items-center text-muted-foreground',
                               account.lastLoginAt ? 'cursor-help' : 'opacity-50',
                             )}
-                            title={account.lastLoginAt ? `최근 로그인 ${new Date(account.lastLoginAt).toLocaleString('ko-KR')}` : '로그인 기록 없음'}
+                            title={account.lastLoginAt ? `최근 로그인 ${formatDateTime(account.lastLoginAt)}` : '로그인 기록 없음'}
                             aria-label={account.lastLoginAt ? '최근 로그인 있음' : '로그인 기록 없음'}
                           >
                             <Clock3 className="h-4 w-4" />

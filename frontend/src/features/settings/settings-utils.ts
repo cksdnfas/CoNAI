@@ -39,9 +39,16 @@ export function buildBackupTargetPreviewPath(raw: string) {
   return normalized ? `Upload/${normalized}` : 'Upload'
 }
 
+export function normalizeUtcLikeTimestamp(value?: string | null) {
+  if (!value) return value ?? null
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+    ? `${value.replace(' ', 'T')}Z`
+    : value
+}
+
 export function formatDateTime(value?: string | null) {
   if (!value) return '—'
-  const date = new Date(value)
+  const date = new Date(normalizeUtcLikeTimestamp(value) ?? value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString('ko-KR')
 }
