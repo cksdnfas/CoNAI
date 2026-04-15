@@ -1,7 +1,9 @@
-import type { KeyboardEvent } from 'react'
+import { type KeyboardEvent, useEffect, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
+import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { buildPreviewImageRecord } from '@/features/images/components/inline-media-preview'
 
 type NaiSavedAssetTileProps = {
@@ -29,6 +31,17 @@ export function NaiSavedAssetTile({
     fileName: title,
     alt: title,
   })
+  const [hasPreviewError, setHasPreviewError] = useState(false)
+
+  useEffect(() => {
+    setHasPreviewError(false)
+  }, [imageUrl, mimeType, title])
+
+  const previewState = resolveImagePreviewState({
+    image: previewImage,
+    hasPreviewUrl: Boolean(imageUrl),
+    hasPreviewError,
+  })
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -45,17 +58,22 @@ export function NaiSavedAssetTile({
       onKeyDown={handleKeyDown}
       className="group relative isolate h-60 overflow-hidden rounded-sm border border-border bg-surface-container text-left transition-transform duration-300 hover:-translate-y-0.5 hover:bg-surface-high"
     >
-      {previewImage ? (
+      {previewImage && previewState === 'ready' ? (
         <ImagePreviewMedia
           image={previewImage}
           alt={title}
           loading="lazy"
           className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          onError={() => setHasPreviewError(true)}
         />
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-surface-lowest to-surface-high text-xs text-muted-foreground">
-          no preview
-        </div>
+        <ImagePreviewPlaceholder
+          label={getImagePreviewStateLabel(previewState)}
+          className="absolute inset-0 bg-gradient-to-b from-surface-lowest to-surface-high text-xs text-muted-foreground"
+          iconClassName="h-10 w-10"
+          labelClassName="text-xs"
+          compact
+        />
       )}
 
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/84 via-black/42 to-transparent" />

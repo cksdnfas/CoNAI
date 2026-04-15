@@ -2,6 +2,8 @@ import { ChevronLeft, ChevronRight, Lock, RotateCcw, RotateCw, Undo2, Unlock, Zo
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import type { ImageRecord } from '@/types/image'
+import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
+import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { getImageListMediaKind } from '@/features/images/components/image-list/image-list-utils'
 import { cn } from '@/lib/utils'
 import { EnhancedVideoPlayer } from './enhanced-video-player'
@@ -40,11 +42,19 @@ function getPointerDistance(first: PointerPosition, second: PointerPosition) {
 
 function loadImageWheelZoomEnabled() {
   if (typeof window === 'undefined') {
-    return true
+    return false
   }
 
   const savedValue = window.localStorage.getItem(IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY)
-  return savedValue !== 'false'
+  if (savedValue === 'true') {
+    return true
+  }
+
+  if (savedValue === 'false') {
+    return false
+  }
+
+  return false
 }
 
 function persistImageWheelZoomEnabled(enabled: boolean) {
@@ -73,8 +83,13 @@ function persistImageControlsCollapsed(collapsed: boolean) {
 
 /** Render the main detail media using the correct element for image, GIF, or video files. */
 export function ImageDetailMedia({ image, renderUrl, className }: ImageDetailMediaProps) {
+  const previewState = resolveImagePreviewState({
+    image,
+    hasPreviewUrl: Boolean(renderUrl),
+  })
+
   if (!renderUrl) {
-    return <div className="text-sm text-muted-foreground">표시할 이미지가 없어</div>
+    return <ImagePreviewPlaceholder label={getImagePreviewStateLabel(previewState)} className="min-h-[20rem] rounded-sm border border-dashed border-border/70 bg-surface-low text-sm text-muted-foreground" />
   }
 
   const mediaKind = getImageListMediaKind(image)
@@ -86,19 +101,40 @@ export function ImageDetailMedia({ image, renderUrl, className }: ImageDetailMed
     return <EnhancedVideoPlayer renderUrl={renderUrl} className={mediaClassName} loop autoPlay />
   }
 
-  return <InteractiveImageDetailMedia renderUrl={renderUrl} altText={altText} className={mediaClassName} />
+  return <InteractiveImageDetailMedia image={image} renderUrl={renderUrl} altText={altText} className={mediaClassName} />
 }
 
+function ImageDetailMediaFallback({ image }: { image: ImageRecord }) {
+  const previewState = resolveImagePreviewState({
+    image,
+    hasPreviewUrl: Boolean(image.thumbnail_url || image.image_url),
+    hasPreviewError: true,
+  })
+
+  return <ImagePreviewPlaceholder label={getImagePreviewStateLabel(previewState)} className="min-h-[20rem] rounded-sm border border-dashed border-border/70 bg-surface-low text-sm text-muted-foreground" />
+}
 
 function InteractiveImageDetailMedia({
+  image,
   renderUrl,
   altText,
   className,
 }: {
+  image: ImageRecord
   renderUrl: string
   altText: string
   className: string
 }) {
+  const [hasRenderError, setHasRenderError] = useState(false)
+
+  useEffect(() => {
+    setHasRenderError(false)
+  }, [renderUrl])
+
+  if (hasRenderError) {
+    return <ImageDetailMediaFallback image={image} />
+  }
+
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const pointersRef = useRef(new Map<number, PointerPosition>())
   const pinchStartDistanceRef = useRef<number | null>(null)
@@ -428,7 +464,7 @@ function InteractiveImageDetailMedia({
             transformOrigin: 'center center',
           }}
         >
-          <img src={renderUrl} alt={altText} className={cn(className, 'pointer-events-none select-none')} draggable={false} />
+          <img src={renderUrl} alt={altText} className={cn(className, 'pointer-events-none select-none')} draggable={false} onError={() => setHasRenderError(true)} />
         </div>
       </div>
     </div>

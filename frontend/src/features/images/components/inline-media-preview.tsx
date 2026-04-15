@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
+import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
 import { cn } from '@/lib/utils'
-import type { ImageRecord } from '@/types/image'
+import type { ImagePreviewStatus, ImageRecord } from '@/types/image'
 
 interface InlineMediaPreviewProps {
   src?: string | null
@@ -13,6 +15,9 @@ interface InlineMediaPreviewProps {
   emptyLabel?: string
   loading?: 'lazy' | 'eager'
   fitToMedia?: boolean
+  isProcessing?: boolean
+  fileStatus?: ImageRecord['file_status']
+  previewStatus?: ImagePreviewStatus
 }
 
 /** Infer one mime type from a data URL or file-like URL when explicit metadata is absent. */
@@ -48,7 +53,7 @@ function inferMimeTypeFromSource(src?: string | null) {
 }
 
 /** Build one temporary ImageRecord so shared media rendering can be reused. */
-export function buildPreviewImageRecord({ src, mimeType, fileName, alt }: Pick<InlineMediaPreviewProps, 'src' | 'mimeType' | 'fileName' | 'alt'>): ImageRecord | null {
+export function buildPreviewImageRecord({ src, mimeType, fileName, alt, isProcessing, fileStatus, previewStatus }: Pick<InlineMediaPreviewProps, 'src' | 'mimeType' | 'fileName' | 'alt' | 'isProcessing' | 'fileStatus' | 'previewStatus'>): ImageRecord | null {
   if (!src) {
     return null
   }
@@ -59,6 +64,9 @@ export function buildPreviewImageRecord({ src, mimeType, fileName, alt }: Pick<I
     image_url: src,
     thumbnail_url: src,
     mime_type: mimeType || inferMimeTypeFromSource(src),
+    is_processing: isProcessing,
+    file_status: fileStatus,
+    preview_status: previewStatus,
   }
 }
 
@@ -70,11 +78,25 @@ export function InlineMediaPreview({
   alt,
   frameClassName,
   mediaClassName,
-  emptyLabel = 'No preview available',
+  emptyLabel = '미리보기 없음',
   loading = 'lazy',
   fitToMedia = false,
+  isProcessing,
+  fileStatus,
+  previewStatus,
 }: InlineMediaPreviewProps) {
-  const previewImage = buildPreviewImageRecord({ src, mimeType, fileName, alt })
+  const previewImage = buildPreviewImageRecord({ src, mimeType, fileName, alt, isProcessing, fileStatus, previewStatus })
+  const [hasPreviewError, setHasPreviewError] = useState(false)
+
+  useEffect(() => {
+    setHasPreviewError(false)
+  }, [src, mimeType, fileName, isProcessing, fileStatus, previewStatus])
+
+  const resolvedPreviewState = resolveImagePreviewState({
+    image: previewImage,
+    hasPreviewUrl: Boolean(src),
+    hasPreviewError,
+  })
 
   return (
     <div
@@ -83,15 +105,22 @@ export function InlineMediaPreview({
         frameClassName,
       )}
     >
-      {previewImage ? (
+      {previewImage && resolvedPreviewState === 'ready' ? (
         <ImagePreviewMedia
           image={previewImage}
           alt={alt}
           loading={loading}
           className={cn(fitToMedia ? 'max-h-40 max-w-full w-auto object-contain' : 'max-h-40 w-full object-contain', mediaClassName)}
+          onError={() => setHasPreviewError(true)}
         />
       ) : (
-        <ImagePreviewPlaceholder label={emptyLabel} compact className="min-h-24 text-xs" iconClassName="h-5 w-5" labelClassName="text-xs" />
+        <ImagePreviewPlaceholder
+          label={getImagePreviewStateLabel(resolvedPreviewState, emptyLabel)}
+          compact
+          className="min-h-24 text-xs"
+          iconClassName="h-5 w-5"
+          labelClassName="text-xs"
+        />
       )}
     </div>
   )

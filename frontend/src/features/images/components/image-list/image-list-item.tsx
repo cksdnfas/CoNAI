@@ -1,6 +1,7 @@
 import { memo, type DragEvent, type KeyboardEvent, type ReactNode, useEffect, useState } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
+import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
 import { ImageEditAction } from '@/features/images/components/detail/image-edit-action'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -58,13 +59,14 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
 
   useEffect(() => {
     setHasPreviewError(false)
-  }, [previewUrl, image.is_processing, image.width, image.height, image.composite_hash, image.original_file_path])
+  }, [previewUrl, image.is_processing, image.preview_status, image.file_status, image.width, image.height, image.composite_hash, image.original_file_path])
 
-  const placeholderLabel = image.is_processing
-    ? '이미지 준비 중'
-    : previewUrl && hasPreviewError
-      ? '파일을 표시할 수 없어'
-      : '미리보기 없음'
+  const previewState = resolveImagePreviewState({
+    image,
+    hasPreviewUrl: Boolean(previewUrl),
+    hasPreviewError,
+  })
+  const placeholderLabel = getImagePreviewStateLabel(previewState)
 
   const content = previewUrl && !hasPreviewError ? (
     <ImagePreviewMedia

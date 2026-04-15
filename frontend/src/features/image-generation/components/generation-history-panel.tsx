@@ -61,6 +61,11 @@ function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['record
     width: record.actual_width ?? null,
     height: record.actual_height ?? null,
     is_processing: record.generation_status === 'pending' || record.generation_status === 'processing',
+    preview_status: record.generation_status === 'failed'
+      ? 'failed'
+      : record.generation_status === 'pending' || record.generation_status === 'processing'
+        ? 'processing'
+        : undefined,
   }
 }
 
