@@ -28,9 +28,9 @@ export default {
       {
         text: '릴리즈 노트',
         items: [
-          { text: '최신 릴리즈 · 26.4.8', link: '/RELEASE-MD/RELEASE_26.4.8' },
-          { text: '이전 릴리즈 · 26.4.5', link: '/RELEASE-MD/RELEASE_26.4.5' },
-          { text: '전전 릴리즈 · 26.3.26', link: '/RELEASE-MD/RELEASE_26.3.26' },
+          { text: '최신 릴리즈 · 26.4.15', link: '/RELEASE-MD/RELEASE_26.4.15' },
+          { text: '이전 릴리즈 · 26.4.13', link: '/RELEASE-MD/RELEASE_26.4.13' },
+          { text: '전전 릴리즈 · 26.4.8', link: '/RELEASE-MD/RELEASE_26.4.8' },
           { text: '전체 릴리즈 보기', link: '/RELEASE-MD/' },
         ],
       },
