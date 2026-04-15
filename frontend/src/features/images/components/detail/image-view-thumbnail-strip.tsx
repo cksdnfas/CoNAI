@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
+import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { getRatingTiers } from '@/lib/api-search'
@@ -42,12 +43,18 @@ function ThumbnailStripPreview({ item, displayName, blurPreview }: { item: Image
 
   useEffect(() => {
     setHasPreviewError(false)
-  }, [previewUrl, item.composite_hash, item.original_file_path, item.is_processing])
+  }, [previewUrl, item.composite_hash, item.original_file_path, item.is_processing, item.preview_status, item.file_status])
+
+  const previewState = resolveImagePreviewState({
+    image: item,
+    hasPreviewUrl: Boolean(previewUrl),
+    hasPreviewError,
+  })
 
   if (!previewUrl || hasPreviewError) {
     return (
       <ImagePreviewPlaceholder
-        label={item.is_processing ? '처리 중' : '미리보기 없음'}
+        label={getImagePreviewStateLabel(previewState)}
         compact
         className="text-[10px]"
       />

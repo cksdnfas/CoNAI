@@ -248,7 +248,7 @@ function ImageAttachmentSelectionCard({
           actions={image ? <Badge variant="secondary">1 selected</Badge> : <Badge variant="outline">0 selected</Badge>}
         />
 
-        {image && previewUrl ? (
+        {image ? (
           <div className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
             <InlineMediaPreview
               src={previewUrl}
@@ -257,6 +257,9 @@ function ImageAttachmentSelectionCard({
               alt={fileName ?? 'selected image'}
               frameClassName="p-3"
               mediaClassName="max-h-72 w-full object-contain"
+              isProcessing={image.is_processing}
+              fileStatus={image.file_status}
+              previewStatus={image.preview_status}
             />
             <div className="space-y-2">
               <div className="break-all text-sm font-medium text-foreground">{fileName}</div>

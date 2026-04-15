@@ -79,6 +79,8 @@ export interface ImageGroupMembership {
   collection_type?: 'manual' | 'auto'
 }
 
+export type ImagePreviewStatus = 'ready' | 'processing' | 'failed' | 'unavailable' | 'empty'
+
 export interface ImageRecord {
   id: number | string
   file_id?: number | null
@@ -90,10 +92,12 @@ export interface ImageRecord {
   height?: number | null
   mime_type?: string | null
   file_type?: string | null
+  file_status?: 'active' | 'missing' | 'deleted' | null
   file_size?: number | null
   first_seen_date?: string | null
   rating_score?: number | null
   is_processing?: boolean
+  preview_status?: ImagePreviewStatus
   ai_metadata?: ImageAiMetadata | null
   auto_tags?: ImageAutoTags | null
   groups?: ImageGroupMembership[] | null
