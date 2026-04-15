@@ -9,6 +9,7 @@ import {
 import { getThemeTonePanelStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import type { AppearanceSettings } from '@/types/settings'
+import { getDensityLabel } from './appearance-tab-editor-shared'
 import { SettingsValueTile } from './settings-primitives'
 
 interface AppearanceTabPreviewSectionProps {
@@ -75,7 +76,7 @@ export function AppearanceTabPreviewSection({
         <SettingsValueTile label="Radius" value={appearanceDraft.radiusPreset} />
         <SettingsValueTile label="Glass" value={appearanceDraft.glassPreset} />
         <SettingsValueTile label="Shadow" value={appearanceDraft.shadowPreset} />
-        <SettingsValueTile label="Density" value={appearanceDraft.density} />
+        <SettingsValueTile label="Density" value={getDensityLabel(appearanceDraft.density)} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -107,7 +108,7 @@ export function AppearanceTabPreviewSection({
         />
         <SettingsValueTile
           label="Saved Baseline"
-          value={`${savedAppearance.themeMode} · ${savedAppearance.surfacePreset} · ${savedAppearance.density}`}
+          value={`${savedAppearance.themeMode} · ${savedAppearance.surfacePreset} · ${getDensityLabel(savedAppearance.density)}`}
         />
       </div>
     </>

@@ -91,6 +91,14 @@ export async function getAppSettings() {
   return response.data
 }
 
+export async function getRuntimeAppearanceSettings() {
+  const response = await fetchJson<ApiResponse<AppearanceSettings>>('/api/runtime-appearance')
+  if (!response.success) {
+    throw new Error(response.error || '런타임 테마 설정을 불러오지 못했어.')
+  }
+  return response.data
+}
+
 export async function getWallpaperRuntimeSettings() {
   const response = await fetchJson<ApiResponse<WallpaperRuntimeSettings>>('/api/wallpaper-runtime/settings')
   if (!response.success) {

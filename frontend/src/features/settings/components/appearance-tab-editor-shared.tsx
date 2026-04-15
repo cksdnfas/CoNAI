@@ -47,6 +47,8 @@ export function getThemeModeLabel(mode: AppearanceSettings['themeMode']) {
 /** Map density values to localized labels. */
 export function getDensityLabel(density: AppearanceSettings['density']) {
   switch (density) {
+    case 'ultra-compact':
+      return '아주 촘촘하게'
     case 'compact':
       return '촘촘하게'
     case 'comfortable':
