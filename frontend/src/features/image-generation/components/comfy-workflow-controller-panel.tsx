@@ -11,7 +11,7 @@ import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
-import { WorkflowFieldInput } from './workflow-field-input'
+import { WorkflowFieldDisclosureCard } from './workflow-field-disclosure-card'
 
 type ComfyWorkflowControllerPanelProps = {
   workflowName: string
@@ -278,14 +278,13 @@ export function ComfyWorkflowControllerPanel({
               {workflowFields.length > 0 ? (
                 <div className="overflow-hidden rounded-sm border border-border/70 divide-y divide-border/70">
                   {workflowFields.map((field) => (
-                    <div key={field.id} className="bg-background/20 px-4 py-4">
-                      <WorkflowFieldInput
-                        field={field}
-                        value={workflowDraft[field.id] ?? ''}
-                        onChange={(value) => onFieldChange(field.id, value)}
-                        onImageChange={(image) => onImageChange(field.id, image)}
-                      />
-                    </div>
+                    <WorkflowFieldDisclosureCard
+                      key={field.id}
+                      field={field}
+                      value={workflowDraft[field.id] ?? ''}
+                      onChange={(value) => onFieldChange(field.id, value)}
+                      onImageChange={(image) => onImageChange(field.id, image)}
+                    />
                   ))}
                 </div>
               ) : (

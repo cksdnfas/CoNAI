@@ -25,6 +25,7 @@ export interface MarkedField {
   description?: string; // 필드 사용 가이드 (MCP 및 사용자용)
   jsonPath: string; // JSON 경로 (예: "6.inputs.text")
   type: 'text' | 'number' | 'select' | 'textarea' | 'image';
+  default_collapsed?: boolean;
   default_value?: any;
   placeholder?: string;
   dropdown_list_name?: string; // 커스텀 드롭다운 목록 이름 (참조)

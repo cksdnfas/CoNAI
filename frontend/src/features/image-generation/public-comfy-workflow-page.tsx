@@ -17,7 +17,7 @@ import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { refreshGenerationQueueViews } from './components/generation-queue-actions'
 import { GenerationHistoryPanel } from './components/generation-history-panel'
-import { WorkflowFieldInput } from './components/workflow-field-input'
+import { WorkflowFieldDisclosureCard } from './components/workflow-field-disclosure-card'
 import {
   buildWorkflowDraft,
   buildWorkflowPromptData,
@@ -281,14 +281,13 @@ export function PublicComfyWorkflowPage() {
       ) : (
         <div className="overflow-hidden rounded-sm border border-border/70 divide-y divide-border/70">
           {workflowFields.map((field) => (
-            <div key={field.id} className="bg-background/20 px-4 py-4">
-              <WorkflowFieldInput
-                field={field}
-                value={workflowDraft[field.id] ?? ''}
-                onChange={(value) => handleFieldChange(field.id, value)}
-                onImageChange={(image) => handleImageChange(field.id, image)}
-              />
-            </div>
+            <WorkflowFieldDisclosureCard
+              key={field.id}
+              field={field}
+              value={workflowDraft[field.id] ?? ''}
+              onChange={(value) => handleFieldChange(field.id, value)}
+              onImageChange={(image) => handleImageChange(field.id, image)}
+            />
           ))}
         </div>
       )}

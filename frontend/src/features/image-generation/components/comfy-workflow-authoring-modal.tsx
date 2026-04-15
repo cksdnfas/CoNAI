@@ -9,7 +9,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp, Search, Upload } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Search, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -94,6 +94,7 @@ export function ComfyWorkflowAuthoringModal({
   const [workflowJson, setWorkflowJson] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [isPublicPage, setIsPublicPage] = useState(false)
+  const [isBasicInfoExpanded, setIsBasicInfoExpanded] = useState(true)
   const [publicSlug, setPublicSlug] = useState('')
   const [markedFields, setMarkedFields] = useState<WorkflowMarkedField[]>([])
   const [expandedFieldIds, setExpandedFieldIds] = useState<string[]>([])
@@ -115,6 +116,7 @@ export function ComfyWorkflowAuthoringModal({
       setWorkflowJson(initialData.workflow.workflow_json)
       setJsonError(null)
       setIsPublicPage(Boolean(initialData.workflow.is_public_page))
+      setIsBasicInfoExpanded(true)
       setPublicSlug(initialData.workflow.public_slug ?? '')
       setMarkedFields(initialData.workflow.marked_fields ?? [])
       setExpandedFieldIds([])
@@ -130,6 +132,7 @@ export function ComfyWorkflowAuthoringModal({
     setWorkflowJson('')
     setJsonError(null)
     setIsPublicPage(false)
+    setIsBasicInfoExpanded(true)
     setPublicSlug('')
     setMarkedFields([])
     setExpandedFieldIds([])
@@ -196,8 +199,10 @@ export function ComfyWorkflowAuthoringModal({
     setMarkedFields((current) => {
       const exists = current.some((item) => item.jsonPath === field.jsonPath)
       if (exists) {
+        setExpandedFieldIds((expanded) => expanded.filter((item) => item !== field.id))
         return current.filter((item) => item.jsonPath !== field.jsonPath)
       }
+      setExpandedFieldIds((expanded) => (expanded.includes(field.id) ? expanded : [...expanded, field.id]))
       return [...current, field]
     })
   }
@@ -298,6 +303,7 @@ export function ComfyWorkflowAuthoringModal({
 
   const handleFieldRemove = (fieldId: string) => {
     setMarkedFields((current) => current.filter((field) => field.id !== fieldId))
+    setExpandedFieldIds((current) => current.filter((item) => item !== fieldId))
   }
 
   const handleFieldExpandToggle = (fieldId: string) => {
@@ -376,56 +382,67 @@ export function ComfyWorkflowAuthoringModal({
         <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="space-y-5">
             <section className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-              <div className="text-sm font-semibold text-foreground">기본 정보</div>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 text-left"
+                onClick={() => setIsBasicInfoExpanded((current) => !current)}
+                aria-expanded={isBasicInfoExpanded}
+              >
+                <div className="text-sm font-semibold text-foreground">기본 정보</div>
+                {isBasicInfoExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              </button>
 
-              <div className="grid gap-4">
-                <SettingsField label="이름">
-                  <Input
-                    variant="settings"
-                    value={workflowName}
-                    onChange={(event) => setWorkflowName(event.target.value)}
-                    placeholder="ComfyUI Workflow"
-                  />
-                </SettingsField>
-
-                <SettingsField label="설명">
-                  <Textarea
-                    variant="settings"
-                    rows={4}
-                    value={workflowDescription}
-                    onChange={(event) => setWorkflowDescription(event.target.value)}
-                    placeholder="선택"
-                  />
-                </SettingsField>
-
-                <SettingsToggleRow>
-                  <input
-                    type="checkbox"
-                    checked={isPublicPage}
-                    onChange={(event) => setIsPublicPage(event.target.checked)}
-                  />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-foreground">공용 페이지 사용</div>
-                  </div>
-                </SettingsToggleRow>
-
-                {isPublicPage ? (
-                  <SettingsField label="Public slug">
+              {isBasicInfoExpanded ? (
+                <div className="grid gap-4">
+                  <SettingsField label="이름">
                     <Input
                       variant="settings"
-                      value={publicSlug}
-                      onChange={(event) => setPublicSlug(slugifyPublicWorkflow(event.target.value))}
-                      placeholder="character-poster-generator"
+                      value={workflowName}
+                      onChange={(event) => setWorkflowName(event.target.value)}
+                      placeholder="ComfyUI Workflow"
                     />
                   </SettingsField>
-                ) : null}
-              </div>
+
+                  <SettingsField label="설명">
+                    <Textarea
+                      variant="settings"
+                      rows={4}
+                      value={workflowDescription}
+                      onChange={(event) => setWorkflowDescription(event.target.value)}
+                      placeholder="선택"
+                    />
+                  </SettingsField>
+
+                  <SettingsToggleRow>
+                    <input
+                      type="checkbox"
+                      checked={isPublicPage}
+                      onChange={(event) => setIsPublicPage(event.target.checked)}
+                    />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground">공용 페이지 사용</div>
+                    </div>
+                  </SettingsToggleRow>
+
+                  {isPublicPage ? (
+                    <SettingsField label="Public slug">
+                      <Input
+                        variant="settings"
+                        value={publicSlug}
+                        onChange={(event) => setPublicSlug(slugifyPublicWorkflow(event.target.value))}
+                        placeholder="character-poster-generator"
+                      />
+                    </SettingsField>
+                  ) : null}
+                </div>
+              ) : null}
             </section>
 
             <ComfyWorkflowMarkedFieldsEditor
               markedFields={markedFields}
               expandedFieldIds={expandedFieldIds}
               dropdownListNames={dropdownListNames}
+              listClassName={isBasicInfoExpanded ? 'max-h-[620px]' : 'max-h-[820px]'}
               onFieldPatch={handleFieldPatch}
               onFieldRemove={handleFieldRemove}
               onFieldExpandToggle={handleFieldExpandToggle}

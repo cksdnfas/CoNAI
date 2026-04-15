@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { CircleQuestionMark } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,12 +12,13 @@ import { InlineMediaPreview } from '@/features/images/components/inline-media-pr
 type WorkflowFieldInputProps = {
   field: WorkflowMarkedField
   value: WorkflowFieldDraftValue
+  hideLabel?: boolean
   onChange: (value: WorkflowFieldDraftValue) => void
   onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
 
 /** Render a single marked-field editor for a ComfyUI workflow. */
-export function WorkflowFieldInput({ field, value, onChange, onImageChange }: WorkflowFieldInputProps) {
+export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, onImageChange }: WorkflowFieldInputProps) {
   const fieldLabel = field.required ? `${field.label} *` : field.label
   const labelAccessory = field.description ? (
     <span
@@ -28,88 +30,90 @@ export function WorkflowFieldInput({ field, value, onChange, onImageChange }: Wo
     </span>
   ) : null
 
-  if (field.type === 'textarea') {
+  const wrapField = (children: ReactNode) => {
+    if (hideLabel) {
+      return <div>{children}</div>
+    }
+
     return (
       <FormField label={fieldLabel} labelAccessory={labelAccessory}>
-        <WildcardInlinePickerField
-          tool="comfyui"
-          multiline
-          rows={4}
-          value={typeof value === 'string' ? value : ''}
-          placeholder={field.placeholder || ''}
-          onChange={onChange}
-        />
+        {children}
       </FormField>
     )
   }
 
+  if (field.type === 'textarea') {
+    return wrapField(
+      <WildcardInlinePickerField
+        tool="comfyui"
+        multiline
+        rows={4}
+        value={typeof value === 'string' ? value : ''}
+        placeholder={field.placeholder || ''}
+        onChange={onChange}
+      />, 
+    )
+  }
+
   if (field.type === 'select') {
-    return (
-      <FormField label={fieldLabel} labelAccessory={labelAccessory}>
-        <Select value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)}>
-          <option value="">선택</option>
-          {(field.options ?? []).map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </Select>
-      </FormField>
+    return wrapField(
+      <Select value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)}>
+        <option value="">선택</option>
+        {(field.options ?? []).map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </Select>,
     )
   }
 
   if (field.type === 'image') {
     const imageValue = typeof value === 'string' ? null : value
 
-    return (
-      <FormField label={fieldLabel} labelAccessory={labelAccessory}>
-        <div className="space-y-3">
-          <ImageAttachmentPickerButton label={imageValue ? '이미지 변경' : '이미지 선택'} modalTitle={field.label} allowSaveDialog={false} onSelect={(image) => void onImageChange(image)} />
-          {imageValue ? (
-            <div className="space-y-2 rounded-sm bg-surface-low p-3">
-              <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>
-              <InlineMediaPreview
-                src={imageValue.dataUrl}
-                mimeType={imageValue.mimeType}
-                fileName={imageValue.fileName}
-                alt={field.label}
-                frameClassName="p-3"
-              />
-              <div className="flex justify-end">
-                <Button type="button" size="sm" variant="ghost" onClick={() => void onImageChange()}>
-                  이미지 제거
-                </Button>
-              </div>
+    return wrapField(
+      <div className="space-y-3">
+        <ImageAttachmentPickerButton label={imageValue ? '이미지 변경' : '이미지 선택'} modalTitle={field.label} allowSaveDialog={false} onSelect={(image) => void onImageChange(image)} />
+        {imageValue ? (
+          <div className="space-y-2 rounded-sm bg-surface-low p-3">
+            <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>
+            <InlineMediaPreview
+              src={imageValue.dataUrl}
+              mimeType={imageValue.mimeType}
+              fileName={imageValue.fileName}
+              alt={field.label}
+              frameClassName="p-3"
+            />
+            <div className="flex justify-end">
+              <Button type="button" size="sm" variant="ghost" onClick={() => void onImageChange()}>
+                이미지 제거
+              </Button>
             </div>
-          ) : null}
-        </div>
-      </FormField>
+          </div>
+        ) : null}
+      </div>,
     )
   }
 
   if (field.type === 'text') {
-    return (
-      <FormField label={fieldLabel} labelAccessory={labelAccessory}>
-        <WildcardInlinePickerField
-          tool="comfyui"
-          value={typeof value === 'string' ? value : ''}
-          placeholder={field.placeholder || ''}
-          onChange={onChange}
-        />
-      </FormField>
+    return wrapField(
+      <WildcardInlinePickerField
+        tool="comfyui"
+        value={typeof value === 'string' ? value : ''}
+        placeholder={field.placeholder || ''}
+        onChange={onChange}
+      />, 
     )
   }
 
-  return (
-    <FormField label={fieldLabel} labelAccessory={labelAccessory}>
-      <Input
-        type={field.type === 'number' ? 'number' : 'text'}
-        min={field.type === 'number' ? field.min : undefined}
-        max={field.type === 'number' ? field.max : undefined}
-        value={typeof value === 'string' ? value : ''}
-        placeholder={field.placeholder || ''}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </FormField>
+  return wrapField(
+    <Input
+      type={field.type === 'number' ? 'number' : 'text'}
+      min={field.type === 'number' ? field.min : undefined}
+      max={field.type === 'number' ? field.max : undefined}
+      value={typeof value === 'string' ? value : ''}
+      placeholder={field.placeholder || ''}
+      onChange={(event) => onChange(event.target.value)}
+    />,
   )
 }

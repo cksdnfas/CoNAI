@@ -313,6 +313,7 @@ export function buildWorkflowMarkedFieldFromInput(
     description: `${classType} · ${input.key}`,
     jsonPath: `${nodeId}.inputs.${input.key}`,
     type: fieldType,
+    default_collapsed: false,
     default_value:
       input.value === null
         ? undefined
