@@ -86,7 +86,7 @@ function ProgressBar({ percent }: { percent: number }) {
 }
 
 /** Render a reusable drag/drop click target for upload and extract surfaces. */
-function DropSurface({
+export function DropSurface({
   active,
   ariaLabel,
   onClick,
