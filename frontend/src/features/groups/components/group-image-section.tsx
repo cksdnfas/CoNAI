@@ -20,6 +20,7 @@ interface GroupImageSectionProps {
   onLoadMore: () => void
   hideHeader?: boolean
   presentation?: 'page' | 'drawer'
+  preferredColumnCount?: number
   selectable?: boolean
   selectedIds?: string[]
   onSelectedIdsChange?: (selectedIds: string[]) => void
@@ -37,6 +38,7 @@ export function GroupImageSection({
   onLoadMore,
   hideHeader = false,
   presentation = 'page',
+  preferredColumnCount,
   selectable = false,
   selectedIds = [],
   onSelectedIdsChange,
@@ -100,6 +102,7 @@ export function GroupImageSection({
           isLoadingMore={isLoadingMore}
           onLoadMore={onLoadMore}
           minColumnWidth={presentation === 'drawer' ? 180 : 280}
+          preferredColumnCount={preferredColumnCount}
           columnGap={presentation === 'drawer' ? 12 : 20}
           rowGap={presentation === 'drawer' ? 12 : 20}
           gridItemHeight={presentation === 'drawer' ? 220 : 260}

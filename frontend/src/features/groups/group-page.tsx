@@ -21,6 +21,8 @@ import { GroupImageSection } from './components/group-image-section'
 import { GroupDownloadModal } from './components/group-download-modal'
 import { GroupDetailHeaderCard } from './components/group-detail-header-card'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
+import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
+import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { formatGroupTimestamp, getGroupCardGridClassName, groupSources, normalizeGroupSourceKey, type GroupEditorState, type GroupSourceKey } from './group-page-shared'
 import { useGroupPageQueries } from './use-group-page-queries'
 import { useGroupPageActions } from './use-group-page-actions'
@@ -28,6 +30,14 @@ import { useGroupPageActions } from './use-group-page-actions'
 export function GroupPage() {
   const navigate = useNavigate()
   const { showSnackbar } = useSnackbar()
+  const {
+    columnCount: groupColumnCount,
+    setColumnCount: setGroupColumnCount,
+    resetColumnCount: resetGroupColumnCount,
+    defaultColumnCount: defaultGroupColumnCount,
+    minColumnCount: minGroupColumnCount,
+    maxColumnCount: maxGroupColumnCount,
+  } = useImageListColumnPreference('group')
   const { groupId } = useParams<{ groupId?: string }>()
   const [searchParams] = useSearchParams()
   const [editorState, setEditorState] = useState<GroupEditorState | null>(null)
@@ -252,10 +262,23 @@ export function GroupPage() {
                 isLoadingMore={groupImagesQuery.isFetchingNextPage}
                 onLoadMore={() => void groupImagesQuery.fetchNextPage()}
                 hideHeader
+                preferredColumnCount={groupColumnCount}
                 selectable={true}
                 selectedIds={selectedGroupImageIds}
                 onSelectedIdsChange={setSelectedGroupImageIds}
               />
+
+              {groupImages.length > 0 ? (
+                <ImageListColumnFloatingControl
+                  value={groupColumnCount}
+                  defaultValue={defaultGroupColumnCount}
+                  min={minGroupColumnCount}
+                  max={maxGroupColumnCount}
+                  title="그룹 한 줄 카드 수"
+                  onChange={setGroupColumnCount}
+                  onReset={resetGroupColumnCount}
+                />
+              ) : null}
             </div>
           ) : null}
         </section>

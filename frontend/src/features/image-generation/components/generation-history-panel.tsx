@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
+import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
+import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import type { ImageRecord } from '@/types/image'
 import {
   cleanupFailedGenerationHistory,
@@ -62,6 +65,7 @@ function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['record
     image_url: hasLinkedImage ? imageSource.imageUrl : null,
     width: record.actual_width ?? null,
     height: record.actual_height ?? null,
+    rating_score: record.rating_score ?? null,
     is_processing: displayStatus === 'pending' || displayStatus === 'processing',
     preview_status: displayStatus === 'failed'
       ? 'failed'
@@ -75,6 +79,14 @@ function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['record
 export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
   const authStatusQuery = useAuthStatusQuery()
+  const {
+    columnCount: historyColumnCount,
+    setColumnCount: setHistoryColumnCount,
+    resetColumnCount: resetHistoryColumnCount,
+    defaultColumnCount: defaultHistoryColumnCount,
+    minColumnCount: minHistoryColumnCount,
+    maxColumnCount: maxHistoryColumnCount,
+  } = useImageListColumnPreference('history')
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [isDownloadingSelection, setIsDownloadingSelection] = useState(false)
@@ -148,6 +160,14 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     [historyRecords],
   )
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
+  const {
+    renderItemPersistentOverlay,
+    shouldBlurItemPreview,
+  } = useImageFeedSafety({
+    items: historyImages,
+    enabled: historyImages.length > 0,
+    visibilityMode: 'badge-only',
+  })
   const historyRecordMap = useMemo(
     () => new Map(historyRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
     [historyRecords],
@@ -300,6 +320,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             selectedIds={selectedHistoryIds}
             onSelectedIdsChange={setSelectedHistoryIds}
             minColumnWidth={220}
+            preferredColumnCount={historyColumnCount}
             columnGap={splitPaneScroll ? 12 : 16}
             rowGap={splitPaneScroll ? 12 : 16}
             className={cn(splitPaneScroll && 'h-full pr-3 pb-1')}
@@ -330,9 +351,23 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
                 </Badge>
               )
             }}
+            renderItemPersistentOverlay={renderItemPersistentOverlay}
+            shouldBlurItemPreview={shouldBlurItemPreview}
           />
         ) : null}
       </div>
+
+      {historyImages.length > 0 ? (
+        <ImageListColumnFloatingControl
+          value={historyColumnCount}
+          defaultValue={defaultHistoryColumnCount}
+          min={minHistoryColumnCount}
+          max={maxHistoryColumnCount}
+          title="히스토리 한 줄 카드 수"
+          onChange={setHistoryColumnCount}
+          onReset={resetHistoryColumnCount}
+        />
+      ) : null}
 
       <ImageSelectionBar
         selectedCount={selectedHistoryRecords.length}

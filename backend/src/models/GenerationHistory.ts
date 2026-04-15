@@ -50,6 +50,7 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
   actual_composite_hash?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
+  rating_score?: number | null;
   requested_server_id?: number | null;
   requested_server_name?: string | null;
   requested_server_tag?: string | null;
@@ -63,6 +64,7 @@ export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
   actual_composite_hash?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
+  rating_score?: number | null;
   requested_server_id?: number | null;
   requested_server_name?: string | null;
   requested_server_tag?: string | null;
@@ -368,7 +370,8 @@ export class GenerationHistoryModel {
         assigned_server.name as assigned_server_name,
         matched_file.composite_hash as actual_composite_hash,
         im.width as actual_width,
-        im.height as actual_height
+        im.height as actual_height,
+        im.rating_score as rating_score
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
       LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id
@@ -420,7 +423,8 @@ export class GenerationHistoryModel {
         assigned_server.name as assigned_server_name,
         matched_file.composite_hash as actual_composite_hash,
         im.width as actual_width,
-        im.height as actual_height
+        im.height as actual_height,
+        im.rating_score as rating_score
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
       LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id

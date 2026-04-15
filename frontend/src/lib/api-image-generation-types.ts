@@ -83,6 +83,7 @@ export interface GenerationHistoryRecord {
   // Main-DB resolved display fields
   actual_width?: number | null
   actual_height?: number | null
+  rating_score?: number | null
 
   // Detail/compat-only legacy fields
   width?: number | null

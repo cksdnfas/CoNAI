@@ -19,6 +19,7 @@ export interface ImageListProps {
   isLoadingMore?: boolean
   onLoadMore?: () => Promise<unknown> | void
   minColumnWidth?: number
+  preferredColumnCount?: number
   columnGap?: number
   rowGap?: number
   gridItemHeight?: number

@@ -1,16 +1,14 @@
 import type { ReactNode } from 'react'
-import { VirtuosoMasonry } from '@virtuoso.dev/masonry'
+import { VirtuosoMasonry, type ItemContent } from '@virtuoso.dev/masonry'
 import type { ImageRecord } from '@/types/image'
 import type { ImageListScrollMode } from './image-list-types'
 import { ImageListItem } from './image-list-item'
-import { useImageListColumnCount } from './use-image-list-column-count'
 
 interface ImageListMasonryProps {
-  containerElement: HTMLDivElement | null
   items: ImageRecord[]
   selectedIds: string[]
   selectionMode: boolean
-  minColumnWidth: number
+  columnCount: number
   columnGap: number
   rowGap: number
   getItemHref?: (image: ImageRecord) => string | undefined
@@ -23,13 +21,48 @@ interface ImageListMasonryProps {
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
 }
 
+interface ImageListMasonryContext {
+  rowGap: number
+  selectedIds: string[]
+  selectionMode: boolean
+  getItemHref?: (image: ImageRecord) => string | undefined
+  getItemId?: (image: ImageRecord) => string
+  onActivate: (image: ImageRecord, imageId: string, href?: string) => void
+  renderItemOverlay?: (image: ImageRecord) => ReactNode
+  renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  shouldBlurItemPreview?: (image: ImageRecord) => boolean
+}
+
+const MasonryItemContent: ItemContent<ImageRecord, ImageListMasonryContext> = ({ data: image, context }) => {
+  if (!image) {
+    return null
+  }
+
+  const itemId = String(context.getItemId ? context.getItemId(image) : (image.composite_hash ?? image.id))
+
+  return (
+    <div style={{ paddingBottom: `${context.rowGap}px` }}>
+      <ImageListItem
+        image={image}
+        itemId={itemId}
+        href={context.getItemHref?.(image)}
+        selected={context.selectedIds.includes(itemId)}
+        selectionMode={context.selectionMode}
+        onActivate={context.onActivate}
+        renderOverlay={context.renderItemOverlay?.(image)}
+        renderPersistentOverlay={context.renderItemPersistentOverlay?.(image)}
+        blurPreview={context.shouldBlurItemPreview?.(image) ?? false}
+      />
+    </div>
+  )
+}
+
 /** Render a reusable virtualized masonry layout with responsive column count. */
 export function ImageListMasonry({
-  containerElement,
   items,
   selectedIds,
   selectionMode,
-  minColumnWidth,
+  columnCount,
   columnGap,
   rowGap,
   getItemHref,
@@ -41,12 +74,22 @@ export function ImageListMasonry({
   renderItemPersistentOverlay,
   shouldBlurItemPreview,
 }: ImageListMasonryProps) {
-  const columnCount = useImageListColumnCount(containerElement, minColumnWidth, columnGap)
   const usesWindowScroll = scrollMode === 'window'
 
   return (
-    <VirtuosoMasonry<ImageRecord, undefined>
+    <VirtuosoMasonry<ImageRecord, ImageListMasonryContext>
       data={items}
+      context={{
+        rowGap,
+        selectedIds,
+        selectionMode,
+        getItemHref,
+        getItemId,
+        onActivate,
+        renderItemOverlay,
+        renderItemPersistentOverlay,
+        shouldBlurItemPreview,
+      }}
       useWindowScroll={usesWindowScroll}
       columnCount={columnCount}
       initialItemCount={Math.min(items.length, Math.max(columnCount * 2, 8))}
@@ -57,29 +100,7 @@ export function ImageListMasonry({
         overflowY: usesWindowScroll ? undefined : 'auto',
         paddingRight: usesWindowScroll ? undefined : '4px',
       }}
-      ItemContent={({ data: image }) => {
-        if (!image) {
-          return null
-        }
-
-        const itemId = String(getItemId ? getItemId(image) : (image.composite_hash ?? image.id))
-
-        return (
-          <div style={{ paddingBottom: `${rowGap}px` }}>
-            <ImageListItem
-              image={image}
-              itemId={itemId}
-              href={getItemHref?.(image)}
-              selected={selectedIds.includes(itemId)}
-              selectionMode={selectionMode}
-              onActivate={onActivate}
-              renderOverlay={renderItemOverlay?.(image)}
-              renderPersistentOverlay={renderItemPersistentOverlay?.(image)}
-              blurPreview={shouldBlurItemPreview?.(image) ?? false}
-            />
-          </div>
-        )
-      }}
+      ItemContent={MasonryItemContent}
     />
   )
 }

@@ -14,6 +14,7 @@ const ImageListMasonryLazy = lazy(async () => {
   return { default: module.ImageListMasonry }
 })
 import type { ImageListProps } from './image-list-types'
+import { useImageListColumnCount } from './use-image-list-column-count'
 import { useImageListLoadMore } from './use-image-list-load-more'
 import { useImageListSelection } from './use-image-list-selection'
 
@@ -36,6 +37,7 @@ export function ImageList({
   isLoadingMore = false,
   onLoadMore,
   minColumnWidth = 300,
+  preferredColumnCount,
   columnGap = 24,
   rowGap = 24,
   gridItemHeight = 280,
@@ -60,6 +62,7 @@ export function ImageList({
     () => items.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
     [items],
   )
+  const resolvedColumnCount = useImageListColumnCount(containerElement, minColumnWidth, columnGap, preferredColumnCount)
   const loadMoreSentinelRef = useImageListLoadMore({
     hasMore: scrollMode === 'window' && hasMore,
     isLoadingMore,
@@ -207,6 +210,7 @@ export function ImageList({
             getItemId={getItemId}
             selectionMode={selectionMode}
             minColumnWidth={minColumnWidth}
+            columnCount={resolvedColumnCount}
             columnGap={columnGap}
             rowGap={rowGap}
             gridItemHeight={gridItemHeight}
@@ -221,12 +225,11 @@ export function ImageList({
           />
         ) : (
           <ImageListMasonryLazy
-            containerElement={containerElement}
             items={items}
             selectedIds={selectedIds}
             getItemId={getItemId}
             selectionMode={selectionMode}
-            minColumnWidth={minColumnWidth}
+            columnCount={resolvedColumnCount}
             columnGap={columnGap}
             rowGap={rowGap}
             getItemHref={getItemHref}

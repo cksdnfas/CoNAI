@@ -17,6 +17,7 @@ export function useImageFeedSafety({
   isError = false,
   isLoadingMore = false,
   onLoadMore,
+  visibilityMode = 'feed',
 }: {
   items: ImageRecord[]
   enabled?: boolean
@@ -25,6 +26,7 @@ export function useImageFeedSafety({
   isError?: boolean
   isLoadingMore?: boolean
   onLoadMore?: () => Promise<unknown> | void
+  visibilityMode?: 'feed' | 'badge-only'
 }) {
   const ratingTiersQuery = useQuery({
     queryKey: ['rating-tiers'],
@@ -39,8 +41,10 @@ export function useImageFeedSafety({
   )
 
   const visibleItems = useMemo(
-    () => items.filter((image) => itemSafetyById.get(getImageFeedSafetyKey(image))?.visibility !== 'hide'),
-    [itemSafetyById, items],
+    () => visibilityMode === 'badge-only'
+      ? items
+      : items.filter((image) => itemSafetyById.get(getImageFeedSafetyKey(image))?.visibility !== 'hide'),
+    [itemSafetyById, items, visibilityMode],
   )
 
   useEffect(() => {
@@ -60,8 +64,14 @@ export function useImageFeedSafety({
     hasOnlyHiddenItems: items.length > 0 && visibleItems.length === 0,
     renderItemPersistentOverlay: (image: ImageRecord) => {
       const safety = itemSafetyById.get(getImageFeedSafetyKey(image))
-      return safety?.tier ? <ImageRatingSafetyBadge tier={safety.tier} visibility={safety.visibility} /> : null
+      if (!safety?.tier) {
+        return null
+      }
+
+      return <ImageRatingSafetyBadge tier={safety.tier} visibility={visibilityMode === 'badge-only' ? 'show' : safety.visibility} />
     },
-    shouldBlurItemPreview: (image: ImageRecord) => itemSafetyById.get(getImageFeedSafetyKey(image))?.visibility === 'blur',
+    shouldBlurItemPreview: (image: ImageRecord) => visibilityMode === 'badge-only'
+      ? false
+      : itemSafetyById.get(getImageFeedSafetyKey(image))?.visibility === 'blur',
   }
 }

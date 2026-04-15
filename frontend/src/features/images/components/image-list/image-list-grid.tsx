@@ -9,6 +9,7 @@ interface ImageListGridProps {
   selectedIds: string[]
   selectionMode: boolean
   minColumnWidth: number
+  columnCount: number
   columnGap: number
   rowGap: number
   gridItemHeight: number
@@ -29,6 +30,7 @@ export function ImageListGrid({
   selectedIds,
   selectionMode,
   minColumnWidth,
+  columnCount,
   columnGap,
   rowGap,
   gridItemHeight,
@@ -48,6 +50,7 @@ export function ImageListGrid({
     <div
       style={{
         ['--image-list-min-column-width' as string]: `${minColumnWidth}px`,
+        ['--image-list-column-repeat' as string]: String(columnCount),
         ['--image-list-column-gap' as string]: `${columnGap}px`,
         ['--image-list-row-gap' as string]: `${rowGap}px`,
         height: usesWindowScroll ? undefined : (viewportHeight ?? '100%'),

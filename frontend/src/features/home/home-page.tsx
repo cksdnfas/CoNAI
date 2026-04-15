@@ -9,11 +9,21 @@ import { useAuthPermissionRedirect } from '@/features/auth/use-auth-permission-r
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
+import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { useHomePageData } from './use-home-page-data'
 
 /** Render the Home page with the reusable image list and header-driven search results. */
 export function HomePage() {
   const { showSnackbar } = useSnackbar()
+  const {
+    columnCount: homeColumnCount,
+    setColumnCount: setHomeColumnCount,
+    resetColumnCount: resetHomeColumnCount,
+    defaultColumnCount: defaultHomeColumnCount,
+    minColumnCount: minHomeColumnCount,
+    maxColumnCount: maxHomeColumnCount,
+  } = useImageListColumnPreference('home')
   const {
     authStatusQuery,
     canViewHome,
@@ -123,6 +133,7 @@ export function HomePage() {
             isLoadingMore={imagesQuery.isFetchingNextPage}
             onLoadMore={imagesQuery.fetchNextPage}
             minColumnWidth={300}
+            preferredColumnCount={homeColumnCount}
             columnGap={24}
             rowGap={24}
             gridItemHeight={280}
@@ -148,6 +159,15 @@ export function HomePage() {
               </div>
             ) : null}
           </div>
+          <ImageListColumnFloatingControl
+            value={homeColumnCount}
+            defaultValue={defaultHomeColumnCount}
+            min={minHomeColumnCount}
+            max={maxHomeColumnCount}
+            title="홈 한 줄 카드 수"
+            onChange={setHomeColumnCount}
+            onReset={resetHomeColumnCount}
+          />
         </>
       ) : null}
 
