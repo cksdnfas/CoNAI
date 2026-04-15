@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ImagePlus, Loader2 } from 'lucide-react'
-import { SectionHeading } from '@/components/common/section-heading'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -428,32 +426,22 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
         <div className="space-y-5">
           <input ref={inputRef} type="file" accept="image/*" hidden onChange={(event) => void handleUploadFileChange(event)} />
 
-          <div className="border-b border-border/70 pb-4">
+          <div>
             <SegmentedTabBar value={source} items={IMAGE_ATTACHMENT_SOURCE_ITEMS} onChange={(nextSource) => setSource(nextSource as ImageAttachmentSource)} />
           </div>
 
           {source === 'upload' ? (
-            <Card className="overflow-hidden">
-              <CardContent className="p-0">
-                <SectionHeading
-                  variant="inside"
-                  className="border-b border-border/70 px-4 pb-4"
-                  heading="파일 업로드"
-                />
-
-                <div className="space-y-4 px-4 pt-4">
-                  <DropSurface
-                    ariaLabel="첨부할 이미지 선택"
-                    active={uploadDropZone.isDragActive}
-                    onClick={() => inputRef.current?.click()}
-                    onDrop={uploadDropZone.handleDrop}
-                    onDragEnter={uploadDropZone.handleDragEnter}
-                    onDragOver={uploadDropZone.handleDragOver}
-                    onDragLeave={uploadDropZone.handleDragLeave}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            <div className="pt-1">
+              <DropSurface
+                ariaLabel="첨부할 이미지 선택"
+                active={uploadDropZone.isDragActive}
+                onClick={() => inputRef.current?.click()}
+                onDrop={uploadDropZone.handleDrop}
+                onDragEnter={uploadDropZone.handleDragEnter}
+                onDragOver={uploadDropZone.handleDragOver}
+                onDragLeave={uploadDropZone.handleDragLeave}
+              />
+            </div>
           ) : null}
 
           {source === 'system' ? (
