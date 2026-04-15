@@ -65,8 +65,9 @@ export function ImageListMasonry({
         const itemId = String(getItemId ? getItemId(image) : (image.composite_hash ?? image.id))
 
         return (
-          <div style={{ paddingBottom: `${rowGap}px` }}>
+          <div key={itemId} style={{ paddingBottom: `${rowGap}px` }}>
             <ImageListItem
+              key={itemId}
               image={image}
               itemId={itemId}
               href={getItemHref?.(image)}
