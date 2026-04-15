@@ -6,7 +6,7 @@ export type WorkflowPromptFieldLike = {
   default_value?: unknown
 }
 
-/** Resolve one prompt-data object with wildcard parsing applied to text-like marked fields. */
+/** Resolve one prompt-data object with preprocess chains first, then wildcard parsing on text-like fields. */
 export function resolveWorkflowPromptValues<T extends Record<string, any>>(
   markedFields: WorkflowPromptFieldLike[],
   promptData: T,
@@ -15,7 +15,7 @@ export function resolveWorkflowPromptValues<T extends Record<string, any>>(
   const resolvedPromptData: Record<string, any> = { ...promptData }
 
   for (const field of markedFields) {
-    if (field.type === 'image') {
+    if (field.type === 'image' || field.type === 'number' || field.type === 'select') {
       continue
     }
 
@@ -27,7 +27,8 @@ export function resolveWorkflowPromptValues<T extends Record<string, any>>(
       continue
     }
 
-    resolvedPromptData[field.id] = rawValue.includes('++')
+    const trimmedValue = rawValue.trim()
+    resolvedPromptData[field.id] = trimmedValue.length > 0
       ? WildcardService.parseWildcards(rawValue, tool)
       : rawValue
   }

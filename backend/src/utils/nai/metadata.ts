@@ -70,15 +70,15 @@ export interface NAIMetadataInputParams extends Omit<NAIMetadataParams, 'charact
 
 const CHARACTER_GRID_VALUES = [0.1, 0.3, 0.5, 0.7, 0.9] as const
 
-/** Parse one NAI prompt-like string when it contains wildcard syntax. */
+/** Parse one NAI prompt-like string with preprocess chains first, then wildcards. */
 function parseNaiWildcardText(value: string | undefined) {
   if (typeof value !== 'string') {
     return ''
   }
 
   const trimmedValue = value.trim()
-  if (!trimmedValue.includes('++')) {
-    return trimmedValue
+  if (!trimmedValue) {
+    return ''
   }
 
   return WildcardService.parseWildcards(trimmedValue, 'nai')
