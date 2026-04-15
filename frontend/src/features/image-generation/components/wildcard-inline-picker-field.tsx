@@ -676,8 +676,13 @@ export function WildcardInlinePickerField({
                 {renderPromptSyntaxOverlay(value, detectedTokens)}
               </div>
             ) : (
-              <div className="flex h-full items-center overflow-hidden whitespace-pre px-3 text-sm text-transparent">
-                {renderPromptSyntaxOverlay(value, detectedTokens)}
+              <div className="flex h-full items-center overflow-hidden px-3 text-sm text-transparent">
+                <div
+                  className="min-w-full whitespace-pre"
+                  style={{ transform: `translateX(${-fieldScrollLeft}px)` }}
+                >
+                  {renderPromptSyntaxOverlay(value, detectedTokens)}
+                </div>
               </div>
             )}
           </div>
