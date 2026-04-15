@@ -512,6 +512,22 @@ export function resolveHistoryImageSource(record: GenerationHistoryRecord) {
   }
 }
 
+/** Resolve the effective history display status for list surfaces.
+ * A completed history without a linked main-image record is still treated as in-flight,
+ * because thumbnail/detail routes are not ready yet and should not look like a real failure.
+ */
+export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): GenerationHistoryRecord['generation_status'] {
+  if (record.generation_status === 'failed') {
+    return 'failed'
+  }
+
+  if (record.generation_status === 'pending' || record.generation_status === 'processing') {
+    return record.generation_status
+  }
+
+  return record.actual_composite_hash ? 'completed' : 'processing'
+}
+
 /** Resolve the most useful image detail route for a history item. */
 export function getHistoryDetailHref(record: GenerationHistoryRecord) {
   return resolveHistoryImageSource(record).detailHref
@@ -525,8 +541,8 @@ export function getHistoryServiceLabel(serviceType: GenerationServiceType) {
 /** Resolve a compact label for the history status badge. */
 export function getHistoryStatusLabel(status: GenerationHistoryRecord['generation_status']) {
   if (status === 'completed') return '완료'
-  if (status === 'failed') return '실패'
-  if (status === 'processing') return '처리 중'
+  if (status === 'failed') return '생성 실패'
+  if (status === 'processing') return '작업 중'
   return '대기 중'
 }
 

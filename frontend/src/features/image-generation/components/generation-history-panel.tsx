@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 import {
   getErrorMessage,
   getHistoryStatusLabel,
+  resolveHistoryDisplayStatus,
   resolveHistoryImageSource,
 } from '../image-generation-shared'
 
@@ -38,11 +39,10 @@ type GenerationHistoryPanelProps = {
 const GENERATION_HISTORY_PAGE_SIZE = 40
 
 function hasInFlightHistory(records: GenerationHistoryResponse['records']) {
-  return records.some((record) => record.generation_status === 'pending' || record.generation_status === 'processing')
-}
-
-function isResultFocusedHistoryRecord(record: GenerationHistoryResponse['records'][number]) {
-  return record.generation_status === 'completed' || record.generation_status === 'failed'
+  return records.some((record) => {
+    const displayStatus = resolveHistoryDisplayStatus(record)
+    return displayStatus === 'pending' || displayStatus === 'processing'
+  })
 }
 
 function getGenerationHistorySelectionId(record: GenerationHistoryResponse['records'][number]) {
@@ -51,19 +51,21 @@ function getGenerationHistorySelectionId(record: GenerationHistoryResponse['reco
 
 function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['records'][number]): ImageRecord {
   const imageSource = resolveHistoryImageSource(record)
+  const displayStatus = resolveHistoryDisplayStatus(record)
+  const hasLinkedImage = Boolean(record.actual_composite_hash)
 
   return {
     id: `generation-history-${record.id}`,
-    composite_hash: imageSource.compositeHash,
+    composite_hash: hasLinkedImage ? imageSource.compositeHash : null,
     original_file_path: null,
-    thumbnail_url: imageSource.thumbnailUrl,
-    image_url: imageSource.imageUrl,
+    thumbnail_url: hasLinkedImage ? imageSource.thumbnailUrl : null,
+    image_url: hasLinkedImage ? imageSource.imageUrl : null,
     width: record.actual_width ?? null,
     height: record.actual_height ?? null,
-    is_processing: record.generation_status === 'pending' || record.generation_status === 'processing',
-    preview_status: record.generation_status === 'failed'
+    is_processing: displayStatus === 'pending' || displayStatus === 'processing',
+    preview_status: displayStatus === 'failed'
       ? 'failed'
-      : record.generation_status === 'pending' || record.generation_status === 'processing'
+      : displayStatus === 'pending' || displayStatus === 'processing'
         ? 'processing'
         : undefined,
   }
@@ -130,22 +132,25 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => (historyQuery.data?.pages ?? []).flatMap((page) => page.records),
     [historyQuery.data?.pages],
   )
-  const visibleHistoryRecords = useMemo(
-    () => historyRecords.filter((record) => isResultFocusedHistoryRecord(record)),
+  const inFlightHistoryCount = useMemo(
+    () => historyRecords.filter((record) => {
+      const displayStatus = resolveHistoryDisplayStatus(record)
+      return displayStatus === 'pending' || displayStatus === 'processing'
+    }).length,
     [historyRecords],
   )
-  const inFlightHistoryCount = useMemo(
-    () => historyRecords.filter((record) => !isResultFocusedHistoryRecord(record)).length,
+  const completedHistoryCount = useMemo(
+    () => historyRecords.filter((record) => resolveHistoryDisplayStatus(record) === 'completed').length,
     [historyRecords],
   )
   const failedHistoryCount = useMemo(
     () => historyRecords.filter((record) => record.generation_status === 'failed').length,
     [historyRecords],
   )
-  const historyImages = useMemo(() => visibleHistoryRecords.map((record) => mapHistoryRecordToImageRecord(record)), [visibleHistoryRecords])
+  const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
   const historyRecordMap = useMemo(
-    () => new Map(visibleHistoryRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
-    [visibleHistoryRecords],
+    () => new Map(historyRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
+    [historyRecords],
   )
   const selectedHistoryRecords = useMemo(
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
@@ -156,7 +161,14 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     [selectedHistoryRecords],
   )
   const historyLabel = isPublicView ? 'Public Workflow' : serviceType === 'novelai' ? 'NAI' : workflowId ? 'ComfyUI Workflow' : 'ComfyUI'
-  const getHistoryImageHref = (image: ImageRecord) => (image?.composite_hash ? `/images/${image.composite_hash}` : undefined)
+  const getHistoryImageHref = (image: ImageRecord) => {
+    const record = historyRecordMap.get(String(image?.id ?? ''))
+    if (!record || resolveHistoryDisplayStatus(record) !== 'completed' || !image?.composite_hash) {
+      return undefined
+    }
+
+    return `/images/${image.composite_hash}`
+  }
 
   useEffect(() => {
     setSelectedHistoryIds((current) => current.filter((id) => historyRecordMap.has(id)))
@@ -238,9 +250,10 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{historyLabel}</Badge>
-          <Badge variant="outline">결과 {visibleHistoryRecords.length}</Badge>
+          <Badge variant="outline">기록 {historyRecords.length}</Badge>
           {!isPublicView ? <Badge variant="outline">{isAdmin ? '전체 사용자' : '내 기록'}</Badge> : null}
-          {inFlightHistoryCount > 0 ? <Badge variant="secondary">진행 중 {inFlightHistoryCount}</Badge> : null}
+          {completedHistoryCount > 0 ? <Badge variant="outline">완료 {completedHistoryCount}</Badge> : null}
+          {inFlightHistoryCount > 0 ? <Badge variant="secondary">작업 중 {inFlightHistoryCount}</Badge> : null}
           <Button
             type="button"
             size="sm"
@@ -302,13 +315,18 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               }
 
               const record = historyRecordMap.get(String(imageSelectionId))
-              if (!record || record.generation_status === 'completed') {
+              if (!record) {
+                return null
+              }
+
+              const displayStatus = resolveHistoryDisplayStatus(record)
+              if (displayStatus === 'completed') {
                 return null
               }
 
               return (
                 <Badge variant="outline">
-                  {getHistoryStatusLabel(record.generation_status)}
+                  {getHistoryStatusLabel(displayStatus)}
                 </Badge>
               )
             }}
