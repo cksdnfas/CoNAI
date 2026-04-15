@@ -183,14 +183,11 @@ function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter, onMou
 
         {token.previewItems.length > 0 ? (
           <div className="space-y-1.5">
-            <div className="text-[11px] font-medium text-muted-foreground">{token.kind === 'lora' ? '연결된 프롬프트 예시' : '나오는 내용 예시'}</div>
-            <div className="space-y-1.5">
-              {token.previewItems.map((item, index) => (
-                <div key={`${token.key}:preview:${index}`} className="rounded-sm border border-border/70 bg-surface-lowest px-2.5 py-2 text-[12px] leading-5 text-foreground/92">
-                  <div className="break-words whitespace-pre-wrap">{item}</div>
-                </div>
-              ))}
-            </div>
+            {token.previewItems.map((item, index) => (
+              <div key={`${token.key}:preview:${index}`} className="rounded-sm border border-border/70 bg-surface-lowest px-2.5 py-2 text-[12px] leading-5 text-foreground/92">
+                <div className="break-words whitespace-pre-wrap">{item}</div>
+              </div>
+            ))}
           </div>
         ) : token.fallbackMessage ? (
           <div className="rounded-sm border border-border/70 bg-surface-lowest px-2.5 py-2 text-[12px] leading-5 text-foreground/92">
