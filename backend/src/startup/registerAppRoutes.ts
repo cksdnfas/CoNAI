@@ -39,6 +39,7 @@ import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
 import { allowAnonymousPermission, optionalAuth, requireAuth, requirePermission } from '../middleware/authMiddleware';
 import { buildAuthStatusPayload } from '../routes/auth-route-helpers';
+import { logger } from '../utils/logger';
 
 export interface RegisterAppRoutesOptions {
   uploadsDir: string;
@@ -55,7 +56,25 @@ export interface RegisterAppRoutesResult {
 
 /** Register one static runtime directory with shared CORS and cache headers. */
 function registerRuntimeStaticDirectory(app: Express, mountPath: string, directoryPath: string): void {
-  app.use(mountPath, optionalAuth, express.static(directoryPath, {
+  app.use(mountPath, (req, res, next) => {
+    const startedAt = Date.now();
+    const isMediaRequest = /\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov|avi|mkv)$/i.test(req.path || '');
+
+    res.once('finish', () => {
+      const elapsedMs = Date.now() - startedAt;
+      if (isMediaRequest && elapsedMs >= 300) {
+        logger.debug('[ImagePerf][static]', {
+          mountPath,
+          method: req.method,
+          url: req.originalUrl,
+          statusCode: res.statusCode,
+          elapsedMs,
+        });
+      }
+    });
+
+    next();
+  }, optionalAuth, express.static(directoryPath, {
     setHeaders: (res, filePath) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
