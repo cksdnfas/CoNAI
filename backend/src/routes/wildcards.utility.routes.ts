@@ -1,12 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
-import { WildcardService } from '../services/wildcardService';
 import { WildcardCreateData } from '../models/Wildcard';
-import { routeParam } from './routeParam';
+import { WildcardService } from '../services/wildcardService';
+import { requirePermission } from '../middleware/authMiddleware';
 
 const router = Router();
 
-router.post('/parse', asyncHandler(async (req: Request, res: Response) => {
+router.post('/parse', requirePermission('page.wildcards.view'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { text, tool, count = 1 } = req.body;
 
@@ -35,7 +35,7 @@ router.post('/parse', asyncHandler(async (req: Request, res: Response) => {
   }
 }));
 
-router.post('/scan-lora-folder', asyncHandler(async (req: Request, res: Response) => {
+router.post('/scan-lora-folder', requirePermission('wildcards.lora.scan'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { loraFiles, loraWeight = 1.0, duplicateHandling = 'number' } = req.body;
 

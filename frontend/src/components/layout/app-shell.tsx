@@ -11,7 +11,7 @@ import { ImageViewModalProvider } from '@/features/images/components/detail/imag
 import { cn } from '@/lib/utils'
 import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
 
-const PRIMARY_NAV_ORDER = ['/groups', '/prompts', '/generation', '/upload', '/wallpaper', '/wallpaper/runtime', '/settings'] as const
+const PRIMARY_NAV_ORDER = ['/groups', '/prompts', '/generation', '/wildcards', '/upload', '/wallpaper', '/wallpaper/runtime', '/settings'] as const
 
 const navItems: Array<{ to: string; label: string; icon: LucideIcon; permissionKey: string | null }> = [
   { to: '/access', label: '이용 가능 페이지', icon: ShieldCheck, permissionKey: null },

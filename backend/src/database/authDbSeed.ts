@@ -71,6 +71,12 @@ const DEFAULT_PERMISSION_CATALOG = [
     description: 'Open generation pages.',
   },
   {
+    permissionKey: 'page.wildcards.view',
+    resource: 'page.wildcards',
+    action: 'view',
+    description: 'Open the wildcard workspace page.',
+  },
+  {
     permissionKey: 'page.image-detail.view',
     resource: 'page.image-detail',
     action: 'view',
@@ -177,6 +183,24 @@ const DEFAULT_PERMISSION_CATALOG = [
     resource: 'generation',
     action: 'execute',
     description: 'Run image generation actions.',
+  },
+  {
+    permissionKey: 'wildcards.edit',
+    resource: 'wildcards',
+    action: 'edit',
+    description: 'Create or update wildcard and preprocess entries.',
+  },
+  {
+    permissionKey: 'wildcards.delete',
+    resource: 'wildcards',
+    action: 'delete',
+    description: 'Delete wildcard and preprocess entries.',
+  },
+  {
+    permissionKey: 'wildcards.lora.scan',
+    resource: 'wildcards.lora',
+    action: 'scan',
+    description: 'Run LoRA auto-collection scans.',
   },
   {
     permissionKey: 'workflows.view',

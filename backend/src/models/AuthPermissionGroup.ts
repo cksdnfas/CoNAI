@@ -10,6 +10,24 @@ export interface PagePermissionRecord {
   description: string | null;
 }
 
+const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
+  'page.home.view',
+  'page.groups.view',
+  'page.prompts.view',
+  'page.generation.view',
+  'page.wildcards.view',
+  'page.image-detail.view',
+  'page.metadata-editor.view',
+  'page.upload.view',
+  'page.settings.view',
+  'page.wallpaper.view',
+  'page.wallpaper.runtime.view',
+  'wildcards.edit',
+  'wildcards.delete',
+] as const;
+
+const ANONYMOUS_EDITABLE_PERMISSION_KEYS = ['page.wallpaper.runtime.view'] as const;
+
 export interface PermissionGroupPageAccessRecord {
   group_key: BuiltInPermissionGroupKey;
   name: string;
@@ -48,6 +66,11 @@ export class AuthPermissionGroup {
       WHERE permission_key LIKE 'page.%'
       ORDER BY id ASC
     `).all() as PagePermissionRecord[];
+  }
+
+  /** List the editable built-in permission catalog used by the anonymous/guest settings UI. */
+  static listBuiltInEditablePermissions(): PagePermissionRecord[] {
+    return this.listPermissionsByKeys(BUILT_IN_EDITABLE_PERMISSION_KEYS);
   }
 
   /** List all permission groups for one group-centered management UI. */
@@ -104,10 +127,12 @@ export class AuthPermissionGroup {
     return this.listAllGroups().find((group) => group.id === groupId) ?? null;
   }
 
-  /** List one or more built-in groups with their assigned page-view permissions. */
+  /** List one or more built-in groups with their editable direct permissions. */
   static listBuiltInPageAccess(groupKeys: BuiltInPermissionGroupKey[]): PermissionGroupPageAccessRecord[] {
     const db = getAuthDb();
+    const editablePermissionKeys = this.getBuiltInEditablePermissionKeys();
     const placeholders = groupKeys.map(() => '?').join(', ');
+    const permissionPlaceholders = editablePermissionKeys.map(() => '?').join(', ');
     const rows = db.prepare(`
       SELECT
         g.group_key,
@@ -116,11 +141,11 @@ export class AuthPermissionGroup {
         GROUP_CONCAT(p.permission_key) as permission_keys_csv
       FROM auth_permission_groups g
       LEFT JOIN auth_group_permissions gp ON gp.group_id = g.id AND gp.allowed = 1
-      LEFT JOIN auth_permissions p ON p.id = gp.permission_id AND p.permission_key LIKE 'page.%'
+      LEFT JOIN auth_permissions p ON p.id = gp.permission_id AND p.permission_key IN (${permissionPlaceholders})
       WHERE g.group_key IN (${placeholders})
       GROUP BY g.id
       ORDER BY g.priority ASC, g.id ASC
-    `).all(...groupKeys) as Array<{
+    `).all(...editablePermissionKeys, ...groupKeys) as Array<{
       group_key: BuiltInPermissionGroupKey;
       name: string;
       description: string | null;
@@ -248,39 +273,12 @@ export class AuthPermissionGroup {
     `).run(accountId, groupId);
   }
 
-  /** Replace the directly assigned page-view permissions for one built-in group. */
-  static replaceBuiltInPageAccess(groupKey: 'anonymous' | 'guest', permissionKeys: string[]): PermissionGroupPageAccessRecord {
-    const db = getAuthDb();
-    const normalizedPermissionKeys = this.normalizePagePermissionKeys(permissionKeys, groupKey);
-
-    const groupRow = db.prepare('SELECT id FROM auth_permission_groups WHERE group_key = ?').get(groupKey) as { id: number } | undefined;
-    if (!groupRow) {
-      throw new Error('Permission group not found');
-    }
-
-    this.syncDirectPagePermissions(groupRow.id, normalizedPermissionKeys);
-
-    const updatedGroup = this.listBuiltInPageAccess([groupKey])[0];
-    if (!updatedGroup) {
-      throw new Error('Failed to refresh permission group');
-    }
-
-    return updatedGroup;
-  }
-
-  /** Normalize and validate one direct page-permission list. */
-  private static normalizePagePermissionKeys(permissionKeys: string[], groupKey?: string): string[] {
+  /** Normalize and validate one direct page-permission list for custom groups. */
+  private static normalizePagePermissionKeys(permissionKeys: string[]): string[] {
     const normalizedPermissionKeys = Array.from(new Set(permissionKeys.map((value) => value.trim()).filter(Boolean)));
-
-    if (groupKey === 'anonymous') {
-      const allowedAnonymousPermissionKeys = new Set(['page.wallpaper.runtime.view']);
-      if (normalizedPermissionKeys.some((permissionKey) => !allowedAnonymousPermissionKeys.has(permissionKey))) {
-        throw new Error('Anonymous access can only include the wallpaper runtime page');
-      }
-    }
-
     const allowedPermissionRows = this.listPagePermissions();
     const allowedPermissionKeySet = new Set(allowedPermissionRows.map((permission) => permission.permission_key));
+
     if (normalizedPermissionKeys.some((permissionKey) => !allowedPermissionKeySet.has(permissionKey))) {
       throw new Error('One or more permission keys are invalid');
     }
@@ -288,14 +286,16 @@ export class AuthPermissionGroup {
     return normalizedPermissionKeys;
   }
 
-  /** Replace the direct page-permission rows for one group. */
+  /** Replace the direct page-permission rows for one custom group. */
   private static syncDirectPagePermissions(groupId: number, permissionKeys: string[]): void {
     const db = getAuthDb();
-    const pagePermissionIds = db.prepare(`
-      SELECT id, permission_key
-      FROM auth_permissions
-      WHERE permission_key LIKE 'page.%'
-    `).all() as Array<{ id: number; permission_key: string }>;
+    const pagePermissions = this.listPagePermissions();
+    const pagePermissionIds = pagePermissions
+      .map((permission) => ({
+        permission_key: permission.permission_key,
+        id: this.getPermissionIdByKey(permission.permission_key),
+      }))
+      .filter((permission): permission is { permission_key: string; id: number } => permission.id !== null);
     const selectedPermissionIds = pagePermissionIds
       .filter((permission) => permissionKeys.includes(permission.permission_key))
       .map((permission) => permission.id);
@@ -322,6 +322,116 @@ export class AuthPermissionGroup {
         insertPermission.run(groupId, permissionId);
       }
     }
+  }
+
+  /** Replace the directly assigned editable permissions for one built-in group. */
+  static replaceBuiltInPageAccess(groupKey: 'anonymous' | 'guest', permissionKeys: string[]): PermissionGroupPageAccessRecord {
+    const db = getAuthDb();
+    const normalizedPermissionKeys = this.normalizeBuiltInPermissionKeys(permissionKeys, groupKey);
+
+    const groupRow = db.prepare('SELECT id FROM auth_permission_groups WHERE group_key = ?').get(groupKey) as { id: number } | undefined;
+    if (!groupRow) {
+      throw new Error('Permission group not found');
+    }
+
+    this.syncDirectBuiltInPermissions(groupRow.id, normalizedPermissionKeys);
+
+    const updatedGroup = this.listBuiltInPageAccess([groupKey])[0];
+    if (!updatedGroup) {
+      throw new Error('Failed to refresh permission group');
+    }
+
+    return updatedGroup;
+  }
+
+  /** Normalize and validate one direct built-in permission list. */
+  private static normalizeBuiltInPermissionKeys(permissionKeys: string[], groupKey?: string): string[] {
+    const normalizedPermissionKeys = Array.from(new Set(permissionKeys.map((value) => value.trim()).filter(Boolean)));
+    const allowedPermissionKeySet = new Set(this.getBuiltInEditablePermissionKeys(groupKey));
+
+    if (groupKey === 'anonymous' && normalizedPermissionKeys.some((permissionKey) => !allowedPermissionKeySet.has(permissionKey))) {
+      throw new Error('Anonymous access can only include the wallpaper runtime page');
+    }
+
+    if (normalizedPermissionKeys.some((permissionKey) => !allowedPermissionKeySet.has(permissionKey))) {
+      throw new Error('One or more permission keys are invalid');
+    }
+
+    return normalizedPermissionKeys;
+  }
+
+  /** Replace the direct built-in permission rows for one group while preserving unrelated permissions. */
+  private static syncDirectBuiltInPermissions(groupId: number, permissionKeys: string[]): void {
+    const db = getAuthDb();
+    const editablePermissions = this.listPermissionsByKeys(this.getBuiltInEditablePermissionKeys());
+    const selectedPermissionIds = editablePermissions
+      .filter((permission) => permissionKeys.includes(permission.permission_key))
+      .map((permission) => this.getPermissionIdByKey(permission.permission_key))
+      .filter((permissionId): permissionId is number => permissionId !== null);
+
+    if (editablePermissions.length > 0) {
+      const editablePermissionIds = editablePermissions
+        .map((permission) => this.getPermissionIdByKey(permission.permission_key))
+        .filter((permissionId): permissionId is number => permissionId !== null);
+
+      if (editablePermissionIds.length > 0) {
+        const placeholders = editablePermissionIds.map(() => '?').join(', ');
+        db.prepare(`
+          DELETE FROM auth_group_permissions
+          WHERE group_id = ? AND permission_id IN (${placeholders})
+        `).run(groupId, ...editablePermissionIds);
+      }
+    }
+
+    if (selectedPermissionIds.length > 0) {
+      const insertPermission = db.prepare(`
+        INSERT INTO auth_group_permissions (
+          group_id, permission_id, allowed, created_at, updated_at
+        ) VALUES (?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(group_id, permission_id) DO UPDATE SET
+          allowed = 1,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+
+      for (const permissionId of selectedPermissionIds) {
+        insertPermission.run(groupId, permissionId);
+      }
+    }
+  }
+
+  /** Resolve the editable built-in permission keys, with anonymous-specific restriction when needed. */
+  private static getBuiltInEditablePermissionKeys(groupKey?: string): string[] {
+    if (groupKey === 'anonymous') {
+      return [...ANONYMOUS_EDITABLE_PERMISSION_KEYS];
+    }
+
+    return [...BUILT_IN_EDITABLE_PERMISSION_KEYS];
+  }
+
+  /** Load one or more permissions in stable caller-defined key order. */
+  private static listPermissionsByKeys(permissionKeys: readonly string[]): PagePermissionRecord[] {
+    const db = getAuthDb();
+    if (permissionKeys.length === 0) {
+      return [];
+    }
+
+    const rows = db.prepare(`
+      SELECT permission_key, resource, action, description
+      FROM auth_permissions
+      WHERE permission_key IN (${permissionKeys.map(() => '?').join(', ')})
+    `).all(...permissionKeys) as PagePermissionRecord[];
+    const rowMap = new Map(rows.map((row) => [row.permission_key, row]));
+
+    return permissionKeys
+      .map((permissionKey) => rowMap.get(permissionKey) ?? null)
+      .filter((row): row is PagePermissionRecord => row !== null);
+  }
+
+  /** Resolve one permission id from its stable key. */
+  private static getPermissionIdByKey(permissionKey: string): number | null {
+    const db = getAuthDb();
+    const row = db.prepare('SELECT id FROM auth_permissions WHERE permission_key = ?').get(permissionKey) as { id: number } | undefined;
+    return row?.id ?? null;
   }
 
   /** Require one permission group summary by id. */

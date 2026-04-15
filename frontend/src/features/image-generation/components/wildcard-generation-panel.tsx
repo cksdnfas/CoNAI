@@ -17,6 +17,8 @@ import {
   type WildcardRecord,
   type WildcardTool,
 } from '@/lib/api'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { LoraAutoCollectModal } from './lora-auto-collect-modal'
@@ -63,6 +65,7 @@ const WORKSPACE_TABS: Array<{ value: WildcardWorkspaceTab; label: string }> = [
 export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPanelProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const authStatusQuery = useAuthStatusQuery()
   const isWideLayout = useDesktopPageLayout()
 
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WildcardWorkspaceTab>('wildcards')
@@ -173,7 +176,11 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     ? getWildcardPromptSyntaxLabel({ type: selectedEntry.wildcard.type, tab: activeWorkspaceTab })
     : '항목 문법'
   const activeTabLabel = WORKSPACE_TABS.find((tab) => tab.value === activeWorkspaceTab)?.label ?? '와일드카드'
-  const canCreateInActiveTab = canCreateWorkspaceTabItem(activeWorkspaceTab)
+  const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
+  const canEditWildcardEntries = hasAuthPermission(permissionKeys, 'wildcards.edit')
+  const canDeleteWildcardEntries = hasAuthPermission(permissionKeys, 'wildcards.delete')
+  const canScanLora = hasAuthPermission(permissionKeys, 'wildcards.lora.scan')
+  const canCreateInActiveTab = canCreateWorkspaceTabItem(activeWorkspaceTab) && canEditWildcardEntries
   const isReadonlyActiveTab = isReadonlyWorkspaceTab(activeWorkspaceTab)
 
   useEffect(() => {
@@ -223,7 +230,12 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   }
 
   const handleOpenCreateModal = (defaultParentId: number | null) => {
-    if (!canCreateInActiveTab) {
+    if (!canEditWildcardEntries) {
+      showSnackbar({ message: '이 계정은 항목을 추가할 수 없어.', tone: 'info' })
+      return
+    }
+
+    if (!canCreateWorkspaceTabItem(activeWorkspaceTab)) {
       showSnackbar({ message: '로라 탭은 자동 수집 항목 기반이라 새 항목 생성은 막아둘게.', tone: 'info' })
       return
     }
@@ -235,6 +247,11 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   }
 
   const handleOpenEditModal = () => {
+    if (!canEditWildcardEntries) {
+      showSnackbar({ message: '이 계정은 항목을 수정할 수 없어.', tone: 'info' })
+      return
+    }
+
     if (isReadonlyActiveTab) {
       showSnackbar({ message: '로라 탭 항목은 자동 수집 기반이라 편집할 수 없어.', tone: 'info' })
       return
@@ -251,6 +268,11 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   }
 
   const handleDeleteSelected = async () => {
+    if (!canDeleteWildcardEntries) {
+      showSnackbar({ message: '이 계정은 항목을 삭제할 수 없어.', tone: 'info' })
+      return
+    }
+
     if (isReadonlyActiveTab) {
       showSnackbar({ message: '로라 탭 항목은 자동 수집 기반이라 삭제할 수 없어.', tone: 'info' })
       return
@@ -303,6 +325,11 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   }
 
   const handleSubmitLoraCollect = async (input: LoraScanRequest) => {
+    if (!canScanLora) {
+      showSnackbar({ message: '이 계정은 LoRA 자동 수집을 실행할 수 없어.', tone: 'info' })
+      return
+    }
+
     await loraCollectMutation.mutateAsync(input)
   }
 
@@ -337,6 +364,9 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
           selectedWildcard={selectedWildcard}
           searchInput={searchInput}
           canCreateInActiveTab={canCreateInActiveTab}
+          canEditInActiveTab={canEditWildcardEntries && !isReadonlyActiveTab}
+          canDeleteInActiveTab={canDeleteWildcardEntries && !isReadonlyActiveTab}
+          canScanLora={canScanLora}
           isLoading={wildcardsQuery.isLoading}
           isError={wildcardsQuery.isError}
           isDeleting={deleteMutation.isPending}
@@ -362,14 +392,18 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
           <WildcardDetailCard
             selectedEntry={selectedEntry}
             onCopySyntax={handleCopy}
-            extraActions={selectedWildcard && !isReadonlyActiveTab ? (
+            extraActions={selectedWildcard && !isReadonlyActiveTab && (canEditWildcardEntries || canDeleteWildcardEntries) ? (
               <>
-                <Button type="button" variant="outline" size="icon-sm" className="bg-surface-low" onClick={handleOpenEditModal} aria-label="편집" title="편집">
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button type="button" variant="outline" size="icon-sm" className="bg-surface-low" onClick={() => void handleDeleteSelected()} disabled={deleteMutation.isPending} aria-label="삭제" title="삭제">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {canEditWildcardEntries ? (
+                  <Button type="button" variant="outline" size="icon-sm" className="bg-surface-low" onClick={handleOpenEditModal} aria-label="편집" title="편집">
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                ) : null}
+                {canDeleteWildcardEntries ? (
+                  <Button type="button" variant="outline" size="icon-sm" className="bg-surface-low" onClick={() => void handleDeleteSelected()} disabled={deleteMutation.isPending} aria-label="삭제" title="삭제">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : null}
               </>
             ) : undefined}
           />

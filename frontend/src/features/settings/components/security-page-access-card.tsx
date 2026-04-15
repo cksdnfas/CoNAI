@@ -31,11 +31,11 @@ export function SecurityPageAccessCard({
       <CardContent className="space-y-4">
         <SectionHeading
           variant="inside"
-          heading="페이지 접근"
+          heading="기본 권한"
           actions={
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline">anonymous 라이브 페이지</Badge>
-              <Badge variant="outline">guest 편집</Badge>
+              <Badge variant="outline">guest 설정 가능</Badge>
               <Badge variant="secondary">admin 전체 허용</Badge>
             </div>
           }

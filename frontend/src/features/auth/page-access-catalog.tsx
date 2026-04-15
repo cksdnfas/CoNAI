@@ -1,4 +1,4 @@
-import { FolderTree, House, Image as ImageIcon, LayoutGrid, MessageSquareText, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
+import { FolderTree, House, Image as ImageIcon, LayoutGrid, MessageSquareText, Settings2, Sparkles, Upload, WandSparkles, type LucideIcon } from 'lucide-react'
 import { hasAuthPermission } from './auth-permissions'
 
 export interface PageAccessCatalogItem {
@@ -37,6 +37,13 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     description: '이미지 생성',
     permissionKey: 'page.generation.view',
     icon: Sparkles,
+  },
+  {
+    path: '/wildcards',
+    label: '와일드카드',
+    description: '와일드카드 작업',
+    permissionKey: 'page.wildcards.view',
+    icon: WandSparkles,
   },
   {
     path: '/wallpaper',

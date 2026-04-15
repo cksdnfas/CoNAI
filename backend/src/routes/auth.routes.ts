@@ -40,8 +40,16 @@ function buildSessionAccountResponse(req: Request, message: string, account: Ses
   };
 }
 
-/** Format one page permission resource into the current UI label shape. */
-function formatPagePermissionLabel(resource: string): string {
+/** Format one editable built-in permission into the current UI label shape. */
+function formatBuiltInPermissionLabel(permissionKey: string, resource: string): string {
+  if (permissionKey === 'wildcards.edit') {
+    return 'Wildcard Edit';
+  }
+
+  if (permissionKey === 'wildcards.delete') {
+    return 'Wildcard Delete';
+  }
+
   return resource
     .replace(/^page\./, '')
     .replace(/\.runtime$/, ' runtime')
@@ -479,9 +487,9 @@ const handlePermissionGroupMemberRemove: RequestHandler = async (req, res) => {
   }
 };
 
-/** Handle built-in page-access matrix reads. */
+/** Handle built-in guest/anonymous permission matrix reads. */
 const handlePageAccessList: RequestHandler = async (_req, res) => {
-  const permissions = AuthPermissionGroup.listPagePermissions();
+  const permissions = AuthPermissionGroup.listBuiltInEditablePermissions();
   const groups = AuthPermissionGroup.listBuiltInPageAccess(['anonymous', 'guest', 'admin']);
 
   res.json({
@@ -489,7 +497,7 @@ const handlePageAccessList: RequestHandler = async (_req, res) => {
     data: {
       permissions: permissions.map((permission) => ({
         permissionKey: permission.permission_key,
-        label: formatPagePermissionLabel(permission.resource),
+        label: formatBuiltInPermissionLabel(permission.permission_key, permission.resource),
         description: permission.description,
       })),
       groups: groups.map((group) => ({
@@ -502,7 +510,7 @@ const handlePageAccessList: RequestHandler = async (_req, res) => {
   });
 };
 
-/** Handle built-in page-access replacements for anonymous or guest. */
+/** Handle built-in guest/anonymous permission replacements. */
 const handlePageAccessReplace: RequestHandler = async (req, res) => {
   const groupKey = String(req.params.groupKey || '').trim();
   const permissionKeys = Array.isArray(req.body?.permissionKeys)
@@ -523,7 +531,7 @@ const handlePageAccessReplace: RequestHandler = async (req, res) => {
     const updatedGroup = AuthPermissionGroup.replaceBuiltInPageAccess(groupKey, permissionKeys);
     res.json({
       success: true,
-      message: `${updatedGroup.name} page access updated successfully`,
+      message: `${updatedGroup.name} built-in access updated successfully`,
       data: {
         groupKey: updatedGroup.group_key,
         name: updatedGroup.name,

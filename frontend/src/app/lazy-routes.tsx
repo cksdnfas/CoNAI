@@ -30,6 +30,11 @@ const PublicComfyWorkflowPageLazy = lazy(async () => {
   return { default: module.PublicComfyWorkflowPage }
 })
 
+const WildcardPageLazy = lazy(async () => {
+  const module = await import('@/features/image-generation/wildcard-page')
+  return { default: module.WildcardPage }
+})
+
 const ModuleGraphPageLazy = lazy(async () => {
   const module = await import('@/features/module-graph/module-graph-page')
   return { default: module.ModuleGraphPage }
@@ -105,6 +110,10 @@ export function ImageGenerationRoute() {
 
 export function PublicComfyWorkflowRoute() {
   return withSuspense(<PublicComfyWorkflowPageLazy />)
+}
+
+export function WildcardRoute() {
+  return withSuspense(<WildcardPageLazy />)
 }
 
 export function ModuleGraphRoute() {

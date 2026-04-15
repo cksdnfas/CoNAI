@@ -4,6 +4,8 @@ import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { Button } from '@/components/ui/button'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
@@ -63,8 +65,13 @@ export function ImageGenerationPage() {
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(() => loadPersistedSelectedComfyWorkflowId())
   const [isControllerOpen, setIsControllerOpen] = useState(false)
+  const authStatusQuery = useAuthStatusQuery()
   const isWideLayout = useDesktopPageLayout()
-  const activeTab = parseImageGenerationTab(searchParams.get('tab'))
+  const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
+  const visibleTabs = IMAGE_GENERATION_TABS.filter((tab) => tab.value !== 'wildcards' || hasAuthPermission(permissionKeys, 'page.wildcards.view'))
+  const activeTab = visibleTabs.some((tab) => tab.value === parseImageGenerationTab(searchParams.get('tab')))
+    ? parseImageGenerationTab(searchParams.get('tab'))
+    : (visibleTabs[0]?.value ?? 'nai')
   const shouldShowHistory = activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
   const useWideNaiSplitPaneScroll = isWideLayout && activeTab === 'nai' && shouldShowHistory
 
@@ -87,6 +94,19 @@ export function ImageGenerationPage() {
   useEffect(() => {
     persistSelectedComfyWorkflowId(selectedComfyWorkflowId)
   }, [selectedComfyWorkflowId])
+
+  useEffect(() => {
+    const requestedTab = parseImageGenerationTab(searchParams.get('tab'))
+    if (visibleTabs.some((tab) => tab.value === requestedTab)) {
+      return
+    }
+
+    if (visibleTabs[0]) {
+      const nextSearchParams = new URLSearchParams(searchParams)
+      nextSearchParams.set('tab', visibleTabs[0].value)
+      setSearchParams(nextSearchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams, visibleTabs])
 
   const controllerLabel = activeTab === 'nai' ? 'NAI' : activeTab === 'wildcards' ? 'Wildcard' : 'ComfyUI'
   const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
@@ -147,7 +167,7 @@ export function ImageGenerationPage() {
 
         <SegmentedTabBar
           value={activeTab}
-          items={IMAGE_GENERATION_TABS}
+          items={visibleTabs}
           onChange={(nextTab) => handleChangeTab(nextTab as ImageGenerationTab)}
         />
       </div>
