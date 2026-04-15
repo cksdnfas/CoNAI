@@ -1,12 +1,12 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  getAppSettings,
   getAutoFolderGroupFileCounts,
   getGroupFileCounts,
   getGroupImages,
   getGroupsHierarchyAll,
 } from '@/lib/api'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { createEmptyGroupFileCounts, getDownloadCountsFromImages, type GroupSourceDefinition } from './group-page-shared'
 
 /** Own query loading, invalidation helpers, and lightweight derived data for the group page. */
@@ -29,10 +29,7 @@ export function useGroupPageQueries({
 }) {
   const queryClient = useQueryClient()
 
-  const settingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
-  })
+  const appearanceQuery = useGlobalAppearanceSettingsQuery()
 
   const groupsQuery = useQuery({
     queryKey: ['groups-hierarchy-all', selectedSource.key],
@@ -96,7 +93,7 @@ export function useGroupPageQueries({
     ])
   }
 
-  const groupExplorerCardStyle = settingsQuery.data?.appearance.groupExplorerCardStyle ?? DEFAULT_APPEARANCE_SETTINGS.groupExplorerCardStyle
+  const groupExplorerCardStyle = appearanceQuery.data?.groupExplorerCardStyle ?? DEFAULT_APPEARANCE_SETTINGS.groupExplorerCardStyle
   const allGroups = groupsQuery.data ?? []
   const selectedGroupHierarchy = allGroups.find((group) => group.id === selectedGroupId) ?? null
   const rootGroups = allGroups.filter((group) => group.parent_id == null)
@@ -124,7 +121,7 @@ export function useGroupPageQueries({
   const selectableDownloadCount = selectedGroupImages.filter((image) => image.original_file_path || image.thumbnail_url).length
 
   return {
-    settingsQuery,
+    appearanceQuery,
     groupsQuery,
     assignableCustomGroupsQuery,
     selectedGroupQuery,

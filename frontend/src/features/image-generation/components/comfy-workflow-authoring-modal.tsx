@@ -8,7 +8,6 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Search, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,9 +16,9 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import {
-  getAppSettings,
   createGenerationWorkflow,
   updateGenerationWorkflow,
   type CustomDropdownList,
@@ -85,10 +84,7 @@ export function ComfyWorkflowAuthoringModal({
   onSaved,
 }: ComfyWorkflowAuthoringModalProps) {
   const { showSnackbar } = useSnackbar()
-  const settingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
-  })
+  const appearanceQuery = useGlobalAppearanceSettingsQuery()
   const [workflowName, setWorkflowName] = useState('')
   const [workflowDescription, setWorkflowDescription] = useState('')
   const [workflowJson, setWorkflowJson] = useState('')
@@ -248,7 +244,7 @@ export function ComfyWorkflowAuthoringModal({
   }, [activeGraphSearchNodeId, graphSearchMatches, isCoarsePointer, parsedGraph])
 
   const reactFlowColorMode: 'light' | 'dark' | 'system' =
-    settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode
+    appearanceQuery.data?.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode
   const authoringMiniMapNodeColor = reactFlowColorMode === 'light' ? '#d9480f' : '#f95e14'
   const authoringMiniMapMaskColor = reactFlowColorMode === 'light' ? 'rgba(255, 255, 255, 0.62)' : 'rgba(8, 10, 14, 0.58)'
   const authoringMiniMapBgColor = reactFlowColorMode === 'light' ? '#f5f6f8' : '#141414'

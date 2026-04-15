@@ -91,6 +91,14 @@ export async function getAppSettings() {
   return response.data
 }
 
+export async function getPublicAppearanceSettings() {
+  const response = await fetchJson<ApiResponse<AppearanceSettings>>('/api/settings/appearance-public')
+  if (!response.success) {
+    throw new Error(response.error || '공용 화면 설정을 불러오지 못했어.')
+  }
+  return response.data
+}
+
 export async function getWallpaperRuntimeSettings() {
   const response = await fetchJson<ApiResponse<WallpaperRuntimeSettings>>('/api/wallpaper-runtime/settings')
   if (!response.success) {

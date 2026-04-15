@@ -10,6 +10,7 @@ import {
   type GraphExecutionRecord,
 } from '@/lib/api'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 
 /** Own the data queries and lightweight derived query state used by the module-graph page. */
 export function useModuleGraphPageQueries({
@@ -32,6 +33,7 @@ export function useModuleGraphPageQueries({
     queryKey: ['app-settings', 'module-graph-validation'],
     queryFn: getAppSettings,
   })
+  const appearanceQuery = useGlobalAppearanceSettingsQuery()
 
   const graphWorkflowsQuery = useQuery({
     queryKey: ['module-graph-workflows'],
@@ -78,8 +80,9 @@ export function useModuleGraphPageQueries({
     graphExecutionsQuery,
     executionDetailQuery,
     browseContentQuery,
+    appearanceQuery,
     modules: modulesQuery.data ?? [],
     executionList: graphExecutionsQuery.data ?? [],
-    reactFlowColorMode: settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode,
+    reactFlowColorMode: appearanceQuery.data?.themeMode ?? settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode,
   }
 }

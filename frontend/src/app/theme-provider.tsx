@@ -1,17 +1,13 @@
 import type { PropsWithChildren } from 'react'
 import { useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getAppSettings } from '@/lib/api'
 import { DEFAULT_APPEARANCE_SETTINGS, applyAppearanceTheme } from '@/lib/appearance'
+import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const settingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
-  })
+  const appearanceQuery = useGlobalAppearanceSettingsQuery()
 
   useEffect(() => {
-    const appearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
+    const appearance = appearanceQuery.data ?? DEFAULT_APPEARANCE_SETTINGS
     applyAppearanceTheme(appearance)
 
     if (typeof window === 'undefined' || appearance.themeMode !== 'system') {
@@ -23,7 +19,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
 
     mediaQuery.addEventListener('change', handleChange)
     return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [settingsQuery.data?.appearance])
+  }, [appearanceQuery.data])
 
   return <>{children}</>
 }

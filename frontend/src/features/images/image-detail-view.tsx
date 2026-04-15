@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getAppSettings, getImage, getImageDuplicates, getPromptSimilarImages, getSimilarImages } from '@/lib/api'
+import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -72,9 +73,10 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
     queryKey: ['app-settings'],
     queryFn: getAppSettings,
   })
+  const appearanceQuery = useGlobalAppearanceSettingsQuery()
 
   const effectiveSimilaritySettings = settingsQuery.data?.similarity
-  const effectiveAppearanceSettings = settingsQuery.data?.appearance
+  const effectiveAppearanceSettings = appearanceQuery.data
 
   const relatedImageMobileColumns = effectiveAppearanceSettings?.detailRelatedImageMobileColumns ?? 1
   const relatedImageDesktopColumns = effectiveAppearanceSettings?.detailRelatedImageColumns ?? 3

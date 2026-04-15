@@ -36,6 +36,7 @@ import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
 import { allowAnonymousPermission, optionalAuth, requireAuth, requirePermission } from '../middleware/authMiddleware';
 import { buildAuthStatusPayload } from '../routes/auth-route-helpers';
+import { settingsService } from '../services/settingsService';
 
 export interface RegisterAppRoutesOptions {
   uploadsDir: string;
@@ -74,10 +75,14 @@ function serializeFrontendBootstrap(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
-/** Render the integrated frontend index with one auth bootstrap payload. */
+/** Render the integrated frontend index with auth and appearance bootstrap payloads. */
 function renderIntegratedFrontendIndex(req: Request, htmlTemplate: string): string {
   const authStatus = buildAuthStatusPayload(req);
-  const bootstrapScript = `<script>window.__CONAI_AUTH_STATUS__=${serializeFrontendBootstrap(authStatus)};</script>`;
+  const appearance = settingsService.loadSettings().appearance;
+  const bootstrapScript = [
+    `<script>window.__CONAI_AUTH_STATUS__=${serializeFrontendBootstrap(authStatus)};</script>`,
+    `<script>window.__CONAI_APPEARANCE__=${serializeFrontendBootstrap(appearance)};</script>`,
+  ].join('');
 
   return htmlTemplate.includes('</head>')
     ? htmlTemplate.replace('</head>', `${bootstrapScript}</head>`)
@@ -130,6 +135,12 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/negative-prompt-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), negativePromptGroupRoutes);
   app.use('/api/groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), groupRoutes);
   app.use('/api/auto-folder-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), autoFolderGroupRoutes);
+  app.get('/api/settings/appearance-public', options.readOnlyLimiter, (_req, res) => {
+    res.json({
+      success: true,
+      data: settingsService.loadSettings().appearance,
+    });
+  });
   app.use('/api/settings', optionalAuth, requirePermission('page.settings.view'), settingsRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);

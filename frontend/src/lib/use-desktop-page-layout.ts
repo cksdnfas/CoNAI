@@ -1,16 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
-import { getAppSettings } from '@/lib/api'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useMinWidth } from './use-min-width'
 
 /** Resolve the shared desktop page-layout breakpoint from appearance settings. */
 export function useDesktopPageLayout() {
-  const settingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
-  })
+  const appearanceQuery = useGlobalAppearanceSettingsQuery()
 
-  const desktopPageColumnsMinWidth = settingsQuery.data?.appearance.desktopPageColumnsMinWidth ?? DEFAULT_APPEARANCE_SETTINGS.desktopPageColumnsMinWidth
+  const desktopPageColumnsMinWidth = appearanceQuery.data?.desktopPageColumnsMinWidth ?? DEFAULT_APPEARANCE_SETTINGS.desktopPageColumnsMinWidth
 
   return useMinWidth(desktopPageColumnsMinWidth)
 }
