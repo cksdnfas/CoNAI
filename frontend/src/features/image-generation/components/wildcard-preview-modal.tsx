@@ -16,6 +16,7 @@ export interface WildcardPreviewResult {
 export interface WildcardPreviewModalProps {
   open: boolean
   selectedWildcardSyntax: string
+  selectedWildcardSyntaxLabel: string
   previewTool: WildcardTool
   previewCount: string
   previewText: string
@@ -35,6 +36,7 @@ export interface WildcardPreviewModalProps {
 export function WildcardPreviewModal({
   open,
   selectedWildcardSyntax,
+  selectedWildcardSyntaxLabel,
   previewTool,
   previewCount,
   previewText,
@@ -63,7 +65,7 @@ export function WildcardPreviewModal({
     >
       <div className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
-          <Input value={selectedWildcardSyntax} readOnly placeholder="선택한 와일드카드 문법" />
+          <Input value={selectedWildcardSyntax} readOnly placeholder={`선택한 ${selectedWildcardSyntaxLabel}`} />
           <Select value={previewTool} onChange={(event) => onPreviewToolChange(event.target.value as WildcardTool)}>
             <option value="nai">NAI</option>
             <option value="comfyui">ComfyUI</option>
@@ -79,7 +81,7 @@ export function WildcardPreviewModal({
           value={previewText}
           onChange={(event) => onPreviewTextChange(event.target.value)}
           rows={5}
-          placeholder="예: masterpiece, ++character_pose++, cinematic lighting"
+          placeholder="예: masterpiece, character_pose, ++lighting_style++, cinematic lighting"
         />
 
         <div className="flex flex-wrap gap-2">

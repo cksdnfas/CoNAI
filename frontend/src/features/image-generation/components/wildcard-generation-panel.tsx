@@ -29,6 +29,8 @@ import {
   copyWildcardText,
   filterWildcardTree,
   flattenWildcardTree,
+  getWildcardPromptSyntax,
+  getWildcardPromptSyntaxLabel,
   getWorkspaceTabRecordType,
   isReadonlyWorkspaceTab,
   matchesWorkspaceTab,
@@ -164,7 +166,12 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     [browserEntries, selectedWildcardId],
   )
   const selectedWildcard = selectedEntry?.wildcard ?? null
-  const selectedWildcardSyntax = selectedEntry ? `++${selectedEntry.wildcard.name}++` : ''
+  const selectedWildcardSyntax = selectedEntry
+    ? getWildcardPromptSyntax(selectedEntry.wildcard.name, { type: selectedEntry.wildcard.type, tab: activeWorkspaceTab })
+    : ''
+  const selectedWildcardSyntaxLabel = selectedEntry
+    ? getWildcardPromptSyntaxLabel({ type: selectedEntry.wildcard.type, tab: activeWorkspaceTab })
+    : '항목 문법'
   const activeTabLabel = WORKSPACE_TABS.find((tab) => tab.value === activeWorkspaceTab)?.label ?? '와일드카드'
   const canCreateInActiveTab = canCreateWorkspaceTabItem(activeWorkspaceTab)
   const isReadonlyActiveTab = isReadonlyWorkspaceTab(activeWorkspaceTab)
@@ -391,6 +398,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
       <WildcardPreviewModal
         open={isPreviewModalOpen}
         selectedWildcardSyntax={selectedWildcardSyntax}
+        selectedWildcardSyntaxLabel={selectedWildcardSyntaxLabel}
         previewTool={previewTool}
         previewCount={previewCount}
         previewText={previewText}

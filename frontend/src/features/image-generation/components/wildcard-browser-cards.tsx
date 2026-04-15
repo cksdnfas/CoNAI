@@ -14,6 +14,8 @@ import {
 import { cn } from '@/lib/utils'
 import {
   formatWildcardDateTime,
+  getWildcardPromptSyntax,
+  getWildcardPromptSyntaxLabel,
   type WildcardTreeEntry,
 } from './wildcard-generation-panel-helpers'
 
@@ -78,7 +80,8 @@ export function WildcardDetailCard({
   extraActions?: ReactNode
 }) {
   const selectedWildcard = selectedEntry?.wildcard ?? null
-  const selectedWildcardSyntax = selectedWildcard ? `++${selectedWildcard.name}++` : ''
+  const selectedWildcardSyntax = selectedWildcard ? getWildcardPromptSyntax(selectedWildcard.name, { type: selectedWildcard.type }) : ''
+  const selectedWildcardSyntaxLabel = selectedWildcard ? getWildcardPromptSyntaxLabel({ type: selectedWildcard.type }) : '항목 문법'
   const [activeItemTool, setActiveItemTool] = useState<WildcardTool>('comfyui')
   const selectedNaiItems = useMemo(
     () => (selectedWildcard?.items ?? []).filter((item) => item.tool === 'nai'),
@@ -109,7 +112,7 @@ export function WildcardDetailCard({
             <div className="rounded-sm border border-border bg-surface-low p-3 text-sm text-muted-foreground">
               <button
                 type="button"
-                onClick={() => void onCopySyntax(selectedWildcardSyntax, '와일드카드 문법')}
+                onClick={() => void onCopySyntax(selectedWildcardSyntax, selectedWildcardSyntaxLabel)}
                 className="inline-flex max-w-full items-center rounded-sm bg-surface-lowest px-3 py-2 text-left transition-colors hover:bg-surface-high"
                 title="클릭해서 복사"
               >
@@ -202,7 +205,7 @@ export function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
               {log.wildcards.slice(0, 8).map((entry) => (
                 <div key={entry.id} className="rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-foreground">++{entry.name}++</span>
+                    <span className="font-medium text-foreground">{getWildcardPromptSyntax(entry.name)}</span>
                     <Badge variant="outline">items {entry.itemCount}</Badge>
                     <Badge variant="outline">level {entry.level}</Badge>
                   </div>
