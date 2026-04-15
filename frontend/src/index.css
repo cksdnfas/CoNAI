@@ -81,8 +81,8 @@
   --theme-shell-header-height: 4rem;
   --theme-shell-inline-padding: 1.5rem;
   --theme-shell-main-padding-bottom: 4rem;
-  --theme-card-padding-x: 1rem;
-  --theme-card-padding-y: 1rem;
+  --theme-card-padding-x: 0.5rem;
+  --theme-card-padding-y: 0.5rem;
   --theme-card-gap: 1rem;
   --theme-field-gap: 0.5rem;
   --theme-control-height: 2.5rem;
