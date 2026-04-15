@@ -7,6 +7,7 @@ export interface PageAccessCatalogItem {
   description: string
   permissionKey: string
   icon: LucideIcon
+  category: 'primary' | 'derived'
 }
 
 export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
@@ -16,6 +17,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     description: '이미지 탐색',
     permissionKey: 'page.home.view',
     icon: House,
+    category: 'primary',
   },
   {
     path: '/groups',
@@ -23,6 +25,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     description: '그룹 탐색',
     permissionKey: 'page.groups.view',
     icon: FolderTree,
+    category: 'primary',
   },
   {
     path: '/prompts',
@@ -30,6 +33,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     description: '프롬프트 확인',
     permissionKey: 'page.prompts.view',
     icon: MessageSquareText,
+    category: 'primary',
   },
   {
     path: '/generation',
@@ -37,6 +41,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     description: '이미지 생성',
     permissionKey: 'page.generation.view',
     icon: Sparkles,
+    category: 'primary',
   },
   {
     path: '/wildcards',
@@ -44,6 +49,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     description: '와일드카드 작업',
     permissionKey: 'page.wildcards.view',
     icon: WandSparkles,
+    category: 'derived',
   },
   {
     path: '/wallpaper',
@@ -51,6 +57,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     description: '편집 화면',
     permissionKey: 'page.wallpaper.view',
     icon: LayoutGrid,
+    category: 'primary',
   },
   {
     path: '/wallpaper/runtime',
@@ -58,6 +65,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     description: '실행 화면',
     permissionKey: 'page.wallpaper.runtime.view',
     icon: ImageIcon,
+    category: 'derived',
   },
   {
     path: '/upload',
@@ -65,6 +73,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     description: '파일 등록',
     permissionKey: 'page.upload.view',
     icon: Upload,
+    category: 'primary',
   },
   {
     path: '/settings',
@@ -72,6 +81,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     description: '환경 관리',
     permissionKey: 'page.settings.view',
     icon: Settings2,
+    category: 'primary',
   },
 ]
 

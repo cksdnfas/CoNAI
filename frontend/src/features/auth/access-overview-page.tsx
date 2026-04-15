@@ -54,6 +54,8 @@ export function AccessOverviewPage() {
 
   const authStatus = authStatusQuery.data
   const accessibleItems = listAccessiblePageAccessItems(authStatus?.permissionKeys ?? [])
+  const primaryItems = accessibleItems.filter((item) => item.category === 'primary')
+  const derivedItems = accessibleItems.filter((item) => item.category === 'derived')
   const publicWorkflowsQuery = useQuery({
     queryKey: ['public-generation-workflows', 'access-overview'],
     queryFn: getPublicGenerationWorkflows,
@@ -91,14 +93,34 @@ export function AccessOverviewPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          {accessibleItems.length > 0 ? (
+          {primaryItems.length > 0 ? (
             <section className="space-y-2.5">
               <div className="flex items-center gap-2">
                 <div className="text-sm font-semibold text-foreground">기본 페이지</div>
-                <div className="text-xs text-muted-foreground">{accessibleItems.length}</div>
+                <div className="text-xs text-muted-foreground">{primaryItems.length}</div>
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {accessibleItems.map(({ path, label, description, icon }) => (
+                {primaryItems.map(({ path, label, description, icon }) => (
+                  <AccessEntryCard
+                    key={path}
+                    href={path}
+                    label={label}
+                    description={description}
+                    icon={icon}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {derivedItems.length > 0 ? (
+            <section className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-semibold text-foreground">파생 페이지</div>
+                <div className="text-xs text-muted-foreground">{derivedItems.length}</div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {derivedItems.map(({ path, label, description, icon }) => (
                   <AccessEntryCard
                     key={path}
                     href={path}
