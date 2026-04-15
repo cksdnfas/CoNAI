@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import {
   cancelGenerationQueueJob,
   getGenerationQueue,
@@ -20,6 +21,7 @@ import {
   formatGenerationQueueTimestamp,
   getGenerationQueueEtaLabel,
   getGenerationQueuePositionLabel,
+  getGenerationQueueRequesterLabel,
   getGenerationQueueStatusLabel,
   isActiveGenerationQueueStatus,
 } from './generation-queue-ui'
@@ -33,6 +35,7 @@ type GenerationQueuePanelProps = {
 /** Render a lightweight queue operations panel for image-generation jobs. */
 export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: GenerationQueuePanelProps) {
   const { showSnackbar } = useSnackbar()
+  const authStatusQuery = useAuthStatusQuery()
   const [pendingJobId, setPendingJobId] = useState<number | null>(null)
 
   const queueQuery = useQuery({
@@ -156,11 +159,13 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
                 const isCancelRequested = hasCancelRequest && isActiveGenerationQueueStatus(record.status)
                 const completedAfterCancel = hasCancelRequest && record.status === 'completed'
                 const failedAfterCancel = hasCancelRequest && record.status === 'failed'
-                const canCancel = (record.status === 'queued' || record.status === 'dispatching' || record.status === 'running') && !isCancelRequested
-                const canRetry = record.status === 'failed' || record.status === 'cancelled'
+                const canManageRecord = authStatusQuery.data?.isAdmin === true || record.is_mine === true
+                const canCancel = canManageRecord && (record.status === 'queued' || record.status === 'dispatching' || record.status === 'running') && !isCancelRequested
+                const canRetry = canManageRecord && (record.status === 'failed' || record.status === 'cancelled')
                 const isBusy = pendingJobId === record.id
                 const queuePositionLabel = getGenerationQueuePositionLabel(record)
                 const queueEtaLabel = getGenerationQueueEtaLabel(record)
+                const requesterLabel = getGenerationQueueRequesterLabel(record)
 
                 return (
                   <div key={record.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
@@ -181,6 +186,7 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
 
                         <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
                           <span>job #{record.id}</span>
+                          <span>{record.is_mine ? `${requesterLabel} (나)` : requesterLabel}</span>
                           {queuedAt ? <span>queued {queuedAt}</span> : null}
                           {startedAt ? <span>started {startedAt}</span> : null}
                           {completedAt ? <span>done {completedAt}</span> : null}

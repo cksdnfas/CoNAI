@@ -364,14 +364,7 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     return
   }
 
-  const requesterAccountId = getRequesterAccountId(req)
-  const accessibleRecords = isAdminRequest(req)
-    ? GenerationQueueModel.findAll()
-    : requesterAccountId === null
-      ? []
-      : GenerationQueueModel.findByRequester(requesterAccountId)
-
-  const visibleRecords = filterQueueRecords(accessibleRecords, {
+  const visibleRecords = filterQueueRecords(GenerationQueueModel.findAll(), {
     serviceType,
     workflowId,
   })
@@ -418,17 +411,16 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const mineOnly = req.query.mine === 'true'
   const requesterAccountId = getRequesterAccountId(req)
 
-  let accessibleRecords = GenerationQueueModel.findAll(statuses)
-  if (!isAdminRequest(req) || mineOnly) {
-    accessibleRecords = requesterAccountId === null
-      ? []
-      : accessibleRecords.filter((record) => record.requested_by_account_id === requesterAccountId)
-  }
-
-  const records = filterQueueRecords(accessibleRecords, {
+  let records = filterQueueRecords(GenerationQueueModel.findAll(statuses), {
     serviceType,
     workflowId,
   })
+
+  if (mineOnly) {
+    records = requesterAccountId === null
+      ? []
+      : records.filter((record) => record.requested_by_account_id === requesterAccountId)
+  }
 
   const activeRelevantRecords = filterQueueRecords(GenerationQueueModel.findAll(ACTIVE_QUEUE_STATUSES), {
     serviceType,
