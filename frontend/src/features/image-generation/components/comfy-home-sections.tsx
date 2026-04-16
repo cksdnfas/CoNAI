@@ -300,14 +300,15 @@ function splitDropdownItems(rawValue: string) {
     .filter(Boolean)
 }
 
-function stripKnownModelExtension(fileName: string) {
+/** Keep known model file extensions so auto-collected dropdowns match ComfyUI object-info values exactly. */
+function getKnownModelFileName(fileName: string) {
   const lowerName = fileName.toLowerCase()
   const matchedExtension = MODEL_FILE_EXTENSIONS.find((extension) => lowerName.endsWith(extension))
   if (!matchedExtension) {
     return null
   }
 
-  return fileName.slice(0, -matchedExtension.length)
+  return fileName
 }
 
 function collectModelFoldersFromSelection(files: RelativeFile[]) {
@@ -322,8 +323,8 @@ function collectModelFoldersFromSelection(files: RelativeFile[]) {
       continue
     }
 
-    const strippedFileName = stripKnownModelExtension(parts[parts.length - 1])
-    if (!strippedFileName) {
+    const modelFileName = getKnownModelFileName(parts[parts.length - 1])
+    if (!modelFileName) {
       continue
     }
 
@@ -340,8 +341,8 @@ function collectModelFoldersFromSelection(files: RelativeFile[]) {
       files: [],
     }
 
-    if (!bucket.files.includes(strippedFileName)) {
-      bucket.files.push(strippedFileName)
+    if (!bucket.files.includes(modelFileName)) {
+      bucket.files.push(modelFileName)
     }
     folderMap.set(displayName, bucket)
   }

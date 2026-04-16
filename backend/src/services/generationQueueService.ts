@@ -12,6 +12,7 @@ import { resolveWorkflowPromptValues } from './workflowPromptValueResolver'
 import { executeComfyGeneration } from './comfyGenerationExecutor'
 import { executeNaiGeneration } from './naiGenerationExecutor'
 import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser'
+import { reconcileComfyModelSelectionValues } from './comfyModelSelectionResolver'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type { NAIMetadataInputParams } from '../utils/nai/metadata'
@@ -524,7 +525,8 @@ export class GenerationQueueService {
     const comfyService = createComfyUIService(apiEndpoint)
     const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : []
     const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, payload.promptData)
-    const resolvedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui')
+    const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui')
+    const resolvedPromptData = await reconcileComfyModelSelectionValues(workflow.workflow_json, markedFields, parsedPromptData, comfyService)
     const substitutedWorkflow = comfyService.substitutePromptData(
       workflow.workflow_json,
       markedFields,

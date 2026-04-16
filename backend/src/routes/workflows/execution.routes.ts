@@ -14,6 +14,7 @@ import type { GeneratedImageSaveOptions } from '../../utils/fileSaver';
 import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
 import { GenerationQueueModel } from '../../models/GenerationQueue';
+import { reconcileComfyModelSelectionValues } from '../../services/comfyModelSelectionResolver';
 import { resolveWorkflowPromptValues } from '../../services/workflowPromptValueResolver';
 
 const router = Router();
@@ -75,7 +76,8 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
     const comfyService = createComfyUIService(apiEndpoint);
     const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [];
     const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, prompt_data);
-    const resolvedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui');
+    const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui');
+    const resolvedPromptData = await reconcileComfyModelSelectionValues(workflow.workflow_json, markedFields, parsedPromptData, comfyService);
     const substitutedWorkflow = comfyService.substitutePromptData(
       workflow.workflow_json,
       markedFields,

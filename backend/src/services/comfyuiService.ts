@@ -71,6 +71,19 @@ function collectPromptIds(entries: unknown[]) {
 
 function resolveAxiosErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
+    const responseData = error.response?.data;
+    if (typeof responseData === 'string' && responseData.trim().length > 0) {
+      return `${error.message} | ${responseData.trim()}`;
+    }
+
+    if (responseData && typeof responseData === 'object') {
+      try {
+        return `${error.message} | ${JSON.stringify(responseData)}`;
+      } catch {
+        // fall through to the base axios message
+      }
+    }
+
     return error.message;
   }
   return error instanceof Error ? error.message : 'Unknown error';
@@ -90,6 +103,23 @@ export class ComfyUIService {
         'Content-Type': 'application/json'
       }
     });
+  }
+
+  /** Load the exact allowed option list for one node input from the target ComfyUI server. */
+  async getNodeInputOptions(classType: string, inputKey: string): Promise<string[] | null> {
+    try {
+      const response = await this.axiosInstance.get(`/object_info/${classType}`);
+      const options = response.data?.[classType]?.input?.required?.[inputKey]?.[0];
+      if (!Array.isArray(options)) {
+        return null;
+      }
+
+      const stringOptions = options.filter((option: unknown): option is string => typeof option === 'string');
+      return stringOptions.length > 0 ? stringOptions : null;
+    } catch (error) {
+      console.warn(`⚠️ Failed to load ComfyUI input options for ${classType}.${inputKey}:`, resolveAxiosErrorMessage(error));
+      return null;
+    }
   }
 
   /**
@@ -159,7 +189,7 @@ export class ComfyUIService {
       return response.data.prompt_id;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`ComfyUI API error: ${error.message}`);
+        throw new Error(`ComfyUI API error: ${resolveAxiosErrorMessage(error)}`);
       }
       throw error;
     }

@@ -11,6 +11,11 @@ interface ApiResponse {
   error?: string;
 }
 
+/** Normalize scanned ComfyUI model paths to the same backslash form returned by the server model list. */
+function normalizeComfyModelOptionPath(value: string) {
+  return value.replace(/\//g, '\\');
+}
+
 /**
  * 모든 커스텀 드롭다운 목록 조회
  * GET /api/custom-dropdown-lists
@@ -350,7 +355,7 @@ router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Respo
         for (const file of folder.files) {
           // 이미 상대경로가 포함된 경우 그대로 사용, 아니면 subPath 추가
           const fullPath = file.includes('/') ? file : subPath + file;
-          rootFolderMap.get(rootFolder)!.push(fullPath);
+          rootFolderMap.get(rootFolder)!.push(normalizeComfyModelOptionPath(fullPath));
         }
       }
 
@@ -381,7 +386,7 @@ router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Respo
               await CustomDropdownListModel.create({
                 name: folder.displayName,
                 description: `ComfyUI ${folder.folderName} 모델 목록 (자동 수집)`,
-                items: folder.files,
+                items: folder.files.map((item: string) => normalizeComfyModelOptionPath(item)),
                 is_auto_collected: 1,
                 source_path: sourcePath || 'client-selected'
               });
@@ -400,7 +405,7 @@ router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Respo
             await CustomDropdownListModel.create({
               name: folder.displayName,
               description: `ComfyUI ${folder.folderName} 모델 목록 (자동 수집)`,
-              items: folder.files,
+              items: folder.files.map((item: string) => normalizeComfyModelOptionPath(item)),
               is_auto_collected: 1,
               source_path: sourcePath || 'client-selected'
             });
