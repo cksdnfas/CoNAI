@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Download } from 'lucide-react'
+import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { downloadImageSelection } from '@/lib/api'
@@ -32,31 +33,6 @@ export function ImageDownloadTriggerButton({
   const [isDownloading, setIsDownloading] = useState(false)
   const containerRef = useRef<HTMLSpanElement | null>(null)
   const compositeHash = typeof image?.composite_hash === 'string' && image.composite_hash.length > 0 ? image.composite_hash : null
-
-  useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isOpen])
 
   const handleSelect = async (type: 'thumbnail' | 'original') => {
     if (!compositeHash || isDownloading) {
@@ -93,14 +69,13 @@ export function ImageDownloadTriggerButton({
         {children ?? <Download className="h-4 w-4" />}
       </Button>
 
-      {isOpen ? (
+      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom">
         <ImageDownloadOptionMenu
           targetCount={1}
           isDownloading={isDownloading}
-          className="absolute right-0 top-full z-[140] mt-2"
           onSelect={handleSelect}
         />
-      ) : null}
+      </AnchoredPopup>
     </span>
   )
 }

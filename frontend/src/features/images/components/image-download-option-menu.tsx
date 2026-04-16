@@ -15,7 +15,7 @@ export function ImageDownloadOptionMenu({ targetCount, isDownloading = false, cl
   const isBatch = targetCount > 1
 
   return (
-    <div className={cn('min-w-[180px] rounded-sm border border-border bg-background p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.28)]', className)} data-no-select-drag="true">
+    <div className={cn('min-w-[180px] p-1.5', className)} data-no-select-drag="true">
       <Button
         type="button"
         variant="ghost"

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { LayoutGrid, RotateCcw } from 'lucide-react'
+import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -28,40 +29,10 @@ export function ImageListColumnFloatingControl({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const options = Array.from({ length: Math.max(0, max - min + 1) }, (_, index) => min + index)
 
-  useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isOpen])
-
   return (
     <div ref={containerRef} className={cn('pointer-events-none fixed bottom-6 right-4 z-50', className)}>
-      {isOpen ? (
-        <div
-          className={cn(
-            'theme-floating-panel pointer-events-auto absolute bottom-[calc(100%+0.75rem)] right-0 w-[220px] rounded-sm border border-border/80 bg-background/96 p-3 shadow-[0_20px_60px_rgba(0,0,0,0.4)] backdrop-blur-sm',
-            'space-y-3',
-          )}
-        >
+      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="top">
+        <div className="w-[220px] space-y-3 p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <div className="text-xs font-semibold text-foreground">{title}</div>
@@ -105,7 +76,7 @@ export function ImageListColumnFloatingControl({
             })}
           </div>
         </div>
-      ) : null}
+      </AnchoredPopup>
 
       <button
         type="button"

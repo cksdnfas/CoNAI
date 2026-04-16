@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, Boxes, CheckCircle2, Copy, RotateCcw, Save, SlidersHorizontal, Trash2, Unplug, Workflow } from 'lucide-react'
 import type { WorkflowValidationIssue } from './workflow-validation-panel'
+import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -49,7 +50,7 @@ function WorkflowValidationQuickPopup({
   const warningCount = issues.filter((issue) => issue.severity === 'warning').length
 
   return (
-    <div className="absolute right-0 top-full z-20 mt-2 w-[min(360px,calc(100vw-2rem))] rounded-sm border border-border/70 bg-background/95 p-3 shadow-[0_18px_48px_rgba(0,0,0,0.35)] backdrop-blur-md">
+    <div className="w-[min(360px,calc(100vw-2rem))] p-3">
       <div className="flex items-center justify-between gap-2 border-b border-border/70 pb-2">
         <div>
           <div className="text-xs font-semibold tracking-[0.08em] text-muted-foreground">편집기 검증</div>
@@ -153,31 +154,6 @@ export function ModuleWorkflowEditorView({
   const validationPopupRef = useRef<HTMLDivElement | null>(null)
   const validationStatus = useMemo(() => getValidationStatus(validationIssues), [validationIssues])
 
-  useEffect(() => {
-    if (!isValidationPopupOpen) {
-      return
-    }
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!validationPopupRef.current?.contains(event.target as Node)) {
-        setIsValidationPopupOpen(false)
-      }
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsValidationPopupOpen(false)
-      }
-    }
-
-    window.addEventListener('mousedown', handlePointerDown)
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown)
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isValidationPopupOpen])
-
   return (
     <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
       {workflowListSidebar}
@@ -222,13 +198,13 @@ export function ModuleWorkflowEditorView({
                       {validationStatus.tone === 'ready' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                     </Button>
 
-                    {isValidationPopupOpen ? (
+                    <AnchoredPopup open={isValidationPopupOpen} anchorRef={validationPopupRef} onClose={() => setIsValidationPopupOpen(false)} align="end" side="bottom">
                       <WorkflowValidationQuickPopup
                         issues={validationIssues}
                         onIssueSelect={onValidationIssueSelect}
                         onClose={() => setIsValidationPopupOpen(false)}
                       />
-                    ) : null}
+                    </AnchoredPopup>
                   </div>
                   <Button
                     type="button"
