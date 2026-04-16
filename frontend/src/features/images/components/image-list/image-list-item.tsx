@@ -131,7 +131,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
         </div>
         {blurPreview ? <div className="pointer-events-none absolute inset-0 z-10 bg-black/18" /> : null}
       </div>
-      {renderPersistentOverlay ? <div className="absolute inset-x-0 bottom-0 z-30 p-2">{renderPersistentOverlay}</div> : null}
+      {renderPersistentOverlay ? <div className="image-list-persistent-overlay absolute inset-x-0 bottom-0 z-30 p-2">{renderPersistentOverlay}</div> : null}
       {quickActions}
       <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
     </div>
