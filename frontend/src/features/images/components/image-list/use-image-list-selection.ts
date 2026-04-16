@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import SelectionArea from '@viselect/vanilla'
+import { useMultiTouchSelectionStartGuard } from '@/lib/use-multi-touch-selection-start-guard'
 
 interface UseImageListSelectionParams {
   containerElement: HTMLDivElement | null
@@ -8,18 +9,6 @@ interface UseImageListSelectionParams {
   onSelectedIdsChange?: (selectedIds: string[]) => void
   onDragStateChange?: (isDragging: boolean) => void
   selectionAreaClass?: string
-}
-
-function isTouchSelectionEvent(event: Event | null | undefined) {
-  if (!event) {
-    return false
-  }
-
-  if (typeof TouchEvent !== 'undefined' && event instanceof TouchEvent) {
-    return true
-  }
-
-  return 'pointerType' in event && typeof event.pointerType === 'string' && event.pointerType === 'touch'
 }
 
 /** Keep DOM selection preview outside React and commit only the final result. */
@@ -35,6 +24,7 @@ export function useImageListSelection({
   const previewElementsRef = useRef<Set<HTMLElement>>(new Set())
   const suppressClickUntilRef = useRef(0)
   const didDragSelectionRef = useRef(false)
+  const canStartSelection = useMultiTouchSelectionStartGuard(containerElement, selectable)
 
   useEffect(() => {
     const container = containerElement
@@ -85,7 +75,7 @@ export function useImageListSelection({
 
     selection
       .on('beforestart', ({ event }) => {
-        if (isTouchSelectionEvent(event)) {
+        if (!canStartSelection(event)) {
           return false
         }
 
@@ -133,7 +123,7 @@ export function useImageListSelection({
       selection.destroy()
       selectionRef.current = null
     }
-  }, [containerElement, onDragStateChange, onSelectedIdsChange, selectable])
+  }, [canStartSelection, containerElement, onDragStateChange, onSelectedIdsChange, selectable])
 
   useEffect(() => {
     const container = containerElement

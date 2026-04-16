@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import SelectionArea from '@viselect/vanilla'
+import { useMultiTouchSelectionStartGuard } from '@/lib/use-multi-touch-selection-start-guard'
 
 interface UsePromptListSelectionParams {
   containerElement: HTMLDivElement | null
@@ -13,18 +14,6 @@ interface UsePromptListSelectionResult {
   shouldSuppressClick: () => boolean
 }
 
-function isTouchSelectionEvent(event: Event | null | undefined) {
-  if (!event) {
-    return false
-  }
-
-  if (typeof TouchEvent !== 'undefined' && event instanceof TouchEvent) {
-    return true
-  }
-
-  return 'pointerType' in event && typeof event.pointerType === 'string' && event.pointerType === 'touch'
-}
-
 /** Keep prompt drag-selection preview outside React and commit only the final result. */
 export function usePromptListSelection({
   containerElement,
@@ -36,6 +25,7 @@ export function usePromptListSelection({
   const selectionRef = useRef<SelectionArea | null>(null)
   const previewElementsRef = useRef<Set<HTMLElement>>(new Set())
   const suppressClickUntilRef = useRef(0)
+  const canStartSelection = useMultiTouchSelectionStartGuard(containerElement, selectable)
 
   useEffect(() => {
     const container = containerElement
@@ -86,7 +76,7 @@ export function usePromptListSelection({
 
     selection
       .on('beforestart', ({ event }) => {
-        if (isTouchSelectionEvent(event)) {
+        if (!canStartSelection(event)) {
           return false
         }
 
@@ -126,7 +116,7 @@ export function usePromptListSelection({
       selection.destroy()
       selectionRef.current = null
     }
-  }, [containerElement, onDragStateChange, onSelectedIdsChange, selectable])
+  }, [canStartSelection, containerElement, onDragStateChange, onSelectedIdsChange, selectable])
 
   useEffect(() => {
     const container = containerElement
