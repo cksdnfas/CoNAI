@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
+import { type ComponentPropsWithoutRef, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +21,7 @@ interface AnchoredPopupProps {
   sideOffset?: number
   viewportPadding?: number
   className?: string
+  surfaceProps?: Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className'>
   children: ReactNode
 }
 
@@ -36,6 +37,7 @@ export function AnchoredPopup({
   sideOffset = 8,
   viewportPadding = 12,
   className,
+  surfaceProps,
   children,
 }: AnchoredPopupProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -135,6 +137,7 @@ export function AnchoredPopup({
         maxHeight: position?.maxHeight,
         visibility: position ? 'visible' : 'hidden',
       }}
+      {...surfaceProps}
     >
       {children}
     </div>,
