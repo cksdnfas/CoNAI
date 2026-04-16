@@ -57,7 +57,7 @@ export async function clearSearchHistory() {
 
 /** Load user-configured rating tiers for tier-based search chips. */
 export async function getRatingTiers() {
-  const response = await fetchJson<ApiResponse<RatingTierRecord[]>>('/api/settings/rating/tiers')
+  const response = await fetchJson<ApiResponse<RatingTierRecord[]>>('/api/runtime-media-settings/rating-tiers')
   if (!response.success || !response.data) {
     throw new Error(response.error || '평가 티어를 불러오지 못했어.')
   }

@@ -99,6 +99,14 @@ export async function getRuntimeAppearanceSettings() {
   return response.data
 }
 
+export async function getRuntimeSimilaritySettings() {
+  const response = await fetchJson<ApiResponse<SimilaritySettings>>('/api/runtime-media-settings/similarity')
+  if (!response.success) {
+    throw new Error(response.error || '런타임 유사도 설정을 불러오지 못했어.')
+  }
+  return response.data
+}
+
 export async function getWallpaperRuntimeSettings() {
   const response = await fetchJson<ApiResponse<WallpaperRuntimeSettings>>('/api/wallpaper-runtime/settings')
   if (!response.success) {

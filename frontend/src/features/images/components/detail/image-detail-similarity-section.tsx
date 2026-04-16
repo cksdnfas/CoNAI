@@ -21,6 +21,7 @@ import { SimilaritySettingsPanel } from './similarity-settings-panel'
 interface ImageDetailSimilaritySectionProps {
   presentation: 'page' | 'modal'
   currentSimilaritySettings?: SimilaritySettings
+  canEditSettings?: boolean
   similarImageItems: SimilarImage[]
   similarImagesLoading: boolean
   similarImagesError: unknown
@@ -157,6 +158,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 export function ImageDetailSimilaritySection({
   presentation,
   currentSimilaritySettings,
+  canEditSettings = false,
   similarImageItems,
   similarImagesLoading,
   similarImagesError,
@@ -178,7 +180,8 @@ export function ImageDetailSimilaritySection({
   const saveSimilaritySettingsMutation = useMutation({
     mutationFn: (settings: SimilaritySettingsDraft) => updateSimilaritySettings(settings),
     onSuccess: (settings) => {
-      queryClient.setQueryData(['app-settings'], settings)
+      queryClient.setQueryData(['runtime-similarity-settings'], settings.similarity)
+      queryClient.invalidateQueries({ queryKey: ['runtime-similarity-settings'] })
       setIsSimilaritySettingsOpen(false)
     },
   })
@@ -194,7 +197,8 @@ export function ImageDetailSimilaritySection({
         },
       }),
     onSuccess: (settings) => {
-      queryClient.setQueryData(['app-settings'], settings)
+      queryClient.setQueryData(['runtime-similarity-settings'], settings.similarity)
+      queryClient.invalidateQueries({ queryKey: ['runtime-similarity-settings'] })
       setIsPromptSimilaritySettingsOpen(false)
     },
   })
@@ -347,7 +351,7 @@ export function ImageDetailSimilaritySection({
         })}
       </div>
 
-      {activeSimilarImageTab === 'image' ? (
+      {canEditSettings && activeSimilarImageTab === 'image' ? (
         <div className="shrink-0">
           <SimilaritySettingsPanel
             isOpen={isSimilaritySettingsOpen}
@@ -365,7 +369,7 @@ export function ImageDetailSimilaritySection({
         </div>
       ) : null}
 
-      {activeSimilarImageTab === 'text' ? (
+      {canEditSettings && activeSimilarImageTab === 'text' ? (
         <div className="shrink-0">
           <PromptSimilaritySettingsPanel
             isOpen={isPromptSimilaritySettingsOpen}

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getAppSettings, getImage, getImageDuplicates, getPromptSimilarImages, getSimilarImages } from '@/lib/api'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { getImage, getImageDuplicates, getPromptSimilarImages, getRuntimeAppearanceSettings, getRuntimeSimilaritySettings, getSimilarImages } from '@/lib/api'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -68,13 +70,21 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
     }
   }, [compositeHash, presentation])
 
-  const settingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+  const authStatusQuery = useAuthStatusQuery()
+
+  const runtimeAppearanceQuery = useQuery({
+    queryKey: ['runtime-appearance'],
+    queryFn: getRuntimeAppearanceSettings,
   })
 
-  const effectiveSimilaritySettings = settingsQuery.data?.similarity
-  const effectiveAppearanceSettings = settingsQuery.data?.appearance
+  const runtimeSimilarityQuery = useQuery({
+    queryKey: ['runtime-similarity-settings'],
+    queryFn: getRuntimeSimilaritySettings,
+  })
+
+  const effectiveSimilaritySettings = runtimeSimilarityQuery.data
+  const effectiveAppearanceSettings = runtimeAppearanceQuery.data
+  const canManageSimilaritySettings = hasAuthPermission(authStatusQuery.data?.permissionKeys, 'page.settings.view')
 
   const relatedImageMobileColumns = effectiveAppearanceSettings?.detailRelatedImageMobileColumns ?? 1
   const relatedImageDesktopColumns = effectiveAppearanceSettings?.detailRelatedImageColumns ?? 3
@@ -290,13 +300,14 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
                 <ImageDetailSimilaritySection
                   presentation={presentation}
                   currentSimilaritySettings={effectiveSimilaritySettings}
+                  canEditSettings={canManageSimilaritySettings}
                   similarImageItems={similarImageItems}
-                  similarImagesLoading={similarQuery.isLoading || settingsQuery.isLoading}
-                  similarImagesError={similarQuery.isError ? similarQuery.error : null}
+                  similarImagesLoading={similarQuery.isLoading || runtimeSimilarityQuery.isLoading}
+                  similarImagesError={similarQuery.isError ? similarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null}
                   promptSimilarImageItems={promptSimilarImageItems}
                   promptSimilarImages={promptSimilarImages}
-                  promptSimilarImagesLoading={promptSimilarQuery.isLoading || settingsQuery.isLoading}
-                  promptSimilarImagesError={promptSimilarQuery.isError ? promptSimilarQuery.error : null}
+                  promptSimilarImagesLoading={promptSimilarQuery.isLoading || runtimeSimilarityQuery.isLoading}
+                  promptSimilarImagesError={promptSimilarQuery.isError ? promptSimilarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null}
                   mobileCardColumns={relatedImageMobileColumns}
                   desktopCardColumns={relatedImageDesktopColumns}
                   cardAspectRatio={relatedImageAspectRatio}

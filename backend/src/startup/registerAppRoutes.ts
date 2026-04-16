@@ -34,6 +34,7 @@ import searchHistoryRoutes from '../routes/search-history.routes';
 import searchOptionsRoutes from '../routes/search-options.routes';
 import { wallpaperRuntimeRoutes } from '../routes/wallpaperRuntime.routes';
 import { runtimeAppearanceRoutes } from '../routes/runtimeAppearance.routes';
+import { runtimeMediaSettingsRoutes } from '../routes/runtime-media-settings.routes';
 import publicWorkflowRoutes from '../routes/public-workflows.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
@@ -153,6 +154,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), groupRoutes);
   app.use('/api/auto-folder-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), autoFolderGroupRoutes);
   app.use('/api/runtime-appearance', optionalAuth, runtimeAppearanceRoutes);
+  app.use('/api/runtime-media-settings', options.readOnlyLimiter, optionalAuth, runtimeMediaSettingsRoutes);
   app.use('/api/settings', optionalAuth, requirePermission('page.settings.view'), settingsRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);
