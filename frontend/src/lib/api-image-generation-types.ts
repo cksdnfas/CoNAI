@@ -107,6 +107,7 @@ export interface WorkflowMarkedField {
   jsonPath: string
   type: 'text' | 'number' | 'select' | 'textarea' | 'image'
   default_collapsed?: boolean
+  simple_upload_only?: boolean
   default_value?: string | number | boolean | null
   placeholder?: string
   dropdown_list_name?: string

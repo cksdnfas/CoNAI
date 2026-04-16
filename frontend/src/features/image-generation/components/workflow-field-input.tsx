@@ -73,7 +73,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
 
     return wrapField(
       <div className="space-y-3">
-        <ImageAttachmentPickerButton label={imageValue ? '이미지 변경' : '이미지 선택'} modalTitle={field.label} allowSaveDialog={false} onSelect={(image) => void onImageChange(image)} />
+        <ImageAttachmentPickerButton label={imageValue ? '이미지 변경' : '이미지 선택'} modalTitle={field.label} allowSaveDialog={false} uploadOnly={field.simple_upload_only === true} onSelect={(image) => void onImageChange(image)} />
         {imageValue ? (
           <div className="space-y-2 rounded-sm bg-surface-low p-3">
             <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>

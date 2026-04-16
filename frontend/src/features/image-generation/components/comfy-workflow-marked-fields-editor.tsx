@@ -134,6 +134,17 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         />
                         생성 화면 기본 접기
                       </SettingsToggleRow>
+
+                      {field.type === 'image' ? (
+                        <SettingsToggleRow className="rounded-sm border border-border/70 bg-background px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={field.simple_upload_only === true}
+                            onChange={(event) => onFieldPatch(field.id, { simple_upload_only: event.target.checked })}
+                          />
+                          심플 업로드 모드
+                        </SettingsToggleRow>
+                      ) : null}
                     </div>
 
                     {field.type === 'select' ? (

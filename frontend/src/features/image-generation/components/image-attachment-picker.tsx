@@ -38,6 +38,7 @@ type ImageAttachmentPickerButtonProps = {
   modalTitle?: string
   disabled?: boolean
   allowSaveDialog?: boolean
+  uploadOnly?: boolean
   onSelect: (image?: SelectedImageDraft) => void
 }
 
@@ -175,7 +176,7 @@ function ImageAttachmentBrowserSection({
 }
 
 /** Render a shared image attachment button backed by upload/system/save picker sources. */
-export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선택', disabled = false, allowSaveDialog = true, onSelect }: ImageAttachmentPickerButtonProps) {
+export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선택', disabled = false, allowSaveDialog = true, uploadOnly = false, onSelect }: ImageAttachmentPickerButtonProps) {
   const { showSnackbar } = useSnackbar()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [isOpen, setIsOpen] = useState(false)
@@ -189,6 +190,10 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
   const [saveSearch, setSaveSearch] = useState('')
   const [imageSaveOptions, setImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [pendingImageSave, setPendingImageSave] = useState<PendingImageSaveState | null>(null)
+  const sourceItems = useMemo(
+    () => (uploadOnly ? IMAGE_ATTACHMENT_SOURCE_ITEMS.filter((item) => item.value === 'upload') : IMAGE_ATTACHMENT_SOURCE_ITEMS),
+    [uploadOnly],
+  )
 
   const appSettingsQuery = useQuery({
     queryKey: ['app-settings'],
@@ -198,13 +203,13 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
   const systemImagesQuery = useQuery({
     queryKey: ['image-attachment-system-images', systemPage],
     queryFn: () => getImages({ page: systemPage, limit: SYSTEM_IMAGE_PAGE_SIZE }),
-    enabled: isOpen && source === 'system',
+    enabled: isOpen && !uploadOnly && source === 'system',
   })
 
   const saveImagesQuery = useQuery({
     queryKey: ['image-attachment-save-images'],
     queryFn: () => listGenerationSaveImages(),
-    enabled: isOpen && source === 'save',
+    enabled: isOpen && !uploadOnly && source === 'save',
   })
 
   useEffect(() => {
@@ -220,6 +225,12 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
     setSystemSearch('')
     setSaveSearch('')
   }, [isOpen])
+
+  useEffect(() => {
+    if (uploadOnly && source !== 'upload') {
+      setSource('upload')
+    }
+  }, [source, uploadOnly])
 
   useEffect(() => {
     if (!isOpen || source !== 'system' || !systemImagesQuery.data) {
@@ -426,9 +437,11 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
         <div className="space-y-5">
           <input ref={inputRef} type="file" accept="image/*" hidden onChange={(event) => void handleUploadFileChange(event)} />
 
-          <div>
-            <SegmentedTabBar value={source} items={IMAGE_ATTACHMENT_SOURCE_ITEMS} onChange={(nextSource) => setSource(nextSource as ImageAttachmentSource)} />
-          </div>
+          {!uploadOnly ? (
+            <div>
+              <SegmentedTabBar value={source} items={sourceItems} onChange={(nextSource) => setSource(nextSource as ImageAttachmentSource)} />
+            </div>
+          ) : null}
 
           {source === 'upload' ? (
             <div className="pt-1">
@@ -444,7 +457,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
             </div>
           ) : null}
 
-          {source === 'system' ? (
+          {!uploadOnly && source === 'system' ? (
             <ImageAttachmentBrowserSection
               searchValue={systemSearch}
               searchPlaceholder="불러온 시스템 이미지에서 이름 검색"
@@ -482,7 +495,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
             />
           ) : null}
 
-          {source === 'save' ? (
+          {!uploadOnly && source === 'save' ? (
             <ImageAttachmentBrowserSection
               searchValue={saveSearch}
               searchPlaceholder="save 이미지 이름 검색"
