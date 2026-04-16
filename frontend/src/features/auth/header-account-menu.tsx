@@ -74,7 +74,7 @@ export function HeaderAccountMenu() {
         <CircleUserRound className="h-4 w-4" />
       </button>
 
-      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom">
+      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom" closeOnBack>
         <div className="w-[220px] space-y-3 p-3" role="menu" aria-label="계정 메뉴">
           <div className="space-y-1">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">현재 계정</div>

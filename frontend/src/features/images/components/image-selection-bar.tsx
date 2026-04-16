@@ -63,7 +63,7 @@ export function ImageSelectionBar({
               </Button>
 
               {onDownloadSelect ? (
-                <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="top">
+                <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="top" closeOnBack>
                   <ImageDownloadOptionMenu
                     targetCount={downloadableCount}
                     isDownloading={isDownloading}

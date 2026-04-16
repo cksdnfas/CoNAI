@@ -2,6 +2,7 @@ import { useEffect, useRef, type PropsWithChildren, type ReactNode } from 'react
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 
 interface SettingsModalProps extends PropsWithChildren {
   open: boolean
@@ -14,6 +15,8 @@ interface SettingsModalProps extends PropsWithChildren {
 
 export function SettingsModal({ open, title, description, headerContent, onClose, widthClassName = 'max-w-4xl', children }: SettingsModalProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useOverlayBackClose({ open, onClose })
 
   useEffect(() => {
     if (!open) {

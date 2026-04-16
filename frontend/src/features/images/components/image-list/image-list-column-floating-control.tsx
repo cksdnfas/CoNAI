@@ -31,7 +31,7 @@ export function ImageListColumnFloatingControl({
 
   return (
     <div ref={containerRef} className={cn('pointer-events-none fixed bottom-6 right-4 z-50', className)}>
-      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="top">
+      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="top" closeOnBack>
         <div className="w-[220px] space-y-3 p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">

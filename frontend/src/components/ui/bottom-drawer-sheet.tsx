@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useOverlayBackClose } from './use-overlay-back-close'
 import { Button } from './button'
 
 type BottomDrawerSheetProps = {
@@ -33,6 +34,8 @@ export function BottomDrawerSheet({
   footer,
   closeLabel = '접기',
 }: BottomDrawerSheetProps) {
+  useOverlayBackClose({ open, onClose })
+
   useEffect(() => {
     if (!open) {
       return

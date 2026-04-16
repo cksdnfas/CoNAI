@@ -1,6 +1,7 @@
 import { type ComponentPropsWithoutRef, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
+import { useOverlayBackClose } from './use-overlay-back-close'
 
 export type AnchoredPopupSide = 'top' | 'bottom'
 export type AnchoredPopupAlign = 'start' | 'center' | 'end'
@@ -21,6 +22,7 @@ interface AnchoredPopupProps {
   sideOffset?: number
   viewportPadding?: number
   className?: string
+  closeOnBack?: boolean
   surfaceProps?: Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className'>
   children: ReactNode
 }
@@ -37,11 +39,14 @@ export function AnchoredPopup({
   sideOffset = 8,
   viewportPadding = 12,
   className,
+  closeOnBack = false,
   surfaceProps,
   children,
 }: AnchoredPopupProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const [position, setPosition] = useState<AnchoredPopupPosition | null>(null)
+
+  useOverlayBackClose({ open, onClose: onClose ?? (() => undefined), enabled: closeOnBack && Boolean(onClose) })
 
   useEffect(() => {
     if (!open || typeof window === 'undefined') {

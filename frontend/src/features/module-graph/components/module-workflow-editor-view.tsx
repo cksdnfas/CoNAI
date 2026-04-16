@@ -198,7 +198,7 @@ export function ModuleWorkflowEditorView({
                       {validationStatus.tone === 'ready' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                     </Button>
 
-                    <AnchoredPopup open={isValidationPopupOpen} anchorRef={validationPopupRef} onClose={() => setIsValidationPopupOpen(false)} align="end" side="bottom">
+                    <AnchoredPopup open={isValidationPopupOpen} anchorRef={validationPopupRef} onClose={() => setIsValidationPopupOpen(false)} align="end" side="bottom" closeOnBack>
                       <WorkflowValidationQuickPopup
                         issues={validationIssues}
                         onIssueSelect={onValidationIssueSelect}

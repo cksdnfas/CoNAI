@@ -69,7 +69,7 @@ export function ImageDownloadTriggerButton({
         {children ?? <Download className="h-4 w-4" />}
       </Button>
 
-      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom">
+      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom" closeOnBack>
         <ImageDownloadOptionMenu
           targetCount={1}
           isDownloading={isDownloading}

@@ -32,7 +32,7 @@ export function DetailSettingsFlyout({
       <Button ref={triggerRef} size="icon-sm" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={onToggle} aria-label={triggerLabel} title={triggerTitle}>
         {icon}
       </Button>
-      <AnchoredPopup open={isOpen} anchorRef={triggerRef} onClose={onToggle} align="end" side="bottom" className={panelWidthClassName}>
+      <AnchoredPopup open={isOpen} anchorRef={triggerRef} onClose={onToggle} align="end" side="bottom" className={panelWidthClassName} closeOnBack>
         <div className="border-b border-border/70 px-4 py-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">옵션</div>
           <div className="mt-1 text-sm font-semibold text-foreground">{triggerTitle}</div>
