@@ -417,6 +417,30 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
     setSelectedSaveIds(nextIds.slice(-1))
   }
 
+  if (uploadOnly) {
+    return (
+      <>
+        <input ref={inputRef} type="file" accept="image/*" hidden onChange={(event) => void handleUploadFileChange(event)} />
+
+        <div className={disabled ? 'pointer-events-none opacity-60' : undefined}>
+          <DropSurface
+            ariaLabel={`${label} 업로드`}
+            active={uploadDropZone.isDragActive}
+            onClick={() => {
+              if (!disabled && !isImporting) {
+                inputRef.current?.click()
+              }
+            }}
+            onDrop={uploadDropZone.handleDrop}
+            onDragEnter={uploadDropZone.handleDragEnter}
+            onDragOver={uploadDropZone.handleDragOver}
+            onDragLeave={uploadDropZone.handleDragLeave}
+          />
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
       <Button type="button" variant="outline" disabled={disabled} onClick={() => setIsOpen(true)}>
