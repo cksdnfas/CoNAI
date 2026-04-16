@@ -368,7 +368,7 @@ export class GenerationHistoryModel {
         requested_server.name as requested_server_name,
         qj.assigned_server_id,
         assigned_server.name as assigned_server_name,
-        matched_file.composite_hash as actual_composite_hash,
+        im.composite_hash as actual_composite_hash,
         im.width as actual_width,
         im.height as actual_height,
         im.rating_score as rating_score
@@ -421,7 +421,7 @@ export class GenerationHistoryModel {
         requested_server.name as requested_server_name,
         qj.assigned_server_id,
         assigned_server.name as assigned_server_name,
-        matched_file.composite_hash as actual_composite_hash,
+        im.composite_hash as actual_composite_hash,
         im.width as actual_width,
         im.height as actual_height,
         im.rating_score as rating_score
