@@ -251,30 +251,23 @@ export class RatingScoreService {
 
   /**
    * 점수 필터 조건을 SQL WHERE 절로 변환
+   * Search/history-facing score semantics should follow stored media_metadata.rating_score.
    * (autoTagSearchService에서 사용)
    */
-  static buildScoreFilterSQL(filter: RatingScoreFilter, weights: RatingWeights): {
+  static buildScoreFilterSQL(filter: RatingScoreFilter, _weights?: RatingWeights | null): {
     condition: string;
     params: number[];
   } {
     const conditions: string[] = [];
     const params: number[] = [];
 
-    // 점수 계산 식 생성
-    const scoreExpression = `
-      (ROUND(COALESCE(json_extract(i.auto_tags, '$.rating.general'), json_extract(i.auto_tags, '$.tagger.rating.general'), 0) * 1000) / 1000 * ${weights.general_weight} +
-       ROUND(COALESCE(json_extract(i.auto_tags, '$.rating.sensitive'), json_extract(i.auto_tags, '$.tagger.rating.sensitive'), 0) * 1000) / 1000 * ${weights.sensitive_weight} +
-       ROUND(COALESCE(json_extract(i.auto_tags, '$.rating.questionable'), json_extract(i.auto_tags, '$.tagger.rating.questionable'), 0) * 1000) / 1000 * ${weights.questionable_weight} +
-       ROUND(COALESCE(json_extract(i.auto_tags, '$.rating.explicit'), json_extract(i.auto_tags, '$.tagger.rating.explicit'), 0) * 1000) / 1000 * ${weights.explicit_weight})
-    `.trim();
-
     if (filter.min_score !== undefined) {
-      conditions.push(`${scoreExpression} >= ?`);
+      conditions.push(`i.rating_score >= ?`);
       params.push(filter.min_score);
     }
 
     if (filter.max_score !== undefined) {
-      conditions.push(`${scoreExpression} < ?`);
+      conditions.push(`i.rating_score < ?`);
       params.push(filter.max_score);
     }
 

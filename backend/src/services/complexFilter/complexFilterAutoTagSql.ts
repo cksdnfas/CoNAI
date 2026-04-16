@@ -14,7 +14,7 @@ import { normalizeAutoTagSearchTerm } from '../autoTagSearch/autoTagSearchTerms'
 export function buildComplexFilterAutoTagCondition(
   condition: FilterCondition,
   params: any[],
-  weights: RatingWeights | null,
+  _weights: RatingWeights | null,
 ): string | null {
   if (condition.type === 'auto_tag_exists') {
     return condition.value === true
@@ -69,22 +69,16 @@ export function buildComplexFilterAutoTagCondition(
     return conditions.length > 0 ? conditions.join(' AND ') : null;
   }
 
-  if (condition.type === 'auto_tag_rating_score' && weights) {
+  if (condition.type === 'auto_tag_rating_score') {
     const conditions: string[] = [];
-    const scoreExpression = `
-      (ROUND(COALESCE(json_extract(im.auto_tags, '$.rating.general'), json_extract(im.auto_tags, '$.tagger.rating.general'), 0) * 1000) / 1000 * ${weights.general_weight} +
-       ROUND(COALESCE(json_extract(im.auto_tags, '$.rating.sensitive'), json_extract(im.auto_tags, '$.tagger.rating.sensitive'), 0) * 1000) / 1000 * ${weights.sensitive_weight} +
-       ROUND(COALESCE(json_extract(im.auto_tags, '$.rating.questionable'), json_extract(im.auto_tags, '$.tagger.rating.questionable'), 0) * 1000) / 1000 * ${weights.questionable_weight} +
-       ROUND(COALESCE(json_extract(im.auto_tags, '$.rating.explicit'), json_extract(im.auto_tags, '$.tagger.rating.explicit'), 0) * 1000) / 1000 * ${weights.explicit_weight})
-    `.trim();
 
     if (condition.min_score !== undefined) {
       params.push(condition.min_score);
-      conditions.push(`${scoreExpression} >= ?`);
+      conditions.push(`im.rating_score >= ?`);
     }
     if (condition.max_score !== undefined) {
       params.push(condition.max_score);
-      conditions.push(`${scoreExpression} < ?`);
+      conditions.push(`im.rating_score < ?`);
     }
 
     return conditions.length > 0 ? conditions.join(' AND ') : null;
