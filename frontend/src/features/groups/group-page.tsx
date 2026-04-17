@@ -143,27 +143,12 @@ export function GroupPage() {
       <PageHeader
         eyebrow={isWideLayout ? 'Image' : undefined}
         title="Groups"
-        actions={
-          <>
-            {isCustomSource ? (
-              <>
-                <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollectAll()} disabled={autoCollectAllMutation.isPending}>
-                  <Play className="h-4 w-4" />
-                  {autoCollectAllMutation.isPending ? '전체 자동수집 실행 중…' : '전체 자동수집'}
-                </Button>
-                <Button type="button" size="sm" onClick={handleOpenCreateModal}>
-                  <FolderPlus className="h-4 w-4" />
-                  {selectedGroupId ? '하위 그룹 추가' : '새 그룹'}
-                </Button>
-              </>
-            ) : (
-              <Button type="button" size="sm" variant="secondary" onClick={() => void handleRebuildAutoFolderGroups()} disabled={rebuildAutoFolderGroupsMutation.isPending}>
-                <RotateCcw className="h-4 w-4" />
-                {rebuildAutoFolderGroupsMutation.isPending ? '감시폴더 재구축 중…' : '감시폴더 재구축'}
-              </Button>
-            )}
-          </>
-        }
+        actions={!selectedGroupId && !isCustomSource ? (
+          <Button type="button" size="sm" variant="secondary" onClick={() => void handleRebuildAutoFolderGroups()} disabled={rebuildAutoFolderGroupsMutation.isPending}>
+            <RotateCcw className="h-4 w-4" />
+            {rebuildAutoFolderGroupsMutation.isPending ? '감시폴더 재구축 중…' : '감시폴더 재구축'}
+          </Button>
+        ) : undefined}
       />
 
       <SegmentedTabBar
@@ -180,6 +165,33 @@ export function GroupPage() {
           isLoading={groupsQuery.isLoading}
           isError={groupsQuery.isError}
           errorMessage={groupsQuery.error instanceof Error ? groupsQuery.error.message : null}
+          headerExtra={isCustomSource ? (
+            <div className="flex flex-wrap justify-end gap-2 border-b border-white/5 pb-3">
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                className="bg-surface-low"
+                onClick={() => void handleRunAutoCollectAll()}
+                disabled={autoCollectAllMutation.isPending}
+                aria-label="전체 자동수집"
+                title={autoCollectAllMutation.isPending ? '전체 자동수집 실행 중…' : '전체 자동수집'}
+              >
+                <Play className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                className="bg-surface-low"
+                onClick={handleOpenCreateModal}
+                aria-label="새 그룹"
+                title="새 그룹"
+              >
+                <FolderPlus className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : undefined}
           onSelectGroup={handleOpenGroup}
         />
 

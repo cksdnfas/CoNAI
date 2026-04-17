@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
@@ -13,6 +14,7 @@ export interface GroupExplorerSidebarPanelProps {
   isLoading: boolean
   isError: boolean
   errorMessage?: string | null
+  headerExtra?: ReactNode
   onSelectGroup: (groupId: number) => void
 }
 
@@ -24,6 +26,7 @@ export function GroupExplorerSidebarPanel({
   isLoading,
   isError,
   errorMessage,
+  headerExtra,
   onSelectGroup,
 }: GroupExplorerSidebarPanelProps) {
   return (
@@ -34,6 +37,7 @@ export function GroupExplorerSidebarPanel({
       floatingLockStorageKey="conai:groups:sidebar-locked"
       className={cn(isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
       bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
+      headerExtra={headerExtra}
     >
       {isLoading ? (
         <div className="space-y-2">
