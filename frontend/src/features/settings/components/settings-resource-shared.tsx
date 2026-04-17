@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { Check, FolderPlus, LoaderCircle, Minus, Save, Settings2 } from 'lucide-react'
+import { SegmentedControl, type SegmentedControlItem } from '@/components/common/segmented-control'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CardTitle } from '@/components/ui/card'
@@ -86,6 +87,20 @@ interface SettingsResourceTableProps {
   children: ReactNode
 }
 
+interface SettingsSegmentedTableProps {
+  value: string
+  items: SegmentedControlItem[]
+  onChange: (value: string) => void
+  gridClassName: string
+  headers: ReactNode[]
+  children: ReactNode
+  count?: ReactNode
+  actions?: ReactNode
+  minWidthClassName?: string
+  className?: string
+  size?: 'xs' | 'sm' | 'md'
+}
+
 /** Render a horizontally-scrollable DB-like settings table shell. */
 export function SettingsResourceTable({
   gridClassName,
@@ -110,6 +125,39 @@ export function SettingsResourceTable({
         </div>
         <div className="divide-y divide-border/60">{children}</div>
       </div>
+    </div>
+  )
+}
+
+/** Render one shared settings-style segmented table shell with a tab header and DB-like body. */
+export function SettingsSegmentedTable({
+  value,
+  items,
+  onChange,
+  gridClassName,
+  headers,
+  children,
+  count,
+  actions,
+  minWidthClassName = 'min-w-[880px]',
+  className,
+  size = 'xs',
+}: SettingsSegmentedTableProps) {
+  return (
+    <div className={cn('overflow-hidden rounded-sm border border-border/85 bg-surface-container/30', className)}>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/85 px-4 py-3">
+        <SegmentedControl value={value} items={items} onChange={onChange} size={size} />
+        {count || actions ? (
+          <div className="flex items-center gap-2">
+            {count}
+            {actions}
+          </div>
+        ) : null}
+      </div>
+
+      <SettingsResourceTable gridClassName={gridClassName} minWidthClassName={minWidthClassName} headers={headers}>
+        {children}
+      </SettingsResourceTable>
     </div>
   )
 }
