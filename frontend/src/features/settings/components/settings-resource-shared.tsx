@@ -1,11 +1,12 @@
 import type { ComponentProps, ReactNode } from 'react'
-import { FolderPlus, LoaderCircle, Save, Settings2 } from 'lucide-react'
+import { Check, FolderPlus, LoaderCircle, Minus, Save, Settings2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
 type SettingsBadgeVariant = NonNullable<ComponentProps<typeof Badge>['variant']>
+export type SettingsStatusTone = 'default' | 'muted' | 'danger'
 
 export interface SettingsResourceBadge {
   label: ReactNode
@@ -36,46 +37,118 @@ export function getWatcherBadgeVariant(watcherState?: string | null): SettingsBa
   return 'outline'
 }
 
-interface SettingsResourceListItemProps {
-  title: ReactNode
-  path: ReactNode
-  badges: SettingsResourceBadge[]
+/** Map watcher states to a compact icon tone for table cells. */
+export function getWatcherStatusTone(watcherState?: string | null): SettingsStatusTone {
+  if (!watcherState) {
+    return 'muted'
+  }
+
+  const normalized = watcherState.toLowerCase()
+  if (normalized === 'watching') {
+    return 'default'
+  }
+  if (normalized === 'error') {
+    return 'danger'
+  }
+  return 'muted'
+}
+
+interface SettingsStatusIconProps {
+  checked?: boolean
+  tone?: SettingsStatusTone
+  title?: string
+}
+
+/** Render a dense boolean/status cell for settings tables. */
+export function SettingsStatusIcon({ checked = false, tone = 'muted', title }: SettingsStatusIconProps) {
+  return (
+    <span
+      className={cn(
+        'inline-flex h-7 w-7 items-center justify-center rounded-sm border',
+        tone === 'danger'
+          ? 'border-destructive/35 bg-destructive/10 text-destructive'
+          : checked
+            ? 'border-primary/35 bg-primary/10 text-primary'
+            : 'border-border/70 bg-surface-low/60 text-muted-foreground',
+      )}
+      title={title}
+      aria-label={title}
+    >
+      {checked ? <Check className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+    </span>
+  )
+}
+
+interface SettingsResourceTableProps {
+  gridClassName: string
+  minWidthClassName?: string
+  headers: ReactNode[]
+  children: ReactNode
+}
+
+/** Render a horizontally-scrollable DB-like settings table shell. */
+export function SettingsResourceTable({
+  gridClassName,
+  minWidthClassName = 'min-w-[880px]',
+  headers,
+  children,
+}: SettingsResourceTableProps) {
+  return (
+    <div className="overflow-x-auto">
+      <div className={cn(minWidthClassName, 'w-full')}>
+        <div
+          className={cn(
+            'grid border-b border-border/70 bg-surface-low/55 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground',
+            gridClassName,
+          )}
+        >
+          {headers.map((header, index) => (
+            <div key={index} className={cn(index >= headers.length - 3 ? 'text-center' : 'min-w-0')}>
+              {header}
+            </div>
+          ))}
+        </div>
+        <div className="divide-y divide-border/60">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+interface SettingsResourceTableRowProps {
+  gridClassName: string
+  cells: ReactNode[]
   selected?: boolean
   onOpenOptions: () => void
 }
 
-/** Render a shared settings resource row with status badges and options button. */
-export function SettingsResourceListItem({ title, path, badges, selected = false, onOpenOptions }: SettingsResourceListItemProps) {
+/** Render a shared row for settings resource tables. */
+export function SettingsResourceTableRow({
+  gridClassName,
+  cells,
+  selected = false,
+  onOpenOptions,
+}: SettingsResourceTableRowProps) {
   return (
     <div
       className={cn(
-        'grid gap-3 rounded-sm border px-4 py-4 transition-colors md:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(220px,0.9fr)_auto] md:items-center',
+        'grid items-center px-4 py-3 transition-colors',
+        gridClassName,
         selected
-          ? 'border-primary/40 bg-surface-high shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_18%,transparent)]'
-          : 'border-border bg-surface-low hover:bg-surface-high',
+          ? 'bg-primary/6 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_18%,transparent)]'
+          : 'bg-transparent hover:bg-surface-high/60',
       )}
     >
-      <div className="min-w-0 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">{title}</div>
-      </div>
-
-      <div className="min-w-0 font-mono text-xs text-muted-foreground md:pr-4">
-        <div className="break-all">{path}</div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {badges.map((badge, index) => (
-          <Badge key={index} variant={badge.variant ?? 'outline'}>
-            {badge.label}
-          </Badge>
-        ))}
-      </div>
+      {cells.map((cell, index) => (
+        <div key={index} className={cn(index >= cells.length - 2 ? 'flex justify-center' : 'min-w-0')}>
+          {cell}
+        </div>
+      ))}
 
       <div className="flex justify-end">
         <Button
           type="button"
           size="icon-sm"
-          variant={selected ? 'default' : 'outline'}
+          variant={selected ? 'default' : 'ghost'}
           title="상세 정보와 수정 열기"
           aria-label="상세 정보와 수정 열기"
           onClick={onOpenOptions}

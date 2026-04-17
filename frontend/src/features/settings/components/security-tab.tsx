@@ -63,7 +63,7 @@ export function SecurityTab() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <section>
         <SecurityStatusCard
           authStatus={securityTabData.authStatus}

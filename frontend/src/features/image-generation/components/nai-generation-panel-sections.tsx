@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react'
 import { ArrowUp, ExternalLink, RotateCcw, Save, Settings2, Sparkles } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import { CompactGenerationActionSurface } from './shared-generation-controller'
 import { PromptToggleField } from './prompt-toggle-field'
 
@@ -42,6 +44,38 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenA
   )
 }
 
+type NaiControllerSectionProps = {
+  heading: string
+  actions?: ReactNode
+  children: ReactNode
+  className?: string
+  contentClassName?: string
+}
+
+/** Render one minimal NAI controller section with stronger borders and less card-heavy chrome. */
+export function NaiControllerSection({ heading, actions, children, className, contentClassName }: NaiControllerSectionProps) {
+  return (
+    <section className={cn('overflow-hidden rounded-sm border border-border/85 bg-surface-container/30', className)}>
+      <div className="px-4 py-3 border-b border-border/85">
+        <SectionHeading variant="inside" className="border-b-0 pb-0" heading={heading} actions={actions} />
+      </div>
+      <div className={cn('space-y-4 px-4 py-4', contentClassName)}>
+        {children}
+      </div>
+    </section>
+  )
+}
+
+type NaiControllerInsetBlockProps = {
+  children: ReactNode
+  className?: string
+}
+
+/** Render one dense inset block inside the NAI controller surface. */
+export function NaiControllerInsetBlock({ children, className }: NaiControllerInsetBlockProps) {
+  return <div className={cn('border-t border-border/70 pt-4', className)}>{children}</div>
+}
+
 export interface NaiPromptSectionProps {
   prompt: string
   negativePrompt: string
@@ -57,22 +91,17 @@ export function NaiPromptSection({
   onNegativePromptChange,
 }: NaiPromptSectionProps) {
   return (
-    <section className="space-y-3">
-      <Card>
-        <CardContent className="space-y-4">
-          <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Prompt" />
-          <PromptToggleField
-            tool="nai"
-            positiveValue={prompt}
-            negativeValue={negativePrompt}
-            onPositiveChange={onPromptChange}
-            onNegativeChange={onNegativePromptChange}
-            positiveRows={6}
-            negativeRows={6}
-          />
-        </CardContent>
-      </Card>
-    </section>
+    <NaiControllerSection heading="Prompt">
+      <PromptToggleField
+        tool="nai"
+        positiveValue={prompt}
+        negativeValue={negativePrompt}
+        onPositiveChange={onPromptChange}
+        onNegativeChange={onNegativePromptChange}
+        positiveRows={6}
+        negativeRows={6}
+      />
+    </NaiControllerSection>
   )
 }
 

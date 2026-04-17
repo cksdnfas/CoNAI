@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { CircleHelp, Play, RotateCcw, Square } from 'lucide-react'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { BackupSource, BackupSourceUpdateInput } from '@/types/folder'
 import { buildBackupTargetPreviewPath, formatDateTime, normalizeBackupTargetPath } from '../settings-utils'
-import { SettingsField, SettingsToggleRow } from './settings-primitives'
+import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import {
-  SettingsResourceCardHeader,
   SettingsResourceFooterActions,
   SettingsResourceMetaList,
   getWatcherBadgeVariant,
@@ -67,44 +67,35 @@ export function BackupSourceCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <SettingsResourceCardHeader
-          title={source.display_name || '이름 없는 백업 소스'}
-          badges={[
-            { label: draft.is_active ? 'active' : 'inactive', variant: draft.is_active ? 'outline' : 'secondary' },
-            { label: `mode ${source.import_mode}`, variant: 'outline' },
-            { label: `watcher ${source.watcher_status || 'stopped'}`, variant: getWatcherBadgeVariant(source.watcher_status) },
-          ]}
-          details={[`source ${source.source_path}`, `target ${buildBackupTargetPreviewPath(source.target_folder_name)}`]}
-          actions={[
-            {
-              label: 'watcher 시작',
-              title: 'watcher 시작',
-              icon: <Play className="h-4 w-4" />,
-              disabled: isBusy,
-              onClick: () => void handleAction(() => onStartWatcher(source.id)),
-            },
-            {
-              label: 'watcher 중지',
-              title: 'watcher 중지',
-              icon: <Square className="h-4 w-4" />,
-              disabled: isBusy,
-              onClick: () => void handleAction(() => onStopWatcher(source.id)),
-            },
-            {
-              label: 'watcher 재시작',
-              title: 'watcher 재시작',
-              icon: <RotateCcw className="h-4 w-4" />,
-              disabled: isBusy,
-              onClick: () => void handleAction(() => onRestartWatcher(source.id)),
-            },
-          ]}
-        />
-      </CardHeader>
+    <SettingsSection
+      heading={source.display_name || '이름 없는 백업 소스'}
+      bodyClassName="space-y-5"
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(source.id))} title="watcher 시작" aria-label="watcher 시작">
+            <Play className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(source.id))} title="watcher 중지" aria-label="watcher 중지">
+            <Square className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(source.id))} title="watcher 재시작" aria-label="watcher 재시작">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex flex-wrap gap-2">
+        <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? 'active' : 'inactive'}</Badge>
+        <Badge variant="outline">{`mode ${source.import_mode}`}</Badge>
+        <Badge variant={getWatcherBadgeVariant(source.watcher_status)}>{`watcher ${source.watcher_status || 'stopped'}`}</Badge>
+      </div>
 
-      <CardContent className="space-y-5">
-        <div className="grid gap-4 lg:grid-cols-2">
+      <div className="space-y-1 font-mono text-xs text-muted-foreground">
+        <div className="break-all">source {source.source_path}</div>
+        <div className="break-all">target {buildBackupTargetPreviewPath(source.target_folder_name)}</div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
           <SettingsField label="표시 이름">
             <Input variant="settings" value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} />
           </SettingsField>
@@ -183,34 +174,33 @@ export function BackupSourceCard({
           ]}
         />
 
-        <SettingsResourceFooterActions
-          dangerLabel="백업 소스 제거"
-          dangerDisabled={isBusy}
-          onDanger={() => {
-            if (!window.confirm(`정말 ${source.display_name || source.source_path} 백업 소스를 삭제할까?`)) {
-              return
-            }
-            void handleAction(() => onDelete(source.id))
-          }}
-          primaryLabel={isBusy ? '처리 중…' : '백업 소스 저장'}
-          primaryDisabled={isBusy}
-          onPrimary={() =>
-            void handleAction(() =>
-              onSave(source.id, {
-                display_name: draft.display_name,
-                source_path: draft.source_path,
-                target_folder_name: normalizeBackupTargetPath(draft.target_folder_name),
-                recursive: draft.recursive,
-                watcher_enabled: draft.watcher_enabled,
-                watcher_polling_interval: draft.watcher_enabled ? draft.watcher_polling_interval : null,
-                import_mode: draft.import_mode,
-                webp_quality: draft.webp_quality,
-                is_active: draft.is_active,
-              }),
-            )
+      <SettingsResourceFooterActions
+        dangerLabel="백업 소스 제거"
+        dangerDisabled={isBusy}
+        onDanger={() => {
+          if (!window.confirm(`정말 ${source.display_name || source.source_path} 백업 소스를 삭제할까?`)) {
+            return
           }
-        />
-      </CardContent>
-    </Card>
+          void handleAction(() => onDelete(source.id))
+        }}
+        primaryLabel={isBusy ? '처리 중…' : '백업 소스 저장'}
+        primaryDisabled={isBusy}
+        onPrimary={() =>
+          void handleAction(() =>
+            onSave(source.id, {
+              display_name: draft.display_name,
+              source_path: draft.source_path,
+              target_folder_name: normalizeBackupTargetPath(draft.target_folder_name),
+              recursive: draft.recursive,
+              watcher_enabled: draft.watcher_enabled,
+              watcher_polling_interval: draft.watcher_enabled ? draft.watcher_polling_interval : null,
+              import_mode: draft.import_mode,
+              webp_quality: draft.webp_quality,
+              is_active: draft.is_active,
+            }),
+          )
+        }
+      />
+    </SettingsSection>
   )
 }

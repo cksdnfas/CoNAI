@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
-import { Badge } from '@/components/ui/badge'
 import type { WildcardTool } from '@/lib/api'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 
@@ -58,29 +57,20 @@ export function PromptToggleField({
   const activeSegments = isPositiveTab ? promptStats.positiveSegments : promptStats.negativeSegments
 
   return (
-    <div className="space-y-3">
-      <SegmentedTabBar
-        value={activeTab}
-        items={[
-          { value: 'positive', label: positiveLabel },
-          { value: 'negative', label: negativeLabel },
-        ]}
-        onChange={(nextTab) => setActiveTab(nextTab as PromptToggleTab)}
-        fullWidth
-        size="sm"
-      />
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <SegmentedTabBar
+          value={activeTab}
+          items={[
+            { value: 'positive', label: positiveLabel },
+            { value: 'negative', label: negativeLabel },
+          ]}
+          onChange={(nextTab) => setActiveTab(nextTab as PromptToggleTab)}
+          size="sm"
+        />
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant={promptStats.positiveCharacters > 0 ? 'secondary' : 'outline'}>
-            {positiveLabel} {promptStats.positiveCharacters > 0 ? '입력됨' : '비어있음'}
-          </Badge>
-          <Badge variant={promptStats.negativeCharacters > 0 ? 'secondary' : 'outline'}>
-            {negativeLabel} {promptStats.negativeCharacters > 0 ? '입력됨' : '비어있음'}
-          </Badge>
-        </div>
-        <div>
-          현재 {activeCharacters.toLocaleString('ko-KR')}자 · 약 {activeSegments.toLocaleString('ko-KR')}개 항목
+        <div className="text-[11px] text-muted-foreground">
+          {activeCharacters.toLocaleString('ko-KR')}자 · {activeSegments.toLocaleString('ko-KR')}개
         </div>
       </div>
 

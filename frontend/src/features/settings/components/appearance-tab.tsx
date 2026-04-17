@@ -1,12 +1,11 @@
 import { useRef } from 'react'
 import { Download, RotateCcw, Save, Upload, X } from 'lucide-react'
-import { SectionHeading } from '@/components/common/section-heading'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { AppearanceTabEditorSection } from './appearance-tab-editor-section'
 import { AppearanceTabSlotSection } from './appearance-tab-slot-section'
 import type { AppearanceTabProps } from './appearance-tab.types'
 import { getAppearanceTabColorValues } from './appearance-tab.utils'
+import { SettingsSection } from './settings-primitives'
 
 export function AppearanceTab({
   appearanceDraft,
@@ -30,7 +29,7 @@ export function AppearanceTab({
   const colorValues = getAppearanceTabColorValues(appearanceDraft)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <input
         ref={fileInputRef}
         type="file"
@@ -72,61 +71,54 @@ export function AppearanceTab({
       />
 
       <section>
-        <Card>
-          <CardContent className="space-y-4">
-            <SectionHeading
-              variant="inside"
-              heading="테마 슬롯"
-              actions={
-                <>
-                  <Button type="button" size="icon-sm" variant="outline" onClick={onExport} disabled={isSaving} aria-label="외형 내보내기" title="외형 내보내기">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                  <Button type="button" size="icon-sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSaving} aria-label="외형 가져오기" title="외형 가져오기">
-                    <Upload className="h-4 w-4" />
-                  </Button>
-                  <Button type="button" size="icon-sm" variant="outline" onClick={onReset} disabled={!appearanceDraft || isSaving} aria-label="기본값으로 되돌리기" title="기본값으로 되돌리기">
-                    <RotateCcw className="h-4 w-4" />
-                  </Button>
-                  <Button type="button" size="icon-sm" variant="outline" onClick={onCancel} disabled={!isDirty || isSaving} aria-label="변경 취소" title="변경 취소">
-                    <X className="h-4 w-4" />
-                  </Button>
-                  <Button type="button" size="icon-sm" onClick={onSave} disabled={!appearanceDraft || !isDirty || isSaving} aria-label="외형 저장" title="외형 저장">
-                    <Save className="h-4 w-4" />
-                  </Button>
-                </>
-              }
+        <SettingsSection
+          heading="테마 슬롯"
+          actions={
+            <>
+              <Button type="button" size="icon-sm" variant="outline" onClick={onExport} disabled={isSaving} aria-label="외형 내보내기" title="외형 내보내기">
+                <Download className="h-4 w-4" />
+              </Button>
+              <Button type="button" size="icon-sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSaving} aria-label="외형 가져오기" title="외형 가져오기">
+                <Upload className="h-4 w-4" />
+              </Button>
+              <Button type="button" size="icon-sm" variant="outline" onClick={onReset} disabled={!appearanceDraft || isSaving} aria-label="기본값으로 되돌리기" title="기본값으로 되돌리기">
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+              <Button type="button" size="icon-sm" variant="outline" onClick={onCancel} disabled={!isDirty || isSaving} aria-label="변경 취소" title="변경 취소">
+                <X className="h-4 w-4" />
+              </Button>
+              <Button type="button" size="icon-sm" onClick={onSave} disabled={!appearanceDraft || !isDirty || isSaving} aria-label="외형 저장" title="외형 저장">
+                <Save className="h-4 w-4" />
+              </Button>
+            </>
+          }
+        >
+          {appearanceDraft ? (
+            <AppearanceTabSlotSection
+              appearanceDraft={appearanceDraft}
+              savedAppearance={savedAppearance}
+              isSaving={isSaving}
+              onPatchAppearance={onPatchAppearance}
+              onSavePresetSlots={onSavePresetSlots}
             />
-            {appearanceDraft ? (
-              <AppearanceTabSlotSection
-                appearanceDraft={appearanceDraft}
-                savedAppearance={savedAppearance}
-                isSaving={isSaving}
-                onPatchAppearance={onPatchAppearance}
-                onSavePresetSlots={onSavePresetSlots}
-              />
-            ) : null}
-          </CardContent>
-        </Card>
+          ) : null}
+        </SettingsSection>
       </section>
 
       <section>
-        <Card>
-          <CardContent className="space-y-4">
-            <SectionHeading variant="inside" heading="세부 편집" />
-            {appearanceDraft ? (
-              <AppearanceTabEditorSection
-                appearanceDraft={appearanceDraft}
-                colorValues={colorValues}
-                onPatchAppearance={onPatchAppearance}
-                onRequestSansFontUpload={() => sansFontInputRef.current?.click()}
-                onRequestMonoFontUpload={() => monoFontInputRef.current?.click()}
-                onClearCustomFont={onClearCustomFont}
-                isUploadingFont={isUploadingFont}
-              />
-            ) : null}
-          </CardContent>
-        </Card>
+        <SettingsSection heading="세부 편집">
+          {appearanceDraft ? (
+            <AppearanceTabEditorSection
+              appearanceDraft={appearanceDraft}
+              colorValues={colorValues}
+              onPatchAppearance={onPatchAppearance}
+              onRequestSansFontUpload={() => sansFontInputRef.current?.click()}
+              onRequestMonoFontUpload={() => monoFontInputRef.current?.click()}
+              onClearCustomFont={onClearCustomFont}
+              isUploadingFont={isUploadingFont}
+            />
+          ) : null}
+        </SettingsSection>
       </section>
     </div>
   )
