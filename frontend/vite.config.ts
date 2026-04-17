@@ -94,6 +94,10 @@ export default defineConfig(({ mode }) => {
           target: 'http://localhost:1666',
           changeOrigin: true,
         },
+        '/save': {
+          target: 'http://localhost:1666',
+          changeOrigin: true,
+        },
       },
     },
   }
