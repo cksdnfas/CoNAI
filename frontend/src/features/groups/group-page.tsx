@@ -234,7 +234,7 @@ export function GroupPage() {
                 group={selectedGroupQuery.data}
                 selectedGroupHierarchy={selectedGroupHierarchy}
                 isCustomSource={isCustomSource}
-                groupImageCollectionFilter={groupImageCollectionFilter}
+                isWideLayout={isWideLayout}
                 isGroupFileCountsLoading={groupFileCountsQuery.isLoading}
                 isDownloadingGroup={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
                 isAutoCollectPending={autoCollectMutation.isPending}
@@ -246,7 +246,6 @@ export function GroupPage() {
                 onOpenEditModal={handleOpenEditModal}
                 onRunAutoCollect={() => void handleRunAutoCollect()}
                 onDeleteGroup={() => void handleDeleteSelectedGroup()}
-                onFilterChange={setGroupImageCollectionFilter}
               />
 
               {backNavigationGroup ? (
@@ -261,6 +260,7 @@ export function GroupPage() {
                   loadPreviewImage={selectedSource.getPreviewImage}
                   onOpenGroup={handleOpenGroup}
                   onOpenRoot={handleOpenRoot}
+                  isWideLayout={isWideLayout}
                 />
               ) : null}
 
@@ -273,11 +273,12 @@ export function GroupPage() {
                 hasMore={Boolean(groupImagesQuery.hasNextPage)}
                 isLoadingMore={groupImagesQuery.isFetchingNextPage}
                 onLoadMore={() => void groupImagesQuery.fetchNextPage()}
-                hideHeader
                 preferredColumnCount={groupColumnCount}
                 selectable={true}
                 selectedIds={selectedGroupImageIds}
                 onSelectedIdsChange={setSelectedGroupImageIds}
+                collectionFilter={isCustomSource ? groupImageCollectionFilter : undefined}
+                onCollectionFilterChange={isCustomSource ? setGroupImageCollectionFilter : undefined}
               />
 
               {groupImages.length > 0 ? (

@@ -3,6 +3,7 @@ import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
@@ -25,6 +26,8 @@ interface GroupImageSectionProps {
   selectedIds?: string[]
   onSelectedIdsChange?: (selectedIds: string[]) => void
   renderItemOverlay?: (image: ImageRecord) => ReactNode
+  collectionFilter?: 'all' | 'manual' | 'auto'
+  onCollectionFilterChange?: (value: 'all' | 'manual' | 'auto') => void
 }
 
 export function GroupImageSection({
@@ -43,6 +46,8 @@ export function GroupImageSection({
   selectedIds = [],
   onSelectedIdsChange,
   renderItemOverlay,
+  collectionFilter,
+  onCollectionFilterChange,
 }: GroupImageSectionProps) {
   const shouldShowCollectionCounts = group.manual_added_count !== undefined || group.auto_collected_count !== undefined
   const {
@@ -67,12 +72,28 @@ export function GroupImageSection({
             <h2 className="text-xl font-semibold tracking-tight text-foreground">이미지</h2>
             <div className="mt-1 text-sm text-muted-foreground">{visibleGroupImages.length.toLocaleString('ko-KR')}개 항목</div>
           </div>
-          {shouldShowCollectionCounts ? (
-            <div className="flex shrink-0 items-center gap-2">
-              <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-              <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-            </div>
-          ) : null}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {typeof onCollectionFilterChange === 'function' ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {(['all', 'manual', 'auto'] as const).map((filterValue) => (
+                  <Button
+                    key={filterValue}
+                    type="button"
+                    size="sm"
+                    variant={collectionFilter === filterValue ? 'default' : 'secondary'}
+                    onClick={() => onCollectionFilterChange(filterValue)}
+                  >
+                    {filterValue === 'all' ? '전체' : filterValue === 'manual' ? 'manual만' : 'auto만'}
+                  </Button>
+                ))}
+              </div>
+            ) : shouldShowCollectionCounts ? (
+              <>
+                <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+                <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+              </>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
