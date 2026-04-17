@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
-import { SectionHeading } from '@/components/common/section-heading'
+import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
@@ -60,18 +60,20 @@ export function GroupImageSection({
   })
 
   return (
-    <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-4' : 'space-y-4'}>
+    <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-4'}>
       {!hideHeader ? (
-        <SectionHeading
-          heading="이미지"
-          description={`${visibleGroupImages.length.toLocaleString('ko-KR')}개 항목`}
-          actions={shouldShowCollectionCounts ? (
-            <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">이미지</h2>
+            <div className="mt-1 text-sm text-muted-foreground">{visibleGroupImages.length.toLocaleString('ko-KR')}개 항목</div>
+          </div>
+          {shouldShowCollectionCounts ? (
+            <div className="flex shrink-0 items-center gap-2">
               <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
               <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
             </div>
-          ) : undefined}
-        />
+          ) : null}
+        </div>
       ) : null}
 
       {isLoading ? (
@@ -117,11 +119,15 @@ export function GroupImageSection({
       ) : null}
 
       {!isLoading && !isError && visibleGroupImages.length === 0 ? (
-        <Card >
-          <CardContent className="text-sm text-muted-foreground">
+        presentation === 'drawer' ? (
+          <BottomDrawerNotice>
             {hasOnlyHiddenItems ? '현재 등급 표시 정책 때문에 이 목록에서는 숨겨진 상태야.' : '표시할 이미지가 없어.'}
-          </CardContent>
-        </Card>
+          </BottomDrawerNotice>
+        ) : (
+          <PageInset className="text-sm text-muted-foreground">
+            {hasOnlyHiddenItems ? '현재 등급 표시 정책 때문에 이 목록에서는 숨겨진 상태야.' : '표시할 이미지가 없어.'}
+          </PageInset>
+        )
       ) : null}
     </section>
   )

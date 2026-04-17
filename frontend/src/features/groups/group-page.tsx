@@ -172,7 +172,7 @@ export function GroupPage() {
         onChange={(nextSourceKey) => handleSelectSource(nextSourceKey as GroupSourceKey)}
       />
 
-      <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
+      <div className={cn('grid gap-6', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <GroupExplorerSidebarPanel
           isWideLayout={isWideLayout}
           groups={allGroups}
@@ -183,7 +183,7 @@ export function GroupPage() {
           onSelectGroup={handleOpenGroup}
         />
 
-        <section className="space-y-8">
+        <section className="space-y-6">
           {isWideLayout && selectedGroupId ? (
             <GroupBreadcrumbs
               items={breadcrumbQuery.data ?? []}
@@ -217,7 +217,7 @@ export function GroupPage() {
           ) : null}
 
           {selectedGroupId && selectedGroupQuery.data ? (
-            <div className="space-y-8">
+            <div className="space-y-6">
               <GroupDetailHeaderCard
                 group={selectedGroupQuery.data}
                 selectedGroupHierarchy={selectedGroupHierarchy}

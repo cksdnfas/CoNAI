@@ -5,8 +5,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { collectDescendantGroupIds } from '@/features/groups/group-option-utils'
 import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import { AutoCollectChipEditor } from './auto-collect-chip-editor'
@@ -135,7 +135,7 @@ export function GroupEditorModal({
       title={mode === 'create' ? '커스텀 그룹 만들기' : '커스텀 그룹 편집'}
       widthClassName="max-w-3xl"
     >
-      <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
+      <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
             <AlertTitle>입력 확인이 필요해</AlertTitle>
@@ -143,59 +143,58 @@ export function GroupEditorModal({
           </Alert>
         ) : null}
 
-        <div className="space-y-5">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">그룹명</p>
-            <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="예: 컨셉 아트 / 캐릭터 / 즐겨찾기" />
+        <SettingsModalBody className="space-y-5">
+          <div className="space-y-5">
+            <SettingsField label="그룹명">
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="예: 컨셉 아트 / 캐릭터 / 즐겨찾기" />
+            </SettingsField>
+
+            <SettingsField label="설명">
+              <Textarea
+                rows={3}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </SettingsField>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">그룹 위치</p>
+              <HierarchyPicker
+                items={parentGroups}
+                selectedId={parentValue === 'root' ? null : Number(parentValue)}
+                onSelectRoot={() => setParentValue('root')}
+                onSelect={(candidate) => setParentValue(String(candidate.id))}
+                getId={(candidate) => candidate.id}
+                getParentId={(candidate) => candidate.parent_id}
+                getLabel={(candidate) => candidate.name}
+                sortItems={(left, right) => left.name.localeCompare(right.name)}
+                renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <SettingsToggleRow className="justify-between">
+                <p className="text-sm font-medium text-foreground">필터 적용</p>
+                <input type="checkbox" checked={autoCollectEnabled} onChange={(event) => setAutoCollectEnabled(event.target.checked)} />
+              </SettingsToggleRow>
+
+              {autoCollectEnabled ? <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} /> : null}
+            </div>
+
+            <SettingsField label="대표 색상">
+              <Input value={color} onChange={(event) => setColor(event.target.value)} placeholder="#7c3aed" />
+            </SettingsField>
           </div>
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">설명</p>
-            <Textarea
-              rows={3}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">그룹 위치</p>
-            <HierarchyPicker
-              items={parentGroups}
-              selectedId={parentValue === 'root' ? null : Number(parentValue)}
-              onSelectRoot={() => setParentValue('root')}
-              onSelect={(candidate) => setParentValue(String(candidate.id))}
-              getId={(candidate) => candidate.id}
-              getParentId={(candidate) => candidate.parent_id}
-              getLabel={(candidate) => candidate.name}
-              sortItems={(left, right) => left.name.localeCompare(right.name)}
-              renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-            />
-          </div>
-
-          <div className="space-y-3">
-            <ToggleRow className="justify-between" variant="settings">
-              <p className="text-sm font-medium text-foreground">필터 적용</p>
-              <input type="checkbox" checked={autoCollectEnabled} onChange={(event) => setAutoCollectEnabled(event.target.checked)} />
-            </ToggleRow>
-
-            {autoCollectEnabled ? <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} /> : null}
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">대표 색상</p>
-            <Input value={color} onChange={(event) => setColor(event.target.value)} placeholder="#7c3aed" />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-            취소
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? '저장 중…' : mode === 'create' ? '그룹 만들기' : '변경 저장'}
-          </Button>
-        </div>
+          <SettingsModalFooter>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+              취소
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? '저장 중…' : mode === 'create' ? '그룹 만들기' : '변경 저장'}
+            </Button>
+          </SettingsModalFooter>
+        </SettingsModalBody>
       </form>
     </SettingsModal>
   )

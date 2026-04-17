@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
+import { Badge } from '@/components/ui/badge'
 import type { GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import { GroupImageSection } from './group-image-section'
@@ -37,12 +38,20 @@ export function GroupImageDrawer({
   renderItemOverlay,
   onClose,
 }: GroupImageDrawerProps) {
+  const shouldShowCollectionCounts = group.manual_added_count !== undefined || group.auto_collected_count !== undefined
+
   return (
     <BottomDrawerSheet
       open={open}
       title={group.name}
       subtitle={`${group.image_count.toLocaleString('ko-KR')}개 이미지`}
       ariaLabel="그룹 이미지 시트"
+      headerActions={shouldShowCollectionCounts ? (
+        <div className="hidden items-center gap-2 sm:flex">
+          <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+          <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+        </div>
+      ) : undefined}
       bodyClassName="overflow-hidden"
       onClose={onClose}
     >

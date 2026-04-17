@@ -5,7 +5,7 @@ import type { SearchChip } from '@/features/search/search-types'
 
 interface SearchChipListProps {
   chips: SearchChip[]
-  title?: string
+  title?: string | null
   emptyMessage?: string
   onCycleOperator: (chipId: string) => void
   onRemove: (chipId: string) => void
@@ -21,7 +21,7 @@ export function SearchChipList({
 }: SearchChipListProps) {
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</div>
+      {title ? <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</div> : null}
       {chips.length === 0 ? <div className="rounded-sm border border-border/70 bg-background/60 px-4 py-4 text-sm text-muted-foreground">{emptyMessage}</div> : null}
       {chips.length > 0 ? (
         <div className="space-y-2">

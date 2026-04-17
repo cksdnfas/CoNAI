@@ -3,6 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsField, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 
 interface PromptCollectModalProps {
   open: boolean
@@ -46,7 +47,7 @@ export function PromptCollectModal({ open, isSubmitting = false, onClose, onSubm
       title="프롬프트 수동 수집"
       widthClassName="max-w-3xl"
     >
-      <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
+      <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
             <AlertTitle>입력 확인이 필요해</AlertTitle>
@@ -54,24 +55,24 @@ export function PromptCollectModal({ open, isSubmitting = false, onClose, onSubm
           </Alert>
         ) : null}
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">Positive prompt</p>
-          <Textarea rows={6} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="positive prompt를 여기에 넣어줘" />
-        </div>
+        <SettingsModalBody className="space-y-5">
+          <SettingsField label="Positive prompt">
+            <Textarea rows={6} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="positive prompt를 여기에 넣어줘" />
+          </SettingsField>
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">Negative prompt</p>
-          <Textarea rows={6} value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} placeholder="negative prompt를 여기에 넣어줘" />
-        </div>
+          <SettingsField label="Negative prompt">
+            <Textarea rows={6} value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} placeholder="negative prompt를 여기에 넣어줘" />
+          </SettingsField>
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-            취소
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? '수집 중…' : '수집 실행'}
-          </Button>
-        </div>
+          <SettingsModalFooter>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+              취소
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? '수집 중…' : '수집 실행'}
+            </Button>
+          </SettingsModalFooter>
+        </SettingsModalBody>
       </form>
     </SettingsModal>
   )

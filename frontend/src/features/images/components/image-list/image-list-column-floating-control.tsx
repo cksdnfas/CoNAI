@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { LayoutGrid, RotateCcw } from 'lucide-react'
-import { AnchoredPopup } from '@/components/ui/anchored-popup'
+import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -32,11 +32,11 @@ export function ImageListColumnFloatingControl({
   return (
     <div ref={containerRef} className={cn('pointer-events-none fixed bottom-6 right-4 z-50', className)}>
       <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="top" closeOnBack>
-        <div className="w-[220px] space-y-3 p-3">
+        <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`}>
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
-              <div className="text-xs font-semibold text-foreground">{title}</div>
-              <div className="text-[11px] text-muted-foreground">현재 {value}개</div>
+              <div className={anchoredPopupLabelClassName}>{title}</div>
+              <div className="text-sm font-semibold text-foreground">현재 {value}개</div>
             </div>
             {onReset ? (
               <Button

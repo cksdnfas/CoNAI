@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Download, Save } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
+import { PageInset, PageSection } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -158,26 +159,26 @@ export function ImageMetadataEditPage() {
 
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
         <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)] items-start' : 'grid-cols-1')}>
-          <div className="space-y-4">
-            <div className="overflow-hidden rounded-sm bg-surface-container shadow-[0_0_40px_rgba(14,14,14,0.22)]">
+          <PageSection bodyClassName="space-y-4">
+            <div className="overflow-hidden rounded-sm border border-border/70 bg-surface-lowest">
               <div className="flex min-h-[420px] items-center justify-center bg-surface-lowest">
                 <ImageDetailMedia image={image} renderUrl={renderUrl} />
               </div>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-sm bg-surface-container p-4 text-sm text-muted-foreground">
+              <PageInset className="text-sm text-muted-foreground">
                 <p className="text-[11px] uppercase tracking-[0.18em]">Composite hash</p>
                 <p className="mt-2 break-all font-mono text-foreground">{image.composite_hash || '—'}</p>
-              </div>
-              <div className="rounded-sm bg-surface-container p-4 text-sm text-muted-foreground">
+              </PageInset>
+              <PageInset className="text-sm text-muted-foreground">
                 <p className="text-[11px] uppercase tracking-[0.18em]">File</p>
                 <p className="mt-2 break-all text-foreground">{downloadName}</p>
-              </div>
+              </PageInset>
             </div>
-          </div>
+          </PageSection>
 
-          <div className="space-y-4">
+          <PageSection title="메타 수정">
             {!isEditableImage ? (
               <Alert variant="destructive">
                 <AlertTitle>이 파일은 아직 저장 편집 대상이 아니야</AlertTitle>
@@ -200,7 +201,7 @@ export function ImageMetadataEditPage() {
                 <AlertDescription>{saveMutation.error instanceof Error ? saveMutation.error.message : '알 수 없는 오류가 발생했어.'}</AlertDescription>
               </Alert>
             ) : null}
-          </div>
+          </PageSection>
         </div>
       ) : null}
     </div>

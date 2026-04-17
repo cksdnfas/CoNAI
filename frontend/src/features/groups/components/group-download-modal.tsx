@@ -1,8 +1,8 @@
 import { Download, Film, ImageIcon, Images } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import type { GroupDownloadType, GroupFileCounts } from '@/types/group'
 
 interface GroupDownloadModalProps {
@@ -64,48 +64,48 @@ export function GroupDownloadModal({
       description={description ?? '현재 범위에서 내려받을 파일 종류를 골라줘.'}
       widthClassName="max-w-3xl"
     >
-      <div className="space-y-4">
+      <SettingsModalBody>
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
           <Badge variant="outline">원본 {counts.original.toLocaleString('ko-KR')}개</Badge>
           <Badge variant="outline">GIF/동영상 {counts.video.toLocaleString('ko-KR')}개</Badge>
           <Badge variant="outline">썸네일 {counts.thumbnail.toLocaleString('ko-KR')}개</Badge>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="space-y-2">
           {downloadCards.map((card) => {
             const Icon = card.icon
             const availableCount = counts[card.countKey]
 
             return (
-              <Card key={card.type} >
-                <CardHeader className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-surface-highest text-foreground">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <Badge variant={availableCount > 0 ? 'secondary' : 'outline'}>{availableCount.toLocaleString('ko-KR')}개</Badge>
-                  </div>
-                  <div className="space-y-2">
-                    <CardTitle className="text-base">{card.title}</CardTitle>
-                    <CardDescription>{card.description}</CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    type="button"
-                    className="w-full"
-                    onClick={() => void onDownload(card.type)}
-                    disabled={isLoading || isDownloading || availableCount <= 0}
-                  >
-                    <Download className="h-4 w-4" />
-                    {isDownloading ? '준비 중…' : 'ZIP 다운로드'}
-                  </Button>
-                </CardContent>
-              </Card>
+              <Button
+                key={card.type}
+                type="button"
+                variant="outline"
+                className="h-auto w-full justify-between px-3 py-3 text-left"
+                onClick={() => void onDownload(card.type)}
+                disabled={isLoading || isDownloading || availableCount <= 0}
+              >
+                <span className="flex min-w-0 items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-border/70 bg-surface-low/45 text-foreground">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-foreground">{card.title}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">{card.description}</span>
+                  </span>
+                </span>
+                <Badge variant={availableCount > 0 ? 'secondary' : 'outline'} className="shrink-0">{availableCount.toLocaleString('ko-KR')}개</Badge>
+              </Button>
             )
           })}
         </div>
-      </div>
+
+        <SettingsModalFooter>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading || isDownloading}>
+            취소
+          </Button>
+        </SettingsModalFooter>
+      </SettingsModalBody>
     </SettingsModal>
   )
 }

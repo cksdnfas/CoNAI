@@ -26,12 +26,13 @@ export function CompactGenerationControllerActionBar({
   contentClassName,
 }: CompactGenerationControllerActionBarProps) {
   return (
-    <div className={cn('pointer-events-none fixed inset-x-0 bottom-4 z-[86] flex justify-center px-4', className)}>
-      <div className={cn('pointer-events-auto mx-auto flex w-full max-w-[26rem] items-center gap-2', innerClassName)}>
+    <div className={cn('pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[86] flex justify-center px-4', className)}>
+      <div className={cn('pointer-events-auto mx-auto flex w-full max-w-[28rem] items-center gap-2', innerClassName)}>
         <Button
           type="button"
           size="icon-sm"
-          className="w-10 shrink-0 rounded-sm px-0"
+          variant="outline"
+          className="w-10 shrink-0 rounded-sm border-border/80 bg-background/92 px-0 shadow-[0_10px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm"
           onClick={onToggle}
           aria-label={isExpanded ? expandedLabel : collapsedLabel}
           title={isExpanded ? expandedLabel : collapsedLabel}
@@ -43,8 +44,8 @@ export function CompactGenerationControllerActionBar({
 
         <div
           className={cn(
-            'transition-all duration-200',
-            isExpanded ? 'translate-x-0 scale-100 opacity-100' : 'pointer-events-none translate-x-3 scale-95 opacity-0',
+            'origin-right transition-all duration-200',
+            isExpanded ? 'translate-x-0 scale-100 opacity-100' : 'pointer-events-none translate-x-2 scale-95 opacity-0',
             contentClassName,
           )}
         >
@@ -65,7 +66,7 @@ export function CompactGenerationActionSurface({ children, className }: CompactG
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center overflow-hidden rounded-sm border border-border/80 bg-surface-container/92 shadow-[0_18px_48px_rgba(0,0,0,0.28)] backdrop-blur-sm',
+        'flex shrink-0 items-center overflow-hidden rounded-sm border border-border/85 bg-background/94 shadow-[0_18px_48px_rgba(0,0,0,0.28)] backdrop-blur-sm',
         className,
       )}
     >

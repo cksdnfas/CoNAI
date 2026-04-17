@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { forwardRef, useEffect, type ComponentProps, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,49 @@ type BottomDrawerSheetProps = {
   footer?: ReactNode
   closeLabel?: string
   hideHandle?: boolean
+}
+
+type BottomDrawerSectionProps = ComponentProps<'section'> & {
+  heading?: ReactNode
+  actions?: ReactNode
+  children: ReactNode
+  bodyClassName?: string
+  headerClassName?: string
+}
+
+/** Render one shared minimal content section inside drawer shells. */
+export const BottomDrawerSection = forwardRef<HTMLElement, BottomDrawerSectionProps>(function BottomDrawerSection(
+  { heading, actions, children, className, bodyClassName, headerClassName, ...props },
+  ref,
+) {
+  const hasHeader = heading !== undefined || actions !== undefined
+
+  return (
+    <section ref={ref} className={cn('overflow-hidden rounded-sm border border-border/80 bg-surface-container/30', className)} {...props}>
+      {hasHeader ? (
+        <div className={cn('flex items-center justify-between gap-3 border-b border-border/80 px-4 py-3', headerClassName)}>
+          {heading !== undefined ? <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{heading}</div> : <div className="flex-1" />}
+          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+        </div>
+      ) : null}
+      <div className={cn('px-4 py-4', bodyClassName)}>
+        {children}
+      </div>
+    </section>
+  )
+})
+
+type BottomDrawerNoticeProps = ComponentProps<'div'> & {
+  children: ReactNode
+}
+
+/** Render one shared low-emphasis notice block inside drawer shells. */
+export function BottomDrawerNotice({ children, className, ...props }: BottomDrawerNoticeProps) {
+  return (
+    <div className={cn('rounded-sm border border-border/70 bg-surface-low/45 px-4 py-4 text-sm text-muted-foreground', className)} {...props}>
+      {children}
+    </div>
+  )
 }
 
 export function BottomDrawerSheet({
@@ -66,10 +109,12 @@ export function BottomDrawerSheet({
     return null
   }
 
+  const hasHeader = title !== null || subtitle || headerActions || headerContentId
+
   return createPortal(
     <>
       <div
-        className={open ? 'fixed inset-0 z-[84] bg-black/50 transition-opacity' : 'pointer-events-none fixed inset-0 z-[84] bg-black/0 transition-opacity'}
+        className={open ? 'fixed inset-0 z-[84] bg-black/56 transition-opacity duration-200' : 'pointer-events-none fixed inset-0 z-[84] bg-black/0 transition-opacity duration-200'}
         onClick={onClose}
       />
 
@@ -79,8 +124,8 @@ export function BottomDrawerSheet({
         aria-label={ariaLabel}
         className={cn(
           open
-            ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] flex-col transition-transform duration-300'
-            : 'theme-floating-panel theme-bottom-drawer pointer-events-none fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col transition-transform duration-300',
+            ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] flex-col overflow-hidden transition-transform duration-300'
+            : 'theme-floating-panel theme-bottom-drawer pointer-events-none fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col overflow-hidden transition-transform duration-300',
           className,
         )}
       >
@@ -90,25 +135,27 @@ export function BottomDrawerSheet({
           </div>
         ) : null}
 
-        <div className={cn('theme-drawer-header border-b border-white/5', headerClassName)}>
-          {title !== null || subtitle || headerActions ? (
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="truncate text-lg font-semibold tracking-tight text-foreground">{title}</div>
-                {subtitle ? <div className="text-sm text-muted-foreground">{subtitle}</div> : null}
+        {hasHeader ? (
+          <div className={cn('theme-drawer-header border-b border-border/80 bg-background/40', headerClassName)}>
+            {title !== null || subtitle || headerActions ? (
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                  {title !== null ? <div className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">{title}</div> : null}
+                  {subtitle ? <div className="text-sm text-muted-foreground">{subtitle}</div> : null}
+                </div>
+                {headerActions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{headerActions}</div> : null}
               </div>
-              {headerActions ? <div className="flex shrink-0 flex-wrap gap-2">{headerActions}</div> : null}
-            </div>
-          ) : null}
-          {headerContentId ? <div id={headerContentId} className={cn((title !== null || subtitle || headerActions) ? 'mt-4 border-t border-white/5 pt-4' : 'pt-4', headerPortalClassName)} /> : null}
-        </div>
+            ) : null}
+            {headerContentId ? <div id={headerContentId} className={cn((title !== null || subtitle || headerActions) ? 'mt-3 border-t border-border/80 pt-3' : '', headerPortalClassName)} /> : null}
+          </div>
+        ) : null}
 
-        <div className={cn('theme-drawer-body min-h-0 flex-1 overflow-y-auto pb-20', bodyClassName)}>
+        <div className={cn('theme-drawer-body min-h-0 flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+5rem)]', bodyClassName)}>
           {children}
         </div>
 
         {footer !== null ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             {footer !== undefined ? footer : (
               <Button type="button" size="sm" className="pointer-events-auto w-[30vw] min-w-[112px] max-w-[180px]" onClick={onClose}>
                 <ChevronDown className="h-4 w-4" />

@@ -31,6 +31,11 @@ interface ImageViewMinimalContentProps {
   onViewNext: () => void
 }
 
+/** Render one divider-led side panel shell inside the image view overlay. */
+function ImageViewSidePanel({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn('overflow-hidden rounded-sm border border-border/80 bg-surface-container/25', className)}>{children}</div>
+}
+
 /** Load the active image detail payload used by modal content surfaces. */
 function useImageViewSurfaceDetail(compositeHash: string) {
   const imageQuery = useQuery({
@@ -79,12 +84,14 @@ export function ImageViewMediumContent({ compositeHash, renderHeader }: ImageVie
 
       {imageQuery.isLoading ? (
         <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1.3fr)_360px]">
-          <Skeleton className="min-h-[540px] w-full rounded-sm" />
-          <div className="space-y-3">
-            <Skeleton className="h-24 w-full rounded-sm" />
-            <Skeleton className="h-20 w-full rounded-sm" />
-            <Skeleton className="h-20 w-full rounded-sm" />
-          </div>
+          <ImageViewSidePanel>
+            <Skeleton className="min-h-[540px] w-full rounded-none xl:h-full xl:min-h-0" />
+          </ImageViewSidePanel>
+          <ImageViewSidePanel className="divide-y divide-border/70">
+            <Skeleton className="h-24 w-full rounded-none" />
+            <Skeleton className="h-20 w-full rounded-none" />
+            <Skeleton className="h-20 w-full rounded-none" />
+          </ImageViewSidePanel>
         </div>
       ) : null}
 
@@ -96,18 +103,18 @@ export function ImageViewMediumContent({ compositeHash, renderHeader }: ImageVie
       ) : null}
 
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
-        <div className="grid gap-6 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1.3fr)_360px] xl:items-start">
-          <div className="overflow-hidden rounded-sm bg-surface-container shadow-[0_0_40px_rgba(14,14,14,0.22)] xl:min-h-0 xl:h-full">
-            <div className="flex min-h-[540px] items-center justify-center bg-surface-lowest xl:h-full xl:min-h-0">
+        <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1.3fr)_360px] xl:items-start">
+          <ImageViewSidePanel className="xl:min-h-0 xl:h-full">
+            <div className="flex min-h-[540px] items-center justify-center bg-black/20 xl:h-full xl:min-h-0">
               <ImageDetailMedia image={image} renderUrl={renderUrl} className="max-h-[72vh] w-full object-contain xl:max-h-full" />
             </div>
-          </div>
+          </ImageViewSidePanel>
 
-          <div className="space-y-3 rounded-sm border border-border bg-surface-container p-4 text-sm text-muted-foreground">
+          <ImageViewSidePanel className="divide-y divide-border/70 text-sm text-muted-foreground">
             <PromptField label="Positive" value={positivePrompt} />
             <PromptField label="Negative" value={negativePrompt} />
             <PromptField label="Character" value={characterPrompt} />
-          </div>
+          </ImageViewSidePanel>
         </div>
       ) : null}
     </div>
@@ -209,9 +216,9 @@ export function ImageViewMinimalContent({
 /** Render a labeled prompt block inside the medium surface sidebar. */
 function PromptField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-sm bg-surface-lowest px-3 py-3">
-      <p className="text-[11px] uppercase tracking-[0.18em]">{label}</p>
+    <section className="px-4 py-4">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
       <p className={cn('mt-2 whitespace-pre-wrap break-words text-sm text-foreground')}>{value}</p>
-    </div>
+    </section>
   )
 }

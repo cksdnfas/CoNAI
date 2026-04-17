@@ -11,15 +11,15 @@ interface PageHeaderProps {
 
 export function PageHeader({ eyebrow, title, description, actions, className }: PageHeaderProps) {
   return (
-    <div className={cn('flex flex-col gap-6 md:flex-row md:items-end md:justify-between', className)}>
-      <div>
+    <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between', className)}>
+      <div className="min-w-0 flex-1">
         {eyebrow ? <p className="text-[11px] font-semibold tracking-[0.22em] text-secondary uppercase">{eyebrow}</p> : null}
         <div>
-          <h1 className="text-[18px] font-semibold tracking-[0.18em] text-secondary uppercase">{title}</h1>
-          {description ? <p className="max-w-3xl text-sm leading-7 text-muted-foreground md:text-base">{description}</p> : null}
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
+          {description ? <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{description}</p> : null}
         </div>
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
   )
 }

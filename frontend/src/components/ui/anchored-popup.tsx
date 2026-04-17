@@ -27,7 +27,10 @@ interface AnchoredPopupProps {
   children: ReactNode
 }
 
-export const anchoredPopupSurfaceClassName = 'theme-floating-panel rounded-sm border border-border/80 bg-background/96 shadow-[0_20px_60px_rgba(0,0,0,0.4)] backdrop-blur-sm'
+export const anchoredPopupSurfaceClassName = 'theme-floating-panel rounded-sm border border-border/85 bg-background/96 shadow-[0_20px_60px_rgba(0,0,0,0.4)] backdrop-blur-sm'
+export const anchoredPopupHeaderClassName = 'border-b border-border/70 px-3 py-2.5'
+export const anchoredPopupBodyClassName = 'p-3'
+export const anchoredPopupLabelClassName = 'text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground'
 
 /** Render one reusable anchored popup that avoids parent clipping and stays inside the viewport. */
 export function AnchoredPopup({
@@ -134,7 +137,7 @@ export function AnchoredPopup({
   return createPortal(
     <div
       ref={panelRef}
-      className={cn(anchoredPopupSurfaceClassName, 'z-[140] overflow-y-auto', className)}
+      className={cn(anchoredPopupSurfaceClassName, 'z-[140] overflow-y-auto overscroll-contain', className)}
       style={{
         position: 'fixed',
         top: position?.top ?? -9999,

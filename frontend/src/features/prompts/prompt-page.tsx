@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { PageHeader } from '@/components/common/page-header'
+import { PageSection } from '@/components/common/page-surface'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { exportPromptGroups } from '@/lib/api'
@@ -309,7 +310,7 @@ export function PromptPage() {
         onChange={(nextType) => handleChangeType(nextType as PromptTypeFilter)}
       />
 
-      <div className={cn('grid gap-8', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
+      <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <PromptSidebar
           groups={groupsQuery.data ?? []}
           selectedGroupId={selectedGroupId}
@@ -334,29 +335,28 @@ export function PromptPage() {
           canMoveGroupDown={canMoveGroupDown}
         />
 
-        <section className="relative z-0 space-y-4">
-          <div className="space-y-2">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">{currentSectionCount.toLocaleString('ko-KR')}개 표시됨</p>
-              <PromptToolbar
-                searchInput={searchInput}
-                sortBy={sortBy}
-                sortOrder={sortOrder}
-                onSearchInputChange={setSearchInput}
-                onApplySearch={handleApplySearch}
-                onChangeSortBy={(value) => {
-                  setSortBy(value)
-                  setPage(1)
-                }}
-                onChangeSortOrder={(value) => {
-                  setSortOrder(value)
-                  setPage(1)
-                }}
-              />
-            </div>
-          </div>
-
+        <PageSection
+          className="relative z-0"
+          title={currentSectionTitle}
+          description={`${currentSectionCount.toLocaleString('ko-KR')}개 표시됨`}
+          actions={
+            <PromptToolbar
+              searchInput={searchInput}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              onSearchInputChange={setSearchInput}
+              onApplySearch={handleApplySearch}
+              onChangeSortBy={(value) => {
+                setSortBy(value)
+                setPage(1)
+              }}
+              onChangeSortOrder={(value) => {
+                setSortOrder(value)
+                setPage(1)
+              }}
+            />
+          }
+        >
           <PromptListPanel
             items={items}
             selectedPromptIds={selectedPromptIds}
@@ -381,7 +381,7 @@ export function PromptPage() {
             isLockedPromptItem={isLockedPromptItem}
             canDeletePromptItem={canDeletePromptItem}
           />
-        </section>
+        </PageSection>
       </div>
 
       <PromptSelectionBar

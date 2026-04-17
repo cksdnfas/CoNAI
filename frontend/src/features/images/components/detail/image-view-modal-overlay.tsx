@@ -137,7 +137,7 @@ export function ImageViewModalOverlay({
   const showsThumbnailStrip = viewMode === 'full' && shouldRenderThumbnailStrip && thumbnailStripItems.length > 1
 
   return createPortal(
-    <div className={cn('fixed inset-0 z-[90] bg-black/72', viewMode === 'minimal' ? 'p-0' : 'p-4 md:p-6')} onMouseDown={onClose}>
+    <div className={cn('fixed inset-0 z-[90] bg-black/76 backdrop-blur-[2px]', viewMode === 'minimal' ? 'p-0' : 'p-4 md:p-5')} onMouseDown={onClose}>
       {canViewPrevious ? (
         <button
           type="button"
@@ -202,7 +202,7 @@ export function ImageViewModalOverlay({
           aria-modal="true"
           aria-label="이미지 보기"
           tabIndex={-1}
-          className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border bg-background p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)] outline-none md:p-6 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-6"
+          className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border/85 bg-background/96 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] outline-none md:p-5 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-5"
           style={
             isDesktopModalLayout
               ? { overflowAnchor: 'none' }
@@ -261,7 +261,7 @@ export function ImageViewModalOverlay({
           </div>
 
           {showsThumbnailStrip ? (
-            <div className="mt-4 border-t border-border/70 pt-3 xl:mt-3 xl:shrink-0 xl:pt-3">
+            <div className="mt-4 border-t border-border/80 pt-3 xl:mt-3 xl:shrink-0 xl:pt-3">
               <ImageViewThumbnailStrip
                 items={thumbnailStripItems}
                 activeCompositeHash={compositeHash}

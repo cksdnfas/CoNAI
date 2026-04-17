@@ -234,7 +234,7 @@ export function ImageGenerationPage() {
               onToggle={() => setIsControllerOpen((current) => !current)}
               expandedLabel={`${controllerLabel} 컨트롤 접기`}
               collapsedLabel={`${controllerLabel} 컨트롤 열기`}
-              expandedContent={compactActionBarContentId ? <div id={compactActionBarContentId} className="flex items-center" /> : null}
+              expandedContent={compactActionBarContentId ? <div id={compactActionBarContentId} className="flex items-center justify-end" /> : null}
             />
 
             <BottomDrawerSheet
@@ -245,7 +245,7 @@ export function ImageGenerationPage() {
               headerContentId={drawerHeaderContentId}
               className={useCompactControllerDrawer ? 'border-x-0 border-b-0 bg-transparent shadow-none backdrop-blur-0' : undefined}
               bodyClassName={useCompactControllerDrawer ? 'p-0 pb-24' : undefined}
-              headerClassName={useCompactControllerDrawer ? 'border-b-0 px-4 py-3' : undefined}
+              headerClassName={useCompactControllerDrawer ? 'border-b-0 bg-transparent px-4 py-3' : undefined}
               headerPortalClassName={useCompactControllerDrawer ? 'mt-0 border-t-0 pt-0' : undefined}
               hideHandle={useCompactControllerDrawer}
             >

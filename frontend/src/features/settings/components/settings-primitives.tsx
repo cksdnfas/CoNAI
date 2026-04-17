@@ -15,6 +15,14 @@ type SettingsSectionProps = ComponentProps<'section'> & {
   headerClassName?: string
 }
 
+interface SettingsModalBodyProps extends ComponentProps<'div'> {
+  children: ReactNode
+}
+
+interface SettingsModalFooterProps extends ComponentProps<'div'> {
+  children: ReactNode
+}
+
 /** Shared minimal settings section shell used across tabs. */
 export function SettingsSection({ heading, actions, children, className, bodyClassName, headerClassName, ...props }: SettingsSectionProps) {
   return (
@@ -39,6 +47,16 @@ interface SettingsInsetBlockProps extends ComponentProps<'div'> {
 /** Shared light inset surface for dense notes, previews, and grouped controls. */
 export function SettingsInsetBlock({ children, className, ...props }: SettingsInsetBlockProps) {
   return <div className={cn('rounded-sm border border-border/70 bg-surface-low/45 px-4 py-3', className)} {...props}>{children}</div>
+}
+
+/** Shared compact modal body wrapper for dense modal content. */
+export function SettingsModalBody({ children, className, ...props }: SettingsModalBodyProps) {
+  return <div className={cn('space-y-4', className)} {...props}>{children}</div>
+}
+
+/** Shared compact modal footer row for primary and secondary actions. */
+export function SettingsModalFooter({ children, className, ...props }: SettingsModalFooterProps) {
+  return <div className={cn('flex flex-wrap items-center justify-end gap-2 border-t border-border/70 pt-4', className)} {...props}>{children}</div>
 }
 
 // Shared field wrapper for settings forms.

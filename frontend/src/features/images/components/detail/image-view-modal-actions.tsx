@@ -130,7 +130,7 @@ export function ImageViewModalActions({
         className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-[92] md:inset-x-6 xl:hidden"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="rounded-sm border border-border bg-background/96 p-3 shadow-[0_18px_40px_rgba(0,0,0,0.35)] backdrop-blur-md">
+        <div className="rounded-sm border border-border/85 bg-background/94 p-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.35)] backdrop-blur-md">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
               {navigationButtons}

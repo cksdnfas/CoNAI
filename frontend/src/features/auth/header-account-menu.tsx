@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CircleUserRound, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { AnchoredPopup } from '@/components/ui/anchored-popup'
+import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { logoutLocalAccount } from '@/lib/api'
@@ -75,9 +75,9 @@ export function HeaderAccountMenu() {
       </button>
 
       <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom" closeOnBack>
-        <div className="w-[220px] space-y-3 p-3" role="menu" aria-label="계정 메뉴">
+        <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`} role="menu" aria-label="계정 메뉴">
           <div className="space-y-1">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">현재 계정</div>
+            <div className={anchoredPopupLabelClassName}>현재 계정</div>
             <div className="text-sm font-semibold text-foreground">{authStatus?.username}</div>
             <div className="text-xs text-muted-foreground">{accountTypeLabel}</div>
           </div>

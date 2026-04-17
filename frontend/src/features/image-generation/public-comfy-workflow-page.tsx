@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ArrowLeft, Play, RotateCcw } from 'lucide-react'
-import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
+import { BottomDrawerNotice, BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
@@ -293,7 +293,7 @@ export function PublicComfyWorkflowPage() {
       ) : null}
 
       {workflowFields.length === 0 ? (
-        <div className="text-sm text-muted-foreground">노출된 입력 필드가 아직 없어.</div>
+        <BottomDrawerNotice>노출된 입력 필드가 아직 없어.</BottomDrawerNotice>
       ) : (
         <GenerationControllerFieldStack>
           {workflowFields.map((field) => (
@@ -317,7 +317,7 @@ export function PublicComfyWorkflowPage() {
         <div className="space-y-5">{controllerBodyContent}</div>
       </section>
     ) : (
-      <div className="space-y-5">{controllerBodyContent}</div>
+      <div className="space-y-4">{controllerBodyContent}</div>
     )
   ) : null
 
@@ -328,32 +328,45 @@ export function PublicComfyWorkflowPage() {
       isExpanded={isDrawerOpen}
       onToggle={() => setIsControllerOpen((current) => !current)}
       expandedContent={(
-        <CompactGenerationActionSurface>
-          <ScrubbableNumberInput
-            min={1}
-            max={32}
-            step={1}
-            scrubRatio={1}
-            variant="detail"
-            className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
-            value={queueRegistrationCount}
-            onChange={setQueueRegistrationCount}
-            disabled={isQueueSubmitting}
-            aria-label="큐 등록 개수"
-            inputMode="numeric"
-          />
+        <div className="flex items-center gap-2">
           <Button
             type="button"
             size="icon-sm"
-            className="rounded-none border-l border-border/70 shadow-none"
-            onClick={() => void handleQueueSubmit()}
-            disabled={isQueueSubmitting || workflowFields.length === 0}
-            aria-label={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-            title={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+            variant="outline"
+            onClick={() => navigate('/access')}
+            aria-label="뒤로가기"
+            title="뒤로가기"
           >
-            <Play className="h-4 w-4 fill-current" />
+            <ArrowLeft className="h-4 w-4" />
           </Button>
-        </CompactGenerationActionSurface>
+
+          <CompactGenerationActionSurface>
+            <ScrubbableNumberInput
+              min={1}
+              max={32}
+              step={1}
+              scrubRatio={1}
+              variant="detail"
+              className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
+              value={queueRegistrationCount}
+              onChange={setQueueRegistrationCount}
+              disabled={isQueueSubmitting}
+              aria-label="큐 등록 개수"
+              inputMode="numeric"
+            />
+            <Button
+              type="button"
+              size="icon-sm"
+              className="rounded-none border-l border-border/70 shadow-none"
+              onClick={() => void handleQueueSubmit()}
+              disabled={isQueueSubmitting || workflowFields.length === 0}
+              aria-label={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+              title={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+            >
+              <Play className="h-4 w-4 fill-current" />
+            </Button>
+          </CompactGenerationActionSurface>
+        </div>
       )}
     />
   ) : null
@@ -400,7 +413,7 @@ export function PublicComfyWorkflowPage() {
               onClose={() => setIsControllerOpen(false)}
               className="border-x-0 border-b-0 bg-transparent shadow-none backdrop-blur-0"
               bodyClassName="p-0 pb-24"
-              headerClassName="border-b-0 px-4 py-3"
+              headerClassName="border-b-0 bg-transparent px-4 py-3"
               headerPortalClassName="mt-0 border-t-0 pt-0"
               footer={null}
               hideHandle

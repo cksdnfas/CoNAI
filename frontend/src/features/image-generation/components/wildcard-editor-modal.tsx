@@ -9,6 +9,7 @@ import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import type { WildcardRecord, WildcardTool } from '@/lib/api'
 
 export interface WildcardEditorModalInput {
@@ -273,7 +274,7 @@ export function WildcardEditorModal({
       title={mode === 'create' ? `${tabLabel} 항목 만들기` : `${tabLabel} 항목 편집`}
       widthClassName="max-w-4xl"
     >
-      <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
+      <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
             <AlertTitle>입력 확인이 필요해</AlertTitle>
@@ -281,75 +282,74 @@ export function WildcardEditorModal({
           </Alert>
         ) : null}
 
-        <div className={isChainTab ? 'grid gap-4 md:grid-cols-2' : 'space-y-2'}>
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">이름</p>
-            <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="예: character_pose" />
+        <SettingsModalBody className="space-y-5">
+          <div className={isChainTab ? 'grid gap-4 md:grid-cols-2' : 'space-y-2'}>
+            <SettingsField label="이름">
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="예: character_pose" />
+            </SettingsField>
+
+            {isChainTab ? (
+              <SettingsField label="chain 동작">
+                <Select value={chainOption} onChange={(event) => setChainOption(event.target.value as 'replace' | 'append')}>
+                  <option value="replace">replace</option>
+                  <option value="append">append</option>
+                </Select>
+              </SettingsField>
+            ) : null}
           </div>
 
-          {isChainTab ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">chain 동작</p>
-              <Select value={chainOption} onChange={(event) => setChainOption(event.target.value as 'replace' | 'append')}>
-                <option value="replace">replace</option>
-                <option value="append">append</option>
-              </Select>
-            </div>
-          ) : null}
-        </div>
+          <SettingsField label="설명">
+            <Textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder="선택 사항" />
+          </SettingsField>
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">설명</p>
-          <Textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder="선택 사항" />
-        </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">부모 항목</p>
+            <HierarchyPicker
+              items={parentCandidates}
+              selectedId={parentValue === 'root' ? null : Number(parentValue)}
+              onSelectRoot={() => setParentValue('root')}
+              onSelect={(candidate) => setParentValue(String(candidate.id))}
+              getId={(candidate) => candidate.id}
+              getParentId={(candidate) => candidate.parent_id}
+              getLabel={(candidate) => candidate.name}
+              sortItems={(left, right) => left.name.localeCompare(right.name)}
+              renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
+              rootLabel="루트"
+            />
+          </div>
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">부모 항목</p>
-          <HierarchyPicker
-            items={parentCandidates}
-            selectedId={parentValue === 'root' ? null : Number(parentValue)}
-            onSelectRoot={() => setParentValue('root')}
-            onSelect={(candidate) => setParentValue(String(candidate.id))}
-            getId={(candidate) => candidate.id}
-            getParentId={(candidate) => candidate.parent_id}
-            getLabel={(candidate) => candidate.name}
-            sortItems={(left, right) => left.name.localeCompare(right.name)}
-            renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-            rootLabel="루트"
+          <div className="grid gap-3 md:grid-cols-2">
+            <SettingsToggleRow className="justify-between">
+              <span className="font-medium text-foreground">하위 자동 포함</span>
+              <input type="checkbox" checked={includeChildren} onChange={(event) => setIncludeChildren(event.target.checked)} />
+            </SettingsToggleRow>
+            <SettingsToggleRow className="justify-between">
+              <span className="font-medium text-foreground">자식만 사용</span>
+              <input type="checkbox" checked={onlyChildren} onChange={(event) => setOnlyChildren(event.target.checked)} />
+            </SettingsToggleRow>
+          </div>
+
+          <WildcardItemDraftEditor
+            activeTool={activeItemTool}
+            drafts={itemDrafts}
+            onChangeTool={setActiveItemTool}
+            onChangeDrafts={(tool, nextDrafts) => {
+              setItemDrafts((current) => ({
+                ...current,
+                [tool]: nextDrafts,
+              }))
+            }}
           />
-        </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="flex items-center justify-between rounded-sm border border-border/70 bg-surface-low/50 px-3 py-3 text-sm">
-            <span className="font-medium text-foreground">하위 자동 포함</span>
-            <input type="checkbox" checked={includeChildren} onChange={(event) => setIncludeChildren(event.target.checked)} />
-          </label>
-          <label className="flex items-center justify-between rounded-sm border border-border/70 bg-surface-low/50 px-3 py-3 text-sm">
-            <span className="font-medium text-foreground">자식만 사용</span>
-            <input type="checkbox" checked={onlyChildren} onChange={(event) => setOnlyChildren(event.target.checked)} />
-          </label>
-        </div>
-
-        <WildcardItemDraftEditor
-          activeTool={activeItemTool}
-          drafts={itemDrafts}
-          onChangeTool={setActiveItemTool}
-          onChangeDrafts={(tool, nextDrafts) => {
-            setItemDrafts((current) => ({
-              ...current,
-              [tool]: nextDrafts,
-            }))
-          }}
-        />
-
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-            취소
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? '저장 중…' : mode === 'create' ? '항목 만들기' : '변경 저장'}
-          </Button>
-        </div>
+          <SettingsModalFooter>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+              취소
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? '저장 중…' : mode === 'create' ? '항목 만들기' : '변경 저장'}
+            </Button>
+          </SettingsModalFooter>
+        </SettingsModalBody>
       </form>
     </SettingsModal>
   )

@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import type { PromptGroupRecord } from '@/types/prompt'
 
 interface PromptGroupEditorModalProps {
@@ -77,7 +78,7 @@ export function PromptGroupEditorModal({
       title={mode === 'create' ? `${typeLabel} 그룹 만들기` : `${typeLabel} 그룹 편집`}
       widthClassName="max-w-2xl"
     >
-      <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
+      <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
             <AlertTitle>입력 확인이 필요해</AlertTitle>
@@ -85,39 +86,40 @@ export function PromptGroupEditorModal({
           </Alert>
         ) : null}
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">그룹 이름</p>
-          <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="예: 캐릭터 / 배경 / LoRA" />
-        </div>
+        <SettingsModalBody className="space-y-5">
+          <SettingsField label="그룹 이름">
+            <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="예: 캐릭터 / 배경 / LoRA" />
+          </SettingsField>
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">부모 그룹</p>
-          <HierarchyPicker
-            items={parentGroups}
-            selectedId={parentValue === 'root' ? null : Number(parentValue)}
-            onSelectRoot={() => setParentValue('root')}
-            onSelect={(candidate) => setParentValue(String(candidate.id))}
-            getId={(candidate) => candidate.id}
-            getParentId={(candidate) => candidate.parent_id}
-            getLabel={(candidate) => candidate.group_name}
-            sortItems={(left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name)}
-            renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-          />
-        </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">부모 그룹</p>
+            <HierarchyPicker
+              items={parentGroups}
+              selectedId={parentValue === 'root' ? null : Number(parentValue)}
+              onSelectRoot={() => setParentValue('root')}
+              onSelect={(candidate) => setParentValue(String(candidate.id))}
+              getId={(candidate) => candidate.id}
+              getParentId={(candidate) => candidate.parent_id}
+              getLabel={(candidate) => candidate.group_name}
+              sortItems={(left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name)}
+              renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
+            />
+          </div>
 
-        <label className="flex items-center justify-between rounded-sm border border-border/70 bg-surface-low/50 px-3 py-3 text-sm">
-          <span className="font-medium text-foreground">표시 상태</span>
-          <input type="checkbox" checked={isVisible} onChange={(event) => setIsVisible(event.target.checked)} />
-        </label>
+          <SettingsToggleRow className="justify-between">
+            <span className="font-medium text-foreground">표시 상태</span>
+            <input type="checkbox" checked={isVisible} onChange={(event) => setIsVisible(event.target.checked)} />
+          </SettingsToggleRow>
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-            취소
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? '저장 중…' : mode === 'create' ? '그룹 만들기' : '변경 저장'}
-          </Button>
-        </div>
+          <SettingsModalFooter>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+              취소
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? '저장 중…' : mode === 'create' ? '그룹 만들기' : '변경 저장'}
+            </Button>
+          </SettingsModalFooter>
+        </SettingsModalBody>
       </form>
     </SettingsModal>
   )
