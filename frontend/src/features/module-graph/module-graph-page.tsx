@@ -190,6 +190,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     handleAddModuleFromLibrary,
     handleDuplicateNodeById,
     handleDuplicateSelectedNode,
+    handleCopySelectedNodesToClipboard,
+    handlePasteNodesFromClipboard,
     handleNodeLabelChange,
     handleNodeValueChange,
     handleNodeValueClear,
@@ -394,6 +396,25 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       setSelectedEdgeId(null)
       setSelectedValidationPortKey(null)
     },
+    onSelectionChange: ({ nodes: selectedNodes, edges: selectedEdges }) => {
+      if (selectedNodes.length === 1 && selectedEdges.length === 0) {
+        setSelectedNodeId(selectedNodes[0].id)
+        setSelectedEdgeId(null)
+        setSelectedValidationPortKey(null)
+        return
+      }
+
+      if (selectedNodes.length === 0 && selectedEdges.length === 1) {
+        setSelectedEdgeId(selectedEdges[0].id)
+        setSelectedNodeId(null)
+        setSelectedValidationPortKey(null)
+        return
+      }
+
+      setSelectedNodeId(null)
+      setSelectedEdgeId(null)
+      setSelectedValidationPortKey(null)
+    },
     onEdgeSelect: (edgeId) => {
       setSelectedEdgeId(edgeId)
       setSelectedNodeId(null)
@@ -406,6 +427,8 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     },
     onConnect: handleConnect,
     onAddModuleNode: handleAddModuleNode,
+    onCopySelection: handleCopySelectedNodesToClipboard,
+    onPasteSelection: handlePasteNodesFromClipboard,
     isValidConnection,
   })
 

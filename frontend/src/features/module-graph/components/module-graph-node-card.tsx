@@ -10,7 +10,7 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import type { ModulePortDefinition } from '@/lib/api'
+import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import {
   WORKFLOW_INPUT_ENABLED_KEY,
   WORKFLOW_INPUT_REQUIRED_KEY,
@@ -22,6 +22,7 @@ import {
   getModuleBaseDisplayName,
   getModuleColor,
   getModuleNodeDisplayLabelFromData,
+  getModuleOperationKey,
   getPortTypeColor,
   hasCustomModuleNodeLabel,
   isFinalResultModule,
@@ -329,6 +330,234 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
   )
 }
 
+/** Resolve one inline UI-field string value from node state with a default fallback. */
+function getInlineUiFieldValue(rawValue: unknown, field?: ModuleUiFieldDefinition | null) {
+  if (typeof rawValue === 'string') {
+    return rawValue
+  }
+
+  if (typeof field?.default_value === 'string') {
+    return field.default_value
+  }
+
+  return rawValue == null ? '' : String(rawValue)
+}
+
+/** Render one compact inline separator editor that matches normal node row height. */
+function TextMergeSeparatorCell({ id, data, field }: { id: string; data: ModuleGraphNode['data']; field: ModuleUiFieldDefinition }) {
+  const rawValue = data.inputValues?.[field.key]
+  const value = rawValue == null
+    ? (typeof field.default_value === 'string' && field.default_value.length > 0 ? field.default_value : ',')
+    : String(rawValue)
+
+  return (
+    <div
+      className="nodrag nowheel rounded-sm border border-border/70 bg-background/40 p-1"
+      onMouseDown={stopNodeInteraction}
+    >
+      <Input
+        value={value}
+        onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
+        onMouseDown={stopNodeInteraction}
+        className="h-8 text-xs"
+      />
+    </div>
+  )
+}
+
+/** Render the dedicated text-merge node layout with top output and A/B/C rows. */
+function TextMergeNodeLayout({
+  id,
+  data,
+  accentColor,
+  connectedInputKeys,
+  connectedOutputKeys,
+}: {
+  id: string
+  data: ModuleGraphNode['data']
+  accentColor: string
+  connectedInputKeys: Set<string>
+  connectedOutputKeys: Set<string>
+}) {
+  const inputPorts = data.module.exposed_inputs ?? []
+  const outputPort = data.module.output_ports[0]
+  const separatorAbField = data.module.ui_schema?.find((field) => field.key === 'separator_ab') ?? {
+    key: 'separator_ab',
+    label: 'A 뒤 문자열',
+    data_type: 'text',
+    default_value: ',',
+  }
+  const separatorBcField = data.module.ui_schema?.find((field) => field.key === 'separator_bc') ?? {
+    key: 'separator_bc',
+    label: 'B 뒤 문자열',
+    data_type: 'text',
+    default_value: ',',
+  }
+
+  const buildInputCell = (port?: ModulePortDefinition) => {
+    const connected = Boolean(port && connectedInputKeys.has(port.key))
+    const satisfied = Boolean(port && (connected || hasMeaningfulValue(data.inputValues?.[port.key]) || hasMeaningfulValue(port.default_value)))
+
+    return (
+      <PortCell
+        nodeId={id}
+        port={port}
+        side="input"
+        accentColor={accentColor}
+        connected={connected}
+        satisfied={satisfied}
+        requiredMissing={false}
+        onDisconnectInput={data.onDisconnectNodeInput}
+      />
+    )
+  }
+
+  return (
+    <div className="mt-2.5 grid gap-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        <div aria-hidden="true" />
+        <PortCell
+          nodeId={id}
+          port={outputPort}
+          side="output"
+          accentColor={accentColor}
+          connected={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
+          satisfied={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
+          requiredMissing={false}
+        />
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        {buildInputCell(inputPorts[0])}
+        <TextMergeSeparatorCell id={id} data={data} field={separatorAbField} />
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        {buildInputCell(inputPorts[1])}
+        <TextMergeSeparatorCell id={id} data={data} field={separatorBcField} />
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        {buildInputCell(inputPorts[2])}
+        <div aria-hidden="true" />
+      </div>
+    </div>
+  )
+}
+
+/** Render one compact inline field for transform-style system nodes. */
+function TextTransformInlineField({
+  id,
+  data,
+  field,
+}: {
+  id: string
+  data: ModuleGraphNode['data']
+  field: ModuleUiFieldDefinition
+}) {
+  const rawValue = data.inputValues?.[field.key]
+  const normalizedValue = rawValue ?? field.default_value
+
+  return (
+    <div className="nodrag nowheel space-y-1 rounded-sm border border-border/70 bg-background/35 p-2.5" onMouseDown={stopNodeInteraction} title={field.description || field.label}>
+      <div className="text-[11px] font-medium text-foreground">{field.label}</div>
+      {field.data_type === 'select' ? (
+        <Select
+          value={typeof normalizedValue === 'string' ? normalizedValue : String(normalizedValue ?? '')}
+          onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
+          onMouseDown={stopNodeInteraction}
+          className="h-8 text-xs"
+        >
+          {(field.options ?? []).map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </Select>
+      ) : field.data_type === 'number' ? (
+        <Input
+          type="number"
+          value={typeof normalizedValue === 'number' || typeof normalizedValue === 'string' ? normalizedValue : ''}
+          onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
+          onMouseDown={stopNodeInteraction}
+          placeholder={field.placeholder || field.description || field.label}
+          className="h-8 text-xs"
+        />
+      ) : (
+        <Input
+          value={typeof normalizedValue === 'string' ? normalizedValue : normalizedValue == null ? '' : String(normalizedValue)}
+          onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
+          onMouseDown={stopNodeInteraction}
+          placeholder={field.placeholder || field.description || field.label}
+          className="h-8 text-xs"
+        />
+      )}
+    </div>
+  )
+}
+
+/** Render the regex/text transform node with one source input and inline transform settings. */
+function TextTransformNodeLayout({
+  id,
+  data,
+  accentColor,
+  connectedInputKeys,
+  connectedOutputKeys,
+}: {
+  id: string
+  data: ModuleGraphNode['data']
+  accentColor: string
+  connectedInputKeys: Set<string>
+  connectedOutputKeys: Set<string>
+}) {
+  const inputPort = data.module.exposed_inputs[0]
+  const outputPort = data.module.output_ports[0]
+  const uiFields = data.module.ui_schema ?? []
+  const modeField = uiFields.find((field) => field.key === 'mode')
+  const patternField = uiFields.find((field) => field.key === 'pattern')
+  const flagsField = uiFields.find((field) => field.key === 'flags')
+  const replacementField = uiFields.find((field) => field.key === 'replacement')
+  const groupIndexField = uiFields.find((field) => field.key === 'group_index')
+  const prefixField = uiFields.find((field) => field.key === 'prefix')
+  const suffixField = uiFields.find((field) => field.key === 'suffix')
+  const currentMode = getInlineUiFieldValue(data.inputValues?.mode, modeField)
+
+  return (
+    <div className="mt-2.5 space-y-1.5">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        <PortCell
+          nodeId={id}
+          port={inputPort}
+          side="input"
+          accentColor={accentColor}
+          connected={Boolean(inputPort && connectedInputKeys.has(inputPort.key))}
+          satisfied={Boolean(inputPort && (connectedInputKeys.has(inputPort.key) || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))}
+          requiredMissing={Boolean(inputPort?.required && !connectedInputKeys.has(inputPort.key) && !hasMeaningfulValue(data.inputValues?.[inputPort.key]) && !hasMeaningfulValue(inputPort.default_value))}
+          onDisconnectInput={data.onDisconnectNodeInput}
+        />
+        <PortCell
+          nodeId={id}
+          port={outputPort}
+          side="output"
+          accentColor={accentColor}
+          connected={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
+          satisfied={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
+          requiredMissing={false}
+        />
+      </div>
+
+      <div className="grid gap-1.5">
+        {modeField ? <TextTransformInlineField id={id} data={data} field={modeField} /> : null}
+        {patternField ? <TextTransformInlineField id={id} data={data} field={patternField} /> : null}
+        {flagsField ? <TextTransformInlineField id={id} data={data} field={flagsField} /> : null}
+        {currentMode === 'replace'
+          ? (replacementField ? <TextTransformInlineField id={id} data={data} field={replacementField} /> : null)
+          : (groupIndexField ? <TextTransformInlineField id={id} data={data} field={groupIndexField} /> : null)}
+        {prefixField ? <TextTransformInlineField id={id} data={data} field={prefixField} /> : null}
+        {suffixField ? <TextTransformInlineField id={id} data={data} field={suffixField} /> : null}
+      </div>
+    </div>
+  )
+}
+
 /** Render a compact text artifact preview with optional modal expansion. */
 function ArtifactTextPreviewCard({
   preview,
@@ -423,7 +652,10 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const outputGroups = data.executionOutputGroups ?? []
   const hasOutputGroups = outputGroups.length > 0
   const hasStandaloneArtifactPreview = hasArtifactPreview && !hasOutputGroups
+  const operationKey = getModuleOperationKey(module)
   const isFinalResult = isFinalResultModule(module)
+  const isTextMergeModule = operationKey === 'system.merge_text'
+  const isTextTransformModule = operationKey === 'system.regex_text_transform'
   const summaryText = isWorkflowInputSource
     ? `${ENGINE_TYPE_LABELS[module.engine_type] ?? module.engine_type} · 값 ${sourceValueConfigured ? 1 : 0}/${sourceValuePort ? 1 : 0} · 출력 ${connectedOutputCount}/${sourceOutputPort ? 1 : outputPorts.length}`
     : `${ENGINE_TYPE_LABELS[module.engine_type] ?? module.engine_type} · 입력 ${connectedInputCount}/${inputPorts.length} · 출력 ${connectedOutputCount}/${outputPorts.length}`
@@ -544,40 +776,58 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
       {isWorkflowInputSource ? <InlineWorkflowInputEditor id={id} data={data} /> : null}
 
       {!isWorkflowInputSource ? (
-        <div className="mt-2.5 grid gap-1">
-          {Array.from({ length: portRowCount }, (_, index) => {
-            const inputPort = inputPorts[index]
-            const outputPort = outputPorts[index]
-            const inputConnected = Boolean(inputPort && connectedInputKeys.has(inputPort.key))
-            const inputSatisfied = Boolean(inputPort && (inputConnected || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))
-            const inputRequiredMissing = Boolean(inputPort && inputPort.required && !inputSatisfied)
-            const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
+        isTextMergeModule ? (
+          <TextMergeNodeLayout
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
+          />
+        ) : isTextTransformModule ? (
+          <TextTransformNodeLayout
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
+          />
+        ) : (
+          <div className="mt-2.5 grid gap-1">
+            {Array.from({ length: portRowCount }, (_, index) => {
+              const inputPort = inputPorts[index]
+              const outputPort = outputPorts[index]
+              const inputConnected = Boolean(inputPort && connectedInputKeys.has(inputPort.key))
+              const inputSatisfied = Boolean(inputPort && (inputConnected || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))
+              const inputRequiredMissing = Boolean(inputPort && inputPort.required && !inputSatisfied)
+              const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
 
-            return (
-              <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
-                <PortCell
-                  nodeId={id}
-                  port={inputPort}
-                  side="input"
-                  accentColor={accentColor}
-                  connected={inputConnected}
-                  satisfied={inputSatisfied}
-                  requiredMissing={inputRequiredMissing}
-                  onDisconnectInput={data.onDisconnectNodeInput}
-                />
-                <PortCell
-                  nodeId={id}
-                  port={outputPort}
-                  side="output"
-                  accentColor={accentColor}
-                  connected={outputConnected}
-                  satisfied={outputConnected}
-                  requiredMissing={false}
-                />
-              </div>
-            )
-          })}
-        </div>
+              return (
+                <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+                  <PortCell
+                    nodeId={id}
+                    port={inputPort}
+                    side="input"
+                    accentColor={accentColor}
+                    connected={inputConnected}
+                    satisfied={inputSatisfied}
+                    requiredMissing={inputRequiredMissing}
+                    onDisconnectInput={data.onDisconnectNodeInput}
+                  />
+                  <PortCell
+                    nodeId={id}
+                    port={outputPort}
+                    side="output"
+                    accentColor={accentColor}
+                    connected={outputConnected}
+                    satisfied={outputConnected}
+                    requiredMissing={false}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )
       ) : null}
 
       {hasStandaloneArtifactPreview ? (

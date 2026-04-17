@@ -1,16 +1,23 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { addEdge, MarkerType, type Connection } from '@xyflow/react'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import {
   buildAutoLayoutedNodes,
   buildGraphEditorSnapshot,
   buildModuleEdgePresentation,
+  buildModuleGraphClipboardPayload,
+  cloneModuleGraphValue,
+  createModuleGraphEdgeId,
+  createModuleGraphNodeId,
   findNodePort,
   getModuleBaseDisplayName,
   getModulePortCompatibility,
   parseHandleId,
+  parseModuleGraphClipboardPayload,
+  serializeModuleGraphClipboardPayload,
   type ModuleGraphEdge,
   type ModuleGraphNode,
 } from './module-graph-shared'
@@ -19,6 +26,7 @@ import {
 export function useModuleGraphEditorInteractions({
   nodes,
   edges,
+  modules,
   selectedNode,
   selectedNodeId,
   selectedEdgeId,
@@ -42,6 +50,7 @@ export function useModuleGraphEditorInteractions({
 }: {
   nodes: ModuleGraphNode[]
   edges: ModuleGraphEdge[]
+  modules: ModuleDefinitionRecord[]
   selectedNode: ModuleGraphNode | null
   selectedNodeId: string | null
   selectedEdgeId: string | null
@@ -63,6 +72,8 @@ export function useModuleGraphEditorInteractions({
   fitViewAfterAutoLayout: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const lastCopiedSelectionRef = useRef<string | null>(null)
+
   /** Validate whether one graph-port connection is allowed. */
   const isValidConnection = useCallback(
     (edgeOrConnection: Connection | ModuleGraphEdge) => {
@@ -141,7 +152,7 @@ export function useModuleGraphEditorInteractions({
       connectionStart?: { nodeId: string; handleId: string; handleType: 'source' | 'target' }
     },
   ) => {
-    const nodeId = `module-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const nodeId = createModuleGraphNodeId()
     const offset = nodes.length % 5
     const nextPosition = options?.position ?? {
       x: 80 + offset * 40,
@@ -185,7 +196,7 @@ export function useModuleGraphEditorInteractions({
             if (isValidConnection(nextConnection)) {
               setEdges((currentEdges) => addEdge(
                 {
-                  id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  id: createModuleGraphEdgeId(),
                   ...nextConnection,
                   markerEnd: { type: MarkerType.ArrowClosed },
                   ...buildModuleEdgePresentation(sourcePort, compatibleTargetPort),
@@ -211,7 +222,7 @@ export function useModuleGraphEditorInteractions({
             if (isValidConnection(nextConnection)) {
               setEdges((currentEdges) => addEdge(
                 {
-                  id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  id: createModuleGraphEdgeId(),
                   ...nextConnection,
                   markerEnd: { type: MarkerType.ArrowClosed },
                   ...buildModuleEdgePresentation(compatibleSourcePort, targetPort),
@@ -243,8 +254,8 @@ export function useModuleGraphEditorInteractions({
       return
     }
 
-    const duplicatedNodeId = `module-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const duplicatedInputValues = JSON.parse(JSON.stringify(nodeToDuplicate.data.inputValues || {})) as Record<string, unknown>
+    const duplicatedNodeId = createModuleGraphNodeId()
+    const duplicatedInputValues = cloneModuleGraphValue(nodeToDuplicate.data.inputValues || {}) as Record<string, unknown>
 
     setNodes((currentNodes) => [
       ...currentNodes,
@@ -275,6 +286,135 @@ export function useModuleGraphEditorInteractions({
 
     handleDuplicateNodeById(selectedNode.id)
   }, [handleDuplicateNodeById, selectedNode])
+
+  /** Copy the current node selection into a graph-aware clipboard payload. */
+  const handleCopySelectedNodesToClipboard = useCallback(async () => {
+    const selectedNodes = nodes.filter((node) => node.selected)
+    if (selectedNodes.length === 0) {
+      return false
+    }
+
+    const serializedPayload = serializeModuleGraphClipboardPayload(buildModuleGraphClipboardPayload(selectedNodes, edges))
+
+    try {
+      await copyTextToClipboard(serializedPayload)
+      lastCopiedSelectionRef.current = serializedPayload
+      showSnackbar({ message: selectedNodes.length === 1 ? '노드를 복사했어.' : `${selectedNodes.length}개 노드를 복사했어.`, tone: 'info' })
+      return true
+    } catch {
+      showSnackbar({ message: '클립보드에 노드를 복사하지 못했어.', tone: 'error' })
+      return false
+    }
+  }, [edges, nodes, showSnackbar])
+
+  /** Paste one copied node selection while preserving relative layout and internal edges. */
+  const handlePasteNodesFromClipboard = useCallback(async (options?: { position?: { x: number; y: number } }) => {
+    let clipboardReadFailed = false
+    let clipboardText: string | null = null
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
+      try {
+        clipboardText = await navigator.clipboard.readText()
+      } catch {
+        clipboardReadFailed = true
+      }
+    } else {
+      clipboardReadFailed = true
+    }
+
+    let payload = clipboardText ? parseModuleGraphClipboardPayload(clipboardText) : null
+    if (!payload && clipboardReadFailed) {
+      payload = parseModuleGraphClipboardPayload(lastCopiedSelectionRef.current ?? '')
+    }
+
+    if (!payload || payload.nodes.length === 0) {
+      return false
+    }
+
+    const moduleById = new Map(modules.map((module) => [module.id, module]))
+    const sourceAnchor = payload.nodes.reduce(
+      (current, node) => ({
+        x: Math.min(current.x, node.position.x),
+        y: Math.min(current.y, node.position.y),
+      }),
+      { x: Number.POSITIVE_INFINITY, y: Number.POSITIVE_INFINITY },
+    )
+    const pasteAnchor = options?.position ?? {
+      x: sourceAnchor.x + 48,
+      y: sourceAnchor.y + 48,
+    }
+
+    const nextNodes: ModuleGraphNode[] = []
+    const nodeIdMap = new Map<string, string>()
+
+    for (const copiedNode of payload.nodes) {
+      const module = moduleById.get(copiedNode.moduleId)
+      if (!module) {
+        continue
+      }
+
+      const nextNodeId = createModuleGraphNodeId()
+      nodeIdMap.set(copiedNode.id, nextNodeId)
+      nextNodes.push({
+        id: nextNodeId,
+        type: 'module',
+        position: {
+          x: pasteAnchor.x + (copiedNode.position.x - sourceAnchor.x),
+          y: pasteAnchor.y + (copiedNode.position.y - sourceAnchor.y),
+        },
+        selected: true,
+        data: {
+          module,
+          label: copiedNode.label,
+          inputValues: cloneModuleGraphValue(copiedNode.inputValues),
+        },
+      })
+    }
+
+    if (nextNodes.length === 0) {
+      showSnackbar({ message: '붙여넣을 수 있는 노드를 찾지 못했어.', tone: 'error' })
+      return false
+    }
+
+    const nextNodeMap = new Map(nextNodes.map((node) => [node.id, node]))
+    const nextEdges = payload.edges.flatMap((copiedEdge) => {
+      const sourceNodeId = nodeIdMap.get(copiedEdge.source)
+      const targetNodeId = nodeIdMap.get(copiedEdge.target)
+      if (!sourceNodeId || !targetNodeId) {
+        return []
+      }
+
+      const sourceNode = nextNodeMap.get(sourceNodeId)
+      const targetNode = nextNodeMap.get(targetNodeId)
+      const sourceHandle = parseHandleId(copiedEdge.sourceHandle)
+      const targetHandle = parseHandleId(copiedEdge.targetHandle)
+      const sourcePort = findNodePort(sourceNode, 'out', sourceHandle?.portKey)
+      const targetPort = findNodePort(targetNode, 'in', targetHandle?.portKey)
+
+      return [{
+        id: createModuleGraphEdgeId(),
+        source: sourceNodeId,
+        target: targetNodeId,
+        sourceHandle: copiedEdge.sourceHandle,
+        targetHandle: copiedEdge.targetHandle,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        ...buildModuleEdgePresentation(sourcePort, targetPort),
+      }]
+    })
+
+    setNodes((currentNodes) => [
+      ...currentNodes.map((node) => (node.selected ? { ...node, selected: false } : node)),
+      ...nextNodes,
+    ])
+    setEdges((currentEdges) => [
+      ...currentEdges.map((edge) => (edge.selected ? { ...edge, selected: false } : edge)),
+      ...nextEdges,
+    ])
+    setSelectedEdgeId(null)
+    setSelectedNodeId(nextNodes.length === 1 ? nextNodes[0].id : null)
+    showSnackbar({ message: nextNodes.length === 1 ? '노드를 붙여넣었어.' : `${nextNodes.length}개 노드를 붙여넣었어.`, tone: 'info' })
+    return true
+  }, [modules, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId, showSnackbar])
 
   /** Update one node label in local editor state. */
   const handleNodeLabelChange = useCallback((nodeId: string, label: string) => {
@@ -496,6 +636,8 @@ export function useModuleGraphEditorInteractions({
     handleAddModuleFromLibrary,
     handleDuplicateNodeById,
     handleDuplicateSelectedNode,
+    handleCopySelectedNodesToClipboard,
+    handlePasteNodesFromClipboard,
     handleNodeLabelChange,
     handleNodeValueChange,
     handleNodeValueClear,

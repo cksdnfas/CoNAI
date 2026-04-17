@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Background, Controls, MarkerType, MiniMap, ReactFlow, type Connection, type OnEdgesChange, type OnNodesChange, type ReactFlowInstance } from '@xyflow/react'
 import type { ModuleDefinitionRecord } from '@/lib/api'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
@@ -51,6 +51,20 @@ function getEventClientPoint(event: unknown) {
   }
 
   return null
+}
+
+/** Resolve whether one target should keep its native text-editing shortcuts. */
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return target.isContentEditable || Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+}
+
+/** Resolve whether one click is extending selection instead of opening a node menu. */
+function isSelectionModifierEvent(event: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }) {
+  return Boolean(event.ctrlKey || event.metaKey || event.shiftKey)
 }
 
 /** Resolve a sortable rank for one compatible port match. */
@@ -185,8 +199,11 @@ export function ModuleGraphCanvas({
   onNodeSelect,
   onEdgeSelect,
   onPaneSelect,
+  onSelectionChange,
   onConnect,
   onAddModuleNode,
+  onCopySelection,
+  onPasteSelection,
   onDuplicateNodeById,
   onDisconnectAllNodeConnections,
   onRemoveNodeById,
@@ -201,8 +218,11 @@ export function ModuleGraphCanvas({
   onNodeSelect: (nodeId: string) => void
   onEdgeSelect: (edgeId: string) => void
   onPaneSelect: () => void
+  onSelectionChange: (selection: { nodes: ModuleGraphNode[]; edges: ModuleGraphEdge[] }) => void
   onConnect: (connection: Connection) => void
   onAddModuleNode: (module: ModuleDefinitionRecord, options?: { position?: { x: number; y: number }; connectionStart?: PendingConnectionStart }) => void
+  onCopySelection: () => Promise<boolean>
+  onPasteSelection: (options?: { position?: { x: number; y: number } }) => Promise<boolean>
   onDuplicateNodeById: (nodeId: string) => void
   onDisconnectAllNodeConnections: (nodeId: string) => void
   onRemoveNodeById: (nodeId: string) => void
@@ -212,9 +232,12 @@ export function ModuleGraphCanvas({
   const [quickCreateState, setQuickCreateState] = useState<QuickCreateState | null>(null)
   const isCoarsePointer = useIsCoarsePointer()
   const [actionMenuState, setActionMenuState] = useState<ActionMenuState | null>(null)
+  const canvasRootRef = useRef<HTMLDivElement | null>(null)
   const suppressNextPaneClickRef = useRef(false)
   const pendingConnectionStartRef = useRef<PendingConnectionStart | null>(null)
   const connectionStartPointRef = useRef<{ x: number; y: number } | null>(null)
+  const lastInteractionFlowPositionRef = useRef<{ x: number; y: number } | null>(null)
+  const isCanvasActiveRef = useRef(false)
 
   const recommendedModules = useMemo(
     () => getRecommendedModulesFromConnectionStart(modules, nodes, quickCreateState?.connectionStart ?? null),
@@ -302,8 +325,81 @@ export function ModuleGraphCanvas({
     })
   }, [reactFlowInstance])
 
+  const rememberInteractionPoint = useCallback((event: unknown) => {
+    const clientPoint = getEventClientPoint(event)
+    if (!clientPoint || !reactFlowInstance) {
+      return
+    }
+
+    lastInteractionFlowPositionRef.current = reactFlowInstance.screenToFlowPosition({ x: clientPoint.x, y: clientPoint.y })
+  }, [reactFlowInstance])
+
+  const getPasteFlowPosition = useCallback(() => {
+    if (lastInteractionFlowPositionRef.current) {
+      return lastInteractionFlowPositionRef.current
+    }
+
+    if (!reactFlowInstance || !canvasRootRef.current) {
+      return null
+    }
+
+    const rect = canvasRootRef.current.getBoundingClientRect()
+    return reactFlowInstance.screenToFlowPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    })
+  }, [reactFlowInstance])
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const canvasRoot = canvasRootRef.current
+      if (!canvasRoot) {
+        return
+      }
+
+      isCanvasActiveRef.current = canvasRoot.contains(event.target as Node)
+      if (isCanvasActiveRef.current) {
+        rememberInteractionPoint(event)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isCanvasActiveRef.current || isEditableTarget(event.target)) {
+        return
+      }
+
+      if (!(event.ctrlKey || event.metaKey)) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+      if (key === 'c') {
+        event.preventDefault()
+        closeQuickCreateMenu()
+        closeActionMenu()
+        void onCopySelection()
+        return
+      }
+
+      if (key === 'v') {
+        event.preventDefault()
+        closeQuickCreateMenu()
+        closeActionMenu()
+        const pastePosition = getPasteFlowPosition()
+        void onPasteSelection(pastePosition ? { position: pastePosition } : undefined)
+      }
+    }
+
+    window.addEventListener('pointerdown', handlePointerDown, true)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [closeActionMenu, closeQuickCreateMenu, getPasteFlowPosition, onCopySelection, onPasteSelection, rememberInteractionPoint])
+
   return (
-    <div className="relative h-[760px] overflow-hidden rounded-sm border border-border bg-surface-lowest">
+    <div ref={canvasRootRef} className="relative h-[760px] overflow-hidden rounded-sm border border-border bg-surface-lowest">
       <ReactFlow
         className={isCoarsePointer ? 'theme-graph-flow touch-scroll-safe' : 'theme-graph-flow'}
         nodes={reactFlowNodes}
@@ -311,23 +407,33 @@ export function ModuleGraphCanvas({
         onInit={setReactFlowInstance}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onSelectionChange={onSelectionChange}
         onNodeClick={(event, node) => {
+          rememberInteractionPoint(event)
           closeQuickCreateMenu()
           onNodeSelect(node.id)
+          if (isSelectionModifierEvent(event)) {
+            closeActionMenu()
+            return
+          }
+
           openNodeActionMenu(event, node)
         }}
         onNodeContextMenu={(event, node) => {
           event.preventDefault()
+          rememberInteractionPoint(event)
           closeQuickCreateMenu()
           onNodeSelect(node.id)
           openNodeActionMenu(event, node)
         }}
-        onEdgeClick={(_, edge) => {
+        onEdgeClick={(event, edge) => {
+          rememberInteractionPoint(event)
           closeQuickCreateMenu()
           closeActionMenu()
           onEdgeSelect(edge.id)
         }}
-        onPaneClick={() => {
+        onPaneClick={(event) => {
+          rememberInteractionPoint(event)
           if (suppressNextPaneClickRef.current) {
             suppressNextPaneClickRef.current = false
             return
@@ -339,11 +445,13 @@ export function ModuleGraphCanvas({
         }}
         onPaneContextMenu={(event) => {
           event.preventDefault()
+          rememberInteractionPoint(event)
           closeQuickCreateMenu()
           onPaneSelect()
           openPaneActionMenu(event)
         }}
         onConnectStart={(event, params) => {
+          rememberInteractionPoint(event)
           if (params.nodeId && params.handleId && (params.handleType === 'source' || params.handleType === 'target')) {
             pendingConnectionStartRef.current = {
               nodeId: params.nodeId,
@@ -355,6 +463,7 @@ export function ModuleGraphCanvas({
           }
         }}
         onConnectEnd={(event, connectionState) => {
+          rememberInteractionPoint(event)
           const pendingConnectionStart = pendingConnectionStartRef.current
           const clientPoint = getEventClientPoint(event)
           const startPoint = connectionStartPointRef.current
@@ -381,7 +490,10 @@ export function ModuleGraphCanvas({
         defaultViewport={INITIAL_GRAPH_VIEWPORT}
         colorMode={reactFlowColorMode}
         nodesDraggable
-        panOnDrag={!isCoarsePointer}
+        elementsSelectable
+        selectionOnDrag={!isCoarsePointer}
+        multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
+        panOnDrag={isCoarsePointer}
         snapToGrid
         connectionRadius={32}
         deleteKeyCode={['Backspace', 'Delete']}

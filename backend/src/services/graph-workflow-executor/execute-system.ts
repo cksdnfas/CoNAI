@@ -12,6 +12,7 @@ import {
   executeConstantPromptNode,
   executeConstantTextNode,
 } from './system-constant-operations'
+import { executeRegexTextTransformNode, executeTextMergeNode } from './system-text-operations'
 import {
   executeFindSimilarImages,
   executeExtractArtistFromImage,
@@ -39,6 +40,8 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.constant_image': executeConstantImageNode,
   'system.constant_number': executeConstantNumberNode,
   'system.constant_boolean': executeConstantBooleanNode,
+  'system.regex_text_transform': executeRegexTextTransformNode,
+  'system.merge_text': executeTextMergeNode,
   'system.random_prompt_from_group': executeRandomPromptFromGroup,
   'system.find_similar_images': executeFindSimilarImages,
   'system.load_prompt_from_reference': executeLoadPromptFromReference,

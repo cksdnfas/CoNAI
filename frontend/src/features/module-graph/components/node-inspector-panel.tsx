@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
-import type { GraphExecutionArtifactRecord, ModulePortDefinition } from '@/lib/api'
+import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
@@ -127,6 +127,12 @@ function PortHeader({
       </Button>
     </div>
   )
+}
+
+/** Find editable UI-only fields that are not backed by module input ports. */
+function getStandaloneNodeUiFields(node: ModuleGraphNode) {
+  const portKeys = new Set((node.data.module.exposed_inputs ?? []).map((port) => port.key))
+  return (node.data.module.ui_schema ?? []).filter((field) => !portKeys.has(field.key))
 }
 
 /** Resolve a selected edge endpoint back into its node and module port metadata. */
@@ -387,6 +393,126 @@ export function NodeInspectorPanel({
     )
   }
 
+  const renderStandaloneUiField = (node: ModuleGraphNode, field: ModuleUiFieldDefinition) => {
+    const rawValue = node.data.inputValues?.[field.key]
+    const normalizedDescription = normalizeModulePortDescription(field.description)
+    const hasExplicitValue = hasMeaningfulValue(rawValue)
+    const clearFieldValue = () => onNodeValueClear(node.id, field.key)
+
+    if (field.data_type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
+      return (
+        <div key={field.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <div className="text-sm font-medium text-foreground">{field.label}</div>
+                <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
+              </div>
+              {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
+            </div>
+            <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
+              값 지우기
+            </Button>
+          </div>
+          <Select
+            value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
+            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value)}
+          >
+            <option value="">{hasMeaningfulValue(field.default_value) ? '기본값 사용' : '선택'}</option>
+            {field.options.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </Select>
+        </div>
+      )
+    }
+
+    if (field.data_type === 'number') {
+      return (
+        <div key={field.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <div className="text-sm font-medium text-foreground">{field.label}</div>
+                <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
+              </div>
+              {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
+            </div>
+            <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
+              값 지우기
+            </Button>
+          </div>
+          <Input
+            type="number"
+            min={field.min}
+            max={field.max}
+            value={typeof rawValue === 'number' ? String(rawValue) : typeof rawValue === 'string' ? rawValue : ''}
+            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value === '' ? '' : Number(event.target.value))}
+            placeholder={field.placeholder || field.label}
+          />
+        </div>
+      )
+    }
+
+    if (field.data_type === 'boolean') {
+      return (
+        <div key={field.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <div className="text-sm font-medium text-foreground">{field.label}</div>
+                <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
+              </div>
+              {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
+            </div>
+            <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
+              값 지우기
+            </Button>
+          </div>
+          <Select
+            value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
+            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value === 'true')}
+          >
+            <option value="">기본값 사용</option>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </Select>
+        </div>
+      )
+    }
+
+    return (
+      <div key={field.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1">
+              <div className="text-sm font-medium text-foreground">{field.label}</div>
+              <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
+            </div>
+            {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
+          </div>
+          <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
+            값 지우기
+          </Button>
+        </div>
+        {field.data_type === 'json' || field.data_type === 'prompt' || field.data_type === 'text' ? (
+          <Textarea
+            rows={field.data_type === 'json' ? 6 : 2}
+            value={typeof rawValue === 'string' ? rawValue : rawValue ? JSON.stringify(rawValue, null, 2) : ''}
+            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value)}
+            placeholder={field.placeholder || normalizedDescription || field.label}
+          />
+        ) : (
+          <Input
+            value={typeof rawValue === 'string' ? rawValue : rawValue ? String(rawValue) : ''}
+            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value)}
+            placeholder={field.placeholder || normalizedDescription || field.label}
+          />
+        )}
+      </div>
+    )
+  }
+
   const sourceEndpoint = selectedEdge
     ? resolveEdgeEndpoint(nodes, selectedEdge.source, selectedEdge.sourceHandle, 'out')
     : null
@@ -398,6 +524,7 @@ export function NodeInspectorPanel({
     ? (selectedNode.data.module.exposed_inputs ?? []).filter((port) => port.required && !isNodeInputSatisfied(selectedNode, port))
     : []
   const selectedNodeWorkflowInputPort = selectedNode ? getWorkflowInputSourcePort(selectedNode) : null
+  const selectedNodeStandaloneUiFields = selectedNode ? getStandaloneNodeUiFields(selectedNode) : []
   const sortedSelectedNodeInputs = selectedNode && !selectedNodeWorkflowInputPort
     ? [...(selectedNode.data.module.exposed_inputs ?? [])].sort((left, right) => {
         const leftHighlighted = left.key === highlightedPortKey ? 1 : 0
@@ -573,9 +700,16 @@ export function NodeInspectorPanel({
             </div>
 
             {(selectedNode.data.module.exposed_inputs ?? []).length === 0 || selectedNodeWorkflowInputPort ? (
-              <div className="text-sm text-muted-foreground">이 노드 입력은 카드에서 바로 편집해.</div>
+              selectedNodeStandaloneUiFields.length > 0 ? (
+                <div className="space-y-4">{selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}</div>
+              ) : (
+                <div className="text-sm text-muted-foreground">이 노드 입력은 카드에서 바로 편집해.</div>
+              )
             ) : (
-              <div className="space-y-4">{sortedSelectedNodeInputs.map((port) => renderPortInput(selectedNode, port))}</div>
+              <div className="space-y-4">
+                {sortedSelectedNodeInputs.map((port) => renderPortInput(selectedNode, port))}
+                {selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}
+              </div>
             )}
           </>
         ) : null}

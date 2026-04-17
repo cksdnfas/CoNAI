@@ -92,8 +92,11 @@ export function useModuleGraphPageEditorPanels({
   onNodeSelect,
   onEdgeSelect,
   onPaneSelect,
+  onSelectionChange,
   onConnect,
   onAddModuleNode,
+  onCopySelection,
+  onPasteSelection,
   isValidConnection,
 }: {
   workflowView: 'browse' | 'edit'
@@ -163,8 +166,11 @@ export function useModuleGraphPageEditorPanels({
   onNodeSelect: (nodeId: string) => void
   onEdgeSelect: (edgeId: string) => void
   onPaneSelect: () => void
+  onSelectionChange: (selection: { nodes: ModuleGraphNode[]; edges: ModuleGraphEdge[] }) => void
   onConnect: (connection: Connection) => void
   onAddModuleNode: (module: ModuleDefinitionRecord, options?: { position?: { x: number; y: number }; connectionStart?: { nodeId: string; handleId: string; handleType: 'source' | 'target' } }) => void
+  onCopySelection: () => Promise<boolean>
+  onPasteSelection: (options?: { position?: { x: number; y: number } }) => Promise<boolean>
   isValidConnection: (connection: Connection | ModuleGraphEdge) => boolean
 }) {
   const graphCanvasNodes = useMemo(
@@ -287,8 +293,11 @@ export function useModuleGraphPageEditorPanels({
         onNodeSelect={onNodeSelect}
         onEdgeSelect={onEdgeSelect}
         onPaneSelect={onPaneSelect}
+        onSelectionChange={onSelectionChange}
         onConnect={onConnect}
         onAddModuleNode={onAddModuleNode}
+        onCopySelection={onCopySelection}
+        onPasteSelection={onPasteSelection}
         onDuplicateNodeById={onDuplicateNodeById}
         onDisconnectAllNodeConnections={onDisconnectAllNodeConnections}
         onRemoveNodeById={onRemoveNodeById}
