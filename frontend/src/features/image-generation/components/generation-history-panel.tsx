@@ -248,7 +248,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   }
 
   return (
-    <section className={cn('space-y-4', splitPaneScroll && 'flex min-h-0 flex-1 flex-col')}>
+    <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden' : 'space-y-4')}>
       <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -299,7 +299,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
       {isHistoryLoading ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
 
-      <div className={cn(splitPaneScroll && 'min-h-0 flex-1')}>
+      <div className={cn(splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
         {!isHistoryLoading && historyImages.length === 0 ? (
           <div className="py-4 text-sm text-muted-foreground">아직 표시할 생성 결과가 없어.</div>
         ) : null}
@@ -323,9 +323,8 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             preferredColumnCount={historyColumnCount}
             columnGap={splitPaneScroll ? 12 : 16}
             rowGap={splitPaneScroll ? 12 : 16}
-            className={cn(splitPaneScroll && 'h-full pr-3 pb-1')}
+            className={cn(splitPaneScroll && 'min-h-0 flex-1 overflow-hidden pr-3 pb-1')}
             scrollMode={splitPaneScroll ? 'container' : 'window'}
-            viewportHeight={splitPaneScroll ? '100%' : undefined}
             hasMore={Boolean(historyQuery.hasNextPage)}
             isLoadingMore={historyQuery.isFetchingNextPage}
             onLoadMore={historyQuery.fetchNextPage}

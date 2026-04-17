@@ -74,6 +74,7 @@ export function ImageGenerationPage() {
     : (visibleTabs[0]?.value ?? 'nai')
   const shouldShowHistory = activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
   const useWideNaiSplitPaneScroll = isWideLayout && activeTab === 'nai' && shouldShowHistory
+  const useWideSplitPaneScroll = isWideLayout && shouldShowHistory
 
   const handleGlobalRefresh = () => {
     setGlobalRefreshNonce((current) => current + 1)
@@ -143,6 +144,7 @@ export function ImageGenerationPage() {
           onHistoryRefresh={handleHistoryRefresh}
           selectedWorkflowId={selectedComfyWorkflowId}
           onSelectedWorkflowChange={setSelectedComfyWorkflowId}
+          splitPaneScroll={useWideSplitPaneScroll}
           headerPortalTargetId={comfyDrawerHeaderContentId}
           compactActionBarContentTargetId={activeTab === 'comfyui' ? compactActionBarContentId : undefined}
         />
@@ -158,10 +160,10 @@ export function ImageGenerationPage() {
       className={cn(
         'space-y-6',
         isWideLayout ? 'pb-0' : 'pb-24',
-        useWideNaiSplitPaneScroll && 'xl:flex xl:h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] xl:min-h-0 xl:flex-col xl:space-y-0 xl:overflow-hidden',
+        useWideSplitPaneScroll && 'flex h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
       )}
     >
-      <div className={cn('space-y-6', useWideNaiSplitPaneScroll && 'xl:shrink-0 xl:pb-6')}>
+      <div className={cn('space-y-6', useWideSplitPaneScroll && 'shrink-0 pb-6')}>
         <PageHeader
           eyebrow="Create"
           title="Image Generation"
@@ -193,26 +195,24 @@ export function ImageGenerationPage() {
             className={cn(
               'grid items-start gap-8',
               shouldShowHistory ? 'grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1',
-              useWideNaiSplitPaneScroll && 'xl:min-h-0 xl:flex-1 xl:items-stretch',
+              useWideSplitPaneScroll && 'min-h-0 flex-1 items-stretch',
             )}
           >
-            <div className={cn('min-w-0', useWideNaiSplitPaneScroll && 'xl:flex xl:min-h-0 xl:flex-col')}>
+            <div className={cn('min-w-0', useWideSplitPaneScroll && 'flex min-h-0 flex-col overflow-hidden')}>
               <Suspense fallback={<PanelFallback />}>
                 {controllerPanel}
               </Suspense>
             </div>
             {shouldShowHistory ? (
-              <div className={cn('min-w-0', useWideNaiSplitPaneScroll && 'xl:min-h-0 xl:flex xl:flex-col')}>
-                <div className={cn(useWideNaiSplitPaneScroll && 'xl:min-h-0 xl:flex-1')}>
-                  <Suspense fallback={<PanelFallback />}>
-                    <GenerationHistoryPanelLazy
-                      refreshNonce={historyRefreshNonce}
-                      serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
-                      workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
-                      splitPaneScroll={useWideNaiSplitPaneScroll}
-                    />
-                  </Suspense>
-                </div>
+              <div className={cn('min-w-0', useWideSplitPaneScroll && 'min-h-0 flex flex-col overflow-hidden')}>
+                <Suspense fallback={<PanelFallback />}>
+                  <GenerationHistoryPanelLazy
+                    refreshNonce={historyRefreshNonce}
+                    serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
+                    workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
+                    splitPaneScroll={useWideSplitPaneScroll}
+                  />
+                </Suspense>
               </div>
             ) : null}
           </div>

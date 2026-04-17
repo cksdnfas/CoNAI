@@ -418,10 +418,13 @@
   .image-list-root [data-testid='virtuoso-scroller'] {
     width: 100%;
     min-width: 0;
+    min-height: 0;
+    height: 100%;
   }
 
   .image-list-root [data-testid='virtuoso-list'] {
     min-width: 0;
+    min-height: 0;
     flex-basis: 0;
   }
 

@@ -13,6 +13,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getAppSettings, getPublicGenerationWorkflow, queuePublicGenerationWorkflowJob, type WorkflowMarkedField } from '@/lib/api'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
+import { cn } from '@/lib/utils'
 import { refreshGenerationQueueViews } from './components/generation-queue-actions'
 import { GenerationHistoryPanel } from './components/generation-history-panel'
 import { CompactGenerationActionSurface, CompactGenerationControllerActionBar, GenerationControllerFieldStack } from './components/shared-generation-controller'
@@ -68,6 +69,7 @@ export function PublicComfyWorkflowPage() {
   const workflow = workflowQuery.data ?? null
   const workflowFields = workflow?.marked_fields ?? []
   const generationSaveOptions = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
+  const useWideSplitPaneScroll = isWideLayout && workflow !== null
 
   useEffect(() => {
     if (!workflow) {
@@ -312,9 +314,11 @@ export function PublicComfyWorkflowPage() {
 
   const controllerPanel = workflow ? (
     isWideLayout ? (
-      <section className="space-y-3">
+      <section className={cn(useWideSplitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-3 overflow-hidden' : 'space-y-3')}>
         <div className="border-b border-border/70 pb-4">{desktopControllerHeaderContent}</div>
-        <div className="space-y-5">{controllerBodyContent}</div>
+        <div className={cn(useWideSplitPaneScroll ? 'min-h-0 flex-1 overflow-y-auto pr-2' : 'space-y-5')}>
+          <div className="space-y-5">{controllerBodyContent}</div>
+        </div>
       </section>
     ) : (
       <div className="space-y-4">{controllerBodyContent}</div>
@@ -372,7 +376,12 @@ export function PublicComfyWorkflowPage() {
   ) : null
 
   return (
-    <div className={isWideLayout ? 'space-y-6' : 'space-y-6 pb-24'}>
+    <div
+      className={cn(
+        isWideLayout ? 'space-y-6' : 'space-y-6 pb-24',
+        useWideSplitPaneScroll && 'flex h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
+      )}
+    >
       {workflowQuery.isError ? (
         <Alert variant="destructive">
           <AlertTitle>공용 워크플로우를 불러오지 못했어</AlertTitle>
@@ -384,14 +393,24 @@ export function PublicComfyWorkflowPage() {
 
       {workflow ? (
         isWideLayout ? (
-          <div className="grid items-start gap-8 grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]">
-            {controllerPanel}
-            <GenerationHistoryPanel
-              refreshNonce={historyRefreshNonce}
-              serviceType="comfyui"
-              workflowId={workflow.id}
-              publicWorkflowSlug={slug}
-            />
+          <div
+            className={cn(
+              'grid items-start gap-8 grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]',
+              useWideSplitPaneScroll && 'min-h-0 flex-1 items-stretch',
+            )}
+          >
+            <div className={cn(useWideSplitPaneScroll && 'min-h-0 flex flex-col overflow-hidden')}>
+              {controllerPanel}
+            </div>
+            <div className={cn(useWideSplitPaneScroll && 'min-h-0 flex flex-col overflow-hidden')}>
+              <GenerationHistoryPanel
+                refreshNonce={historyRefreshNonce}
+                serviceType="comfyui"
+                workflowId={workflow.id}
+                publicWorkflowSlug={slug}
+                splitPaneScroll={useWideSplitPaneScroll}
+              />
+            </div>
           </div>
         ) : (
           <>

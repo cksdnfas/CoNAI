@@ -195,53 +195,59 @@ export function ImageList({
   return (
     <div
       ref={setContainerElement}
-      className={cn('relative image-list-root', className)}
+      className={cn(
+        'relative min-h-0 image-list-root',
+        scrollMode === 'container' && 'flex h-full min-h-0 flex-1 flex-col overflow-hidden',
+        className,
+      )}
       onMouseDown={(event) => {
         if (selectionMode && !isDraggingSelection && event.target === event.currentTarget) {
           onSelectedIdsChange?.([])
         }
       }}
     >
-      <Suspense fallback={<ImageListFallback />}>
-        {layout === 'grid' ? (
-          <ImageListGridLazy
-            items={items}
-            selectedIds={selectedIds}
-            getItemId={getItemId}
-            selectionMode={selectionMode}
-            minColumnWidth={minColumnWidth}
-            columnCount={resolvedColumnCount}
-            columnGap={columnGap}
-            rowGap={rowGap}
-            gridItemHeight={gridItemHeight}
-            getItemHref={getItemHref}
-            onActivate={handleActivate}
-            scrollMode={scrollMode}
-            viewportHeight={viewportHeight}
-            onEndReached={handleEndReached}
-            renderItemOverlay={renderItemOverlay}
-            renderItemPersistentOverlay={renderItemPersistentOverlay}
-            shouldBlurItemPreview={shouldBlurItemPreview}
-          />
-        ) : (
-          <ImageListMasonryLazy
-            items={items}
-            selectedIds={selectedIds}
-            getItemId={getItemId}
-            selectionMode={selectionMode}
-            columnCount={resolvedColumnCount}
-            columnGap={columnGap}
-            rowGap={rowGap}
-            getItemHref={getItemHref}
-            onActivate={handleActivate}
-            scrollMode={scrollMode}
-            viewportHeight={viewportHeight}
-            renderItemOverlay={renderItemOverlay}
-            renderItemPersistentOverlay={renderItemPersistentOverlay}
-            shouldBlurItemPreview={shouldBlurItemPreview}
-          />
-        )}
-      </Suspense>
+      <div className={cn(scrollMode === 'container' && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
+        <Suspense fallback={<ImageListFallback />}>
+          {layout === 'grid' ? (
+            <ImageListGridLazy
+              items={items}
+              selectedIds={selectedIds}
+              getItemId={getItemId}
+              selectionMode={selectionMode}
+              minColumnWidth={minColumnWidth}
+              columnCount={resolvedColumnCount}
+              columnGap={columnGap}
+              rowGap={rowGap}
+              gridItemHeight={gridItemHeight}
+              getItemHref={getItemHref}
+              onActivate={handleActivate}
+              scrollMode={scrollMode}
+              viewportHeight={viewportHeight}
+              onEndReached={handleEndReached}
+              renderItemOverlay={renderItemOverlay}
+              renderItemPersistentOverlay={renderItemPersistentOverlay}
+              shouldBlurItemPreview={shouldBlurItemPreview}
+            />
+          ) : (
+            <ImageListMasonryLazy
+              items={items}
+              selectedIds={selectedIds}
+              getItemId={getItemId}
+              selectionMode={selectionMode}
+              columnCount={resolvedColumnCount}
+              columnGap={columnGap}
+              rowGap={rowGap}
+              getItemHref={getItemHref}
+              onActivate={handleActivate}
+              scrollMode={scrollMode}
+              viewportHeight={viewportHeight}
+              renderItemOverlay={renderItemOverlay}
+              renderItemPersistentOverlay={renderItemPersistentOverlay}
+              shouldBlurItemPreview={shouldBlurItemPreview}
+            />
+          )}
+        </Suspense>
+      </div>
 
       {scrollMode === 'window' ? <div ref={loadMoreSentinelRef} className="h-px w-full" aria-hidden="true" /> : null}
     </div>

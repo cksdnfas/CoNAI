@@ -75,6 +75,13 @@ export function ImageListMasonry({
   shouldBlurItemPreview,
 }: ImageListMasonryProps) {
   const usesWindowScroll = scrollMode === 'window'
+  const resolvedContainerHeight = usesWindowScroll
+    ? undefined
+    : typeof viewportHeight === 'number'
+      ? viewportHeight
+      : typeof viewportHeight === 'string' && viewportHeight !== '100%'
+        ? viewportHeight
+        : undefined
 
   return (
     <VirtuosoMasonry<ImageRecord, ImageListMasonryContext>
@@ -95,7 +102,9 @@ export function ImageListMasonry({
       initialItemCount={Math.min(items.length, Math.max(columnCount * 2, 8))}
       style={{
         columnGap: `${columnGap}px`,
-        height: usesWindowScroll ? undefined : (viewportHeight ?? '100%'),
+        height: resolvedContainerHeight,
+        minHeight: usesWindowScroll ? undefined : 0,
+        flex: usesWindowScroll ? undefined : 1,
         overflowX: usesWindowScroll ? undefined : 'hidden',
         overflowY: usesWindowScroll ? undefined : 'auto',
         paddingRight: usesWindowScroll ? undefined : '4px',
