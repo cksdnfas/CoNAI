@@ -35,10 +35,18 @@ type NaiGenerationPanelProps = {
   splitPaneScroll?: boolean
   compactActionBar?: boolean
   headerPortalTargetId?: string
+  compactActionBarContentTargetId?: string
 }
 
 /** Render the NAI login, generation, and module-authoring workflow. */
-export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneScroll = false, compactActionBar = false, headerPortalTargetId }: NaiGenerationPanelProps) {
+export function NaiGenerationPanel({
+  refreshNonce,
+  onHistoryRefresh,
+  splitPaneScroll = false,
+  compactActionBar = false,
+  headerPortalTargetId,
+  compactActionBarContentTargetId,
+}: NaiGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
   const [isGenerationSaveOptionsOpen, setIsGenerationSaveOptionsOpen] = useState(false)
@@ -252,21 +260,24 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
   const useInlineActionBar = splitPaneScroll || compactActionBar
   const useDrawerCompactChrome = compactActionBar && !splitPaneScroll
   const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null)
+  const [compactActionBarPortalTarget, setCompactActionBarPortalTarget] = useState<HTMLElement | null>(null)
 
   useEffect(() => {
-    if (!useDrawerCompactChrome || !headerPortalTargetId || typeof document === 'undefined') {
+    if (!useDrawerCompactChrome || typeof document === 'undefined') {
       setHeaderPortalTarget(null)
+      setCompactActionBarPortalTarget(null)
       return
     }
 
-    const resolveTarget = () => {
-      setHeaderPortalTarget(document.getElementById(headerPortalTargetId))
+    const resolveTargets = () => {
+      setHeaderPortalTarget(headerPortalTargetId ? document.getElementById(headerPortalTargetId) : null)
+      setCompactActionBarPortalTarget(compactActionBarContentTargetId ? document.getElementById(compactActionBarContentTargetId) : null)
     }
 
-    resolveTarget()
-    const frame = window.requestAnimationFrame(resolveTarget)
+    resolveTargets()
+    const frame = window.requestAnimationFrame(resolveTargets)
     return () => window.cancelAnimationFrame(frame)
-  }, [headerPortalTargetId, useDrawerCompactChrome])
+  }, [compactActionBarContentTargetId, headerPortalTargetId, useDrawerCompactChrome])
 
   const generationSaveSourceInfo = useMemo(() => {
     const width = parseNumberInput(naiForm.width, 1024)
@@ -284,20 +295,31 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
     }
   }, [naiForm.height, naiForm.width])
 
+  const sharedActionSectionProps = {
+    canUpscale: naiForm.action !== 'generate' && Boolean(naiForm.sourceImage),
+    isUpscaling,
+    isGenerating: isNaiGenerating,
+    canGenerate: naiForm.prompt.trim().length > 0,
+    generateButtonLabel: naiGenerateButtonLabel,
+    costErrorMessage: naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.') : null,
+    onOpenModuleSave: () => setIsModuleSaveModalOpen(true),
+    onOpenSaveOptions: () => setIsGenerationSaveOptionsOpen(true),
+    onUpscale: handleUpscale,
+    onReset: resetNaiForm,
+    onGenerate: handleNaiGenerate,
+  } satisfies Omit<Parameters<typeof NaiActionSection>[0], 'variant'>
+
   const actionSection = (
     <NaiActionSection
       variant={useInlineActionBar ? 'inline' : 'card'}
-      canUpscale={naiForm.action !== 'generate' && Boolean(naiForm.sourceImage)}
-      isUpscaling={isUpscaling}
-      isGenerating={isNaiGenerating}
-      canGenerate={naiForm.prompt.trim().length > 0}
-      generateButtonLabel={naiGenerateButtonLabel}
-      costErrorMessage={naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.') : null}
-      onOpenModuleSave={() => setIsModuleSaveModalOpen(true)}
-      onOpenSaveOptions={() => setIsGenerationSaveOptionsOpen(true)}
-      onUpscale={handleUpscale}
-      onReset={resetNaiForm}
-      onGenerate={handleNaiGenerate}
+      {...sharedActionSectionProps}
+    />
+  )
+
+  const compactActionSection = (
+    <NaiActionSection
+      variant="compact"
+      {...sharedActionSectionProps}
     />
   )
 
@@ -357,7 +379,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
         onOpenAuth={() => setIsNaiAuthModalOpen(true)}
         compact
       />
-      {actionSection}
+      {useDrawerCompactChrome ? null : actionSection}
     </div>
   )
 
@@ -386,6 +408,7 @@ export function NaiGenerationPanel({ refreshNonce, onHistoryRefresh, splitPaneSc
           splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
           useDrawerCompactChrome && 'px-5 pb-5',
         )}>
+          {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionSection, compactActionBarPortalTarget) : null}
           {editorSections}
         </div>
       </div>

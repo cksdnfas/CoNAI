@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState } from 'react'
-import { RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -8,9 +8,9 @@ import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { Button } from '@/components/ui/button'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
-import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
+import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
 import { loadPersistedSelectedComfyWorkflowId, persistSelectedComfyWorkflowId } from './image-generation-shared'
 
 const NaiGenerationPanelLazy = lazy(async () => {
@@ -116,6 +116,13 @@ export function ImageGenerationPage() {
     ? 'comfy-controller-drawer-header-content'
     : undefined
   const drawerHeaderContentId = naiDrawerHeaderContentId ?? comfyDrawerHeaderContentId
+  const compactActionBarContentId = shouldUseControllerDrawer
+    ? activeTab === 'nai'
+      ? 'nai-controller-compact-action-bar-content'
+      : activeTab === 'comfyui' && selectedComfyWorkflowId !== null
+        ? 'comfy-controller-compact-action-bar-content'
+        : undefined
+    : undefined
   const useCompactControllerDrawer = Boolean(drawerHeaderContentId)
 
   const controllerPanel = activeTab === 'nai'
@@ -126,6 +133,7 @@ export function ImageGenerationPage() {
         splitPaneScroll={useWideNaiSplitPaneScroll}
         compactActionBar={useCompactNaiActionBar}
         headerPortalTargetId={naiDrawerHeaderContentId}
+        compactActionBarContentTargetId={activeTab === 'nai' ? compactActionBarContentId : undefined}
       />
     )
     : activeTab === 'comfyui'
@@ -136,6 +144,7 @@ export function ImageGenerationPage() {
           selectedWorkflowId={selectedComfyWorkflowId}
           onSelectedWorkflowChange={setSelectedComfyWorkflowId}
           headerPortalTargetId={comfyDrawerHeaderContentId}
+          compactActionBarContentTargetId={activeTab === 'comfyui' ? compactActionBarContentId : undefined}
         />
       )
       : activeTab === 'wildcards'
@@ -220,18 +229,13 @@ export function ImageGenerationPage() {
               </Suspense>
             </div>
 
-            <FloatingBottomAction
-              type="button"
-              size="icon-sm"
-              containerClassName="bottom-4"
-              innerClassName="mx-auto max-w-[26rem] justify-start"
-              className="w-10 min-w-0 max-w-none rounded-sm px-0"
-              aria-label={`${controllerLabel} 컨트롤 열기`}
-              title={`${controllerLabel} 컨트롤 열기`}
-              onClick={() => setIsControllerOpen(true)}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-            </FloatingBottomAction>
+            <CompactGenerationControllerActionBar
+              isExpanded={isDrawerOpen}
+              onToggle={() => setIsControllerOpen((current) => !current)}
+              expandedLabel={`${controllerLabel} 컨트롤 접기`}
+              collapsedLabel={`${controllerLabel} 컨트롤 열기`}
+              expandedContent={compactActionBarContentId ? <div id={compactActionBarContentId} className="flex items-center" /> : null}
+            />
 
             <BottomDrawerSheet
               open={isDrawerOpen}
@@ -240,7 +244,7 @@ export function ImageGenerationPage() {
               onClose={() => setIsControllerOpen(false)}
               headerContentId={drawerHeaderContentId}
               className={useCompactControllerDrawer ? 'border-x-0 border-b-0 bg-transparent shadow-none backdrop-blur-0' : undefined}
-              bodyClassName={useCompactControllerDrawer ? 'p-0 pb-14' : undefined}
+              bodyClassName={useCompactControllerDrawer ? 'p-0 pb-24' : undefined}
               headerClassName={useCompactControllerDrawer ? 'border-b-0 px-4 py-3' : undefined}
               headerPortalClassName={useCompactControllerDrawer ? 'mt-0 border-t-0 pt-0' : undefined}
               hideHandle={useCompactControllerDrawer}

@@ -3,6 +3,7 @@ import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { CompactGenerationActionSurface } from './shared-generation-controller'
 import { PromptToggleField } from './prompt-toggle-field'
 
 export interface NaiConnectionHeaderProps {
@@ -76,7 +77,7 @@ export function NaiPromptSection({
 }
 
 export interface NaiActionSectionProps {
-  variant?: 'card' | 'inline'
+  variant?: 'card' | 'inline' | 'compact'
   canUpscale: boolean
   isUpscaling: boolean
   isGenerating: boolean
@@ -173,6 +174,79 @@ export function NaiActionSection({
       <section className="space-y-3">
         {actionContent}
       </section>
+    )
+  }
+
+  if (variant === 'compact') {
+    return (
+      <CompactGenerationActionSurface className="max-w-full">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onOpenModuleSave}
+          disabled={isGenerating || isUpscaling}
+          aria-label="모듈 저장"
+          title="모듈 저장"
+          className="rounded-none border-r border-border/70 shadow-none"
+        >
+          <Save className="h-4 w-4" />
+        </Button>
+
+        {canUpscale ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onUpscale}
+            disabled={isUpscaling || isGenerating}
+            aria-label={isUpscaling ? '업스케일 중' : '소스 2x 업스케일'}
+            title={isUpscaling ? '업스케일 중' : '소스 2x 업스케일'}
+            className="rounded-none border-r border-border/70 shadow-none"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+        ) : null}
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onReset}
+          disabled={isGenerating || isUpscaling}
+          aria-label="초기화"
+          title="초기화"
+          className="rounded-none shadow-none"
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+
+        <Button
+          type="button"
+          size="sm"
+          onClick={onGenerate}
+          disabled={isGenerating || !canGenerate}
+          className="rounded-none border-l border-border/70 shadow-none"
+          aria-label={generateButtonLabel}
+          title={generateButtonLabel}
+        >
+          <Sparkles className="h-4 w-4" />
+          {generateButtonLabel}
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onOpenSaveOptions}
+          disabled={isGenerating || isUpscaling}
+          aria-label="생성 결과 저장 옵션"
+          title="생성 결과 저장 옵션"
+          className="rounded-none border-l border-border/70 shadow-none"
+        >
+          <Settings2 className="h-4 w-4" />
+        </Button>
+      </CompactGenerationActionSurface>
     )
   }
 

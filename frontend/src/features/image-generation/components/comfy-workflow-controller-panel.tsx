@@ -9,6 +9,7 @@ import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
+import { CompactGenerationActionSurface, GenerationControllerFieldStack } from './shared-generation-controller'
 import { WorkflowFieldDisclosureCard } from './workflow-field-disclosure-card'
 
 type ComfyWorkflowControllerPanelProps = {
@@ -22,6 +23,7 @@ type ComfyWorkflowControllerPanelProps = {
   queueRegistrationCount: string
   isGenerating: boolean
   headerPortalTargetId?: string
+  compactActionBarContentTargetId?: string
   onBack: () => void
   onSelectTarget: (target: string) => void
   onQueueRegistrationCountChange: (value: string) => void
@@ -45,6 +47,7 @@ export function ComfyWorkflowControllerPanel({
   queueRegistrationCount,
   isGenerating,
   headerPortalTargetId,
+  compactActionBarContentTargetId,
   onBack,
   onSelectTarget,
   onQueueRegistrationCountChange,
@@ -60,22 +63,25 @@ export function ComfyWorkflowControllerPanel({
   const selectedServer = selectedTarget.startsWith('server:')
     ? servers.find((server) => server.id === Number(selectedTarget.slice('server:'.length))) ?? null
     : null
-  const [, setHeaderPortalRevision] = useState(0)
+  const [, setPortalRevision] = useState(0)
   const useDrawerCompactChrome = Boolean(headerPortalTargetId)
 
   useEffect(() => {
-    if (!headerPortalTargetId || typeof document === 'undefined') {
+    if ((!headerPortalTargetId && !compactActionBarContentTargetId) || typeof document === 'undefined') {
       return
     }
 
     const frame = window.requestAnimationFrame(() => {
-      setHeaderPortalRevision((current) => current + 1)
+      setPortalRevision((current) => current + 1)
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [headerPortalTargetId])
+  }, [compactActionBarContentTargetId, headerPortalTargetId])
 
   const headerPortalTarget = headerPortalTargetId && typeof document !== 'undefined'
     ? document.getElementById(headerPortalTargetId)
+    : null
+  const compactActionBarPortalTarget = compactActionBarContentTargetId && typeof document !== 'undefined'
+    ? document.getElementById(compactActionBarContentTargetId)
     : null
 
   const selectedServerStatus = selectedServer ? serverTests[selectedServer.id] : undefined
@@ -111,10 +117,10 @@ export function ComfyWorkflowControllerPanel({
               ? '연결 실패'
               : '미확인'
 
-  const targetSelectControl = (
+  const renderTargetSelectControl = (className: string) => (
     <Select
       variant="detail"
-      className="h-10 w-full min-w-0 px-2 text-xs"
+      className={className}
       value={selectedTarget}
       onChange={(event) => onSelectTarget(event.target.value)}
       disabled={servers.length === 0 || isGenerating}
@@ -179,7 +185,7 @@ export function ComfyWorkflowControllerPanel({
         </Button>
 
         <div className="w-[168px] shrink-0 sm:w-[220px]">
-          {targetSelectControl}
+          {renderTargetSelectControl('h-10 w-full min-w-0 px-2 text-xs')}
         </div>
 
         <ScrubbableNumberInput
@@ -267,42 +273,66 @@ export function ComfyWorkflowControllerPanel({
     </div>
   )
 
-  const drawerBottomActionBar = (
-    <div className="sticky bottom-0 z-20 mt-4 border-t border-border/70 bg-background/95 px-4 py-3 backdrop-blur-sm">
-      <div className="space-y-3">
-        {servers.length > 0 ? targetSelectControl : null}
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onBack} className="shrink-0">
-            <ArrowLeft className="h-4 w-4" />
-            뒤로
-          </Button>
-          <ScrubbableNumberInput
-            min={1}
-            max={32}
-            step={1}
-            scrubRatio={1}
-            variant="detail"
-            className="h-10 w-[76px] shrink-0 px-2 text-center text-xs"
-            value={queueRegistrationCount}
-            onChange={onQueueRegistrationCountChange}
-            disabled={isGenerating || workflowFields.length === 0}
-            aria-label="큐 등록 개수"
-            inputMode="numeric"
-          />
-          <Button
-            type="button"
-            className="ml-auto shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_18%,transparent)]"
-            onClick={onGenerateSelected}
-            disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
-            aria-label={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-            title={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-          >
-            <Play className="h-4 w-4 fill-current" />
-            생성
-          </Button>
+  const compactActionBarContent = (
+    <CompactGenerationActionSurface className="max-w-full">
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        onClick={onOpenModuleSave}
+        disabled={isGenerating}
+        aria-label="모듈 저장"
+        title="모듈 저장"
+        className="rounded-none border-r border-border/70 shadow-none"
+      >
+        <Save className="h-4 w-4" />
+      </Button>
+
+      {servers.length > 0 ? (
+        <div className="w-[144px] shrink-0 border-r border-border/70 px-1">
+          {renderTargetSelectControl('h-8 w-full min-w-0 border-0 !bg-transparent px-2 text-xs')}
         </div>
-      </div>
-    </div>
+      ) : null}
+
+      <ScrubbableNumberInput
+        min={1}
+        max={32}
+        step={1}
+        scrubRatio={1}
+        variant="detail"
+        className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
+        value={queueRegistrationCount}
+        onChange={onQueueRegistrationCountChange}
+        disabled={isGenerating || workflowFields.length === 0}
+        aria-label="큐 등록 개수"
+        inputMode="numeric"
+      />
+
+      <Button
+        type="button"
+        size="icon-sm"
+        onClick={onGenerateSelected}
+        disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
+        aria-label={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+        title={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+        className="rounded-none border-l border-border/70 shadow-none"
+      >
+        <Play className="h-4 w-4 fill-current" />
+      </Button>
+
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        onClick={onOpenSaveOptions}
+        disabled={isGenerating || workflowFields.length === 0}
+        aria-label="생성 결과 저장 옵션"
+        title="생성 결과 저장 옵션"
+        className="rounded-none border-l border-border/70 shadow-none"
+      >
+        <Settings2 className="h-4 w-4" />
+      </Button>
+    </CompactGenerationActionSurface>
   )
 
   return (
@@ -332,7 +362,7 @@ export function ComfyWorkflowControllerPanel({
           ) : null}
 
           {workflowFields.length > 0 ? (
-            <div className="overflow-hidden rounded-sm border border-border/85 divide-y divide-border/85 bg-surface-container/30">
+            <GenerationControllerFieldStack>
               {workflowFields.map((field) => (
                 <WorkflowFieldDisclosureCard
                   key={field.id}
@@ -342,7 +372,7 @@ export function ComfyWorkflowControllerPanel({
                   onImageChange={(image) => onImageChange(field.id, image)}
                 />
               ))}
-            </div>
+            </GenerationControllerFieldStack>
           ) : (
             <Alert>
               <AlertTitle>입력 필드 없음</AlertTitle>
@@ -351,7 +381,7 @@ export function ComfyWorkflowControllerPanel({
           )}
         </section>
 
-        {useDrawerCompactChrome ? drawerBottomActionBar : null}
+        {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
       </div>
     </section>
   )

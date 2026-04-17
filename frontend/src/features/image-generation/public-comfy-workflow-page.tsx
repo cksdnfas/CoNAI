@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { ArrowLeft, ChevronDown, Play, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { ArrowLeft, Play, RotateCcw } from 'lucide-react'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { refreshGenerationQueueViews } from './components/generation-queue-actions'
 import { GenerationHistoryPanel } from './components/generation-history-panel'
+import { CompactGenerationActionSurface, CompactGenerationControllerActionBar, GenerationControllerFieldStack } from './components/shared-generation-controller'
 import { WorkflowFieldDisclosureCard } from './components/workflow-field-disclosure-card'
 import {
   buildWorkflowDraft,
@@ -294,7 +295,7 @@ export function PublicComfyWorkflowPage() {
       {workflowFields.length === 0 ? (
         <div className="text-sm text-muted-foreground">노출된 입력 필드가 아직 없어.</div>
       ) : (
-        <div className="overflow-hidden rounded-sm border border-border/85 divide-y divide-border/85 bg-surface-container/30">
+        <GenerationControllerFieldStack>
           {workflowFields.map((field) => (
             <WorkflowFieldDisclosureCard
               key={field.id}
@@ -304,7 +305,7 @@ export function PublicComfyWorkflowPage() {
               onImageChange={(image) => handleImageChange(field.id, image)}
             />
           ))}
-        </div>
+        </GenerationControllerFieldStack>
       )}
     </>
   )
@@ -323,22 +324,11 @@ export function PublicComfyWorkflowPage() {
   const shouldUseControllerDrawer = !isWideLayout && workflow !== null
   const isDrawerOpen = shouldUseControllerDrawer && isControllerOpen
   const compactControllerActionBar = workflow && !isWideLayout ? (
-    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[86] flex justify-center px-4">
-      <div className="pointer-events-auto mx-auto flex w-full max-w-[26rem] items-center gap-2">
-        <Button
-          type="button"
-          size="icon-sm"
-          className="w-10 shrink-0 rounded-sm px-0"
-          onClick={() => setIsControllerOpen((current) => !current)}
-          aria-label={isDrawerOpen ? '접기' : '컨트롤 열기'}
-          title={isDrawerOpen ? '접기' : '컨트롤 열기'}
-        >
-          {isDrawerOpen ? <ChevronDown className="h-4 w-4" /> : <SlidersHorizontal className="h-4 w-4" />}
-        </Button>
-
-        <div className="h-px flex-1 bg-border/60" />
-
-        <div className={isDrawerOpen ? 'flex shrink-0 items-center overflow-hidden rounded-sm border border-border/80 bg-surface-container/92 shadow-[0_18px_48px_rgba(0,0,0,0.28)] transition-all duration-200 opacity-100 translate-x-0 scale-100' : 'flex shrink-0 items-center overflow-hidden rounded-sm border border-border/80 bg-surface-container/92 shadow-[0_18px_48px_rgba(0,0,0,0.28)] transition-all duration-200 opacity-0 translate-x-3 scale-95 pointer-events-none'}>
+    <CompactGenerationControllerActionBar
+      isExpanded={isDrawerOpen}
+      onToggle={() => setIsControllerOpen((current) => !current)}
+      expandedContent={(
+        <CompactGenerationActionSurface>
           <ScrubbableNumberInput
             min={1}
             max={32}
@@ -363,9 +353,9 @@ export function PublicComfyWorkflowPage() {
           >
             <Play className="h-4 w-4 fill-current" />
           </Button>
-        </div>
-      </div>
-    </div>
+        </CompactGenerationActionSurface>
+      )}
+    />
   ) : null
 
   return (

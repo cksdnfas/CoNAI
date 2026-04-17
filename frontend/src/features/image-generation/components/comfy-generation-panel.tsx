@@ -45,6 +45,7 @@ type ComfyGenerationPanelProps = {
   selectedWorkflowId: number | null
   onSelectedWorkflowChange: (workflowId: number | null) => void
   headerPortalTargetId?: string
+  compactActionBarContentTargetId?: string
 }
 
 type ComfyWorkflowEditorState = {
@@ -58,6 +59,7 @@ export function ComfyGenerationPanel({
   selectedWorkflowId,
   onSelectedWorkflowChange,
   headerPortalTargetId,
+  compactActionBarContentTargetId,
 }: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
@@ -512,6 +514,7 @@ export function ComfyGenerationPanel({
             queueRegistrationCount={queueRegistrationCount}
             isGenerating={isComfyGenerating}
             headerPortalTargetId={headerPortalTargetId}
+            compactActionBarContentTargetId={compactActionBarContentTargetId}
             onBack={() => onSelectedWorkflowChange(null)}
             onSelectTarget={setSelectedTarget}
             onQueueRegistrationCountChange={setQueueRegistrationCount}
