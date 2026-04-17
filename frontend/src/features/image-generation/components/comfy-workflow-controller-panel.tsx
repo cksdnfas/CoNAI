@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, Play, RotateCcw, Save, Settings2 } from 'lucide-react'
-import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api'
@@ -113,7 +111,45 @@ export function ComfyWorkflowControllerPanel({
               ? '연결 실패'
               : '미확인'
 
-  const actionButtons = (
+  const targetSelectControl = (
+    <Select
+      variant="detail"
+      className="h-10 w-full min-w-0 px-2 text-xs"
+      value={selectedTarget}
+      onChange={(event) => onSelectTarget(event.target.value)}
+      disabled={servers.length === 0 || isGenerating}
+      aria-label="생성 타겟 선택"
+    >
+      {servers.length === 0 ? <option value="auto">서버 없음</option> : null}
+      <option value="auto">자동 분산</option>
+      {routingTags.map((tag) => {
+        const connectedCount = connectedServers.filter((server) => (server.routing_tags ?? []).includes(tag)).length
+        return (
+          <option key={`tag:${tag}`} value={`tag:${tag}`}>
+            #{tag} · 연결 {connectedCount}
+          </option>
+        )
+      })}
+      {servers.map((server) => {
+        const connectionStatus = serverTests[server.id]?.status
+        const statusLabel = connectionStatus?.is_connected === true
+          ? connectionStatus.is_idle
+            ? 'idle'
+            : `실행 ${connectionStatus.running_count ?? 0} · 대기 ${connectionStatus.pending_count ?? 0}`
+          : connectionStatus
+            ? '실패'
+            : '미확인'
+
+        return (
+          <option key={server.id} value={`server:${server.id}`}>
+            {server.name} · {statusLabel}
+          </option>
+        )
+      })}
+    </Select>
+  )
+
+  const desktopActionButtons = (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap gap-2">
         <Button
@@ -142,41 +178,9 @@ export function ComfyWorkflowControllerPanel({
           <RotateCcw className="h-4 w-4" />
         </Button>
 
-        <Select
-          variant="detail"
-          className="h-9 w-[168px] shrink-0 px-2 text-xs sm:w-[220px]"
-          value={selectedTarget}
-          onChange={(event) => onSelectTarget(event.target.value)}
-          disabled={servers.length === 0 || isGenerating}
-          aria-label="생성 타겟 선택"
-        >
-          {servers.length === 0 ? <option value="auto">서버 없음</option> : null}
-          <option value="auto">자동 분산</option>
-          {routingTags.map((tag) => {
-            const connectedCount = connectedServers.filter((server) => (server.routing_tags ?? []).includes(tag)).length
-            return (
-              <option key={`tag:${tag}`} value={`tag:${tag}`}>
-                #{tag} · 연결 {connectedCount}
-              </option>
-            )
-          })}
-          {servers.map((server) => {
-            const connectionStatus = serverTests[server.id]?.status
-            const statusLabel = connectionStatus?.is_connected === true
-              ? connectionStatus.is_idle
-                ? 'idle'
-                : `실행 ${connectionStatus.running_count ?? 0} · 대기 ${connectionStatus.pending_count ?? 0}`
-              : connectionStatus
-                ? '실패'
-                : '미확인'
-
-            return (
-              <option key={server.id} value={`server:${server.id}`}>
-                {server.name} · {statusLabel}
-              </option>
-            )
-          })}
-        </Select>
+        <div className="w-[168px] shrink-0 sm:w-[220px]">
+          {targetSelectControl}
+        </div>
 
         <ScrubbableNumberInput
           min={1}
@@ -219,7 +223,7 @@ export function ComfyWorkflowControllerPanel({
     </div>
   )
 
-  const compactHeaderContent = (
+  const desktopHeaderContent = (
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-3">
@@ -242,22 +246,76 @@ export function ComfyWorkflowControllerPanel({
         </div>
       </div>
 
-      {actionButtons}
+      {desktopActionButtons}
+    </div>
+  )
 
+  const drawerHeaderContent = (
+    <div className="flex items-center gap-3">
+      <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{workflowName}</div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={onResetDraft}
+        disabled={isGenerating}
+        aria-label="초기화"
+        title="초기화"
+      >
+        <RotateCcw className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+
+  const drawerBottomActionBar = (
+    <div className="sticky bottom-0 z-20 mt-4 border-t border-border/70 bg-background/95 px-4 py-3 backdrop-blur-sm">
+      <div className="space-y-3">
+        {servers.length > 0 ? targetSelectControl : null}
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onBack} className="shrink-0">
+            <ArrowLeft className="h-4 w-4" />
+            뒤로
+          </Button>
+          <ScrubbableNumberInput
+            min={1}
+            max={32}
+            step={1}
+            scrubRatio={1}
+            variant="detail"
+            className="h-10 w-[76px] shrink-0 px-2 text-center text-xs"
+            value={queueRegistrationCount}
+            onChange={onQueueRegistrationCountChange}
+            disabled={isGenerating || workflowFields.length === 0}
+            aria-label="큐 등록 개수"
+            inputMode="numeric"
+          />
+          <Button
+            type="button"
+            className="ml-auto shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_18%,transparent)]"
+            onClick={onGenerateSelected}
+            disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
+            aria-label={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+            title={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+          >
+            <Play className="h-4 w-4 fill-current" />
+            생성
+          </Button>
+        </div>
+      </div>
     </div>
   )
 
   return (
     <section className="space-y-6">
       {useDrawerCompactChrome
-        ? (headerPortalTarget ? createPortal(compactHeaderContent, headerPortalTarget) : null)
+        ? (headerPortalTarget ? createPortal(drawerHeaderContent, headerPortalTarget) : null)
         : (
           <div className="space-y-3 border-b border-border/70 pb-4">
-            {compactHeaderContent}
+            {desktopHeaderContent}
           </div>
         )}
 
-      <div className={cn('space-y-6', useDrawerCompactChrome && 'px-5 pt-4 pb-5')}>
+      <div className={cn('space-y-6', useDrawerCompactChrome ? 'px-0 pt-0 pb-5' : undefined)}>
         {servers.length === 0 ? (
           <Alert>
             <AlertTitle>서버 필요</AlertTitle>
@@ -265,37 +323,35 @@ export function ComfyWorkflowControllerPanel({
           </Alert>
         ) : null}
 
-        <section className="space-y-3">
-          <Card>
-            <CardContent className="space-y-4">
-              <SectionHeading
-                variant="inside"
-                className="border-b border-border/70 pb-4"
-                heading="입력 필드"
-                actions={<Badge variant="outline">{workflowFields.length}</Badge>}
-              />
+        <section className="space-y-3 px-4">
+          {!useDrawerCompactChrome ? (
+            <div className="flex items-center justify-between gap-2 px-1">
+              <div className="text-sm font-medium text-foreground">입력 필드</div>
+              <Badge variant="outline">{workflowFields.length}</Badge>
+            </div>
+          ) : null}
 
-              {workflowFields.length > 0 ? (
-                <div className="overflow-hidden rounded-sm border border-border/70 divide-y divide-border/70">
-                  {workflowFields.map((field) => (
-                    <WorkflowFieldDisclosureCard
-                      key={field.id}
-                      field={field}
-                      value={workflowDraft[field.id] ?? ''}
-                      onChange={(value) => onFieldChange(field.id, value)}
-                      onImageChange={(image) => onImageChange(field.id, image)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <Alert>
-                  <AlertTitle>입력 필드 없음</AlertTitle>
-                  <AlertDescription>노출된 필드가 없어.</AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
+          {workflowFields.length > 0 ? (
+            <div className="overflow-hidden rounded-sm border border-border/85 divide-y divide-border/85 bg-surface-container/30">
+              {workflowFields.map((field) => (
+                <WorkflowFieldDisclosureCard
+                  key={field.id}
+                  field={field}
+                  value={workflowDraft[field.id] ?? ''}
+                  onChange={(value) => onFieldChange(field.id, value)}
+                  onImageChange={(image) => onImageChange(field.id, image)}
+                />
+              ))}
+            </div>
+          ) : (
+            <Alert>
+              <AlertTitle>입력 필드 없음</AlertTitle>
+              <AlertDescription>노출된 필드가 없어.</AlertDescription>
+            </Alert>
+          )}
         </section>
+
+        {useDrawerCompactChrome ? drawerBottomActionBar : null}
       </div>
     </section>
   )

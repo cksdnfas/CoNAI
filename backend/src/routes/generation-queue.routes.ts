@@ -9,6 +9,7 @@ import {
   resolveGenerationQueueLaneMeta,
 } from '../services/generationQueueRouting'
 import { GenerationQueueService } from '../services/generationQueueService'
+import { readComfyRequestDebugSnapshot } from '../services/generationRequestDebugService'
 import { AuthAccessControlService } from '../services/authAccessControlService'
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../types/generationQueue'
 
@@ -605,6 +606,44 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     record,
     message: 'Generation queue job created',
   })
+}))
+
+/** GET /api/generation-queue/:id/request-debug */
+router.get('/:id/request-debug', asyncHandler(async (req: Request, res: Response) => {
+  const jobId = Number(req.params.id)
+  if (!Number.isInteger(jobId) || jobId <= 0) {
+    res.status(400).json({ success: false, error: 'Invalid queue job id' })
+    return
+  }
+
+  const existing = GenerationQueueModel.findById(jobId)
+  if (!existing) {
+    res.status(404).json({ success: false, error: 'Generation queue job not found' })
+    return
+  }
+
+  if (!canAccessJob(req, existing)) {
+    res.status(403).json({ success: false, error: 'You do not have access to this queue job' })
+    return
+  }
+
+  if (existing.service_type !== 'comfyui') {
+    res.status(400).json({ success: false, error: 'Request debug is currently supported for comfyui jobs only' })
+    return
+  }
+
+  try {
+    const snapshot = await readComfyRequestDebugSnapshot(existing.id)
+    res.json({
+      success: true,
+      data: snapshot,
+    })
+  } catch (error) {
+    res.status(404).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Request debug snapshot not found',
+    })
+  }
 }))
 
 /** POST /api/generation-queue/:id/retry */

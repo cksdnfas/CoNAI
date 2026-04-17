@@ -1,3 +1,4 @@
+import { useState, type DragEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -6,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import type { WorkflowMarkedField } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react'
 
 type ComfyWorkflowMarkedFieldsEditorProps = {
   markedFields: WorkflowMarkedField[]
@@ -16,6 +17,7 @@ type ComfyWorkflowMarkedFieldsEditorProps = {
   onFieldPatch: (fieldId: string, patch: Partial<WorkflowMarkedField>) => void
   onFieldRemove: (fieldId: string) => void
   onFieldExpandToggle: (fieldId: string) => void
+  onReorderMarkedField: (sourceFieldId: string, targetFieldId: string) => void
 }
 
 /** Convert the comma-separated manual option input into workflow field options. */
@@ -35,7 +37,42 @@ export function ComfyWorkflowMarkedFieldsEditor({
   onFieldPatch,
   onFieldRemove,
   onFieldExpandToggle,
+  onReorderMarkedField,
 }: ComfyWorkflowMarkedFieldsEditorProps) {
+  const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null)
+  const [dragOverFieldId, setDragOverFieldId] = useState<string | null>(null)
+
+  const handleFieldDragStart = (fieldId: string) => (event: DragEvent<HTMLButtonElement>) => {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', fieldId)
+    setDraggedFieldId(fieldId)
+    setDragOverFieldId(fieldId)
+  }
+
+  const handleFieldDragOver = (fieldId: string) => (event: DragEvent<HTMLDivElement>) => {
+    if (draggedFieldId == null || draggedFieldId === fieldId) {
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    setDragOverFieldId(fieldId)
+  }
+
+  const handleFieldDrop = (fieldId: string) => (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    if (draggedFieldId != null && draggedFieldId !== fieldId) {
+      onReorderMarkedField(draggedFieldId, fieldId)
+    }
+    setDraggedFieldId(null)
+    setDragOverFieldId(null)
+  }
+
+  const handleFieldDragEnd = () => {
+    setDraggedFieldId(null)
+    setDragOverFieldId(null)
+  }
+
   return (
     <section className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
       <div className="flex items-center justify-between gap-3">
@@ -45,12 +82,31 @@ export function ComfyWorkflowMarkedFieldsEditor({
 
       {markedFields.length > 0 ? (
         <div className={cn('space-y-3 overflow-y-auto pr-1', listClassName ?? 'max-h-[620px]')}>
-          {markedFields.map((field) => {
+          {markedFields.map((field, index) => {
             const isExpanded = expandedFieldIds.includes(field.id)
 
             return (
-              <div key={field.id} className="rounded-sm border border-border/70 bg-surface-container">
+              <div
+                key={field.id}
+                onDragOver={handleFieldDragOver(field.id)}
+                onDrop={handleFieldDrop(field.id)}
+                className={dragOverFieldId === field.id && draggedFieldId !== field.id
+                  ? 'rounded-sm border border-primary bg-surface-container ring-1 ring-primary/35'
+                  : 'rounded-sm border border-border/70 bg-surface-container'}
+              >
                 <div className="flex items-start gap-2 px-3 py-3">
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={handleFieldDragStart(field.id)}
+                    onDragEnd={handleFieldDragEnd}
+                    className="mt-0.5 inline-flex shrink-0 cursor-grab items-center justify-center rounded-sm border border-border bg-surface-low p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
+                    aria-label="드래그해서 순서 바꾸기"
+                    title="드래그해서 순서 바꾸기"
+                  >
+                    <GripVertical className="h-4 w-4" />
+                  </button>
+
                   <button
                     type="button"
                     className="flex min-w-0 flex-1 items-start gap-3 text-left"
@@ -60,6 +116,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                     {isExpanded ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">#{index + 1}</span>
                         <span className="truncate text-sm font-medium text-foreground">{field.label || field.id}</span>
                         <Badge variant="outline">{field.type}</Badge>
                         {field.required ? <Badge variant="outline">required</Badge> : null}

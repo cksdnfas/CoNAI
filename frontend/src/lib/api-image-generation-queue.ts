@@ -1,5 +1,5 @@
 import { requestJson } from './api-image-generation-request'
-import type { CreateGenerationQueueJobPayload, GenerationQueueJobRecord, GenerationQueueJobStatus, GenerationQueueStatusCounts } from './api-image-generation-types'
+import type { CreateGenerationQueueJobPayload, GenerationQueueJobRecord, GenerationQueueJobStatus, GenerationQueueRequestDebugSnapshot, GenerationQueueStatusCounts } from './api-image-generation-types'
 
 interface GenerationQueueListResponse {
   success: boolean
@@ -19,6 +19,11 @@ interface GenerationQueueStatsResponse {
   visible: GenerationQueueStatusCounts
   total_visible: number
   active_visible: number
+}
+
+interface GenerationQueueRequestDebugResponse {
+  success: boolean
+  data: GenerationQueueRequestDebugSnapshot
 }
 
 /** Load queue jobs for the image generation workspace. */
@@ -72,6 +77,11 @@ export async function createGenerationQueueJob(payload: CreateGenerationQueueJob
     },
     body: JSON.stringify(payload),
   })
+}
+
+/** Load the final upstream request snapshot captured for one queue job. */
+export async function getGenerationQueueRequestDebug(queueJobId: number) {
+  return requestJson<GenerationQueueRequestDebugResponse>(`/api/generation-queue/${queueJobId}/request-debug`)
 }
 
 /** Retry one failed or cancelled queue job. */

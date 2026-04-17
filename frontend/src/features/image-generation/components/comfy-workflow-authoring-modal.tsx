@@ -314,6 +314,25 @@ export function ComfyWorkflowAuthoringModal({
     ))
   }
 
+  const handleReorderMarkedField = (sourceFieldId: string, targetFieldId: string) => {
+    if (sourceFieldId === targetFieldId) {
+      return
+    }
+
+    setMarkedFields((current) => {
+      const reorderedFields = [...current]
+      const sourceIndex = reorderedFields.findIndex((field) => field.id === sourceFieldId)
+      const targetIndex = reorderedFields.findIndex((field) => field.id === targetFieldId)
+      if (sourceIndex < 0 || targetIndex < 0) {
+        return current
+      }
+
+      const [movedField] = reorderedFields.splice(sourceIndex, 1)
+      reorderedFields.splice(targetIndex, 0, movedField)
+      return reorderedFields
+    })
+  }
+
   const handleSave = async () => {
     if (isSaving) {
       return
@@ -446,6 +465,7 @@ export function ComfyWorkflowAuthoringModal({
               onFieldPatch={handleFieldPatch}
               onFieldRemove={handleFieldRemove}
               onFieldExpandToggle={handleFieldExpandToggle}
+              onReorderMarkedField={handleReorderMarkedField}
             />
           </div>
 

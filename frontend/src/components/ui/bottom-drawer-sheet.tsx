@@ -16,8 +16,11 @@ type BottomDrawerSheetProps = {
   ariaLabel?: string
   className?: string
   bodyClassName?: string
+  headerClassName?: string
+  headerPortalClassName?: string
   footer?: ReactNode
   closeLabel?: string
+  hideHandle?: boolean
 }
 
 export function BottomDrawerSheet({
@@ -31,8 +34,11 @@ export function BottomDrawerSheet({
   ariaLabel,
   className,
   bodyClassName,
+  headerClassName,
+  headerPortalClassName,
   footer,
   closeLabel = '접기',
+  hideHandle = false,
 }: BottomDrawerSheetProps) {
   useOverlayBackClose({ open, onClose })
 
@@ -78,11 +84,13 @@ export function BottomDrawerSheet({
           className,
         )}
       >
-        <div className="flex justify-center px-4 pt-3">
-          <div className="h-1.5 w-14 rounded-full bg-white/15" />
-        </div>
+        {!hideHandle ? (
+          <div className="flex justify-center px-4 pt-3">
+            <div className="h-1.5 w-14 rounded-full bg-white/15" />
+          </div>
+        ) : null}
 
-        <div className="theme-drawer-header border-b border-white/5">
+        <div className={cn('theme-drawer-header border-b border-white/5', headerClassName)}>
           {title !== null || subtitle || headerActions ? (
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -92,21 +100,23 @@ export function BottomDrawerSheet({
               {headerActions ? <div className="flex shrink-0 flex-wrap gap-2">{headerActions}</div> : null}
             </div>
           ) : null}
-          {headerContentId ? <div id={headerContentId} className={cn((title !== null || subtitle || headerActions) ? 'mt-4 border-t border-white/5 pt-4' : 'pt-4')} /> : null}
+          {headerContentId ? <div id={headerContentId} className={cn((title !== null || subtitle || headerActions) ? 'mt-4 border-t border-white/5 pt-4' : 'pt-4', headerPortalClassName)} /> : null}
         </div>
 
         <div className={cn('theme-drawer-body min-h-0 flex-1 overflow-y-auto pb-20', bodyClassName)}>
           {children}
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
-          {footer ?? (
-            <Button type="button" size="sm" className="pointer-events-auto w-[30vw] min-w-[112px] max-w-[180px]" onClick={onClose}>
-              <ChevronDown className="h-4 w-4" />
-              {closeLabel}
-            </Button>
-          )}
-        </div>
+        {footer !== null ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
+            {footer !== undefined ? footer : (
+              <Button type="button" size="sm" className="pointer-events-auto w-[30vw] min-w-[112px] max-w-[180px]" onClick={onClose}>
+                <ChevronDown className="h-4 w-4" />
+                {closeLabel}
+              </Button>
+            )}
+          </div>
+        ) : null}
       </aside>
     </>,
     document.body,

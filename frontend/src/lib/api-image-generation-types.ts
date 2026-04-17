@@ -48,6 +48,25 @@ export interface CreateGenerationQueueJobPayload {
   request_summary?: string | null
 }
 
+export interface GenerationQueueRequestDebugSnapshot {
+  service_type: 'comfyui'
+  stage: 'prepared' | 'submitted' | 'failed' | 'completed'
+  captured_at: string
+  queue_job_id?: number | null
+  history_id?: number | null
+  workflow_id?: number | null
+  workflow_name?: string | null
+  server_id?: number | null
+  server_name?: string | null
+  endpoint?: string | null
+  prompt_id?: string | null
+  error_message?: string | null
+  raw_prompt_data?: Record<string, unknown>
+  prepared_prompt_data?: Record<string, unknown>
+  resolved_prompt_data?: Record<string, unknown>
+  request_body?: Record<string, unknown>
+}
+
 export interface GenerationQueueStatusCounts {
   queued: number
   dispatching: number

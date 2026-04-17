@@ -85,6 +85,8 @@ export function SettingsPage() {
 
   const syncSettingsCache = (nextSettings: AppSettingsRecord) => {
     queryClient.setQueryData(['app-settings'], nextSettings)
+    queryClient.setQueryData(['runtime-appearance-settings'], nextSettings.appearance)
+    queryClient.setQueryData(['runtime-appearance'], nextSettings.appearance)
   }
 
   const refreshAutoQueries = async () => {

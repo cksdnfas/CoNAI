@@ -220,9 +220,17 @@ export function ImageGenerationPage() {
               </Suspense>
             </div>
 
-            <FloatingBottomAction type="button" onClick={() => setIsControllerOpen(true)}>
+            <FloatingBottomAction
+              type="button"
+              size="icon-sm"
+              containerClassName="bottom-4"
+              innerClassName="mx-auto max-w-[26rem] justify-start"
+              className="w-10 min-w-0 max-w-none rounded-sm px-0"
+              aria-label={`${controllerLabel} 컨트롤 열기`}
+              title={`${controllerLabel} 컨트롤 열기`}
+              onClick={() => setIsControllerOpen(true)}
+            >
               <SlidersHorizontal className="h-4 w-4" />
-              {controllerLabel}
             </FloatingBottomAction>
 
             <BottomDrawerSheet
@@ -231,7 +239,11 @@ export function ImageGenerationPage() {
               ariaLabel={`${controllerLabel} 컨트롤 패널`}
               onClose={() => setIsControllerOpen(false)}
               headerContentId={drawerHeaderContentId}
+              className={useCompactControllerDrawer ? 'border-x-0 border-b-0 bg-transparent shadow-none backdrop-blur-0' : undefined}
               bodyClassName={useCompactControllerDrawer ? 'p-0 pb-14' : undefined}
+              headerClassName={useCompactControllerDrawer ? 'border-b-0 px-4 py-3' : undefined}
+              headerPortalClassName={useCompactControllerDrawer ? 'mt-0 border-t-0 pt-0' : undefined}
+              hideHandle={useCompactControllerDrawer}
             >
               <Suspense fallback={<PanelFallback />}>
                 {controllerPanel}

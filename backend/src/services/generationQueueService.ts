@@ -13,6 +13,7 @@ import { executeComfyGeneration } from './comfyGenerationExecutor'
 import { executeNaiGeneration } from './naiGenerationExecutor'
 import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser'
 import { reconcileComfyModelSelectionValues } from './comfyModelSelectionResolver'
+import { getComfyRequestDebugRelativePath, writeComfyRequestDebugSnapshot, type ComfyRequestDebugSnapshot } from './generationRequestDebugService'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type { NAIMetadataInputParams } from '../utils/nai/metadata'
@@ -68,6 +69,47 @@ function parseComfyQueuePayload(record: GenerationQueueJobRecord) {
 function parseNaiQueuePayload(record: GenerationQueueJobRecord) {
   const payload = parseStoredRequestPayload(record)
   return payload as unknown as NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }
+}
+
+function updateQueueRequestDebugMeta(record: GenerationQueueJobRecord, meta: Record<string, unknown>) {
+  try {
+    const payload = parseStoredRequestPayload(record)
+    const currentDebug = payload._debug && typeof payload._debug === 'object' && !Array.isArray(payload._debug)
+      ? payload._debug as Record<string, unknown>
+      : {}
+
+    GenerationQueueModel.update(record.id, {
+      request_payload: {
+        ...payload,
+        _debug: {
+          ...currentDebug,
+          ...meta,
+        },
+      },
+    })
+  } catch (error) {
+    console.warn(`⚠️ Failed to persist queue debug metadata for job ${record.id}:`, error)
+  }
+}
+
+async function writeQueueComfyDebugSnapshot(record: GenerationQueueJobRecord, snapshot: ComfyRequestDebugSnapshot) {
+  try {
+    const saved = await writeComfyRequestDebugSnapshot(record.id, snapshot)
+    updateQueueRequestDebugMeta(record, {
+      comfy_request_log_path: saved.relativePath,
+      comfy_request_captured_at: snapshot.captured_at,
+      comfy_request_stage: snapshot.stage,
+      comfy_prompt_id: snapshot.prompt_id ?? null,
+      comfy_endpoint: snapshot.endpoint ?? null,
+    })
+    return saved
+  } catch (error) {
+    console.warn(`⚠️ Failed to write ComfyUI request debug snapshot for job ${record.id}:`, error)
+    return {
+      absolutePath: null,
+      relativePath: getComfyRequestDebugRelativePath(record.id),
+    }
+  }
 }
 
 function hasQueuedComfyJobs() {
@@ -548,6 +590,31 @@ export class GenerationQueueService {
       console.error(`⚠️ Failed to create ComfyUI queue history for job ${job.id}:`, historyError)
     }
 
+    const debugSnapshotBase = {
+      service_type: 'comfyui' as const,
+      queue_job_id: job.id,
+      history_id: historyId ?? null,
+      workflow_id: workflow.id,
+      workflow_name: workflow.name,
+      server_id: assignedServer?.id ?? job.assigned_server_id ?? null,
+      server_name: assignedServer?.name ?? null,
+      endpoint: apiEndpoint,
+      raw_prompt_data: payload.promptData,
+      prepared_prompt_data: preparedPromptData,
+      resolved_prompt_data: resolvedPromptData,
+      request_body: {
+        prompt: substitutedWorkflow,
+      },
+    }
+
+    const preparedDebugLog = await writeQueueComfyDebugSnapshot(job, {
+      ...debugSnapshotBase,
+      stage: 'prepared',
+      captured_at: new Date().toISOString(),
+    })
+
+    console.log(`🧾 Queue job ${job.id} ComfyUI request snapshot: ${preparedDebugLog.relativePath}`)
+
     try {
       const result = await executeComfyGeneration({
         comfyService,
@@ -558,6 +625,13 @@ export class GenerationQueueService {
             assignedServerId: assignedServer?.id ?? job.assigned_server_id ?? null,
             expectedCurrentStatuses: ['dispatching'],
             providerJobId: promptId,
+          })
+
+          await writeQueueComfyDebugSnapshot(job, {
+            ...debugSnapshotBase,
+            stage: 'submitted',
+            captured_at: new Date().toISOString(),
+            prompt_id: promptId,
           })
 
           if (!historyId) {
@@ -581,14 +655,29 @@ export class GenerationQueueService {
         GenerationHistoryModel.updateStatus(historyId, 'completed')
       }
 
+      await writeQueueComfyDebugSnapshot(job, {
+        ...debugSnapshotBase,
+        stage: 'completed',
+        captured_at: new Date().toISOString(),
+        prompt_id: result.promptId,
+      })
+
       this.transitionJob(job.id, 'completed', {
         expectedCurrentStatuses: ['running'],
       })
 
       console.log(`✅ Queue job ${job.id} completed via ComfyUI (${result.savedImageCount}/${result.attemptedImageCount} saved)`)
     } catch (error) {
+      const failureMessage = resolveFailureMessage(error)
+      await writeQueueComfyDebugSnapshot(job, {
+        ...debugSnapshotBase,
+        stage: 'failed',
+        captured_at: new Date().toISOString(),
+        error_message: failureMessage,
+      })
+
       if (historyId) {
-        GenerationHistoryModel.recordError(historyId, resolveFailureMessage(error))
+        GenerationHistoryModel.recordError(historyId, failureMessage)
       }
       throw error
     }

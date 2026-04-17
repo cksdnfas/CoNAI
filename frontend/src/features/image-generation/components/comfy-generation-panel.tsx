@@ -213,7 +213,7 @@ export function ComfyGenerationPanel({
     }
 
     const baseDraft = buildWorkflowDraft(selectedWorkflowFields)
-    const persistedDraft = loadPersistedComfyWorkflowDraft(selectedWorkflow.id)
+    const persistedDraft = loadPersistedComfyWorkflowDraft(selectedWorkflow.id, selectedWorkflowFields)
     const validFieldIds = new Set(selectedWorkflowFields.map((field) => field.id))
     const filteredPersistedDraft = Object.fromEntries(
       Object.entries(persistedDraft).filter(([fieldId]) => validFieldIds.has(fieldId)),

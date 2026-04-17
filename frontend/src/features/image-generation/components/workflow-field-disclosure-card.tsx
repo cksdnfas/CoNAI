@@ -23,7 +23,7 @@ export function WorkflowFieldDisclosureCard({ field, value, onChange, onImageCha
   }, [field.default_collapsed, field.id])
 
   return (
-    <div className="bg-background/20">
+    <div className="overflow-hidden bg-surface-container/95 backdrop-blur-sm">
       <div className="px-4 py-3">
         <button
           type="button"
@@ -58,7 +58,7 @@ export function WorkflowFieldDisclosureCard({ field, value, onChange, onImageCha
       </div>
 
       {isExpanded ? (
-        <div className="border-t border-border/70 px-4 py-4">
+        <div className="border-t border-border/85 px-0 pt-0 pb-0">
           <WorkflowFieldInput
             field={field}
             value={value}

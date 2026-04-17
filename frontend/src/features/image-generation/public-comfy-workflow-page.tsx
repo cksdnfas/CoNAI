@@ -3,12 +3,10 @@ import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { ArrowLeft, Play, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Play, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -76,7 +74,7 @@ export function PublicComfyWorkflowPage() {
     }
 
     const baseDraft = buildWorkflowDraft(workflowFields)
-    const persistedDraft = loadPersistedComfyWorkflowDraft(workflow.id)
+    const persistedDraft = loadPersistedComfyWorkflowDraft(workflow.id, workflowFields)
     setWorkflowDraft({ ...baseDraft, ...persistedDraft })
   }, [workflow, workflowFields])
 
@@ -201,7 +199,7 @@ export function PublicComfyWorkflowPage() {
     : null
   void drawerHeaderPortalRevision
 
-  const controllerActions = (
+  const desktopControllerActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <Button
         type="button"
@@ -241,7 +239,7 @@ export function PublicComfyWorkflowPage() {
     </div>
   )
 
-  const controllerHeaderContent = workflow ? (
+  const desktopControllerHeaderContent = workflow ? (
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-3">
@@ -263,7 +261,24 @@ export function PublicComfyWorkflowPage() {
         </div>
       </div>
 
-      {controllerActions}
+      {desktopControllerActions}
+    </div>
+  ) : null
+
+  const drawerControllerHeaderContent = workflow ? (
+    <div className="flex items-center gap-3">
+      <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{workflow.name}</div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={handleResetDraft}
+        disabled={isQueueSubmitting}
+        aria-label="초기화"
+        title="초기화"
+      >
+        <RotateCcw className="h-4 w-4" />
+      </Button>
     </div>
   ) : null
 
@@ -279,7 +294,7 @@ export function PublicComfyWorkflowPage() {
       {workflowFields.length === 0 ? (
         <div className="text-sm text-muted-foreground">노출된 입력 필드가 아직 없어.</div>
       ) : (
-        <div className="overflow-hidden rounded-sm border border-border/70 divide-y divide-border/70">
+        <div className="overflow-hidden rounded-sm border border-border/85 divide-y divide-border/85 bg-surface-container/30">
           {workflowFields.map((field) => (
             <WorkflowFieldDisclosureCard
               key={field.id}
@@ -297,20 +312,61 @@ export function PublicComfyWorkflowPage() {
   const controllerPanel = workflow ? (
     isWideLayout ? (
       <section className="space-y-3">
-        <div className="border-b border-border/70 pb-4">{controllerHeaderContent}</div>
-        <Card>
-          <CardContent className="space-y-5">{controllerBodyContent}</CardContent>
-        </Card>
+        <div className="border-b border-border/70 pb-4">{desktopControllerHeaderContent}</div>
+        <div className="space-y-5">{controllerBodyContent}</div>
       </section>
     ) : (
-      <Card>
-        <CardContent className="space-y-5">{controllerBodyContent}</CardContent>
-      </Card>
+      <div className="space-y-5">{controllerBodyContent}</div>
     )
   ) : null
 
   const shouldUseControllerDrawer = !isWideLayout && workflow !== null
   const isDrawerOpen = shouldUseControllerDrawer && isControllerOpen
+  const compactControllerActionBar = workflow && !isWideLayout ? (
+    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[86] flex justify-center px-4">
+      <div className="pointer-events-auto mx-auto flex w-full max-w-[26rem] items-center gap-2">
+        <Button
+          type="button"
+          size="icon-sm"
+          className="w-10 shrink-0 rounded-sm px-0"
+          onClick={() => setIsControllerOpen((current) => !current)}
+          aria-label={isDrawerOpen ? '접기' : '컨트롤 열기'}
+          title={isDrawerOpen ? '접기' : '컨트롤 열기'}
+        >
+          {isDrawerOpen ? <ChevronDown className="h-4 w-4" /> : <SlidersHorizontal className="h-4 w-4" />}
+        </Button>
+
+        <div className="h-px flex-1 bg-border/60" />
+
+        <div className={isDrawerOpen ? 'flex shrink-0 items-center overflow-hidden rounded-sm border border-border/80 bg-surface-container/92 shadow-[0_18px_48px_rgba(0,0,0,0.28)] transition-all duration-200 opacity-100 translate-x-0 scale-100' : 'flex shrink-0 items-center overflow-hidden rounded-sm border border-border/80 bg-surface-container/92 shadow-[0_18px_48px_rgba(0,0,0,0.28)] transition-all duration-200 opacity-0 translate-x-3 scale-95 pointer-events-none'}>
+          <ScrubbableNumberInput
+            min={1}
+            max={32}
+            step={1}
+            scrubRatio={1}
+            variant="detail"
+            className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
+            value={queueRegistrationCount}
+            onChange={setQueueRegistrationCount}
+            disabled={isQueueSubmitting}
+            aria-label="큐 등록 개수"
+            inputMode="numeric"
+          />
+          <Button
+            type="button"
+            size="icon-sm"
+            className="rounded-none border-l border-border/70 shadow-none"
+            onClick={() => void handleQueueSubmit()}
+            disabled={isQueueSubmitting || workflowFields.length === 0}
+            aria-label={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+            title={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+          >
+            <Play className="h-4 w-4 fill-current" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : null
 
   return (
     <div className={isWideLayout ? 'space-y-6' : 'space-y-6 pb-24'}>
@@ -344,10 +400,7 @@ export function PublicComfyWorkflowPage() {
               onBack={() => navigate('/access')}
             />
 
-            <FloatingBottomAction type="button" onClick={() => setIsControllerOpen(true)}>
-              <SlidersHorizontal className="h-4 w-4" />
-              컨트롤
-            </FloatingBottomAction>
+            {compactControllerActionBar}
 
             <BottomDrawerSheet
               open={isDrawerOpen}
@@ -355,9 +408,14 @@ export function PublicComfyWorkflowPage() {
               headerContentId={drawerHeaderContentId}
               ariaLabel={`${workflow.name} 컨트롤 패널`}
               onClose={() => setIsControllerOpen(false)}
-              bodyClassName="p-4 pb-20"
+              className="border-x-0 border-b-0 bg-transparent shadow-none backdrop-blur-0"
+              bodyClassName="p-0 pb-24"
+              headerClassName="border-b-0 px-4 py-3"
+              headerPortalClassName="mt-0 border-t-0 pt-0"
+              footer={null}
+              hideHandle
             >
-              {drawerHeaderPortalTarget && controllerHeaderContent ? createPortal(controllerHeaderContent, drawerHeaderPortalTarget) : null}
+              {drawerHeaderPortalTarget && drawerControllerHeaderContent ? createPortal(drawerControllerHeaderContent, drawerHeaderPortalTarget) : null}
               {controllerPanel}
             </BottomDrawerSheet>
           </>
