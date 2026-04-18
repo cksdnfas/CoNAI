@@ -1,7 +1,7 @@
 import { Folder, FolderOpen, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import type { WildcardRecord, WildcardTool } from '@/lib/api'
 
 export interface WildcardEditorModalInput {
@@ -80,7 +81,7 @@ function normalizeWildcardItemDrafts(drafts: WildcardItemDraft[]) {
     }))
 }
 
-/** Render one compact row-based item editor like a simple spreadsheet. */
+/** Render one compact row-based item editor with the shared settings-style segmented table shell. */
 function WildcardItemDraftEditor({
   activeTool,
   drafts,
@@ -119,68 +120,58 @@ function WildcardItemDraftEditor({
   }
 
   return (
-    <div className="space-y-3">
-      <SegmentedTabBar
-        value={activeTool}
-        items={[
-          { value: 'nai', label: 'NAI 항목' },
-          { value: 'comfyui', label: 'ComfyUI 항목' },
-        ]}
-        onChange={(value) => onChangeTool(value as WildcardTool)}
-        size="sm"
-        actions={(
-          <Button type="button" size="icon-sm" variant="outline" onClick={handleAddDraft} aria-label={`${activeToolLabel} 항목 추가`} title="항목 추가">
-            <Plus className="h-4 w-4" />
-          </Button>
-        )}
-      />
-
-      <div className="overflow-hidden rounded-sm border border-border/70 bg-surface-low">
-        <div className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_3rem] gap-3 border-b border-border/70 bg-surface-lowest px-3 py-2 text-xs font-medium text-muted-foreground">
-          <div className="text-center">번호</div>
-          <div className="text-center">내용</div>
-          <div className="text-center">가중치</div>
-          <div className="text-center">삭제</div>
+    <SettingsSegmentedTable
+      value={activeTool}
+      items={[
+        { value: 'nai', label: 'NAI' },
+        { value: 'comfyui', label: 'ComfyUI' },
+      ]}
+      onChange={(value) => onChangeTool(value as WildcardTool)}
+      gridClassName="grid-cols-[3rem_minmax(0,1fr)_5rem_3rem]"
+      headers={['번호', '내용', '가중치', '삭제']}
+      actions={
+        <Button type="button" size="icon-sm" variant="outline" onClick={handleAddDraft} aria-label={`${activeToolLabel} 항목 추가`} title="항목 추가">
+          <Plus className="h-4 w-4" />
+        </Button>
+      }
+      minWidthClassName="min-w-[640px]"
+    >
+      {activeDrafts.map((draft, index) => (
+        <div key={draft.id} className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_3rem] items-center px-4 py-3 transition-colors hover:bg-surface-high/60">
+          <div className="text-center text-sm font-medium tabular-nums text-muted-foreground">{index + 1}</div>
+          <Input
+            variant="settings"
+            value={draft.content}
+            onChange={(event) => handleChangeDraft(draft.id, 'content', event.target.value)}
+            placeholder="항목 내용"
+          />
+          <ScrubbableNumberInput
+            variant="settings"
+            min={0.1}
+            step={0.1}
+            scrubRatio={0.6}
+            className="h-9 px-2 text-center"
+            value={draft.weight}
+            onChange={(value) => handleChangeDraft(draft.id, 'weight', value)}
+            placeholder="1"
+            inputMode="decimal"
+            aria-label={`${activeToolLabel} 항목 ${index + 1} 가중치`}
+          />
+          <div className="flex justify-center">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => handleRemoveDraft(draft.id)}
+              aria-label={`${activeToolLabel} 항목 ${index + 1} 삭제`}
+              title="삭제"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-
-        <div className="divide-y divide-border/70">
-          {activeDrafts.map((draft, index) => (
-            <div key={draft.id} className="grid grid-cols-[3rem_minmax(0,1fr)_5rem_3rem] items-center gap-3 px-3 py-2.5">
-              <div className="text-center text-sm font-medium tabular-nums text-muted-foreground">{index + 1}</div>
-              <Input
-                value={draft.content}
-                onChange={(event) => handleChangeDraft(draft.id, 'content', event.target.value)}
-                placeholder="항목 내용"
-              />
-              <ScrubbableNumberInput
-                min={0.1}
-                step={0.1}
-                scrubRatio={0.6}
-                variant="detail"
-                className="h-9 px-2 text-center"
-                value={draft.weight}
-                onChange={(value) => handleChangeDraft(draft.id, 'weight', value)}
-                placeholder="1"
-                inputMode="decimal"
-                aria-label={`${activeToolLabel} 항목 ${index + 1} 가중치`}
-              />
-              <div className="flex justify-center">
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={() => handleRemoveDraft(draft.id)}
-                  aria-label={`${activeToolLabel} 항목 ${index + 1} 삭제`}
-                  title="삭제"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+      ))}
+    </SettingsSegmentedTable>
   )
 }
 
@@ -285,12 +276,12 @@ export function WildcardEditorModal({
         <SettingsModalBody className="space-y-5">
           <div className={isChainTab ? 'grid gap-4 md:grid-cols-2' : 'space-y-2'}>
             <SettingsField label="이름">
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="예: character_pose" />
+              <Input variant="settings" value={name} onChange={(event) => setName(event.target.value)} placeholder="예: character_pose" />
             </SettingsField>
 
             {isChainTab ? (
               <SettingsField label="chain 동작">
-                <Select value={chainOption} onChange={(event) => setChainOption(event.target.value as 'replace' | 'append')}>
+                <Select variant="settings" value={chainOption} onChange={(event) => setChainOption(event.target.value as 'replace' | 'append')}>
                   <option value="replace">replace</option>
                   <option value="append">append</option>
                 </Select>
@@ -299,7 +290,7 @@ export function WildcardEditorModal({
           </div>
 
           <SettingsField label="설명">
-            <Textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder="선택 사항" />
+            <Textarea variant="settings" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder="선택 사항" />
           </SettingsField>
 
           <div className="space-y-2">
