@@ -185,7 +185,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
       {mode === 'chip' ? (
         <div className="space-y-4">
           <section ref={searchSectionRef} className="space-y-3">
-            <div className="theme-settings-control flex items-center rounded-sm border border-border bg-surface-container text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
+            <div className="theme-settings-control theme-input-surface flex items-center rounded-sm border text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
               <Search className="mr-2 h-4 w-4 text-muted-foreground" />
               <input
                 value={searchInput}

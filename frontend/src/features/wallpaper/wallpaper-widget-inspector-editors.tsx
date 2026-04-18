@@ -1,4 +1,5 @@
 import { Select } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import {
   WallpaperInspectorSectionCard,
@@ -63,8 +64,9 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSe
       return (
         <WallpaperInspectorSectionCard title="내용">
           <SettingsField label="내용">
-            <textarea
-              className="theme-settings-control min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
+            <Textarea
+              variant="settings"
+              rows={4}
               value={selectedWidget.settings.text}
               onChange={(event) => {
                 updateWidgetSettings({ text: event.target.value })

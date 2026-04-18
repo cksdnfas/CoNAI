@@ -12,6 +12,8 @@ import { normalizeModulePortDescription } from '../module-graph-shared'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 
+const WORKFLOW_INPUT_FIELD_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-4'
+
 function hasExplicitValue(value: unknown) {
   return value !== undefined && value !== null && value !== ''
 }
@@ -98,7 +100,7 @@ export function WorkflowInputFields({
 
     if (isNaiCharacterPromptPort(inputDefinition.port_key, inputDefinition.data_type)) {
       return (
-        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+        <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -117,7 +119,7 @@ export function WorkflowInputFields({
 
     if (isNaiVibePort(inputDefinition.port_key, inputDefinition.data_type)) {
       return (
-        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+        <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -136,7 +138,7 @@ export function WorkflowInputFields({
 
     if (isNaiCharacterReferencePort(inputDefinition.port_key, inputDefinition.data_type)) {
       return (
-        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+        <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -155,7 +157,7 @@ export function WorkflowInputFields({
 
     if (inputDefinition.ui_data_type === 'select' && Array.isArray(inputDefinition.options) && inputDefinition.options.length > 0) {
       return (
-        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+        <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -182,7 +184,7 @@ export function WorkflowInputFields({
 
     if (inputDefinition.data_type === 'prompt' || inputDefinition.data_type === 'json') {
       return (
-        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+        <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -206,7 +208,7 @@ export function WorkflowInputFields({
 
     if (inputDefinition.data_type === 'number') {
       return (
-        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+        <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -230,7 +232,7 @@ export function WorkflowInputFields({
 
     if (inputDefinition.data_type === 'boolean') {
       return (
-        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+        <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -256,7 +258,7 @@ export function WorkflowInputFields({
 
     if (inputDefinition.data_type === 'image' || inputDefinition.data_type === 'mask') {
       return (
-        <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+        <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -277,7 +279,7 @@ export function WorkflowInputFields({
     }
 
     return (
-      <div key={inputDefinition.id} className="space-y-2 rounded-sm bg-surface-low p-4">
+      <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">

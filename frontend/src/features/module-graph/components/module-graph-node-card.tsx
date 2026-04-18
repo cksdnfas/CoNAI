@@ -50,8 +50,8 @@ const ENGINE_TYPE_LABELS = {
 
 const TEXT_PORT_COLOR = getPortTypeColor('text')
 const PROMPT_PORT_COLOR = getPortTypeColor('prompt')
-const MODULE_GRAPH_INLINE_CONTROL_CLASS = 'border-border/80 bg-[var(--surface-lowest)] focus:border-primary'
-const MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS = 'border-border/80 bg-[var(--surface-lowest)]'
+const MODULE_GRAPH_INLINE_CONTROL_CLASS = 'theme-input-surface border-border/80 focus:border-primary'
+const MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS = 'theme-input-surface border-border/80'
 
 type PortCellProps = {
   nodeId: string

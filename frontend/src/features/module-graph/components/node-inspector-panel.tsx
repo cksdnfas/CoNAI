@@ -60,6 +60,10 @@ const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
   any: '임의',
 }
 
+const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-3'
+const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'space-y-3 rounded-sm border border-border/70 bg-background/35 p-4'
+const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'rounded-sm border border-border/70 bg-background/35 p-4'
+
 /** Check whether a node input has any explicit or default value. */
 function hasMeaningfulValue(value: unknown) {
   return value !== undefined && value !== null && value !== ''
@@ -166,7 +170,7 @@ function EdgeEndpointCard({
   role: '입력' | '출력'
 }) {
   return (
-    <div className="rounded-sm border border-border bg-surface-low px-3 py-3">
+    <div className="rounded-sm border border-border/70 bg-background/35 px-3 py-3">
       <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{heading}</div>
       <div className="mt-2 flex items-center gap-1">
         <div className="text-sm font-medium text-foreground">{endpoint.node ? getModuleNodeDisplayLabel(endpoint.node) : '알 수 없는 노드'}</div>
@@ -270,7 +274,7 @@ export function NodeInspectorPanel({
 
     if (isNaiCharacterPromptPort(port.key, port.data_type)) {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <NaiCharacterPromptsInput value={rawValue} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
         </div>
@@ -279,7 +283,7 @@ export function NodeInspectorPanel({
 
     if (isNaiVibePort(port.key, port.data_type)) {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <NaiReusableAssetInput kind="vibes" value={rawValue} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
         </div>
@@ -288,7 +292,7 @@ export function NodeInspectorPanel({
 
     if (isNaiCharacterReferencePort(port.key, port.data_type)) {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <NaiReusableAssetInput kind="character_refs" value={rawValue} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
         </div>
@@ -297,7 +301,7 @@ export function NodeInspectorPanel({
 
     if (uiField?.data_type === 'select' && Array.isArray(uiField.options) && uiField.options.length > 0) {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Select
             value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
@@ -314,7 +318,7 @@ export function NodeInspectorPanel({
 
     if (port.data_type === 'prompt' || port.data_type === 'json') {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Textarea
             rows={port.data_type === 'json' ? 6 : 4}
@@ -328,7 +332,7 @@ export function NodeInspectorPanel({
 
     if (port.data_type === 'number') {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Input
             type="number"
@@ -344,7 +348,7 @@ export function NodeInspectorPanel({
 
     if (port.data_type === 'boolean') {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Select
             value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
@@ -360,7 +364,7 @@ export function NodeInspectorPanel({
 
     if (port.data_type === 'image' || port.data_type === 'mask') {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <ImageAttachmentPickerButton label={hasExplicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={port.label} allowSaveDialog={false} onSelect={(image) => void onNodeImageChange(node.id, port.key, image)} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:') ? (
@@ -372,7 +376,7 @@ export function NodeInspectorPanel({
 
     if (port.data_type === 'any') {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <div className="text-sm text-muted-foreground">
             이 포트는 연결된 업스트림 값을 그대로 받아. 직접 편집은 지원하지 않아.
@@ -382,7 +386,7 @@ export function NodeInspectorPanel({
     }
 
     return (
-      <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+      <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
         <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
         <Input
           value={typeof rawValue === 'string' ? rawValue : rawValue ? String(rawValue) : ''}
@@ -401,7 +405,7 @@ export function NodeInspectorPanel({
 
     if (field.data_type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
       return (
-        <div key={field.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+        <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-1">
@@ -429,7 +433,7 @@ export function NodeInspectorPanel({
 
     if (field.data_type === 'number') {
       return (
-        <div key={field.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+        <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-1">
@@ -456,7 +460,7 @@ export function NodeInspectorPanel({
 
     if (field.data_type === 'boolean') {
       return (
-        <div key={field.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+        <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-1">
@@ -482,7 +486,7 @@ export function NodeInspectorPanel({
     }
 
     return (
-      <div key={field.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
+      <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1">
@@ -576,7 +580,7 @@ export function NodeInspectorPanel({
         ) : null}
 
         {!selectedNode && selectedEdge && sourceEndpoint && targetEndpoint ? (
-          <div className="space-y-3 rounded-sm bg-surface-low p-4">
+          <div className={NODE_INSPECTOR_EDGE_SURFACE_CLASS}>
             <div className="flex items-center gap-2">
               <div className="font-medium text-foreground">선택한 엣지</div>
               {selectedEdgeType ? <Badge variant="outline">{selectedEdgeType}</Badge> : null}
@@ -591,7 +595,7 @@ export function NodeInspectorPanel({
 
         {selectedNode ? (
           <>
-            <div className="rounded-sm bg-surface-low p-4">
+            <div className={NODE_INSPECTOR_NODE_SURFACE_CLASS}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">

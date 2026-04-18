@@ -309,6 +309,11 @@
     padding-block: var(--theme-panel-padding-y);
   }
 
+  .theme-input-surface {
+    background: color-mix(in srgb, var(--surface-low) 65%, transparent);
+    border-color: color-mix(in srgb, var(--border) 85%, transparent);
+  }
+
   .theme-drawer-header {
     padding-inline: var(--theme-drawer-header-padding-x);
     padding-block: var(--theme-drawer-header-padding-y);

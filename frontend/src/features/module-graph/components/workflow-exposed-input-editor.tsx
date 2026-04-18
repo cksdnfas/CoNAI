@@ -205,7 +205,7 @@ export function WorkflowExposedInputEditor({
             selectedInputs.map((inputDefinition, index) => {
               const expanded = expandedInputId === inputDefinition.id
               return (
-                <div key={inputDefinition.id} className="rounded-sm border border-primary/25 bg-surface-low">
+                <div key={inputDefinition.id} className="rounded-sm border border-primary/25 bg-background/35">
                   <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
                     <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setExpandedInputId(expanded ? null : inputDefinition.id)}>
                       <div className="flex flex-wrap items-center gap-2">

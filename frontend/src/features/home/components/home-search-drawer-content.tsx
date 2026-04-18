@@ -40,7 +40,7 @@ interface HomeSearchSuggestionPanelProps {
 function HomeSearchInputBox({ searchInput, setSearchInput, submitSearchFromInput, placeholder, ariaLabel, onFocus, style }: HomeSearchInputBoxProps) {
   return (
     <div
-      className="theme-settings-control flex items-center rounded-sm border border-border bg-surface-container text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
+      className="theme-settings-control theme-input-surface flex items-center rounded-sm border text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
       style={style}
     >
       <Search className="mr-2 h-4 w-4 text-muted-foreground" />

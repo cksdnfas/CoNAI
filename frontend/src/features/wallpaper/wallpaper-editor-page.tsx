@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, GripVertical, Lock, Maximize2, M
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { getGroupsHierarchyAll } from '@/lib/api'
 import { getAppSettings, updateAppearanceSettings } from '@/lib/api-settings'
@@ -307,8 +308,8 @@ export function WallpaperEditorPage() {
 
           <div className="space-y-1">
             <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">이름</div>
-            <input
-              className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary"
+            <Input
+              variant="settings"
               value={layoutPreset.name}
               onChange={(event) => {
                 setLayoutPreset((current) => ({
