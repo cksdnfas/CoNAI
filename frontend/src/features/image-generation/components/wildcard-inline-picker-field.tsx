@@ -712,7 +712,7 @@ export function WildcardInlinePickerField({
       </div>
 
       {showDetectedSyntax && detectedTokenSummaries.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 text-[11px] text-muted-foreground">
           <span>감지됨</span>
           {detectedTokenSummaries.map((token) => {
             const isActive = token.key === activeDetectedTokenKey

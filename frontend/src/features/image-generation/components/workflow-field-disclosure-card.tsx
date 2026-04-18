@@ -6,6 +6,10 @@ import type { WorkflowMarkedField } from '@/lib/api'
 import { hasWorkflowFieldValue, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { WorkflowFieldInput } from './workflow-field-input'
 
+export const WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS = 'overflow-hidden rounded-sm border border-border/85 bg-surface-container/30'
+export const WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS = 'bg-surface-container/45'
+export const WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS = 'border-t border-border/85'
+
 type WorkflowFieldDisclosureCardProps = {
   field: WorkflowMarkedField
   value: WorkflowFieldDraftValue
@@ -25,8 +29,8 @@ export function WorkflowFieldDisclosureCard({ field, value, onChange, onImageCha
 
   return (
     <div className={cn(
-      'overflow-hidden rounded-sm border border-border/85 bg-surface-container/30',
-      hasValue && 'bg-surface-low/20',
+      WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS,
+      hasValue && WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS,
     )}>
       <div className="px-4 py-3">
         <button
@@ -63,7 +67,7 @@ export function WorkflowFieldDisclosureCard({ field, value, onChange, onImageCha
 
       {isExpanded ? (
         <div className={cn(
-          'border-t border-border/85 bg-surface-low/20',
+          WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS,
           field.type === 'textarea' ? 'px-0 py-0' : 'px-4 py-4',
         )}>
           <WorkflowFieldInput

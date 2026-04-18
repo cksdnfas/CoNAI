@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
-import { CircleQuestionMark, Plus, Trash2 } from 'lucide-react'
+import { CircleQuestionMark } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { WorkflowMarkedField } from '@/lib/api'
-import { FormField, type SelectedImageDraft, type WorkflowFieldDraftValue, type WorkflowTextDraftSegments } from '../image-generation-shared'
+import { FormField, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
+import { TextSegmentSpreadsheetInput } from './text-segment-spreadsheet-input'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 
@@ -17,94 +18,8 @@ type WorkflowFieldInputProps = {
   onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
 
-/** Normalize one textarea draft value into editable prompt segments. */
-function getTextareaSegments(value: WorkflowFieldDraftValue): WorkflowTextDraftSegments {
-  if (Array.isArray(value)) {
-    return value.length > 0 ? value : ['']
-  }
-
-  if (typeof value === 'string') {
-    return [value]
-  }
-
-  return ['']
-}
-
-/** Render one flatter spreadsheet-style textarea list and keep its draft as string segments. */
-function WorkflowTextareaSegmentsInput({
-  value,
-  placeholder,
-  onChange,
-}: {
-  value: WorkflowFieldDraftValue
-  placeholder: string
-  onChange: (value: WorkflowTextDraftSegments) => void
-}) {
-  const segments = getTextareaSegments(value)
-
-  const handleSegmentChange = (index: number, nextValue: string) => {
-    onChange(segments.map((segment, segmentIndex) => (segmentIndex === index ? nextValue : segment)))
-  }
-
-  const handleAddSegment = () => {
-    onChange([...segments, ''])
-  }
-
-  const handleRemoveSegment = (index: number) => {
-    if (segments.length === 1) {
-      onChange([''])
-      return
-    }
-
-    onChange(segments.filter((_, segmentIndex) => segmentIndex !== index))
-  }
-
-  return (
-    <div className="overflow-hidden rounded-none border-y border-border/80 bg-background/35">
-      {segments.map((segment, index) => (
-        <div key={index} className="flex items-stretch border-b border-border/80 last:border-b-0">
-          <div className="min-w-0 flex-1">
-            <WildcardInlinePickerField
-              tool="comfyui"
-              multiline
-              rows={1}
-              value={segment}
-              placeholder={placeholder}
-              showDetectedSyntax={false}
-              className="min-h-[2.75rem] !rounded-none !border-0 !bg-transparent px-3 py-2"
-              onChange={(nextValue) => handleSegmentChange(index, nextValue)}
-            />
-          </div>
-
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => handleRemoveSegment(index)}
-            aria-label={`프롬프트 행 ${index + 1} 삭제`}
-            title="삭제"
-            className="h-auto self-stretch rounded-none border-l border-border/80 px-2 text-muted-foreground"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      ))}
-
-      <div className="flex border-t border-border/80">
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          onClick={handleAddSegment}
-          aria-label="프롬프트 행 추가"
-          title="입력 행 추가"
-          className="h-9 w-full rounded-none"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  )
+function isWorkflowTextSegmentValue(value: WorkflowFieldDraftValue): value is string | string[] {
+  return typeof value === 'string' || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
 }
 
 /** Render a single marked-field editor for a ComfyUI workflow. */
@@ -134,9 +49,11 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
 
   if (field.type === 'textarea') {
     return wrapField(
-      <WorkflowTextareaSegmentsInput
-        value={value}
+      <TextSegmentSpreadsheetInput
+        tool="comfyui"
+        value={isWorkflowTextSegmentValue(value) ? value : ''}
         placeholder={field.placeholder || ''}
+        className="rounded-none border-x-0 border-y border-border/80"
         onChange={onChange}
       />,
     )
@@ -156,13 +73,13 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
   }
 
   if (field.type === 'image') {
-    const imageValue = typeof value === 'string' || Array.isArray(value) ? null : value
+    const imageValue = isWorkflowTextSegmentValue(value) ? null : value
 
     return wrapField(
       <div className="space-y-3">
         <ImageAttachmentPickerButton label={imageValue ? '이미지 변경' : '이미지 선택'} modalTitle={field.label} allowSaveDialog={false} uploadOnly={field.simple_upload_only === true} onSelect={(image) => void onImageChange(image)} />
         {imageValue ? (
-          <div className="space-y-2 rounded-sm border border-border/80 bg-background/35 p-3">
+          <div className="theme-input-surface space-y-2 rounded-sm border border-border/80 p-3">
             <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>
             <InlineMediaPreview
               src={imageValue.dataUrl}
@@ -188,7 +105,6 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
         tool="comfyui"
         value={typeof value === 'string' ? value : ''}
         placeholder={field.placeholder || ''}
-        showDetectedSyntax={false}
         onChange={onChange}
       />,
     )

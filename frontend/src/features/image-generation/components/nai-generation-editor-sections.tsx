@@ -148,7 +148,7 @@ export function NaiGenerationEditorSections({
           <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Prompt를 사용할 수 없어.</div>
         ) : (
           <>
-            <ToggleRow variant="detail" className="justify-between rounded-sm border border-border/85 bg-surface-low/65 px-3 py-2.5">
+            <ToggleRow variant="detail" className="justify-between px-3 py-2.5">
               <div className="text-sm font-medium text-foreground">AI's Choice</div>
               <input
                 type="checkbox"
@@ -312,7 +312,7 @@ export function NaiGenerationEditorSections({
 
                 <div className="space-y-2">
                   <div className="text-sm font-medium text-foreground">Variety+</div>
-                  <ToggleRow variant="detail" className="justify-between rounded-sm border border-border/85 bg-surface-low/65 px-3 py-2.5">
+                  <ToggleRow variant="detail" className="justify-between px-3 py-2.5">
                     <div className="text-sm text-foreground">사용</div>
                     <input type="checkbox" checked={naiForm.varietyPlus} onChange={(event) => setNaiForm((current) => ({ ...current, varietyPlus: event.target.checked }))} />
                   </ToggleRow>
@@ -372,7 +372,7 @@ export function NaiGenerationEditorSections({
               </div>
 
               {naiForm.action === 'infill' ? (
-                <ToggleRow variant="detail" className="justify-between rounded-sm border border-border/85 bg-surface-low/65 px-3 py-2.5">
+                <ToggleRow variant="detail" className="justify-between px-3 py-2.5">
                   <div className="text-sm text-foreground">Original</div>
                   <input type="checkbox" checked={naiForm.addOriginalImage} onChange={(event) => setNaiForm((current) => ({ ...current, addOriginalImage: event.target.checked }))} />
                 </ToggleRow>

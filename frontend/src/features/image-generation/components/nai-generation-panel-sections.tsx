@@ -91,17 +91,15 @@ export function NaiPromptSection({
   onNegativePromptChange,
 }: NaiPromptSectionProps) {
   return (
-    <NaiControllerSection heading="Prompt">
-      <PromptToggleField
-        tool="nai"
-        positiveValue={prompt}
-        negativeValue={negativePrompt}
-        onPositiveChange={onPromptChange}
-        onNegativeChange={onNegativePromptChange}
-        positiveRows={6}
-        negativeRows={6}
-      />
-    </NaiControllerSection>
+    <PromptToggleField
+      tool="nai"
+      positiveValue={prompt}
+      negativeValue={negativePrompt}
+      onPositiveChange={onPromptChange}
+      onNegativeChange={onNegativePromptChange}
+      positiveRows={6}
+      negativeRows={6}
+    />
   )
 }
 

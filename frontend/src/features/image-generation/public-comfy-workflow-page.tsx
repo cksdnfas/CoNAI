@@ -321,7 +321,7 @@ export function PublicComfyWorkflowPage() {
         </div>
       </section>
     ) : (
-      <div className="space-y-4">{controllerBodyContent}</div>
+      <div className="space-y-4 px-5 pb-5">{controllerBodyContent}</div>
     )
   ) : null
 
