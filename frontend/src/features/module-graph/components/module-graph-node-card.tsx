@@ -50,6 +50,8 @@ const ENGINE_TYPE_LABELS = {
 
 const TEXT_PORT_COLOR = getPortTypeColor('text')
 const PROMPT_PORT_COLOR = getPortTypeColor('prompt')
+const MODULE_GRAPH_INLINE_CONTROL_CLASS = 'border-border/80 bg-[var(--surface-lowest)] focus:border-primary'
+const MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS = 'border-border/80 bg-[var(--surface-lowest)]'
 
 type PortCellProps = {
   nodeId: string
@@ -236,11 +238,11 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
   }
 
   return (
-    <div className="nodrag nowheel mt-2.5 space-y-2.5 rounded-sm border border-border/70 bg-background/40 p-2.5" onMouseDown={stopNodeInteraction}>
+    <div className="nodrag nowheel mt-2.5 space-y-2 px-0.5 pt-1" onMouseDown={stopNodeInteraction}>
       <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">직접 값 설정</div>
 
       <div className="grid gap-2">
-        <ToggleRow variant="detail" className="nodrag nowheel justify-between px-2.5 py-2" onMouseDown={stopNodeInteraction}>
+        <ToggleRow variant="detail" className={`nodrag nowheel justify-between px-2.5 py-2 ${MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS}`} onMouseDown={stopNodeInteraction}>
           <div className="min-w-0 text-xs font-medium text-foreground">실행 입력으로 노출</div>
           <input
             type="checkbox"
@@ -252,7 +254,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
         </ToggleRow>
 
         {workflowInputEnabled ? (
-          <ToggleRow variant="detail" className="nodrag nowheel justify-between px-2.5 py-2" onMouseDown={stopNodeInteraction}>
+          <ToggleRow variant="detail" className={`nodrag nowheel justify-between px-2.5 py-2 ${MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS}`} onMouseDown={stopNodeInteraction}>
             <div className="min-w-0 text-xs font-medium text-foreground">실행 시 필수</div>
             <input
               type="checkbox"
@@ -272,7 +274,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
           onChange={(event) => handleValueChange(event.target.value)}
           onMouseDown={stopNodeInteraction}
           placeholder={sourcePort.label}
-          className="text-sm"
+          className={`text-sm ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
         />
       ) : null}
 
@@ -283,6 +285,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
           onChange={(event) => handleValueChange(event.target.value === '' ? '' : Number(event.target.value))}
           onMouseDown={stopNodeInteraction}
           placeholder={sourcePort.label}
+          className={MODULE_GRAPH_INLINE_CONTROL_CLASS}
         />
       ) : null}
 
@@ -291,6 +294,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
           value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
           onChange={(event) => handleValueChange(event.target.value === 'true')}
           onMouseDown={stopNodeInteraction}
+          className={MODULE_GRAPH_INLINE_CONTROL_CLASS}
         >
           <option value="">선택</option>
           <option value="true">true</option>
@@ -351,17 +355,12 @@ function TextMergeSeparatorCell({ id, data, field }: { id: string; data: ModuleG
     : String(rawValue)
 
   return (
-    <div
-      className="nodrag nowheel rounded-sm border border-border/70 bg-background/40 p-1"
+    <Input
+      value={value}
+      onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
       onMouseDown={stopNodeInteraction}
-    >
-      <Input
-        value={value}
-        onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
-        onMouseDown={stopNodeInteraction}
-        className="h-8 text-xs"
-      />
-    </div>
+      className={`nodrag nowheel h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+    />
   )
 }
 
@@ -445,7 +444,7 @@ function TextMergeNodeLayout({
   )
 }
 
-/** Render one compact inline field for transform-style system nodes. */
+/** Render one minimal inline field for transform-style system nodes without extra card chrome. */
 function TextTransformInlineField({
   id,
   data,
@@ -459,14 +458,14 @@ function TextTransformInlineField({
   const normalizedValue = rawValue ?? field.default_value
 
   return (
-    <div className="nodrag nowheel space-y-1 rounded-sm border border-border/70 bg-background/35 p-2.5" onMouseDown={stopNodeInteraction} title={field.description || field.label}>
-      <div className="text-[11px] font-medium text-foreground">{field.label}</div>
+    <label className="nodrag nowheel grid gap-1" onMouseDown={stopNodeInteraction} title={field.description || field.label}>
+      <span className="text-[11px] font-medium text-foreground">{field.label}</span>
       {field.data_type === 'select' ? (
         <Select
           value={typeof normalizedValue === 'string' ? normalizedValue : String(normalizedValue ?? '')}
           onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
           onMouseDown={stopNodeInteraction}
-          className="h-8 text-xs"
+          className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
         >
           {(field.options ?? []).map((option) => (
             <option key={option} value={option}>{option}</option>
@@ -479,7 +478,7 @@ function TextTransformInlineField({
           onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
           onMouseDown={stopNodeInteraction}
           placeholder={field.placeholder || field.description || field.label}
-          className="h-8 text-xs"
+          className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
         />
       ) : (
         <Input
@@ -487,10 +486,10 @@ function TextTransformInlineField({
           onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
           onMouseDown={stopNodeInteraction}
           placeholder={field.placeholder || field.description || field.label}
-          className="h-8 text-xs"
+          className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
         />
       )}
-    </div>
+    </label>
   )
 }
 
@@ -519,6 +518,14 @@ function TextTransformNodeLayout({
   const prefixField = uiFields.find((field) => field.key === 'prefix')
   const suffixField = uiFields.find((field) => field.key === 'suffix')
   const currentMode = getInlineUiFieldValue(data.inputValues?.mode, modeField)
+  const hasAdvancedFlagsValue = hasMeaningfulValue(data.inputValues?.flags)
+  const [showAdvancedFields, setShowAdvancedFields] = useState(hasAdvancedFlagsValue)
+
+  useEffect(() => {
+    if (hasAdvancedFlagsValue) {
+      setShowAdvancedFields(true)
+    }
+  }, [hasAdvancedFlagsValue])
 
   return (
     <div className="mt-2.5 space-y-1.5">
@@ -544,15 +551,29 @@ function TextTransformNodeLayout({
         />
       </div>
 
-      <div className="grid gap-1.5">
+      <div className="grid gap-2 px-0.5 pt-1">
         {modeField ? <TextTransformInlineField id={id} data={data} field={modeField} /> : null}
         {patternField ? <TextTransformInlineField id={id} data={data} field={patternField} /> : null}
-        {flagsField ? <TextTransformInlineField id={id} data={data} field={flagsField} /> : null}
         {currentMode === 'replace'
           ? (replacementField ? <TextTransformInlineField id={id} data={data} field={replacementField} /> : null)
           : (groupIndexField ? <TextTransformInlineField id={id} data={data} field={groupIndexField} /> : null)}
         {prefixField ? <TextTransformInlineField id={id} data={data} field={prefixField} /> : null}
         {suffixField ? <TextTransformInlineField id={id} data={data} field={suffixField} /> : null}
+
+        {flagsField ? (
+          <div className="grid gap-1">
+            <button
+              type="button"
+              className="nodrag nowheel flex h-7 items-center justify-between rounded-sm border border-border/60 px-2 text-[11px] font-medium text-muted-foreground transition hover:text-foreground"
+              onMouseDown={stopNodeActionEvent}
+              onClick={() => setShowAdvancedFields((current) => !current)}
+            >
+              <span>고급 옵션</span>
+              <span>{showAdvancedFields ? '숨기기' : '플래그'}</span>
+            </button>
+            {showAdvancedFields ? <TextTransformInlineField id={id} data={data} field={flagsField} /> : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -701,7 +722,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                   }
                 }}
                 placeholder={moduleBaseLabel}
-                className="nodrag nowheel h-8 text-sm"
+                className={`nodrag nowheel h-8 text-sm ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
               />
             ) : (
               <button
