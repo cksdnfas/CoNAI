@@ -29,7 +29,7 @@ export type AuthoringNodeData = {
   markedJsonPaths: string[]
   searchMatched?: boolean
   searchCurrent?: boolean
-  onAddField: (nodeId: string, classType: string, input: EditableWorkflowInput) => void
+  onAddField: (nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => void
 }
 
 export type AuthoringNode = Node<AuthoringNodeData, 'comfyAuthoring'>
@@ -238,11 +238,9 @@ function layoutAuthoringGraph(
 /** Convert the raw Comfy workflow JSON into authoring graph nodes and edges. */
 export function parseWorkflowGraph(params: {
   workflowJson: string
-  markedFields: WorkflowMarkedField[]
-  onAddField: (nodeId: string, classType: string, input: EditableWorkflowInput) => void
+  onAddField: (nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => void
 }): ParsedWorkflowGraph {
   const workflow = parseWorkflowDefinition(params.workflowJson)
-  const markedPaths = new Set(params.markedFields.map((field) => field.jsonPath))
 
   const nodes: AuthoringNode[] = []
   const edges: AuthoringEdge[] = []
@@ -286,7 +284,7 @@ export function parseWorkflowGraph(params: {
         title,
         classType,
         editableInputs,
-        markedJsonPaths: editableInputs.map((input) => `${nodeId}.inputs.${input.key}`).filter((path) => markedPaths.has(path)),
+        markedJsonPaths: [],
         onAddField: params.onAddField,
       },
     })
@@ -301,6 +299,7 @@ export function parseWorkflowGraph(params: {
 /** Build a marked-field draft from a clicked graph input. */
 export function buildWorkflowMarkedFieldFromInput(
   nodeId: string,
+  nodeTitle: string,
   classType: string,
   input: EditableWorkflowInput,
 ): WorkflowMarkedField {
@@ -309,7 +308,7 @@ export function buildWorkflowMarkedFieldFromInput(
 
   return {
     id: sanitizeWorkflowFieldId(`${nodeId}_${input.key}`),
-    label: humanizeWorkflowInputKey(input.key),
+    label: `${nodeTitle}-${input.label}`,
     description: `${classType} · ${input.key}`,
     jsonPath: `${nodeId}.inputs.${input.key}`,
     type: fieldType,
@@ -376,7 +375,7 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
               <button
                 key={path}
                 type="button"
-                onClick={() => data.onAddField(id, data.classType, input)}
+                onClick={() => data.onAddField(id, data.title, data.classType, input)}
                 className={selected
                   ? 'nodrag nopan flex w-full items-center justify-between rounded-sm border border-primary/40 bg-primary/10 px-2 py-1.5 text-left text-xs text-foreground'
                   : 'nodrag nopan flex w-full items-center justify-between rounded-sm border border-border bg-surface-low px-2 py-1.5 text-left text-xs text-foreground hover:bg-surface-high'}

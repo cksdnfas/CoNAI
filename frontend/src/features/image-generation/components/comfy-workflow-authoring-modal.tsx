@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   Controls,
@@ -9,12 +9,13 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, ChevronUp, Search, Upload } from 'lucide-react'
+import { ChevronDown, ChevronUp, Search, Upload } from 'lucide-react'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
@@ -94,16 +95,16 @@ export function ComfyWorkflowAuthoringModal({
   const [workflowJson, setWorkflowJson] = useState('')
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [isPublicPage, setIsPublicPage] = useState(false)
-  const [isBasicInfoExpanded, setIsBasicInfoExpanded] = useState(true)
   const [publicSlug, setPublicSlug] = useState('')
   const [markedFields, setMarkedFields] = useState<WorkflowMarkedField[]>([])
   const [expandedFieldIds, setExpandedFieldIds] = useState<string[]>([])
-  const [workflowEditorTab, setWorkflowEditorTab] = useState<'json' | 'graph'>('json')
+  const [workflowEditorTab, setWorkflowEditorTab] = useState<'json' | 'graph'>('graph')
   const [graphSearchQuery, setGraphSearchQuery] = useState('')
   const [graphSearchIndex, setGraphSearchIndex] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const isCoarsePointer = useIsCoarsePointer()
   const [authoringFlowInstance, setAuthoringFlowInstance] = useState<ReactFlowInstance<AuthoringNode, AuthoringEdge> | null>(null)
+  const jsonTextareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -116,7 +117,6 @@ export function ComfyWorkflowAuthoringModal({
       setWorkflowJson(initialData.workflow.workflow_json)
       setJsonError(null)
       setIsPublicPage(Boolean(initialData.workflow.is_public_page))
-      setIsBasicInfoExpanded(true)
       setPublicSlug(initialData.workflow.public_slug ?? '')
       setMarkedFields(initialData.workflow.marked_fields ?? [])
       setExpandedFieldIds([])
@@ -132,11 +132,10 @@ export function ComfyWorkflowAuthoringModal({
     setWorkflowJson('')
     setJsonError(null)
     setIsPublicPage(false)
-    setIsBasicInfoExpanded(true)
     setPublicSlug('')
     setMarkedFields([])
     setExpandedFieldIds([])
-    setWorkflowEditorTab('json')
+    setWorkflowEditorTab('graph')
     setGraphSearchQuery('')
     setGraphSearchIndex(0)
     setIsSaving(false)
@@ -194,8 +193,8 @@ export function ComfyWorkflowAuthoringModal({
     }
   }
 
-  const handleAddField = (nodeId: string, classType: string, input: EditableWorkflowInput) => {
-    const field = buildWorkflowMarkedFieldFromInput(nodeId, classType, input)
+  const handleAddField = useCallback((nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => {
+    const field = buildWorkflowMarkedFieldFromInput(nodeId, nodeTitle, classType, input)
     setMarkedFields((current) => {
       const exists = current.some((item) => item.jsonPath === field.jsonPath)
       if (exists) {
@@ -205,7 +204,7 @@ export function ComfyWorkflowAuthoringModal({
       setExpandedFieldIds((expanded) => (expanded.includes(field.id) ? expanded : [...expanded, field.id]))
       return [...current, field]
     })
-  }
+  }, [])
 
   const parsedGraph = useMemo(() => {
     if (workflowJson.trim().length === 0 || jsonError) {
@@ -215,13 +214,12 @@ export function ComfyWorkflowAuthoringModal({
     try {
       return parseWorkflowGraph({
         workflowJson,
-        markedFields,
         onAddField: handleAddField,
       })
     } catch {
       return null
     }
-  }, [jsonError, markedFields, workflowJson])
+  }, [handleAddField, jsonError, workflowJson])
 
   const graphSearchMatches = useMemo(() => {
     if (!parsedGraph) {
@@ -230,6 +228,28 @@ export function ComfyWorkflowAuthoringModal({
 
     return findAuthoringGraphMatches(parsedGraph.nodes, graphSearchQuery)
   }, [graphSearchQuery, parsedGraph])
+
+  const jsonSearchMatches = useMemo(() => {
+    const normalizedQuery = graphSearchQuery.trim().toLowerCase()
+    if (!normalizedQuery || workflowJson.length === 0) {
+      return []
+    }
+
+    const normalizedJson = workflowJson.toLowerCase()
+    const matches: number[] = []
+    let searchFrom = 0
+
+    while (searchFrom < normalizedJson.length) {
+      const nextIndex = normalizedJson.indexOf(normalizedQuery, searchFrom)
+      if (nextIndex < 0) {
+        break
+      }
+      matches.push(nextIndex)
+      searchFrom = nextIndex + Math.max(1, normalizedQuery.length)
+    }
+
+    return matches
+  }, [graphSearchQuery, workflowJson])
 
   const activeGraphSearchNodeId = graphSearchMatches.length > 0
     ? graphSearchMatches[Math.min(graphSearchIndex, graphSearchMatches.length - 1)]
@@ -241,16 +261,20 @@ export function ComfyWorkflowAuthoringModal({
     }
 
     const matchedIdSet = new Set(graphSearchMatches)
+    const markedPathSet = new Set(markedFields.map((field) => field.jsonPath))
     return parsedGraph.nodes.map((node) => ({
       ...node,
       dragHandle: isCoarsePointer ? AUTHORING_NODE_DRAG_HANDLE_SELECTOR : undefined,
       data: {
         ...node.data,
+        markedJsonPaths: node.data.editableInputs
+          .map((input) => `${node.id}.inputs.${input.key}`)
+          .filter((path) => markedPathSet.has(path)),
         searchMatched: matchedIdSet.has(node.id),
         searchCurrent: node.id === activeGraphSearchNodeId,
       },
     }))
-  }, [activeGraphSearchNodeId, graphSearchMatches, isCoarsePointer, parsedGraph])
+  }, [activeGraphSearchNodeId, graphSearchMatches, isCoarsePointer, markedFields, parsedGraph])
 
   const reactFlowColorMode: 'light' | 'dark' | 'system' =
     settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode
@@ -274,7 +298,24 @@ export function ComfyWorkflowAuthoringModal({
 
   useEffect(() => {
     setGraphSearchIndex(0)
-  }, [graphSearchQuery])
+  }, [graphSearchQuery, workflowEditorTab])
+
+  useEffect(() => {
+    if (workflowEditorTab !== 'json' || graphSearchQuery.trim().length === 0 || jsonSearchMatches.length === 0) {
+      return
+    }
+
+    const textareaElement = jsonTextareaRef.current
+    if (!textareaElement) {
+      return
+    }
+
+    const matchIndex = jsonSearchMatches[Math.min(graphSearchIndex, jsonSearchMatches.length - 1)]
+    const selectionEnd = matchIndex + graphSearchQuery.trim().length
+
+    textareaElement.focus({ preventScroll: true })
+    textareaElement.setSelectionRange(matchIndex, selectionEnd)
+  }, [graphSearchIndex, graphSearchQuery, jsonSearchMatches, workflowEditorTab])
 
   useEffect(() => {
     if (!authoringFlowInstance || !activeGraphSearchNodeId || !parsedGraph) {
@@ -296,6 +337,9 @@ export function ComfyWorkflowAuthoringModal({
   }, [activeGraphSearchNodeId, authoringFlowInstance, parsedGraph])
 
   const dropdownListNames = dropdownLists.map((list) => list.name)
+  const activeSearchMatches = workflowEditorTab === 'json' ? jsonSearchMatches : graphSearchMatches
+  const activeSearchCount = activeSearchMatches.length
+  const searchPlaceholder = workflowEditorTab === 'json' ? 'Workflow JSON 검색' : '노드 title / class_type / id 검색'
 
   const handleFieldPatch = (fieldId: string, patch: Partial<WorkflowMarkedField>) => {
     setMarkedFields((current) => current.map((field) => (field.id === fieldId ? { ...field, ...patch } : field)))
@@ -395,174 +439,140 @@ export function ComfyWorkflowAuthoringModal({
       open={open}
       onClose={onClose}
       title={modalTitle}
-      widthClassName="max-w-[1380px]"
+      widthClassName="max-w-[1180px]"
     >
-      <div className="space-y-5">
-        <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <div className="space-y-5">
-            <section className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between gap-3 text-left"
-                onClick={() => setIsBasicInfoExpanded((current) => !current)}
-                aria-expanded={isBasicInfoExpanded}
-              >
-                <div className="text-sm font-semibold text-foreground">기본 정보</div>
-                {isBasicInfoExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-              </button>
+      <SettingsModalBody className="space-y-5">
+        <SettingsSection heading="기본 정보">
+          <div className="grid gap-4">
+            <SettingsField label="이름">
+              <Input
+                variant="settings"
+                value={workflowName}
+                onChange={(event) => setWorkflowName(event.target.value)}
+                placeholder="ComfyUI Workflow"
+              />
+            </SettingsField>
 
-              {isBasicInfoExpanded ? (
-                <div className="grid gap-4">
-                  <SettingsField label="이름">
-                    <Input
-                      variant="settings"
-                      value={workflowName}
-                      onChange={(event) => setWorkflowName(event.target.value)}
-                      placeholder="ComfyUI Workflow"
-                    />
-                  </SettingsField>
+            <SettingsField label="설명">
+              <Textarea
+                variant="settings"
+                rows={4}
+                value={workflowDescription}
+                onChange={(event) => setWorkflowDescription(event.target.value)}
+                placeholder="선택"
+              />
+            </SettingsField>
 
-                  <SettingsField label="설명">
-                    <Textarea
-                      variant="settings"
-                      rows={4}
-                      value={workflowDescription}
-                      onChange={(event) => setWorkflowDescription(event.target.value)}
-                      placeholder="선택"
-                    />
-                  </SettingsField>
-
-                  <SettingsToggleRow>
-                    <input
-                      type="checkbox"
-                      checked={isPublicPage}
-                      onChange={(event) => setIsPublicPage(event.target.checked)}
-                    />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-foreground">공용 페이지 사용</div>
-                    </div>
-                  </SettingsToggleRow>
-
-                  {isPublicPage ? (
-                    <SettingsField label="Public slug">
-                      <Input
-                        variant="settings"
-                        value={publicSlug}
-                        onChange={(event) => setPublicSlug(slugifyPublicWorkflow(event.target.value))}
-                        placeholder="character-poster-generator"
-                      />
-                    </SettingsField>
-                  ) : null}
-                </div>
-              ) : null}
-            </section>
-
-            <ComfyWorkflowMarkedFieldsEditor
-              markedFields={markedFields}
-              expandedFieldIds={expandedFieldIds}
-              dropdownListNames={dropdownListNames}
-              listClassName={isBasicInfoExpanded ? 'max-h-[620px]' : 'max-h-[820px]'}
-              onFieldPatch={handleFieldPatch}
-              onFieldRemove={handleFieldRemove}
-              onFieldExpandToggle={handleFieldExpandToggle}
-              onReorderMarkedField={handleReorderMarkedField}
-            />
-          </div>
-
-          <div className="min-w-0">
-            <section className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="inline-flex rounded-sm border border-border bg-surface-container p-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={workflowEditorTab === 'json' ? 'default' : 'ghost'}
-                    onClick={() => setWorkflowEditorTab('json')}
-                  >
-                    Workflow JSON
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={workflowEditorTab === 'graph' ? 'default' : 'ghost'}
-                    onClick={() => setWorkflowEditorTab('graph')}
-                  >
-                    Graph View
-                  </Button>
-                </div>
-
-                {workflowEditorTab === 'json' ? (
-                  <Button type="button" size="sm" variant="outline" asChild>
-                    <label className="cursor-pointer">
-                      <Upload className="h-4 w-4" />
-                      업로드
-                      <input type="file" accept=".json,application/json" hidden onChange={(event) => void handleFileUpload(event.target.files?.[0])} />
-                    </label>
-                  </Button>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="relative min-w-[240px]">
-                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        variant="settings"
-                        value={graphSearchQuery}
-                        onChange={(event) => setGraphSearchQuery(event.target.value)}
-                        placeholder="노드 title / class_type / id 검색"
-                        className="pl-8"
-                      />
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {graphSearchQuery.trim().length > 0 ? `${graphSearchMatches.length}개` : '검색 없음'}
-                    </div>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      disabled={graphSearchMatches.length === 0}
-                      onClick={() => setGraphSearchIndex((current) => (
-                        graphSearchMatches.length === 0
-                          ? 0
-                          : (current - 1 + graphSearchMatches.length) % graphSearchMatches.length
-                      ))}
-                      title="이전 검색 결과"
-                      aria-label="이전 검색 결과"
-                    >
-                      <ChevronUp className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      disabled={graphSearchMatches.length === 0}
-                      onClick={() => setGraphSearchIndex((current) => (
-                        graphSearchMatches.length === 0
-                          ? 0
-                          : (current + 1) % graphSearchMatches.length
-                      ))}
-                      title="다음 검색 결과"
-                      aria-label="다음 검색 결과"
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
+            <SettingsToggleRow>
+              <input
+                type="checkbox"
+                checked={isPublicPage}
+                onChange={(event) => setIsPublicPage(event.target.checked)}
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground">공용 페이지 사용</div>
               </div>
+            </SettingsToggleRow>
 
-              {workflowEditorTab === 'json' ? (
-                <div className="space-y-3">
-                  <Textarea
-                    variant="settings"
-                    rows={12}
-                    value={workflowJson}
-                    onChange={(event) => handleWorkflowJsonChange(event.target.value)}
-                    placeholder="ComfyUI API workflow JSON"
-                    className="min-h-[620px] font-mono text-xs"
-                  />
+            {isPublicPage ? (
+              <SettingsField label="Public slug">
+                <Input
+                  variant="settings"
+                  value={publicSlug}
+                  onChange={(event) => setPublicSlug(slugifyPublicWorkflow(event.target.value))}
+                  placeholder="character-poster-generator"
+                />
+              </SettingsField>
+            ) : null}
+          </div>
+        </SettingsSection>
 
-                  {jsonError ? <div className="text-xs text-[#ffb4ab]">{jsonError}</div> : null}
-                </div>
-              ) : (
-                <div className="h-[660px] overflow-hidden rounded-sm border border-border bg-surface-lowest">
+        <SettingsSection
+          heading={
+            <SegmentedControl
+              value={workflowEditorTab}
+              items={[
+                { value: 'graph', label: 'Graph View' },
+                { value: 'json', label: 'Workflow JSON' },
+              ]}
+              onChange={(nextTab) => setWorkflowEditorTab(nextTab as 'json' | 'graph')}
+              size="sm"
+            />
+          }
+          bodyClassName="space-y-0 px-0 py-0"
+          actions={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="relative min-w-[240px] flex-1 sm:min-w-[280px]">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  variant="settings"
+                  value={graphSearchQuery}
+                  onChange={(event) => setGraphSearchQuery(event.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="pl-8"
+                />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {graphSearchQuery.trim().length > 0 ? `${activeSearchCount}개` : '검색 없음'}
+              </div>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                disabled={activeSearchCount === 0}
+                onClick={() => setGraphSearchIndex((current) => (
+                  activeSearchCount === 0
+                    ? 0
+                    : (current - 1 + activeSearchCount) % activeSearchCount
+                ))}
+                title="이전 검색 결과"
+                aria-label="이전 검색 결과"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                disabled={activeSearchCount === 0}
+                onClick={() => setGraphSearchIndex((current) => (
+                  activeSearchCount === 0
+                    ? 0
+                    : (current + 1) % activeSearchCount
+                ))}
+                title="다음 검색 결과"
+                aria-label="다음 검색 결과"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+              <Button type="button" size="sm" variant="outline" asChild>
+                <label className="cursor-pointer">
+                  <Upload className="h-4 w-4" />
+                  업로드
+                  <input type="file" accept=".json,application/json" hidden onChange={(event) => void handleFileUpload(event.target.files?.[0])} />
+                </label>
+              </Button>
+            </div>
+          }
+        >
+          {workflowEditorTab === 'json' ? (
+            <div className="space-y-0">
+              <Textarea
+                ref={jsonTextareaRef}
+                variant="settings"
+                rows={12}
+                value={workflowJson}
+                onChange={(event) => handleWorkflowJsonChange(event.target.value)}
+                placeholder="ComfyUI API workflow JSON"
+                className="min-h-[520px] rounded-none border-0 bg-transparent px-4 py-4 font-mono text-xs focus:ring-0"
+              />
+
+              {jsonError ? <div className="border-t border-border/70 px-4 py-3 text-xs text-[#ffb4ab]">{jsonError}</div> : null}
+            </div>
+          ) : (
+            <div className="px-4 py-4">
+              <div className="mx-auto w-full max-w-[980px]">
+                <div className="h-[620px] overflow-hidden rounded-sm border border-border/85 bg-surface-lowest">
                   {parsedGraph ? (
                     <ReactFlowProvider>
                       <ReactFlow<AuthoringNode, AuthoringEdge>
@@ -571,7 +581,6 @@ export function ComfyWorkflowAuthoringModal({
                         edges={parsedGraph.edges}
                         nodeTypes={nodeTypes}
                         onInit={setAuthoringFlowInstance}
-                        fitView
                         fitViewOptions={INITIAL_AUTHORING_FIT_VIEW_OPTIONS}
                         defaultViewport={INITIAL_AUTHORING_VIEWPORT}
                         colorMode={reactFlowColorMode}
@@ -603,18 +612,29 @@ export function ComfyWorkflowAuthoringModal({
                     </div>
                   )}
                 </div>
-              )}
-            </section>
-          </div>
-        </div>
+              </div>
+            </div>
+          )}
+        </SettingsSection>
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
+        <ComfyWorkflowMarkedFieldsEditor
+          markedFields={markedFields}
+          expandedFieldIds={expandedFieldIds}
+          dropdownListNames={dropdownListNames}
+          listClassName="max-h-[520px]"
+          onFieldPatch={handleFieldPatch}
+          onFieldRemove={handleFieldRemove}
+          onFieldExpandToggle={handleFieldExpandToggle}
+          onReorderMarkedField={handleReorderMarkedField}
+        />
+
+        <SettingsModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>취소</Button>
           <Button type="button" onClick={() => void handleSave()} disabled={isSaving || workflowName.trim().length === 0 || workflowJson.trim().length === 0 || jsonError !== null}>
             {isSaving ? '저장 중…' : submitLabel}
           </Button>
-        </div>
-      </div>
+        </SettingsModalFooter>
+      </SettingsModalBody>
     </SettingsModal>
   )
 }

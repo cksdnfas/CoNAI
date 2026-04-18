@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { SettingsField, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import type { WorkflowMarkedField } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react'
@@ -74,12 +74,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
   }
 
   return (
-    <section className="space-y-4 rounded-sm border border-border bg-surface-low p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-semibold text-foreground">Marked Fields</div>
-        <Badge variant="outline">{markedFields.length}</Badge>
-      </div>
-
+    <SettingsSection heading="Marked Fields" actions={<Badge variant="outline">{markedFields.length}</Badge>}>
       {markedFields.length > 0 ? (
         <div className={cn('space-y-3 overflow-y-auto pr-1', listClassName ?? 'max-h-[620px]')}>
           {markedFields.map((field, index) => {
@@ -91,8 +86,8 @@ export function ComfyWorkflowMarkedFieldsEditor({
                 onDragOver={handleFieldDragOver(field.id)}
                 onDrop={handleFieldDrop(field.id)}
                 className={dragOverFieldId === field.id && draggedFieldId !== field.id
-                  ? 'rounded-sm border border-primary bg-surface-container ring-1 ring-primary/35'
-                  : 'rounded-sm border border-border/70 bg-surface-container'}
+                  ? 'rounded-sm border border-primary bg-surface-low/55 ring-1 ring-primary/35'
+                  : 'rounded-sm border border-border/70 bg-surface-low/35'}
               >
                 <div className="flex items-start gap-2 px-3 py-3">
                   <button
@@ -100,7 +95,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                     draggable
                     onDragStart={handleFieldDragStart(field.id)}
                     onDragEnd={handleFieldDragEnd}
-                    className="mt-0.5 inline-flex shrink-0 cursor-grab items-center justify-center rounded-sm border border-border bg-surface-low p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
+                    className="mt-0.5 inline-flex shrink-0 cursor-grab items-center justify-center rounded-sm border border-border/70 bg-background/60 p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
                     aria-label="드래그해서 순서 바꾸기"
                     title="드래그해서 순서 바꾸기"
                   >
@@ -134,7 +129,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                 </div>
 
                 {isExpanded ? (
-                  <div className="space-y-4 border-t border-border/70 bg-background/50 px-3 py-3">
+                  <div className="space-y-4 border-t border-border/70 bg-background/35 px-3 py-3">
                     <div className="grid gap-3 md:grid-cols-2">
                       <SettingsField label="라벨">
                         <Input variant="settings" value={field.label} onChange={(event) => onFieldPatch(field.id, { label: event.target.value })} />
@@ -237,7 +232,9 @@ export function ComfyWorkflowMarkedFieldsEditor({
             )
           })}
         </div>
-      ) : null}
-    </section>
+      ) : (
+        <div className="text-sm text-muted-foreground">아직 추가된 Marked Field가 없어.</div>
+      )}
+    </SettingsSection>
   )
 }
