@@ -14,6 +14,7 @@ type BottomDrawerSheetProps = {
   children: ReactNode
   onClose: () => void
   ariaLabel?: string
+  surfaceVariant?: 'default' | 'controller'
   className?: string
   bodyClassName?: string
   headerClassName?: string
@@ -75,6 +76,7 @@ export function BottomDrawerSheet({
   children,
   onClose,
   ariaLabel,
+  surfaceVariant = 'default',
   className,
   bodyClassName,
   headerClassName,
@@ -110,6 +112,7 @@ export function BottomDrawerSheet({
   }
 
   const hasHeader = title !== null || subtitle || headerActions || headerContentId
+  const useControllerSurface = surfaceVariant === 'controller'
 
   return createPortal(
     <>
@@ -126,6 +129,7 @@ export function BottomDrawerSheet({
           open
             ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] flex-col overflow-hidden transition-transform duration-300'
             : 'theme-floating-panel theme-bottom-drawer pointer-events-none fixed inset-x-0 bottom-0 z-[85] flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col overflow-hidden transition-transform duration-300',
+          useControllerSurface && 'border-x-0 border-b-0 bg-background/96 shadow-[0_-24px_64px_rgba(0,0,0,0.42)] backdrop-blur-md',
           className,
         )}
       >
@@ -136,7 +140,11 @@ export function BottomDrawerSheet({
         ) : null}
 
         {hasHeader ? (
-          <div className={cn('theme-drawer-header border-b border-border/80 bg-background/40', headerClassName)}>
+          <div className={cn(
+            'theme-drawer-header',
+            useControllerSurface ? 'border-b-0 bg-background/92 px-4 py-3' : 'border-b border-border/80 bg-background/40',
+            headerClassName,
+          )}>
             {title !== null || subtitle || headerActions ? (
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1 space-y-1">
@@ -150,7 +158,11 @@ export function BottomDrawerSheet({
           </div>
         ) : null}
 
-        <div className={cn('theme-drawer-body min-h-0 flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+5rem)]', bodyClassName)}>
+        <div className={cn(
+          'theme-drawer-body min-h-0 flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+5rem)]',
+          useControllerSurface && 'bg-background/92',
+          bodyClassName,
+        )}>
           {children}
         </div>
 

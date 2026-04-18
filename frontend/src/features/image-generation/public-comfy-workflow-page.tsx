@@ -332,45 +332,32 @@ export function PublicComfyWorkflowPage() {
       isExpanded={isDrawerOpen}
       onToggle={() => setIsControllerOpen((current) => !current)}
       expandedContent={(
-        <div className="flex items-center gap-2">
+        <CompactGenerationActionSurface>
+          <ScrubbableNumberInput
+            min={1}
+            max={32}
+            step={1}
+            scrubRatio={1}
+            variant="detail"
+            className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
+            value={queueRegistrationCount}
+            onChange={setQueueRegistrationCount}
+            disabled={isQueueSubmitting}
+            aria-label="큐 등록 개수"
+            inputMode="numeric"
+          />
           <Button
             type="button"
             size="icon-sm"
-            variant="outline"
-            onClick={() => navigate('/access')}
-            aria-label="뒤로가기"
-            title="뒤로가기"
+            className="rounded-none border-l border-border/70 shadow-none"
+            onClick={() => void handleQueueSubmit()}
+            disabled={isQueueSubmitting || workflowFields.length === 0}
+            aria-label={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+            title={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
           >
-            <ArrowLeft className="h-4 w-4" />
+            <Play className="h-4 w-4 fill-current" />
           </Button>
-
-          <CompactGenerationActionSurface>
-            <ScrubbableNumberInput
-              min={1}
-              max={32}
-              step={1}
-              scrubRatio={1}
-              variant="detail"
-              className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
-              value={queueRegistrationCount}
-              onChange={setQueueRegistrationCount}
-              disabled={isQueueSubmitting}
-              aria-label="큐 등록 개수"
-              inputMode="numeric"
-            />
-            <Button
-              type="button"
-              size="icon-sm"
-              className="rounded-none border-l border-border/70 shadow-none"
-              onClick={() => void handleQueueSubmit()}
-              disabled={isQueueSubmitting || workflowFields.length === 0}
-              aria-label={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-              title={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-            >
-              <Play className="h-4 w-4 fill-current" />
-            </Button>
-          </CompactGenerationActionSurface>
-        </div>
+        </CompactGenerationActionSurface>
       )}
     />
   ) : null
@@ -430,9 +417,8 @@ export function PublicComfyWorkflowPage() {
               headerContentId={drawerHeaderContentId}
               ariaLabel={`${workflow.name} 컨트롤 패널`}
               onClose={() => setIsControllerOpen(false)}
-              className="border-x-0 border-b-0 bg-transparent shadow-none backdrop-blur-0"
+              surfaceVariant="controller"
               bodyClassName="p-0 pb-24"
-              headerClassName="border-b-0 bg-transparent px-4 py-3"
               headerPortalClassName="mt-0 border-t-0 pt-0"
               footer={null}
               hideHandle

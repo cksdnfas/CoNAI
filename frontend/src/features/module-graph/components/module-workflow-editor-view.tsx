@@ -292,8 +292,11 @@ export function ModuleWorkflowEditorView({
           subtitle={editorSupportSubtitle}
           ariaLabel="워크플로우 실행 결과"
           onClose={onCloseEditorSupport}
+          surfaceVariant="controller"
           className={isDesktopPageLayout ? 'inset-x-auto left-1/2 w-[min(80vw,1400px)] -translate-x-1/2' : undefined}
-          bodyClassName="space-y-4 px-4 py-4 sm:px-6"
+          bodyClassName="space-y-4 px-4 py-4 sm:px-5"
+          footer={null}
+          hideHandle
         >
           {workflowEditorSupportPanels}
         </BottomDrawerSheet>

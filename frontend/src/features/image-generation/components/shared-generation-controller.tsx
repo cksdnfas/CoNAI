@@ -26,13 +26,12 @@ export function CompactGenerationControllerActionBar({
   contentClassName,
 }: CompactGenerationControllerActionBarProps) {
   return (
-    <div className={cn('pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[86] flex justify-center px-4', className)}>
-      <div className={cn('pointer-events-auto mx-auto flex w-full max-w-[28rem] items-center gap-2', innerClassName)}>
+    <div className={cn('pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[86] flex justify-start px-3', className)}>
+      <div className={cn('pointer-events-auto flex w-full items-center gap-2', innerClassName)}>
         <Button
           type="button"
           size="icon-sm"
-          variant="outline"
-          className="w-10 shrink-0 rounded-sm border-border/80 bg-background/92 px-0 shadow-[0_10px_28px_rgba(0,0,0,0.22)] backdrop-blur-sm"
+          className="w-10 shrink-0 rounded-sm border border-primary/70 bg-primary px-0 text-primary-foreground shadow-[0_12px_32px_rgba(0,0,0,0.28)] hover:bg-primary/90"
           onClick={onToggle}
           aria-label={isExpanded ? expandedLabel : collapsedLabel}
           title={isExpanded ? expandedLabel : collapsedLabel}
@@ -40,11 +39,11 @@ export function CompactGenerationControllerActionBar({
           {isExpanded ? <ChevronDown className="h-4 w-4" /> : <SlidersHorizontal className="h-4 w-4" />}
         </Button>
 
-        <div className="h-px flex-1 bg-border/60" />
+        <div className={cn('h-px flex-1 transition-opacity duration-200', isExpanded ? 'bg-border/60 opacity-100' : 'bg-border/0 opacity-0')} />
 
         <div
           className={cn(
-            'origin-right transition-all duration-200',
+            'origin-left ml-auto transition-all duration-200',
             isExpanded ? 'translate-x-0 scale-100 opacity-100' : 'pointer-events-none translate-x-2 scale-95 opacity-0',
             contentClassName,
           )}
@@ -80,10 +79,10 @@ type GenerationControllerFieldStackProps = {
   className?: string
 }
 
-/** Render the shared dense stacked field shell for workflow controller inputs. */
+/** Render the shared field stack for workflow controller inputs with separated cards. */
 export function GenerationControllerFieldStack({ children, className }: GenerationControllerFieldStackProps) {
   return (
-    <div className={cn('overflow-hidden rounded-sm border border-border/85 divide-y divide-border/85 bg-surface-container/30', className)}>
+    <div className={cn('space-y-3', className)}>
       {children}
     </div>
   )

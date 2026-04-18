@@ -1,16 +1,153 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, Play, RotateCcw, Save, Settings2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Play, RotateCcw, Save, Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Select } from '@/components/ui/select'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { CompactGenerationActionSurface, GenerationControllerFieldStack } from './shared-generation-controller'
 import { WorkflowFieldDisclosureCard } from './workflow-field-disclosure-card'
+
+type WorkflowTargetOption = {
+  value: string
+  label: string
+  description?: string
+}
+
+/** Render one styled workflow-target selector with a portal menu so it is not clipped by controller chrome. */
+function WorkflowTargetSelect({
+  value,
+  options,
+  disabled = false,
+  buttonClassName,
+  menuMinWidth = 220,
+  onChange,
+}: {
+  value: string
+  options: WorkflowTargetOption[]
+  disabled?: boolean
+  buttonClassName?: string
+  menuMinWidth?: number
+  onChange: (value: string) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null)
+  const triggerRef = useRef<HTMLDivElement | null>(null)
+  const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? null
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    const updateMenuRect = () => {
+      const rect = triggerRef.current?.getBoundingClientRect()
+      if (!rect) {
+        return
+      }
+
+      setMenuRect({
+        left: rect.left,
+        top: rect.bottom + 6,
+        width: rect.width,
+      })
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (triggerRef.current?.contains(target)) {
+        return
+      }
+
+      const menuElement = document.getElementById('comfy-workflow-target-select-menu')
+      if (menuElement?.contains(target)) {
+        return
+      }
+
+      setIsOpen(false)
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
+    updateMenuRect()
+    window.addEventListener('resize', updateMenuRect)
+    window.addEventListener('scroll', updateMenuRect, true)
+    window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+
+    return () => {
+      window.removeEventListener('resize', updateMenuRect)
+      window.removeEventListener('scroll', updateMenuRect, true)
+      window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [isOpen])
+
+  return (
+    <>
+      <div ref={triggerRef} className="min-w-0">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={disabled || options.length === 0}
+          onClick={() => setIsOpen((current) => !current)}
+          className={cn('w-full justify-between rounded-none border-0 bg-transparent px-2 text-xs text-foreground shadow-none', buttonClassName)}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+          title={selectedOption?.description ? `${selectedOption.label} · ${selectedOption.description}` : selectedOption?.label}
+        >
+          <span className="min-w-0 truncate">{selectedOption?.label ?? '선택'}</span>
+          <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', isOpen && 'rotate-180')} />
+        </Button>
+      </div>
+
+      {isOpen && menuRect && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              id="comfy-workflow-target-select-menu"
+              className="fixed z-[120] overflow-hidden rounded-sm border border-border/80 bg-background/95 p-1 shadow-[0_18px_48px_rgba(0,0,0,0.35)] backdrop-blur-md"
+              style={{
+                left: menuRect.left,
+                top: menuRect.top,
+                width: Math.max(menuRect.width, menuMinWidth),
+              }}
+              role="listbox"
+              aria-label="생성 타겟 선택"
+            >
+              {options.map((option) => {
+                const isSelected = option.value === value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={cn(
+                      'flex w-full items-center justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm transition-colors',
+                      isSelected ? 'bg-surface-high text-foreground' : 'text-muted-foreground hover:bg-surface-high/70 hover:text-foreground',
+                    )}
+                    onClick={() => {
+                      onChange(option.value)
+                      setIsOpen(false)
+                    }}
+                  >
+                    <span className="min-w-0 truncate">{option.label}</span>
+                    {option.description ? <span className="shrink-0 text-[11px] text-muted-foreground">{option.description}</span> : null}
+                  </button>
+                )
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  )
+}
 
 type ComfyWorkflowControllerPanelProps = {
   workflowName: string
@@ -22,6 +159,7 @@ type ComfyWorkflowControllerPanelProps = {
   workflowDraft: Record<string, WorkflowFieldDraftValue>
   queueRegistrationCount: string
   isGenerating: boolean
+  splitPaneScroll?: boolean
   headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
   onBack: () => void
@@ -29,9 +167,9 @@ type ComfyWorkflowControllerPanelProps = {
   onQueueRegistrationCountChange: (value: string) => void
   onFieldChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
-  onResetDraft: () => void
   onOpenModuleSave: () => void
   onOpenSaveOptions: () => void
+  onResetDraft: () => void
   onGenerateSelected: () => void
 }
 
@@ -46,6 +184,7 @@ export function ComfyWorkflowControllerPanel({
   workflowDraft,
   queueRegistrationCount,
   isGenerating,
+  splitPaneScroll = false,
   headerPortalTargetId,
   compactActionBarContentTargetId,
   onBack,
@@ -53,9 +192,9 @@ export function ComfyWorkflowControllerPanel({
   onQueueRegistrationCountChange,
   onFieldChange,
   onImageChange,
-  onResetDraft,
   onOpenModuleSave,
   onOpenSaveOptions,
+  onResetDraft,
   onGenerateSelected,
 }: ComfyWorkflowControllerPanelProps) {
   const connectedServers = servers.filter((server) => serverTests[server.id]?.status?.is_connected === true)
@@ -84,8 +223,6 @@ export function ComfyWorkflowControllerPanel({
     ? document.getElementById(compactActionBarContentTargetId)
     : null
 
-  const selectedServerStatus = selectedServer ? serverTests[selectedServer.id] : undefined
-  const selectedServerConnection = selectedServerStatus?.status
   const selectedTag = selectedTarget.startsWith('tag:') ? selectedTarget.slice('tag:'.length) : null
   const selectedTagConnectedServers = selectedTag
     ? connectedServers.filter((server) => (server.routing_tags ?? []).includes(selectedTag))
@@ -97,46 +234,26 @@ export function ComfyWorkflowControllerPanel({
       : selectedServer
         ? serverTests[selectedServer.id]?.status?.is_connected === true
         : false
-  const selectedServerBadgeLabel = selectedTarget === 'auto'
-    ? connectedServers.length > 0
-      ? `auto · ${connectedServers.length}`
-      : 'auto · 연결 없음'
-    : selectedTag !== null
-      ? selectedTagConnectedServers.length > 0
-        ? `#${selectedTag} · ${selectedTagConnectedServers.length}`
-        : `#${selectedTag} · 연결 없음`
-      : !selectedServer
-        ? '선택 안 됨'
-        : selectedServerStatus?.isLoading
-          ? '확인 중'
-          : selectedServerConnection?.is_connected
-            ? selectedServerConnection.is_idle === true
-              ? 'idle'
-              : 'busy'
-            : selectedServerConnection
-              ? '연결 실패'
-              : '미확인'
+  const targetOptions = useMemo<WorkflowTargetOption[]>(() => {
+    if (servers.length === 0) {
+      return [{ value: 'auto', label: '서버 없음' }]
+    }
 
-  const renderTargetSelectControl = (className: string) => (
-    <Select
-      variant="detail"
-      className={className}
-      value={selectedTarget}
-      onChange={(event) => onSelectTarget(event.target.value)}
-      disabled={servers.length === 0 || isGenerating}
-      aria-label="생성 타겟 선택"
-    >
-      {servers.length === 0 ? <option value="auto">서버 없음</option> : null}
-      <option value="auto">자동 분산</option>
-      {routingTags.map((tag) => {
+    return [
+      {
+        value: 'auto',
+        label: '자동 분산',
+        description: connectedServers.length > 0 ? `연결 ${connectedServers.length}` : '연결 없음',
+      },
+      ...routingTags.map((tag) => {
         const connectedCount = connectedServers.filter((server) => (server.routing_tags ?? []).includes(tag)).length
-        return (
-          <option key={`tag:${tag}`} value={`tag:${tag}`}>
-            #{tag} · 연결 {connectedCount}
-          </option>
-        )
-      })}
-      {servers.map((server) => {
+        return {
+          value: `tag:${tag}`,
+          label: `#${tag}`,
+          description: connectedCount > 0 ? `연결 ${connectedCount}` : '연결 없음',
+        }
+      }),
+      ...servers.map((server) => {
         const connectionStatus = serverTests[server.id]?.status
         const statusLabel = connectionStatus?.is_connected === true
           ? connectionStatus.is_idle
@@ -146,46 +263,38 @@ export function ComfyWorkflowControllerPanel({
             ? '실패'
             : '미확인'
 
-        return (
-          <option key={server.id} value={`server:${server.id}`}>
-            {server.name} · {statusLabel}
-          </option>
-        )
-      })}
-    </Select>
-  )
+        return {
+          value: `server:${server.id}`,
+          label: server.name,
+          description: statusLabel,
+        }
+      }),
+    ]
+  }, [connectedServers, routingTags, serverTests, servers])
 
   const desktopActionButtons = (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="outline"
-          onClick={onOpenModuleSave}
-          disabled={isGenerating}
-          aria-label="모듈 저장"
-          title="모듈 저장"
-        >
-          <Save className="h-4 w-4" />
-        </Button>
-      </div>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="outline"
+        onClick={onOpenModuleSave}
+        disabled={isGenerating}
+        aria-label="모듈 저장"
+        title="모듈 저장"
+      >
+        <Save className="h-4 w-4" />
+      </Button>
 
-      <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto pb-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onResetDraft}
-          disabled={isGenerating}
-          aria-label="초기화"
-          title="초기화"
-        >
-          <RotateCcw className="h-4 w-4" />
-        </Button>
-
-        <div className="w-[168px] shrink-0 sm:w-[220px]">
-          {renderTargetSelectControl('h-10 w-full min-w-0 px-2 text-xs')}
+      <CompactGenerationActionSurface className="max-w-full">
+        <div className="w-[168px] shrink-0 border-r border-border/70 px-1 sm:w-[220px]">
+          <WorkflowTargetSelect
+            value={selectedTarget}
+            options={targetOptions}
+            disabled={servers.length === 0 || isGenerating}
+            buttonClassName="h-10 w-full min-w-0"
+            onChange={onSelectTarget}
+          />
         </div>
 
         <ScrubbableNumberInput
@@ -194,7 +303,7 @@ export function ComfyWorkflowControllerPanel({
           step={1}
           scrubRatio={1}
           variant="detail"
-          className="h-9 w-[72px] shrink-0 px-2 text-center text-xs"
+          className="h-9 w-[72px] shrink-0 !rounded-none !border-0 !bg-transparent px-2 text-center text-xs"
           value={queueRegistrationCount}
           onChange={onQueueRegistrationCountChange}
           disabled={isGenerating || workflowFields.length === 0}
@@ -209,7 +318,7 @@ export function ComfyWorkflowControllerPanel({
           disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
           aria-label={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
           title={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-          className="shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_18%,transparent)]"
+          className="rounded-none border-l border-border/70 shadow-none"
         >
           <Play className="h-4 w-4 fill-current" />
         </Button>
@@ -217,39 +326,49 @@ export function ComfyWorkflowControllerPanel({
         <Button
           type="button"
           size="icon-sm"
-          variant="outline"
+          variant="ghost"
           onClick={onOpenSaveOptions}
           disabled={isGenerating || workflowFields.length === 0}
           aria-label="생성 결과 저장 옵션"
           title="생성 결과 저장 옵션"
+          className="rounded-none border-l border-border/70 shadow-none"
         >
           <Settings2 className="h-4 w-4" />
         </Button>
-      </div>
+      </CompactGenerationActionSurface>
     </div>
   )
 
   const desktopHeaderContent = (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-3">
-          <Button type="button" variant="ghost" size="sm" onClick={onBack}>
-            <ArrowLeft className="h-4 w-4" />
-            처음으로
-          </Button>
+    <div className="space-y-4">
+      <div className="flex items-start gap-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onBack}
+          aria-label="워크플로우 목록으로 돌아가기"
+          title="처음으로"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
 
-          <div>
-            <div className="text-base font-semibold text-foreground">{workflowName}</div>
-            {workflowDescription ? <div className="mt-1 text-sm text-muted-foreground">{workflowDescription}</div> : null}
-          </div>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="text-base font-semibold text-foreground">{workflowName}</div>
+          {workflowDescription ? <div className="text-sm text-muted-foreground">{workflowDescription}</div> : null}
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          <Badge variant="outline">필드 {workflowFields.length}</Badge>
-          <Badge variant="outline">활성 서버 {servers.length}</Badge>
-          <Badge variant="outline">연결 서버 {connectedServers.length}</Badge>
-          {servers.length > 0 ? <Badge variant={canGenerateSelected ? (selectedServerConnection?.is_connected && selectedServerConnection.is_idle === false ? 'secondary' : 'outline') : 'outline'}>{selectedServerBadgeLabel}</Badge> : null}
-        </div>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          onClick={onResetDraft}
+          disabled={isGenerating || workflowFields.length === 0}
+          aria-label="워크플로우 설정 초기화"
+          title="워크플로우 설정 초기화"
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Button>
       </div>
 
       {desktopActionButtons}
@@ -258,15 +377,25 @@ export function ComfyWorkflowControllerPanel({
 
   const drawerHeaderContent = (
     <div className="flex items-center gap-3">
-      <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{workflowName}</div>
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
+        onClick={onBack}
+        aria-label="워크플로우 목록으로 돌아가기"
+        title="처음으로"
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </Button>
+      <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{workflowName}</div>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
         onClick={onResetDraft}
-        disabled={isGenerating}
-        aria-label="초기화"
-        title="초기화"
+        disabled={isGenerating || workflowFields.length === 0}
+        aria-label="워크플로우 설정 초기화"
+        title="워크플로우 설정 초기화"
       >
         <RotateCcw className="h-4 w-4" />
       </Button>
@@ -274,69 +403,77 @@ export function ComfyWorkflowControllerPanel({
   )
 
   const compactActionBarContent = (
-    <CompactGenerationActionSurface className="max-w-full">
+    <div className="flex items-center gap-2">
       <Button
         type="button"
         size="icon-sm"
-        variant="ghost"
+        variant="outline"
         onClick={onOpenModuleSave}
         disabled={isGenerating}
         aria-label="모듈 저장"
         title="모듈 저장"
-        className="rounded-none border-r border-border/70 shadow-none"
       >
         <Save className="h-4 w-4" />
       </Button>
 
-      {servers.length > 0 ? (
-        <div className="w-[144px] shrink-0 border-r border-border/70 px-1">
-          {renderTargetSelectControl('h-8 w-full min-w-0 border-0 !bg-transparent px-2 text-xs')}
-        </div>
-      ) : null}
+      <CompactGenerationActionSurface className="max-w-full">
+        {servers.length > 0 ? (
+          <div className="w-[144px] shrink-0 border-r border-border/70 px-1">
+            <WorkflowTargetSelect
+              value={selectedTarget}
+              options={targetOptions}
+              disabled={isGenerating}
+              buttonClassName="h-8 w-full min-w-0"
+              menuMinWidth={180}
+              onChange={onSelectTarget}
+            />
+          </div>
+        ) : null}
 
-      <ScrubbableNumberInput
-        min={1}
-        max={32}
-        step={1}
-        scrubRatio={1}
-        variant="detail"
-        className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
-        value={queueRegistrationCount}
-        onChange={onQueueRegistrationCountChange}
-        disabled={isGenerating || workflowFields.length === 0}
-        aria-label="큐 등록 개수"
-        inputMode="numeric"
-      />
+        <ScrubbableNumberInput
+          min={1}
+          max={32}
+          step={1}
+          scrubRatio={1}
+          variant="detail"
+          className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
+          value={queueRegistrationCount}
+          onChange={onQueueRegistrationCountChange}
+          disabled={isGenerating || workflowFields.length === 0}
+          aria-label="큐 등록 개수"
+          inputMode="numeric"
+        />
 
-      <Button
-        type="button"
-        size="icon-sm"
-        onClick={onGenerateSelected}
-        disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
-        aria-label={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-        title={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-        className="rounded-none border-l border-border/70 shadow-none"
-      >
-        <Play className="h-4 w-4 fill-current" />
-      </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          onClick={onGenerateSelected}
+          disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
+          aria-label={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+          title={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+          className="rounded-none border-l border-border/70 shadow-none"
+        >
+          <Play className="h-4 w-4 fill-current" />
+        </Button>
 
-      <Button
-        type="button"
-        size="icon-sm"
-        variant="ghost"
-        onClick={onOpenSaveOptions}
-        disabled={isGenerating || workflowFields.length === 0}
-        aria-label="생성 결과 저장 옵션"
-        title="생성 결과 저장 옵션"
-        className="rounded-none border-l border-border/70 shadow-none"
-      >
-        <Settings2 className="h-4 w-4" />
-      </Button>
-    </CompactGenerationActionSurface>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          onClick={onOpenSaveOptions}
+          disabled={isGenerating || workflowFields.length === 0}
+          aria-label="생성 결과 저장 옵션"
+          title="생성 결과 저장 옵션"
+          className="rounded-none border-l border-border/70 shadow-none"
+        >
+          <Settings2 className="h-4 w-4" />
+        </Button>
+      </CompactGenerationActionSurface>
+    </div>
   )
 
   return (
-    <section className="space-y-6">
+    <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
       {useDrawerCompactChrome
         ? (headerPortalTarget ? createPortal(drawerHeaderContent, headerPortalTarget) : null)
         : (
@@ -345,7 +482,11 @@ export function ComfyWorkflowControllerPanel({
           </div>
         )}
 
-      <div className={cn('space-y-6', useDrawerCompactChrome ? 'px-0 pt-0 pb-5' : undefined)}>
+      <div className={cn(
+        'space-y-6',
+        splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
+        useDrawerCompactChrome ? 'px-0 pt-0 pb-5' : undefined,
+      )}>
         {servers.length === 0 ? (
           <Alert>
             <AlertTitle>서버 필요</AlertTitle>
@@ -354,13 +495,6 @@ export function ComfyWorkflowControllerPanel({
         ) : null}
 
         <section className="space-y-3 px-4">
-          {!useDrawerCompactChrome ? (
-            <div className="flex items-center justify-between gap-2 px-1">
-              <div className="text-sm font-medium text-foreground">입력 필드</div>
-              <Badge variant="outline">{workflowFields.length}</Badge>
-            </div>
-          ) : null}
-
           {workflowFields.length > 0 ? (
             <GenerationControllerFieldStack>
               {workflowFields.map((field) => (
