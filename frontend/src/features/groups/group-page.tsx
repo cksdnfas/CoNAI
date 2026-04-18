@@ -1,4 +1,4 @@
-import { FolderMinus, FolderPlus, Play, RotateCcw } from 'lucide-react'
+import { Download, FolderMinus, FolderPlus, Pencil, Play, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -167,6 +167,33 @@ export function GroupPage() {
           errorMessage={groupsQuery.error instanceof Error ? groupsQuery.error.message : null}
           headerExtra={isCustomSource ? (
             <div className="flex flex-wrap justify-end gap-2 border-b border-white/5 pb-3">
+              {selectedGroupId ? (
+                <>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="outline"
+                    className="bg-surface-low"
+                    onClick={handleOpenGroupDownloadModal}
+                    disabled={groupFileCountsQuery.isLoading || (downloadGroupArchiveMutation.isPending && downloadScope === 'group')}
+                    aria-label="현재 그룹 다운로드"
+                    title={downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? '다운로드 준비 중…' : '현재 그룹 다운로드'}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="outline"
+                    className="bg-surface-low"
+                    onClick={handleOpenEditModal}
+                    aria-label="현재 그룹 편집"
+                    title="현재 그룹 편집"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : null}
               <Button
                 type="button"
                 size="icon-sm"
@@ -196,7 +223,7 @@ export function GroupPage() {
         />
 
         <section className="space-y-6">
-          {isWideLayout && selectedGroupId ? (
+          {isWideLayout && selectedGroupId && !isCustomSource ? (
             <GroupBreadcrumbs
               items={breadcrumbQuery.data ?? []}
               selectedGroupId={selectedGroupId}
@@ -230,23 +257,25 @@ export function GroupPage() {
 
           {selectedGroupId && selectedGroupQuery.data ? (
             <div className="space-y-6">
-              <GroupDetailHeaderCard
-                group={selectedGroupQuery.data}
-                selectedGroupHierarchy={selectedGroupHierarchy}
-                isCustomSource={isCustomSource}
-                isWideLayout={isWideLayout}
-                isGroupFileCountsLoading={groupFileCountsQuery.isLoading}
-                isDownloadingGroup={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
-                isAutoCollectPending={autoCollectMutation.isPending}
-                isDeletePending={deleteGroupMutation.isPending}
-                lastAutoCollectLabel={formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
-                parentGroupLabel={selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
-                onOpenDownload={handleOpenGroupDownloadModal}
-                onOpenCreateModal={handleOpenCreateModal}
-                onOpenEditModal={handleOpenEditModal}
-                onRunAutoCollect={() => void handleRunAutoCollect()}
-                onDeleteGroup={() => void handleDeleteSelectedGroup()}
-              />
+              {isCustomSource ? null : (
+                <GroupDetailHeaderCard
+                  group={selectedGroupQuery.data}
+                  selectedGroupHierarchy={selectedGroupHierarchy}
+                  isCustomSource={isCustomSource}
+                  isWideLayout={isWideLayout}
+                  isGroupFileCountsLoading={groupFileCountsQuery.isLoading}
+                  isDownloadingGroup={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
+                  isAutoCollectPending={autoCollectMutation.isPending}
+                  isDeletePending={deleteGroupMutation.isPending}
+                  lastAutoCollectLabel={formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
+                  parentGroupLabel={selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
+                  onOpenDownload={handleOpenGroupDownloadModal}
+                  onOpenCreateModal={handleOpenCreateModal}
+                  onOpenEditModal={handleOpenEditModal}
+                  onRunAutoCollect={() => void handleRunAutoCollect()}
+                  onDeleteGroup={() => void handleDeleteSelectedGroup()}
+                />
+              )}
 
               {backNavigationGroup ? (
                 <GroupNavigationGridSection

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Bot, Images, Pencil } from 'lucide-react'
 import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
@@ -29,6 +30,12 @@ interface GroupImageSectionProps {
   collectionFilter?: 'all' | 'manual' | 'auto'
   onCollectionFilterChange?: (value: 'all' | 'manual' | 'auto') => void
 }
+
+const COLLECTION_FILTER_OPTIONS = [
+  { value: 'all', icon: Images, label: '전체 이미지' },
+  { value: 'manual', icon: Pencil, label: '수동 추가만' },
+  { value: 'auto', icon: Bot, label: '자동 수집만' },
+] as const
 
 export function GroupImageSection({
   group,
@@ -75,15 +82,17 @@ export function GroupImageSection({
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {typeof onCollectionFilterChange === 'function' ? (
               <div className="flex flex-wrap items-center gap-2">
-                {(['all', 'manual', 'auto'] as const).map((filterValue) => (
+                {COLLECTION_FILTER_OPTIONS.map(({ value, icon: Icon, label }) => (
                   <Button
-                    key={filterValue}
+                    key={value}
                     type="button"
-                    size="sm"
-                    variant={collectionFilter === filterValue ? 'default' : 'secondary'}
-                    onClick={() => onCollectionFilterChange(filterValue)}
+                    size="icon-sm"
+                    variant={collectionFilter === value ? 'default' : 'secondary'}
+                    onClick={() => onCollectionFilterChange(value)}
+                    aria-label={label}
+                    title={label}
                   >
-                    {filterValue === 'all' ? '전체' : filterValue === 'manual' ? 'manual만' : 'auto만'}
+                    <Icon className="h-4 w-4" />
                   </Button>
                 ))}
               </div>
