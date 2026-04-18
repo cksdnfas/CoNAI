@@ -60,43 +60,46 @@ function WorkflowTextareaSegmentsInput({
   }
 
   return (
-    <div className="space-y-1.5">
-      <div className="overflow-hidden bg-surface-lowest/90">
-        <div className="divide-y divide-border/70">
-          {segments.map((segment, index) => (
-            <div key={index} className="grid grid-cols-[minmax(0,1fr)_2.75rem] items-stretch bg-transparent">
-              <div className="min-w-0">
-                <WildcardInlinePickerField
-                  tool="comfyui"
-                  multiline
-                  rows={4}
-                  value={segment}
-                  placeholder={placeholder}
-                  className="!rounded-none !border-0 !bg-transparent px-3 py-2.5 focus:!border-0"
-                  onChange={(nextValue) => handleSegmentChange(index, nextValue)}
-                />
-              </div>
+    <div className="overflow-hidden rounded-none border-y border-border/80 bg-background/35">
+      {segments.map((segment, index) => (
+        <div key={index} className="flex items-stretch border-b border-border/80 last:border-b-0">
+          <div className="min-w-0 flex-1">
+            <WildcardInlinePickerField
+              tool="comfyui"
+              multiline
+              rows={1}
+              value={segment}
+              placeholder={placeholder}
+              showDetectedSyntax={false}
+              className="min-h-[2.75rem] !rounded-none !border-0 !bg-transparent px-3 py-2"
+              onChange={(nextValue) => handleSegmentChange(index, nextValue)}
+            />
+          </div>
 
-              <div className="flex items-start justify-center border-l border-border/70 py-2.5">
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={() => handleRemoveSegment(index)}
-                  aria-label={`프롬프트 행 ${index + 1} 삭제`}
-                  title="삭제"
-                  className="mt-0.5"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => handleRemoveSegment(index)}
+            aria-label={`프롬프트 행 ${index + 1} 삭제`}
+            title="삭제"
+            className="h-auto self-stretch rounded-none border-l border-border/80 px-2 text-muted-foreground"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
-      </div>
+      ))}
 
-      <div className="flex justify-end px-0 pb-0">
-        <Button type="button" size="icon-sm" variant="outline" onClick={handleAddSegment} aria-label="프롬프트 행 추가" title="입력 행 추가">
+      <div className="flex border-t border-border/80">
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          onClick={handleAddSegment}
+          aria-label="프롬프트 행 추가"
+          title="입력 행 추가"
+          className="h-9 w-full rounded-none"
+        >
           <Plus className="h-4 w-4" />
         </Button>
       </div>
@@ -159,7 +162,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
       <div className="space-y-3">
         <ImageAttachmentPickerButton label={imageValue ? '이미지 변경' : '이미지 선택'} modalTitle={field.label} allowSaveDialog={false} uploadOnly={field.simple_upload_only === true} onSelect={(image) => void onImageChange(image)} />
         {imageValue ? (
-          <div className="space-y-2 rounded-sm bg-surface-low p-3">
+          <div className="space-y-2 rounded-sm border border-border/80 bg-background/35 p-3">
             <div className="text-xs text-muted-foreground">{imageValue.fileName}</div>
             <InlineMediaPreview
               src={imageValue.dataUrl}
@@ -185,6 +188,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
         tool="comfyui"
         value={typeof value === 'string' ? value : ''}
         placeholder={field.placeholder || ''}
+        showDetectedSyntax={false}
         onChange={onChange}
       />,
     )

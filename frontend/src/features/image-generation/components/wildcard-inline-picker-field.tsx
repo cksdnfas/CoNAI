@@ -46,6 +46,7 @@ type WildcardInlinePickerFieldProps = {
   placeholder?: string
   disabled?: boolean
   className?: string
+  showDetectedSyntax?: boolean
 }
 
 type PromptSyntaxPopupPosition = {
@@ -242,6 +243,7 @@ export function WildcardInlinePickerField({
   placeholder,
   disabled = false,
   className,
+  showDetectedSyntax = true,
 }: WildcardInlinePickerFieldProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
@@ -665,8 +667,8 @@ export function WildcardInlinePickerField({
 
   return (
     <div ref={rootRef} className="relative space-y-2">
-      <div className={cn('relative rounded-sm', detectedTokens.length > 0 ? 'bg-surface-container' : undefined)}>
-        {detectedTokens.length > 0 ? (
+      <div className={cn('relative rounded-sm', showDetectedSyntax && detectedTokens.length > 0 ? 'bg-surface-container' : undefined)}>
+        {showDetectedSyntax && detectedTokens.length > 0 ? (
           <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-sm">
             {multiline ? (
               <div
@@ -695,7 +697,7 @@ export function WildcardInlinePickerField({
             }}
             rows={rows}
             {...sharedProps}
-            className={cn(textareaVariants(), detectedTokens.length > 0 ? 'relative z-10 bg-transparent' : 'relative z-10', className)}
+            className={cn(textareaVariants(), showDetectedSyntax && detectedTokens.length > 0 ? 'relative z-10 bg-transparent' : 'relative z-10', className)}
           />
         ) : (
           <input
@@ -704,12 +706,12 @@ export function WildcardInlinePickerField({
             }}
             type="text"
             {...sharedProps}
-            className={cn(inputVariants(), detectedTokens.length > 0 ? 'relative z-10 bg-transparent' : 'relative z-10', className)}
+            className={cn(inputVariants(), showDetectedSyntax && detectedTokens.length > 0 ? 'relative z-10 bg-transparent' : 'relative z-10', className)}
           />
         )}
       </div>
 
-      {detectedTokenSummaries.length > 0 ? (
+      {showDetectedSyntax && detectedTokenSummaries.length > 0 ? (
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
           <span>감지됨</span>
           {detectedTokenSummaries.map((token) => {
@@ -750,7 +752,7 @@ export function WildcardInlinePickerField({
         </div>
       ) : null}
 
-      {activeDetectedToken && detectedPopupPosition ? (
+      {showDetectedSyntax && activeDetectedToken && detectedPopupPosition ? (
         <PromptSyntaxTokenPopup
           token={activeDetectedToken}
           position={detectedPopupPosition}
