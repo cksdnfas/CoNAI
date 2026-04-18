@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { PageHeader } from '@/components/common/page-header'
-import { PageSection } from '@/components/common/page-surface'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { exportPromptGroups } from '@/lib/api'
@@ -335,11 +334,13 @@ export function PromptPage() {
           canMoveGroupDown={canMoveGroupDown}
         />
 
-        <PageSection
-          className="relative z-0"
-          title={currentSectionTitle}
-          description={`${currentSectionCount.toLocaleString('ko-KR')}개 표시됨`}
-          actions={
+        <section className="relative z-0 space-y-4">
+          <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
+              <div className="mt-1 text-sm text-muted-foreground">{currentSectionCount.toLocaleString('ko-KR')}개 표시됨</div>
+            </div>
+
             <PromptToolbar
               searchInput={searchInput}
               sortBy={sortBy}
@@ -355,8 +356,8 @@ export function PromptPage() {
                 setPage(1)
               }}
             />
-          }
-        >
+          </div>
+
           <PromptListPanel
             items={items}
             selectedPromptIds={selectedPromptIds}
@@ -381,7 +382,7 @@ export function PromptPage() {
             isLockedPromptItem={isLockedPromptItem}
             canDeletePromptItem={canDeletePromptItem}
           />
-        </PageSection>
+        </section>
       </div>
 
       <PromptSelectionBar
