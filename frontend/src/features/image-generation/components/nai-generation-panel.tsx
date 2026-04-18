@@ -341,6 +341,7 @@ export function NaiGenerationPanel({
       setSavedVibeSearch={setSavedVibeSearch}
       filteredSavedVibes={filteredSavedVibes}
       savedVibesLoading={savedVibesLoading}
+      naiConnected={connected}
       encodingVibeIndex={encodingVibeIndex}
       handleNaiFieldChange={handleNaiFieldChange}
       handleResolutionPresetChange={handleResolutionPresetChange}

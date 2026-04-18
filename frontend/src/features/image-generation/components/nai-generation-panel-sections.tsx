@@ -45,7 +45,7 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenA
 }
 
 type NaiControllerSectionProps = {
-  heading: string
+  heading: ReactNode
   actions?: ReactNode
   children: ReactNode
   className?: string

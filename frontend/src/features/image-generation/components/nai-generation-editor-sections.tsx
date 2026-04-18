@@ -44,6 +44,7 @@ export function NaiGenerationEditorSections({
   setSavedVibeSearch,
   filteredSavedVibes,
   savedVibesLoading,
+  naiConnected,
   encodingVibeIndex,
   handleNaiFieldChange,
   handleResolutionPresetChange,
@@ -87,6 +88,7 @@ export function NaiGenerationEditorSections({
   setSavedVibeSearch: Dispatch<SetStateAction<string>>
   filteredSavedVibes: Array<any>
   savedVibesLoading: boolean
+  naiConnected: boolean
   encodingVibeIndex: number | null
   handleNaiFieldChange: (field: 'prompt' | 'negativePrompt' | 'model' | 'action' | 'sampler' | 'scheduler' | 'width' | 'height' | 'steps' | 'scale' | 'samples' | 'seed' | 'strength' | 'noise', value: string) => void
   handleResolutionPresetChange: (presetKey: string) => void
@@ -400,6 +402,7 @@ export function NaiGenerationEditorSections({
       <NaiVibesSection
         vibes={naiForm.vibes}
         encodingVibeIndex={encodingVibeIndex}
+        naiConnected={naiConnected}
         savedVibes={filteredSavedVibes}
         savedVibeSearch={savedVibeSearch}
         savedVibesLoading={savedVibesLoading}
