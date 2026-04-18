@@ -157,6 +157,12 @@ export function resolveNodeInputs(node: GraphWorkflowNode, moduleDefinition: Par
     }
   }
 
+  for (const field of moduleDefinition.ui_schema ?? []) {
+    if (field.default_value !== undefined && resolvedInputs[field.key] === undefined) {
+      resolvedInputs[field.key] = field.default_value
+    }
+  }
+
   Object.assign(resolvedInputs, explicitInputs)
 
   for (const [portKey, artifact] of Object.entries(incomingArtifacts)) {
