@@ -96,7 +96,7 @@
   --theme-bottom-drawer-radius: calc(var(--radius) + 0.75rem);
   --theme-selection-bar-padding-x: 1.25rem;
   --theme-selection-bar-padding-y: 0.75rem;
-  --theme-selection-bar-radius: calc(var(--radius) + 0.75rem);
+  --theme-selection-bar-radius: var(--radius);
   --theme-ui-scale: 1;
   --theme-text-scale: 1;
   --theme-body-font-weight: 400;
@@ -327,6 +327,11 @@
   .theme-selection-bar {
     padding-inline: var(--theme-selection-bar-padding-x);
     padding-block: var(--theme-selection-bar-padding-y);
+    border-width: 3px;
+    border-color: color-mix(in srgb, var(--primary) 42%, var(--theme-floating-border));
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 16%, transparent),
+      var(--theme-floating-shadow);
     border-radius: var(--theme-selection-bar-radius);
   }
 

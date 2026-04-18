@@ -178,14 +178,15 @@ export function HomePage() {
             isDownloading={isDownloading}
             extraActions={
               <Button
-                size="sm"
+                size="icon-sm"
                 variant="secondary"
                 onClick={handleOpenAssignModal}
                 disabled={assignToGroupMutation.isPending || groupsQuery.isPending}
+                title={assignToGroupMutation.isPending ? '그룹 추가 중' : '그룹에 추가'}
+                aria-label={assignToGroupMutation.isPending ? '그룹 추가 중' : '그룹에 추가'}
                 data-no-select-drag="true"
               >
                 <FolderPlus className="h-4 w-4" />
-                {assignToGroupMutation.isPending ? '그룹 추가 중…' : '그룹에 추가'}
               </Button>
             }
             onDownloadSelect={handleDownloadSelected}

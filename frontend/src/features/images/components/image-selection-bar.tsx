@@ -32,6 +32,11 @@ export function ImageSelectionBar({
 }: ImageSelectionBarProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLSpanElement | null>(null)
+  const downloadLabel = isDownloading
+    ? '다운로드 준비 중'
+    : downloadableCount > 1
+      ? 'ZIP 다운로드'
+      : '다운로드'
 
   return (
     <SelectionActionBar
@@ -40,6 +45,7 @@ export function ImageSelectionBar({
         ? `${downloadableCount.toLocaleString('ko-KR')}개 다운로드 가능`
         : '다운로드 가능한 항목이 없어')}
       onClear={onClear}
+      compactActions
       actions={(
         <>
           {extraActions}
@@ -47,7 +53,7 @@ export function ImageSelectionBar({
           {showDownloadAction ? (
             <span ref={containerRef} className="relative inline-flex">
               <Button
-                size="sm"
+                size="icon-sm"
                 onClick={() => {
                   if (onDownloadSelect) {
                     setIsOpen((current) => !current)
@@ -56,10 +62,11 @@ export function ImageSelectionBar({
                   onDownload?.()
                 }}
                 disabled={downloadableCount <= 0 || isDownloading}
+                title={downloadLabel}
+                aria-label={downloadLabel}
                 data-no-select-drag="true"
               >
                 <Download className="h-4 w-4" />
-                {isDownloading ? '준비 중…' : downloadableCount > 1 ? 'ZIP 다운로드' : '다운로드'}
               </Button>
 
               {onDownloadSelect ? (

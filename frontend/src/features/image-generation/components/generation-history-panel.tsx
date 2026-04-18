@@ -376,9 +376,15 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           ? `${downloadableCompositeHashes.length.toLocaleString('ko-KR')}개 다운로드 가능`
           : '다운로드 가능한 결과가 없어'}
         extraActions={!isPublicView ? (
-          <Button size="sm" onClick={() => void handleDeleteSelected()} disabled={selectedHistoryRecords.length === 0 || isDeletingSelection} data-no-select-drag="true">
+          <Button
+            size="icon-sm"
+            onClick={() => void handleDeleteSelected()}
+            disabled={selectedHistoryRecords.length === 0 || isDeletingSelection}
+            title={isDeletingSelection ? '삭제 중' : '선택 삭제'}
+            aria-label={isDeletingSelection ? '삭제 중' : '선택 삭제'}
+            data-no-select-drag="true"
+          >
             <Trash2 className="h-4 w-4" />
-            {isDeletingSelection ? '삭제 중…' : '선택 삭제'}
           </Button>
         ) : undefined}
         onDownloadSelect={handleDownloadSelected}
