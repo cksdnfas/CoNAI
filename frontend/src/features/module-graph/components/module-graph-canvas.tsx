@@ -491,9 +491,10 @@ export function ModuleGraphCanvas({
         colorMode={reactFlowColorMode}
         nodesDraggable
         elementsSelectable
-        selectionOnDrag={!isCoarsePointer}
+        selectionKeyCode={isCoarsePointer ? null : ['Meta', 'Control']}
+        selectionOnDrag={false}
         multiSelectionKeyCode={['Meta', 'Control', 'Shift']}
-        panOnDrag={isCoarsePointer}
+        panOnDrag
         snapToGrid
         connectionRadius={32}
         deleteKeyCode={['Backspace', 'Delete']}
