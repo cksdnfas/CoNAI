@@ -12,8 +12,54 @@ import fs from 'fs';
 import sharp from 'sharp';
 import { WebPConversionService } from '../services/webpConversionService';
 import { buildImageEditorResultData, listSaveBrowserImages } from './imageEditorRouteHelpers';
+import { sendRouteBadRequest } from './routeValidation';
 
 const router = Router();
+const INVALID_IMAGE_ID_ERROR = 'Invalid image ID';
+const IMAGE_DATA_REQUIRED_ERROR = 'Image data is required';
+
+/** Parse one image-editor route id and keep the legacy numeric behavior. */
+function parseImageEditorRouteId(value: string | string[] | undefined) {
+  return parseInt(routeParam(value));
+}
+
+/** Require one valid image-editor route id before continuing with the handler. */
+function requireImageEditorRouteId(req: Request, res: Response) {
+  const imageId = parseImageEditorRouteId(req.params.id);
+  if (Number.isNaN(imageId)) {
+    sendRouteBadRequest(res, INVALID_IMAGE_ID_ERROR);
+    return null;
+  }
+
+  return imageId;
+}
+
+/** Require one image payload before continuing with save handlers. */
+function requireImageData(res: Response, imageData: unknown) {
+  if (!imageData) {
+    return sendRouteBadRequest(res, IMAGE_DATA_REQUIRED_ERROR);
+  }
+
+  return true;
+}
+
+/** Resolve one canvas file path and block traversal attempts with the legacy payload. */
+function getCanvasFilePathOrBlock(filename: string, res: Response) {
+  const canvasDir = runtimePaths.canvasDir;
+  const filePath = path.join(canvasDir, filename);
+  const resolvedPath = path.resolve(filePath);
+  const resolvedCanvasDir = path.resolve(canvasDir);
+
+  if (!resolvedPath.startsWith(resolvedCanvasDir)) {
+    res.status(403).json({
+      success: false,
+      error: 'Access denied'
+    });
+    return null;
+  }
+
+  return filePath;
+}
 
 async function getAccessibleImageFileOrBlock(imageId: number, res: Response) {
   const imageFile = ImageFileModel.findById(imageId);
@@ -68,13 +114,9 @@ router.get('/save-images', asyncHandler(async (_req: Request, res: Response) => 
  * GET /api/image-editor/:id/webp
  */
 router.get('/:id/webp', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = parseInt(routeParam(routeParam(req.params.id)));
-
-  if (isNaN(imageId)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid image ID'
-    });
+  const imageId = requireImageEditorRouteId(req, res);
+  if (imageId === null) {
+    return;
   }
 
   try {
@@ -117,13 +159,9 @@ router.get('/:id/webp', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/image-editor/:id/temp
  */
 router.post('/:id/temp', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = parseInt(routeParam(routeParam(req.params.id)));
-
-  if (isNaN(imageId)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid image ID'
-    });
+  const imageId = requireImageEditorRouteId(req, res);
+  if (imageId === null) {
+    return;
   }
 
   const editOptions: EditOptions = req.body;
@@ -154,22 +192,15 @@ router.post('/:id/temp', asyncHandler(async (req: Request, res: Response) => {
  * Body: { imageData: base64 string, maskData?: base64 string }
  */
 router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = parseInt(routeParam(routeParam(req.params.id)));
-
-  if (isNaN(imageId)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid image ID'
-    });
+  const imageId = requireImageEditorRouteId(req, res);
+  if (imageId === null) {
+    return;
   }
 
   const { imageData, maskData } = req.body;
 
-  if (!imageData) {
-    return res.status(400).json({
-      success: false,
-      error: 'Image data is required'
-    });
+  if (!requireImageData(res, imageData)) {
+    return;
   }
 
   try {
@@ -208,29 +239,19 @@ router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
  * Body: { imageData: base64 string, format?: 'png' | 'jpeg' | 'webp', quality?: number }
  */
 router.post('/:id/save-output', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = parseInt(routeParam(routeParam(req.params.id)));
-
-  if (isNaN(imageId)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid image ID'
-    });
+  const imageId = requireImageEditorRouteId(req, res);
+  if (imageId === null) {
+    return;
   }
 
   const { imageData, format = 'webp', quality = 90 } = req.body;
 
-  if (!imageData) {
-    return res.status(400).json({
-      success: false,
-      error: 'Image data is required'
-    });
+  if (!requireImageData(res, imageData)) {
+    return;
   }
 
   if (!['png', 'jpeg', 'webp'].includes(format)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid format'
-    });
+    return sendRouteBadRequest(res, 'Invalid format');
   }
 
   try {
@@ -264,22 +285,15 @@ router.post('/:id/save-output', asyncHandler(async (req: Request, res: Response)
  * Body: { imageData: base64 string, quality?: number (default 90) }
  */
 router.post('/:id/save-webp', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = parseInt(routeParam(routeParam(req.params.id)));
-
-  if (isNaN(imageId)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid image ID'
-    });
+  const imageId = requireImageEditorRouteId(req, res);
+  if (imageId === null) {
+    return;
   }
 
   const { imageData, quality = 90 } = req.body;
 
-  if (!imageData) {
-    return res.status(400).json({
-      success: false,
-      error: 'Image data is required'
-    });
+  if (!requireImageData(res, imageData)) {
+    return;
   }
 
   try {
@@ -428,10 +442,7 @@ router.post('/mask/blank', asyncHandler(async (req: Request, res: Response) => {
   const { width, height } = req.body;
 
   if (!width || !height || width <= 0 || height <= 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'Valid width and height are required'
-    });
+    return sendRouteBadRequest(res, 'Valid width and height are required');
   }
 
   try {
@@ -465,18 +476,9 @@ router.get('/canvas/:filename/webp', asyncHandler(async (req: Request, res: Resp
   const filename = routeParam(req.params.filename);
 
   try {
-    const canvasDir = runtimePaths.canvasDir;
-    const filePath = path.join(canvasDir, filename);
-
-    // Security check: ensure the file is within canvas directory
-    const resolvedPath = path.resolve(filePath);
-    const resolvedCanvasDir = path.resolve(canvasDir);
-
-    if (!resolvedPath.startsWith(resolvedCanvasDir)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied'
-      });
+    const filePath = getCanvasFilePathOrBlock(filename, res);
+    if (!filePath) {
+      return;
     }
 
     if (!fs.existsSync(filePath)) {
@@ -515,11 +517,8 @@ router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res
   const filename = routeParam(req.params.filename);
   const { imageData, quality = 90, createNew = false } = req.body;
 
-  if (!imageData) {
-    return res.status(400).json({
-      success: false,
-      error: 'Image data is required'
-    });
+  if (!requireImageData(res, imageData)) {
+    return;
   }
 
   try {
@@ -544,17 +543,9 @@ router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res
       newFileName = filename;
     }
 
-    const filePath = path.join(canvasDir, newFileName);
-
-    // Security check
-    const resolvedPath = path.resolve(filePath);
-    const resolvedCanvasDir = path.resolve(canvasDir);
-
-    if (!resolvedPath.startsWith(resolvedCanvasDir)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied'
-      });
+    const filePath = getCanvasFilePathOrBlock(newFileName, res);
+    if (!filePath) {
+      return;
     }
 
     const metadataSourcePath = fs.existsSync(filePath) ? filePath : undefined;
@@ -672,18 +663,9 @@ router.delete('/canvas/:filename', asyncHandler(async (req: Request, res: Respon
   const filename = routeParam(req.params.filename);
 
   try {
-    const canvasDir = runtimePaths.canvasDir;
-    const filePath = path.join(canvasDir, filename);
-
-    // Security check: ensure the file is within canvas directory
-    const resolvedPath = path.resolve(filePath);
-    const resolvedCanvasDir = path.resolve(canvasDir);
-
-    if (!resolvedPath.startsWith(resolvedCanvasDir)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied'
-      });
+    const filePath = getCanvasFilePathOrBlock(filename, res);
+    if (!filePath) {
+      return;
     }
 
     if (!fs.existsSync(filePath)) {

@@ -18,22 +18,46 @@ import {
   resolveOutputFormat,
 } from './uploadRouteHelpers';
 
+type UploadedImageFile = Express.Multer.File & { path: string };
+
+/** Send one metadata utility 400 response without changing the existing envelope. */
+function sendUploadMetadataBadRequest(res: Response, error: string) {
+  return res.status(400).json(errorResponse(error));
+}
+
+/** Resolve one uploaded image file only after the shared metadata utility guards pass. */
+function getValidatedUploadMetadataFile(
+  req: Request,
+  res: Response,
+  invalidImageMessage: string,
+): UploadedImageFile | null {
+  const file = getSingleUploadedFile(req);
+
+  if (!file) {
+    sendUploadMetadataBadRequest(res, 'No file uploaded');
+    return null;
+  }
+
+  if (!isImageFile(file.mimetype)) {
+    sendUploadMetadataBadRequest(res, invalidImageMessage);
+    return null;
+  }
+
+  if (!file.path) {
+    res.status(500).json(errorResponse('Temporary upload path is missing'));
+    return null;
+  }
+
+  return file as UploadedImageFile;
+}
+
 /** Register metadata-only utility routes that work without saving uploads into the library. */
 export function registerUploadMetadataUtilityRoutes(router: Router): void {
   /** Convert one uploaded image to WebP without storing it in the library. */
   router.post('/convert-webp', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
-    const file = getSingleUploadedFile(req);
-
+    const file = getValidatedUploadMetadataFile(req, res, 'Only image files can be converted to WebP');
     if (!file) {
-      return res.status(400).json(errorResponse('No file uploaded'));
-    }
-
-    if (!isImageFile(file.mimetype)) {
-      return res.status(400).json(errorResponse('Only image files can be converted to WebP'));
-    }
-
-    if (!file.path) {
-      return res.status(500).json(errorResponse('Temporary upload path is missing'));
+      return;
     }
 
     const rawQuality = typeof req.body?.quality === 'string' ? Number(req.body.quality) : Number(req.body?.quality ?? 90);
@@ -64,18 +88,9 @@ export function registerUploadMetadataUtilityRoutes(router: Router): void {
 
   /** Rewrite image metadata without saving the upload to the library. */
   router.post('/rewrite-metadata', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
-    const file = getSingleUploadedFile(req);
-
+    const file = getValidatedUploadMetadataFile(req, res, 'Only image files can be rewritten without upload');
     if (!file) {
-      return res.status(400).json(errorResponse('No file uploaded'));
-    }
-
-    if (!isImageFile(file.mimetype)) {
-      return res.status(400).json(errorResponse('Only image files can be rewritten without upload'));
-    }
-
-    if (!file.path) {
-      return res.status(500).json(errorResponse('Temporary upload path is missing'));
+      return;
     }
 
     const outputFormat = resolveOutputFormat(req.body?.format, file);
@@ -115,18 +130,9 @@ export function registerUploadMetadataUtilityRoutes(router: Router): void {
 
   /** Extract metadata and prompt preview information from one uploaded image. */
   router.post('/extract-metadata', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
-    const file = getSingleUploadedFile(req);
-
+    const file = getValidatedUploadMetadataFile(req, res, 'Only image files can be extracted without upload');
     if (!file) {
-      return res.status(400).json(errorResponse('No file uploaded'));
-    }
-
-    if (!isImageFile(file.mimetype)) {
-      return res.status(400).json(errorResponse('Only image files can be extracted without upload'));
-    }
-
-    if (!file.path) {
-      return res.status(500).json(errorResponse('Temporary upload path is missing'));
+      return;
     }
 
     try {
@@ -146,18 +152,9 @@ export function registerUploadMetadataUtilityRoutes(router: Router): void {
 
   /** Extract tagger results from one uploaded image without saving it. */
   router.post('/extract-tagger', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
-    const file = getSingleUploadedFile(req);
-
+    const file = getValidatedUploadMetadataFile(req, res, 'Only image files can be tag-extracted without upload');
     if (!file) {
-      return res.status(400).json(errorResponse('No file uploaded'));
-    }
-
-    if (!isImageFile(file.mimetype)) {
-      return res.status(400).json(errorResponse('Only image files can be tag-extracted without upload'));
-    }
-
-    if (!file.path) {
-      return res.status(500).json(errorResponse('Temporary upload path is missing'));
+      return;
     }
 
     try {
@@ -178,18 +175,9 @@ export function registerUploadMetadataUtilityRoutes(router: Router): void {
 
   /** Extract kaloscope artist results from one uploaded image without saving it. */
   router.post('/extract-kaloscope', uploadSingle, asyncHandler(async (req: Request, res: Response) => {
-    const file = getSingleUploadedFile(req);
-
+    const file = getValidatedUploadMetadataFile(req, res, 'Only image files can be artist-extracted without upload');
     if (!file) {
-      return res.status(400).json(errorResponse('No file uploaded'));
-    }
-
-    if (!isImageFile(file.mimetype)) {
-      return res.status(400).json(errorResponse('Only image files can be artist-extracted without upload'));
-    }
-
-    if (!file.path) {
-      return res.status(500).json(errorResponse('Temporary upload path is missing'));
+      return;
     }
 
     try {

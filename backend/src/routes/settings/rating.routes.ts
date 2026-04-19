@@ -3,8 +3,14 @@ import { routeParam } from '../routeParam';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { RatingScoreService } from '../../services/ratingScoreService';
 import { RatingData, RatingTierInput, RatingWeightsUpdate } from '../../types/rating';
+import { sendRouteBadRequest } from '../routeValidation';
 
 const router = Router();
+
+/** Parse the tier route id without changing current route-param behavior. */
+function parseTierRouteId(value: string | string[] | undefined) {
+  return parseInt(routeParam(routeParam(value)), 10);
+}
 
 router.get(
   '/weights',
@@ -31,10 +37,7 @@ router.put(
         message: 'Rating weights updated successfully',
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        error: (error as Error).message,
-      });
+      sendRouteBadRequest(res, (error as Error).message);
     }
     return;
   }),
@@ -65,10 +68,7 @@ router.post(
         message: 'Rating tier created successfully',
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        error: (error as Error).message,
-      });
+      sendRouteBadRequest(res, (error as Error).message);
     }
     return;
   }),
@@ -77,14 +77,11 @@ router.post(
 router.put(
   '/tiers/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const tierId = parseInt(routeParam(routeParam(req.params.id)), 10);
+    const tierId = parseTierRouteId(req.params.id);
     const tierData: Partial<RatingTierInput> = req.body;
 
     if (isNaN(tierId)) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid tier ID',
-      });
+      sendRouteBadRequest(res, 'Invalid tier ID');
       return;
     }
 
@@ -96,10 +93,7 @@ router.put(
         message: 'Rating tier updated successfully',
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        error: (error as Error).message,
-      });
+      sendRouteBadRequest(res, (error as Error).message);
     }
     return;
   }),
@@ -108,13 +102,10 @@ router.put(
 router.delete(
   '/tiers/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const tierId = parseInt(routeParam(routeParam(req.params.id)), 10);
+    const tierId = parseTierRouteId(req.params.id);
 
     if (isNaN(tierId)) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid tier ID',
-      });
+      sendRouteBadRequest(res, 'Invalid tier ID');
       return;
     }
 
@@ -125,10 +116,7 @@ router.delete(
         message: 'Rating tier deleted successfully',
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        error: (error as Error).message,
-      });
+      sendRouteBadRequest(res, (error as Error).message);
     }
     return;
   }),
@@ -140,10 +128,7 @@ router.put(
     const tiers: RatingTierInput[] = req.body;
 
     if (!Array.isArray(tiers)) {
-      res.status(400).json({
-        success: false,
-        error: 'Request body must be an array of tiers',
-      });
+      sendRouteBadRequest(res, 'Request body must be an array of tiers');
       return;
     }
 
@@ -155,10 +140,7 @@ router.put(
         message: 'All rating tiers updated successfully',
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        error: (error as Error).message,
-      });
+      sendRouteBadRequest(res, (error as Error).message);
     }
     return;
   }),
@@ -170,20 +152,14 @@ router.post(
     const ratingData: RatingData = req.body;
 
     if (!ratingData || typeof ratingData !== 'object') {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid rating data',
-      });
+      sendRouteBadRequest(res, 'Invalid rating data');
       return;
     }
 
     const requiredFields = ['general', 'sensitive', 'questionable', 'explicit'];
     for (const field of requiredFields) {
       if (typeof (ratingData as any)[field] !== 'number') {
-        res.status(400).json({
-          success: false,
-          error: `Field "${field}" is required and must be a number`,
-        });
+        sendRouteBadRequest(res, `Field "${field}" is required and must be a number`);
         return;
       }
     }
@@ -195,10 +171,7 @@ router.post(
         data: result,
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        error: (error as Error).message,
-      });
+      sendRouteBadRequest(res, (error as Error).message);
     }
     return;
   }),
