@@ -1,4 +1,4 @@
-import { buildApiUrl, fetchJson, triggerBlobDownload, triggerBrowserDownload } from '@/lib/api-client'
+import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
 import type { PromptSimilarityQueryResult, SimilarityQueryResult } from '@/types/similarity'
@@ -207,13 +207,66 @@ export function buildImageDownloadUrl(compositeHash: string, type: ImageDownload
   return buildApiUrl(`/api/images/${compositeHash}/download?${searchParams.toString()}`)
 }
 
+function getSingleImageDownloadFallbackName(compositeHash: string, type: ImageDownloadType, contentType: string | null) {
+  const normalizedContentType = contentType?.toLowerCase() ?? ''
+
+  if (type === 'thumbnail') {
+    return `${compositeHash}-thumbnail.webp`
+  }
+
+  if (normalizedContentType.includes('image/png')) {
+    return `${compositeHash}.png`
+  }
+  if (normalizedContentType.includes('image/jpeg')) {
+    return `${compositeHash}.jpg`
+  }
+  if (normalizedContentType.includes('image/webp')) {
+    return `${compositeHash}.webp`
+  }
+  if (normalizedContentType.includes('image/gif')) {
+    return `${compositeHash}.gif`
+  }
+  if (normalizedContentType.includes('video/mp4')) {
+    return `${compositeHash}.mp4`
+  }
+  if (normalizedContentType.includes('video/webm')) {
+    return `${compositeHash}.webm`
+  }
+  if (normalizedContentType.includes('video/quicktime')) {
+    return `${compositeHash}.mov`
+  }
+
+  return `${compositeHash}.bin`
+}
+
+async function downloadSingleImage(compositeHash: string, type: ImageDownloadType = 'original') {
+  const response = await fetch(buildImageDownloadUrl(compositeHash, type), {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      Accept: type === 'thumbnail' ? 'image/webp' : 'application/octet-stream',
+    },
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(text || `Single download failed: ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  const fallbackFileName = getSingleImageDownloadFallbackName(compositeHash, type, response.headers.get('Content-Type'))
+  const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
+
+  triggerBlobDownload(blob, fileName)
+}
+
 export async function downloadImageSelection(compositeHashes: string[], type: ImageDownloadType = 'original') {
   if (compositeHashes.length === 0) {
     return
   }
 
   if (compositeHashes.length === 1) {
-    triggerBrowserDownload(buildImageDownloadUrl(compositeHashes[0], type))
+    await downloadSingleImage(compositeHashes[0], type)
     return
   }
 
