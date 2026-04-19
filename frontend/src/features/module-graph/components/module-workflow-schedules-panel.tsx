@@ -329,6 +329,7 @@ export function ModuleWorkflowSchedulesPanel({
         onClose={resetDraft}
         title={editorMode === 'edit' ? '자동 실행 수정' : '자동 실행 추가'}
         widthClassName="max-w-5xl"
+        closeOnBack={false}
       >
         <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">

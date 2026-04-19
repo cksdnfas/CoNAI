@@ -86,6 +86,7 @@ export function ModuleGraphWorkspaceModals({
         title={browseManageModalTitle}
         onClose={onCloseBrowseManage}
         widthClassName="max-w-3xl"
+        closeOnBack={false}
       >
         {workflowView === 'browse' && isBrowseManageModalOpen ? (
           <Suspense fallback={<WorkspaceModalFallback />}>
@@ -111,6 +112,7 @@ export function ModuleGraphWorkspaceModals({
         title="폴더 삭제"
         onClose={onCloseFolderDelete}
         widthClassName="max-w-xl"
+        closeOnBack={false}
       >
         <div className="space-y-4">
           <Alert>
@@ -144,6 +146,7 @@ export function ModuleGraphWorkspaceModals({
         description="사용자 모듈과 시스템 모듈을 나눠 보고, 필요한 항목을 바로 그래프에 추가해."
         onClose={onCloseModuleLibrary}
         widthClassName="max-w-6xl"
+        closeOnBack={false}
       >
         {isModuleLibraryOpen ? (
           <Suspense fallback={<WorkspaceModalFallback />}>
@@ -165,6 +168,7 @@ export function ModuleGraphWorkspaceModals({
         description="user/custom_nodes 기반 로컬 커스텀 노드를 스캔, 생성, 테스트해."
         onClose={onCloseCustomNodeManager}
         widthClassName="max-w-6xl"
+        closeOnBack={false}
       >
         {isCustomNodeManagerOpen ? (
           <Suspense fallback={<WorkspaceModalFallback />}>

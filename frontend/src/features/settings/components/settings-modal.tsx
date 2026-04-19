@@ -11,12 +11,13 @@ interface SettingsModalProps extends PropsWithChildren {
   headerContent?: ReactNode
   onClose: () => void
   widthClassName?: string
+  closeOnBack?: boolean
 }
 
-export function SettingsModal({ open, title, description, headerContent, onClose, widthClassName = 'max-w-4xl', children }: SettingsModalProps) {
+export function SettingsModal({ open, title, description, headerContent, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, children }: SettingsModalProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  useOverlayBackClose({ open, onClose })
+  useOverlayBackClose({ open, onClose, enabled: closeOnBack })
 
   useEffect(() => {
     if (!open) {

@@ -953,6 +953,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         description="긴 출력 전문 보기"
         widthClassName="max-w-3xl"
         onClose={() => setArtifactTextModal(null)}
+        closeOnBack={false}
       >
         <pre className="max-h-[70vh] overflow-auto rounded-sm border border-border/70 bg-surface-low p-3 text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
           {artifactTextModal?.text ?? ''}
