@@ -63,6 +63,7 @@ function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['record
     original_file_path: null,
     thumbnail_url: hasLinkedImage ? imageSource.thumbnailUrl : null,
     image_url: hasLinkedImage ? imageSource.imageUrl : null,
+    mime_type: record.actual_mime_type ?? null,
     width: record.actual_width ?? null,
     height: record.actual_height ?? null,
     rating_score: record.rating_score ?? null,

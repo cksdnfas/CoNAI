@@ -84,14 +84,20 @@ export interface ComfyUIPromptResponse {
   node_errors?: Record<string, any>;
 }
 
+export interface ComfyUIOutputFile {
+  filename: string;
+  subfolder: string;
+  type: string;
+  format?: string;
+}
+
 export interface ComfyUIHistoryItem {
   prompt: any[];
   outputs: Record<string, {
-    images?: Array<{
-      filename: string;
-      subfolder: string;
-      type: string;
-    }>;
+    images?: ComfyUIOutputFile[];
+    gifs?: ComfyUIOutputFile[];
+    videos?: ComfyUIOutputFile[];
+    files?: ComfyUIOutputFile[];
   }>;
   status: {
     status_str: string;

@@ -2,13 +2,20 @@ import axios, { AxiosInstance } from 'axios';
 import * as path from 'path';
 import * as fs from 'fs';
 import FormData from 'form-data';
-import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse } from '../types/workflow';
+import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse, ComfyUIOutputFile } from '../types/workflow';
 import type { ComfyUIQueueState, ComfyUIServerRecord, ComfyUIServerRuntimeStatus } from '../types/comfyuiServer';
 import { runtimePaths } from '../config/runtimePaths';
 
 type ComfyUIQueueResponse = {
   queue_running?: unknown;
   queue_pending?: unknown;
+};
+
+type ComfyOutputKind = 'image' | 'animated' | 'video';
+
+type CollectedComfyOutput = ComfyUIOutputFile & {
+  nodeId: string;
+  kind: ComfyOutputKind;
 };
 
 function normalizeQueueEntries(value: unknown): unknown[] {
@@ -246,13 +253,13 @@ export class ComfyUIService {
   }
 
   /**
-   * 생성된 이미지 다운로드 (임시 폴더에 저장)
+   * 생성된 출력 파일 다운로드 (임시 폴더에 저장)
    * @param filename 파일명
    * @param subfolder 서브폴더
    * @param type 타입 (output, input, temp)
    * @returns 다운로드된 임시 파일의 절대 경로
    */
-  async downloadImage(filename: string, subfolder: string = '', type: string = 'output'): Promise<string> {
+  async downloadOutputFile(filename: string, subfolder: string = '', type: string = 'output'): Promise<string> {
     try {
       // 다운로드 URL 구성
       const params = new URLSearchParams({
@@ -262,7 +269,7 @@ export class ComfyUIService {
       });
       const url = `/view?${params.toString()}`;
 
-      // 이미지 다운로드
+      // 출력 파일 다운로드
       const response = await this.axiosInstance.get(url, {
         responseType: 'arraybuffer'
       });
@@ -284,96 +291,108 @@ export class ComfyUIService {
       return tempFilePath; // 절대 경로 반환
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`ComfyUI image download error: ${error.message}`);
+        throw new Error(`ComfyUI output download error: ${error.message}`);
       }
       throw error;
     }
   }
 
+  private resolveOutputKind(bucket: 'images' | 'gifs' | 'videos' | 'files', file: ComfyUIOutputFile): ComfyOutputKind {
+    if (bucket === 'videos') {
+      return 'video';
+    }
+
+    const normalizedFormat = (file.format || '').toLowerCase();
+    const extension = path.extname(file.filename).toLowerCase();
+
+    if (normalizedFormat.startsWith('video/') || ['.mp4', '.webm', '.mov', '.mkv', '.avi'].includes(extension)) {
+      return 'video';
+    }
+
+    if (bucket === 'gifs' || ['.gif', '.webp'].includes(extension)) {
+      return 'animated';
+    }
+
+    return 'image';
+  }
+
+  private parseNodeOrder(nodeId: string): number {
+    const match = nodeId.match(/^\d+/);
+    return match ? Number(match[0]) : -1;
+  }
+
   /**
-   * 히스토리에서 생성된 이미지 정보 추출
-   * @param history ComfyUI 히스토리 응답
-   * @param promptId 프롬프트 ID
-   * @param onlyFinalImage true면 SaveImage 노드의 이미지만, false면 모든 이미지 (기본값: true)
-   * @returns 이미지 파일 정보 배열
+   * 히스토리에서 생성된 최종 출력 정보를 추출한다.
    */
-  extractImageInfo(
+  extractOutputInfo(
     history: ComfyUIHistoryResponse,
     promptId: string,
-    onlyFinalImage: boolean = true
-  ): Array<{
-    filename: string;
-    subfolder: string;
-    type: string;
-    nodeId: string;
-  }> {
+    onlyFinalOutput: boolean = true
+  ): CollectedComfyOutput[] {
     const item = history[promptId];
     if (!item || !item.outputs) {
       return [];
     }
 
-    const allImages: Array<{
-      filename: string;
-      subfolder: string;
-      type: string;
-      nodeId: string;
-    }> = [];
+    const allOutputs: CollectedComfyOutput[] = [];
 
-    // outputs의 모든 노드를 순회하여 이미지 찾기
     for (const nodeId in item.outputs) {
       const output = item.outputs[nodeId];
-      if (output.images && Array.isArray(output.images)) {
-        output.images.forEach((img: any) => {
-          allImages.push({
-            ...img,
-            nodeId
+      const buckets: Array<'images' | 'gifs' | 'videos' | 'files'> = ['images', 'gifs', 'videos', 'files'];
+
+      for (const bucket of buckets) {
+        const files = output[bucket];
+        if (!Array.isArray(files)) {
+          continue;
+        }
+
+        files.forEach((file) => {
+          allOutputs.push({
+            ...file,
+            nodeId,
+            kind: this.resolveOutputKind(bucket, file),
           });
         });
       }
     }
 
-    // 최종 이미지만 필터링
-    if (onlyFinalImage && allImages.length > 0) {
-      // SaveImage 노드의 이미지를 우선적으로 선택
-      const saveImageNodes = allImages.filter(img => {
-        // 노드 class_type 정보가 없으므로, 일반적으로 가장 큰 노드 ID를 가진 것이 최종 출력
-        return true;
-      });
+    if (onlyFinalOutput && allOutputs.length > 0) {
+      const maxNodeOrder = Math.max(...allOutputs.map((file) => this.parseNodeOrder(file.nodeId)));
+      const finalOutputs = allOutputs.filter((file) => this.parseNodeOrder(file.nodeId) === maxNodeOrder);
 
-      // 가장 마지막 노드의 이미지만 반환 (노드 ID가 가장 큰 것)
-      const maxNodeId = Math.max(...allImages.map(img => parseInt(img.nodeId)));
-      const finalImages = allImages.filter(img => parseInt(img.nodeId) === maxNodeId);
-
-      console.log(`📸 Found ${allImages.length} images, returning ${finalImages.length} final image(s) from node #${maxNodeId}`);
-      return finalImages;
+      console.log(`📦 Found ${allOutputs.length} outputs, returning ${finalOutputs.length} final output(s) from node #${maxNodeOrder}`);
+      return finalOutputs;
     }
 
-    console.log(`📸 Found ${allImages.length} images, returning all`);
-    return allImages;
+    console.log(`📦 Found ${allOutputs.length} outputs, returning all`);
+    return allOutputs;
   }
 
   /**
-   * Wait for one submitted ComfyUI prompt and download its generated images.
+   * Wait for one submitted ComfyUI prompt and download its generated outputs.
    */
-  async collectGeneratedImages(promptId: string): Promise<string[]> {
+  async collectGeneratedOutputs(promptId: string): Promise<Array<CollectedComfyOutput & { tempPath: string }>> {
     const history = await this.waitForCompletion(promptId);
-    const imageInfos = this.extractImageInfo(history, promptId);
+    const outputInfos = this.extractOutputInfo(history, promptId);
 
-    if (imageInfos.length === 0) {
-      throw new Error('No images generated by ComfyUI');
+    if (outputInfos.length === 0) {
+      throw new Error('No outputs generated by ComfyUI');
     }
 
-    const tempFilePaths: string[] = [];
-    for (const imageInfo of imageInfos) {
-      const tempPath = await this.downloadImage(
-        imageInfo.filename,
-        imageInfo.subfolder,
-        imageInfo.type
+    const tempFiles: Array<CollectedComfyOutput & { tempPath: string }> = [];
+    for (const outputInfo of outputInfos) {
+      const tempPath = await this.downloadOutputFile(
+        outputInfo.filename,
+        outputInfo.subfolder,
+        outputInfo.type
       );
-      tempFilePaths.push(tempPath);
+      tempFiles.push({
+        ...outputInfo,
+        tempPath,
+      });
     }
 
-    return tempFilePaths;
+    return tempFiles;
   }
 
   /**
@@ -392,7 +411,8 @@ export class ComfyUIService {
     console.log('🚀 Submitting workflow to ComfyUI (pre-substituted from frontend)');
 
     const promptId = await this.submitPrompt(promptData);
-    const imagePaths = await this.collectGeneratedImages(promptId);
+    const outputs = await this.collectGeneratedOutputs(promptId);
+    const imagePaths = outputs.map((output) => output.tempPath);
 
     return { promptId, imagePaths };
   }

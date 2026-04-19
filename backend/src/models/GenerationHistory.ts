@@ -50,6 +50,7 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
   actual_composite_hash?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
+  actual_mime_type?: string | null;
   rating_score?: number | null;
   requested_server_id?: number | null;
   requested_server_name?: string | null;
@@ -64,6 +65,7 @@ export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
   actual_composite_hash?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
+  actual_mime_type?: string | null;
   rating_score?: number | null;
   requested_server_id?: number | null;
   requested_server_name?: string | null;
@@ -371,6 +373,7 @@ export class GenerationHistoryModel {
         im.composite_hash as actual_composite_hash,
         im.width as actual_width,
         im.height as actual_height,
+        matched_file.mime_type as actual_mime_type,
         im.rating_score as rating_score
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
@@ -424,6 +427,7 @@ export class GenerationHistoryModel {
         im.composite_hash as actual_composite_hash,
         im.width as actual_width,
         im.height as actual_height,
+        matched_file.mime_type as actual_mime_type,
         im.rating_score as rating_score
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id

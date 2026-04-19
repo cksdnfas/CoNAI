@@ -645,7 +645,7 @@ export class GenerationQueueService {
       })
 
       if (!result.representativeImage) {
-        throw new Error(`Queue job ${job.id} finished ComfyUI execution but no representative image was saved`)
+        throw new Error(`Queue job ${job.id} finished ComfyUI execution but no representative output was saved`)
       }
 
       if (historyId) {
@@ -666,7 +666,7 @@ export class GenerationQueueService {
         expectedCurrentStatuses: ['running'],
       })
 
-      console.log(`✅ Queue job ${job.id} completed via ComfyUI (${result.savedImageCount}/${result.attemptedImageCount} saved)`)
+      console.log(`✅ Queue job ${job.id} completed via ComfyUI (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`)
     } catch (error) {
       const failureMessage = resolveFailureMessage(error)
       await writeQueueComfyDebugSnapshot(job, {

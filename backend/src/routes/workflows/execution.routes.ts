@@ -156,14 +156,14 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
             });
             GenerationHistoryModel.updateStatus(historyId, 'completed');
 
-            console.log(`✅ ComfyUI history ${historyId} linked to representative image: ${result.representativeImage.compositeHash.substring(0, 16)}...`);
-            console.log(`✅ Image generation completed for history ID ${historyId} (${result.savedImageCount}/${result.attemptedImageCount} saved)`);
+            console.log(`✅ ComfyUI history ${historyId} linked to representative output: ${result.representativeImage.compositeHash.substring(0, 16)}...`);
+            console.log(`✅ Image generation completed for history ID ${historyId} (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`);
           } else {
-            GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no output image could be saved');
-            console.error(`❌ ComfyUI history ${historyId} has no saved representative image after generation`);
+            GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no output file could be saved');
+            console.error(`❌ ComfyUI history ${historyId} has no saved representative output after generation`);
           }
         } else {
-          console.log(`✅ Image generation completed without history tracking (${result.savedImageCount}/${result.attemptedImageCount} saved)`);
+          console.log(`✅ Image generation completed without history tracking (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`);
         }
       } catch (error) {
         console.error(`❌ Image generation failed for history ID ${historyId}:`, error);

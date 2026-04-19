@@ -73,6 +73,7 @@ export class APIImageProcessor {
     width: number;
     height: number;
     compositeHash: string;
+    mimeType?: string;
   }> {
     try {
       // Use FileSaver to save original file only
@@ -81,6 +82,31 @@ export class APIImageProcessor {
     } catch (error) {
       console.error('API Image processing failed:', error);
       throw new Error(`Failed to process ${serviceType} generated image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Process generated output file from an already-downloaded Comfy result.
+   * Static images keep the existing image pipeline, while videos/animated outputs
+   * are preserved as original media files.
+   */
+  static async processGeneratedFile(
+    sourceFilePath: string,
+    serviceType: 'comfyui' | 'novelai',
+    saveOptions?: GeneratedImageSaveOptions,
+  ): Promise<{
+    originalPath: string;
+    fileSize: number;
+    width: number;
+    height: number;
+    compositeHash: string;
+    mimeType?: string;
+  }> {
+    try {
+      return await FileSaver.saveGeneratedFile(sourceFilePath, serviceType, saveOptions);
+    } catch (error) {
+      console.error('API generated file processing failed:', error);
+      throw new Error(`Failed to process ${serviceType} generated output: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -178,7 +204,9 @@ export class APIImageProcessor {
   static async ensureDirectories(): Promise<void> {
     const baseUploadPath = this.getBaseUploadPath();
     const imagesPath = path.join(baseUploadPath, 'images');
+    const videosPath = path.join(runtimePaths.uploadsDir, 'videos', 'API');
 
     await fs.promises.mkdir(imagesPath, { recursive: true });
+    await fs.promises.mkdir(videosPath, { recursive: true });
   }
 }

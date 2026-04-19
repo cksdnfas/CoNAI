@@ -29,7 +29,13 @@ export function getImageListMediaKind(image: ImageRecord): ImageListMediaKind {
   return 'image'
 }
 
-/** Return the preferred display URL for web rendering, thumbnail first with original fallback. */
+/** Return the preferred display URL for web rendering. Videos prefer the original file, still images prefer thumbnails first. */
 export function getImageListPreviewUrl(image: ImageRecord): string | null {
+  const mediaKind = getImageListMediaKind(image)
+
+  if (mediaKind === 'video') {
+    return image.image_url || image.thumbnail_url || null
+  }
+
   return image.thumbnail_url || image.image_url || null
 }
