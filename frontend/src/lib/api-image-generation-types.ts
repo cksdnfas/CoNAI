@@ -134,6 +134,7 @@ export interface WorkflowMarkedField {
   required?: boolean
   min?: number
   max?: number
+  step?: number
 }
 
 export interface GenerationWorkflow {

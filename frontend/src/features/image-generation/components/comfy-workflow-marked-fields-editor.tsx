@@ -2,6 +2,7 @@ import { useState, type DragEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsField, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
@@ -26,6 +27,16 @@ function parseMarkedFieldOptions(rawValue: string) {
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean)
+}
+
+function parseOptionalNumberInput(rawValue: string) {
+  const trimmed = rawValue.trim()
+  if (trimmed.length === 0) {
+    return undefined
+  }
+
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 /** Render the marked-field list and the strongly bounded field editing controls. */
@@ -157,10 +168,19 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             value={field.default_value === undefined || field.default_value === null ? '' : String(field.default_value)}
                             onChange={(event) => onFieldPatch(field.id, { default_value: event.target.value })}
                           />
+                        ) : field.type === 'number' ? (
+                          <ScrubbableNumberInput
+                            variant="settings"
+                            min={field.min}
+                            max={field.max}
+                            step={field.step ?? 1}
+                            value={field.default_value === undefined || field.default_value === null ? '' : String(field.default_value)}
+                            onChange={(value) => onFieldPatch(field.id, { default_value: value })}
+                          />
                         ) : (
                           <Input
                             variant="settings"
-                            type={field.type === 'number' ? 'number' : 'text'}
+                            type="text"
                             value={field.default_value === undefined || field.default_value === null ? '' : String(field.default_value)}
                             onChange={(event) => onFieldPatch(field.id, { default_value: event.target.value })}
                           />
@@ -198,6 +218,42 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         </SettingsToggleRow>
                       ) : null}
                     </div>
+
+                    {field.type === 'number' ? (
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <SettingsField label="Min">
+                          <Input
+                            variant="settings"
+                            type="number"
+                            value={field.min ?? ''}
+                            onChange={(event) => onFieldPatch(field.id, { min: parseOptionalNumberInput(event.target.value) })}
+                            placeholder="없음"
+                          />
+                        </SettingsField>
+
+                        <SettingsField label="Max">
+                          <Input
+                            variant="settings"
+                            type="number"
+                            value={field.max ?? ''}
+                            onChange={(event) => onFieldPatch(field.id, { max: parseOptionalNumberInput(event.target.value) })}
+                            placeholder="없음"
+                          />
+                        </SettingsField>
+
+                        <SettingsField label="Step">
+                          <Input
+                            variant="settings"
+                            type="number"
+                            min={0}
+                            step="any"
+                            value={field.step ?? ''}
+                            onChange={(event) => onFieldPatch(field.id, { step: parseOptionalNumberInput(event.target.value) })}
+                            placeholder="1"
+                          />
+                        </SettingsField>
+                      </div>
+                    ) : null}
 
                     {field.type === 'select' ? (
                       <div className="grid gap-4 md:grid-cols-2">

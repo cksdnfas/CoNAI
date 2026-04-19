@@ -34,6 +34,7 @@ export interface MarkedField {
   required?: boolean;
   min?: number; // number 타입인 경우 최소값
   max?: number; // number 타입인 경우 최대값
+  step?: number; // number 타입인 경우 증감 단위
 }
 
 /**

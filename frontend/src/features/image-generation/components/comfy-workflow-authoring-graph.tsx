@@ -55,6 +55,20 @@ function sanitizeWorkflowFieldId(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
+function inferWorkflowNumberStep(value: number) {
+  if (!Number.isFinite(value)) {
+    return undefined
+  }
+
+  const normalized = `${value}`
+  const decimalPart = normalized.includes('.') ? normalized.split('.')[1] ?? '' : ''
+  if (decimalPart.length === 0) {
+    return 1
+  }
+
+  return Number(`0.${'0'.repeat(Math.max(decimalPart.length - 1, 0))}1`)
+}
+
 /** Infer the most useful authoring field type from the raw workflow value. */
 function inferWorkflowFieldType(inputKey: string, value: string | number | boolean | null): WorkflowMarkedField['type'] {
   if (typeof value === 'number') {
@@ -322,6 +336,7 @@ export function buildWorkflowMarkedFieldFromInput(
     placeholder: fieldType === 'text' || fieldType === 'textarea' ? humanizeWorkflowInputKey(input.key) : undefined,
     options: dropdownOptions,
     required: false,
+    step: typeof input.value === 'number' ? inferWorkflowNumberStep(input.value) : undefined,
   }
 }
 

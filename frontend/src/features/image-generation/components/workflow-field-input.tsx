@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { CircleQuestionMark } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import type { WorkflowMarkedField } from '@/lib/api'
 import { FormField, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
@@ -110,11 +111,22 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
     )
   }
 
+  if (field.type === 'number') {
+    return wrapField(
+      <ScrubbableNumberInput
+        min={field.min}
+        max={field.max}
+        step={field.step ?? 1}
+        value={typeof value === 'string' ? value : ''}
+        placeholder={field.placeholder || ''}
+        onChange={onChange}
+      />,
+    )
+  }
+
   return wrapField(
     <Input
-      type={field.type === 'number' ? 'number' : 'text'}
-      min={field.type === 'number' ? field.min : undefined}
-      max={field.type === 'number' ? field.max : undefined}
+      type="text"
       value={typeof value === 'string' ? value : ''}
       placeholder={field.placeholder || ''}
       onChange={(event) => onChange(event.target.value)}
