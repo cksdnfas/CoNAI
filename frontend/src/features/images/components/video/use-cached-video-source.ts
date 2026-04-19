@@ -211,13 +211,14 @@ async function touchPersistentVideoCacheEntry(sourceUrl: string) {
 }
 
 async function createObjectUrlFromResponse(sourceUrl: string, response: Response) {
+  const existingEntry = cachedVideoEntries.get(sourceUrl)
+  if (existingEntry?.objectUrl) {
+    touchCachedEntry(sourceUrl)
+    return { objectUrl: existingEntry.objectUrl, size: existingEntry.size }
+  }
+
   const blob = await response.blob()
   const objectUrl = URL.createObjectURL(blob)
-  const existingEntry = cachedVideoEntries.get(sourceUrl)
-
-  if (existingEntry?.objectUrl) {
-    URL.revokeObjectURL(existingEntry.objectUrl)
-  }
 
   cachedVideoEntries.set(sourceUrl, {
     objectUrl,
@@ -368,8 +369,14 @@ export function useCachedVideoSource(
         if (backgroundOnly) {
           setResolvedSourceUrl(cacheableSourceUrl)
           setIsCachePending(false)
-          void warmCachedVideoSource(cacheableSourceUrl)
-          return null
+          return warmCachedVideoSource(cacheableSourceUrl).then((nextObjectUrl) => {
+            if (cancelled || !nextObjectUrl) {
+              return null
+            }
+
+            setResolvedSourceUrl(nextObjectUrl)
+            return nextObjectUrl
+          })
         }
 
         return warmCachedVideoSource(cacheableSourceUrl).then((nextObjectUrl) => {
