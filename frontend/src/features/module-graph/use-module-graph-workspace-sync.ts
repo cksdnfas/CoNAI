@@ -57,17 +57,25 @@ export function useModuleGraphWorkspaceSync({
 }) {
   const previousExecutionStatusesRef = useRef<Record<number, GraphExecutionRecord['status']>>({})
   const lastNodePreviewSyncSignatureRef = useRef('')
+  const lastAutoSelectedGraphIdRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (selectedGraphId === null || executionList.length === 0) {
+      lastAutoSelectedGraphIdRef.current = null
       return
     }
 
     const hasSelectedExecution = selectedExecutionId !== null && executionList.some((execution) => execution.id === selectedExecutionId)
     if (hasSelectedExecution) {
+      lastAutoSelectedGraphIdRef.current = selectedGraphId
       return
     }
 
+    if (selectedExecutionId === null && lastAutoSelectedGraphIdRef.current === selectedGraphId) {
+      return
+    }
+
+    lastAutoSelectedGraphIdRef.current = selectedGraphId
     setSelectedExecutionId(executionList[0].id)
   }, [executionList, selectedExecutionId, selectedGraphId, setSelectedExecutionId])
 

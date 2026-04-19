@@ -5,6 +5,7 @@ import type {
 } from '@/lib/api'
 import {
   buildArtifactTextPreview,
+  buildArtifactTextValue,
   getArtifactStoredValue,
   hasGraphArtifactVisualPreview,
 } from '../module-graph-shared'
@@ -128,6 +129,20 @@ export function buildArtifactSummaryText(artifact: GraphExecutionArtifactRecord)
   return buildArtifactTextPreview(artifact, 220)
 }
 
+/** Build the full readable text shown in the output-content modal for one artifact. */
+export function buildArtifactFullText(artifact: GraphExecutionArtifactRecord) {
+  const textValue = buildArtifactTextValue(artifact)
+  if (textValue) {
+    return textValue
+  }
+
+  if (artifact.storage_path) {
+    return artifact.storage_path
+  }
+
+  return buildArtifactSummaryText(artifact) ?? '내용 없음'
+}
+
 /** Build the detail lines shown under one visual execution artifact preview. */
 export function buildArtifactDetailLines(artifact: GraphExecutionArtifactRecord) {
   const storedValue = getArtifactStoredValue(artifact)
@@ -226,6 +241,26 @@ function pickHighlightedArtifacts(artifacts: GraphExecutionArtifactRecord[]) {
   }
 
   return sortedArtifacts.slice(0, 4)
+}
+
+/** Pick one representative artifact for the compact per-node execution grid. */
+export function pickPrimaryExecutionArtifact(artifacts: GraphExecutionArtifactRecord[]) {
+  return pickHighlightedArtifacts(artifacts)[0] ?? null
+}
+
+/** Build one simple modal body string for a node's text/json outputs. */
+export function buildArtifactGroupModalText(artifacts: GraphExecutionArtifactRecord[]) {
+  if (artifacts.length === 0) {
+    return '내용 없음'
+  }
+
+  if (artifacts.length === 1) {
+    return buildArtifactFullText(artifacts[0])
+  }
+
+  return artifacts
+    .map((artifact) => `${artifact.port_key}\n${buildArtifactFullText(artifact)}`)
+    .join('\n\n')
 }
 
 /** Resolve terminal node ids from the selected workflow graph. */

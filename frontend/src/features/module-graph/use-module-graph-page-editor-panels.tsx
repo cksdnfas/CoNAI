@@ -158,7 +158,7 @@ export function useModuleGraphPageEditorPanels({
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => void
-  onSelectExecution: (executionId: number) => void
+  onSelectExecution: (executionId: number | null) => void
   onRerunSelectedGraph: () => void
   onRetrySelectedExecution: () => void
   onCancelSelectedExecution: () => void
