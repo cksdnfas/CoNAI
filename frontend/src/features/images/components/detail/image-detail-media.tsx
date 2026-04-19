@@ -1,11 +1,21 @@
-import { ChevronLeft, ChevronRight, Lock, RotateCcw, RotateCw, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import type { ImageRecord } from '@/types/image'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { getImageListMediaKind } from '@/features/images/components/image-list/image-list-utils'
 import { cn } from '@/lib/utils'
+import {
+  canToggleImageDetailRenderMode,
+  getImageDetailRenderModeLabel,
+  getImageDetailRenderUrl,
+  getNextImageDetailRenderMode,
+  loadImageDetailRenderMode,
+  persistImageDetailRenderMode,
+  type ImageDetailRenderMode,
+} from './image-detail-utils'
 import { EnhancedVideoPlayer } from './enhanced-video-player'
 
 interface ImageDetailMediaProps {
@@ -83,25 +93,45 @@ function persistImageControlsCollapsed(collapsed: boolean) {
 
 /** Render the main detail media using the correct element for image, GIF, or video files. */
 export function ImageDetailMedia({ image, renderUrl, className }: ImageDetailMediaProps) {
+  const { showSnackbar } = useSnackbar()
+  const [preferredRenderMode, setPreferredRenderMode] = useState<ImageDetailRenderMode>(() => loadImageDetailRenderMode())
+  const mediaKind = getImageListMediaKind(image)
+  const canToggleRenderMode = canToggleImageDetailRenderMode(image)
+  const effectiveRenderUrl = canToggleRenderMode ? getImageDetailRenderUrl(image, preferredRenderMode) : renderUrl
   const previewState = resolveImagePreviewState({
     image,
-    hasPreviewUrl: Boolean(renderUrl),
+    hasPreviewUrl: Boolean(effectiveRenderUrl),
   })
 
-  if (!renderUrl) {
+  if (!effectiveRenderUrl) {
     return <ImagePreviewPlaceholder label={getImagePreviewStateLabel(previewState)} className="min-h-[20rem] rounded-sm border border-dashed border-border/70 bg-surface-low text-sm text-muted-foreground" />
   }
 
-  const mediaKind = getImageListMediaKind(image)
   const altText = image.composite_hash || String(image.id)
-
   const mediaClassName = className ?? 'max-h-[80vh] w-full object-contain'
 
-  if (mediaKind === 'video') {
-    return <EnhancedVideoPlayer renderUrl={renderUrl} className={mediaClassName} loop autoPlay />
+  const handleToggleRenderMode = () => {
+    const nextMode = getNextImageDetailRenderMode(preferredRenderMode)
+    setPreferredRenderMode(nextMode)
+    persistImageDetailRenderMode(nextMode)
+    showSnackbar({ message: `${getImageDetailRenderModeLabel(nextMode)} 보기로 바꿨어.`, tone: 'info' })
   }
 
-  return <InteractiveImageDetailMedia image={image} renderUrl={renderUrl} altText={altText} className={mediaClassName} />
+  if (mediaKind === 'video') {
+    return <EnhancedVideoPlayer renderUrl={effectiveRenderUrl} className={mediaClassName} loop autoPlay />
+  }
+
+  return (
+    <InteractiveImageDetailMedia
+      image={image}
+      renderUrl={effectiveRenderUrl}
+      altText={altText}
+      className={mediaClassName}
+      renderMode={preferredRenderMode}
+      canToggleRenderMode={canToggleRenderMode}
+      onToggleRenderMode={handleToggleRenderMode}
+    />
+  )
 }
 
 function ImageDetailMediaFallback({ image }: { image: ImageRecord }) {
@@ -119,11 +149,17 @@ function InteractiveImageDetailMedia({
   renderUrl,
   altText,
   className,
+  renderMode,
+  canToggleRenderMode,
+  onToggleRenderMode,
 }: {
   image: ImageRecord
   renderUrl: string
   altText: string
   className: string
+  renderMode: ImageDetailRenderMode
+  canToggleRenderMode: boolean
+  onToggleRenderMode: () => void
 }) {
   const [hasRenderError, setHasRenderError] = useState(false)
 
@@ -379,6 +415,22 @@ function InteractiveImageDetailMedia({
 
   return (
     <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
+      {canToggleRenderMode ? (
+        <div className="absolute bottom-3 left-3 z-10 flex items-end gap-2">
+          <Button
+            size="icon-sm"
+            type="button"
+            variant="outline"
+            className="bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high"
+            onClick={onToggleRenderMode}
+            title={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
+            aria-label={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
+          >
+            {renderMode === 'original' ? <ImageIcon className="h-4 w-4" /> : <ScanSearch className="h-4 w-4" />}
+          </Button>
+        </div>
+      ) : null}
+
       <div className="absolute bottom-3 right-3 z-10 flex items-end gap-2">
         <div
           className={cn(

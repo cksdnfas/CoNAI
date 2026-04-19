@@ -1,7 +1,7 @@
 import type { ImageRecord } from '@/types/image'
 import type { SimilaritySettings } from '@/types/settings'
 import { buildImageDownloadUrl } from '@/lib/api'
-import { getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
+import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 
 export function formatBytes(value?: number | null) {
   if (!value) return '—'
@@ -25,13 +25,61 @@ export function getDownloadName(path?: string | null, compositeHash?: string | n
   return compositeHash ? `${compositeHash}.png` : 'image'
 }
 
-/** Build the in-app render URL for the main detail media view, thumbnail first with original fallback. */
-export function getImageDetailRenderUrl(image?: ImageRecord | null) {
+export type ImageDetailRenderMode = 'thumbnail' | 'original'
+
+export const IMAGE_DETAIL_RENDER_MODE_STORAGE_KEY = 'conai:image-detail:render-mode'
+
+export function loadImageDetailRenderMode(): ImageDetailRenderMode {
+  if (typeof window === 'undefined') {
+    return 'thumbnail'
+  }
+
+  return window.localStorage.getItem(IMAGE_DETAIL_RENDER_MODE_STORAGE_KEY) === 'original' ? 'original' : 'thumbnail'
+}
+
+export function persistImageDetailRenderMode(mode: ImageDetailRenderMode) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(IMAGE_DETAIL_RENDER_MODE_STORAGE_KEY, mode)
+}
+
+export function getImageDetailRenderModeLabel(mode: ImageDetailRenderMode) {
+  return mode === 'original' ? '원본' : '썸네일'
+}
+
+export function getNextImageDetailRenderMode(mode: ImageDetailRenderMode): ImageDetailRenderMode {
+  return mode === 'original' ? 'thumbnail' : 'original'
+}
+
+export function canToggleImageDetailRenderMode(image?: ImageRecord | null) {
+  if (!image) {
+    return false
+  }
+
+  if (getImageListMediaKind(image) !== 'image') {
+    return false
+  }
+
+  return Boolean(image.thumbnail_url && image.image_url && image.thumbnail_url !== image.image_url)
+}
+
+/** Build the in-app render URL for the main detail media view. Still images can honor thumbnail/original mode, while GIF/video ignore it. */
+export function getImageDetailRenderUrl(image?: ImageRecord | null, preferredMode: ImageDetailRenderMode = 'thumbnail') {
   if (!image) {
     return null
   }
 
-  return getImageListPreviewUrl(image)
+  if (getImageListMediaKind(image) !== 'image') {
+    return getImageListPreviewUrl(image)
+  }
+
+  if (preferredMode === 'original') {
+    return image.image_url || image.thumbnail_url || null
+  }
+
+  return image.thumbnail_url || image.image_url || null
 }
 
 /** Build the original-file download URL for the detail header actions. */
