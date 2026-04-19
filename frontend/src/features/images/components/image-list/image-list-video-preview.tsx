@@ -1,4 +1,5 @@
 import { type CSSProperties, type DragEventHandler, useEffect, useState } from 'react'
+import { useCachedVideoSource } from '@/features/images/components/video/use-cached-video-source'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { getImageListPreviewUrl } from './image-list-utils'
@@ -22,13 +23,14 @@ export function ImageListVideoPreview({
   onError,
 }: ImageListVideoPreviewProps) {
   const previewUrl = getImageListPreviewUrl(image)
+  const { resolvedSourceUrl } = useCachedVideoSource(previewUrl, { backgroundOnly: true })
   const [hasLoadedFrame, setHasLoadedFrame] = useState(false)
 
   useEffect(() => {
     setHasLoadedFrame(false)
-  }, [previewUrl])
+  }, [resolvedSourceUrl])
 
-  if (!previewUrl) {
+  if (!resolvedSourceUrl) {
     return null
   }
 
@@ -45,7 +47,7 @@ export function ImageListVideoPreview({
         )}
       />
       <video
-        src={previewUrl}
+        src={resolvedSourceUrl}
         className={cn(
           className,
           'transition-opacity duration-200',

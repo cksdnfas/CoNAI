@@ -3,6 +3,7 @@ import './image-detail-media.css'
 
 import type Plyr from 'plyr'
 import { useEffect, useRef } from 'react'
+import { useCachedVideoSource } from '@/features/images/components/video/use-cached-video-source'
 import { cn } from '@/lib/utils'
 
 function destroyPlyrSafely(player: Plyr | null) {
@@ -33,6 +34,7 @@ export function EnhancedVideoPlayer({
   autoPlay = false,
   preload = 'metadata',
 }: EnhancedVideoPlayerProps) {
+  const { resolvedSourceUrl, isCachePending } = useCachedVideoSource(renderUrl)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playerRef = useRef<Plyr | null>(null)
 
@@ -93,11 +95,11 @@ export function EnhancedVideoPlayer({
       playerRef.current = null
       destroyPlyrSafely(activePlayer)
     }
-  }, [autoPlay, renderUrl])
+  }, [autoPlay, resolvedSourceUrl])
 
   return (
     <div
-      className={cn('conai-video-player w-full overflow-hidden rounded-sm bg-black', className)}
+      className={cn('conai-video-player relative w-full overflow-hidden rounded-sm bg-black', className)}
       style={{
         ['--plyr-color-main' as string]: 'var(--primary)',
         ['--plyr-control-icon-size' as string]: '18px',
@@ -116,17 +118,23 @@ export function EnhancedVideoPlayer({
         ['--plyr-video-progress-buffered-background' as string]: 'rgb(255 255 255 / 0.14)',
       }}
     >
+      {isCachePending && !resolvedSourceUrl ? (
+        <div className="absolute inset-0 z-10 animate-pulse bg-surface-lowest" aria-hidden="true" />
+      ) : null}
       <video
-        key={renderUrl}
+        key={resolvedSourceUrl ?? renderUrl}
         ref={videoRef}
-        className="conai-video-player__media h-full w-full bg-black object-contain"
+        className={cn(
+          'conai-video-player__media h-full w-full bg-black object-contain',
+          isCachePending && !resolvedSourceUrl && 'opacity-0',
+        )}
         autoPlay={autoPlay}
         controls
         loop={loop}
         playsInline
         preload={preload}
       >
-        <source src={renderUrl} />
+        {resolvedSourceUrl ? <source src={resolvedSourceUrl} /> : null}
       </video>
     </div>
   )
