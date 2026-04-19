@@ -7,6 +7,7 @@ import { SIMILARITY_THRESHOLDS } from '../../types/similarity';
 import { runtimePaths } from '../../config/runtimePaths';
 import { successResponse, errorResponse, PAGINATION } from '@conai/shared';
 import { db } from '../../database/init';
+import { sendRouteBadRequest } from '../routeValidation';
 import {
   ensureImageFieldOrBlock,
   enrichDuplicateGroups,
@@ -29,7 +30,7 @@ router.get('/:id/duplicates', asyncHandler(async (req: Request, res: Response) =
   try {
     const identifier = getSimilarityRouteIdentifier(req);
     const { value } = identifier;
-    const threshold = parseInt(req.query.threshold as string) || SIMILARITY_THRESHOLDS.NEAR_DUPLICATE;
+    const threshold = parseIntegerWithFallback(req.query.threshold, SIMILARITY_THRESHOLDS.NEAR_DUPLICATE);
     const includeMetadata = req.query.includeMetadata !== 'false';
 
     if (!ensureImageFieldOrBlock(res, identifier, {
@@ -150,8 +151,8 @@ router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response
   try {
     const identifier = getSimilarityRouteIdentifier(req);
     const { value } = identifier;
-    const threshold = parseFloat(req.query.threshold as string) || (SIMILARITY_THRESHOLDS.COLOR_SIMILAR * 100);
-    const limit = parseInt(req.query.limit as string) || PAGINATION.GROUP_IMAGES_LIMIT;
+    const threshold = parseNumberWithFallback(req.query.threshold, SIMILARITY_THRESHOLDS.COLOR_SIMILAR * 100);
+    const limit = parseIntegerWithFallback(req.query.limit, PAGINATION.GROUP_IMAGES_LIMIT);
 
     if (!ensureImageFieldOrBlock(res, identifier, {
       field: 'color_histogram',
@@ -187,8 +188,8 @@ router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response
  */
 router.get('/duplicates/all', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const threshold = parseInt(req.query.threshold as string) || SIMILARITY_THRESHOLDS.NEAR_DUPLICATE;
-    const minGroupSize = parseInt(req.query.minGroupSize as string) || 2;
+    const threshold = parseIntegerWithFallback(req.query.threshold, SIMILARITY_THRESHOLDS.NEAR_DUPLICATE);
+    const minGroupSize = parseIntegerWithFallback(req.query.minGroupSize, 2);
 
     const groups = await ImageSimilarityModel.findAllDuplicateGroups({
       threshold,
@@ -223,7 +224,7 @@ router.get('/duplicates/all', asyncHandler(async (req: Request, res: Response) =
  */
 router.post('/similarity/rebuild', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 50;
+    const limit = parseIntegerWithFallback(req.query.limit, 50);
 
     // 해시가 없는 이미지 메타데이터 조회
     const imagesWithoutHash = db.prepare(`
@@ -351,13 +352,15 @@ router.delete('/files/bulk', asyncHandler(async (req: Request, res: Response) =>
   const { fileIds } = req.body;
 
   if (!Array.isArray(fileIds) || fileIds.length === 0) {
-    return res.status(400).json(errorResponse('fileIds must be a non-empty array'));
+    sendRouteBadRequest(res, 'fileIds must be a non-empty array');
+    return;
   }
 
   // Validate all fileIds are numbers
   const validFileIds = fileIds.filter(id => typeof id === 'number' && !isNaN(id));
   if (validFileIds.length !== fileIds.length) {
-    return res.status(400).json(errorResponse('All fileIds must be valid numbers'));
+    sendRouteBadRequest(res, 'All fileIds must be valid numbers');
+    return;
   }
 
   const { DeletionService } = await import('../../services/deletionService');

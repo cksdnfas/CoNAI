@@ -27,6 +27,7 @@ import {
   GraphWorkflowScheduleType,
 } from '../types/moduleGraph'
 import { asyncHandler } from '../middleware/errorHandler'
+import { parsePositiveInteger, sendRouteBadRequest } from './routeValidation'
 
 const router = Router()
 
@@ -44,17 +45,12 @@ function parseOptionalTrimmedString(value: unknown) {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
 
-function parseOptionalPositiveInteger(value: unknown) {
-  if (value === null || value === undefined || value === '') {
-    return null
-  }
-
-  const numericValue = Number(value)
-  return Number.isInteger(numericValue) && numericValue > 0 ? numericValue : null
-}
-
 function parseScheduleInputValues(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function parseGraphRouteInteger(value: string | string[] | undefined) {
+  return parseInt(routeParam(routeParam(value)))
 }
 
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
@@ -100,7 +96,7 @@ router.post('/folders', asyncHandler(async (req: Request, res: Response) => {
   const parentId = typeof req.body?.parent_id === 'number' ? req.body.parent_id : null
 
   if (!name) {
-    return res.status(400).json({ success: false, error: 'name is required' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'name is required')
   }
 
   if (parentId !== null && !GraphWorkflowFolderModel.findById(parentId)) {
@@ -117,14 +113,14 @@ router.post('/folders', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 router.put('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseGraphRouteInteger(req.params.id)
   const existingFolder = !isNaN(id) ? GraphWorkflowFolderModel.findById(id) : null
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined
   const description = typeof req.body?.description === 'string' ? req.body.description.trim() : undefined
   const parentId = typeof req.body?.parent_id === 'number' ? req.body.parent_id : req.body?.parent_id === null ? null : undefined
 
   if (isNaN(id)) {
-    return res.status(400).json({ success: false, error: 'Invalid folder ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid folder ID')
   }
 
   if (!existingFolder) {
@@ -132,12 +128,12 @@ router.put('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (name !== undefined && !name) {
-    return res.status(400).json({ success: false, error: 'name is required' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'name is required')
   }
 
   if (parentId !== undefined) {
     if (parentId === id) {
-      return res.status(400).json({ success: false, error: 'Folder cannot be its own parent' } as ModuleGraphResponse)
+      return sendRouteBadRequest(res, 'Folder cannot be its own parent')
     }
     if (parentId !== null && !GraphWorkflowFolderModel.findById(parentId)) {
       return res.status(404).json({ success: false, error: 'Parent folder not found' } as ModuleGraphResponse)
@@ -151,7 +147,7 @@ router.put('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
       parent_id: parentId,
     })
     if (!updated) {
-      return res.status(400).json({ success: false, error: 'No folder changes detected' } as ModuleGraphResponse)
+      return sendRouteBadRequest(res, 'No folder changes detected')
     }
 
     return res.json({ success: true, data: { message: 'Graph workflow folder updated successfully' } } as ModuleGraphResponse)
@@ -162,11 +158,11 @@ router.put('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 router.delete('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseGraphRouteInteger(req.params.id)
   const deleteMode = req.query.mode === 'delete_tree' ? 'delete_tree' : 'move_children'
 
   if (isNaN(id)) {
-    return res.status(400).json({ success: false, error: 'Invalid folder ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid folder ID')
   }
 
   if (!GraphWorkflowFolderModel.findById(id)) {
@@ -218,22 +214,22 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const scheduleType = parseScheduleType(req.body?.schedule_type)
   const status = parseScheduleStatus(req.body?.status) ?? 'paused'
   const runAt = parseOptionalTrimmedString(req.body?.run_at)
-  const intervalMinutes = parseOptionalPositiveInteger(req.body?.interval_minutes)
+  const intervalMinutes = parsePositiveInteger(req.body?.interval_minutes)
   const dailyTime = parseOptionalTrimmedString(req.body?.daily_time)
-  const maxRunCount = parseOptionalPositiveInteger(req.body?.max_run_count)
+  const maxRunCount = parsePositiveInteger(req.body?.max_run_count)
   const timezone = parseOptionalTrimmedString(req.body?.timezone)
   const inputValues = parseScheduleInputValues(req.body?.input_values)
 
   if (!Number.isFinite(workflowId)) {
-    return res.status(400).json({ success: false, error: 'graph_workflow_id is required' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'graph_workflow_id is required')
   }
 
   if (!name) {
-    return res.status(400).json({ success: false, error: 'name is required' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'name is required')
   }
 
   if (!scheduleType) {
-    return res.status(400).json({ success: false, error: 'schedule_type must be once, interval, or daily' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'schedule_type must be once, interval, or daily')
   }
 
   const workflow = GraphWorkflowModel.findById(workflowId)
@@ -242,15 +238,15 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (scheduleType === 'once' && !runAt) {
-    return res.status(400).json({ success: false, error: 'run_at is required for one-time schedules' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'run_at is required for one-time schedules')
   }
 
   if (scheduleType === 'interval' && !intervalMinutes) {
-    return res.status(400).json({ success: false, error: 'interval_minutes is required for interval schedules' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'interval_minutes is required for interval schedules')
   }
 
   if (scheduleType === 'daily' && !dailyTime) {
-    return res.status(400).json({ success: false, error: 'daily_time is required for daily schedules' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'daily_time is required for daily schedules')
   }
 
   try {
@@ -289,9 +285,9 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseInt(routeParam(routeParam(req.params.scheduleId)))
+  const scheduleId = parseGraphRouteInteger(req.params.scheduleId)
   if (isNaN(scheduleId)) {
-    return res.status(400).json({ success: false, error: 'Invalid schedule ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid schedule ID')
   }
 
   const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
@@ -308,18 +304,18 @@ router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Resp
   const scheduleType = req.body?.schedule_type !== undefined ? parseScheduleType(req.body.schedule_type) : undefined
   const requestedStatus = req.body?.status !== undefined ? parseScheduleStatus(req.body.status) : undefined
   const runAt = req.body?.run_at !== undefined ? parseOptionalTrimmedString(req.body.run_at) : undefined
-  const intervalMinutes = req.body?.interval_minutes !== undefined ? parseOptionalPositiveInteger(req.body.interval_minutes) : undefined
+  const intervalMinutes = req.body?.interval_minutes !== undefined ? parsePositiveInteger(req.body.interval_minutes) : undefined
   const dailyTime = req.body?.daily_time !== undefined ? parseOptionalTrimmedString(req.body.daily_time) : undefined
-  const maxRunCount = req.body?.max_run_count !== undefined ? parseOptionalPositiveInteger(req.body.max_run_count) : undefined
+  const maxRunCount = req.body?.max_run_count !== undefined ? parsePositiveInteger(req.body.max_run_count) : undefined
   const timezone = req.body?.timezone !== undefined ? parseOptionalTrimmedString(req.body.timezone) : undefined
   const inputValues = req.body?.input_values !== undefined ? parseScheduleInputValues(req.body.input_values) : undefined
 
   if (name !== undefined && !name) {
-    return res.status(400).json({ success: false, error: 'name is required' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'name is required')
   }
 
   if (req.body?.schedule_type !== undefined && !scheduleType) {
-    return res.status(400).json({ success: false, error: 'schedule_type must be once, interval, or daily' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'schedule_type must be once, interval, or daily')
   }
 
   try {
@@ -365,9 +361,9 @@ router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Resp
 }))
 
 router.post('/schedules/:scheduleId/pause', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseInt(routeParam(routeParam(req.params.scheduleId)))
+  const scheduleId = parseGraphRouteInteger(req.params.scheduleId)
   if (isNaN(scheduleId)) {
-    return res.status(400).json({ success: false, error: 'Invalid schedule ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid schedule ID')
   }
 
   const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
@@ -387,9 +383,9 @@ router.post('/schedules/:scheduleId/pause', asyncHandler(async (req: Request, re
 }))
 
 router.post('/schedules/:scheduleId/resume', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseInt(routeParam(routeParam(req.params.scheduleId)))
+  const scheduleId = parseGraphRouteInteger(req.params.scheduleId)
   if (isNaN(scheduleId)) {
-    return res.status(400).json({ success: false, error: 'Invalid schedule ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid schedule ID')
   }
 
   const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
@@ -421,9 +417,9 @@ router.post('/schedules/:scheduleId/resume', asyncHandler(async (req: Request, r
 }))
 
 router.post('/schedules/:scheduleId/run-now', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseInt(routeParam(routeParam(req.params.scheduleId)))
+  const scheduleId = parseGraphRouteInteger(req.params.scheduleId)
   if (isNaN(scheduleId)) {
-    return res.status(400).json({ success: false, error: 'Invalid schedule ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid schedule ID')
   }
 
   const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
@@ -458,9 +454,9 @@ router.post('/schedules/:scheduleId/run-now', asyncHandler(async (req: Request, 
 }))
 
 router.delete('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseInt(routeParam(routeParam(req.params.scheduleId)))
+  const scheduleId = parseGraphRouteInteger(req.params.scheduleId)
   if (isNaN(scheduleId)) {
-    return res.status(400).json({ success: false, error: 'Invalid schedule ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid schedule ID')
   }
 
   const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
@@ -474,9 +470,9 @@ router.delete('/schedules/:scheduleId', asyncHandler(async (req: Request, res: R
 }))
 
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseGraphRouteInteger(req.params.id)
   if (isNaN(id)) {
-    return res.status(400).json({ success: false, error: 'Invalid graph workflow ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid graph workflow ID')
   }
 
   try {
@@ -493,9 +489,9 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 router.get('/:id/executions', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseGraphRouteInteger(req.params.id)
   if (isNaN(id)) {
-    return res.status(400).json({ success: false, error: 'Invalid graph workflow ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid graph workflow ID')
   }
 
   try {
@@ -508,9 +504,9 @@ router.get('/:id/executions', asyncHandler(async (req: Request, res: Response) =
 }))
 
 router.get('/executions/:executionId', asyncHandler(async (req: Request, res: Response) => {
-  const executionId = parseInt(routeParam(routeParam(req.params.executionId)))
+  const executionId = parseGraphRouteInteger(req.params.executionId)
   if (isNaN(executionId)) {
-    return res.status(400).json({ success: false, error: 'Invalid execution ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid execution ID')
   }
 
   try {
@@ -530,9 +526,9 @@ router.get('/executions/:executionId', asyncHandler(async (req: Request, res: Re
 }))
 
 router.post('/:id/execute', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseGraphRouteInteger(req.params.id)
   if (isNaN(id)) {
-    return res.status(400).json({ success: false, error: 'Invalid graph workflow ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid graph workflow ID')
   }
 
   try {
@@ -549,10 +545,10 @@ router.post('/:id/execute', asyncHandler(async (req: Request, res: Response) => 
 }))
 
 router.post('/:id/nodes/:nodeId/execute', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseGraphRouteInteger(req.params.id)
   const nodeId = routeParam(req.params.nodeId)
   if (isNaN(id) || !nodeId) {
-    return res.status(400).json({ success: false, error: 'Invalid graph workflow or node ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid graph workflow or node ID')
   }
 
   try {
@@ -581,9 +577,9 @@ router.post('/:id/nodes/:nodeId/execute', asyncHandler(async (req: Request, res:
 }))
 
 router.post('/executions/:executionId/cancel', asyncHandler(async (req: Request, res: Response) => {
-  const executionId = parseInt(routeParam(routeParam(req.params.executionId)))
+  const executionId = parseGraphRouteInteger(req.params.executionId)
   if (isNaN(executionId)) {
-    return res.status(400).json({ success: false, error: 'Invalid execution ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid execution ID')
   }
 
   try {
@@ -607,7 +603,7 @@ router.post('/executions/cleanup-empty', asyncHandler(async (req: Request, res: 
     : []
 
   if (executionIds.length === 0) {
-    return res.status(400).json({ success: false, error: 'execution_ids is required' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'execution_ids is required')
   }
 
   try {
@@ -628,11 +624,11 @@ router.post('/artifacts/copy-to-folder', asyncHandler(async (req: Request, res: 
     : []
 
   if (!Number.isFinite(folderId)) {
-    return res.status(400).json({ success: false, error: 'folder_id is required' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'folder_id is required')
   }
 
   if (sourcePaths.length === 0) {
-    return res.status(400).json({ success: false, error: 'source_paths is required' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'source_paths is required')
   }
 
   try {
@@ -656,7 +652,7 @@ router.post('/artifacts/delete', asyncHandler(async (req: Request, res: Response
     : []
 
   if (artifactIds.length === 0) {
-    return res.status(400).json({ success: false, error: 'artifact_ids is required' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'artifact_ids is required')
   }
 
   try {
@@ -670,7 +666,7 @@ router.post('/artifacts/delete', asyncHandler(async (req: Request, res: Response
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const { name, description, graph, folder_id, version, is_active } = req.body
   if (!name || !graph) {
-    return res.status(400).json({ success: false, error: 'name and graph are required' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'name and graph are required')
   }
 
   try {
@@ -692,9 +688,9 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseGraphRouteInteger(req.params.id)
   if (isNaN(id)) {
-    return res.status(400).json({ success: false, error: 'Invalid graph workflow ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid graph workflow ID')
   }
 
   try {
@@ -732,9 +728,9 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseGraphRouteInteger(req.params.id)
   if (isNaN(id)) {
-    return res.status(400).json({ success: false, error: 'Invalid graph workflow ID' } as ModuleGraphResponse)
+    return sendRouteBadRequest(res, 'Invalid graph workflow ID')
   }
 
   try {

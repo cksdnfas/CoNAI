@@ -1,4 +1,4 @@
-import { Router, type Request, type RequestHandler } from 'express';
+import { Router, type Request, type RequestHandler, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import { AuthCredentials } from '../models/AuthCredentials';
@@ -25,6 +25,18 @@ type SessionResponseAccount = {
   username: string;
   account_type: 'admin' | 'guest';
 };
+
+/** Send the auth route's legacy 400 payload shape without changing response contracts. */
+function sendAuthBadRequest(res: Response, error: string) {
+  res.status(400).json({ error });
+  return false;
+}
+
+/** Parse one auth route integer while preserving the current Number.parseInt semantics. */
+function parseAuthInteger(value: unknown) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  return Number.isInteger(parsed) ? parsed : null;
+}
 
 /** Normalize SQLite UTC timestamps into ISO strings so clients parse them consistently. */
 function formatSqliteUtcTimestamp(value: string | null | undefined) {
@@ -103,7 +115,7 @@ const handleLogin: RequestHandler = async (req, res) => {
   const password = String(req.body?.password || '');
 
   if (!username || !password) {
-    res.status(400).json({ error: 'Username and password are required' });
+    sendAuthBadRequest(res, 'Username and password are required');
     return;
   }
 
@@ -159,7 +171,7 @@ const handleSetup: RequestHandler = async (req, res) => {
   const password = String(req.body?.password || '');
 
   if (!username || !password) {
-    res.status(400).json({ error: 'Username and password are required' });
+    sendAuthBadRequest(res, 'Username and password are required');
     return;
   }
 
@@ -199,7 +211,7 @@ const handleUpdateCredentials: RequestHandler = async (req, res) => {
   const newPassword = String(req.body?.newPassword || '');
 
   if (!currentPassword || !newUsername || !newPassword) {
-    res.status(400).json({ error: 'Current password, new username, and new password are required' });
+    sendAuthBadRequest(res, 'Current password, new username, and new password are required');
     return;
   }
 
@@ -246,7 +258,7 @@ const handleGuestAccountCreate: RequestHandler = async (req, res) => {
   const password = String(req.body?.password || '');
 
   if (!username || !password) {
-    res.status(400).json({ error: 'Username and password are required' });
+    sendAuthBadRequest(res, 'Username and password are required');
     return;
   }
 
@@ -333,9 +345,9 @@ const handlePermissionGroups: RequestHandler = async (req, res) => {
 
 /** Handle one permission-group detail read with its current members. */
 const handlePermissionGroupDetail: RequestHandler = async (req, res) => {
-  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
-  if (!Number.isInteger(groupId)) {
-    res.status(400).json({ error: 'Invalid group id' });
+  const groupId = parseAuthInteger(req.params.groupId);
+  if (groupId === null) {
+    sendAuthBadRequest(res, 'Invalid group id');
     return;
   }
 
@@ -384,9 +396,9 @@ const handlePermissionGroupCreate: RequestHandler = async (req, res) => {
 
 /** Handle one custom permission-group update. */
 const handlePermissionGroupUpdate: RequestHandler = async (req, res) => {
-  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
-  if (!Number.isInteger(groupId)) {
-    res.status(400).json({ error: 'Invalid group id' });
+  const groupId = parseAuthInteger(req.params.groupId);
+  if (groupId === null) {
+    sendAuthBadRequest(res, 'Invalid group id');
     return;
   }
 
@@ -417,9 +429,9 @@ const handlePermissionGroupUpdate: RequestHandler = async (req, res) => {
 
 /** Handle one custom permission-group deletion. */
 const handlePermissionGroupDelete: RequestHandler = async (req, res) => {
-  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
-  if (!Number.isInteger(groupId)) {
-    res.status(400).json({ error: 'Invalid group id' });
+  const groupId = parseAuthInteger(req.params.groupId);
+  if (groupId === null) {
+    sendAuthBadRequest(res, 'Invalid group id');
     return;
   }
 
@@ -440,16 +452,16 @@ const handlePermissionGroupDelete: RequestHandler = async (req, res) => {
 
 /** Handle adding one account membership to one custom permission group. */
 const handlePermissionGroupMemberAdd: RequestHandler = async (req, res) => {
-  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
-  const accountId = Number.parseInt(String(req.body?.accountId || ''), 10);
+  const groupId = parseAuthInteger(req.params.groupId);
+  const accountId = parseAuthInteger(req.body?.accountId);
 
-  if (!Number.isInteger(groupId)) {
-    res.status(400).json({ error: 'Invalid group id' });
+  if (groupId === null) {
+    sendAuthBadRequest(res, 'Invalid group id');
     return;
   }
 
-  if (!Number.isInteger(accountId)) {
-    res.status(400).json({ error: 'Invalid account id' });
+  if (accountId === null) {
+    sendAuthBadRequest(res, 'Invalid account id');
     return;
   }
 
@@ -470,16 +482,16 @@ const handlePermissionGroupMemberAdd: RequestHandler = async (req, res) => {
 
 /** Handle removing one account membership from one custom permission group. */
 const handlePermissionGroupMemberRemove: RequestHandler = async (req, res) => {
-  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
-  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+  const groupId = parseAuthInteger(req.params.groupId);
+  const accountId = parseAuthInteger(req.params.accountId);
 
-  if (!Number.isInteger(groupId)) {
-    res.status(400).json({ error: 'Invalid group id' });
+  if (groupId === null) {
+    sendAuthBadRequest(res, 'Invalid group id');
     return;
   }
 
-  if (!Number.isInteger(accountId)) {
-    res.status(400).json({ error: 'Invalid account id' });
+  if (accountId === null) {
+    sendAuthBadRequest(res, 'Invalid account id');
     return;
   }
 
@@ -529,12 +541,12 @@ const handlePageAccessReplace: RequestHandler = async (req, res) => {
     : null;
 
   if (groupKey !== 'anonymous' && groupKey !== 'guest') {
-    res.status(400).json({ error: 'groupKey must be one of: anonymous, guest' });
+    sendAuthBadRequest(res, 'groupKey must be one of: anonymous, guest');
     return;
   }
 
   if (!permissionKeys) {
-    res.status(400).json({ error: 'permissionKeys must be an array' });
+    sendAuthBadRequest(res, 'permissionKeys must be an array');
     return;
   }
 
@@ -559,16 +571,16 @@ const handlePageAccessReplace: RequestHandler = async (req, res) => {
 
 /** Handle system-group changes for one local account. */
 const handleAccountSystemGroupUpdate: RequestHandler = async (req, res) => {
-  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+  const accountId = parseAuthInteger(req.params.accountId);
   const groupKey = String(req.body?.groupKey || '').trim() as AssignableSystemGroupKey;
 
-  if (!Number.isInteger(accountId)) {
-    res.status(400).json({ error: 'Invalid account id' });
+  if (accountId === null) {
+    sendAuthBadRequest(res, 'Invalid account id');
     return;
   }
 
   if (groupKey !== 'guest' && groupKey !== 'admin') {
-    res.status(400).json({ error: 'groupKey must be one of: guest, admin' });
+    sendAuthBadRequest(res, 'groupKey must be one of: guest, admin');
     return;
   }
 
@@ -579,12 +591,12 @@ const handleAccountSystemGroupUpdate: RequestHandler = async (req, res) => {
   }
 
   if (req.session.accountId === accountId && groupKey !== 'admin') {
-    res.status(400).json({ error: 'You cannot demote your current admin session' });
+    sendAuthBadRequest(res, 'You cannot demote your current admin session');
     return;
   }
 
   if (targetAccount.account_type === 'admin' && groupKey !== 'admin' && AuthAccount.countActiveAdmins() <= 1) {
-    res.status(400).json({ error: 'At least one active admin account must remain' });
+    sendAuthBadRequest(res, 'At least one active admin account must remain');
     return;
   }
 
@@ -608,16 +620,16 @@ const handleAccountSystemGroupUpdate: RequestHandler = async (req, res) => {
 
 /** Handle admin-side password changes for one local account. */
 const handleAccountPasswordUpdate: RequestHandler = async (req, res) => {
-  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+  const accountId = parseAuthInteger(req.params.accountId);
   const newPassword = String(req.body?.newPassword || '');
 
-  if (!Number.isInteger(accountId)) {
-    res.status(400).json({ error: 'Invalid account id' });
+  if (accountId === null) {
+    sendAuthBadRequest(res, 'Invalid account id');
     return;
   }
 
   if (!newPassword.trim()) {
-    res.status(400).json({ error: 'newPassword is required' });
+    sendAuthBadRequest(res, 'newPassword is required');
     return;
   }
 
@@ -639,15 +651,15 @@ const handleAccountPasswordUpdate: RequestHandler = async (req, res) => {
 
 /** Handle one removable account deletion from the admin UI. */
 const handleAccountDelete: RequestHandler = async (req, res) => {
-  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+  const accountId = parseAuthInteger(req.params.accountId);
 
-  if (!Number.isInteger(accountId)) {
-    res.status(400).json({ error: 'Invalid account id' });
+  if (accountId === null) {
+    sendAuthBadRequest(res, 'Invalid account id');
     return;
   }
 
   if (req.session.accountId === accountId) {
-    res.status(400).json({ error: 'You cannot delete your current session account' });
+    sendAuthBadRequest(res, 'You cannot delete your current session account');
     return;
   }
 

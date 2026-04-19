@@ -12,6 +12,7 @@ import { GenerationQueueService } from '../services/generationQueueService'
 import { readComfyRequestDebugSnapshot } from '../services/generationRequestDebugService'
 import { AuthAccessControlService } from '../services/authAccessControlService'
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../types/generationQueue'
+import { parsePositiveInteger, sendRouteBadRequest } from './routeValidation'
 
 const router = express.Router()
 
@@ -57,8 +58,8 @@ function parsePositiveIntegerQuery(value: unknown, name: string): number | undef
     return undefined
   }
 
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed <= 0) {
+  const parsed = parsePositiveInteger(value)
+  if (parsed === null) {
     throw new Error(`${name} must be a positive integer`)
   }
 
@@ -358,10 +359,7 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     serviceType = parseServiceType(req.query.service_type)
     workflowId = parsePositiveIntegerQuery(req.query.workflow_id, 'workflow_id')
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Invalid queue stats filter',
-    })
+    sendRouteBadRequest(res, error instanceof Error ? error.message : 'Invalid queue stats filter')
     return
   }
 
@@ -402,10 +400,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     serviceType = parseServiceType(req.query.service_type)
     workflowId = parsePositiveIntegerQuery(req.query.workflow_id, 'workflow_id')
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Invalid queue filter',
-    })
+    sendRouteBadRequest(res, error instanceof Error ? error.message : 'Invalid queue filter')
     return
   }
 
@@ -479,17 +474,17 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   } = req.body ?? {}
 
   if (service_type !== 'comfyui' && service_type !== 'novelai') {
-    res.status(400).json({ success: false, error: 'service_type must be either comfyui or novelai' })
+    sendRouteBadRequest(res, 'service_type must be either comfyui or novelai')
     return
   }
 
   if (!request_payload || typeof request_payload !== 'object' || Array.isArray(request_payload)) {
-    res.status(400).json({ success: false, error: 'request_payload must be an object' })
+    sendRouteBadRequest(res, 'request_payload must be an object')
     return
   }
 
   if (priority !== undefined && (!Number.isInteger(priority) || priority < 0 || priority > 100000)) {
-    res.status(400).json({ success: false, error: 'priority must be an integer between 0 and 100000' })
+    sendRouteBadRequest(res, 'priority must be an integer between 0 and 100000')
     return
   }
 
@@ -497,18 +492,20 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     parsedRequestedServerTag = parseRequestedServerTag(requested_server_tag)
   } catch (error) {
-    res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'requested_server_tag is invalid' })
+    sendRouteBadRequest(res, error instanceof Error ? error.message : 'requested_server_tag is invalid')
     return
   }
 
   let workflowIdNumber: number | null = null
+  let requestedGroupIdNumber: number | null = null
+  let requestedServerIdNumber: number | null = null
   let workflowLinkedServers: Array<{ id: number; routing_tags?: string[] }> = []
   let workflowHasServerLinks = false
 
   if (workflow_id !== undefined && workflow_id !== null) {
-    workflowIdNumber = Number(workflow_id)
-    if (!Number.isInteger(workflowIdNumber) || workflowIdNumber <= 0) {
-      res.status(400).json({ success: false, error: 'workflow_id must be a positive integer' })
+    workflowIdNumber = parsePositiveInteger(workflow_id)
+    if (workflowIdNumber === null) {
+      sendRouteBadRequest(res, 'workflow_id must be a positive integer')
       return
     }
 
@@ -523,63 +520,63 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (requested_group_id !== undefined && requested_group_id !== null) {
-    const groupIdNumber = Number(requested_group_id)
-    if (!Number.isInteger(groupIdNumber) || groupIdNumber <= 0) {
-      res.status(400).json({ success: false, error: 'requested_group_id must be a positive integer' })
+    requestedGroupIdNumber = parsePositiveInteger(requested_group_id)
+    if (requestedGroupIdNumber === null) {
+      sendRouteBadRequest(res, 'requested_group_id must be a positive integer')
       return
     }
   }
 
   if (service_type === 'comfyui') {
     if (workflowIdNumber === null) {
-      res.status(400).json({ success: false, error: 'workflow_id is required for comfyui jobs' })
+      sendRouteBadRequest(res, 'workflow_id is required for comfyui jobs')
       return
     }
 
     if (workflowHasServerLinks && workflowLinkedServers.length === 0) {
-      res.status(400).json({ success: false, error: 'This workflow has no active linked ComfyUI servers' })
+      sendRouteBadRequest(res, 'This workflow has no active linked ComfyUI servers')
       return
     }
   }
 
   if (requested_server_id !== undefined && requested_server_id !== null) {
-    const serverIdNumber = Number(requested_server_id)
-    if (!Number.isInteger(serverIdNumber) || serverIdNumber <= 0) {
-      res.status(400).json({ success: false, error: 'requested_server_id must be a positive integer' })
+    requestedServerIdNumber = parsePositiveInteger(requested_server_id)
+    if (requestedServerIdNumber === null) {
+      sendRouteBadRequest(res, 'requested_server_id must be a positive integer')
       return
     }
 
-    const server = ComfyUIServerModel.findById(serverIdNumber)
+    const server = ComfyUIServerModel.findById(requestedServerIdNumber)
     if (!server || !server.is_active) {
       res.status(404).json({ success: false, error: 'Referenced ComfyUI server not found or inactive' })
       return
     }
 
     if (service_type !== 'comfyui') {
-      res.status(400).json({ success: false, error: 'requested_server_id is only valid for comfyui jobs' })
+      sendRouteBadRequest(res, 'requested_server_id is only valid for comfyui jobs')
       return
     }
 
-    if (workflowHasServerLinks && !workflowLinkedServers.some((linkedServer) => Number(linkedServer.id) === serverIdNumber)) {
-      res.status(400).json({ success: false, error: 'requested_server_id is not linked to this workflow' })
+    if (workflowHasServerLinks && !workflowLinkedServers.some((linkedServer) => Number(linkedServer.id) === requestedServerIdNumber)) {
+      sendRouteBadRequest(res, 'requested_server_id is not linked to this workflow')
       return
     }
   }
 
   if (parsedRequestedServerTag !== undefined && service_type !== 'comfyui') {
-    res.status(400).json({ success: false, error: 'requested_server_tag is only valid for comfyui jobs' })
+    sendRouteBadRequest(res, 'requested_server_tag is only valid for comfyui jobs')
     return
   }
 
   if (requested_server_id !== undefined && requested_server_id !== null && parsedRequestedServerTag !== undefined) {
-    res.status(400).json({ success: false, error: 'requested_server_id and requested_server_tag cannot be combined' })
+    sendRouteBadRequest(res, 'requested_server_id and requested_server_tag cannot be combined')
     return
   }
 
   if (parsedRequestedServerTag !== undefined) {
     const tagCandidateServers = workflowHasServerLinks ? workflowLinkedServers : ComfyUIServerModel.findActiveServers()
     if (!tagCandidateServers.some((linkedServer) => (linkedServer.routing_tags ?? []).includes(parsedRequestedServerTag))) {
-      res.status(400).json({ success: false, error: workflowHasServerLinks ? 'requested_server_tag does not match any linked workflow server' : 'requested_server_tag does not match any active ComfyUI server' })
+      sendRouteBadRequest(res, workflowHasServerLinks ? 'requested_server_tag does not match any linked workflow server' : 'requested_server_tag does not match any active ComfyUI server')
       return
     }
   }
@@ -590,8 +587,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     priority,
     workflow_id: workflowIdNumber,
     workflow_name: typeof workflow_name === 'string' && workflow_name.trim().length > 0 ? workflow_name.trim() : null,
-    requested_group_id: requested_group_id !== undefined && requested_group_id !== null ? Number(requested_group_id) : null,
-    requested_server_id: requested_server_id !== undefined && requested_server_id !== null ? Number(requested_server_id) : null,
+    requested_group_id: requestedGroupIdNumber,
+    requested_server_id: requestedServerIdNumber,
     requested_server_tag: parsedRequestedServerTag ?? null,
     request_payload,
     request_summary: typeof request_summary === 'string' && request_summary.trim().length > 0 ? request_summary.trim() : null,
@@ -610,9 +607,9 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
 /** GET /api/generation-queue/:id/request-debug */
 router.get('/:id/request-debug', asyncHandler(async (req: Request, res: Response) => {
-  const jobId = Number(req.params.id)
-  if (!Number.isInteger(jobId) || jobId <= 0) {
-    res.status(400).json({ success: false, error: 'Invalid queue job id' })
+  const jobId = parsePositiveInteger(req.params.id)
+  if (jobId === null) {
+    sendRouteBadRequest(res, 'Invalid queue job id')
     return
   }
 
@@ -628,7 +625,7 @@ router.get('/:id/request-debug', asyncHandler(async (req: Request, res: Response
   }
 
   if (existing.service_type !== 'comfyui') {
-    res.status(400).json({ success: false, error: 'Request debug is currently supported for comfyui jobs only' })
+    sendRouteBadRequest(res, 'Request debug is currently supported for comfyui jobs only')
     return
   }
 
@@ -653,9 +650,9 @@ router.post('/:id/retry', asyncHandler(async (req: Request, res: Response) => {
     return
   }
 
-  const jobId = Number(req.params.id)
-  if (!Number.isInteger(jobId) || jobId <= 0) {
-    res.status(400).json({ success: false, error: 'Invalid queue job id' })
+  const jobId = parsePositiveInteger(req.params.id)
+  if (jobId === null) {
+    sendRouteBadRequest(res, 'Invalid queue job id')
     return
   }
 
@@ -678,18 +675,15 @@ router.post('/:id/retry', asyncHandler(async (req: Request, res: Response) => {
       message: 'Queue job retried',
     })
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Retry failed',
-    })
+    sendRouteBadRequest(res, error instanceof Error ? error.message : 'Retry failed')
   }
 }))
 
 /** POST /api/generation-queue/:id/cancel */
 router.post('/:id/cancel', asyncHandler(async (req: Request, res: Response) => {
-  const jobId = Number(req.params.id)
-  if (!Number.isInteger(jobId) || jobId <= 0) {
-    res.status(400).json({ success: false, error: 'Invalid queue job id' })
+  const jobId = parsePositiveInteger(req.params.id)
+  if (jobId === null) {
+    sendRouteBadRequest(res, 'Invalid queue job id')
     return
   }
 
