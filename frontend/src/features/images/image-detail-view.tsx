@@ -278,7 +278,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
             )}
           >
             <div className="overflow-hidden rounded-sm bg-surface-container shadow-[0_0_40px_rgba(14,14,14,0.22)]">
-              <div className="flex min-h-[540px] items-center justify-center bg-surface-lowest">
+              <div className="flex min-h-[540px] items-stretch justify-center bg-surface-lowest">
                 <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} />
               </div>
             </div>

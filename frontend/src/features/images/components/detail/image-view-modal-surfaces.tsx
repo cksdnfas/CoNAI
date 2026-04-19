@@ -105,8 +105,8 @@ export function ImageViewMediumContent({ compositeHash, renderHeader }: ImageVie
       {!imageQuery.isLoading && !imageQuery.isError && image ? (
         <div className="grid gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1.3fr)_360px] xl:items-start">
           <ImageViewSidePanel className="xl:min-h-0 xl:h-full">
-            <div className="flex min-h-[540px] items-center justify-center bg-black/20 xl:h-full xl:min-h-0">
-              <ImageDetailMedia image={image} renderUrl={renderUrl} className="max-h-[72vh] w-full object-contain xl:max-h-full" />
+            <div className="flex min-h-[540px] items-stretch justify-center bg-black/20 xl:h-full xl:min-h-0">
+              <ImageDetailMedia image={image} renderUrl={renderUrl} className="max-h-[72vh] max-w-full w-auto object-contain xl:max-h-full" />
             </div>
           </ImageViewSidePanel>
 
@@ -197,7 +197,7 @@ export function ImageViewMinimalContent({
         </div>
       </div>
 
-      <div className="flex h-full items-center justify-center px-4 py-20">
+      <div className="flex h-full items-stretch justify-center px-4 py-20">
         {imageQuery.isLoading ? <Skeleton className="h-[68vh] w-full max-w-5xl rounded-sm bg-white/8" /> : null}
         {imageQuery.isError ? (
           <Alert variant="destructive" className="mx-auto max-w-xl">
@@ -206,7 +206,7 @@ export function ImageViewMinimalContent({
           </Alert>
         ) : null}
         {!imageQuery.isLoading && !imageQuery.isError && image ? (
-          <ImageDetailMedia image={image} renderUrl={renderUrl} className="max-h-[calc(100vh-8rem)] w-full max-w-full object-contain" />
+          <ImageDetailMedia image={image} renderUrl={renderUrl} className="max-h-[calc(100vh-8rem)] max-w-full w-auto object-contain" />
         ) : null}
       </div>
     </div>

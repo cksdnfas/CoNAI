@@ -420,7 +420,7 @@ function InteractiveImageDetailMedia({
   }
 
   return (
-    <div className="relative isolate flex h-full w-full items-center justify-center overflow-hidden">
+    <div className="relative isolate flex h-full w-full self-stretch items-center justify-center overflow-hidden">
       {canToggleRenderMode ? (
         <div className="absolute bottom-3 left-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
           <Button
@@ -496,7 +496,7 @@ function InteractiveImageDetailMedia({
       <div
         ref={viewportRef}
         className={cn(
-          'relative z-0 flex h-full w-full items-center justify-center overflow-hidden select-none',
+          'relative z-0 flex h-full w-full self-stretch items-center justify-center overflow-hidden select-none',
           isPannable ? 'cursor-grab active:cursor-grabbing' : isWheelZoomEnabled ? 'cursor-zoom-in' : 'cursor-default',
         )}
         style={{ touchAction: isWheelZoomEnabled ? 'none' : 'pan-y', overscrollBehavior: isWheelZoomEnabled ? 'contain' : 'auto' }}
@@ -518,13 +518,13 @@ function InteractiveImageDetailMedia({
         onPointerCancel={finishPointerInteraction}
       >
         <div
-          className={cn('inline-flex max-w-full will-change-transform', !isGestureActive && 'transition-transform duration-150 ease-out')}
+          className={cn('inline-flex max-h-full max-w-full will-change-transform', !isGestureActive && 'transition-transform duration-150 ease-out')}
           style={{
             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale}) rotate(${rotation}deg)`,
             transformOrigin: 'center center',
           }}
         >
-          <img src={renderUrl} alt={altText} className={cn(className, 'pointer-events-none select-none')} draggable={false} onError={() => setHasRenderError(true)} />
+          <img src={renderUrl} alt={altText} className={cn(className, 'block h-auto max-h-full w-auto max-w-full object-contain pointer-events-none select-none')} draggable={false} onError={() => setHasRenderError(true)} />
         </div>
       </div>
     </div>
