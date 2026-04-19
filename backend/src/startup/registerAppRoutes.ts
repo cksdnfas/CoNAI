@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type RequestHandler } from 'express';
+import express, { type Express, type Request, type RequestHandler, type Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { imageRoutes } from '../routes/images/index';
@@ -98,9 +98,11 @@ function serializeFrontendBootstrap(value: unknown): string {
 }
 
 /** Render the integrated frontend index with one auth bootstrap payload. */
-function renderIntegratedFrontendIndex(req: Request, htmlTemplate: string): string {
+function renderIntegratedFrontendIndex(req: Request, res: Response, htmlTemplate: string): string {
   const authStatus = buildAuthStatusPayload(req);
-  const bootstrapScript = `<script>window.__CONAI_AUTH_STATUS__=${serializeFrontendBootstrap(authStatus)};</script>`;
+  const bootstrapScriptNonce = res.locals.cspNonce as string | undefined;
+  const nonceAttribute = bootstrapScriptNonce ? ` nonce="${bootstrapScriptNonce}"` : '';
+  const bootstrapScript = `<script${nonceAttribute}>window.__CONAI_AUTH_STATUS__=${serializeFrontendBootstrap(authStatus)};</script>`;
 
   return htmlTemplate.includes('</head>')
     ? htmlTemplate.replace('</head>', `${bootstrapScript}</head>`)
@@ -227,7 +229,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
       }
 
       res.setHeader('Cache-Control', 'no-cache');
-      res.type('html').send(renderIntegratedFrontendIndex(req, indexHtmlTemplate));
+      res.type('html').send(renderIntegratedFrontendIndex(req, res, indexHtmlTemplate));
     };
 
     app.get('/', handleFrontendIndex);

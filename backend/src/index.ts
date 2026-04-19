@@ -31,10 +31,11 @@ if (process.env.NODE_ENV === 'production' || isPackagedRuntime()) {
 }
 
 import https from 'https';
-import express from 'express';
+import express, { type Response as ExpressResponse } from 'express';
 import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
+import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import BetterSqlite3Store from 'better-sqlite3-session-store';
@@ -133,7 +134,10 @@ const readOnlyLimiter = rateLimit({
 // Middleware
 const isSecureContext = (process.env.BACKEND_PROTOCOL || '').toLowerCase() === 'https';
 
-
+app.use((_req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
 
 app.use(helmet({
 
@@ -150,6 +154,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'script-src': [
+        "'self'",
+        (_req, res) => `'nonce-${(res as ExpressResponse).locals.cspNonce as string}'`,
+      ],
       'upgrade-insecure-requests': null, // HTTP 접속 허용
       'connect-src': ["'self'", 'http://localhost:*', 'ws:', 'wss:'], // API 연결 허용
       'img-src': ["'self'", 'data:', 'blob:', 'http:', 'https:'], // 외부 네트워크 이미지 + 로컬 blob 미리보기 허용
