@@ -9,6 +9,21 @@ import { getGroupHierarchyService } from '../services/groupHierarchyService';
 
 const router = Router();
 
+/** Send the standard 400 route validation payload without changing response shape. */
+function sendRouteBadRequest(res: Response, message: string) {
+  return res.status(400).json(errorResponse(message));
+}
+
+/** Read and validate one numeric route id without repeating routeParam/validateId plumbing. */
+function parseRouteId(value: string | string[] | undefined, label = 'Group ID') {
+  return validateId(routeParam(value), label);
+}
+
+/** Read one required route parameter while preserving the legacy missing-param error flow. */
+function parseRequiredRouteParam(value: string | string[] | undefined) {
+  return routeParam(value);
+}
+
 function validateAutoCollectConditions(conditions: AutoCollectCondition[] | ComplexFilter): { valid: boolean; errors: string[] } {
   const isComplexFilter = conditions && typeof conditions === 'object' && !Array.isArray(conditions);
 
@@ -19,11 +34,43 @@ function validateAutoCollectConditions(conditions: AutoCollectCondition[] | Comp
   return AutoCollectionService.validateConditions(conditions as AutoCollectCondition[]);
 }
 
+/** Validate auto-collect conditions only when the route enables them and supplied input exists. */
+function validateAutoCollectInput(
+  res: Response,
+  autoCollectEnabled: boolean | undefined,
+  autoCollectConditions: AutoCollectCondition[] | ComplexFilter | undefined
+) {
+  if (!autoCollectEnabled || !autoCollectConditions) {
+    return true;
+  }
+
+  const validation = validateAutoCollectConditions(autoCollectConditions);
+  if (!validation.valid) {
+    sendRouteBadRequest(
+      res,
+      `Invalid auto collection conditions: ${validation.errors.join(', ')}`
+    );
+    return false;
+  }
+
+  return true;
+}
+
+/** Validate the bulk composite hash array without changing the route error payload. */
+function requireCompositeHashes(res: Response, compositeHashes: unknown): compositeHashes is string[] {
+  if (!Array.isArray(compositeHashes) || compositeHashes.length === 0) {
+    sendRouteBadRequest(res, 'Composite hashes array is required');
+    return false;
+  }
+
+  return true;
+}
+
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
 
   if (!name) {
-    return res.status(400).json(errorResponse('Group name is required'));
+    return sendRouteBadRequest(res, 'Group name is required');
   }
 
   if (parent_id !== undefined && parent_id !== null) {
@@ -31,19 +78,12 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const parentDepth = hierarchyService.calculateDepth(parent_id);
 
     if (parentDepth >= 4) {
-      return res.status(400).json(
-        errorResponse('Maximum hierarchy depth (5 levels) would be exceeded')
-      );
+      return sendRouteBadRequest(res, 'Maximum hierarchy depth (5 levels) would be exceeded');
     }
   }
 
-  if (auto_collect_enabled && auto_collect_conditions) {
-    const validation = validateAutoCollectConditions(auto_collect_conditions);
-    if (!validation.valid) {
-      return res.status(400).json(
-        errorResponse(`Invalid auto collection conditions: ${validation.errors.join(', ')}`)
-      );
-    }
+  if (!validateAutoCollectInput(res, auto_collect_enabled, auto_collect_conditions)) {
+    return;
   }
 
   try {
@@ -83,7 +123,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = parseRouteId(req.params.id);
     const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions } = req.body;
 
     if (parent_id !== undefined) {
@@ -91,17 +131,12 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       const validation = hierarchyService.validateHierarchy(id, parent_id);
 
       if (!validation.valid) {
-        return res.status(400).json(errorResponse(validation.error || 'Invalid hierarchy'));
+        return sendRouteBadRequest(res, validation.error || 'Invalid hierarchy');
       }
     }
 
-    if (auto_collect_enabled && auto_collect_conditions) {
-      const validation = validateAutoCollectConditions(auto_collect_conditions);
-      if (!validation.valid) {
-        return res.status(400).json(
-          errorResponse(`Invalid auto collection conditions: ${validation.errors.join(', ')}`)
-        );
-      }
+    if (!validateAutoCollectInput(res, auto_collect_enabled, auto_collect_conditions)) {
+      return;
     }
 
     const groupData: GroupUpdateData = {
@@ -132,7 +167,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     console.error('Error updating group:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update group';
     if ((errorMessage as string).includes('UNIQUE')) {
-      return res.status(400).json(errorResponse('Group name already exists'));
+      return sendRouteBadRequest(res, 'Group name already exists');
     }
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));
@@ -141,7 +176,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = parseRouteId(req.params.id);
     const cascade = req.query.cascade === 'true';
 
     const deleted = await GroupModel.delete(id, cascade);
@@ -161,11 +196,11 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
 
 router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const groupId = parseRouteId(req.params.id);
     const { composite_hash, order_index = 0 } = req.body;
 
     if (!composite_hash) {
-      return res.status(400).json(errorResponse('Composite hash is required'));
+      return sendRouteBadRequest(res, 'Composite hash is required');
     }
 
     const collectionType = await ImageGroupModel.getCollectionType(groupId, composite_hash);
@@ -202,11 +237,11 @@ router.post('/:id/images', asyncHandler(async (req: Request, res: Response) => {
 
 router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const groupId = parseRouteId(req.params.id);
     const { composite_hashes } = req.body;
 
-    if (!composite_hashes || !Array.isArray(composite_hashes) || composite_hashes.length === 0) {
-      return res.status(400).json(errorResponse('Composite hashes array is required'));
+    if (!requireCompositeHashes(res, composite_hashes)) {
+      return;
     }
 
     let addedCount = 0;
@@ -255,11 +290,11 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
 
 router.post('/:id/images/bulk-remove', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const groupId = parseRouteId(req.params.id);
     const { composite_hashes } = req.body;
 
-    if (!composite_hashes || !Array.isArray(composite_hashes) || composite_hashes.length === 0) {
-      return res.status(400).json(errorResponse('Composite hashes array is required'));
+    if (!requireCompositeHashes(res, composite_hashes)) {
+      return;
     }
 
     let removedCount = 0;
@@ -297,8 +332,8 @@ router.post('/:id/images/bulk-remove', asyncHandler(async (req: Request, res: Re
 
 router.delete('/:id/images/:imageId', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
-    const compositeHash = routeParam(routeParam(req.params.imageId));
+    const groupId = parseRouteId(req.params.id);
+    const compositeHash = parseRequiredRouteParam(req.params.imageId);
 
     const removed = await ImageGroupModel.removeImageFromGroup(groupId, compositeHash);
 
@@ -317,7 +352,7 @@ router.delete('/:id/images/:imageId', asyncHandler(async (req: Request, res: Res
 
 router.post('/:id/auto-collect', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = parseRouteId(req.params.id);
     const result = await AutoCollectionService.runAutoCollectionForGroup(id);
     return res.json(successResponse(result));
   } catch (error) {
