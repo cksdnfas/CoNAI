@@ -5,8 +5,8 @@ import type {
 } from '@/lib/api'
 import {
   buildArtifactTextPreview,
-  getArtifactPreviewUrl,
   getArtifactStoredValue,
+  hasGraphArtifactVisualPreview,
 } from '../module-graph-shared'
 
 export type ParsedExecutionPlan = {
@@ -219,7 +219,7 @@ export function groupArtifactsByNode(artifacts: GraphExecutionArtifactRecord[], 
 /** Prefer visual artifacts when picking the most useful compact preview set. */
 function pickHighlightedArtifacts(artifacts: GraphExecutionArtifactRecord[]) {
   const sortedArtifacts = [...artifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
-  const visualArtifacts = sortedArtifacts.filter((artifact) => (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') && getArtifactPreviewUrl(artifact))
+  const visualArtifacts = sortedArtifacts.filter((artifact) => hasGraphArtifactVisualPreview(artifact))
 
   if (visualArtifacts.length > 0) {
     return visualArtifacts.slice(0, 4)

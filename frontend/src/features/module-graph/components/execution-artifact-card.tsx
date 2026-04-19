@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { GraphExecutionArtifactRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { formatDateTime, getArtifactPreviewUrl } from '../module-graph-shared'
+import { formatDateTime, getArtifactPreviewUrl, hasGraphArtifactVisualPreview, resolveGraphArtifactMimeType } from '../module-graph-shared'
 import { buildArtifactDetailLines, buildArtifactSummaryText, getCompactExecutionArtifactLabel } from './graph-execution-panel-helpers'
 
 export interface ExecutionArtifactCardProps {
@@ -16,10 +16,11 @@ export interface ExecutionArtifactCardProps {
 /** Render one execution artifact card with either a compact clean preview or the full technical card. */
 export function ExecutionArtifactCard({ artifact, compact = false, title, hideTitle = false, overlayLabel }: ExecutionArtifactCardProps) {
   const previewUrl = getArtifactPreviewUrl(artifact)
+  const mimeType = resolveGraphArtifactMimeType(artifact)
   const summaryText = buildArtifactSummaryText(artifact)
   const detailLines = buildArtifactDetailLines(artifact)
   const displayTitle = title ?? getCompactExecutionArtifactLabel(artifact)
-  const hasVisualPreview = Boolean(previewUrl && (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask'))
+  const hasVisualPreview = hasGraphArtifactVisualPreview(artifact)
 
   if (compact) {
     if (hasVisualPreview && hideTitle) {
@@ -28,6 +29,7 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
           <div className="relative max-w-full overflow-hidden rounded-sm border border-border bg-surface-lowest">
             <InlineMediaPreview
               src={previewUrl}
+              mimeType={mimeType}
               alt={`${artifact.node_id}-${artifact.port_key}`}
               frameClassName="border-0 bg-transparent p-0"
               mediaClassName="max-h-52 max-w-full w-auto object-contain"
@@ -52,6 +54,7 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
             <div className="relative max-w-full">
               <InlineMediaPreview
                 src={previewUrl}
+                mimeType={mimeType}
                 alt={`${artifact.node_id}-${artifact.port_key}`}
                 frameClassName="p-0"
                 mediaClassName="max-h-40 max-w-full w-auto object-contain"
@@ -84,9 +87,10 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
         </div>
       </div>
 
-      {previewUrl && (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') ? (
+      {hasVisualPreview ? (
         <InlineMediaPreview
           src={previewUrl}
+          mimeType={mimeType}
           alt={`${artifact.node_id}-${artifact.port_key}`}
           frameClassName="p-2"
           mediaClassName={cn('max-h-52 w-full object-contain')}

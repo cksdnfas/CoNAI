@@ -18,7 +18,9 @@ import { cn } from '@/lib/utils'
 import {
   formatDateTime,
   getArtifactPreviewUrl,
+  hasGraphArtifactVisualPreview,
   parseMetadataValue,
+  resolveGraphArtifactMimeType,
 } from '../module-graph-shared'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import {
@@ -138,7 +140,7 @@ function SelectedExecutionSummary({
 
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {group.artifacts.map((artifact) => {
-                    const useVisualCompactCard = artifact.artifact_type === 'image' || artifact.artifact_type === 'mask'
+                    const useVisualCompactCard = hasGraphArtifactVisualPreview(artifact)
 
                     return (
                       <ExecutionArtifactCard
@@ -471,6 +473,7 @@ export function GraphExecutionPanel({
               </div>
               {executionDetail.artifacts.map((artifact) => {
                 const previewUrl = getArtifactPreviewUrl(artifact)
+                const mimeType = resolveGraphArtifactMimeType(artifact)
                 const parsedMetadata = parseMetadataValue(artifact.metadata)
 
                 return (
@@ -486,9 +489,10 @@ export function GraphExecutionPanel({
                       </div>
                     </div>
 
-                    {previewUrl && (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') ? (
+                    {hasGraphArtifactVisualPreview(artifact) ? (
                       <InlineMediaPreview
                         src={previewUrl}
+                        mimeType={mimeType}
                         alt={`${artifact.node_id}-${artifact.port_key}`}
                         frameClassName="mt-2 p-2"
                         mediaClassName="max-h-44 w-full object-contain"

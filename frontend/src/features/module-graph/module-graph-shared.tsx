@@ -346,6 +346,29 @@ export function getArtifactPreviewUrl(artifact: GraphExecutionArtifactRecord) {
   return buildApiUrl(`/temp${normalized.slice(markerIndex)}`)
 }
 
+type GraphArtifactPreviewLike = {
+  artifact_type: string
+  storage_path?: string | null
+  metadata?: string | null
+  source_storage_path?: string | null
+  source_metadata?: string | null
+}
+
+const GRAPH_ARTIFACT_MEDIA_EXTENSION_MIME_MAP: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.avi': 'video/x-msvideo',
+  '.mkv': 'video/x-matroska',
+}
+
 /** Parse a JSON-ish metadata string into an inspectable value. */
 export function parseMetadataValue(value?: string | null) {
   if (!value) {
@@ -357,6 +380,64 @@ export function parseMetadataValue(value?: string | null) {
   } catch {
     return value
   }
+}
+
+/** Normalize artifact metadata into one object record when it stores structured fields. */
+export function parseArtifactMetadataRecord(value?: string | null) {
+  const metadata = parseMetadataValue(value)
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : null
+}
+
+/** Infer one media MIME type from the stored artifact file extension. */
+export function inferArtifactMimeTypeFromPath(path?: string | null) {
+  if (!path) {
+    return null
+  }
+
+  const normalized = path.replace(/\\/g, '/').toLowerCase()
+  const lastDotIndex = normalized.lastIndexOf('.')
+  if (lastDotIndex === -1) {
+    return null
+  }
+
+  return GRAPH_ARTIFACT_MEDIA_EXTENSION_MIME_MAP[normalized.slice(lastDotIndex)] ?? null
+}
+
+/** Resolve the best available MIME type for one stored execution artifact or final-result source. */
+export function resolveGraphArtifactMimeType(artifact: GraphArtifactPreviewLike) {
+  const metadataValue = artifact.source_metadata ?? artifact.metadata
+  const storagePath = artifact.source_storage_path ?? artifact.storage_path
+  const metadata = parseArtifactMetadataRecord(metadataValue)
+  const metadataMimeType = typeof metadata?.mimeType === 'string'
+    ? metadata.mimeType
+    : (typeof metadata?.mime_type === 'string' ? metadata.mime_type : null)
+
+  if (metadataMimeType?.trim()) {
+    return metadataMimeType
+  }
+
+  if (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') {
+    return inferArtifactMimeTypeFromPath(storagePath) ?? 'image/png'
+  }
+
+  return inferArtifactMimeTypeFromPath(storagePath)
+}
+
+/** Check whether one artifact should render through the shared inline media preview. */
+export function isGraphArtifactVisualMedia(artifact: GraphArtifactPreviewLike) {
+  const mimeType = resolveGraphArtifactMimeType(artifact)
+  if (mimeType?.startsWith('image/') || mimeType?.startsWith('video/')) {
+    return true
+  }
+
+  return artifact.artifact_type === 'image' || artifact.artifact_type === 'mask'
+}
+
+/** Check whether one execution artifact has a usable visual preview URL and media type. */
+export function hasGraphArtifactVisualPreview(artifact: GraphExecutionArtifactRecord) {
+  return Boolean(getArtifactPreviewUrl(artifact) && isGraphArtifactVisualMedia(artifact))
 }
 
 /** Recover the structured value payload stored inside one execution artifact metadata blob. */
@@ -406,9 +487,7 @@ export function buildArtifactTextPreview(artifact: GraphExecutionArtifactRecord,
 
 /** Pick the most useful inline preview payload for one node artifact list. */
 export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord[]) {
-  const latestVisualArtifact = [...artifacts]
-    .reverse()
-    .find((artifact) => (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') && getArtifactPreviewUrl(artifact))
+  const latestVisualArtifact = artifacts.find((artifact) => hasGraphArtifactVisualPreview(artifact))
 
   if (latestVisualArtifact) {
     return {
@@ -419,8 +498,7 @@ export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord
     }
   }
 
-  const latestTextArtifact = [...artifacts]
-    .reverse()
+  const latestTextArtifact = artifacts
     .find((artifact) => artifact.artifact_type === 'prompt' || artifact.artifact_type === 'text' || artifact.artifact_type === 'json' || artifact.artifact_type === 'number' || artifact.artifact_type === 'boolean')
 
   if (latestTextArtifact) {
