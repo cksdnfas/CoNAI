@@ -13,6 +13,7 @@ import { ImageDetailMedia } from './components/detail/image-detail-media'
 import { ImageDetailMetaCard } from './components/detail/image-detail-meta-card'
 import { ImageDetailSimilaritySection } from './components/detail/image-detail-similarity-section'
 import { SimilarImageScoreOverlay } from './components/detail/similarity-score-overlay'
+import { getImageListMediaKind } from './components/image-list/image-list-utils'
 import {
   getDownloadName,
   getImageDetailDownloadUrl,
@@ -101,10 +102,13 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
     enabled: Boolean(compositeHash),
   })
 
+  const image = imageQuery.data
+  const isVideoDetail = image ? getImageListMediaKind(image) === 'video' : false
+
   const duplicatesQuery = useQuery({
     queryKey: ['image-duplicates', compositeHash],
     queryFn: () => getImageDuplicates(compositeHash, 5),
-    enabled: Boolean(compositeHash) && (presentation !== 'modal' || isModalSecondaryContentReady),
+    enabled: Boolean(compositeHash) && Boolean(image) && !isVideoDetail && (presentation !== 'modal' || isModalSecondaryContentReady),
   })
 
   const similarQuery = useQuery({
@@ -144,7 +148,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
         sortBy: 'similarity',
         sortOrder: 'DESC',
       }),
-    enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings) && (presentation !== 'modal' || isModalSecondaryContentReady),
+    enabled: Boolean(compositeHash) && Boolean(image) && !isVideoDetail && Boolean(effectiveSimilaritySettings) && (presentation !== 'modal' || isModalSecondaryContentReady),
   })
 
   const promptSimilarQuery = useQuery({
@@ -167,7 +171,6 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
     enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings) && (presentation !== 'modal' || isModalSecondaryContentReady),
   })
 
-  const image = imageQuery.data
   const renderUrl = getImageDetailRenderUrl(image)
   const downloadUrl = getImageDetailDownloadUrl(image)
   const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
