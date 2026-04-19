@@ -90,26 +90,10 @@ function getTotalCachedVideoBytes() {
   return total
 }
 
-function evictInMemoryCachedVideoEntries(excludedSourceUrl?: string | null) {
-  const removableEntries = [...cachedVideoEntries.entries()]
-    .filter(([sourceUrl, entry]) => sourceUrl !== excludedSourceUrl && !entry.promise && entry.objectUrl && entry.activeConsumers === 0)
-    .sort((left, right) => left[1].lastAccessedAt - right[1].lastAccessedAt)
-
-  while (
-    cachedVideoEntries.size > MAX_VIDEO_CACHE_ENTRIES
-    || getTotalCachedVideoBytes() > MAX_VIDEO_CACHE_BYTES
-  ) {
-    const nextEntry = removableEntries.shift()
-    if (!nextEntry) {
-      return
-    }
-
-    const [sourceUrl, entry] = nextEntry
-    if (entry.objectUrl) {
-      URL.revokeObjectURL(entry.objectUrl)
-    }
-    cachedVideoEntries.delete(sourceUrl)
-  }
+function evictInMemoryCachedVideoEntries(_excludedSourceUrl?: string | null) {
+  // Runtime blob URLs proved too fragile to revoke aggressively while virtualized
+  // media elements may still be mounting, unmounting, or decoding.
+  // Keep object URLs stable for the page lifetime and let page teardown reclaim them.
 }
 
 async function enforcePersistentVideoCacheLimits(excludedSourceUrl?: string | null) {
@@ -350,6 +334,10 @@ export function useCachedVideoSource(
       return sourceUrl ?? null
     }
 
+    if (backgroundOnly) {
+      return cacheableSourceUrl
+    }
+
     return getCachedVideoObjectUrl(cacheableSourceUrl)
   })
   const [isCachePending, setIsCachePending] = useState(() => Boolean(cacheableSourceUrl && !getCachedVideoObjectUrl(cacheableSourceUrl)))
@@ -361,15 +349,20 @@ export function useCachedVideoSource(
       return
     }
 
-    const cachedObjectUrl = getCachedVideoObjectUrl(cacheableSourceUrl)
-    if (cachedObjectUrl) {
-      setResolvedSourceUrl(cachedObjectUrl)
+    if (backgroundOnly) {
+      setResolvedSourceUrl(cacheableSourceUrl)
       setIsCachePending(false)
+
+      if (!hasRecentFailedVideoCacheAttempt(cacheableSourceUrl)) {
+        void warmCachedVideoSource(cacheableSourceUrl)
+      }
+
       return
     }
 
-    if (backgroundOnly && hasRecentFailedVideoCacheAttempt(cacheableSourceUrl)) {
-      setResolvedSourceUrl(null)
+    const cachedObjectUrl = getCachedVideoObjectUrl(cacheableSourceUrl)
+    if (cachedObjectUrl) {
+      setResolvedSourceUrl(cachedObjectUrl)
       setIsCachePending(false)
       return
     }
@@ -388,27 +381,6 @@ export function useCachedVideoSource(
           setResolvedSourceUrl(persistentObjectUrl)
           setIsCachePending(false)
           return persistentObjectUrl
-        }
-
-        if (backgroundOnly) {
-          setResolvedSourceUrl(cacheableSourceUrl)
-          setIsCachePending(false)
-          return warmCachedVideoSource(cacheableSourceUrl).then((nextObjectUrl) => {
-            if (cancelled) {
-              return null
-            }
-
-            if (!nextObjectUrl && hasRecentFailedVideoCacheAttempt(cacheableSourceUrl)) {
-              setResolvedSourceUrl(null)
-              return null
-            }
-
-            if (nextObjectUrl) {
-              setResolvedSourceUrl(nextObjectUrl)
-            }
-
-            return nextObjectUrl
-          })
         }
 
         return warmCachedVideoSource(cacheableSourceUrl).then((nextObjectUrl) => {
