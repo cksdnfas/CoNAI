@@ -108,7 +108,7 @@ export function ImageDetailMedia({ image, renderUrl, className }: ImageDetailMed
   }
 
   const altText = image.composite_hash || String(image.id)
-  const mediaClassName = className ?? 'max-h-[80vh] w-full object-contain'
+  const mediaClassName = className ?? 'max-h-[80vh] max-w-full w-auto object-contain'
 
   const handleToggleRenderMode = () => {
     const nextMode = getNextImageDetailRenderMode(preferredRenderMode)
@@ -217,7 +217,13 @@ function InteractiveImageDetailMedia({
     setIsGestureActive(false)
   }, [renderUrl])
 
-  const isPannable = scale > MIN_SCALE + 0.001 || rotation !== 0
+  const isScaled = scale > MIN_SCALE + 0.001
+  const hasRotation = rotation !== 0
+  const hasOffset = Math.abs(offset.x) > 0.5 || Math.abs(offset.y) > 0.5
+  const isPannable = isScaled || hasRotation
+  const isDefaultView = !isScaled && !hasRotation && !hasOffset
+  const canZoomOut = scale > MIN_SCALE + 0.001
+  const canZoomIn = scale < MAX_SCALE - 0.001
   const transformSummary = `${Math.round(scale * 100)}%${rotation !== 0 ? ` · ${rotation}°` : ''}`
 
   const resetView = useCallback(() => {
@@ -414,9 +420,9 @@ function InteractiveImageDetailMedia({
   }
 
   return (
-    <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
+    <div className="relative isolate flex h-full w-full items-center justify-center overflow-hidden">
       {canToggleRenderMode ? (
-        <div className="absolute bottom-3 left-3 z-10 flex items-end gap-2">
+        <div className="absolute bottom-3 left-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
           <Button
             size="icon-sm"
             type="button"
@@ -431,14 +437,14 @@ function InteractiveImageDetailMedia({
         </div>
       ) : null}
 
-      <div className="absolute bottom-3 right-3 z-10 flex items-end gap-2">
+      <div className="absolute bottom-3 right-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
         <div
           className={cn(
             'flex flex-wrap items-center gap-1.5 rounded-sm border border-border bg-background p-2 text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] transition-all duration-200 ease-out',
             isControlsCollapsed ? 'pointer-events-none translate-x-3 opacity-0' : 'translate-x-0 opacity-100',
           )}
         >
-          <div className="hidden px-2 text-[11px] text-muted-foreground sm:block">{transformSummary}</div>
+          {!isDefaultView ? <div className="hidden px-2 text-[11px] text-muted-foreground sm:block">{transformSummary}</div> : null}
           <Button
             size="icon-sm"
             type="button"
@@ -450,10 +456,10 @@ function InteractiveImageDetailMedia({
           >
             {isWheelZoomEnabled ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
           </Button>
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(-ZOOM_STEP)} title="축소" aria-label="축소">
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(-ZOOM_STEP)} title="축소" aria-label="축소" disabled={!canZoomOut}>
             <ZoomOut className="h-4 w-4" />
           </Button>
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(ZOOM_STEP)} title="확대" aria-label="확대">
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(ZOOM_STEP)} title="확대" aria-label="확대" disabled={!canZoomIn}>
             <ZoomIn className="h-4 w-4" />
           </Button>
           <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => rotateBy(-ROTATION_STEP)} title="왼쪽 회전" aria-label="왼쪽 회전">
@@ -462,9 +468,11 @@ function InteractiveImageDetailMedia({
           <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => rotateBy(ROTATION_STEP)} title="오른쪽 회전" aria-label="오른쪽 회전">
             <RotateCw className="h-4 w-4" />
           </Button>
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={resetView} title="초기화" aria-label="초기화">
-            <Undo2 className="h-4 w-4" />
-          </Button>
+          {!isDefaultView ? (
+            <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={resetView} title="초기화" aria-label="초기화">
+              <Undo2 className="h-4 w-4" />
+            </Button>
+          ) : null}
           <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={toggleControlsCollapsed} title="컨트롤 수납" aria-label="컨트롤 수납">
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -488,7 +496,7 @@ function InteractiveImageDetailMedia({
       <div
         ref={viewportRef}
         className={cn(
-          'flex h-full w-full items-center justify-center overflow-hidden select-none',
+          'relative z-0 flex h-full w-full items-center justify-center overflow-hidden select-none',
           isPannable ? 'cursor-grab active:cursor-grabbing' : isWheelZoomEnabled ? 'cursor-zoom-in' : 'cursor-default',
         )}
         style={{ touchAction: isWheelZoomEnabled ? 'none' : 'pan-y', overscrollBehavior: isWheelZoomEnabled ? 'contain' : 'auto' }}
@@ -510,7 +518,7 @@ function InteractiveImageDetailMedia({
         onPointerCancel={finishPointerInteraction}
       >
         <div
-          className={cn('will-change-transform', !isGestureActive && 'transition-transform duration-150 ease-out')}
+          className={cn('inline-flex max-w-full will-change-transform', !isGestureActive && 'transition-transform duration-150 ease-out')}
           style={{
             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale}) rotate(${rotation}deg)`,
             transformOrigin: 'center center',
