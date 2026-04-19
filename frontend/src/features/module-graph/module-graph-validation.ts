@@ -3,6 +3,7 @@ import type {
   ModuleDefinitionRecord,
 } from '@/lib/api'
 import type { AppSettings } from '@/types/settings'
+import { hasMeaningfulValue } from './components/module-graph-field-shared'
 import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
 import { isFinalResultModule } from './module-graph-shared'
 
@@ -20,11 +21,6 @@ export type ValidationEdgeRecord = {
 /** Build one canonical workflow-exposed-input id from node and port keys. */
 export function buildWorkflowExposedInputId(nodeId: string, portKey: string) {
   return `${nodeId}:${portKey}`
-}
-
-/** Check whether one runtime value should count as a filled workflow input. */
-function hasMeaningfulValue(value: unknown) {
-  return value !== undefined && value !== null && value !== ''
 }
 
 /** Resolve system capability validation issues from current application settings. */

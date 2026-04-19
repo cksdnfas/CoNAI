@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { CircleHelp, Eye, Play, RotateCcw, Square } from 'lucide-react'
+import { Eye, Play, RotateCcw, Square } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -34,6 +34,7 @@ import {
   pickPrimaryExecutionArtifact,
   type ParsedExecutionPlan,
 } from './graph-execution-panel-helpers'
+import { TechnicalReferenceHint } from './module-graph-field-shared'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 
 type GraphExecutionDetail = {
@@ -44,14 +45,6 @@ type GraphExecutionDetail = {
 }
 
 type ExecutionDetailSectionKey = 'summary' | 'inputs' | 'artifacts' | 'logs'
-
-function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
-  return (
-    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
-      <CircleHelp className="h-3.5 w-3.5" />
-    </span>
-  )
-}
 
 function ExecutionOutputGroupCard({
   group,

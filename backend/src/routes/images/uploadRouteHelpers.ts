@@ -1,9 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
+import { errorResponse } from '@conai/shared';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { AIMetadata } from '../../services/metadata';
 import { ImageMetadataWriteService, ImageOutputFormat } from '../../services/imageMetadataWriteService';
+
+export type UploadedImageFile = Express.Multer.File & { path: string };
 
 /** Shared multipart image-save options accepted by upload-related routes. */
 export type UploadImageSaveRequestOptions = {
@@ -61,6 +64,22 @@ export function parseMultipartInteger(value: unknown, fallback: number) {
     const parsed = Number(value);
     if (Number.isFinite(parsed)) {
       return Math.round(parsed);
+    }
+  }
+
+  return fallback;
+}
+
+/** Parse a multipart number field with fallback behavior. */
+export function parseMultipartNumber(value: unknown, fallback: number) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
     }
   }
 
@@ -275,6 +294,64 @@ export function buildExtractedImagePreview(
 export function getSingleUploadedFile(req: Request) {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
   return files?.['image']?.[0] || files?.['file']?.[0] || null;
+}
+
+function sendUploadBadRequest(res: Response, error: string) {
+  return res.status(400).json(errorResponse(error));
+}
+
+/** Resolve one uploaded image file and preserve the existing bad-request envelope. */
+export function getValidatedUploadedImageFile(
+  req: Request,
+  res: Response,
+  invalidImageMessage: string,
+): UploadedImageFile | null {
+  const file = getSingleUploadedFile(req);
+
+  if (!file) {
+    sendUploadBadRequest(res, 'No file uploaded');
+    return null;
+  }
+
+  if (!isImageFile(file.mimetype)) {
+    sendUploadBadRequest(res, invalidImageMessage);
+    return null;
+  }
+
+  if (!file.path) {
+    res.status(500).json(errorResponse('Temporary upload path is missing'));
+    return null;
+  }
+
+  return file as UploadedImageFile;
+}
+
+/** Run one temporary-upload image handler and always clean up the staged file. */
+export async function withValidatedUploadedImageFile<T>(
+  req: Request,
+  res: Response,
+  invalidImageMessage: string,
+  handler: (file: UploadedImageFile) => Promise<T>,
+): Promise<T | void> {
+  const file = getValidatedUploadedImageFile(req, res, invalidImageMessage);
+  if (!file) {
+    return;
+  }
+
+  try {
+    return await handler(file);
+  } finally {
+    await cleanupTemporaryUpload(file);
+  }
+}
+
+/** Apply standard attachment headers for one rewritten image download. */
+export function setDownloadResponseHeaders(res: Response, originalName: string, format: ImageOutputFormat) {
+  const downloadName = buildDownloadFileName(originalName, format);
+  const encodedName = encodeURIComponent(downloadName);
+
+  res.setHeader('Content-Type', buildOutputMimeType(format));
+  res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"; filename*=UTF-8''${encodedName}`);
 }
 
 /** Best-effort cleanup for one temporary uploaded file. */
