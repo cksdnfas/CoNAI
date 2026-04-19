@@ -11,6 +11,7 @@ import { ImageAttachmentPickerButton } from '@/features/image-generation/compone
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
+import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import {
   WORKFLOW_INPUT_ENABLED_KEY,
   WORKFLOW_INPUT_REQUIRED_KEY,
@@ -29,17 +30,6 @@ import {
   normalizeModulePortDescription,
   type ModuleGraphNode,
 } from '../module-graph-shared'
-
-const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
-  image: '이미지',
-  mask: '마스크',
-  prompt: '프롬프트',
-  text: '텍스트',
-  number: '숫자',
-  boolean: '불리언',
-  json: 'JSON',
-  any: '임의',
-}
 
 const ENGINE_TYPE_LABELS = {
   nai: 'NAI',
@@ -65,11 +55,6 @@ type PortCellProps = {
   onDisconnectInput?: (nodeId: string, portKey: string) => void
 }
 
-/** Check whether a node input has any explicit or default value. */
-function hasMeaningfulValue(value: unknown) {
-  return value !== undefined && value !== null && value !== ''
-}
-
 /** Flag prompt/text ports that can bridge within the string family. */
 function isStringBridgePort(dataType: ModulePortDefinition['data_type']) {
   return dataType === 'text' || dataType === 'prompt'
@@ -91,7 +76,7 @@ function buildPortTooltip(port: ModulePortDefinition, statusLabel: string) {
   return [
     port.label,
     `키: ${port.key}`,
-    `타입: ${PORT_TYPE_LABELS[port.data_type]}`,
+    `타입: ${getModuleGraphPortTypeLabel(port.data_type)}`,
     `상태: ${statusLabel}`,
     isStringBridgePort(port.data_type) ? '브리지: 텍스트 ↔ 프롬프트' : null,
     port.required ? '필수' : null,
@@ -171,7 +156,7 @@ function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requi
             className="shrink-0 px-1.5 py-0 text-[9px] font-medium uppercase tracking-[0.08em]"
             style={{ borderColor: `${portTypeColor}66`, color: portTypeColor } as CSSProperties}
           >
-            {PORT_TYPE_LABELS[port.data_type]}
+            {getModuleGraphPortTypeLabel(port.data_type)}
           </Badge>
         )}
       </div>
@@ -209,7 +194,7 @@ function SourceNodeOutputPort({ port, connected, accentColor }: { port: ModulePo
             className="shrink-0 px-1.5 py-0 text-[9px] font-medium uppercase tracking-[0.08em]"
             style={{ borderColor: `${portTypeColor}66`, color: portTypeColor } as CSSProperties}
           >
-            {PORT_TYPE_LABELS[port.data_type]}
+            {getModuleGraphPortTypeLabel(port.data_type)}
           </Badge>
         </div>
       </div>
@@ -909,7 +894,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                   <div className="flex shrink-0 items-center gap-1">
                     {group.portType ? (
                       <Badge variant="outline" className="px-1.5 py-0 text-[9px] uppercase tracking-[0.08em]">
-                        {PORT_TYPE_LABELS[group.portType]}
+                        {getModuleGraphPortTypeLabel(group.portType)}
                       </Badge>
                     ) : null}
                     <Badge variant="secondary" className="px-1.5 py-0 text-[9px]">{group.artifactCount}</Badge>

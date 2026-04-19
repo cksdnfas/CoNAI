@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Trash2, WandSparkles } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
@@ -29,15 +29,13 @@ import { WildcardPreviewModal } from './wildcard-preview-modal'
 import {
   canCreateWorkspaceTabItem,
   copyWildcardText,
-  filterWildcardTree,
-  flattenWildcardTree,
   getWildcardPromptSyntax,
   getWildcardPromptSyntaxLabel,
   getWorkspaceTabRecordType,
   isReadonlyWorkspaceTab,
-  matchesWorkspaceTab,
   type WildcardWorkspaceTab,
 } from './wildcard-generation-panel-helpers'
+import { useWildcardWorkspaceBrowser } from './use-wildcard-workspace-browser'
 import { getErrorMessage } from '../image-generation-shared'
 
 type WildcardGenerationPanelProps = {
@@ -70,7 +68,6 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
 
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WildcardWorkspaceTab>('wildcards')
   const [searchInput, setSearchInput] = useState('')
-  const [selectedWildcardId, setSelectedWildcardId] = useState<number | null>(null)
   const [previewTool, setPreviewTool] = useState<WildcardTool>('nai')
   const [previewText, setPreviewText] = useState('')
   const [previewCount, setPreviewCount] = useState('5')
@@ -146,28 +143,18 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     },
   })
 
-  const browserTreeNodes = useMemo(
-    () => filterWildcardTree(wildcardsQuery.data ?? [], (node) => matchesWorkspaceTab(node, activeWorkspaceTab)),
-    [activeWorkspaceTab, wildcardsQuery.data],
-  )
-  const browserEntries = useMemo(() => flattenWildcardTree(browserTreeNodes), [browserTreeNodes])
-
-  const filteredEntries = useMemo(() => {
-    const normalizedSearch = searchInput.trim().toLowerCase()
-    if (!normalizedSearch) {
-      return browserEntries
-    }
-
-    return browserEntries.filter((entry) => {
-      const pathText = entry.path.join(' / ').toLowerCase()
-      return entry.wildcard.name.toLowerCase().includes(normalizedSearch) || pathText.includes(normalizedSearch)
-    })
-  }, [browserEntries, searchInput])
-
-  const selectedEntry = useMemo(
-    () => browserEntries.find((entry) => entry.wildcard.id === selectedWildcardId) ?? null,
-    [browserEntries, selectedWildcardId],
-  )
+  const {
+    treeNodes: browserTreeNodes,
+    entries: browserEntries,
+    filteredEntries,
+    selectedWildcardId,
+    selectedEntry,
+    setSelectedWildcardId,
+  } = useWildcardWorkspaceBrowser({
+    records: wildcardsQuery.data ?? [],
+    activeTab: activeWorkspaceTab,
+    searchQuery: searchInput,
+  })
   const selectedWildcard = selectedEntry?.wildcard ?? null
   const selectedWildcardSyntax = selectedEntry
     ? getWildcardPromptSyntax(selectedEntry.wildcard.name, { type: selectedEntry.wildcard.type, tab: activeWorkspaceTab })
@@ -182,17 +169,6 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   const canScanLora = hasAuthPermission(permissionKeys, 'wildcards.lora.scan')
   const canCreateInActiveTab = canCreateWorkspaceTabItem(activeWorkspaceTab) && canEditWildcardEntries
   const isReadonlyActiveTab = isReadonlyWorkspaceTab(activeWorkspaceTab)
-
-  useEffect(() => {
-    if (browserEntries.length === 0) {
-      setSelectedWildcardId(null)
-      return
-    }
-
-    if (selectedWildcardId === null || !browserEntries.some((entry) => entry.wildcard.id === selectedWildcardId)) {
-      setSelectedWildcardId(browserEntries[0].wildcard.id)
-    }
-  }, [browserEntries, selectedWildcardId])
 
   useEffect(() => {
     if (!selectedWildcardSyntax) {

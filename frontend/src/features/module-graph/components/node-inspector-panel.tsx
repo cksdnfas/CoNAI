@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { ChevronDown, ChevronRight, CircleHelp } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldD
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
+import { TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import { getWorkflowInputSourcePort } from '../module-graph-workflow-inputs'
 import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, normalizeModulePortDescription, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
@@ -49,34 +50,9 @@ type NodeOutputArtifactGroup = {
   artifacts: GraphExecutionArtifactRecord[]
 }
 
-const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
-  image: '이미지',
-  mask: '마스크',
-  prompt: '프롬프트',
-  text: '텍스트',
-  number: '숫자',
-  boolean: '불리언',
-  json: 'JSON',
-  any: '임의',
-}
-
 const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-3'
 const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'space-y-3 rounded-sm border border-border/70 bg-background/35 p-4'
 const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'rounded-sm border border-border/70 bg-background/35 p-4'
-
-/** Check whether a node input has any explicit or default value. */
-function hasMeaningfulValue(value: unknown) {
-  return value !== undefined && value !== null && value !== ''
-}
-
-/** Render a compact tooltip icon for internal node, edge, and port references. */
-function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
-  return (
-    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
-      <CircleHelp className="h-3.5 w-3.5" />
-    </span>
-  )
-}
 
 /** Resolve whether one node input is already satisfied by a connection or value. */
 function isNodeInputSatisfied(node: ModuleGraphNode, port: ModulePortDefinition) {
@@ -93,7 +69,7 @@ function findNodeUiField(node: ModuleGraphNode, portKey: string) {
 function PortBadges({ port, missingRequired = false }: { port: ModulePortDefinition; missingRequired?: boolean }) {
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      <Badge variant="outline">{PORT_TYPE_LABELS[port.data_type]}</Badge>
+      <Badge variant="outline">{getModuleGraphPortTypeLabel(port.data_type)}</Badge>
       <Badge variant="secondary">{port.key}</Badge>
       {port.required ? <Badge variant="outline">필수</Badge> : null}
       {missingRequired ? <Badge variant="secondary">입력 필요</Badge> : null}
@@ -684,7 +660,7 @@ export function NodeInspectorPanel({
                             {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                             <span className="truncate text-sm font-medium text-foreground">{group.portLabel}</span>
                             <Badge variant="secondary">{group.portKey}</Badge>
-                            {group.portType ? <Badge variant="outline">{PORT_TYPE_LABELS[group.portType]}</Badge> : null}
+                            {group.portType ? <Badge variant="outline">{getModuleGraphPortTypeLabel(group.portType)}</Badge> : null}
                           </div>
                           <Badge variant="outline">{group.artifacts.length}</Badge>
                         </button>

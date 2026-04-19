@@ -53,6 +53,55 @@ function parseGraphRouteInteger(value: string | string[] | undefined) {
   return parseInt(routeParam(routeParam(value)))
 }
 
+function sendGraphRouteNotFound(res: Response, error: string) {
+  res.status(404).json({ success: false, error } as ModuleGraphResponse)
+  return null
+}
+
+function parseRequiredGraphRouteId(
+  res: Response,
+  value: string | string[] | undefined,
+  error: string,
+) {
+  const id = parseGraphRouteInteger(value)
+  if (Number.isNaN(id)) {
+    sendRouteBadRequest(res, error)
+    return null
+  }
+
+  return id
+}
+
+function findGraphWorkflowFolderOrRespond(
+  res: Response,
+  folderId: number,
+  error = 'Graph workflow folder not found',
+) {
+  return GraphWorkflowFolderModel.findById(folderId) ?? sendGraphRouteNotFound(res, error)
+}
+
+function findGraphWorkflowOrRespond(res: Response, workflowId: number) {
+  return GraphWorkflowModel.findById(workflowId) ?? sendGraphRouteNotFound(res, 'Graph workflow not found')
+}
+
+function findGraphWorkflowScheduleOrRespond(res: Response, scheduleId: number) {
+  return GraphWorkflowScheduleModel.findById(scheduleId) ?? sendGraphRouteNotFound(res, 'Graph workflow schedule not found')
+}
+
+function findScheduleWorkflowContextOrRespond(res: Response, scheduleId: number) {
+  const schedule = findGraphWorkflowScheduleOrRespond(res, scheduleId)
+  if (!schedule) {
+    return null
+  }
+
+  const workflow = findGraphWorkflowOrRespond(res, schedule.graph_workflow_id)
+  if (!workflow) {
+    return null
+  }
+
+  return { schedule, workflow }
+}
+
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const activeOnly = req.query.active === 'true'
@@ -68,8 +117,8 @@ router.get('/browse-content', asyncHandler(async (req: Request, res: Response) =
   const folderIdParam = typeof req.query.folder_id === 'string' ? Number(req.query.folder_id) : null
   const folderId = folderIdParam !== null && Number.isFinite(folderIdParam) ? folderIdParam : null
 
-  if (folderId !== null && !GraphWorkflowFolderModel.findById(folderId)) {
-    return res.status(404).json({ success: false, error: 'Graph workflow folder not found' } as ModuleGraphResponse)
+  if (folderId !== null && !findGraphWorkflowFolderOrRespond(res, folderId)) {
+    return
   }
 
   try {
@@ -99,8 +148,8 @@ router.post('/folders', asyncHandler(async (req: Request, res: Response) => {
     return sendRouteBadRequest(res, 'name is required')
   }
 
-  if (parentId !== null && !GraphWorkflowFolderModel.findById(parentId)) {
-    return res.status(404).json({ success: false, error: 'Parent folder not found' } as ModuleGraphResponse)
+  if (parentId !== null && !findGraphWorkflowFolderOrRespond(res, parentId, 'Parent folder not found')) {
+    return
   }
 
   try {
@@ -113,18 +162,18 @@ router.post('/folders', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 router.put('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseGraphRouteInteger(req.params.id)
-  const existingFolder = !isNaN(id) ? GraphWorkflowFolderModel.findById(id) : null
+  const id = parseRequiredGraphRouteId(res, req.params.id, 'Invalid folder ID')
+  if (id === null) {
+    return
+  }
+
+  const existingFolder = findGraphWorkflowFolderOrRespond(res, id)
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined
   const description = typeof req.body?.description === 'string' ? req.body.description.trim() : undefined
   const parentId = typeof req.body?.parent_id === 'number' ? req.body.parent_id : req.body?.parent_id === null ? null : undefined
 
-  if (isNaN(id)) {
-    return sendRouteBadRequest(res, 'Invalid folder ID')
-  }
-
   if (!existingFolder) {
-    return res.status(404).json({ success: false, error: 'Graph workflow folder not found' } as ModuleGraphResponse)
+    return
   }
 
   if (name !== undefined && !name) {
@@ -135,8 +184,8 @@ router.put('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
     if (parentId === id) {
       return sendRouteBadRequest(res, 'Folder cannot be its own parent')
     }
-    if (parentId !== null && !GraphWorkflowFolderModel.findById(parentId)) {
-      return res.status(404).json({ success: false, error: 'Parent folder not found' } as ModuleGraphResponse)
+    if (parentId !== null && !findGraphWorkflowFolderOrRespond(res, parentId, 'Parent folder not found')) {
+      return
     }
   }
 
@@ -158,15 +207,15 @@ router.put('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 router.delete('/folders/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseGraphRouteInteger(req.params.id)
+  const id = parseRequiredGraphRouteId(res, req.params.id, 'Invalid folder ID')
   const deleteMode = req.query.mode === 'delete_tree' ? 'delete_tree' : 'move_children'
 
-  if (isNaN(id)) {
-    return sendRouteBadRequest(res, 'Invalid folder ID')
+  if (id === null) {
+    return
   }
 
-  if (!GraphWorkflowFolderModel.findById(id)) {
-    return res.status(404).json({ success: false, error: 'Graph workflow folder not found' } as ModuleGraphResponse)
+  if (!findGraphWorkflowFolderOrRespond(res, id)) {
+    return
   }
 
   try {
@@ -192,9 +241,9 @@ router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
     }
 
     if (folderIdParam !== null && Number.isFinite(folderIdParam)) {
-      const folder = GraphWorkflowFolderModel.findById(folderIdParam)
+      const folder = findGraphWorkflowFolderOrRespond(res, folderIdParam)
       if (!folder) {
-        return res.status(404).json({ success: false, error: 'Graph workflow folder not found' } as ModuleGraphResponse)
+        return
       }
 
       const workflowIds = GraphWorkflowModel.findByFolderIds(GraphWorkflowFolderModel.getSubtreeFolderIds(folder.id), true).map((workflow) => workflow.id)
@@ -232,9 +281,9 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
     return sendRouteBadRequest(res, 'schedule_type must be once, interval, or daily')
   }
 
-  const workflow = GraphWorkflowModel.findById(workflowId)
+  const workflow = findGraphWorkflowOrRespond(res, workflowId)
   if (!workflow) {
-    return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
+    return
   }
 
   if (scheduleType === 'once' && !runAt) {
@@ -285,20 +334,17 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseGraphRouteInteger(req.params.scheduleId)
-  if (isNaN(scheduleId)) {
-    return sendRouteBadRequest(res, 'Invalid schedule ID')
+  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, 'Invalid schedule ID')
+  if (scheduleId === null) {
+    return
   }
 
-  const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
-  if (!schedule) {
-    return res.status(404).json({ success: false, error: 'Graph workflow schedule not found' } as ModuleGraphResponse)
+  const scheduleContext = findScheduleWorkflowContextOrRespond(res, scheduleId)
+  if (!scheduleContext) {
+    return
   }
 
-  const workflow = GraphWorkflowModel.findById(schedule.graph_workflow_id)
-  if (!workflow) {
-    return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
-  }
+  const { schedule, workflow } = scheduleContext
 
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined
   const scheduleType = req.body?.schedule_type !== undefined ? parseScheduleType(req.body.schedule_type) : undefined
@@ -361,14 +407,13 @@ router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Resp
 }))
 
 router.post('/schedules/:scheduleId/pause', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseGraphRouteInteger(req.params.scheduleId)
-  if (isNaN(scheduleId)) {
-    return sendRouteBadRequest(res, 'Invalid schedule ID')
+  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, 'Invalid schedule ID')
+  if (scheduleId === null) {
+    return
   }
 
-  const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
-  if (!schedule) {
-    return res.status(404).json({ success: false, error: 'Graph workflow schedule not found' } as ModuleGraphResponse)
+  if (!findGraphWorkflowScheduleOrRespond(res, scheduleId)) {
+    return
   }
 
   const updated = GraphWorkflowScheduleModel.update(scheduleId, {
@@ -383,20 +428,17 @@ router.post('/schedules/:scheduleId/pause', asyncHandler(async (req: Request, re
 }))
 
 router.post('/schedules/:scheduleId/resume', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseGraphRouteInteger(req.params.scheduleId)
-  if (isNaN(scheduleId)) {
-    return sendRouteBadRequest(res, 'Invalid schedule ID')
+  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, 'Invalid schedule ID')
+  if (scheduleId === null) {
+    return
   }
 
-  const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
-  if (!schedule) {
-    return res.status(404).json({ success: false, error: 'Graph workflow schedule not found' } as ModuleGraphResponse)
+  const scheduleContext = findScheduleWorkflowContextOrRespond(res, scheduleId)
+  if (!scheduleContext) {
+    return
   }
 
-  const workflow = GraphWorkflowModel.findById(schedule.graph_workflow_id)
-  if (!workflow) {
-    return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
-  }
+  const { schedule, workflow } = scheduleContext
 
   const nextRunAt = GraphWorkflowScheduleService.buildInitialNextRunAt({
     scheduleType: schedule.schedule_type,
@@ -417,20 +459,17 @@ router.post('/schedules/:scheduleId/resume', asyncHandler(async (req: Request, r
 }))
 
 router.post('/schedules/:scheduleId/run-now', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseGraphRouteInteger(req.params.scheduleId)
-  if (isNaN(scheduleId)) {
-    return sendRouteBadRequest(res, 'Invalid schedule ID')
+  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, 'Invalid schedule ID')
+  if (scheduleId === null) {
+    return
   }
 
-  const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
-  if (!schedule) {
-    return res.status(404).json({ success: false, error: 'Graph workflow schedule not found' } as ModuleGraphResponse)
+  const scheduleContext = findScheduleWorkflowContextOrRespond(res, scheduleId)
+  if (!scheduleContext) {
+    return
   }
 
-  const workflow = GraphWorkflowModel.findById(schedule.graph_workflow_id)
-  if (!workflow) {
-    return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
-  }
+  const { schedule } = scheduleContext
 
   try {
     const result = GraphWorkflowExecutionQueue.enqueue(
@@ -454,14 +493,13 @@ router.post('/schedules/:scheduleId/run-now', asyncHandler(async (req: Request, 
 }))
 
 router.delete('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseGraphRouteInteger(req.params.scheduleId)
-  if (isNaN(scheduleId)) {
-    return sendRouteBadRequest(res, 'Invalid schedule ID')
+  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, 'Invalid schedule ID')
+  if (scheduleId === null) {
+    return
   }
 
-  const schedule = GraphWorkflowScheduleModel.findById(scheduleId)
-  if (!schedule) {
-    return res.status(404).json({ success: false, error: 'Graph workflow schedule not found' } as ModuleGraphResponse)
+  if (!findGraphWorkflowScheduleOrRespond(res, scheduleId)) {
+    return
   }
 
   const queueCleanup = GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds([scheduleId])

@@ -7,10 +7,7 @@ import { textareaVariants } from '@/components/ui/textarea'
 import { getWildcards, type WildcardTool } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
-  filterWildcardTree,
-  flattenWildcardTree,
   getWildcardPromptSyntax,
-  matchesWorkspaceTab,
   type WildcardWorkspaceTab,
 } from './wildcard-generation-panel-helpers'
 import {
@@ -35,6 +32,7 @@ import {
   type PromptSyntaxToken,
   type PromptSyntaxTokenKind,
 } from './prompt-syntax-highlight-helpers'
+import { useWildcardWorkspaceBrowser } from './use-wildcard-workspace-browser'
 import { WildcardInlinePickerExplorer } from './wildcard-inline-picker-explorer'
 
 type WildcardInlinePickerFieldProps = {
@@ -257,7 +255,6 @@ export function WildcardInlinePickerField({
   const [filterMode, setFilterMode] = useState<WildcardFilterMode>(() => readStoredWildcardFilterMode(tool))
   const [recentWildcardNames, setRecentWildcardNames] = useState<string[]>(() => readStoredRecentWildcards(tool))
   const [activeExplorerTab, setActiveExplorerTab] = useState<WildcardWorkspaceTab>('wildcards')
-  const [selectedExplorerId, setSelectedExplorerId] = useState<number | null>(null)
   const [expandedExplorerIds, setExpandedExplorerIds] = useState<number[]>([])
   const [isExplorerPinned, setIsExplorerPinned] = useState(false)
   const [fieldScrollTop, setFieldScrollTop] = useState(0)
@@ -275,10 +272,15 @@ export function WildcardInlinePickerField({
   const wildcards = wildcardsQuery.data ?? []
   const flattenedWildcards = useMemo(() => flattenWildcardRecords(wildcards), [wildcards])
   const activeQuery = useMemo(() => resolveActiveWildcardQuery(value, caretPosition), [value, caretPosition])
-  const explorerTreeNodes = useMemo(
-    () => filterWildcardTree(wildcards, (node) => matchesWorkspaceTab(node, activeExplorerTab)),
-    [activeExplorerTab, wildcards],
-  )
+  const {
+    treeNodes: explorerTreeNodes,
+    entries: explorerEntries,
+    selectedWildcardId: selectedExplorerId,
+    setSelectedWildcardId: setSelectedExplorerId,
+  } = useWildcardWorkspaceBrowser({
+    records: wildcards,
+    activeTab: activeExplorerTab,
+  })
   const detectedTokens = useMemo(
     () => detectPromptSyntaxTokens(value, flattenedWildcards, tool),
     [flattenedWildcards, tool, value],
@@ -343,7 +345,6 @@ export function WildcardInlinePickerField({
     return records
   }, [activeQuery, filterMode, flattenedWildcards, recentWildcardNames, tool])
 
-  const explorerEntries = useMemo(() => flattenWildcardTree(explorerTreeNodes), [explorerTreeNodes])
   const isTreeExplorerMode = filterMode === 'all' && (activeQuery === null || (activeQuery?.query.trim().length ?? 0) === 0)
   const isPopupOpen = isFocused && (activeQuery !== null || isExplorerPinned) && !disabled
   const normalizedActiveQuery = activeQuery?.query.trim() ?? ''
@@ -366,13 +367,10 @@ export function WildcardInlinePickerField({
 
   useEffect(() => {
     if (explorerEntries.length === 0) {
-      setSelectedExplorerId(null)
       return
     }
 
     if (selectedExplorerId === null || !explorerEntries.some((entry) => entry.wildcard.id === selectedExplorerId)) {
-      const firstEntry = explorerEntries[0]
-      setSelectedExplorerId(firstEntry.wildcard.id)
       setExpandedExplorerIds((current) => Array.from(new Set([...current, ...explorerEntries.filter((entry) => entry.depth === 0).map((entry) => entry.wildcard.id)])))
     }
   }, [explorerEntries, selectedExplorerId])

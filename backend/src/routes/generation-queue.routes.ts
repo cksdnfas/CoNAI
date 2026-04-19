@@ -100,6 +100,27 @@ function canAccessJob(req: Request, job: GenerationQueueJobRecord) {
   return accountId !== null && job.requested_by_account_id === accountId
 }
 
+function resolveAccessibleQueueJob(req: Request, res: Response) {
+  const jobId = parsePositiveInteger(req.params.id)
+  if (jobId === null) {
+    sendRouteBadRequest(res, 'Invalid queue job id')
+    return null
+  }
+
+  const job = GenerationQueueModel.findById(jobId)
+  if (!job) {
+    res.status(404).json({ success: false, error: 'Generation queue job not found' })
+    return null
+  }
+
+  if (!canAccessJob(req, job)) {
+    res.status(403).json({ success: false, error: 'You do not have access to this queue job' })
+    return null
+  }
+
+  return { jobId, job }
+}
+
 function hasGenerationPageAccess(req: Request) {
   const accountId = getRequesterAccountId(req)
   return AuthAccessControlService.hasPermission(accountId, 'page.generation.view')
@@ -607,30 +628,20 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
 /** GET /api/generation-queue/:id/request-debug */
 router.get('/:id/request-debug', asyncHandler(async (req: Request, res: Response) => {
-  const jobId = parsePositiveInteger(req.params.id)
-  if (jobId === null) {
-    sendRouteBadRequest(res, 'Invalid queue job id')
+  const resolvedJob = resolveAccessibleQueueJob(req, res)
+  if (!resolvedJob) {
     return
   }
 
-  const existing = GenerationQueueModel.findById(jobId)
-  if (!existing) {
-    res.status(404).json({ success: false, error: 'Generation queue job not found' })
-    return
-  }
+  const { job } = resolvedJob
 
-  if (!canAccessJob(req, existing)) {
-    res.status(403).json({ success: false, error: 'You do not have access to this queue job' })
-    return
-  }
-
-  if (existing.service_type !== 'comfyui') {
+  if (job.service_type !== 'comfyui') {
     sendRouteBadRequest(res, 'Request debug is currently supported for comfyui jobs only')
     return
   }
 
   try {
-    const snapshot = await readComfyRequestDebugSnapshot(existing.id)
+    const snapshot = await readComfyRequestDebugSnapshot(job.id)
     res.json({
       success: true,
       data: snapshot,
@@ -650,22 +661,12 @@ router.post('/:id/retry', asyncHandler(async (req: Request, res: Response) => {
     return
   }
 
-  const jobId = parsePositiveInteger(req.params.id)
-  if (jobId === null) {
-    sendRouteBadRequest(res, 'Invalid queue job id')
+  const resolvedJob = resolveAccessibleQueueJob(req, res)
+  if (!resolvedJob) {
     return
   }
 
-  const existing = GenerationQueueModel.findById(jobId)
-  if (!existing) {
-    res.status(404).json({ success: false, error: 'Generation queue job not found' })
-    return
-  }
-
-  if (!canAccessJob(req, existing)) {
-    res.status(403).json({ success: false, error: 'You do not have access to this queue job' })
-    return
-  }
+  const { jobId } = resolvedJob
 
   try {
     const retryRecord = GenerationQueueService.retryJob(jobId)
@@ -681,22 +682,12 @@ router.post('/:id/retry', asyncHandler(async (req: Request, res: Response) => {
 
 /** POST /api/generation-queue/:id/cancel */
 router.post('/:id/cancel', asyncHandler(async (req: Request, res: Response) => {
-  const jobId = parsePositiveInteger(req.params.id)
-  if (jobId === null) {
-    sendRouteBadRequest(res, 'Invalid queue job id')
+  const resolvedJob = resolveAccessibleQueueJob(req, res)
+  if (!resolvedJob) {
     return
   }
 
-  const existing = GenerationQueueModel.findById(jobId)
-  if (!existing) {
-    res.status(404).json({ success: false, error: 'Generation queue job not found' })
-    return
-  }
-
-  if (!canAccessJob(req, existing)) {
-    res.status(403).json({ success: false, error: 'You do not have access to this queue job' })
-    return
-  }
+  const { jobId, job: existing } = resolvedJob
 
   if (TERMINAL_QUEUE_STATUSES.includes(existing.status)) {
     res.json({

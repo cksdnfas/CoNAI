@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, CircleHelp, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 import type { GraphWorkflowExposedInput } from '@/lib/api'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
+import { TechnicalReferenceHint, hasMeaningfulValue } from './module-graph-field-shared'
 
 type WorkflowExposedInputEditorProps = {
   candidates: GraphWorkflowExposedInput[]
@@ -25,19 +26,6 @@ type WorkflowExposedInputEditorProps = {
   onMoveInput: (inputId: string, direction: 'up' | 'down') => void
   onChangeDefaultImage: (inputId: string, image?: SelectedImageDraft) => Promise<void> | void
   showHeader?: boolean
-}
-
-function hasExplicitValue(value: unknown) {
-  return value !== undefined && value !== null && value !== ''
-}
-
-/** Render a compact tooltip icon for internal node and port references. */
-function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
-  return (
-    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
-      <CircleHelp className="h-3.5 w-3.5" />
-    </span>
-  )
 }
 
 /** Render workflow-level exposed input selection and presentation editing for the runner form. */
@@ -151,7 +139,7 @@ export function WorkflowExposedInputEditor({
     if (inputDefinition.data_type === 'image' || inputDefinition.data_type === 'mask') {
       return (
         <div className="space-y-2">
-          <ImageAttachmentPickerButton label={hasExplicitValue(rawValue) ? '기본 이미지 변경' : '기본 이미지 선택'} modalTitle={inputDefinition.label} allowSaveDialog={false} onSelect={(image) => void onChangeDefaultImage(inputDefinition.id, image)} />
+          <ImageAttachmentPickerButton label={hasMeaningfulValue(rawValue) ? '기본 이미지 변경' : '기본 이미지 선택'} modalTitle={inputDefinition.label} allowSaveDialog={false} onSelect={(image) => void onChangeDefaultImage(inputDefinition.id, image)} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:') ? (
             <InlineMediaPreview src={rawValue} alt={inputDefinition.label} frameClassName="p-3" mediaClassName="max-h-36 w-full object-contain" />
           ) : null}
@@ -160,7 +148,7 @@ export function WorkflowExposedInputEditor({
             size="sm"
             variant="ghost"
             onClick={() => onUpdateInput(inputDefinition.id, { default_value: undefined })}
-            disabled={!hasExplicitValue(rawValue)}
+            disabled={!hasMeaningfulValue(rawValue)}
           >
             기본 이미지 지우기
           </Button>

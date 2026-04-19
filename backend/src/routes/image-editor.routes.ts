@@ -85,6 +85,24 @@ async function getAccessibleImageFileOrBlock(imageId: number, res: Response) {
   return imageFile;
 }
 
+/** Require a valid image id and a non-hidden source file before continuing. */
+async function requireAccessibleImageEditorRequest(req: Request, res: Response) {
+  const imageId = requireImageEditorRouteId(req, res);
+  if (imageId === null) {
+    return null;
+  }
+
+  const imageFile = await getAccessibleImageFileOrBlock(imageId, res);
+  if (!imageFile) {
+    return null;
+  }
+
+  return {
+    imageId,
+    imageFile,
+  };
+}
+
 /**
  * List save-folder images for attachment picker UIs.
  * GET /api/image-editor/save-images
@@ -114,17 +132,13 @@ router.get('/save-images', asyncHandler(async (_req: Request, res: Response) => 
  * GET /api/image-editor/:id/webp
  */
 router.get('/:id/webp', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = requireImageEditorRouteId(req, res);
-  if (imageId === null) {
-    return;
-  }
-
   try {
-    const imageFile = await getAccessibleImageFileOrBlock(imageId, res);
-    if (!imageFile) {
+    const imageRequest = await requireAccessibleImageEditorRequest(req, res);
+    if (!imageRequest) {
       return;
     }
 
+    const { imageFile } = imageRequest;
     const originalPath = imageFile.original_file_path;
 
     if (!fs.existsSync(originalPath)) {
@@ -159,19 +173,15 @@ router.get('/:id/webp', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/image-editor/:id/temp
  */
 router.post('/:id/temp', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = requireImageEditorRouteId(req, res);
-  if (imageId === null) {
-    return;
-  }
-
   const editOptions: EditOptions = req.body;
 
   try {
-    if (!await getAccessibleImageFileOrBlock(imageId, res)) {
+    const imageRequest = await requireAccessibleImageEditorRequest(req, res);
+    if (!imageRequest) {
       return;
     }
 
-    const result = await ImageEditorService.editImage(imageId, editOptions);
+    const result = await ImageEditorService.editImage(imageRequest.imageId, editOptions);
 
     return res.json({
       success: true,
@@ -192,11 +202,6 @@ router.post('/:id/temp', asyncHandler(async (req: Request, res: Response) => {
  * Body: { imageData: base64 string, maskData?: base64 string }
  */
 router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = requireImageEditorRouteId(req, res);
-  if (imageId === null) {
-    return;
-  }
-
   const { imageData, maskData } = req.body;
 
   if (!requireImageData(res, imageData)) {
@@ -204,7 +209,8 @@ router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    if (!await getAccessibleImageFileOrBlock(imageId, res)) {
+    const imageRequest = await requireAccessibleImageEditorRequest(req, res);
+    if (!imageRequest) {
       return;
     }
 
@@ -214,7 +220,7 @@ router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
 
     const result = await ImageEditorService.saveEditedImageAsNew(
       imageBuffer,
-      imageId,
+      imageRequest.imageId,
       maskBuffer
     );
 
@@ -239,11 +245,6 @@ router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
  * Body: { imageData: base64 string, format?: 'png' | 'jpeg' | 'webp', quality?: number }
  */
 router.post('/:id/save-output', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = requireImageEditorRouteId(req, res);
-  if (imageId === null) {
-    return;
-  }
-
   const { imageData, format = 'webp', quality = 90 } = req.body;
 
   if (!requireImageData(res, imageData)) {
@@ -255,13 +256,14 @@ router.post('/:id/save-output', asyncHandler(async (req: Request, res: Response)
   }
 
   try {
-    if (!await getAccessibleImageFileOrBlock(imageId, res)) {
+    const imageRequest = await requireAccessibleImageEditorRequest(req, res);
+    if (!imageRequest) {
       return;
     }
 
     const result = await ImageEditorService.saveAsFormat(
       imageData,
-      imageId,
+      imageRequest.imageId,
       format,
       quality
     );
@@ -285,11 +287,6 @@ router.post('/:id/save-output', asyncHandler(async (req: Request, res: Response)
  * Body: { imageData: base64 string, quality?: number (default 90) }
  */
 router.post('/:id/save-webp', asyncHandler(async (req: Request, res: Response) => {
-  const imageId = requireImageEditorRouteId(req, res);
-  if (imageId === null) {
-    return;
-  }
-
   const { imageData, quality = 90 } = req.body;
 
   if (!requireImageData(res, imageData)) {
@@ -297,13 +294,14 @@ router.post('/:id/save-webp', asyncHandler(async (req: Request, res: Response) =
   }
 
   try {
-    if (!await getAccessibleImageFileOrBlock(imageId, res)) {
+    const imageRequest = await requireAccessibleImageEditorRequest(req, res);
+    if (!imageRequest) {
       return;
     }
 
     const result = await ImageEditorService.saveAsWebP(
       imageData,
-      imageId,
+      imageRequest.imageId,
       quality
     );
 

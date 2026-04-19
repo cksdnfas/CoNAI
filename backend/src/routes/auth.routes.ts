@@ -38,6 +38,30 @@ function parseAuthInteger(value: unknown) {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
+/** Parse one required integer param/body value or send the route's legacy invalid-id payload. */
+function parseRequiredAuthInteger(res: Response, value: unknown, error: string) {
+  const parsed = parseAuthInteger(value);
+  if (parsed === null) {
+    sendAuthBadRequest(res, error);
+    return null;
+  }
+
+  return parsed;
+}
+
+/** Reuse the permission-group route error/status mapping without changing response contracts. */
+function sendPermissionGroupRouteError(res: Response, error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+  const statusCode = (
+    message === 'Invalid group id'
+    || message === 'Group name is required'
+    || message === 'One or more permission keys are invalid'
+    || message === 'System groups cannot be modified through this endpoint'
+  ) ? 400 : (message === 'Permission group not found' || message === 'Account not found') ? 404 : 500;
+
+  res.status(statusCode).json({ error: message });
+}
+
 /** Normalize SQLite UTC timestamps into ISO strings so clients parse them consistently. */
 function formatSqliteUtcTimestamp(value: string | null | undefined) {
   if (!value) {
@@ -345,9 +369,8 @@ const handlePermissionGroups: RequestHandler = async (req, res) => {
 
 /** Handle one permission-group detail read with its current members. */
 const handlePermissionGroupDetail: RequestHandler = async (req, res) => {
-  const groupId = parseAuthInteger(req.params.groupId);
+  const groupId = parseRequiredAuthInteger(res, req.params.groupId, 'Invalid group id');
   if (groupId === null) {
-    sendAuthBadRequest(res, 'Invalid group id');
     return;
   }
 
@@ -388,17 +411,14 @@ const handlePermissionGroupCreate: RequestHandler = async (req, res) => {
       data: formatPermissionGroupSummary(group),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to create permission group';
-    const statusCode = message === 'Group name is required' || message === 'One or more permission keys are invalid' ? 400 : 500;
-    res.status(statusCode).json({ error: message });
+    sendPermissionGroupRouteError(res, error, 'Failed to create permission group');
   }
 };
 
 /** Handle one custom permission-group update. */
 const handlePermissionGroupUpdate: RequestHandler = async (req, res) => {
-  const groupId = parseAuthInteger(req.params.groupId);
+  const groupId = parseRequiredAuthInteger(res, req.params.groupId, 'Invalid group id');
   if (groupId === null) {
-    sendAuthBadRequest(res, 'Invalid group id');
     return;
   }
 
@@ -416,22 +436,14 @@ const handlePermissionGroupUpdate: RequestHandler = async (req, res) => {
       data: formatPermissionGroupSummary(group),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to update permission group';
-    const statusCode = (
-      message === 'Invalid group id'
-      || message === 'Group name is required'
-      || message === 'One or more permission keys are invalid'
-      || message === 'System groups cannot be modified through this endpoint'
-    ) ? 400 : message === 'Permission group not found' ? 404 : 500;
-    res.status(statusCode).json({ error: message });
+    sendPermissionGroupRouteError(res, error, 'Failed to update permission group');
   }
 };
 
 /** Handle one custom permission-group deletion. */
 const handlePermissionGroupDelete: RequestHandler = async (req, res) => {
-  const groupId = parseAuthInteger(req.params.groupId);
+  const groupId = parseRequiredAuthInteger(res, req.params.groupId, 'Invalid group id');
   if (groupId === null) {
-    sendAuthBadRequest(res, 'Invalid group id');
     return;
   }
 
@@ -442,26 +454,19 @@ const handlePermissionGroupDelete: RequestHandler = async (req, res) => {
       message: 'Permission group deleted successfully',
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to delete permission group';
-    const statusCode = (
-      message === 'System groups cannot be modified through this endpoint'
-    ) ? 400 : message === 'Permission group not found' ? 404 : 500;
-    res.status(statusCode).json({ error: message });
+    sendPermissionGroupRouteError(res, error, 'Failed to delete permission group');
   }
 };
 
 /** Handle adding one account membership to one custom permission group. */
 const handlePermissionGroupMemberAdd: RequestHandler = async (req, res) => {
-  const groupId = parseAuthInteger(req.params.groupId);
-  const accountId = parseAuthInteger(req.body?.accountId);
-
+  const groupId = parseRequiredAuthInteger(res, req.params.groupId, 'Invalid group id');
   if (groupId === null) {
-    sendAuthBadRequest(res, 'Invalid group id');
     return;
   }
 
+  const accountId = parseRequiredAuthInteger(res, req.body?.accountId, 'Invalid account id');
   if (accountId === null) {
-    sendAuthBadRequest(res, 'Invalid account id');
     return;
   }
 
@@ -472,26 +477,19 @@ const handlePermissionGroupMemberAdd: RequestHandler = async (req, res) => {
       message: 'Group member added successfully',
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to add group member';
-    const statusCode = (
-      message === 'System groups cannot be modified through this endpoint'
-    ) ? 400 : (message === 'Permission group not found' || message === 'Account not found') ? 404 : 500;
-    res.status(statusCode).json({ error: message });
+    sendPermissionGroupRouteError(res, error, 'Failed to add group member');
   }
 };
 
 /** Handle removing one account membership from one custom permission group. */
 const handlePermissionGroupMemberRemove: RequestHandler = async (req, res) => {
-  const groupId = parseAuthInteger(req.params.groupId);
-  const accountId = parseAuthInteger(req.params.accountId);
-
+  const groupId = parseRequiredAuthInteger(res, req.params.groupId, 'Invalid group id');
   if (groupId === null) {
-    sendAuthBadRequest(res, 'Invalid group id');
     return;
   }
 
+  const accountId = parseRequiredAuthInteger(res, req.params.accountId, 'Invalid account id');
   if (accountId === null) {
-    sendAuthBadRequest(res, 'Invalid account id');
     return;
   }
 
@@ -502,11 +500,7 @@ const handlePermissionGroupMemberRemove: RequestHandler = async (req, res) => {
       message: 'Group member removed successfully',
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to remove group member';
-    const statusCode = (
-      message === 'System groups cannot be modified through this endpoint'
-    ) ? 400 : (message === 'Permission group not found' || message === 'Account not found') ? 404 : 500;
-    res.status(statusCode).json({ error: message });
+    sendPermissionGroupRouteError(res, error, 'Failed to remove group member');
   }
 };
 

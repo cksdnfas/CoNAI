@@ -7,6 +7,10 @@ import type { ImageRecord } from '@/types/image'
 import type { WallpaperImageTransitionStyle, WallpaperWidgetInstance } from './wallpaper-types'
 import { useWallpaperBrowseContentQuery, useWallpaperGroupPreviewImagesQuery } from './wallpaper-widget-data'
 import {
+  buildWallpaperImageTransitionTransform,
+  type WallpaperImageTransitionFrame,
+} from './wallpaper-image-transition-utils'
+import {
   getWallpaperArtifactPreviewImage,
   WallpaperPreviewImageSurface,
   type WallpaperWidgetPreviewImage,
@@ -22,6 +26,23 @@ import {
   useWallpaperRotatingIndex,
 } from './wallpaper-widget-utils'
 
+function getWallpaperBaseStackCardFrame(
+  offsetX: number,
+  offsetY: number,
+  scale: number,
+  rotate: number,
+): WallpaperImageTransitionFrame {
+  return {
+    opacity: 1,
+    translateX: offsetX,
+    translateY: offsetY,
+    scale,
+    rotate,
+    rotateX: 0,
+    blur: 0,
+  }
+}
+
 // Build one stack-card motion style so recent-results stack mode respects transition style choices.
 function getWallpaperStackCardStyle(
   transitionStyle: WallpaperImageTransitionStyle,
@@ -31,47 +52,32 @@ function getWallpaperStackCardStyle(
   scale: number,
   rotate: number,
 ): CSSProperties {
+  const frame = getWallpaperBaseStackCardFrame(offsetX, offsetY, scale, rotate)
+
   if (transitionStyle === 'zoom') {
-    return {
-      transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${Math.max(0.72, scale - order * 0.04)})`,
-      filter: `blur(${Math.max(0, order * 1.6)}px)`,
-    }
-  }
-
-  if (transitionStyle === 'slide') {
-    return {
-      transform: `translate3d(${offsetX}px, ${offsetY + order * 12}px, 0) rotate(${rotate}deg) scale(${scale})`,
-      filter: `blur(${Math.max(0, order * 0.8)}px)`,
-    }
-  }
-
-  if (transitionStyle === 'blur') {
-    return {
-      transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${scale})`,
-      filter: `blur(${Math.max(0, order * 2.6)}px)`,
-    }
-  }
-
-  if (transitionStyle === 'flip') {
-    return {
-      transform: `perspective(1200px) translate3d(${offsetX}px, ${offsetY}px, 0) rotateX(${order * 12}deg) rotate(${rotate}deg) scale(${scale})`,
-      filter: `blur(${Math.max(0, order * 0.6)}px)`,
-      transformStyle: 'preserve-3d',
-    }
-  }
-
-  if (transitionStyle === 'shuffle') {
-    const shuffleX = offsetX + ((order % 2 === 0 ? -1 : 1) * order * 10)
-    const shuffleY = offsetY + order * 6
-    const shuffleRotate = rotate + ((order % 2 === 0 ? -1 : 1) * order * 3.5)
-    return {
-      transform: `translate3d(${shuffleX}px, ${shuffleY}px, 0) rotate(${shuffleRotate}deg) scale(${Math.max(0.8, scale - order * 0.015)})`,
-      filter: `blur(${Math.max(0, order * 1.1)}px)`,
-    }
+    frame.scale = Math.max(0.72, scale - order * 0.04)
+    frame.blur = Math.max(0, order * 1.6)
+  } else if (transitionStyle === 'slide') {
+    frame.translateY += order * 12
+    frame.blur = Math.max(0, order * 0.8)
+  } else if (transitionStyle === 'blur') {
+    frame.blur = Math.max(0, order * 2.6)
+  } else if (transitionStyle === 'flip') {
+    frame.rotateX = order * 12
+    frame.blur = Math.max(0, order * 0.6)
+  } else if (transitionStyle === 'shuffle') {
+    const direction = order % 2 === 0 ? -1 : 1
+    frame.translateX += direction * order * 10
+    frame.translateY += order * 6
+    frame.rotate += direction * order * 3.5
+    frame.scale = Math.max(0.8, scale - order * 0.015)
+    frame.blur = Math.max(0, order * 1.1)
   }
 
   return {
-    transform: `translate3d(${offsetX}px, ${offsetY}px, 0) rotate(${rotate}deg) scale(${scale})`,
+    transform: buildWallpaperImageTransitionTransform(frame),
+    filter: `blur(${frame.blur}px)`,
+    ...(transitionStyle === 'flip' ? { transformStyle: 'preserve-3d' as const } : {}),
   }
 }
 

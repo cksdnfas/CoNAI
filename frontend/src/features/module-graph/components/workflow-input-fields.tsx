@@ -9,14 +9,11 @@ import type { SelectedImageDraft } from '@/features/image-generation/image-gener
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { GraphWorkflowExposedInput } from '@/lib/api'
 import { normalizeModulePortDescription } from '../module-graph-shared'
+import { hasMeaningfulValue } from './module-graph-field-shared'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 
 const WORKFLOW_INPUT_FIELD_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-4'
-
-function hasExplicitValue(value: unknown) {
-  return value !== undefined && value !== null && value !== ''
-}
 
 function hasDefaultValue(value: unknown) {
   return value !== undefined
@@ -95,7 +92,7 @@ export function WorkflowInputFields({
 
   const renderInputField = (inputDefinition: GraphWorkflowExposedInput) => {
     const rawValue = inputValues[inputDefinition.id]
-    const explicitValue = hasExplicitValue(rawValue)
+    const explicitValue = hasMeaningfulValue(rawValue)
     const normalizedDescription = normalizeModulePortDescription(inputDefinition.description)
 
     if (isNaiCharacterPromptPort(inputDefinition.port_key, inputDefinition.data_type)) {
