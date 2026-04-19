@@ -2,7 +2,7 @@ import 'plyr/dist/plyr.css'
 import './image-detail-media.css'
 
 import type Plyr from 'plyr'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCachedVideoSource } from '@/features/images/components/video/use-cached-video-source'
 import { cn } from '@/lib/utils'
 
@@ -16,6 +16,51 @@ function destroyPlyrSafely(player: Plyr | null) {
   } catch (error) {
     console.warn('[EnhancedVideoPlayer] Failed to destroy Plyr cleanly.', error)
   }
+}
+
+function supportsPictureInPicture(video: HTMLVideoElement) {
+  if (typeof document === 'undefined') {
+    return false
+  }
+
+  return Boolean(
+    'pictureInPictureEnabled' in document
+    && (document as Document & { pictureInPictureEnabled?: boolean }).pictureInPictureEnabled
+    && !video.disablePictureInPicture,
+  )
+}
+
+function supportsAirplay(video: HTMLVideoElement) {
+  return typeof (video as HTMLVideoElement & { webkitShowPlaybackTargetPicker?: () => void }).webkitShowPlaybackTargetPicker === 'function'
+}
+
+function supportsFullscreen() {
+  if (typeof document === 'undefined') {
+    return false
+  }
+
+  return Boolean(
+    document.fullscreenEnabled
+    || (document as Document & { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled,
+  )
+}
+
+function buildPlyrControls(video: HTMLVideoElement) {
+  const controls: Plyr.Options['controls'] = ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume']
+
+  if (supportsPictureInPicture(video)) {
+    controls.push('pip')
+  }
+
+  if (supportsAirplay(video)) {
+    controls.push('airplay')
+  }
+
+  if (supportsFullscreen()) {
+    controls.push('fullscreen')
+  }
+
+  return controls
 }
 
 interface EnhancedVideoPlayerProps {
@@ -37,6 +82,11 @@ export function EnhancedVideoPlayer({
   const { resolvedSourceUrl } = useCachedVideoSource(renderUrl)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playerRef = useRef<Plyr | null>(null)
+  const [useNativeControlsFallback, setUseNativeControlsFallback] = useState(false)
+
+  useEffect(() => {
+    setUseNativeControlsFallback(false)
+  }, [resolvedSourceUrl])
 
   useEffect(() => {
     if (!resolvedSourceUrl) {
@@ -67,14 +117,15 @@ export function EnhancedVideoPlayer({
         const createdPlayer = new PlyrClass(node, {
           autoplay: autoPlay,
           iconUrl: '/vendor/plyr.svg',
-          controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'pip', 'airplay', 'fullscreen'],
+          controls: buildPlyrControls(node),
           hideControls: true,
           keyboard: { focused: true, global: false },
           clickToPlay: true,
           resetOnEnd: false,
           seekTime: 5,
-          fullscreen: { enabled: true, iosNative: true },
+          fullscreen: { enabled: supportsFullscreen(), iosNative: true },
           tooltips: { controls: true, seek: true },
+          settings: [],
         })
 
         if (disposed || videoRef.current !== node) {
@@ -91,6 +142,7 @@ export function EnhancedVideoPlayer({
         }
       } catch (error) {
         console.warn('[EnhancedVideoPlayer] Falling back to native video controls.', error)
+        setUseNativeControlsFallback(true)
       }
     }
 
@@ -133,7 +185,7 @@ export function EnhancedVideoPlayer({
           ref={videoRef}
           className="conai-video-player__media h-full w-full bg-black object-contain"
           autoPlay={autoPlay}
-          controls
+          controls={useNativeControlsFallback}
           loop={loop}
           playsInline
           preload={preload}
