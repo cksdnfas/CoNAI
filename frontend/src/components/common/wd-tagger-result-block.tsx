@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import type { AutoTestTaggerResult } from '@/lib/api'
 import { CharacterPromptSection, GeneralPromptSection, RatingPromptSection } from './prompt-result-sections'
-import { getSortedEntries } from './tag-result-utils'
+import { getSortedEntries, parseTaglistTokens } from './tag-result-utils'
 
 interface WDTaggerResultBlockProps {
   result: AutoTestTaggerResult
@@ -12,6 +12,7 @@ export function WDTaggerResultBlock({ result, title = 'WD Tagger 결과' }: WDTa
   const ratingEntries = getSortedEntries(result.rating)
   const characterEntries = getSortedEntries(result.character)
   const generalEntries = getSortedEntries(result.general)
+  const generalTags = parseTaglistTokens(result.taglist)
 
   if (ratingEntries.length === 0 && characterEntries.length === 0 && generalEntries.length === 0) return null
 
@@ -34,7 +35,7 @@ export function WDTaggerResultBlock({ result, title = 'WD Tagger 결과' }: WDTa
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Detailed scores</div>
           <div className="grid gap-3 grid-cols-1">
             <CharacterPromptSection entries={characterEntries} />
-            <GeneralPromptSection tags={generalEntries.map(([tag]) => tag)} entries={generalEntries} collapsibleScores />
+            <GeneralPromptSection tags={generalTags.length > 0 ? generalTags : generalEntries.map(([tag]) => tag)} entries={generalEntries} collapsibleScores />
           </div>
         </div>
       ) : null}
