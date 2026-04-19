@@ -6,6 +6,14 @@ import type { WorkflowMarkedField } from '@/lib/api'
 import { hasWorkflowFieldValue, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { WorkflowFieldInput } from './workflow-field-input'
 
+function formatWorkflowFieldTypeLabel(field: WorkflowMarkedField) {
+  if (field.type === 'node') {
+    return 'Node'
+  }
+
+  return field.type
+}
+
 export const WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS = 'overflow-hidden rounded-sm border border-border/85 bg-surface-container/30'
 export const WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS = 'bg-surface-container/45'
 export const WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS = 'border-t border-border/85'
@@ -57,8 +65,11 @@ export function WorkflowFieldDisclosureCard({ field, value, onChange, onImageCha
                 ) : null}
               </div>
 
-              <div className="shrink-0 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                {field.type}
+              <div className={cn(
+                'shrink-0 text-[11px] font-medium tracking-[0.14em] text-muted-foreground',
+                field.type !== 'node' && 'uppercase',
+              )}>
+                {formatWorkflowFieldTypeLabel(field)}
               </div>
             </div>
           </div>

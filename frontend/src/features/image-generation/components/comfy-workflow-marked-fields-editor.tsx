@@ -39,6 +39,14 @@ function parseOptionalNumberInput(rawValue: string) {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
+function formatMarkedFieldTypeLabel(field: WorkflowMarkedField) {
+  if (field.type === 'node') {
+    return 'Node'
+  }
+
+  return field.type
+}
+
 /** Render the marked-field list and the strongly bounded field editing controls. */
 export function ComfyWorkflowMarkedFieldsEditor({
   markedFields,
@@ -124,7 +132,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-xs text-muted-foreground">#{index + 1}</span>
                         <span className="truncate text-sm font-medium text-foreground">{field.label || field.id}</span>
-                        <Badge variant="outline">{field.type}</Badge>
+                        <Badge variant="outline">{formatMarkedFieldTypeLabel(field)}</Badge>
                         {field.required ? <Badge variant="outline">required</Badge> : null}
                         {field.default_collapsed ? <Badge variant="secondary">기본 접기</Badge> : null}
                       </div>
@@ -147,12 +155,18 @@ export function ComfyWorkflowMarkedFieldsEditor({
                       </SettingsField>
 
                       <SettingsField label="타입">
-                        <Select variant="settings" value={field.type} onChange={(event) => onFieldPatch(field.id, { type: event.target.value as WorkflowMarkedField['type'] })}>
+                        <Select
+                          variant="settings"
+                          value={field.type}
+                          disabled={field.type === 'node'}
+                          onChange={(event) => onFieldPatch(field.id, { type: event.target.value as WorkflowMarkedField['type'] })}
+                        >
                           <option value="text">text</option>
                           <option value="textarea">textarea</option>
                           <option value="number">number</option>
                           <option value="select">select</option>
                           <option value="image">image</option>
+                          <option value="node">Node</option>
                         </Select>
                       </SettingsField>
 
@@ -160,7 +174,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         <Input variant="settings" value={field.description ?? ''} onChange={(event) => onFieldPatch(field.id, { description: event.target.value })} />
                       </SettingsField>
 
-                      <SettingsField label="Default" className="md:col-span-2">
+                      <SettingsField label={field.type === 'node' ? 'Default (JSON)' : 'Default'} className="md:col-span-2">
                         {field.type === 'textarea' ? (
                           <Textarea
                             variant="settings"
@@ -176,6 +190,15 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             step={field.step ?? 1}
                             value={field.default_value === undefined || field.default_value === null ? '' : String(field.default_value)}
                             onChange={(value) => onFieldPatch(field.id, { default_value: value })}
+                          />
+                        ) : field.type === 'node' ? (
+                          <Textarea
+                            variant="settings"
+                            rows={8}
+                            readOnly
+                            value={field.default_value && typeof field.default_value === 'object'
+                              ? JSON.stringify(field.default_value, null, 2)
+                              : ''}
                           />
                         ) : (
                           <Input

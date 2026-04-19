@@ -13,6 +13,10 @@ function getComfyModuleFieldDataType(field: WorkflowMarkedField): ModulePortData
     return 'number'
   }
 
+  if (field.type === 'node') {
+    return 'json'
+  }
+
   return 'text'
 }
 

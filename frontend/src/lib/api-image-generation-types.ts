@@ -125,10 +125,10 @@ export interface WorkflowMarkedField {
   label: string
   description?: string
   jsonPath: string
-  type: 'text' | 'number' | 'select' | 'textarea' | 'image'
+  type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'node'
   default_collapsed?: boolean
   simple_upload_only?: boolean
-  default_value?: string | number | boolean | null
+  default_value?: string | number | boolean | Record<string, unknown> | null
   placeholder?: string
   dropdown_list_name?: string
   options?: string[]
@@ -136,6 +136,13 @@ export interface WorkflowMarkedField {
   min?: number
   max?: number
   step?: number
+  node_class_type?: string
+  node_editor?: 'power_lora_loader_rgthree'
+  node_items?: Array<{
+    key: string
+    label: string
+    lora?: string
+  }>
 }
 
 export interface GenerationWorkflow {
@@ -363,7 +370,7 @@ export interface GenerationImageSaveOptions {
 }
 
 export interface ComfyUIGenerationPayload {
-  prompt_data: Record<string, string | number | ComfyUIImageFieldValue>
+  prompt_data: Record<string, string | number | Record<string, unknown> | ComfyUIImageFieldValue>
   server_id?: number
   imageSaveOptions?: GenerationImageSaveOptions
 }

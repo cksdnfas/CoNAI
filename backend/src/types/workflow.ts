@@ -24,7 +24,7 @@ export interface MarkedField {
   label: string; // 사용자에게 표시될 라벨 (예: "Positive Prompt")
   description?: string; // 필드 사용 가이드 (MCP 및 사용자용)
   jsonPath: string; // JSON 경로 (예: "6.inputs.text")
-  type: 'text' | 'number' | 'select' | 'textarea' | 'image';
+  type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'node';
   default_collapsed?: boolean;
   simple_upload_only?: boolean;
   default_value?: any;
@@ -35,6 +35,13 @@ export interface MarkedField {
   min?: number; // number 타입인 경우 최소값
   max?: number; // number 타입인 경우 최대값
   step?: number; // number 타입인 경우 증감 단위
+  node_class_type?: string;
+  node_editor?: 'power_lora_loader_rgthree';
+  node_items?: Array<{
+    key: string;
+    label: string;
+    lora?: string;
+  }>;
 }
 
 /**

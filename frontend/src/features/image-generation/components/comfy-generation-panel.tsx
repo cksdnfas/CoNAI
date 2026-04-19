@@ -194,7 +194,7 @@ export function ComfyGenerationPanel({
     moduleSaveWorkflowFields.map((field) => ({
       key: field.id,
       label: field.label,
-      dataType: field.type === 'number' ? 'number' : field.type === 'image' ? 'image' : 'text',
+      dataType: field.type === 'number' ? 'number' : field.type === 'image' ? 'image' : field.type === 'node' ? 'json' : 'text',
       options: field.options,
     }))
   ), [moduleSaveWorkflowFields])

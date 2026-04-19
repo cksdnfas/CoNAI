@@ -200,6 +200,7 @@ function mapComfyFieldTypeToPortType(type: unknown): ModulePortDataType {
   if (type === 'image') return 'image'
   if (type === 'number') return 'number'
   if (type === 'textarea') return 'prompt'
+  if (type === 'node') return 'json'
   return 'text'
 }
 

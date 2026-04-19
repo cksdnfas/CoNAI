@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import type { WorkflowMarkedField } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { FormField, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { TextSegmentSpreadsheetInput } from './text-segment-spreadsheet-input'
@@ -19,8 +20,59 @@ type WorkflowFieldInputProps = {
   onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
 
+type PowerLoraLoaderEntryValue = {
+  on?: boolean
+  lora?: string
+  strength?: number
+}
+
 function isWorkflowTextSegmentValue(value: WorkflowFieldDraftValue): value is string | string[] {
   return typeof value === 'string' || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+}
+
+function isSelectedImageDraftValue(value: WorkflowFieldDraftValue): value is SelectedImageDraft {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && 'dataUrl' in value && 'fileName' in value
+}
+
+function isWorkflowNodeDraftValue(value: WorkflowFieldDraftValue): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && !isSelectedImageDraftValue(value)
+}
+
+function isPowerLoraLoaderEntryValue(value: unknown): value is PowerLoraLoaderEntryValue {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return typeof record.lora === 'string'
+    && typeof record.on === 'boolean'
+    && typeof record.strength === 'number'
+}
+
+/** Render one compact switch-style toggle for the Power Lora row. */
+function PowerLoraRowToggle({ pressed, onPressedChange }: { pressed: boolean; onPressedChange: (pressed: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={pressed}
+      aria-label={pressed ? '로라 사용 끄기' : '로라 사용 켜기'}
+      onClick={() => onPressedChange(!pressed)}
+      className={cn(
+        'inline-flex h-6 w-10 shrink-0 items-center rounded-full border transition-colors',
+        pressed
+          ? 'border-primary/60 bg-primary/25 justify-end pl-1 pr-[3px]'
+          : 'border-border/80 bg-background/70 justify-start pr-1 pl-[3px]',
+      )}
+    >
+      <span
+        className={cn(
+          'h-4.5 w-4.5 rounded-full transition-colors',
+          pressed ? 'bg-primary shadow-[0_0_0_1px_rgba(255,255,255,0.08)]' : 'bg-muted-foreground/65',
+        )}
+      />
+    </button>
+  )
 }
 
 /** Render a single marked-field editor for a ComfyUI workflow. */
@@ -74,7 +126,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
   }
 
   if (field.type === 'image') {
-    const imageValue = isWorkflowTextSegmentValue(value) ? null : value
+    const imageValue = isSelectedImageDraftValue(value) ? value : null
 
     return wrapField(
       <div className="space-y-3">
@@ -96,6 +148,66 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
             </div>
           </div>
         ) : null}
+      </div>,
+    )
+  }
+
+  if (field.type === 'node' && field.node_editor === 'power_lora_loader_rgthree') {
+    const nodeValue: Record<string, unknown> = isWorkflowNodeDraftValue(value) ? value : {}
+    const nodeItems = (field.node_items ?? []).filter((item) => isPowerLoraLoaderEntryValue(nodeValue[item.key]))
+
+    return wrapField(
+      <div className="space-y-2.5">
+        {nodeItems.length > 0 ? (
+          <div className="space-y-2">
+            {nodeItems.map((item) => {
+              const entry = nodeValue[item.key] as PowerLoraLoaderEntryValue
+              return (
+                <div
+                  key={item.key}
+                  className={cn(
+                    'grid grid-cols-[auto_minmax(0,1fr)_88px] items-center gap-3 rounded-sm border px-3 py-2.5 transition-colors',
+                    entry.on === true
+                      ? 'border-primary/30 bg-surface-container/45'
+                      : 'border-border/70 bg-background/30',
+                  )}
+                >
+                  <PowerLoraRowToggle
+                    pressed={entry.on === true}
+                    onPressedChange={(pressed) => onChange({
+                      ...nodeValue,
+                      [item.key]: {
+                        ...entry,
+                        on: pressed,
+                      },
+                    })}
+                  />
+
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-foreground">{item.label}</div>
+                  </div>
+
+                  <ScrubbableNumberInput
+                    step={0.05}
+                    value={typeof entry.strength === 'number' ? String(entry.strength) : ''}
+                    aria-label={`${item.label} 가중치`}
+                    className="h-8 w-[72px] px-2 text-left"
+                    onChange={(nextValue) => {
+                      const parsedStrength = Number(nextValue)
+                      onChange({
+                        ...nodeValue,
+                        [item.key]: {
+                          ...entry,
+                          strength: Number.isFinite(parsedStrength) ? parsedStrength : (entry.strength ?? 1),
+                        },
+                      })
+                    }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        ) : <div className="rounded-sm border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground">노출할 lora_* 항목이 없어.</div>}
       </div>,
     )
   }

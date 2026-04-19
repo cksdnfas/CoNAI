@@ -268,7 +268,7 @@ export function ComfyWorkflowAuthoringModal({
       data: {
         ...node.data,
         markedJsonPaths: node.data.editableInputs
-          .map((input) => `${node.id}.inputs.${input.key}`)
+          .map((input) => input.jsonPath ?? `${node.id}.inputs.${input.key}`)
           .filter((path) => markedPathSet.has(path)),
         searchMatched: matchedIdSet.has(node.id),
         searchCurrent: node.id === activeGraphSearchNodeId,

@@ -98,7 +98,9 @@ export type NAIFormDraft = {
 
 export type WorkflowTextDraftSegments = string[]
 
-export type WorkflowFieldDraftValue = string | WorkflowTextDraftSegments | SelectedImageDraft
+export type WorkflowNodeDraftValue = Record<string, unknown>
+
+export type WorkflowFieldDraftValue = string | WorkflowTextDraftSegments | SelectedImageDraft | WorkflowNodeDraftValue
 
 export type ComfyUIServerFormDraft = {
   name: string
@@ -370,6 +372,23 @@ function normalizeWorkflowTextDraftSegments(value: unknown): WorkflowTextDraftSe
   return ['']
 }
 
+function isSelectedImageDraft(value: unknown): value is SelectedImageDraft {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return typeof record.fileName === 'string' && typeof record.dataUrl === 'string'
+}
+
+function isWorkflowNodeDraftValue(value: unknown): value is WorkflowNodeDraftValue {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && !isSelectedImageDraft(value)
+}
+
+function cloneWorkflowNodeDraftValue(value: WorkflowNodeDraftValue): WorkflowNodeDraftValue {
+  return JSON.parse(JSON.stringify(value)) as WorkflowNodeDraftValue
+}
+
 /** Normalize one prompt segment before comma-joining it for API submission. */
 function normalizeWorkflowPromptSegment(value: string) {
   return value
@@ -393,6 +412,14 @@ function normalizeWorkflowDraftValue(field: WorkflowMarkedField, value: unknown)
     return normalizeWorkflowTextDraftSegments(value)
   }
 
+  if (field.type === 'node') {
+    return isWorkflowNodeDraftValue(value) ? cloneWorkflowNodeDraftValue(value) : {}
+  }
+
+  if (field.type === 'image') {
+    return isSelectedImageDraft(value) ? value : ''
+  }
+
   return typeof value === 'string' ? value : ''
 }
 
@@ -404,7 +431,7 @@ export function loadPersistedComfyWorkflowDraft(workflowId: number, fields?: Wor
   }
 
   const persistedEntries = Object.entries(rawValue)
-    .filter(([, value]) => typeof value === 'string' || isWorkflowTextDraftSegments(value))
+    .filter(([, value]) => typeof value === 'string' || isWorkflowTextDraftSegments(value) || isWorkflowNodeDraftValue(value))
 
   if (!fields) {
     return Object.fromEntries(persistedEntries) as Record<string, WorkflowFieldDraftValue>
@@ -422,7 +449,7 @@ export function loadPersistedComfyWorkflowDraft(workflowId: number, fields?: Wor
 /** Persist one Comfy workflow draft, skipping image payload fields. */
 export function persistComfyWorkflowDraft(workflowId: number, draft: Record<string, WorkflowFieldDraftValue>) {
   const persistableDraft = Object.fromEntries(
-    Object.entries(draft).filter(([, value]) => typeof value === 'string' || isWorkflowTextDraftSegments(value)),
+    Object.entries(draft).filter(([, value]) => typeof value === 'string' || isWorkflowTextDraftSegments(value) || isWorkflowNodeDraftValue(value)),
   )
 
   writeLocalStorageJson(buildComfyWorkflowDraftStorageKey(workflowId), persistableDraft)
@@ -531,12 +558,16 @@ export function hasWorkflowFieldValue(value: WorkflowFieldDraftValue | undefined
     return value.trim().length > 0
   }
 
-  return value.dataUrl.trim().length > 0
+  if (isSelectedImageDraft(value)) {
+    return value.dataUrl.trim().length > 0
+  }
+
+  return Object.keys(value).length > 0
 }
 
 /** Convert workflow field input strings into the payload expected by the backend. */
 export function buildWorkflowPromptData(fields: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>) {
-  return fields.reduce<Record<string, string | number | SelectedImageDraft>>((payload, field) => {
+  return fields.reduce<Record<string, unknown>>((payload, field) => {
     const value = draft[field.id]
 
     if (!hasWorkflowFieldValue(value)) {
@@ -552,7 +583,7 @@ export function buildWorkflowPromptData(fields: WorkflowMarkedField[], draft: Re
     }
 
     if (typeof value !== 'string') {
-      payload[field.id] = value
+      payload[field.id] = isWorkflowNodeDraftValue(value) ? cloneWorkflowNodeDraftValue(value) : value
       return payload
     }
 
