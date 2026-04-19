@@ -150,11 +150,16 @@ export function ImageListVideoPreview({
     }
 
     videoNode.pause()
-    videoNode.removeAttribute('src')
-    videoNode.load()
-    setIsSourceAttached(false)
-    setHasLoadedFrame(false)
-    hasReleasedLoadRef.current = false
+  }, [isNearViewport, isSourceAttached, videoNode])
+
+  useEffect(() => {
+    if (!videoNode || !isNearViewport || !isSourceAttached) {
+      return
+    }
+
+    void videoNode.play().catch(() => {
+      // Visibility transitions can race with browser autoplay rules.
+    })
   }, [isNearViewport, isSourceAttached, videoNode])
 
   useEffect(() => {
