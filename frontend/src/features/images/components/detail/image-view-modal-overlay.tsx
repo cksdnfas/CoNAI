@@ -3,22 +3,16 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
-import type { ImageRecord } from '@/types/image'
 import { ImageDetailView } from '@/features/images/image-detail-view'
-import { ImageViewThumbnailStrip } from './image-view-thumbnail-strip'
 import { ImageViewModalActions, type ImageViewModalMode } from './image-view-modal-actions'
 import { ImageViewMediumContent, ImageViewMinimalContent } from './image-view-modal-surfaces'
-import type { ImageViewModalAccessOptions, ImageViewModalOpenInput } from './image-view-modal-context'
+import type { ImageViewModalAccessOptions } from './image-view-modal-context'
 
 interface ImageViewModalOverlayProps {
   compositeHash: string
   activeIndex: number
   totalCount: number
-  thumbnailStripItems: ImageRecord[]
-  thumbnailStripCompositeHashes: string[]
   openSessionId: number
-  stripFocusRequestId: number
-  stripFocusBehavior: ScrollBehavior | null
   viewMode: ImageViewModalMode
   onChangeViewMode: (mode: ImageViewModalMode) => void
   canViewPrevious: boolean
@@ -27,7 +21,6 @@ interface ImageViewModalOverlayProps {
   onClose: () => void
   onViewPrevious: () => void
   onViewNext: () => void
-  onSelectImage: (input: ImageViewModalOpenInput) => void
 }
 
 /** Render the full-screen image view modal only after the modal is opened. */
@@ -35,11 +28,7 @@ export function ImageViewModalOverlay({
   compositeHash,
   activeIndex,
   totalCount,
-  thumbnailStripItems,
-  thumbnailStripCompositeHashes,
   openSessionId,
-  stripFocusRequestId,
-  stripFocusBehavior,
   viewMode,
   onChangeViewMode,
   canViewPrevious,
@@ -48,13 +37,11 @@ export function ImageViewModalOverlay({
   onClose,
   onViewPrevious,
   onViewNext,
-  onSelectImage,
 }: ImageViewModalOverlayProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mobileActionsRef = useRef<HTMLDivElement | null>(null)
   const isDesktopModalLayout = useMinWidth(1280)
   const [mobileActionsHeight, setMobileActionsHeight] = useState(0)
-  const [shouldRenderThumbnailStrip, setShouldRenderThumbnailStrip] = useState(viewMode !== 'full')
 
   useLayoutEffect(() => {
     const containerElement = containerRef.current
@@ -86,23 +73,7 @@ export function ImageViewModalOverlay({
       window.cancelAnimationFrame(frameId)
       window.clearTimeout(timeoutId)
     }
-  }, [compositeHash, openSessionId, viewMode, shouldRenderThumbnailStrip, mobileActionsHeight])
-
-  useEffect(() => {
-    if (viewMode !== 'full') {
-      setShouldRenderThumbnailStrip(false)
-      return
-    }
-
-    setShouldRenderThumbnailStrip(false)
-    const timerId = window.setTimeout(() => {
-      setShouldRenderThumbnailStrip(true)
-    }, 120)
-
-    return () => {
-      window.clearTimeout(timerId)
-    }
-  }, [compositeHash, viewMode])
+  }, [compositeHash, openSessionId, viewMode, mobileActionsHeight])
 
   useEffect(() => {
     if (isDesktopModalLayout || viewMode === 'minimal') {
@@ -133,8 +104,6 @@ export function ImageViewModalOverlay({
       window.removeEventListener('resize', updateMobileActionsHeight)
     }
   }, [isDesktopModalLayout, compositeHash, viewMode])
-
-  const showsThumbnailStrip = viewMode === 'full' && shouldRenderThumbnailStrip && thumbnailStripItems.length > 1
 
   return createPortal(
     <div className={cn('fixed inset-0 z-[90] bg-black/76 backdrop-blur-[2px]', viewMode === 'minimal' ? 'p-0' : 'p-4 md:p-5')} onMouseDown={onClose}>
@@ -259,25 +228,6 @@ export function ImageViewModalOverlay({
               />
             )}
           </div>
-
-          {showsThumbnailStrip ? (
-            <div className="mt-4 border-t border-border/80 pt-3 xl:mt-3 xl:shrink-0 xl:pt-3">
-              <ImageViewThumbnailStrip
-                items={thumbnailStripItems}
-                activeCompositeHash={compositeHash}
-                initialScrollSessionId={openSessionId}
-                focusRequestId={stripFocusRequestId}
-                focusBehavior={stripFocusBehavior}
-                onSelect={(nextCompositeHash) =>
-                  onSelectImage({
-                    compositeHash: nextCompositeHash,
-                    compositeHashes: thumbnailStripCompositeHashes,
-                    stripFocusBehavior: null,
-                  })
-                }
-              />
-            </div>
-          ) : null}
         </div>
       )}
     </div>,

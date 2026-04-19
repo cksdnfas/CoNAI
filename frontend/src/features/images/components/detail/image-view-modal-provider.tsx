@@ -1,6 +1,4 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getImagesBatch } from '@/lib/api'
 import type { ImageRecord } from '@/types/image'
 import { ImageViewModalContext, type ImageViewModalAccessOptions, type ImageViewModalOpenInput } from './image-view-modal-context'
 import type { ImageViewModalMode } from './image-view-modal-actions'
@@ -80,17 +78,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   const canViewPrevious = activeIndex > 0
   const canViewNext = activeIndex >= 0 && activeIndex < modalState.compositeHashes.length - 1
 
-  const missingThumbnailStripCompositeHashes = useMemo(
-    () => modalState.compositeHashes.filter((compositeHash) => !modalState.sourceItemsByHash[compositeHash]),
-    [modalState.compositeHashes, modalState.sourceItemsByHash],
-  )
-
-  const thumbnailStripQuery = useQuery({
-    queryKey: ['image-view-thumbnail-strip', missingThumbnailStripCompositeHashes],
-    queryFn: () => getImagesBatch(missingThumbnailStripCompositeHashes),
-    enabled: viewMode === 'full' && missingThumbnailStripCompositeHashes.length > 0,
-    staleTime: 60_000,
-  })
+  // 썸네일 스트립은 성능 문제로 잠시 비활성화한다.
+  // 탐색 컨텍스트 자체는 유지하므로, 필요할 때 UI와 배치 로드만 다시 연결하면 된다.
 
   /** Open the image view modal with an optional ordered navigation context. */
   const openImageView = useCallback((input: ImageViewModalOpenInput) => {
@@ -249,27 +238,6 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     }
   }, [closeImageView, modalState.compositeHash, viewNextImage, viewPreviousImage])
 
-  const thumbnailStripFallbackItemsByHash = useMemo(
-    () => Object.fromEntries(((thumbnailStripQuery.data ?? []) as ImageRecord[])
-      .map((item) => {
-        const compositeHash = item.composite_hash
-        return typeof compositeHash === 'string' && compositeHash.length > 0 ? ([compositeHash, item] as const) : null
-      })
-      .filter((entry): entry is readonly [string, ImageRecord] => entry !== null)),
-    [thumbnailStripQuery.data],
-  )
-
-  const thumbnailStripItems = useMemo(
-    () => modalState.compositeHashes
-      .map((compositeHash) => modalState.sourceItemsByHash[compositeHash] ?? thumbnailStripFallbackItemsByHash[compositeHash] ?? null)
-      .filter((item): item is ImageRecord => item !== null),
-    [modalState.compositeHashes, modalState.sourceItemsByHash, thumbnailStripFallbackItemsByHash],
-  )
-  const thumbnailStripCompositeHashes = useMemo(
-    () => thumbnailStripItems.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
-    [thumbnailStripItems],
-  )
-
   const contextValue = useMemo(
     () => ({
       activeCompositeHash: modalState.compositeHash,
@@ -295,20 +263,15 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
             compositeHash={modalState.compositeHash}
             activeIndex={activeIndex}
             totalCount={modalState.compositeHashes.length}
-            thumbnailStripItems={thumbnailStripItems}
-            thumbnailStripCompositeHashes={thumbnailStripCompositeHashes}
             viewMode={viewMode}
             onChangeViewMode={handleViewModeChange}
             openSessionId={modalState.openSessionId}
-            stripFocusRequestId={modalState.stripFocusRequestId}
-            stripFocusBehavior={modalState.stripFocusBehavior}
             canViewPrevious={canViewPrevious}
             canViewNext={canViewNext}
             accessOptions={modalState.accessOptions}
             onClose={closeImageView}
             onViewPrevious={viewPreviousImage}
             onViewNext={viewNextImage}
-            onSelectImage={openImageView}
           />
         </Suspense>
       ) : null}
