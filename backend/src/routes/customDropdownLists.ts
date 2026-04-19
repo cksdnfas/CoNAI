@@ -16,6 +16,11 @@ function normalizeComfyModelOptionPath(value: string) {
   return value.replace(/\//g, '\\');
 }
 
+/** Build a stable auto-collected merged list name without colliding with direct folder lists. */
+function buildMergedComfyDropdownListName(rootFolder: string, createBoth: boolean) {
+  return createBoth ? `${rootFolder} (통합)` : rootFolder;
+}
+
 /**
  * 모든 커스텀 드롭다운 목록 조회
  * GET /api/custom-dropdown-lists
@@ -341,21 +346,13 @@ router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Respo
       const rootFolderMap = new Map<string, string[]>();
 
       for (const folder of modelFolders) {
-        const rootFolder = folder.folderName; // checkpoints, unet 등
+        const rootFolder = folder.folderName;
         if (!rootFolderMap.has(rootFolder)) {
           rootFolderMap.set(rootFolder, []);
         }
 
-        // 파일 경로에 하위폴더 정보 포함하여 통합
-        // displayName: "checkpoints/SD1.5" → subPath: "SD1.5"
-        const subPath = folder.displayName.includes('/')
-          ? folder.displayName.split('/').slice(1).join('/') + '/'
-          : '';
-
         for (const file of folder.files) {
-          // 이미 상대경로가 포함된 경우 그대로 사용, 아니면 subPath 추가
-          const fullPath = file.includes('/') ? file : subPath + file;
-          rootFolderMap.get(rootFolder)!.push(normalizeComfyModelOptionPath(fullPath));
+          rootFolderMap.get(rootFolder)!.push(normalizeComfyModelOptionPath(file));
         }
       }
 
@@ -364,9 +361,9 @@ router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Respo
         if (files.length > 0) {
           try {
             await CustomDropdownListModel.create({
-              name: rootFolder,
+              name: buildMergedComfyDropdownListName(rootFolder, Boolean(createBoth)),
               description: `ComfyUI ${rootFolder} 통합 모델 목록 (자동 수집)`,
-              items: files.sort(),
+              items: [...new Set(files)].sort(),
               is_auto_collected: 1,
               source_path: sourcePath || 'client-selected'
             });
@@ -380,8 +377,7 @@ router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Respo
       // 둘 다 생성 옵션이면 개별 리스트도 추가 생성
       if (createBoth) {
         for (const folder of modelFolders) {
-          // 루트 폴더와 이름이 다른 경우만 (하위폴더가 있는 경우)
-          if (folder.displayName !== folder.folderName && folder.files && folder.files.length > 0) {
+          if (folder.files && folder.files.length > 0) {
             try {
               await CustomDropdownListModel.create({
                 name: folder.displayName,

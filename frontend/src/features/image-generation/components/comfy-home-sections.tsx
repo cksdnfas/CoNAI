@@ -298,11 +298,22 @@ function collectModelFoldersFromSelection(files: RelativeFile[]) {
   const folderMap = new Map<string, ComfyUIModelFolderScanInput>()
   const firstRelativePath = files[0]?.webkitRelativePath ?? files[0]?.name ?? ''
   const selectedRootName = firstRelativePath.split('/')[0] || 'selected-folder'
+  const selectedRootLower = selectedRootName.toLowerCase()
 
   for (const file of files) {
     const relativePath = file.webkitRelativePath ?? file.name
     const parts = relativePath.split('/').filter(Boolean)
     if (parts.length < 2) {
+      continue
+    }
+
+    const selectedPart = parts[0]?.toLowerCase() ?? ''
+    const nestedPart = parts[1]?.toLowerCase() ?? ''
+    const knownRootAtSelected = KNOWN_MODEL_ROOTS.has(selectedPart)
+    const knownRootNested = KNOWN_MODEL_ROOTS.has(nestedPart)
+    const detectedModelRoot = knownRootNested ? parts[1] : knownRootAtSelected ? parts[0] : null
+
+    if (selectedRootLower === 'loras' || detectedModelRoot?.toLowerCase() === 'loras') {
       continue
     }
 
@@ -312,20 +323,23 @@ function collectModelFoldersFromSelection(files: RelativeFile[]) {
     }
 
     let folderParts = parts.slice(0, -1)
-    if (parts.length >= 3 && KNOWN_MODEL_ROOTS.has(parts[1].toLowerCase())) {
+    if (knownRootNested) {
+      folderParts = parts.slice(2, -1)
+    } else if (knownRootAtSelected) {
       folderParts = parts.slice(1, -1)
     }
 
-    const rootFolder = folderParts[0] ?? selectedRootName
+    const rootFolder = folderParts[0] ?? detectedModelRoot ?? selectedRootName
     const displayName = folderParts.join('/') || rootFolder
+    const modelOptionPath = folderParts.length > 0 ? [...folderParts, modelFileName].join('/') : modelFileName
     const bucket = folderMap.get(displayName) ?? {
       folderName: rootFolder,
       displayName,
       files: [],
     }
 
-    if (!bucket.files.includes(modelFileName)) {
-      bucket.files.push(modelFileName)
+    if (!bucket.files.includes(modelOptionPath)) {
+      bucket.files.push(modelOptionPath)
     }
     folderMap.set(displayName, bucket)
   }
