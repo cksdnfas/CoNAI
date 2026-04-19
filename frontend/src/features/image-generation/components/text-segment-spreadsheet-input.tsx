@@ -6,6 +6,8 @@ import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 
 export type TextSegmentSpreadsheetValue = string | string[]
 
+export const DEFAULT_PROMPT_TEXTAREA_ROWS = 5
+
 type TextSegmentSpreadsheetInputProps = {
   tool: WildcardTool
   value: TextSegmentSpreadsheetValue
@@ -65,11 +67,11 @@ export function TextSegmentSpreadsheetInput({
             <WildcardInlinePickerField
               tool={tool}
               multiline
-              rows={1}
+              rows={DEFAULT_PROMPT_TEXTAREA_ROWS}
               value={row}
               placeholder={placeholder}
               showDetectedSyntax={showDetectedSyntax}
-              className="min-h-[2.75rem] !rounded-none !border-0 !bg-transparent px-3 py-2"
+              className="min-h-[8.5rem] !rounded-none !border-0 !bg-transparent px-3 py-2"
               onChange={(nextValue) => handleRowChange(index, nextValue)}
             />
           </div>

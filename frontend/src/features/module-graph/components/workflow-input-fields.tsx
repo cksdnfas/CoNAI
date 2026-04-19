@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
+import { DEFAULT_PROMPT_TEXTAREA_ROWS } from '@/features/image-generation/components/text-segment-spreadsheet-input'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { GraphWorkflowExposedInput } from '@/lib/api'
@@ -194,7 +195,7 @@ export function WorkflowInputFields({
           </div>
           {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
           <Textarea
-            rows={inputDefinition.data_type === 'json' ? 6 : 4}
+            rows={inputDefinition.data_type === 'json' ? 6 : DEFAULT_PROMPT_TEXTAREA_ROWS}
             value={typeof rawValue === 'string' ? rawValue : rawValue ? JSON.stringify(rawValue, null, 2) : ''}
             onChange={(event) => onInputValueChange(inputDefinition.id, event.target.value)}
             placeholder={inputDefinition.placeholder || inputDefinition.label}
