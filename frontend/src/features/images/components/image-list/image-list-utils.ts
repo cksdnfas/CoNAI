@@ -29,11 +29,15 @@ export function getImageListMediaKind(image: ImageRecord): ImageListMediaKind {
   return 'image'
 }
 
-/** Return the preferred display URL for web rendering. Videos prefer the original file, still images prefer thumbnails first. */
+/** Return the preferred display URL for web rendering. Videos use the canonical streaming route so list/detail share one stable in-app source. */
 export function getImageListPreviewUrl(image: ImageRecord): string | null {
   const mediaKind = getImageListMediaKind(image)
 
   if (mediaKind === 'video') {
+    if (image.composite_hash) {
+      return `/api/images/${image.composite_hash}/file`
+    }
+
     return image.image_url || image.thumbnail_url || null
   }
 

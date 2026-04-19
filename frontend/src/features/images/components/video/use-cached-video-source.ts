@@ -4,6 +4,7 @@ const MAX_VIDEO_CACHE_ENTRIES = 12
 const MAX_VIDEO_CACHE_BYTES = 256 * 1024 * 1024
 const PERSISTENT_VIDEO_CACHE_NAME = 'conai-video-source-v1'
 const PERSISTENT_VIDEO_CACHE_MANIFEST_KEY = 'conai:video-source-cache-manifest:v1'
+const FAILED_VIDEO_CACHE_RETRY_MS = 60_000
 
 type CachedVideoEntry = {
   objectUrl: string | null
@@ -20,6 +21,7 @@ type PersistentVideoCacheManifestEntry = {
 }
 
 const cachedVideoEntries = new Map<string, CachedVideoEntry>()
+const failedVideoCacheAttempts = new Map<string, number>()
 
 function isCacheableVideoUrl(sourceUrl: string | null | undefined) {
   return Boolean(
@@ -149,6 +151,15 @@ function getCachedVideoEntry(sourceUrl: string) {
   return entry
 }
 
+function hasRecentFailedVideoCacheAttempt(sourceUrl: string | null | undefined) {
+  if (!sourceUrl) {
+    return false
+  }
+
+  const lastFailedAt = failedVideoCacheAttempts.get(sourceUrl)
+  return Boolean(lastFailedAt && (Date.now() - lastFailedAt) < FAILED_VIDEO_CACHE_RETRY_MS)
+}
+
 export function getCachedVideoObjectUrl(sourceUrl: string | null | undefined) {
   if (!sourceUrl || !isCacheableVideoUrl(sourceUrl)) {
     return null
@@ -253,6 +264,10 @@ export function warmCachedVideoSource(sourceUrl: string | null | undefined) {
     return Promise.resolve(null)
   }
 
+  if (hasRecentFailedVideoCacheAttempt(sourceUrl)) {
+    return Promise.resolve(null)
+  }
+
   const existingEntry = cachedVideoEntries.get(sourceUrl)
   if (existingEntry?.objectUrl) {
     touchCachedEntry(sourceUrl)
@@ -290,6 +305,8 @@ export function warmCachedVideoSource(sourceUrl: string | null | undefined) {
         throw new Error(`Failed to cache video source: ${response.status}`)
       }
 
+      failedVideoCacheAttempts.delete(sourceUrl)
+
       if (canUsePersistentVideoCache()) {
         const cache = await window.caches.open(PERSISTENT_VIDEO_CACHE_NAME)
         await cache.put(sourceUrl, response.clone())
@@ -301,6 +318,7 @@ export function warmCachedVideoSource(sourceUrl: string | null | undefined) {
       return objectUrl
     })
     .catch((error) => {
+      failedVideoCacheAttempts.set(sourceUrl, Date.now())
       console.warn('[CachedVideoSource] Failed to warm video cache.', error)
       cachedVideoEntries.delete(sourceUrl)
       return null
@@ -350,6 +368,12 @@ export function useCachedVideoSource(
       return
     }
 
+    if (backgroundOnly && hasRecentFailedVideoCacheAttempt(cacheableSourceUrl)) {
+      setResolvedSourceUrl(null)
+      setIsCachePending(false)
+      return
+    }
+
     let cancelled = false
     setResolvedSourceUrl(null)
     setIsCachePending(true)
@@ -370,11 +394,19 @@ export function useCachedVideoSource(
           setResolvedSourceUrl(cacheableSourceUrl)
           setIsCachePending(false)
           return warmCachedVideoSource(cacheableSourceUrl).then((nextObjectUrl) => {
-            if (cancelled || !nextObjectUrl) {
+            if (cancelled) {
               return null
             }
 
-            setResolvedSourceUrl(nextObjectUrl)
+            if (!nextObjectUrl && hasRecentFailedVideoCacheAttempt(cacheableSourceUrl)) {
+              setResolvedSourceUrl(null)
+              return null
+            }
+
+            if (nextObjectUrl) {
+              setResolvedSourceUrl(nextObjectUrl)
+            }
+
             return nextObjectUrl
           })
         }
