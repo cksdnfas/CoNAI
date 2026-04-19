@@ -1,7 +1,10 @@
 import { db } from '../database/init';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
+import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
+import type { FileType } from '../types/image';
+import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 
 /**
  * 파일 검증 결과
@@ -45,13 +48,25 @@ export interface VerificationStats {
 
 interface ImageFileRecord {
   id: number;
+  composite_hash: string | null;
   original_file_path: string;
+  file_type: FileType;
+  mime_type: string | null;
+  thumbnail_path: string | null;
+}
+
+interface FileVerificationOutcome {
+  hasIssue: boolean;
+  deleted: boolean;
 }
 
 /**
  * 파일 검증 서비스
- * - 주기적으로 image_files 테이블의 모든 파일 존재 여부 확인
- * - 존재하지 않는 파일의 DB 레코드 즉시 삭제
+ * - image_files 테이블의 active 파일을 순회하면서 원본/썸네일 상태를 검증
+ * - video/animated: 원본이 없으면 image_files 레코드 삭제
+ * - image: 원본/썸네일 둘 다 없으면 image_files 레코드 삭제
+ * - image: 원본은 있고 썸네일이 없으면 썸네일 재생성
+ * - image: 원본은 없지만 썸네일이 있으면 보류 (목록 유지)
  * - 검증 결과를 로그로 저장 (30일간 보관)
  */
 export class FileVerificationService {
@@ -83,13 +98,19 @@ export class FileVerificationService {
     try {
       console.log('🔍 파일 검증 시작...');
 
-      // 전체 파일 목록 조회 (file_status = 'active')
       const allFiles = db
         .prepare(`
-          SELECT id, original_file_path
-          FROM image_files
-          WHERE file_status = 'active'
-          ORDER BY id ASC
+          SELECT
+            if.id,
+            if.composite_hash,
+            if.original_file_path,
+            if.file_type,
+            if.mime_type,
+            mm.thumbnail_path
+          FROM image_files if
+          LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
+          WHERE if.file_status = 'active'
+          ORDER BY if.id ASC
         `)
         .all() as ImageFileRecord[];
 
@@ -102,24 +123,20 @@ export class FileVerificationService {
         startTime,
       };
 
-      // 배치 단위로 처리
-      const concurrency = Math.max(2, os.cpus().length * 2);
-
       for (let i = 0; i < allFiles.length; i += this.BATCH_SIZE) {
         const batch = allFiles.slice(i, i + this.BATCH_SIZE);
         const batchResults = await Promise.allSettled(
           batch.map((file) => this.verifyFile(file))
         );
 
-        // 결과 집계
         batchResults.forEach((result, index) => {
           const file = batch[index];
           totalChecked++;
           this.currentProgress.checkedFiles = totalChecked;
 
           if (result.status === 'fulfilled') {
-            const { exists, deleted } = result.value;
-            if (!exists) {
+            const { hasIssue, deleted } = result.value;
+            if (hasIssue) {
               missingFound++;
               this.currentProgress.missingFiles = missingFound;
               if (deleted) {
@@ -127,7 +144,6 @@ export class FileVerificationService {
               }
             }
           } else {
-            // 검증 실패 (오류)
             errors.push({
               fileId: file.id,
               filePath: file.original_file_path,
@@ -137,14 +153,12 @@ export class FileVerificationService {
           }
         });
 
-        // 진행 상황 로그
         if ((i + this.BATCH_SIZE) % 500 === 0 || i + this.BATCH_SIZE >= allFiles.length) {
           console.log(
-            `  ⏳ 진행: ${totalChecked}/${allFiles.length} (누락: ${missingFound}개)`
+            `  ⏳ 진행: ${totalChecked}/${allFiles.length} (이슈: ${missingFound}개)`
           );
         }
 
-        // 배치 간 짧은 대기 (시스템 부하 방지)
         if (i + this.BATCH_SIZE < allFiles.length) {
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
@@ -152,9 +166,9 @@ export class FileVerificationService {
 
       const duration = Date.now() - startTime;
 
-      console.log(`✅ 파일 검증 완료`);
+      console.log('✅ 파일 검증 완료');
       console.log(`  📊 총 확인: ${totalChecked}개`);
-      console.log(`  ⚠️  누락 발견: ${missingFound}개`);
+      console.log(`  ⚠️  이슈 발견: ${missingFound}개`);
       console.log(`  🗑️  삭제된 레코드: ${deletedRecords}개`);
       console.log(`  ⏱️  소요 시간: ${(duration / 1000).toFixed(2)}초`);
 
@@ -166,10 +180,7 @@ export class FileVerificationService {
         errors,
       };
 
-      // 로그 저장
       this.saveVerificationLog(result, 'manual');
-
-      // 30일 이상 오래된 로그 삭제
       this.cleanupOldLogs();
 
       return result;
@@ -190,27 +201,90 @@ export class FileVerificationService {
   /**
    * 단일 파일 검증
    */
-  private static async verifyFile(
-    file: ImageFileRecord
-  ): Promise<{ exists: boolean; deleted: boolean }> {
+  private static async verifyFile(file: ImageFileRecord): Promise<FileVerificationOutcome> {
     try {
-      const exists = fs.existsSync(file.original_file_path);
+      const originalPath = resolveUploadsPath(file.original_file_path);
+      const originalExists = fs.existsSync(originalPath);
+      const thumbnailExists = this.thumbnailExists(file.thumbnail_path);
 
-      if (!exists) {
-        // 파일이 없으면 DB에서 즉시 삭제
-        const fileName = path.basename(file.original_file_path);
-        console.log(`  ⚠️  파일 없음, DB 삭제: ${fileName}`);
+      if (this.isVideoLike(file)) {
+        if (!originalExists) {
+          const fileName = path.basename(file.original_file_path);
+          console.log(`  ⚠️  원본 없음(video/animated), DB 삭제: ${fileName}`);
+          this.deleteImageFileRecord(file.id);
+          return { hasIssue: true, deleted: true };
+        }
 
-        db.prepare(`DELETE FROM image_files WHERE id = ?`).run(file.id);
-
-        return { exists: false, deleted: true };
+        this.markVerified(file.id);
+        return { hasIssue: false, deleted: false };
       }
 
-      return { exists: true, deleted: false };
+      if (!originalExists && !thumbnailExists) {
+        const fileName = path.basename(file.original_file_path);
+        console.log(`  ⚠️  원본/썸네일 모두 없음(image), DB 삭제: ${fileName}`);
+        this.deleteImageFileRecord(file.id);
+        return { hasIssue: true, deleted: true };
+      }
+
+      if (!originalExists && thumbnailExists) {
+        console.log(`  ⚠️  원본 없음(image), 썸네일 유지로 보류: ${file.original_file_path}`);
+        this.markVerified(file.id);
+        return { hasIssue: true, deleted: false };
+      }
+
+      if (!thumbnailExists) {
+        await this.regenerateThumbnail(file, originalPath);
+        this.markVerified(file.id);
+        return { hasIssue: true, deleted: false };
+      }
+
+      this.markVerified(file.id);
+      return { hasIssue: false, deleted: false };
     } catch (error) {
-      // 파일 시스템 접근 오류
       throw new Error(`파일 검증 실패: ${(error as Error).message}`);
     }
+  }
+
+  private static isVideoLike(file: ImageFileRecord): boolean {
+    return (
+      file.file_type === 'video' ||
+      file.file_type === 'animated' ||
+      Boolean(file.mime_type && file.mime_type.startsWith('video/'))
+    );
+  }
+
+  private static thumbnailExists(thumbnailPath: string | null): boolean {
+    if (!thumbnailPath) {
+      return false;
+    }
+
+    const absoluteThumbnailPath = path.isAbsolute(thumbnailPath)
+      ? thumbnailPath
+      : path.join(runtimePaths.tempDir, thumbnailPath);
+
+    return fs.existsSync(absoluteThumbnailPath);
+  }
+
+  private static async regenerateThumbnail(file: ImageFileRecord, originalPath: string): Promise<void> {
+    if (!file.composite_hash) {
+      throw new Error('composite_hash가 없어 썸네일을 재생성할 수 없습니다');
+    }
+
+    console.log(`  🖼️  썸네일 재생성: ${path.basename(file.original_file_path)}`);
+    const thumbnailPath = await ThumbnailGenerator.generateThumbnail(originalPath, file.composite_hash);
+    MediaMetadataModel.update(file.composite_hash, { thumbnail_path: thumbnailPath });
+  }
+
+  private static deleteImageFileRecord(fileId: number): void {
+    db.prepare(`DELETE FROM image_files WHERE id = ?`).run(fileId);
+  }
+
+  private static markVerified(fileId: number): void {
+    db.prepare(`
+      UPDATE image_files
+      SET last_verified_date = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(fileId);
   }
 
   /**
@@ -283,7 +357,6 @@ export class FileVerificationService {
    * 검증 통계 조회
    */
   static getStats(): VerificationStats {
-    // 전체 파일 수 (active 상태만)
     const { total } = db
       .prepare(`
         SELECT COUNT(*) as total
@@ -292,7 +365,6 @@ export class FileVerificationService {
       `)
       .get() as { total: number };
 
-    // 누락 파일 수 (file_status = 'missing')
     const { missing } = db
       .prepare(`
         SELECT COUNT(*) as missing
@@ -301,7 +373,6 @@ export class FileVerificationService {
       `)
       .get() as { missing: number };
 
-    // 마지막 검증 로그
     const lastLog = db
       .prepare(`
         SELECT *

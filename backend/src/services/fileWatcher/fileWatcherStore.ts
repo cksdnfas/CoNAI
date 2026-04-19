@@ -62,14 +62,12 @@ export function updateWatcherLastEventInDatabase(folderId: number, lastEventIso:
   `).run(lastEventIso, folderId);
 }
 
-/** Mark one tracked file as missing after an unlink event. */
-export function markWatchedFileMissing(filePath: string, lastVerifiedIso: string): number {
+/** Delete one tracked file row after an unlink event so listings immediately drop the stale entry. */
+export function deleteWatchedFileRecord(filePath: string): number {
   const result = db.prepare(`
-    UPDATE image_files
-    SET file_status = 'missing',
-        last_verified_date = ?
+    DELETE FROM image_files
     WHERE original_file_path = ?
-  `).run(lastVerifiedIso, filePath);
+  `).run(filePath);
 
   return result.changes;
 }

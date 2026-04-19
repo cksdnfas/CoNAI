@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, RefreshCcw, ScanSearch } from 'lucide-react'
+import { Plus, RefreshCcw, ScanSearch, ShieldCheck } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -39,6 +39,8 @@ interface FoldersTabProps {
   onValidateBackupPath: () => void
   onAddBackupSource: () => Promise<boolean>
   onRefresh: () => void
+  onVerifyAllFiles: () => void
+  isVerifyingAllFiles: boolean
   onScanAll: () => void
   folders: WatchedFolder[]
   foldersLoading: boolean
@@ -79,6 +81,8 @@ export function FoldersTab({
   onValidateBackupPath,
   onAddBackupSource,
   onRefresh,
+  onVerifyAllFiles,
+  isVerifyingAllFiles,
   onScanAll,
   folders,
   foldersLoading,
@@ -153,6 +157,16 @@ export function FoldersTab({
             <>
               <Button size="icon-sm" variant="outline" onClick={onRefresh} aria-label="새로고침" title="새로고침">
                 <RefreshCcw className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="outline"
+                onClick={onVerifyAllFiles}
+                disabled={isVerifyingAllFiles}
+                aria-label="전체 파일 검증"
+                title="전체 파일 검증"
+              >
+                <ShieldCheck className="h-4 w-4" />
               </Button>
               <Button size="icon-sm" onClick={onScanAll} aria-label="전체 스캔" title="전체 스캔">
                 <ScanSearch className="h-4 w-4" />

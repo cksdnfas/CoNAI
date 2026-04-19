@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { FileVerificationService } from '../services/fileVerificationService';
 import { SystemSettingsService } from '../services/systemSettingsService';
+import { AutoScanScheduler } from '../services/autoScanScheduler';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { successResponse } from '@conai/shared';
 
@@ -82,12 +83,20 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const { enabled, interval } = req.body;
 
+    let settingsChanged = false;
+
     if (typeof enabled === 'boolean') {
       SystemSettingsService.updateFileVerificationEnabled(enabled);
+      settingsChanged = true;
     }
 
     if (typeof interval === 'number') {
       SystemSettingsService.updateFileVerificationInterval(interval);
+      settingsChanged = true;
+    }
+
+    if (settingsChanged) {
+      AutoScanScheduler.restart();
     }
 
     const updatedSettings = {
