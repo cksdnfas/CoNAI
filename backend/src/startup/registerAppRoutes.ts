@@ -212,7 +212,9 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
         }
 
         if (normalizedPath.endsWith('.html')) {
-          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
         }
       },
     }));
@@ -228,7 +230,9 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
         return;
       }
 
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.type('html').send(renderIntegratedFrontendIndex(req, res, indexHtmlTemplate));
     };
 

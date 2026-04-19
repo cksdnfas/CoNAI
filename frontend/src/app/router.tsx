@@ -1,4 +1,5 @@
 import { Navigate, createHashRouter } from 'react-router-dom'
+import { RouteErrorBoundary } from '@/app/route-error-boundary'
 import { ProtectedAppShell } from '@/features/auth/protected-app-shell'
 import { RequireAuthPermission } from '@/features/auth/require-auth-permission'
 import {
@@ -23,10 +24,12 @@ export const appRouter = createHashRouter([
   {
     path: '/login',
     element: <LoginRoute />,
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: '/',
     element: <ProtectedAppShell />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         path: 'access',
