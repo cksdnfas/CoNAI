@@ -57,6 +57,7 @@ export function EnhancedVideoPlayer({
 
         const createdPlayer = new PlyrClass(node, {
           autoplay: autoPlay,
+          iconUrl: '/vendor/plyr.svg',
           controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'pip', 'airplay', 'fullscreen'],
           hideControls: true,
           keyboard: { focused: true, global: false },
