@@ -34,11 +34,18 @@ export function EnhancedVideoPlayer({
   autoPlay = false,
   preload = 'metadata',
 }: EnhancedVideoPlayerProps) {
-  const { resolvedSourceUrl, isCachePending } = useCachedVideoSource(renderUrl)
+  const { resolvedSourceUrl } = useCachedVideoSource(renderUrl)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playerRef = useRef<Plyr | null>(null)
 
   useEffect(() => {
+    if (!resolvedSourceUrl) {
+      const activePlayer = playerRef.current
+      playerRef.current = null
+      destroyPlyrSafely(activePlayer)
+      return
+    }
+
     let disposed = false
 
     const setup = async () => {
@@ -118,24 +125,22 @@ export function EnhancedVideoPlayer({
         ['--plyr-video-progress-buffered-background' as string]: 'rgb(255 255 255 / 0.14)',
       }}
     >
-      {isCachePending && !resolvedSourceUrl ? (
+      {!resolvedSourceUrl ? (
         <div className="absolute inset-0 z-10 animate-pulse bg-surface-lowest" aria-hidden="true" />
-      ) : null}
-      <video
-        key={resolvedSourceUrl ?? renderUrl}
-        ref={videoRef}
-        className={cn(
-          'conai-video-player__media h-full w-full bg-black object-contain',
-          isCachePending && !resolvedSourceUrl && 'opacity-0',
-        )}
-        autoPlay={autoPlay}
-        controls
-        loop={loop}
-        playsInline
-        preload={preload}
-      >
-        {resolvedSourceUrl ? <source src={resolvedSourceUrl} /> : null}
-      </video>
+      ) : (
+        <video
+          key={resolvedSourceUrl}
+          ref={videoRef}
+          className="conai-video-player__media h-full w-full bg-black object-contain"
+          autoPlay={autoPlay}
+          controls
+          loop={loop}
+          playsInline
+          preload={preload}
+        >
+          <source src={resolvedSourceUrl} />
+        </video>
+      )}
     </div>
   )
 }
