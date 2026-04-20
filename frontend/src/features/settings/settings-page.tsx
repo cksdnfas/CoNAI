@@ -54,11 +54,6 @@ const ImageSaveTabLazy = lazy(async () => {
   return { default: module.ImageSaveTab }
 })
 
-const VideoOptimizationTabLazy = lazy(async () => {
-  const module = await import('./components/video-optimization-tab')
-  return { default: module.VideoOptimizationTab }
-})
-
 type AppSettingsRecord = Awaited<ReturnType<typeof getAppSettings>>
 
 function SettingsSectionFallback() {
@@ -227,15 +222,10 @@ export function SettingsPage() {
                 onPatchImageSave={patchImageSaveDraft}
                 onSave={() => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft)}
                 isSaving={imageSaveMutation.isPending}
-              />
-            ) : null}
-
-            {activeTab === 'video-optimization' ? (
-              <VideoOptimizationTabLazy
                 videoOptimizationDraft={effectiveVideoOptimizationDraft}
                 onPatchVideoOptimization={patchVideoOptimizationDraft}
-                onSave={() => effectiveVideoOptimizationDraft && void videoOptimizationMutation.mutateAsync(effectiveVideoOptimizationDraft)}
-                isSaving={videoOptimizationMutation.isPending}
+                onSaveVideoOptimization={() => effectiveVideoOptimizationDraft && void videoOptimizationMutation.mutateAsync(effectiveVideoOptimizationDraft)}
+                isSavingVideoOptimization={videoOptimizationMutation.isPending}
               />
             ) : null}
           </Suspense>

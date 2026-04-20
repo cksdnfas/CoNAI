@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { ImageSaveSettings } from '@/types/settings'
+import type { ImageSaveSettings, VideoOptimizationSettings } from '@/types/settings'
 import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { VideoOptimizationTab } from './video-optimization-tab'
 
 const IMAGE_SAVE_SIZE_PRESETS = [
   { label: '720p', width: 1280, height: 720 },
@@ -18,10 +19,23 @@ interface ImageSaveTabProps {
   onPatchImageSave: (patch: Partial<ImageSaveSettings>) => void
   onSave: () => void
   isSaving: boolean
+  videoOptimizationDraft: VideoOptimizationSettings | null
+  onPatchVideoOptimization: (patch: Partial<VideoOptimizationSettings>) => void
+  onSaveVideoOptimization: () => void
+  isSavingVideoOptimization: boolean
 }
 
-/** Render image save defaults used by save dialogs and attachment flows. */
-export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSaving }: ImageSaveTabProps) {
+/** Render media save defaults used by save dialogs and attachment flows. */
+export function ImageSaveTab({
+  imageSaveDraft,
+  onPatchImageSave,
+  onSave,
+  isSaving,
+  videoOptimizationDraft,
+  onPatchVideoOptimization,
+  onSaveVideoOptimization,
+  isSavingVideoOptimization,
+}: ImageSaveTabProps) {
   return (
     <div className="space-y-6">
       <section>
@@ -175,6 +189,13 @@ export function ImageSaveTab({ imageSaveDraft, onPatchImageSave, onSave, isSavin
           </div>
         </SettingsSection>
       </section>
+
+      <VideoOptimizationTab
+        videoOptimizationDraft={videoOptimizationDraft}
+        onPatchVideoOptimization={onPatchVideoOptimization}
+        onSave={onSaveVideoOptimization}
+        isSaving={isSavingVideoOptimization}
+      />
     </div>
   )
 }

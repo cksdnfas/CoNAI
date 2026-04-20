@@ -1,4 +1,4 @@
-export type SettingsTab = 'folders' | 'appearance' | 'security' | 'auto' | 'metadata' | 'image-save' | 'video-optimization'
+export type SettingsTab = 'folders' | 'appearance' | 'security' | 'auto' | 'metadata' | 'image-save'
 
 export interface SettingsTabItem {
   value: SettingsTab
@@ -11,6 +11,5 @@ export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
   { value: 'security', label: '보안' },
   { value: 'auto', label: '자동화' },
   { value: 'metadata', label: '메타데이터' },
-  { value: 'image-save', label: '이미지 저장' },
-  { value: 'video-optimization', label: '비디오 최적화' },
+  { value: 'image-save', label: '미디어 저장' },
 ]
