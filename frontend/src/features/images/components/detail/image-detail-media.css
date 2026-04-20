@@ -98,6 +98,57 @@
   color: var(--primary);
 }
 
+.conai-video-player .plyr__volume {
+  position: relative;
+  overflow: visible;
+}
+
+.conai-video-player .plyr__volume::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.58rem);
+  width: 2.9rem;
+  height: 8.4rem;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-floating-surface) 94%, rgb(8 8 10 / 0.96));
+  box-shadow: var(--theme-floating-shadow);
+  transform: translateX(-50%) translateY(0.32rem);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.conai-video-player .plyr__volume input[type='range'] {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 1.28rem);
+  width: 6.4rem;
+  min-width: 6.4rem;
+  max-width: 6.4rem;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) rotate(-90deg);
+  transform-origin: center;
+  z-index: 2;
+  transition: opacity 0.18s ease;
+}
+
+.conai-video-player--volume-open .plyr__volume::after,
+.conai-video-player--volume-open .plyr__volume input[type='range'],
+.conai-video-player .plyr__volume:focus-within::after,
+.conai-video-player .plyr__volume:focus-within input[type='range'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.conai-video-player--volume-open .plyr__volume::after,
+.conai-video-player .plyr__volume:focus-within::after {
+  transform: translateX(-50%) translateY(0);
+}
+
 .conai-video-player .plyr__menu__container {
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   box-shadow: var(--theme-floating-shadow);
@@ -143,6 +194,18 @@
 
   .conai-video-player .plyr__controls .plyr__control svg {
     opacity: 0.86;
+  }
+
+  .conai-video-player .plyr__volume::after {
+    width: 3.2rem;
+    height: 8.9rem;
+  }
+
+  .conai-video-player .plyr__volume input[type='range'] {
+    width: 6.9rem;
+    min-width: 6.9rem;
+    max-width: 6.9rem;
+    bottom: calc(100% + 1.38rem);
   }
 
   .conai-video-player .plyr__menu__container .plyr__control {
