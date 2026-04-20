@@ -50,86 +50,6 @@ function buildPlyrControls() {
   return controls
 }
 
-function bindVolumePopoverBehavior(
-  container: HTMLDivElement,
-  isOpenRef: { current: boolean },
-  setOpen: (open: boolean) => void,
-) {
-  const volumeRoot = container.querySelector('.plyr__volume')
-  const muteButton = volumeRoot?.querySelector('[data-plyr="mute"]')
-  const volumeInput = volumeRoot?.querySelector('input[type="range"]')
-
-  if (!(volumeRoot instanceof HTMLElement) || !(muteButton instanceof HTMLButtonElement) || !(volumeInput instanceof HTMLInputElement)) {
-    setOpen(false)
-    return () => {}
-  }
-
-  const open = () => {
-    setOpen(true)
-    window.setTimeout(() => {
-      volumeInput.focus({ preventScroll: true })
-    }, 0)
-  }
-
-  const close = () => {
-    setOpen(false)
-  }
-
-  const handleMuteButtonClick = (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (isOpenRef.current) {
-      close()
-      return
-    }
-
-    open()
-  }
-
-  const handleDocumentPointerDown = (event: PointerEvent) => {
-    const target = event.target
-    if (target instanceof Node && volumeRoot.contains(target)) {
-      return
-    }
-
-    close()
-  }
-
-  const handleEscape = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      close()
-    }
-  }
-
-  const handleFocusOut = (event: FocusEvent) => {
-    const nextTarget = event.relatedTarget
-    if (nextTarget instanceof Node && volumeRoot.contains(nextTarget)) {
-      return
-    }
-
-    window.setTimeout(() => {
-      const activeElement = document.activeElement
-      if (!(activeElement instanceof Node) || !volumeRoot.contains(activeElement)) {
-        close()
-      }
-    }, 0)
-  }
-
-  muteButton.addEventListener('click', handleMuteButtonClick, true)
-  volumeRoot.addEventListener('focusout', handleFocusOut)
-  document.addEventListener('pointerdown', handleDocumentPointerDown, true)
-  document.addEventListener('keydown', handleEscape)
-
-  return () => {
-    muteButton.removeEventListener('click', handleMuteButtonClick, true)
-    volumeRoot.removeEventListener('focusout', handleFocusOut)
-    document.removeEventListener('pointerdown', handleDocumentPointerDown, true)
-    document.removeEventListener('keydown', handleEscape)
-    close()
-  }
-}
-
 interface EnhancedVideoPlayerProps {
   renderUrl: string
   className?: string
@@ -150,17 +70,10 @@ export function EnhancedVideoPlayer({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playerRef = useRef<Plyr | null>(null)
-  const volumePopoverOpenRef = useRef(false)
   const [useNativeControlsFallback, setUseNativeControlsFallback] = useState(false)
-  const [isVolumePopoverOpen, setIsVolumePopoverOpen] = useState(false)
-
-  useEffect(() => {
-    volumePopoverOpenRef.current = isVolumePopoverOpen
-  }, [isVolumePopoverOpen])
 
   useEffect(() => {
     setUseNativeControlsFallback(false)
-    setIsVolumePopoverOpen(false)
   }, [resolvedSourceUrl])
 
   useEffect(() => {
@@ -172,7 +85,6 @@ export function EnhancedVideoPlayer({
     }
 
     let disposed = false
-    let cleanupVolumePopover = () => {}
 
     const setup = async () => {
       const node = videoRef.current
@@ -211,10 +123,6 @@ export function EnhancedVideoPlayer({
 
         playerRef.current = createdPlayer
 
-        if (containerRef.current) {
-          cleanupVolumePopover = bindVolumePopoverBehavior(containerRef.current, volumePopoverOpenRef, setIsVolumePopoverOpen)
-        }
-
         if (autoPlay) {
           void node.play().catch(() => {
             // Browser autoplay policy may still block unmuted playback.
@@ -222,7 +130,6 @@ export function EnhancedVideoPlayer({
         }
       } catch (error) {
         console.warn('[EnhancedVideoPlayer] Falling back to native video controls.', error)
-        cleanupVolumePopover()
         setUseNativeControlsFallback(true)
       }
     }
@@ -231,7 +138,6 @@ export function EnhancedVideoPlayer({
 
     return () => {
       disposed = true
-      cleanupVolumePopover()
       const activePlayer = playerRef.current
       playerRef.current = null
       destroyPlyrSafely(activePlayer)
@@ -241,11 +147,7 @@ export function EnhancedVideoPlayer({
   return (
     <div
       ref={containerRef}
-      className={cn(
-        'conai-video-player relative w-full overflow-hidden rounded-sm bg-black',
-        isVolumePopoverOpen && 'conai-video-player--volume-open',
-        className,
-      )}
+      className={cn('conai-video-player relative w-full overflow-hidden rounded-sm bg-black', className)}
       style={{
         ['--plyr-color-main' as string]: 'var(--primary)',
         ['--plyr-control-icon-size' as string]: '17px',
