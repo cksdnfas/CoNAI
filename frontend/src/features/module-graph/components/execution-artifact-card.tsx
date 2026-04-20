@@ -53,7 +53,6 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
       title={displayTitle}
       widthClassName="max-w-6xl"
       onClose={() => setIsImageModalOpen(false)}
-      closeOnBack={false}
     >
       <InlineMediaPreview
         src={previewUrl}

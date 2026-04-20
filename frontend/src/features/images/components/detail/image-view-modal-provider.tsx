@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
+import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import type { ImageRecord } from '@/types/image'
 import { ImageViewModalContext, type ImageViewModalAccessOptions, type ImageViewModalOpenInput } from './image-view-modal-context'
 import type { ImageViewModalMode } from './image-view-modal-actions'
@@ -157,6 +158,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       accessOptions: {},
     }))
   }, [])
+
+  useOverlayBackClose({ open: Boolean(modalState.compositeHash), onClose: closeImageView })
 
   const handleViewModeChange = useCallback((nextMode: ImageViewModalMode) => {
     setViewMode(nextMode)

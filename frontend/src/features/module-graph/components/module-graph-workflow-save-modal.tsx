@@ -56,7 +56,6 @@ export function ModuleGraphWorkflowSaveModal({
       title={selectedGraphVersion !== null ? '워크플로우 저장' : '워크플로우 등록'}
       description="저장할 이름과 설명, 폴더를 확인해줘."
       widthClassName="max-w-3xl"
-      closeOnBack={false}
     >
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-sm">

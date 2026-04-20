@@ -107,7 +107,6 @@ function ExecutionOutputGroupCard({
         title={group.nodeLabel}
         widthClassName="max-w-4xl"
         onClose={() => setModalType(null)}
-        closeOnBack={false}
       >
         <pre className="max-h-[70vh] overflow-auto text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
           {modalText}
@@ -119,7 +118,6 @@ function ExecutionOutputGroupCard({
         title={group.nodeLabel}
         widthClassName="max-w-6xl"
         onClose={() => setModalType(null)}
-        closeOnBack={false}
       >
         {previewUrl && primaryArtifact ? (
           <InlineMediaPreview
@@ -479,7 +477,6 @@ export function GraphExecutionPanel({
           headerContent={detailSectionButtons}
           onClose={() => setIsDetailModalOpen(false)}
           widthClassName="max-w-6xl"
-          closeOnBack={false}
         >
           <div className="space-y-4">
             <div ref={(node) => { detailSectionRefs.current.summary = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
