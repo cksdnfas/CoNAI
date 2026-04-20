@@ -7,6 +7,7 @@ import type {
   SimilaritySettings,
   TaggerSettings,
   ThumbnailSettings,
+  VideoOptimizationSettings,
 } from '../types/settings';
 
 /** Build the next settings state after applying a general-settings patch. */
@@ -125,6 +126,17 @@ export function applyImageSaveSettingsUpdate(currentSettings: AppSettings, image
     imageSave: {
       ...currentSettings.imageSave,
       ...imageSaveSettings,
+    },
+  };
+}
+
+/** Build the next settings state after applying a video-optimization-settings patch. */
+export function applyVideoOptimizationSettingsUpdate(currentSettings: AppSettings, videoOptimizationSettings: Partial<VideoOptimizationSettings>): AppSettings {
+  return {
+    ...currentSettings,
+    videoOptimization: {
+      ...currentSettings.videoOptimization,
+      ...videoOptimizationSettings,
     },
   };
 }

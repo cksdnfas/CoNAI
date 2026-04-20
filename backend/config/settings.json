@@ -41,6 +41,15 @@
     "size": "1080",
     "quality": 80
   },
+  "videoOptimization": {
+    "enabled": true,
+    "preset": "balanced",
+    "crf": 26,
+    "audioBitrateKbps": 128,
+    "applyToUpload": true,
+    "applyToGeneratedOutputs": true,
+    "applyToBackupImports": true
+  },
   "appearance": {
     "themeMode": "dark",
     "accentPreset": "conai",

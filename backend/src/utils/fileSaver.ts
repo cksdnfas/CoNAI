@@ -3,6 +3,8 @@ import fs from 'fs';
 import sharp from 'sharp';
 import { ImageSimilarityService } from '../services/imageSimilarity';
 import { ImageMetadataWriteService, type ImageOutputFormat } from '../services/imageMetadataWriteService';
+import { settingsService } from '../services/settingsService';
+import { VideoOptimizationService } from '../services/videoOptimizationService';
 import { VideoProcessor } from '../services/videoProcessor';
 import { runtimePaths } from '../config/runtimePaths';
 import { generateFileHash } from './fileHash';
@@ -201,7 +203,7 @@ export class FileSaver {
 
   /**
    * API 생성 결과 파일을 media 종류에 맞게 저장한다.
-   * 정적 이미지는 기존 이미지 저장 파이프라인을, 영상/애니메이션은 원본 보존 저장을 사용한다.
+   * 정적 이미지는 기존 이미지 저장 파이프라인을, 비디오는 설정 기반 H.264 최적화를 적용한다.
    */
   static async saveGeneratedFile(
     sourceFilePath: string,
@@ -225,24 +227,42 @@ export class FileSaver {
       const targetDir = path.join(runtimePaths.uploadsDir, 'videos', 'API', dateFolder);
       await fs.promises.mkdir(targetDir, { recursive: true });
 
+      const videoOptimizationSettings = settingsService.loadSettings().videoOptimization;
+      const shouldOptimizeVideo = sourceMimeType.startsWith('video/')
+        && videoOptimizationSettings.enabled
+        && videoOptimizationSettings.applyToGeneratedOutputs;
+
       const sourceExtension = path.extname(sourceFilePath) || '.bin';
       const filename = this.generateUniqueFilename(sourceExtension.replace(/^\./, ''));
-      const fullPath = path.join(targetDir, filename);
+      const initialPath = path.join(targetDir, filename);
+      const targetBasePath = path.join(targetDir, path.parse(filename).name);
 
-      await fs.promises.copyFile(sourceFilePath, fullPath);
+      let finalPath = initialPath;
+      let finalMimeType = sourceMimeType;
+      if (shouldOptimizeVideo) {
+        const optimizationResult = await VideoOptimizationService.persistWithFallback(sourceFilePath, targetBasePath, sourceExtension, {
+          crf: videoOptimizationSettings.crf,
+          audioBitrateKbps: videoOptimizationSettings.audioBitrateKbps,
+          logLabel: `${serviceType} output`,
+        });
+        finalPath = optimizationResult.outputPath;
+        finalMimeType = optimizationResult.mimeType;
+      } else {
+        await fs.promises.copyFile(sourceFilePath, finalPath);
+      }
 
-      const stats = await fs.promises.stat(fullPath);
-      const compositeHash = await generateFileHash(fullPath);
-      const relativePath = this.normalizeRelativePath(fullPath);
+      const stats = await fs.promises.stat(finalPath);
+      const compositeHash = await generateFileHash(finalPath);
+      const relativePath = this.normalizeRelativePath(finalPath);
 
       let width = 0;
       let height = 0;
       try {
-        const metadata = await VideoProcessor.extractMetadata(fullPath);
+        const metadata = await VideoProcessor.extractMetadata(finalPath);
         width = metadata.width || 0;
         height = metadata.height || 0;
       } catch (metadataError) {
-        console.warn(`[FileSaver] ${serviceType} media metadata fallback for ${path.basename(fullPath)}:`, metadataError);
+        console.warn(`[FileSaver] ${serviceType} media metadata fallback for ${path.basename(finalPath)}:`, metadataError);
       }
 
       return {
@@ -251,7 +271,7 @@ export class FileSaver {
         width,
         height,
         compositeHash,
-        mimeType: sourceMimeType,
+        mimeType: finalMimeType,
       };
     } catch (error) {
       console.error(`[FileSaver] ${serviceType} media 저장 실패:`, error);

@@ -201,6 +201,7 @@ export interface AppearanceSettings extends AppearanceThemeSettings {
 
 export type ThumbnailSize = 'original' | '2048' | '1080' | '720' | '512';
 export type ImageSaveFormat = 'original' | 'png' | 'jpeg' | 'webp';
+export type VideoOptimizationPreset = 'high-quality' | 'balanced' | 'economy';
 
 export interface ThumbnailSettings {
   size: ThumbnailSize;   // 썸네일 크기 (original = 원본 크기 유지)
@@ -221,6 +222,16 @@ export interface ImageSaveSettings {
   applyToWorkflowOutputs: boolean;
 }
 
+export interface VideoOptimizationSettings {
+  enabled: boolean;
+  preset: VideoOptimizationPreset;
+  crf: number;
+  audioBitrateKbps: number;
+  applyToUpload: boolean;
+  applyToGeneratedOutputs: boolean;
+  applyToBackupImports: boolean;
+}
+
 export interface AppSettings {
   general: GeneralSettings;
   tagger: TaggerSettings;
@@ -230,6 +241,7 @@ export interface AppSettings {
   metadataExtraction: MetadataExtractionSettings;
   thumbnail: ThumbnailSettings;
   imageSave: ImageSaveSettings;
+  videoOptimization: VideoOptimizationSettings;
 }
 
 export interface TaggerModelInfo {

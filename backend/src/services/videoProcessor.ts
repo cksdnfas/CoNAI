@@ -4,6 +4,8 @@ import { spawn } from 'child_process';
 import sharp from 'sharp';
 import ffmpegPath from 'ffmpeg-static';
 const ffprobeStatic = require('ffprobe-static');
+import { settingsService } from './settingsService';
+import { VideoOptimizationService } from './videoOptimizationService';
 import { generateFileHash } from '../utils/fileHash';
 
 export interface VideoMetadata {
@@ -104,7 +106,7 @@ export class VideoProcessor {
    * @param originalName 원본 파일명 (예: "한글 비디오.mp4")
    * @returns 고유한 파일명 (예: "20250109_143025_abc123_한글 비디오.mp4")
    */
-  static generateUniqueFilename(originalName: string): string {
+  static generateUniqueFilename(originalName: string, forcedExtension?: string): string {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -122,8 +124,12 @@ export class VideoProcessor {
     const safeOriginalName = normalizeFilename(originalBaseName);
 
     // 확장자 분리
-    const ext = path.extname(safeOriginalName);
-    const nameWithoutExt = path.basename(safeOriginalName, ext);
+    const originalExtension = path.extname(safeOriginalName);
+    const normalizedForcedExtension = forcedExtension
+      ? (forcedExtension.startsWith('.') ? forcedExtension : `.${forcedExtension}`)
+      : '';
+    const ext = normalizedForcedExtension || originalExtension;
+    const nameWithoutExt = path.basename(safeOriginalName, originalExtension);
 
     // 경로 길이 폭증 방지를 위해 파일명 길이 제한
     const MAX_BASENAME_LENGTH = 120;
@@ -356,47 +362,76 @@ export class VideoProcessor {
         throw new Error('FFmpeg is not available. Please install FFmpeg to process videos.');
       }
 
+      const videoOptimizationSettings = settingsService.loadSettings().videoOptimization;
+      const shouldOptimizeVideo = videoOptimizationSettings.enabled && videoOptimizationSettings.applyToUpload;
+
       // 고유한 파일명 생성
       const filename = this.generateUniqueFilename(file.originalname);
+      const sourceExtension = path.extname(file.originalname) || '.mp4';
 
       // 폴더 구조 생성 (videos/YYYY-MM-DD/Origin/)
       const folders = await this.createUploadFolders(baseUploadPath, filename);
 
-      const originalPath = path.join(folders.originFolder, filename);
+      const initialPath = path.join(folders.originFolder, filename);
+      const targetBasePath = path.join(folders.originFolder, path.parse(filename).name);
+      let finalPath = initialPath;
 
-      // diskStorage: 임시 파일 복사
+      // diskStorage: 임시 파일 사용 또는 memoryStorage 버퍼 임시 저장
       if (file.path) {
         tempFilePath = file.path;
-        await fs.promises.copyFile(file.path, originalPath);
+        if (shouldOptimizeVideo) {
+          const optimizationResult = await VideoOptimizationService.persistWithFallback(file.path, targetBasePath, sourceExtension, {
+            crf: videoOptimizationSettings.crf,
+            audioBitrateKbps: videoOptimizationSettings.audioBitrateKbps,
+            logLabel: 'upload',
+          });
+          finalPath = optimizationResult.outputPath;
+        } else {
+          await fs.promises.copyFile(file.path, finalPath);
+        }
       } else if (file.buffer) {
-        // memoryStorage (레거시): 버퍼에서 저장
-        await fs.promises.writeFile(originalPath, file.buffer);
+        if (shouldOptimizeVideo) {
+          const stagedInputPath = path.join(folders.originFolder, `${path.parse(filename).name}.source${sourceExtension}`);
+          tempFilePath = stagedInputPath;
+          await fs.promises.writeFile(stagedInputPath, file.buffer);
+          const optimizationResult = await VideoOptimizationService.persistWithFallback(stagedInputPath, targetBasePath, sourceExtension, {
+            crf: videoOptimizationSettings.crf,
+            audioBitrateKbps: videoOptimizationSettings.audioBitrateKbps,
+            logLabel: 'upload',
+          });
+          finalPath = optimizationResult.outputPath;
+        } else {
+          await fs.promises.writeFile(finalPath, file.buffer);
+        }
       } else {
         throw new Error('No file data available (neither path nor buffer)');
       }
 
       // 메타데이터 추출
       console.log('📊 Extracting video metadata...');
-      const metadata = await this.extractMetadata(originalPath);
+      const metadata = await this.extractMetadata(finalPath);
       console.log(`✅ Video metadata: ${metadata.duration}s, ${metadata.width}x${metadata.height}, ${metadata.video_codec}`);
 
       // MD5 파일 해시 생성
       console.log('🔐 Generating file hash...');
-      const fileHash = await generateFileHash(originalPath);
+      const fileHash = await generateFileHash(finalPath);
       console.log(`✅ File hash: ${fileHash}`);
+
+      const finalStat = await fs.promises.stat(finalPath);
 
       // 메타데이터 업데이트
       metadata.thumbnail_type = 'video-original';
 
-      const relativeOriginal = this.normalizeRelativePath(originalPath, baseUploadPath);
+      const finalFilename = path.basename(finalPath);
+      const relativeOriginal = this.normalizeRelativePath(finalPath, baseUploadPath);
 
       return {
-        filename,
+        filename: finalFilename,
         originalPath: relativeOriginal,
-        thumbnailPath: relativeOriginal, // 썸네일 = 원본 비디오 경로
+        thumbnailPath: relativeOriginal, // 썸네일 = 저장된 비디오 경로
         width: metadata.width,
         height: metadata.height,
-        fileSize: file.size,
+        fileSize: finalStat.size,
         fileHash,
         metadata
       };

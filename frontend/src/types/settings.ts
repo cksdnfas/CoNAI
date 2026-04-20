@@ -7,6 +7,7 @@ export type TaggerDevice = 'auto' | 'cpu' | 'cuda'
 export type KaloscopeDevice = 'auto' | 'cpu' | 'cuda'
 export type PromptSimilarityAlgorithm = 'simhash' | 'minhash'
 export type StealthScanMode = 'full' | 'fast' | 'skip'
+export type VideoOptimizationPreset = 'high-quality' | 'balanced' | 'economy'
 
 export const DEFAULT_ARTIST_LINK_URL_TEMPLATE = 'danbooru.donmai.us/posts?tags={key}'
 
@@ -191,6 +192,16 @@ export interface ImageSaveSettings {
   applyToWorkflowOutputs: boolean
 }
 
+export interface VideoOptimizationSettings {
+  enabled: boolean
+  preset: VideoOptimizationPreset
+  crf: number
+  audioBitrateKbps: number
+  applyToUpload: boolean
+  applyToGeneratedOutputs: boolean
+  applyToBackupImports: boolean
+}
+
 export interface AppSettings {
   general: GeneralSettings
   tagger: TaggerSettings
@@ -200,6 +211,7 @@ export interface AppSettings {
   metadataExtraction: MetadataExtractionSettings
   thumbnail: ThumbnailSettings
   imageSave: ImageSaveSettings
+  videoOptimization: VideoOptimizationSettings
 }
 
 export interface TaggerModelInfo {

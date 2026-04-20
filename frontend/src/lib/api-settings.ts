@@ -12,6 +12,7 @@ import type {
   TaggerModelInfo,
   TaggerServerStatus,
   TaggerSettings,
+  VideoOptimizationSettings,
 } from '@/types/settings'
 import type { RatingTierRecord } from '@/features/search/search-types'
 
@@ -190,6 +191,22 @@ export async function updateImageSaveSettings(settings: Partial<ImageSaveSetting
 
   if (!response.success) {
     throw new Error(response.error || '이미지 저장 설정을 저장하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function updateVideoOptimizationSettings(settings: Partial<VideoOptimizationSettings>) {
+  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/video-optimization', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '비디오 최적화 설정을 저장하지 못했어.')
   }
 
   return response.data

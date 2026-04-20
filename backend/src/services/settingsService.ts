@@ -10,6 +10,7 @@ import {
   AppearanceSettings,
   MetadataExtractionSettings,
   ThumbnailSettings,
+  VideoOptimizationSettings,
   TaggerModel,
   TaggerModelInfo,
   SupportedLanguage,
@@ -32,6 +33,7 @@ import {
   applySimilaritySettingsUpdate,
   applyTaggerSettingsUpdate,
   applyThumbnailSettingsUpdate,
+  applyVideoOptimizationSettingsUpdate,
 } from './settingsServiceUpdates';
 
 const MODEL_REPO_MAP: Record<TaggerModel, string> = {
@@ -196,6 +198,16 @@ export class SettingsService {
   updateImageSaveSettings(imageSaveSettings: Partial<AppSettings['imageSave']>): AppSettings {
     const currentSettings = this.loadSettings();
     const updatedSettings = applyImageSaveSettingsUpdate(currentSettings, imageSaveSettings);
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /**
+   * Update video optimization settings
+   */
+  updateVideoOptimizationSettings(videoOptimizationSettings: Partial<VideoOptimizationSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings = applyVideoOptimizationSettingsUpdate(currentSettings, videoOptimizationSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }

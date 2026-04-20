@@ -7,6 +7,7 @@ import {
   getAppSettings,
   updateImageSaveSettings,
   updateMetadataSettings,
+  updateVideoOptimizationSettings,
 } from '@/lib/api'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -15,6 +16,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import type {
   ImageSaveSettings,
   MetadataExtractionSettings,
+  VideoOptimizationSettings,
 } from '@/types/settings'
 import { SettingsTabNav } from './components/settings-tab-nav'
 import type { SettingsTab } from './settings-tabs'
@@ -52,6 +54,11 @@ const ImageSaveTabLazy = lazy(async () => {
   return { default: module.ImageSaveTab }
 })
 
+const VideoOptimizationTabLazy = lazy(async () => {
+  const module = await import('./components/video-optimization-tab')
+  return { default: module.VideoOptimizationTab }
+})
+
 type AppSettingsRecord = Awaited<ReturnType<typeof getAppSettings>>
 
 function SettingsSectionFallback() {
@@ -66,6 +73,7 @@ export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('folders')
   const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
   const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
+  const [videoOptimizationDraft, setVideoOptimizationDraft] = useState<VideoOptimizationSettings | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
   const canOpenSettings = authStatusQuery.data?.isAdmin === true || authStatusQuery.data?.hasCredentials !== true
 
@@ -102,6 +110,7 @@ export function SettingsPage() {
 
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
   const effectiveImageSaveDraft = imageSaveDraft ?? settingsQuery.data?.imageSave ?? null
+  const effectiveVideoOptimizationDraft = videoOptimizationDraft ?? settingsQuery.data?.videoOptimization ?? null
   const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
 
   const { tabProps: appearanceTabProps } = useAppearanceSettingsTab({
@@ -147,6 +156,18 @@ export function SettingsPage() {
     },
   })
 
+  const videoOptimizationMutation = useMutation({
+    mutationFn: updateVideoOptimizationSettings,
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setVideoOptimizationDraft(settings.videoOptimization)
+      notifyInfo('비디오 최적화 설정을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '비디오 최적화 설정 저장에 실패했어.')
+    },
+  })
+
   if (authStatusQuery.isLoading) {
     return <div className="min-h-screen bg-surface-low animate-pulse" />
   }
@@ -163,6 +184,11 @@ export function SettingsPage() {
   const patchImageSaveDraft = (patch: Partial<ImageSaveSettings>) => {
     if (!effectiveImageSaveDraft) return
     setImageSaveDraft({ ...effectiveImageSaveDraft, ...patch })
+  }
+
+  const patchVideoOptimizationDraft = (patch: Partial<VideoOptimizationSettings>) => {
+    if (!effectiveVideoOptimizationDraft) return
+    setVideoOptimizationDraft({ ...effectiveVideoOptimizationDraft, ...patch })
   }
 
   return (
@@ -201,6 +227,15 @@ export function SettingsPage() {
                 onPatchImageSave={patchImageSaveDraft}
                 onSave={() => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft)}
                 isSaving={imageSaveMutation.isPending}
+              />
+            ) : null}
+
+            {activeTab === 'video-optimization' ? (
+              <VideoOptimizationTabLazy
+                videoOptimizationDraft={effectiveVideoOptimizationDraft}
+                onPatchVideoOptimization={patchVideoOptimizationDraft}
+                onSave={() => effectiveVideoOptimizationDraft && void videoOptimizationMutation.mutateAsync(effectiveVideoOptimizationDraft)}
+                isSaving={videoOptimizationMutation.isPending}
               />
             ) : null}
           </Suspense>

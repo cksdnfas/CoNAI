@@ -1,8 +1,10 @@
 import chokidar, { FSWatcher } from 'chokidar';
 import fs from 'fs';
 import path from 'path';
-import { isImageExtension, isSupportedExtension } from '../constants/supportedExtensions';
+import { isImageExtension, isSupportedExtension, isVideoExtension } from '../constants/supportedExtensions';
 import { runtimePaths } from '../config/runtimePaths';
+import { settingsService } from './settingsService';
+import { VideoOptimizationService } from './videoOptimizationService';
 import { WebPConversionService } from './webpConversionService';
 import { BackupSource, BackupSourceService, ensureBackupTargetDirectory } from './backupSourceService';
 
@@ -76,6 +78,16 @@ function shouldConvertBackupFileToWebP(source: BackupSource, sourceFilePath: str
   return source.import_mode === 'convert_webp' && isImageExtension(path.extname(sourceFilePath));
 }
 
+function shouldOptimizeBackupVideoFile(sourceFilePath: string): boolean {
+  const extension = path.extname(sourceFilePath).toLowerCase();
+  if (!isVideoExtension(extension) || extension === '.gif') {
+    return false;
+  }
+
+  const settings = settingsService.loadSettings().videoOptimization;
+  return settings.enabled && settings.applyToBackupImports;
+}
+
 /** Compute the preferred destination path under uploads for one imported file. */
 function buildPreferredTargetPath(source: BackupSource, sourceFilePath: string): string {
   const targetRoot = ensureBackupTargetDirectory(source.target_folder_name);
@@ -84,6 +96,11 @@ function buildPreferredTargetPath(source: BackupSource, sourceFilePath: string):
   const targetDirectory = relativeDirectory === '.' ? targetRoot : path.join(targetRoot, relativeDirectory);
 
   fs.mkdirSync(targetDirectory, { recursive: true });
+
+  if (shouldOptimizeBackupVideoFile(sourceFilePath)) {
+    const baseName = path.parse(sourceFilePath).name;
+    return path.join(targetDirectory, `${baseName}.mp4`);
+  }
 
   if (shouldConvertBackupFileToWebP(source, sourceFilePath)) {
     const baseName = path.parse(sourceFilePath).name;
@@ -345,7 +362,19 @@ export class BackupSourceWatcherService {
         ? preferredTargetPath
         : buildTargetPath(source, filePath);
 
-      if (shouldConvertBackupFileToWebP(source, filePath)) {
+      if (shouldOptimizeBackupVideoFile(filePath)) {
+        const videoOptimizationSettings = settingsService.loadSettings().videoOptimization;
+        await VideoOptimizationService.persistWithFallback(
+          filePath,
+          targetPath.replace(/\.mp4$/i, ''),
+          path.extname(filePath) || '.mp4',
+          {
+            crf: videoOptimizationSettings.crf,
+            audioBitrateKbps: videoOptimizationSettings.audioBitrateKbps,
+            logLabel: 'backup import',
+          },
+        );
+      } else if (shouldConvertBackupFileToWebP(source, filePath)) {
         const converted = await WebPConversionService.convertFileToWebPBuffer(filePath, {
           quality: source.webp_quality,
           sourcePathForMetadata: filePath,

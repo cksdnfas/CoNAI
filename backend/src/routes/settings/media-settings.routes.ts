@@ -8,7 +8,7 @@ import {
   validateStringEnumIfDefined,
 } from '../routeValidation';
 import { settingsService } from '../../services/settingsService';
-import { ImageSaveSettings, MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings } from '../../types/settings';
+import { ImageSaveSettings, MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings, VideoOptimizationSettings } from '../../types/settings';
 
 const router = Router();
 
@@ -145,6 +145,32 @@ router.put(
       success: true,
       data: updatedSettings,
       message: 'Image save settings updated successfully',
+    });
+    return;
+  }),
+);
+
+router.put(
+  '/video-optimization',
+  asyncHandler(async (req: Request, res: Response) => {
+    const videoOptimizationSettings: Partial<VideoOptimizationSettings> = req.body;
+
+    const validPresets = ['high-quality', 'balanced', 'economy'] as const;
+    if (!validateStringEnumIfDefined(res, videoOptimizationSettings.preset, validPresets, `Invalid preset. Must be one of: ${validPresets.join(', ')}`)) return;
+    if (!validateIntegerInRangeIfDefined(res, videoOptimizationSettings.crf, 18, 40, 'crf must be an integer between 18 and 40')) return;
+    if (!validateIntegerInRangeIfDefined(res, videoOptimizationSettings.audioBitrateKbps, 32, 320, 'audioBitrateKbps must be an integer between 32 and 320')) return;
+
+    for (const field of ['enabled', 'applyToUpload', 'applyToGeneratedOutputs', 'applyToBackupImports'] as const) {
+      const value = videoOptimizationSettings[field];
+      if (!validateBooleanIfDefined(res, value, `${field} must be a boolean`)) return;
+    }
+
+    const updatedSettings = settingsService.updateVideoOptimizationSettings(videoOptimizationSettings);
+
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'Video optimization settings updated successfully',
     });
     return;
   }),

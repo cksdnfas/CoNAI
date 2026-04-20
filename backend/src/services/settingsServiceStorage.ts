@@ -296,6 +296,15 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       applyToUpload: true,
       applyToWorkflowOutputs: true,
     },
+    videoOptimization: {
+      enabled: true,
+      preset: 'balanced',
+      crf: 26,
+      audioBitrateKbps: 128,
+      applyToUpload: true,
+      applyToGeneratedOutputs: true,
+      applyToBackupImports: true,
+    },
   };
 }
 
@@ -380,6 +389,10 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       ...defaults.imageSave,
       ...loadedSettings.imageSave,
     },
+    videoOptimization: {
+      ...defaults.videoOptimization,
+      ...loadedSettings.videoOptimization,
+    },
   };
 }
 
@@ -429,6 +442,12 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
 
   for (const key of Object.keys(defaults.imageSave)) {
     if (!(key in (loaded.imageSave || {}))) {
+      return true;
+    }
+  }
+
+  for (const key of Object.keys(defaults.videoOptimization)) {
+    if (!(key in (loaded.videoOptimization || {}))) {
       return true;
     }
   }
