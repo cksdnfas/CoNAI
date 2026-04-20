@@ -161,7 +161,7 @@ export function ImageMetadataEditPage() {
         <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)] items-start' : 'grid-cols-1')}>
           <PageSection bodyClassName="space-y-4">
             <div className="overflow-hidden rounded-sm border border-border/70 bg-surface-lowest">
-              <div className="flex min-h-[420px] items-stretch justify-center bg-surface-lowest">
+              <div className="flex h-[max(420px,60vh)] items-center justify-center bg-surface-lowest">
                 <ImageDetailMedia image={image} renderUrl={renderUrl} />
               </div>
             </div>

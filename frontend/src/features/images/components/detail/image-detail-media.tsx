@@ -420,7 +420,7 @@ function InteractiveImageDetailMedia({
   }
 
   return (
-    <div className="relative isolate flex h-full w-full self-stretch items-center justify-center overflow-hidden">
+    <div className="relative isolate flex h-full w-full items-center justify-center overflow-hidden">
       {canToggleRenderMode ? (
         <div className="absolute bottom-3 left-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
           <Button
@@ -483,7 +483,7 @@ function InteractiveImageDetailMedia({
             size="icon-sm"
             type="button"
             variant="outline"
-            className="bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)]"
+            className="border-primary/55 bg-primary text-primary-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-primary/92 hover:text-primary-foreground"
             onClick={toggleControlsCollapsed}
             title="컨트롤 펼치기"
             aria-label="컨트롤 펼치기"
@@ -496,7 +496,7 @@ function InteractiveImageDetailMedia({
       <div
         ref={viewportRef}
         className={cn(
-          'relative z-0 flex h-full w-full self-stretch items-center justify-center overflow-hidden select-none',
+          'relative z-0 flex h-full w-full items-center justify-center overflow-hidden select-none',
           isPannable ? 'cursor-grab active:cursor-grabbing' : isWheelZoomEnabled ? 'cursor-zoom-in' : 'cursor-default',
         )}
         style={{ touchAction: isWheelZoomEnabled ? 'none' : 'pan-y', overscrollBehavior: isWheelZoomEnabled ? 'contain' : 'auto' }}
