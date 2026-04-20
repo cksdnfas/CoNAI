@@ -2,11 +2,13 @@ import { Router, type Request, type Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { WorkflowModel } from '../models/Workflow';
 import { WorkflowServerModel } from '../models/ComfyUIServer';
+import { CustomDropdownListModel } from '../models/CustomDropdownList';
 import { GenerationHistoryModel } from '../models/GenerationHistory';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
 import { GenerationQueueService } from '../services/generationQueueService';
 import { settingsService } from '../services/settingsService';
+import type { MarkedField, WorkflowRecord } from '../types/workflow';
 
 const router = Router();
 
@@ -24,9 +26,48 @@ function getRequesterAccountType(req: Request) {
     : null;
 }
 
-/** GET /api/public-workflows */
-router.get('/', asyncHandler(async (_req: Request, res: Response) => {
-  const workflows = WorkflowModel.findAllPublic().map((workflow) => ({
+function parseMarkedFields(markedFieldsJson?: string | null): MarkedField[] {
+  if (!markedFieldsJson) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(markedFieldsJson) as MarkedField[];
+  } catch (error) {
+    console.error('Failed to parse public workflow marked fields:', error);
+    return [];
+  }
+}
+
+function buildCustomDropdownListMap() {
+  return new Map(
+    CustomDropdownListModel.findAll().map((list) => [list.name, list.items]),
+  );
+}
+
+function resolveCustomDropdownMarkedFields(
+  markedFields: MarkedField[],
+  dropdownListMap: Map<string, string[]>,
+): MarkedField[] {
+  return markedFields.map((field) => {
+    if (field.type !== 'select' || !field.dropdown_list_name) {
+      return field;
+    }
+
+    const dropdownItems = dropdownListMap.get(field.dropdown_list_name);
+    if (!dropdownItems) {
+      return field;
+    }
+
+    return {
+      ...field,
+      options: dropdownItems,
+    };
+  });
+}
+
+function serializePublicWorkflow(workflow: WorkflowRecord, dropdownListMap: Map<string, string[]>) {
+  return {
     id: workflow.id,
     name: workflow.name,
     description: workflow.description ?? null,
@@ -34,8 +75,14 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
     is_active: workflow.is_active,
     is_public_page: workflow.is_public_page,
     public_slug: workflow.public_slug ?? null,
-    marked_fields: workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [],
-  }));
+    marked_fields: resolveCustomDropdownMarkedFields(parseMarkedFields(workflow.marked_fields), dropdownListMap),
+  };
+}
+
+/** GET /api/public-workflows */
+router.get('/', asyncHandler(async (_req: Request, res: Response) => {
+  const dropdownListMap = buildCustomDropdownListMap();
+  const workflows = WorkflowModel.findAllPublic().map((workflow) => serializePublicWorkflow(workflow, dropdownListMap));
 
   res.json({
     success: true,
@@ -51,18 +98,11 @@ router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
+  const dropdownListMap = buildCustomDropdownListMap();
+
   res.json({
     success: true,
-    data: {
-      id: workflow.id,
-      name: workflow.name,
-      description: workflow.description ?? null,
-      color: workflow.color,
-      is_active: workflow.is_active,
-      is_public_page: workflow.is_public_page,
-      public_slug: workflow.public_slug ?? null,
-      marked_fields: workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [],
-    },
+    data: serializePublicWorkflow(workflow, dropdownListMap),
   });
 }));
 
