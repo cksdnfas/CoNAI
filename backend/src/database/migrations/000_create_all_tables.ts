@@ -1,6 +1,37 @@
 import Database from 'better-sqlite3';
+import fs from 'fs';
 import path from 'path';
-import { resolveEnvBaseDir, resolveEnvConfiguredPath } from '../../utils/envPath';
+
+function resolveMigrationEnvPath(currentDir: string) {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, '.env')
+  }
+
+  const candidates = [
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '..', '.env'),
+    path.resolve(currentDir, '../../.env'),
+    path.resolve(currentDir, '../../../.env'),
+    path.resolve(currentDir, '../../../../.env'),
+    path.resolve(currentDir, '../../../../../.env'),
+  ]
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
+}
+
+function resolveMigrationEnvBaseDir(currentDir: string) {
+  return path.dirname(resolveMigrationEnvPath(currentDir))
+}
+
+function resolveMigrationEnvConfiguredPath(value: string, currentDir: string) {
+  const trimmed = value.trim()
+
+  if (path.isAbsolute(trimmed)) {
+    return path.resolve(trimmed)
+  }
+
+  return path.resolve(resolveMigrationEnvBaseDir(currentDir), trimmed)
+}
 
 /**
  * 통합 마이그레이션: 모든 필수 테이블 생성
@@ -384,7 +415,7 @@ export const up = async (db: Database.Database): Promise<void> => {
 
   const resolvedBasePath = (() => {
     if (explicitBasePath) {
-      return resolveEnvConfiguredPath(explicitBasePath, __dirname);
+      return resolveMigrationEnvConfiguredPath(explicitBasePath, __dirname);
     }
 
     if (portableExecutableDir) {
@@ -397,11 +428,11 @@ export const up = async (db: Database.Database): Promise<void> => {
       return path.resolve(currentCwd, '..', 'user');
     }
 
-    return path.resolve(resolveEnvBaseDir(__dirname), 'user');
+    return path.resolve(resolveMigrationEnvBaseDir(__dirname), 'user');
   })();
 
   const defaultUploadPath = explicitUploadsDir
-    ? resolveEnvConfiguredPath(explicitUploadsDir, __dirname)
+    ? resolveMigrationEnvConfiguredPath(explicitUploadsDir, __dirname)
     : path.join(resolvedBasePath, 'uploads');
 
   db.prepare(`
