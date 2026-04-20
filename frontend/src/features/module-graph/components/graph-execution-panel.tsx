@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { CircleHelp, Eye, Play, RotateCcw, Square } from 'lucide-react'
+import { Eye, Play, RotateCcw, Square } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -18,10 +18,12 @@ import { cn } from '@/lib/utils'
 import {
   formatDateTime,
   getArtifactPreviewUrl,
+  hasGraphArtifactVisualPreview,
   parseMetadataValue,
+  resolveGraphArtifactMimeType,
 } from '../module-graph-shared'
-import { ExecutionArtifactCard } from './execution-artifact-card'
 import {
+  buildArtifactGroupModalText,
   formatPrimitiveValue,
   getExecutionInputEntries,
   getExecutionModeLabel,
@@ -29,8 +31,10 @@ import {
   groupArtifactsByNode,
   isCompactExecutionArtifactVisible,
   parseExecutionPlan,
+  pickPrimaryExecutionArtifact,
   type ParsedExecutionPlan,
 } from './graph-execution-panel-helpers'
+import { TechnicalReferenceHint } from './module-graph-field-shared'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 
 type GraphExecutionDetail = {
@@ -42,11 +46,90 @@ type GraphExecutionDetail = {
 
 type ExecutionDetailSectionKey = 'summary' | 'inputs' | 'artifacts' | 'logs'
 
-function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
+function ExecutionOutputGroupCard({
+  group,
+}: {
+  group: { nodeId: string; nodeLabel: string; artifacts: GraphExecutionArtifactRecord[] }
+}) {
+  const [modalType, setModalType] = useState<'text' | 'image' | null>(null)
+  const primaryArtifact = useMemo(() => pickPrimaryExecutionArtifact(group.artifacts), [group.artifacts])
+  const modalText = useMemo(() => buildArtifactGroupModalText(group.artifacts), [group.artifacts])
+  const hasVisualPreview = Boolean(primaryArtifact && hasGraphArtifactVisualPreview(primaryArtifact))
+  const previewUrl = primaryArtifact ? getArtifactPreviewUrl(primaryArtifact) : null
+  const mimeType = primaryArtifact ? resolveGraphArtifactMimeType(primaryArtifact) : null
+
   return (
-    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
-      <CircleHelp className="h-3.5 w-3.5" />
-    </span>
+    <>
+      <div className="rounded-sm border border-border/70 bg-background/25 p-2">
+        <div className="mb-1.5 flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-semibold text-foreground">{group.nodeLabel}</div>
+            {primaryArtifact ? <div className="truncate text-[10px] text-muted-foreground">{primaryArtifact.port_key}</div> : null}
+          </div>
+          <Badge variant="outline" className="h-6 shrink-0 px-1.5 text-[10px]">출력 {group.artifacts.length}</Badge>
+        </div>
+
+        {hasVisualPreview && previewUrl && primaryArtifact ? (
+          <button
+            type="button"
+            onClick={() => setModalType('image')}
+            className="group relative block w-full overflow-hidden rounded-sm bg-surface-lowest/80"
+          >
+            <InlineMediaPreview
+              src={previewUrl}
+              mimeType={mimeType}
+              alt={`${primaryArtifact.node_id}-${primaryArtifact.port_key}`}
+              frameClassName="border-0 bg-transparent p-0"
+              mediaClassName="h-[9.5rem] w-full object-contain"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/24 group-focus-visible:bg-black/24" />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+              <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">보기</span>
+            </div>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setModalType('text')}
+            className="group relative flex h-[9.5rem] w-full items-center justify-center overflow-hidden rounded-sm bg-surface-lowest/80 text-sm font-medium text-foreground transition-colors hover:bg-surface-low"
+          >
+            <span>텍스트 컨텐츠</span>
+            <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/24 group-focus-visible:bg-black/24" />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+              <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">보기</span>
+            </div>
+          </button>
+        )}
+      </div>
+
+      <SettingsModal
+        open={modalType === 'text'}
+        title={group.nodeLabel}
+        widthClassName="max-w-4xl"
+        onClose={() => setModalType(null)}
+      >
+        <pre className="max-h-[70vh] overflow-auto text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
+          {modalText}
+        </pre>
+      </SettingsModal>
+
+      <SettingsModal
+        open={modalType === 'image'}
+        title={group.nodeLabel}
+        widthClassName="max-w-6xl"
+        onClose={() => setModalType(null)}
+      >
+        {previewUrl && primaryArtifact ? (
+          <InlineMediaPreview
+            src={previewUrl}
+            mimeType={mimeType}
+            alt={`${primaryArtifact.node_id}-${primaryArtifact.port_key}`}
+            frameClassName="border-0 bg-transparent p-0"
+            mediaClassName="max-h-[80vh] w-full object-contain"
+          />
+        ) : null}
+      </SettingsModal>
+    </>
   )
 }
 
@@ -128,29 +211,9 @@ function SelectedExecutionSummary({
             표시할 출력 없음
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(12rem,1fr))]">
             {compactArtifactGroups.map((group) => (
-              <div key={group.nodeId} className="rounded-sm border border-border bg-background/35 p-3 space-y-2.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-foreground">{group.nodeLabel}</span>
-                  <Badge variant="outline">출력 {group.artifacts.length}</Badge>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {group.artifacts.map((artifact) => {
-                    const useVisualCompactCard = artifact.artifact_type === 'image' || artifact.artifact_type === 'mask'
-
-                    return (
-                      <ExecutionArtifactCard
-                        key={artifact.id}
-                        artifact={artifact}
-                        compact
-                        hideTitle={useVisualCompactCard}
-                      />
-                    )
-                  })}
-                </div>
-              </div>
+              <ExecutionOutputGroupCard key={group.nodeId} group={group} />
             ))}
           </div>
         )}
@@ -172,7 +235,7 @@ type GraphExecutionPanelProps = {
   executionDetailIsError: boolean
   isExecutingGraph: boolean
   isCancellingExecution: boolean
-  onSelectExecution: (executionId: number) => void
+  onSelectExecution: (executionId: number | null) => void
   onRerunGraph: () => void
   onRetryExecution: () => void
   onCancelExecution: () => void
@@ -353,8 +416,9 @@ export function GraphExecutionPanel({
                 <div key={execution.id} className="space-y-1.5">
                   <button
                     type="button"
-                    onClick={() => onSelectExecution(execution.id)}
+                    onClick={() => onSelectExecution(isSelected ? null : execution.id)}
                     className={cn('block w-full rounded-sm border px-2.5 py-2 text-left transition-colors hover:bg-surface-high', isSelected ? 'border-primary/50 bg-surface-high' : 'border-border bg-surface-low')}
+                    title={isSelected ? '다시 누르면 접기' : '클릭해서 펼치기'}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2">
@@ -470,6 +534,7 @@ export function GraphExecutionPanel({
               </div>
               {executionDetail.artifacts.map((artifact) => {
                 const previewUrl = getArtifactPreviewUrl(artifact)
+                const mimeType = resolveGraphArtifactMimeType(artifact)
                 const parsedMetadata = parseMetadataValue(artifact.metadata)
 
                 return (
@@ -485,9 +550,10 @@ export function GraphExecutionPanel({
                       </div>
                     </div>
 
-                    {previewUrl && (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') ? (
+                    {hasGraphArtifactVisualPreview(artifact) ? (
                       <InlineMediaPreview
                         src={previewUrl}
+                        mimeType={mimeType}
                         alt={`${artifact.node_id}-${artifact.port_key}`}
                         frameClassName="mt-2 p-2"
                         mediaClassName="max-h-44 w-full object-contain"

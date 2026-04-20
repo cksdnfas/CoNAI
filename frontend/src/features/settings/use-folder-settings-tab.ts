@@ -11,6 +11,7 @@ import {
   getWatchersHealth,
   restartBackupSourceWatcher,
   restartFolderWatcher,
+  runFileVerification,
   scanAllWatchedFolders,
   scanWatchedFolder,
   startBackupSourceWatcher,
@@ -142,6 +143,17 @@ export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSetti
     await refreshFolderQueries()
   }
 
+  const verifyAllFilesMutation = useMutation({
+    mutationFn: runFileVerification,
+    onSuccess: async (result) => {
+      notifyInfo(`파일 검증 완료: 검사 ${result.totalChecked}개, 이슈 ${result.missingFound}개, 정리 ${result.deletedRecords}개`)
+      await refreshFolderQueries()
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '파일 검증에 실패했어.')
+    },
+  })
+
   const handleScanAllFolders = async () => {
     try {
       const summary = await scanAllWatchedFolders()
@@ -252,6 +264,8 @@ export function useFolderSettingsTab({ notifyInfo, notifyError }: UseFolderSetti
       onValidateBackupPath: () => void validateBackupPathMutation.mutateAsync(newBackupSource.source_path),
       onAddBackupSource: handleAddBackupSource,
       onRefresh: () => void refreshFolderQueries(),
+      onVerifyAllFiles: () => void verifyAllFilesMutation.mutateAsync(),
+      isVerifyingAllFiles: verifyAllFilesMutation.isPending,
       onScanAll: () => void handleScanAllFolders(),
       folders: foldersQuery.data ?? [],
       foldersLoading: foldersQuery.isLoading,

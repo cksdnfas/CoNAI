@@ -3,6 +3,11 @@ import { errorResponse } from '@conai/shared';
 import { db } from '../../database/init';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import type { DuplicateGroup, SimilarImage } from '../../types/similarity';
+import {
+  parseIntegerWithFallback as parseIntegerWithFallbackInternal,
+  parseNumberWithFallback as parseNumberWithFallbackInternal,
+  sendRouteBadRequest,
+} from '../routeValidation';
 import { routeParam } from '../routeParam';
 import { enrichImageWithFileView } from './utils';
 
@@ -19,6 +24,9 @@ type EnrichedSimilarityMatch = Omit<SimilarImage, 'image'> & {
 type EnrichedDuplicateGroup = Omit<DuplicateGroup, 'images'> & {
   images: Array<ReturnType<typeof enrichImageWithFileView>>;
 };
+
+export const parseIntegerWithFallback = parseIntegerWithFallbackInternal;
+export const parseNumberWithFallback = parseNumberWithFallbackInternal;
 
 const legacyImageFieldQueries: Record<RequiredSimilarityField, string> = {
   perceptual_hash: 'SELECT perceptual_hash FROM images WHERE id = ?',
@@ -41,18 +49,6 @@ export function getSimilarityRouteIdentifier(req: Request): SimilarityImageIdent
   return parseImageIdentifier(routeParam(routeParam(req.params.id)));
 }
 
-/** Parse an integer query value while keeping the provided fallback for invalid input. */
-export function parseIntegerWithFallback(value: unknown, fallback: number): number {
-  const parsed = Number.parseInt(String(value ?? ''), 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-/** Parse a numeric query value while keeping the provided fallback for invalid input. */
-export function parseNumberWithFallback(value: unknown, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
 /** Validate that the identified image exists and has the required similarity field before model calls. */
 export function ensureImageFieldOrBlock(
   res: Response,
@@ -73,7 +69,7 @@ export function ensureImageFieldOrBlock(
     }
 
     if (!image[options.field]) {
-      res.status(400).json(errorResponse(options.missingFieldMessage));
+      sendRouteBadRequest(res, options.missingFieldMessage);
       return false;
     }
 
@@ -88,7 +84,7 @@ export function ensureImageFieldOrBlock(
   }
 
   if (!legacyImage[options.field]) {
-    res.status(400).json(errorResponse(options.missingFieldMessage));
+    sendRouteBadRequest(res, options.missingFieldMessage);
     return false;
   }
 

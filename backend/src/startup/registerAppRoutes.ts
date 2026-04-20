@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type RequestHandler } from 'express';
+import express, { type Express, type Request, type RequestHandler, type Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { imageRoutes } from '../routes/images/index';
@@ -17,7 +17,9 @@ import { graphWorkflowRoutes } from '../routes/graphWorkflows';
 import naiRoutes from '../routes/nai';
 import generationHistoryRoutes from '../routes/generation-history.routes';
 import generationQueueRoutes from '../routes/generation-queue.routes';
-import wildcardRoutes from '../routes/wildcards';
+import { wildcardMutationRoutes } from '../routes/wildcards.mutation.routes';
+import { wildcardReadRoutes } from '../routes/wildcards.read.routes';
+import { wildcardUtilityRoutes } from '../routes/wildcards.utility.routes';
 import { watchedFoldersRoutes } from '../routes/watchedFolders';
 import { backupSourcesRoutes } from '../routes/backupSources';
 import { backgroundQueueRoutes } from '../routes/backgroundQueue';
@@ -31,12 +33,15 @@ import civitaiRoutes from '../routes/civitai.routes';
 import searchHistoryRoutes from '../routes/search-history.routes';
 import searchOptionsRoutes from '../routes/search-options.routes';
 import { wallpaperRuntimeRoutes } from '../routes/wallpaperRuntime.routes';
+import { runtimeAppearanceRoutes } from '../routes/runtimeAppearance.routes';
+import { runtimeMediaSettingsRoutes } from '../routes/runtime-media-settings.routes';
 import publicWorkflowRoutes from '../routes/public-workflows.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
 import { allowAnonymousPermission, optionalAuth, requireAuth, requirePermission } from '../middleware/authMiddleware';
 import { buildAuthStatusPayload } from '../routes/auth-route-helpers';
 import { settingsService } from '../services/settingsService';
+import { logger } from '../utils/logger';
 
 export interface RegisterAppRoutesOptions {
   uploadsDir: string;
@@ -53,7 +58,25 @@ export interface RegisterAppRoutesResult {
 
 /** Register one static runtime directory with shared CORS and cache headers. */
 function registerRuntimeStaticDirectory(app: Express, mountPath: string, directoryPath: string): void {
-  app.use(mountPath, optionalAuth, express.static(directoryPath, {
+  app.use(mountPath, (req, res, next) => {
+    const startedAt = Date.now();
+    const isMediaRequest = /\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov|avi|mkv)$/i.test(req.path || '');
+
+    res.once('finish', () => {
+      const elapsedMs = Date.now() - startedAt;
+      if (isMediaRequest && elapsedMs >= 300) {
+        logger.debug('[ImagePerf][static]', {
+          mountPath,
+          method: req.method,
+          url: req.originalUrl,
+          statusCode: res.statusCode,
+          elapsedMs,
+        });
+      }
+    });
+
+    next();
+  }, optionalAuth, express.static(directoryPath, {
     setHeaders: (res, filePath) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -76,12 +99,14 @@ function serializeFrontendBootstrap(value: unknown): string {
 }
 
 /** Render the integrated frontend index with auth and appearance bootstrap payloads. */
-function renderIntegratedFrontendIndex(req: Request, htmlTemplate: string): string {
+function renderIntegratedFrontendIndex(req: Request, res: Response, htmlTemplate: string): string {
   const authStatus = buildAuthStatusPayload(req);
   const appearance = settingsService.loadSettings().appearance;
+  const bootstrapScriptNonce = res.locals.cspNonce as string | undefined;
+  const nonceAttribute = bootstrapScriptNonce ? ` nonce="${bootstrapScriptNonce}"` : '';
   const bootstrapScript = [
-    `<script>window.__CONAI_AUTH_STATUS__=${serializeFrontendBootstrap(authStatus)};</script>`,
-    `<script>window.__CONAI_APPEARANCE__=${serializeFrontendBootstrap(appearance)};</script>`,
+    `<script${nonceAttribute}>window.__CONAI_AUTH_STATUS__=${serializeFrontendBootstrap(authStatus)};</script>`,
+    `<script${nonceAttribute}>window.__CONAI_APPEARANCE__=${serializeFrontendBootstrap(appearance)};</script>`,
   ].join('');
 
   return htmlTemplate.includes('</head>')
@@ -141,6 +166,8 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
       data: settingsService.loadSettings().appearance,
     });
   });
+  app.use('/api/runtime-appearance', optionalAuth, runtimeAppearanceRoutes);
+  app.use('/api/runtime-media-settings', options.readOnlyLimiter, optionalAuth, runtimeMediaSettingsRoutes);
   app.use('/api/settings', optionalAuth, requirePermission('page.settings.view'), settingsRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);
@@ -152,7 +179,9 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/nai', options.uploadLimiter, optionalAuth, requirePermission('page.generation.view'), naiRoutes);
   app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), generationHistoryRoutes);
   app.use('/api/generation-queue', requireAuth, generationQueueRoutes);
-  app.use('/api/wildcards', optionalAuth, requirePermission('page.generation.view'), wildcardRoutes);
+  app.use('/api/wildcards', optionalAuth, wildcardUtilityRoutes);
+  app.use('/api/wildcards', optionalAuth, wildcardMutationRoutes);
+  app.use('/api/wildcards', optionalAuth, wildcardReadRoutes);
   app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
   app.use('/api/backup-sources', optionalAuth, backupSourcesRoutes);
   app.use('/api/search-history', optionalAuth, searchHistoryRoutes);
@@ -194,7 +223,9 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
         }
 
         if (normalizedPath.endsWith('.html')) {
-          res.setHeader('Cache-Control', 'no-cache');
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
         }
       },
     }));
@@ -210,8 +241,10 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
         return;
       }
 
-      res.setHeader('Cache-Control', 'no-cache');
-      res.type('html').send(renderIntegratedFrontendIndex(req, indexHtmlTemplate));
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.type('html').send(renderIntegratedFrontendIndex(req, res, indexHtmlTemplate));
     };
 
     app.get('/', handleFrontendIndex);

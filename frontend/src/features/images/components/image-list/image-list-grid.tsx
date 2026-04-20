@@ -9,6 +9,7 @@ interface ImageListGridProps {
   selectedIds: string[]
   selectionMode: boolean
   minColumnWidth: number
+  columnCount: number
   columnGap: number
   rowGap: number
   gridItemHeight: number
@@ -29,6 +30,7 @@ export function ImageListGrid({
   selectedIds,
   selectionMode,
   minColumnWidth,
+  columnCount,
   columnGap,
   rowGap,
   gridItemHeight,
@@ -43,14 +45,26 @@ export function ImageListGrid({
   shouldBlurItemPreview,
 }: ImageListGridProps) {
   const usesWindowScroll = scrollMode === 'window'
+  const resolvedContainerHeight = usesWindowScroll
+    ? undefined
+    : typeof viewportHeight === 'number'
+      ? viewportHeight
+      : typeof viewportHeight === 'string' && viewportHeight !== '100%'
+        ? viewportHeight
+        : undefined
 
   return (
     <div
       style={{
         ['--image-list-min-column-width' as string]: `${minColumnWidth}px`,
+        ['--image-list-column-repeat' as string]: String(columnCount),
         ['--image-list-column-gap' as string]: `${columnGap}px`,
         ['--image-list-row-gap' as string]: `${rowGap}px`,
-        height: usesWindowScroll ? undefined : (viewportHeight ?? '100%'),
+        height: resolvedContainerHeight,
+        minHeight: usesWindowScroll ? undefined : 0,
+        flex: usesWindowScroll ? undefined : 1,
+        display: usesWindowScroll ? undefined : 'flex',
+        flexDirection: usesWindowScroll ? undefined : 'column',
         overflowX: usesWindowScroll ? undefined : 'hidden',
         paddingRight: usesWindowScroll ? undefined : '4px',
       }}
@@ -58,7 +72,7 @@ export function ImageListGrid({
       <VirtuosoGrid<ImageRecord>
         data={items}
         useWindowScroll={usesWindowScroll}
-        style={usesWindowScroll ? undefined : { height: '100%', overflowX: 'hidden', overflowY: 'auto' }}
+        style={usesWindowScroll ? undefined : { height: '100%', minHeight: 0, flex: 1, overflowX: 'hidden', overflowY: 'auto' }}
         overscan={{ main: 1200, reverse: 600 }}
         endReached={onEndReached}
         listClassName="image-list-grid"

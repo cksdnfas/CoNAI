@@ -2,10 +2,13 @@ import type { WildcardItemRecord, WildcardRecord, WildcardTool } from '@/lib/api
 
 export type FlattenedWildcardRecord = {
   id: number
+  parentId: number | null
   name: string
   path: string[]
   type: WildcardRecord['type']
   isAutoCollected: boolean
+  includeChildren: boolean
+  onlyChildren: boolean
   items: WildcardItemRecord[]
 }
 
@@ -81,10 +84,13 @@ export function flattenWildcardRecords(nodes: WildcardRecord[], parentPath: stri
     const path = [...parentPath, node.name]
     entries.push({
       id: node.id,
+      parentId: node.parent_id ?? null,
       name: node.name,
       path,
       type: node.type,
       isAutoCollected: node.is_auto_collected === 1,
+      includeChildren: node.include_children === 1,
+      onlyChildren: node.only_children === 1,
       items: node.items ?? [],
     })
 
@@ -133,13 +139,12 @@ export function countWildcardItemsForTool(items: WildcardItemRecord[], tool: Wil
   return items.filter((item) => item.tool === tool).length
 }
 
-/** Build the next prompt value for inline wildcard insertion, auto-adding comma separators when chaining entries. */
-export function buildWildcardInsertion(value: string, wildcardName: string, range: WildcardInsertionRange) {
-  const token = `++${wildcardName}++`
+/** Build the next prompt value for inline wildcard/preprocess insertion, auto-adding comma separators when chaining entries. */
+export function buildWildcardInsertion(value: string, insertionText: string, range: WildcardInsertionRange) {
   const before = value.slice(0, range.start)
   const after = value.slice(range.end)
   const needsLeadingSeparator = before.trim().length > 0 && !/[\s,(]$/.test(before)
-  const insertedText = `${needsLeadingSeparator ? ', ' : ''}${token}`
+  const insertedText = `${needsLeadingSeparator ? ', ' : ''}${insertionText}`
 
   return {
     nextValue: `${before}${insertedText}${after}`,

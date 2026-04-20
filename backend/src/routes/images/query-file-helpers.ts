@@ -9,15 +9,105 @@ import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
 import type { ImageFileRecord, ImageMetadataRecord } from '../../types/image';
+import { logger } from '../../utils/logger';
 import { routeParam } from '../routeParam';
 
 export type ImageDownloadType = 'original' | 'thumbnail';
+
+export interface ImageServeDiagnostics {
+  mode?: 'thumbnail' | 'original' | 'video';
+  hadThumbnailPath?: boolean;
+  thumbnailExistsAtStart?: boolean;
+  thumbnailRegenerated?: boolean;
+  thumbnailRegenMs?: number;
+  servedOriginalFallback?: boolean;
+  cacheStatMs?: number;
+  etagHit?: boolean;
+}
+
+const IMMUTABLE_FILE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
 /** Build a stable ETag from file mtime and size. */
 export function generateETag(stats: fs.Stats): string {
   const hash = crypto.createHash('md5');
   hash.update(`${stats.mtime.getTime()}-${stats.size}`);
   return `"${hash.digest('hex')}"`;
+}
+
+function getHeaderValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+}
+
+function getFileCacheValidators(stats: fs.Stats) {
+  return {
+    etag: generateETag(stats),
+    lastModified: stats.mtime.toUTCString(),
+  };
+}
+
+function parseHttpDate(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function isSameOrOlderThanHeaderDate(stats: fs.Stats, headerDateMs: number) {
+  return Math.floor(stats.mtimeMs / 1000) <= Math.floor(headerDateMs / 1000);
+}
+
+function matchesIfNoneMatch(ifNoneMatchHeader: string | undefined, etag: string) {
+  if (!ifNoneMatchHeader) {
+    return false;
+  }
+
+  return ifNoneMatchHeader
+    .split(',')
+    .map((value) => value.trim())
+    .some((value) => value === '*' || value === etag || value === `W/${etag}`);
+}
+
+function shouldReturnNotModified(req: Request, stats: fs.Stats, etag: string) {
+  const ifNoneMatch = getHeaderValue(req.headers['if-none-match']);
+  if (matchesIfNoneMatch(ifNoneMatch, etag)) {
+    return true;
+  }
+
+  if (ifNoneMatch) {
+    return false;
+  }
+
+  const ifModifiedSince = parseHttpDate(getHeaderValue(req.headers['if-modified-since']));
+  return ifModifiedSince !== null && isSameOrOlderThanHeaderDate(stats, ifModifiedSince);
+}
+
+function shouldHonorRangeRequest(req: Request, stats: fs.Stats, etag: string) {
+  const ifRange = getHeaderValue(req.headers['if-range']);
+  if (!ifRange) {
+    return true;
+  }
+
+  if (ifRange.startsWith('"') || ifRange.startsWith('W/')) {
+    return ifRange === etag;
+  }
+
+  const ifRangeDate = parseHttpDate(ifRange);
+  return ifRangeDate !== null && isSameOrOlderThanHeaderDate(stats, ifRangeDate);
+}
+
+function setImmutableCacheHeaders(
+  res: Response,
+  validators: ReturnType<typeof getFileCacheValidators>,
+) {
+  res.setHeader('Cache-Control', IMMUTABLE_FILE_CACHE_CONTROL);
+  res.setHeader('ETag', validators.etag);
+  res.setHeader('Last-Modified', validators.lastModified);
 }
 
 /** Validate the composite-hash route param and send the shared 400 response when invalid. */
@@ -113,56 +203,111 @@ export function buildImageWithFileViewData(metadata: ImageMetadataRecord, file: 
 
 /** Stream a video-like file with range support and long-lived caching headers. */
 export function streamRangeFile(req: Request, res: Response, filePath: string, mimeType: string) {
-  const stat = fs.statSync(filePath);
-  const fileSize = stat.size;
-  const range = req.headers.range;
+  const stats = fs.statSync(filePath);
+  const fileSize = stats.size;
+  const validators = getFileCacheValidators(stats);
+  const { etag } = validators;
+  const range = getHeaderValue(req.headers.range);
 
-  if (range) {
-    const parts = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-    const chunkSize = (end - start) + 1;
-    const fileStream = fs.createReadStream(filePath, { start, end });
+  res.setHeader('Content-Type', mimeType);
+  res.setHeader('Accept-Ranges', 'bytes');
+  setImmutableCacheHeaders(res, validators);
 
-    res.writeHead(206, {
-      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': chunkSize,
-      'Content-Type': mimeType,
-      'Cache-Control': 'public, max-age=31536000, immutable'
-    });
+  if (!range) {
+    if (shouldReturnNotModified(req, stats, etag)) {
+      res.status(304).end();
+      return;
+    }
 
-    fileStream.pipe(res);
+    res.status(200);
+    res.setHeader('Content-Length', fileSize);
+    fs.createReadStream(filePath).pipe(res);
     return;
   }
 
-  res.writeHead(200, {
-    'Content-Length': fileSize,
-    'Content-Type': mimeType,
-    'Accept-Ranges': 'bytes',
-    'Cache-Control': 'public, max-age=31536000, immutable'
-  });
+  if (!shouldHonorRangeRequest(req, stats, etag)) {
+    res.status(200);
+    res.setHeader('Content-Length', fileSize);
+    fs.createReadStream(filePath).pipe(res);
+    return;
+  }
 
-  const fileStream = fs.createReadStream(filePath);
-  fileStream.pipe(res);
+  const parts = range.replace(/bytes=/, '').split('-');
+  const startText = parts[0]?.trim() ?? '';
+  const endText = parts[1]?.trim() ?? '';
+
+  let start = startText ? parseInt(startText, 10) : 0;
+  let end = endText ? parseInt(endText, 10) : fileSize - 1;
+
+  if (!startText && endText) {
+    const suffixLength = parseInt(endText, 10);
+    if (Number.isNaN(suffixLength) || suffixLength <= 0) {
+      res.status(416);
+      res.setHeader('Content-Range', `bytes */${fileSize}`);
+      res.end();
+      return;
+    }
+
+    start = Math.max(fileSize - suffixLength, 0);
+    end = fileSize - 1;
+  } else if (startText && !endText) {
+    end = fileSize - 1;
+  }
+
+  end = Math.min(end, fileSize - 1);
+
+  if (
+    Number.isNaN(start)
+    || Number.isNaN(end)
+    || start < 0
+    || end < start
+    || start >= fileSize
+  ) {
+    res.status(416);
+    res.setHeader('Content-Range', `bytes */${fileSize}`);
+    res.end();
+    return;
+  }
+
+  const chunkSize = (end - start) + 1;
+  res.status(206);
+  res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+  res.setHeader('Content-Length', chunkSize);
+  fs.createReadStream(filePath, { start, end }).pipe(res);
 }
 
 /** Stream one static file with ETag handling and immutable cache headers. */
-export async function streamCacheableFile(req: Request, res: Response, filePath: string, contentType: string) {
+export async function streamCacheableFile(
+  req: Request,
+  res: Response,
+  filePath: string,
+  contentType: string,
+  diagnostics?: ImageServeDiagnostics,
+) {
+  const statStartedAt = Date.now();
   const stats = await fs.promises.stat(filePath);
-  const etag = generateETag(stats);
+  if (diagnostics) {
+    diagnostics.cacheStatMs = Date.now() - statStartedAt;
+  }
 
-  if (req.headers['if-none-match'] === etag) {
+  const validators = getFileCacheValidators(stats);
+  const { etag } = validators;
+  const isNotModified = shouldReturnNotModified(req, stats, etag);
+
+  if (diagnostics) {
+    diagnostics.etagHit = isNotModified;
+  }
+
+  setImmutableCacheHeaders(res, validators);
+
+  if (isNotModified) {
     res.status(304).end();
     return;
   }
 
   res.setHeader('Content-Type', contentType);
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-  res.setHeader('ETag', etag);
-
-  const fileStream = fs.createReadStream(filePath);
-  fileStream.pipe(res);
+  res.setHeader('Content-Length', stats.size);
+  fs.createReadStream(filePath).pipe(res);
 }
 
 /** Serve the thumbnail path, regenerate it when missing, or fall back to the original file. */
@@ -172,11 +317,16 @@ export async function serveThumbnailOrOriginal(
   compositeHash: string,
   metadata: ImageMetadataRecord,
   file: ImageFileRecord,
+  diagnostics?: ImageServeDiagnostics,
 ) {
   const mimeType = file.mime_type;
   const fileType = file.file_type;
 
   if ((mimeType && mimeType.startsWith('video/')) || fileType === 'animated') {
+    if (diagnostics) {
+      diagnostics.mode = 'video';
+    }
+
     const originalPath = getExistingActiveFilePathOrBlock(res, file, {
       missingError: 'Video file not found',
       warnMessage: `[ImageServe] Video file missing on disk: ${resolveUploadsPath(file.original_file_path)}`,
@@ -194,6 +344,12 @@ export async function serveThumbnailOrOriginal(
     ? path.join(runtimePaths.tempDir, metadata.thumbnail_path)
     : null;
 
+  if (diagnostics) {
+    diagnostics.mode = 'thumbnail';
+    diagnostics.hadThumbnailPath = Boolean(metadata.thumbnail_path);
+    diagnostics.thumbnailExistsAtStart = Boolean(thumbnailPath && fs.existsSync(thumbnailPath));
+  }
+
   let serveOriginal = false;
 
   if (!thumbnailPath || !fs.existsSync(thumbnailPath)) {
@@ -207,10 +363,16 @@ export async function serveThumbnailOrOriginal(
     }
 
     try {
-      console.log(`[ImageServe] Regenerating missing thumbnail for ${compositeHash}`);
+      logger.debug('[ImageServe] Regenerating missing thumbnail', { compositeHash, originalPath });
+      const regenStartedAt = Date.now();
       const relativeThumbPath = await ThumbnailGenerator.generateThumbnail(originalPath, compositeHash);
       MediaMetadataModel.update(compositeHash, { thumbnail_path: relativeThumbPath });
       thumbnailPath = path.join(runtimePaths.tempDir, relativeThumbPath);
+
+      if (diagnostics) {
+        diagnostics.thumbnailRegenerated = true;
+        diagnostics.thumbnailRegenMs = Date.now() - regenStartedAt;
+      }
 
       if (!fs.existsSync(thumbnailPath)) {
         serveOriginal = true;
@@ -222,6 +384,11 @@ export async function serveThumbnailOrOriginal(
   }
 
   if (serveOriginal) {
+    if (diagnostics) {
+      diagnostics.mode = 'original';
+      diagnostics.servedOriginalFallback = true;
+    }
+
     const originalPath = getExistingActiveFilePathOrBlock(res, file, {
       missingError: 'Original file not found',
     });
@@ -230,7 +397,7 @@ export async function serveThumbnailOrOriginal(
       return;
     }
 
-    await streamCacheableFile(req, res, originalPath, mimeType);
+    await streamCacheableFile(req, res, originalPath, mimeType, diagnostics);
     return;
   }
 
@@ -239,7 +406,7 @@ export async function serveThumbnailOrOriginal(
     return;
   }
 
-  await streamCacheableFile(req, res, thumbnailPath, 'image/webp');
+  await streamCacheableFile(req, res, thumbnailPath, 'image/webp', diagnostics);
 }
 
 async function resolveThumbnailDownloadFile(compositeHash: string, metadata: ImageMetadataRecord, file: ImageFileRecord) {

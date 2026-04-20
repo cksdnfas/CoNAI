@@ -164,7 +164,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   executionDetailIsError: boolean
   selectedExecutionStatus: GraphExecutionRecord['status'] | null
   setSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
-  onSelectExecution: (executionId: number) => void
+  onSelectExecution: (executionId: number | null) => void
   onRerunGraph: () => void
   onRetryExecution: () => void
   onCancelExecution: () => void

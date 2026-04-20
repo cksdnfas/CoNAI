@@ -7,8 +7,10 @@ const textareaVariants = cva(
   {
     variants: {
       variant: {
-        default: 'border border-border bg-surface-container px-3 py-2 transition focus:border-primary',
-        settings: 'theme-settings-control border border-border bg-surface-container px-3 py-2 focus:ring-1 focus:ring-primary',
+        default: 'theme-input-surface border px-3 py-2 transition focus:border-primary',
+        settings: 'theme-settings-control theme-input-surface border px-3 py-2 focus:ring-1 focus:ring-primary',
+        detail: 'theme-input-surface border px-3 py-2 focus:border-primary',
+        detailNested: 'theme-input-surface border px-3 py-2 focus:border-primary',
       },
     },
     defaultVariants: {
@@ -18,8 +20,12 @@ const textareaVariants = cva(
 )
 
 /** Render a reusable textarea control with shared surface variants. */
-function Textarea({ className, variant, ...props }: React.ComponentProps<'textarea'> & VariantProps<typeof textareaVariants>) {
-  return <textarea data-slot="textarea" className={cn(textareaVariants({ variant }), className)} {...props} />
-}
+const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<'textarea'> & VariantProps<typeof textareaVariants>>(
+  ({ className, variant, ...props }, ref) => {
+    return <textarea ref={ref} data-slot="textarea" className={cn(textareaVariants({ variant }), className)} {...props} />
+  },
+)
+
+Textarea.displayName = 'Textarea'
 
 export { Textarea, textareaVariants }

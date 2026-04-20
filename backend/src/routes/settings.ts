@@ -1,5 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
+import {
+  sendRouteBadRequest,
+  validateIntegerInRangeIfDefined,
+  validateNumberInRangeIfDefined,
+  validateStringEnumIfDefined,
+} from './routeValidation';
 import { asyncHandler } from '../middleware/errorHandler';
 import { settingsService } from '../services/settingsService';
 import { imageTaggerService } from '../services/imageTaggerService';
@@ -22,6 +28,9 @@ import { appearanceSettingsRoutes } from './settings/appearance.routes';
 
 const router = Router();
 const validLanguages: SupportedLanguage[] = ['ko', 'en', 'ja', 'zh-CN', 'zh-TW'];
+const validKaloscopeDevices = ['auto', 'cpu', 'cuda'] as const;
+const validTaggerModels = ['vit', 'swinv2', 'convnext'] as const;
+const validTaggerDevices = ['auto', 'cpu', 'cuda'] as const;
 
 /**
  * GET /api/settings
@@ -51,15 +60,7 @@ router.put(
     const generalSettings: Partial<GeneralSettings> = req.body;
 
     // Validate language if provided
-    if (generalSettings.language !== undefined) {
-      if (!validLanguages.includes(generalSettings.language)) {
-        res.status(400).json({
-          success: false,
-          error: `Invalid language. Must be one of: ${validLanguages.join(', ')}`,
-        });
-        return;
-      }
-    }
+    if (!validateStringEnumIfDefined(res, generalSettings.language, validLanguages, `Invalid language. Must be one of: ${validLanguages.join(', ')}`)) return;
 
     // Update settings
     const updatedSettings = settingsService.updateGeneralSettings(generalSettings);
@@ -100,33 +101,12 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const kaloscopeSettings: Partial<KaloscopeSettings> = req.body;
 
-    if (kaloscopeSettings.device !== undefined) {
-      const validDevices = ['auto', 'cpu', 'cuda'];
-      if (!validDevices.includes(kaloscopeSettings.device)) {
-        res.status(400).json({
-          success: false,
-          error: `Invalid device. Must be one of: ${validDevices.join(', ')}`,
-        });
-        return;
-      }
-    }
-
-    if (kaloscopeSettings.topK !== undefined) {
-      if (!Number.isInteger(kaloscopeSettings.topK) || kaloscopeSettings.topK < 1 || kaloscopeSettings.topK > 200) {
-        res.status(400).json({
-          success: false,
-          error: 'topK must be an integer between 1 and 200',
-        });
-        return;
-      }
-    }
+    if (!validateStringEnumIfDefined(res, kaloscopeSettings.device, validKaloscopeDevices, `Invalid device. Must be one of: ${validKaloscopeDevices.join(', ')}`)) return;
+    if (!validateIntegerInRangeIfDefined(res, kaloscopeSettings.topK, 1, 200, 'topK must be an integer between 1 and 200')) return;
 
     if (kaloscopeSettings.autoUnloadMinutes !== undefined) {
       if (!Number.isInteger(kaloscopeSettings.autoUnloadMinutes) || kaloscopeSettings.autoUnloadMinutes < 1) {
-        res.status(400).json({
-          success: false,
-          error: 'autoUnloadMinutes must be an integer greater than or equal to 1',
-        });
+        sendRouteBadRequest(res, 'autoUnloadMinutes must be an integer greater than or equal to 1');
         return;
       }
     }
@@ -135,18 +115,12 @@ router.put(
       const normalizedTemplate = String(kaloscopeSettings.artistLinkUrlTemplate).trim();
 
       if (!normalizedTemplate) {
-        res.status(400).json({
-          success: false,
-          error: 'artistLinkUrlTemplate must not be empty',
-        });
+        sendRouteBadRequest(res, 'artistLinkUrlTemplate must not be empty');
         return;
       }
 
       if (!normalizedTemplate.includes('{key}')) {
-        res.status(400).json({
-          success: false,
-          error: `artistLinkUrlTemplate must include {key}. Example: ${DEFAULT_ARTIST_LINK_URL_TEMPLATE}`,
-        });
+        sendRouteBadRequest(res, `artistLinkUrlTemplate must include {key}. Example: ${DEFAULT_ARTIST_LINK_URL_TEMPLATE}`);
         return;
       }
 
@@ -160,10 +134,7 @@ router.put(
     if (!wasEnabled && nextEnabled) {
       const dependencyStatus = await kaloscopeTaggerService.checkDependencies();
       if (!dependencyStatus.available) {
-        res.status(400).json({
-          success: false,
-          error: dependencyStatus.message,
-        });
+        sendRouteBadRequest(res, dependencyStatus.message);
         return;
       }
     }
@@ -241,10 +212,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const imageId = String(req.body?.imageId || '').trim();
     if (!imageId) {
-      res.status(400).json({
-        success: false,
-        error: 'imageId is required',
-      });
+      sendRouteBadRequest(res, 'imageId is required');
       return;
     }
 
@@ -298,36 +266,9 @@ router.put(
     const taggerSettings: Partial<TaggerSettings> = req.body;
 
     // Validate settings
-    if (taggerSettings.generalThreshold !== undefined) {
-      if (taggerSettings.generalThreshold < 0 || taggerSettings.generalThreshold > 1) {
-        res.status(400).json({
-          success: false,
-          error: 'General threshold must be between 0 and 1',
-        });
-        return;
-      }
-    }
-
-    if (taggerSettings.characterThreshold !== undefined) {
-      if (taggerSettings.characterThreshold < 0 || taggerSettings.characterThreshold > 1) {
-        res.status(400).json({
-          success: false,
-          error: 'Character threshold must be between 0 and 1',
-        });
-        return;
-      }
-    }
-
-    if (taggerSettings.model !== undefined) {
-      const validModels = ['vit', 'swinv2', 'convnext'];
-      if (!validModels.includes(taggerSettings.model)) {
-        res.status(400).json({
-          success: false,
-          error: `Invalid model. Must be one of: ${validModels.join(', ')}`,
-        });
-        return;
-      }
-    }
+    if (!validateNumberInRangeIfDefined(res, taggerSettings.generalThreshold, 0, 1, 'General threshold must be between 0 and 1')) return;
+    if (!validateNumberInRangeIfDefined(res, taggerSettings.characterThreshold, 0, 1, 'Character threshold must be between 0 and 1')) return;
+    if (!validateStringEnumIfDefined(res, taggerSettings.model, validTaggerModels, `Invalid model. Must be one of: ${validTaggerModels.join(', ')}`)) return;
 
     const currentSettings = settingsService.loadSettings();
     const nextEnabled = taggerSettings.enabled ?? currentSettings.tagger.enabled;
@@ -336,10 +277,7 @@ router.put(
     if (!wasEnabled && nextEnabled) {
       const dependencyStatus = await imageTaggerService.checkPythonDependencies();
       if (!dependencyStatus.available) {
-        res.status(400).json({
-          success: false,
-          error: dependencyStatus.message,
-        });
+        sendRouteBadRequest(res, dependencyStatus.message);
         return;
       }
     }
@@ -389,11 +327,8 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { model } = req.body;
 
-    if (!model || !['vit', 'swinv2', 'convnext'].includes(model)) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid model. Must be one of: vit, swinv2, convnext',
-      });
+    if (!model || !validTaggerModels.includes(model)) {
+      sendRouteBadRequest(res, 'Invalid model. Must be one of: vit, swinv2, convnext');
       return;
     }
 
@@ -451,19 +386,13 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { model, device }: { model?: TaggerModel; device?: TaggerDevice } = req.body;
 
-    if (model && !['vit', 'swinv2', 'convnext'].includes(model)) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid model. Must be one of: vit, swinv2, convnext',
-      });
+    if (model && !validTaggerModels.includes(model)) {
+      sendRouteBadRequest(res, 'Invalid model. Must be one of: vit, swinv2, convnext');
       return;
     }
 
-    if (device && !['auto', 'cpu', 'cuda'].includes(device)) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid device. Must be one of: auto, cpu, cuda',
-      });
+    if (device && !validTaggerDevices.includes(device)) {
+      sendRouteBadRequest(res, 'Invalid device. Must be one of: auto, cpu, cuda');
       return;
     }
 
@@ -503,10 +432,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const imageId = routeParam(req.params.imageId);
     if (!imageId) {
-      res.status(400).json({
-        success: false,
-        error: 'imageId is required',
-      });
+      sendRouteBadRequest(res, 'imageId is required');
       return;
     }
 
@@ -560,10 +486,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const imageId = String(req.body?.imageId || '').trim();
     if (!imageId) {
-      res.status(400).json({
-        success: false,
-        error: 'imageId is required',
-      });
+      sendRouteBadRequest(res, 'imageId is required');
       return;
     }
 

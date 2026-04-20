@@ -1,11 +1,21 @@
-import { ChevronLeft, ChevronRight, Lock, RotateCcw, RotateCw, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import type { ImageRecord } from '@/types/image'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { getImageListMediaKind } from '@/features/images/components/image-list/image-list-utils'
 import { cn } from '@/lib/utils'
+import {
+  canToggleImageDetailRenderMode,
+  getImageDetailRenderModeLabel,
+  getImageDetailRenderUrl,
+  getNextImageDetailRenderMode,
+  loadImageDetailRenderMode,
+  persistImageDetailRenderMode,
+  type ImageDetailRenderMode,
+} from './image-detail-utils'
 import { EnhancedVideoPlayer } from './enhanced-video-player'
 
 interface ImageDetailMediaProps {
@@ -83,25 +93,45 @@ function persistImageControlsCollapsed(collapsed: boolean) {
 
 /** Render the main detail media using the correct element for image, GIF, or video files. */
 export function ImageDetailMedia({ image, renderUrl, className }: ImageDetailMediaProps) {
+  const { showSnackbar } = useSnackbar()
+  const [preferredRenderMode, setPreferredRenderMode] = useState<ImageDetailRenderMode>(() => loadImageDetailRenderMode())
+  const mediaKind = getImageListMediaKind(image)
+  const canToggleRenderMode = canToggleImageDetailRenderMode(image)
+  const effectiveRenderUrl = canToggleRenderMode ? getImageDetailRenderUrl(image, preferredRenderMode) : renderUrl
   const previewState = resolveImagePreviewState({
     image,
-    hasPreviewUrl: Boolean(renderUrl),
+    hasPreviewUrl: Boolean(effectiveRenderUrl),
   })
 
-  if (!renderUrl) {
+  if (!effectiveRenderUrl) {
     return <ImagePreviewPlaceholder label={getImagePreviewStateLabel(previewState)} className="min-h-[20rem] rounded-sm border border-dashed border-border/70 bg-surface-low text-sm text-muted-foreground" />
   }
 
-  const mediaKind = getImageListMediaKind(image)
   const altText = image.composite_hash || String(image.id)
+  const mediaClassName = className ?? 'max-h-[80vh] max-w-full w-auto object-contain'
 
-  const mediaClassName = className ?? 'max-h-[80vh] w-full object-contain'
-
-  if (mediaKind === 'video') {
-    return <EnhancedVideoPlayer renderUrl={renderUrl} className={mediaClassName} loop autoPlay />
+  const handleToggleRenderMode = () => {
+    const nextMode = getNextImageDetailRenderMode(preferredRenderMode)
+    setPreferredRenderMode(nextMode)
+    persistImageDetailRenderMode(nextMode)
+    showSnackbar({ message: `${getImageDetailRenderModeLabel(nextMode)} 보기로 바꿨어.`, tone: 'info' })
   }
 
-  return <InteractiveImageDetailMedia image={image} renderUrl={renderUrl} altText={altText} className={mediaClassName} />
+  if (mediaKind === 'video') {
+    return <EnhancedVideoPlayer renderUrl={effectiveRenderUrl} className={mediaClassName} loop autoPlay />
+  }
+
+  return (
+    <InteractiveImageDetailMedia
+      image={image}
+      renderUrl={effectiveRenderUrl}
+      altText={altText}
+      className={mediaClassName}
+      renderMode={preferredRenderMode}
+      canToggleRenderMode={canToggleRenderMode}
+      onToggleRenderMode={handleToggleRenderMode}
+    />
+  )
 }
 
 function ImageDetailMediaFallback({ image }: { image: ImageRecord }) {
@@ -119,11 +149,17 @@ function InteractiveImageDetailMedia({
   renderUrl,
   altText,
   className,
+  renderMode,
+  canToggleRenderMode,
+  onToggleRenderMode,
 }: {
   image: ImageRecord
   renderUrl: string
   altText: string
   className: string
+  renderMode: ImageDetailRenderMode
+  canToggleRenderMode: boolean
+  onToggleRenderMode: () => void
 }) {
   const [hasRenderError, setHasRenderError] = useState(false)
 
@@ -181,7 +217,13 @@ function InteractiveImageDetailMedia({
     setIsGestureActive(false)
   }, [renderUrl])
 
-  const isPannable = scale > MIN_SCALE + 0.001 || rotation !== 0
+  const isScaled = scale > MIN_SCALE + 0.001
+  const hasRotation = rotation !== 0
+  const hasOffset = Math.abs(offset.x) > 0.5 || Math.abs(offset.y) > 0.5
+  const isPannable = isScaled || hasRotation
+  const isDefaultView = !isScaled && !hasRotation && !hasOffset
+  const canZoomOut = scale > MIN_SCALE + 0.001
+  const canZoomIn = scale < MAX_SCALE - 0.001
   const transformSummary = `${Math.round(scale * 100)}%${rotation !== 0 ? ` · ${rotation}°` : ''}`
 
   const resetView = useCallback(() => {
@@ -378,15 +420,31 @@ function InteractiveImageDetailMedia({
   }
 
   return (
-    <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
-      <div className="absolute bottom-3 right-3 z-10 flex items-end gap-2">
+    <div className="relative isolate flex h-full w-full items-center justify-center overflow-hidden">
+      {canToggleRenderMode ? (
+        <div className="absolute bottom-3 left-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
+          <Button
+            size="icon-sm"
+            type="button"
+            variant="outline"
+            className="bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high"
+            onClick={onToggleRenderMode}
+            title={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
+            aria-label={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
+          >
+            {renderMode === 'original' ? <ImageIcon className="h-4 w-4" /> : <ScanSearch className="h-4 w-4" />}
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="absolute bottom-3 right-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
         <div
           className={cn(
             'flex flex-wrap items-center gap-1.5 rounded-sm border border-border bg-background p-2 text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] transition-all duration-200 ease-out',
             isControlsCollapsed ? 'pointer-events-none translate-x-3 opacity-0' : 'translate-x-0 opacity-100',
           )}
         >
-          <div className="hidden px-2 text-[11px] text-muted-foreground sm:block">{transformSummary}</div>
+          {!isDefaultView ? <div className="hidden px-2 text-[11px] text-muted-foreground sm:block">{transformSummary}</div> : null}
           <Button
             size="icon-sm"
             type="button"
@@ -398,10 +456,10 @@ function InteractiveImageDetailMedia({
           >
             {isWheelZoomEnabled ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
           </Button>
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(-ZOOM_STEP)} title="축소" aria-label="축소">
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(-ZOOM_STEP)} title="축소" aria-label="축소" disabled={!canZoomOut}>
             <ZoomOut className="h-4 w-4" />
           </Button>
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(ZOOM_STEP)} title="확대" aria-label="확대">
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(ZOOM_STEP)} title="확대" aria-label="확대" disabled={!canZoomIn}>
             <ZoomIn className="h-4 w-4" />
           </Button>
           <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => rotateBy(-ROTATION_STEP)} title="왼쪽 회전" aria-label="왼쪽 회전">
@@ -410,9 +468,11 @@ function InteractiveImageDetailMedia({
           <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => rotateBy(ROTATION_STEP)} title="오른쪽 회전" aria-label="오른쪽 회전">
             <RotateCw className="h-4 w-4" />
           </Button>
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={resetView} title="초기화" aria-label="초기화">
-            <Undo2 className="h-4 w-4" />
-          </Button>
+          {!isDefaultView ? (
+            <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={resetView} title="초기화" aria-label="초기화">
+              <Undo2 className="h-4 w-4" />
+            </Button>
+          ) : null}
           <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={toggleControlsCollapsed} title="컨트롤 수납" aria-label="컨트롤 수납">
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -423,7 +483,7 @@ function InteractiveImageDetailMedia({
             size="icon-sm"
             type="button"
             variant="outline"
-            className="bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)]"
+            className="border-primary/55 bg-primary text-primary-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-primary/92 hover:text-primary-foreground"
             onClick={toggleControlsCollapsed}
             title="컨트롤 펼치기"
             aria-label="컨트롤 펼치기"
@@ -436,7 +496,7 @@ function InteractiveImageDetailMedia({
       <div
         ref={viewportRef}
         className={cn(
-          'flex h-full w-full items-center justify-center overflow-hidden select-none',
+          'relative z-0 flex h-full w-full items-center justify-center overflow-hidden select-none',
           isPannable ? 'cursor-grab active:cursor-grabbing' : isWheelZoomEnabled ? 'cursor-zoom-in' : 'cursor-default',
         )}
         style={{ touchAction: isWheelZoomEnabled ? 'none' : 'pan-y', overscrollBehavior: isWheelZoomEnabled ? 'contain' : 'auto' }}
@@ -458,13 +518,13 @@ function InteractiveImageDetailMedia({
         onPointerCancel={finishPointerInteraction}
       >
         <div
-          className={cn('will-change-transform', !isGestureActive && 'transition-transform duration-150 ease-out')}
+          className={cn('inline-flex max-h-full max-w-full will-change-transform', !isGestureActive && 'transition-transform duration-150 ease-out')}
           style={{
             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale}) rotate(${rotation}deg)`,
             transformOrigin: 'center center',
           }}
         >
-          <img src={renderUrl} alt={altText} className={cn(className, 'pointer-events-none select-none')} draggable={false} onError={() => setHasRenderError(true)} />
+          <img src={renderUrl} alt={altText} className={cn(className, 'block h-auto max-h-full w-auto max-w-full object-contain pointer-events-none select-none')} draggable={false} onError={() => setHasRenderError(true)} />
         </div>
       </div>
     </div>

@@ -6,6 +6,10 @@ import { buildPreviewImageRecord } from '@/features/images/components/inline-med
 import { parseMetadataValue } from '@/features/module-graph/module-graph-shared'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
+import {
+  buildWallpaperImageTransitionTransform,
+  resolveWallpaperImageTransitionFrame,
+} from './wallpaper-image-transition-utils'
 import type {
   WallpaperAnimationEasing,
   WallpaperImageHoverMotion,
@@ -135,93 +139,15 @@ function preloadWallpaperPreviewImage(previewImage: WallpaperWidgetPreviewImage)
 }
 
 function getWallpaperTransitionStateStyle(transitionStyle: WallpaperImageTransitionStyle, layer: 'current' | 'previous', isTransitionActive: boolean): CSSProperties {
-  const buildStyle = (opacity: number, transform: string, filter: string): CSSProperties => ({
-    opacity,
-    transform,
-    filter,
+  const frame = resolveWallpaperImageTransitionFrame(transitionStyle, layer, isTransitionActive ? 1 : 0)
+
+  return {
+    opacity: frame.opacity,
+    transform: buildWallpaperImageTransitionTransform(frame),
+    filter: `blur(${frame.blur}px)`,
     backfaceVisibility: 'hidden',
     transformStyle: 'preserve-3d',
-  })
-
-  if (transitionStyle === 'none') {
-    return layer === 'current'
-      ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
-      : buildStyle(0, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
   }
-
-  if (transitionStyle === 'fade') {
-    if (layer === 'current') {
-      return isTransitionActive
-        ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
-        : buildStyle(0, 'translate3d(0, 0, 0) scale(1.02)', 'blur(3px)')
-    }
-    return isTransitionActive
-      ? buildStyle(0, 'translate3d(0, 0, 0) scale(0.98)', 'blur(4px)')
-      : buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
-  }
-
-  if (transitionStyle === 'zoom') {
-    if (layer === 'current') {
-      return isTransitionActive
-        ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
-        : buildStyle(0, 'translate3d(0, 0, 0) scale(1.14)', 'blur(2px)')
-    }
-    return isTransitionActive
-      ? buildStyle(0, 'translate3d(0, 0, 0) scale(0.86)', 'blur(3px)')
-      : buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
-  }
-
-  if (transitionStyle === 'slide') {
-    if (layer === 'current') {
-      return isTransitionActive
-        ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
-        : buildStyle(0, 'translate3d(0, 12px, 0) scale(0.985)', 'blur(2px)')
-    }
-    return isTransitionActive
-      ? buildStyle(0, 'translate3d(0, -12px, 0) scale(1.015)', 'blur(4px)')
-      : buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
-  }
-
-  if (transitionStyle === 'blur') {
-    if (layer === 'current') {
-      return isTransitionActive
-        ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
-        : buildStyle(0, 'translate3d(0, 0, 0) scale(1.035)', 'blur(14px)')
-    }
-    return isTransitionActive
-      ? buildStyle(0, 'translate3d(0, 0, 0) scale(0.97)', 'blur(18px)')
-      : buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
-  }
-
-  if (transitionStyle === 'flip') {
-    if (layer === 'current') {
-      return isTransitionActive
-        ? buildStyle(1, 'perspective(1200px) rotateX(0deg) scale(1)', 'blur(0px)')
-        : buildStyle(0, 'perspective(1200px) rotateX(-84deg) scale(0.96)', 'blur(2px)')
-    }
-    return isTransitionActive
-      ? buildStyle(0, 'perspective(1200px) rotateX(84deg) scale(1.03)', 'blur(4px)')
-      : buildStyle(1, 'perspective(1200px) rotateX(0deg) scale(1)', 'blur(0px)')
-  }
-
-  if (transitionStyle === 'shuffle') {
-    if (layer === 'current') {
-      return isTransitionActive
-        ? buildStyle(1, 'translate3d(0, 0, 0) rotate(0deg) scale(1)', 'blur(0px)')
-        : buildStyle(0, 'translate3d(-12px, 8px, 0) rotate(-3deg) scale(0.92)', 'blur(4px)')
-    }
-    return isTransitionActive
-      ? buildStyle(0, 'translate3d(12px, -8px, 0) rotate(3deg) scale(1.05)', 'blur(5px)')
-      : buildStyle(1, 'translate3d(0, 0, 0) rotate(0deg) scale(1)', 'blur(0px)')
-  }
-
-  return layer === 'current'
-    ? (isTransitionActive
-      ? buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)')
-      : buildStyle(0, 'translate3d(0, 2%, 0) scale(0.9)', 'blur(4px)'))
-    : (isTransitionActive
-      ? buildStyle(0, 'translate3d(0, -2%, 0) scale(1.08)', 'blur(6px)')
-      : buildStyle(1, 'translate3d(0, 0, 0) scale(1)', 'blur(0px)'))
 }
 
 /** Render one optionally clickable wallpaper image surface. */

@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import multer from 'multer'
 import { Router, Request, Response } from 'express'
+import { sendRouteBadRequest } from '../routeValidation'
 import { asyncHandler } from '../../middleware/errorHandler'
 import { runtimePaths, publicUrls } from '../../config/runtimePaths'
 import { settingsService } from '../../services/settingsService'
@@ -19,7 +20,7 @@ const validSurfacePresets = ['studio', 'midnight', 'paper', 'custom']
 const validRadiusPresets = ['sharp', 'balanced', 'soft']
 const validGlassPresets = ['subtle', 'balanced', 'immersive']
 const validShadowPresets = ['soft', 'balanced', 'dramatic']
-const validDensityPresets = ['compact', 'comfortable', 'spacious']
+const validDensityPresets = ['ultra-compact', 'compact', 'comfortable', 'spacious']
 const validFontPresets = ['manrope', 'system', 'custom']
 const validBodyFontWeightPresets = ['regular', 'medium']
 const validEmphasisFontWeightPresets = ['standard', 'bold']
@@ -362,10 +363,7 @@ function validateAppearancePresetSlots(presetSlots: unknown): string | null {
 router.post('/appearance/font-upload', (req: Request, res: Response, next) => {
   appearanceFontUpload.single('font')(req, res, (error) => {
     if (error) {
-      res.status(400).json({
-        success: false,
-        error: error.message || '폰트 업로드에 실패했어.',
-      })
+      sendRouteBadRequest(res, error.message || '폰트 업로드에 실패했어.')
       return
     }
 
@@ -376,18 +374,12 @@ router.post('/appearance/font-upload', (req: Request, res: Response, next) => {
   const file = req.file
 
   if (!target) {
-    res.status(400).json({
-      success: false,
-      error: 'target must be either sans or mono',
-    })
+    sendRouteBadRequest(res, 'target must be either sans or mono')
     return
   }
 
   if (!file) {
-    res.status(400).json({
-      success: false,
-      error: 'No font file uploaded',
-    })
+    sendRouteBadRequest(res, 'No font file uploaded')
     return
   }
 
@@ -411,20 +403,14 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
   const appearanceSettings: Partial<AppearanceSettings> = req.body
   const appearanceValidationError = validateAppearanceThemeSettings(appearanceSettings)
   if (appearanceValidationError) {
-    res.status(400).json({
-      success: false,
-      error: appearanceValidationError,
-    })
+    sendRouteBadRequest(res, appearanceValidationError)
     return
   }
 
   if (appearanceSettings.presetSlots !== undefined) {
     const presetSlotsValidationError = validateAppearancePresetSlots(appearanceSettings.presetSlots)
     if (presetSlotsValidationError) {
-      res.status(400).json({
-        success: false,
-        error: presetSlotsValidationError,
-      })
+      sendRouteBadRequest(res, presetSlotsValidationError)
       return
     }
   }
@@ -432,19 +418,13 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
   if (appearanceSettings.wallpaperLayoutPresets !== undefined) {
     const wallpaperLayoutPresetsValidationError = validateWallpaperLayoutPresets(appearanceSettings.wallpaperLayoutPresets)
     if (wallpaperLayoutPresetsValidationError) {
-      res.status(400).json({
-        success: false,
-        error: wallpaperLayoutPresetsValidationError,
-      })
+      sendRouteBadRequest(res, wallpaperLayoutPresetsValidationError)
       return
     }
   }
 
   if (appearanceSettings.wallpaperActivePresetId !== undefined && appearanceSettings.wallpaperActivePresetId !== null && typeof appearanceSettings.wallpaperActivePresetId !== 'string') {
-    res.status(400).json({
-      success: false,
-      error: 'wallpaperActivePresetId must be a string or null',
-    })
+    sendRouteBadRequest(res, 'wallpaperActivePresetId must be a string or null')
     return
   }
 
@@ -459,10 +439,7 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
 
   if (nextAppearance.accentPreset === 'custom') {
     if (!isHexColor(nextAppearance.customPrimaryColor) || !isHexColor(nextAppearance.customSecondaryColor)) {
-      res.status(400).json({
-        success: false,
-        error: 'Custom preset requires valid customPrimaryColor and customSecondaryColor values',
-      })
+      sendRouteBadRequest(res, 'Custom preset requires valid customPrimaryColor and customSecondaryColor values')
       return
     }
   }
@@ -470,10 +447,7 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
   for (const slot of nextAppearance.presetSlots as AppearancePresetSlot[]) {
     if (slot.appearance?.accentPreset === 'custom') {
       if (!isHexColor(slot.appearance.customPrimaryColor) || !isHexColor(slot.appearance.customSecondaryColor)) {
-        res.status(400).json({
-          success: false,
-          error: `${slot.id} requires valid custom colors when using the custom accent preset`,
-        })
+        sendRouteBadRequest(res, `${slot.id} requires valid custom colors when using the custom accent preset`)
         return
       }
     }
@@ -483,10 +457,7 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
     nextAppearance.wallpaperActivePresetId !== null &&
     !nextAppearance.wallpaperLayoutPresets.some((preset) => preset.id === nextAppearance.wallpaperActivePresetId)
   ) {
-    res.status(400).json({
-      success: false,
-      error: 'wallpaperActivePresetId must match one of wallpaperLayoutPresets or be null',
-    })
+    sendRouteBadRequest(res, 'wallpaperActivePresetId must match one of wallpaperLayoutPresets or be null')
     return
   }
 

@@ -130,17 +130,13 @@ export class AutoTagSearchService {
   }
 
   /**
-   * Rating Score 조건 생성 (가중치 기반)
+   * Rating Score 조건 생성 (stored media_metadata.rating_score 기반)
    */
   private static async buildRatingScoreConditions(scoreFilter: { min_score?: number; max_score?: number }): Promise<QueryBuilderResult> {
     const conditions: string[] = [];
     const params: any[] = [];
 
-    // 가중치 설정 조회
-    const weights = await RatingScoreService.getWeights();
-
-    // RatingScoreService의 SQL 생성 함수 사용
-    const result = RatingScoreService.buildScoreFilterSQL(scoreFilter, weights);
+    const result = RatingScoreService.buildScoreFilterSQL(scoreFilter);
 
     if (result.condition) {
       conditions.push(result.condition);

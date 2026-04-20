@@ -1,9 +1,7 @@
 import type { ReactNode } from 'react'
-import { SectionHeading } from '@/components/common/section-heading'
-import { Card, CardContent } from '@/components/ui/card'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import type { KaloscopeServerStatus, TaggerDependencyCheckResult, TaggerServerStatus } from '@/types/settings'
-import { SettingsValueTile } from './settings-primitives'
+import { SettingsSection, SettingsValueTile } from './settings-primitives'
 
 interface AutoOverviewCardProps {
   heading: ReactNode
@@ -45,22 +43,19 @@ export function AutoOverviewCard({
   const kaloscopeReady = kaloscopeStatus ? kaloscopeStatus.scriptExists && kaloscopeStatus.dependenciesAvailable : null
 
   return (
-    <Card>
-      <CardContent className="space-y-4">
-        <SectionHeading variant="inside" heading={heading} actions={actions} />
-        <div className="grid gap-4 min-[900px]:grid-cols-4">
-          <SettingsValueTile label="loaded model" value={taggerStatus?.currentModel ?? '—'} />
-          <SettingsValueTile label="current device" value={taggerStatus?.currentDevice ?? '—'} />
-          <SettingsValueTile
-            label="wd tagger"
-            value={renderDependencyStatus({
-              ready: taggerDependencyResult?.available ?? null,
-              pending: isCheckingTaggerDependencies,
-            })}
-          />
-          <SettingsValueTile label="kaloscope" value={renderDependencyStatus({ ready: kaloscopeReady })} />
-        </div>
-      </CardContent>
-    </Card>
+    <SettingsSection heading={heading} actions={actions}>
+      <div className="grid gap-4 min-[900px]:grid-cols-4">
+        <SettingsValueTile label="loaded model" value={taggerStatus?.currentModel ?? '—'} />
+        <SettingsValueTile label="current device" value={taggerStatus?.currentDevice ?? '—'} />
+        <SettingsValueTile
+          label="wd tagger"
+          value={renderDependencyStatus({
+            ready: taggerDependencyResult?.available ?? null,
+            pending: isCheckingTaggerDependencies,
+          })}
+        />
+        <SettingsValueTile label="kaloscope" value={renderDependencyStatus({ ready: kaloscopeReady })} />
+      </div>
+    </SettingsSection>
   )
 }

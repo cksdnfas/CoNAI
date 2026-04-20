@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 
-/** Calculate a responsive masonry column count from the container width. */
+const IMAGE_LIST_PREFERRED_MIN_COLUMN_WIDTH = 52
+
+/** Calculate a responsive column count while allowing tighter user-chosen mobile layouts. */
 export function useImageListColumnCount(
   containerElement: HTMLElement | null,
   minColumnWidth: number,
   columnGap: number,
+  preferredColumnCount?: number | null,
 ) {
   const [columnCount, setColumnCount] = useState(1)
 
@@ -13,8 +16,13 @@ export function useImageListColumnCount(
 
     const updateColumnCount = () => {
       const width = containerElement.clientWidth
-      const effectiveWidth = Math.max(1, minColumnWidth + columnGap)
-      const nextColumnCount = Math.max(1, Math.floor((width + columnGap) / effectiveWidth))
+      const defaultEffectiveWidth = Math.max(1, minColumnWidth + columnGap)
+      const preferredEffectiveWidth = Math.max(1, Math.min(minColumnWidth, IMAGE_LIST_PREFERRED_MIN_COLUMN_WIDTH) + columnGap)
+      const maxFitColumnCount = Math.max(1, Math.floor((width + columnGap) / defaultEffectiveWidth))
+      const maxPreferredFitColumnCount = Math.max(1, Math.floor((width + columnGap) / preferredEffectiveWidth))
+      const nextColumnCount = preferredColumnCount && preferredColumnCount > 0
+        ? Math.min(maxPreferredFitColumnCount, preferredColumnCount)
+        : maxFitColumnCount
       setColumnCount(nextColumnCount)
     }
 
@@ -24,7 +32,7 @@ export function useImageListColumnCount(
     observer.observe(containerElement)
 
     return () => observer.disconnect()
-  }, [columnGap, containerElement, minColumnWidth])
+  }, [columnGap, containerElement, minColumnWidth, preferredColumnCount])
 
   return columnCount
 }

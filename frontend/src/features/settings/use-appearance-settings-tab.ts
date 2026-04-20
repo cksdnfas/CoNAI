@@ -4,7 +4,7 @@ import {
   updateAppearanceSettings,
   uploadAppearanceFont,
 } from '@/lib/api'
-import { DEFAULT_APPEARANCE_SETTINGS, applyAppearanceTheme } from '@/lib/appearance'
+import { DEFAULT_APPEARANCE_SETTINGS, applyAppearanceTheme, extractAppearanceTheme } from '@/lib/appearance'
 import { buildAppearancePackage, restoreAppearancePackage } from '@/lib/appearance-package'
 import type { AppearanceTabProps } from './components/appearance-tab.types'
 import type { AppearancePresetSlot, AppearanceSettings } from '@/types/settings'
@@ -110,10 +110,7 @@ export function useAppearanceSettingsTab({
 
   const handleAppearanceSave = () => {
     if (!effectiveAppearanceDraft) return
-    void appearanceMutation.mutateAsync({
-      ...effectiveAppearanceDraft,
-      presetSlots: normalizeAppearancePresetSlots(effectiveAppearanceDraft.presetSlots),
-    })
+    void appearanceMutation.mutateAsync(extractAppearanceTheme(effectiveAppearanceDraft))
   }
 
   const handleAppearanceExport = async () => {

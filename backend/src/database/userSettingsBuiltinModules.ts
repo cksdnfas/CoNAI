@@ -332,6 +332,71 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
   );
 
   upsertBuiltinModule(
+    '텍스트 합치기',
+    'A, B, C 텍스트를 순서대로 붙여서 하나의 텍스트로 만들어. A-B와 B-C 사이 구분자는 노드 안에서 바로 바꿀 수 있어.',
+    'utility',
+    [
+      {
+        key: 'text_a',
+        label: 'A',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        description: '첫 번째 텍스트 조각이야.',
+      },
+      {
+        key: 'text_b',
+        label: 'B',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        description: '두 번째 텍스트 조각이야.',
+      },
+      {
+        key: 'text_c',
+        label: 'C',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        description: '세 번째 텍스트 조각이야.',
+      },
+    ],
+    [
+      {
+        key: 'text',
+        label: '텍스트',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.merge_text' },
+    [
+      {
+        key: 'separator_ab',
+        label: 'A 뒤 문자열',
+        data_type: 'text',
+        default_value: ',',
+        placeholder: '예: , 또는 줄바꿈',
+        description: 'A 항목 뒤에 붙일 문자열이야.',
+      },
+      {
+        key: 'separator_bc',
+        label: 'B 뒤 문자열',
+        data_type: 'text',
+        default_value: ',',
+        placeholder: '예: , 또는 줄바꿈',
+        description: 'B 항목 뒤에 붙일 문자열이야.',
+      },
+    ],
+    '#4db6ac',
+  );
+
+  upsertBuiltinModule(
     '그룹 랜덤 프롬프트',
     '저장된 프롬프트 그룹에서 항목 하나를 뽑아 재사용 가능한 워크플로우 텍스트로 꺼내와.',
     'prompt',
@@ -755,6 +820,79 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
     { operation_key: 'system.final_result' },
     [],
     '#ffa726',
+  );
+
+  upsertBuiltinModule(
+    '텍스트 변환',
+    '텍스트, 프롬프트, JSON 같은 입력을 문자열로 정규화한 뒤 정규식 추출/치환과 접두어·접미어 조합으로 후처리해.',
+    'utility',
+    [
+      {
+        key: 'value',
+        label: '값',
+        direction: 'input',
+        data_type: 'any',
+        required: true,
+        multiple: false,
+        description: '텍스트, 프롬프트, JSON, 숫자 같은 업스트림 값을 문자열로 바꿔서 처리해.',
+      },
+    ],
+    [
+      {
+        key: 'text',
+        label: '변환 텍스트',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.regex_text_transform' },
+    [
+      {
+        key: 'mode',
+        label: '변환 방식',
+        data_type: 'select',
+        default_value: 'extract',
+        options: ['extract', 'replace'],
+      },
+      {
+        key: 'pattern',
+        label: '정규식',
+        data_type: 'text',
+        placeholder: '예: ^\s*([^,\n]+)',
+      },
+      {
+        key: 'flags',
+        label: '플래그',
+        data_type: 'text',
+        placeholder: '예: i 또는 gm',
+      },
+      {
+        key: 'replacement',
+        label: '치환 문자열',
+        data_type: 'text',
+        placeholder: '예: @$1,',
+      },
+      {
+        key: 'group_index',
+        label: '추출 그룹 번호',
+        data_type: 'number',
+      },
+      {
+        key: 'prefix',
+        label: '접두어',
+        data_type: 'text',
+        placeholder: '예: @',
+      },
+      {
+        key: 'suffix',
+        label: '접미어',
+        data_type: 'text',
+        placeholder: '예: ,',
+      },
+    ],
+    '#8d6e63',
   );
 
   upsertBuiltinModule(

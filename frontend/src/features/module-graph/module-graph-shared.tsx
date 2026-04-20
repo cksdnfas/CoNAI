@@ -50,6 +50,28 @@ export type ModuleGraphNodeData = {
 export type ModuleGraphNode = Node<ModuleGraphNodeData, 'module'>
 export type ModuleGraphEdge = Edge
 
+export type ModuleGraphClipboardNode = {
+  id: string
+  moduleId: number
+  position: { x: number; y: number }
+  label?: string
+  inputValues: Record<string, unknown>
+}
+
+export type ModuleGraphClipboardEdge = {
+  source: string
+  target: string
+  sourceHandle?: string | null
+  targetHandle?: string | null
+}
+
+export type ModuleGraphClipboardPayload = {
+  kind: 'conai/module-graph-selection'
+  version: 1
+  nodes: ModuleGraphClipboardNode[]
+  edges: ModuleGraphClipboardEdge[]
+}
+
 /** Parse a React Flow handle id and recover the port key. */
 export function parseHandleId(handleId?: string | null) {
   if (!handleId) {
@@ -66,6 +88,104 @@ export function parseHandleId(handleId?: string | null) {
 /** Build a stable React Flow handle id for module ports. */
 export function buildHandleId(direction: 'in' | 'out', portKey: string) {
   return `${direction}:${portKey}`
+}
+
+/** Build one stable node id for locally created editor nodes. */
+export function createModuleGraphNodeId() {
+  return `module-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** Build one stable edge id for locally created editor edges. */
+export function createModuleGraphEdgeId() {
+  return `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** Deep-clone graph input values so duplicated nodes never share mutable data. */
+export function cloneModuleGraphValue<T>(value: T): T {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(value)
+  }
+
+  if (value === undefined) {
+    return value
+  }
+
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+/** Build one clipboard payload from the currently selected nodes and their internal edges. */
+export function buildModuleGraphClipboardPayload(nodes: ModuleGraphNode[], edges: ModuleGraphEdge[]): ModuleGraphClipboardPayload {
+  const selectedNodeIds = new Set(nodes.map((node) => node.id))
+
+  return {
+    kind: 'conai/module-graph-selection',
+    version: 1,
+    nodes: nodes.map((node) => ({
+      id: node.id,
+      moduleId: node.data.module.id,
+      position: { x: node.position.x, y: node.position.y },
+      label: node.data.label,
+      inputValues: cloneModuleGraphValue(node.data.inputValues || {}),
+    })),
+    edges: edges
+      .filter((edge) => selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target))
+      .map((edge) => ({
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+      })),
+  }
+}
+
+/** Serialize one graph-selection clipboard payload into plain text. */
+export function serializeModuleGraphClipboardPayload(payload: ModuleGraphClipboardPayload) {
+  return JSON.stringify(payload)
+}
+
+/** Parse one graph-selection clipboard payload from plain text when it matches this editor format. */
+export function parseModuleGraphClipboardPayload(value: string): ModuleGraphClipboardPayload | null {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Partial<ModuleGraphClipboardPayload>
+    if (parsed.kind !== 'conai/module-graph-selection' || parsed.version !== 1 || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+      return null
+    }
+
+    const nodes = parsed.nodes.filter((node): node is ModuleGraphClipboardNode => (
+      typeof node?.id === 'string'
+      && typeof node?.moduleId === 'number'
+      && typeof node?.position?.x === 'number'
+      && typeof node?.position?.y === 'number'
+      && (node.label === undefined || typeof node.label === 'string')
+      && typeof node.inputValues === 'object'
+      && node.inputValues !== null
+      && !Array.isArray(node.inputValues)
+    ))
+
+    const edges = parsed.edges.filter((edge): edge is ModuleGraphClipboardEdge => (
+      typeof edge?.source === 'string'
+      && typeof edge?.target === 'string'
+      && (edge.sourceHandle === undefined || edge.sourceHandle === null || typeof edge.sourceHandle === 'string')
+      && (edge.targetHandle === undefined || edge.targetHandle === null || typeof edge.targetHandle === 'string')
+    ))
+
+    if (nodes.length === 0 || nodes.length !== parsed.nodes.length || edges.length !== parsed.edges.length) {
+      return null
+    }
+
+    return {
+      kind: 'conai/module-graph-selection',
+      version: 1,
+      nodes,
+      edges,
+    }
+  } catch {
+    return null
+  }
 }
 
 /** Read a local file into a data URL for graph input overrides. */
@@ -169,6 +289,9 @@ export function getModuleBaseDisplayName(module: ModuleDefinitionRecord) {
   if (operationKey === 'system.constant_boolean') {
     return '불리언'
   }
+  if (operationKey === 'system.merge_text') {
+    return '텍스트 합치기'
+  }
 
   return module.name
 }
@@ -223,6 +346,29 @@ export function getArtifactPreviewUrl(artifact: GraphExecutionArtifactRecord) {
   return buildApiUrl(`/temp${normalized.slice(markerIndex)}`)
 }
 
+type GraphArtifactPreviewLike = {
+  artifact_type: string
+  storage_path?: string | null
+  metadata?: string | null
+  source_storage_path?: string | null
+  source_metadata?: string | null
+}
+
+const GRAPH_ARTIFACT_MEDIA_EXTENSION_MIME_MAP: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.avi': 'video/x-msvideo',
+  '.mkv': 'video/x-matroska',
+}
+
 /** Parse a JSON-ish metadata string into an inspectable value. */
 export function parseMetadataValue(value?: string | null) {
   if (!value) {
@@ -234,6 +380,64 @@ export function parseMetadataValue(value?: string | null) {
   } catch {
     return value
   }
+}
+
+/** Normalize artifact metadata into one object record when it stores structured fields. */
+export function parseArtifactMetadataRecord(value?: string | null) {
+  const metadata = parseMetadataValue(value)
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : null
+}
+
+/** Infer one media MIME type from the stored artifact file extension. */
+export function inferArtifactMimeTypeFromPath(path?: string | null) {
+  if (!path) {
+    return null
+  }
+
+  const normalized = path.replace(/\\/g, '/').toLowerCase()
+  const lastDotIndex = normalized.lastIndexOf('.')
+  if (lastDotIndex === -1) {
+    return null
+  }
+
+  return GRAPH_ARTIFACT_MEDIA_EXTENSION_MIME_MAP[normalized.slice(lastDotIndex)] ?? null
+}
+
+/** Resolve the best available MIME type for one stored execution artifact or final-result source. */
+export function resolveGraphArtifactMimeType(artifact: GraphArtifactPreviewLike) {
+  const metadataValue = artifact.source_metadata ?? artifact.metadata
+  const storagePath = artifact.source_storage_path ?? artifact.storage_path
+  const metadata = parseArtifactMetadataRecord(metadataValue)
+  const metadataMimeType = typeof metadata?.mimeType === 'string'
+    ? metadata.mimeType
+    : (typeof metadata?.mime_type === 'string' ? metadata.mime_type : null)
+
+  if (metadataMimeType?.trim()) {
+    return metadataMimeType
+  }
+
+  if (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') {
+    return inferArtifactMimeTypeFromPath(storagePath) ?? 'image/png'
+  }
+
+  return inferArtifactMimeTypeFromPath(storagePath)
+}
+
+/** Check whether one artifact should render through the shared inline media preview. */
+export function isGraphArtifactVisualMedia(artifact: GraphArtifactPreviewLike) {
+  const mimeType = resolveGraphArtifactMimeType(artifact)
+  if (mimeType?.startsWith('image/') || mimeType?.startsWith('video/')) {
+    return true
+  }
+
+  return artifact.artifact_type === 'image' || artifact.artifact_type === 'mask'
+}
+
+/** Check whether one execution artifact has a usable visual preview URL and media type. */
+export function hasGraphArtifactVisualPreview(artifact: GraphExecutionArtifactRecord) {
+  return Boolean(getArtifactPreviewUrl(artifact) && isGraphArtifactVisualMedia(artifact))
 }
 
 /** Recover the structured value payload stored inside one execution artifact metadata blob. */
@@ -283,9 +487,7 @@ export function buildArtifactTextPreview(artifact: GraphExecutionArtifactRecord,
 
 /** Pick the most useful inline preview payload for one node artifact list. */
 export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord[]) {
-  const latestVisualArtifact = [...artifacts]
-    .reverse()
-    .find((artifact) => (artifact.artifact_type === 'image' || artifact.artifact_type === 'mask') && getArtifactPreviewUrl(artifact))
+  const latestVisualArtifact = artifacts.find((artifact) => hasGraphArtifactVisualPreview(artifact))
 
   if (latestVisualArtifact) {
     return {
@@ -296,8 +498,7 @@ export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord
     }
   }
 
-  const latestTextArtifact = [...artifacts]
-    .reverse()
+  const latestTextArtifact = artifacts
     .find((artifact) => artifact.artifact_type === 'prompt' || artifact.artifact_type === 'text' || artifact.artifact_type === 'json' || artifact.artifact_type === 'number' || artifact.artifact_type === 'boolean')
 
   if (latestTextArtifact) {

@@ -1,10 +1,9 @@
 import { db } from '../database/init';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { FileVerificationService } from './fileVerificationService';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
-import { runtimePaths } from '../config/runtimePaths';
+import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 
 /**
  * 썸네일 재생성 결과
@@ -35,6 +34,7 @@ export interface ThumbnailRegenerationProgress {
 interface ImageFileRecord {
   composite_hash: string;
   original_file_path: string;
+  file_type: 'image' | 'video' | 'animated';
 }
 
 interface MediaMetadataRecord {
@@ -44,7 +44,9 @@ interface MediaMetadataRecord {
 
 /**
  * 썸네일 재생성 서비스
- * - 파일 검증 실행 → 기존 썸네일 삭제 → media_metadata에서 썸네일 항목 삭제 → 썸네일 재생성
+ * - 파일 검증 실행
+ * - 원본이 실제로 존재하는 정적 이미지의 썸네일만 삭제/재생성
+ * - 원본 없는 이미지가 기존 썸네일만 유지하는 경우는 건드리지 않음
  */
 export class ThumbnailRegenerationService {
   private static readonly BATCH_SIZE = 20;
@@ -77,7 +79,6 @@ export class ThumbnailRegenerationService {
     try {
       console.log('🔄 썸네일 재생성 시작...');
 
-      // Phase 1: 파일 검증 실행
       console.log('📋 Phase 1: 파일 검증 실행...');
       this.currentProgress = {
         totalFiles: 0,
@@ -91,24 +92,26 @@ export class ThumbnailRegenerationService {
       await FileVerificationService.verifyAllFiles();
       console.log('✅ Phase 1: 파일 검증 완료');
 
-      // Phase 2: 기존 썸네일 삭제 및 DB 정리
       console.log('🗑️  Phase 2: 기존 썸네일 삭제 및 DB 정리...');
       this.currentProgress.currentPhase = 'deletion';
 
-      // image_files에 있는 composite_hash 목록 조회
-      const imageFileHashes = db
+      const imageFiles = db
         .prepare(`
-          SELECT DISTINCT composite_hash
+          SELECT DISTINCT composite_hash, original_file_path, file_type
           FROM image_files
           WHERE composite_hash IS NOT NULL
-          AND file_status = 'active'
+            AND file_status = 'active'
+            AND file_type = 'image'
+          ORDER BY composite_hash ASC
         `)
-        .all() as { composite_hash: string }[];
+        .all() as ImageFileRecord[];
 
-      const validHashes = new Set(imageFileHashes.map(row => row.composite_hash));
-      console.log(`  📊 유효한 해시: ${validHashes.size}개`);
+      const filesWithExistingOriginals = imageFiles.filter((file) =>
+        fs.existsSync(resolveUploadsPath(file.original_file_path))
+      );
+      const validHashes = new Set(filesWithExistingOriginals.map((row) => row.composite_hash));
+      console.log(`  📊 썸네일 재생성 대상 해시: ${validHashes.size}개`);
 
-      // media_metadata에서 썸네일이 있는 항목 조회
       const metadataWithThumbnails = db
         .prepare(`
           SELECT composite_hash, thumbnail_path
@@ -119,12 +122,13 @@ export class ThumbnailRegenerationService {
 
       console.log(`  📊 썸네일이 있는 메타데이터: ${metadataWithThumbnails.length}개`);
 
-      // 유효한 해시에 해당하는 썸네일만 삭제
       for (const metadata of metadataWithThumbnails) {
         if (validHashes.has(metadata.composite_hash) && metadata.thumbnail_path) {
           try {
-            // 썸네일 파일 삭제 (temp 폴더 기준 상대 경로)
-            const absolutePath = path.join(runtimePaths.tempDir, metadata.thumbnail_path);
+            const absolutePath = path.isAbsolute(metadata.thumbnail_path)
+              ? metadata.thumbnail_path
+              : path.join(runtimePaths.tempDir, metadata.thumbnail_path);
+
             if (fs.existsSync(absolutePath)) {
               fs.unlinkSync(absolutePath);
               thumbnailsDeleted++;
@@ -140,7 +144,6 @@ export class ThumbnailRegenerationService {
         }
       }
 
-      // media_metadata에서 썸네일 경로 제거 (유효한 해시만)
       const deleteStmt = db.prepare(`
         UPDATE media_metadata
         SET thumbnail_path = NULL
@@ -153,33 +156,16 @@ export class ThumbnailRegenerationService {
 
       console.log(`✅ Phase 2: 썸네일 삭제 및 DB 정리 완료 (삭제: ${thumbnailsDeleted}개)`);
 
-      // Phase 3: 썸네일 재생성
       console.log('🖼️  Phase 3: 썸네일 재생성...');
       this.currentProgress.currentPhase = 'generation';
+      this.currentProgress.totalFiles = filesWithExistingOriginals.length;
 
-      // image_files의 원본 파일 기반으로 썸네일 재생성
-      const imageFiles = db
-        .prepare(`
-          SELECT DISTINCT composite_hash, original_file_path
-          FROM image_files
-          WHERE composite_hash IS NOT NULL
-          AND file_status = 'active'
-          ORDER BY composite_hash ASC
-        `)
-        .all() as ImageFileRecord[];
-
-      console.log(`  📊 총 ${imageFiles.length}개 파일의 썸네일 재생성 예정`);
-
-      this.currentProgress.totalFiles = imageFiles.length;
-
-      // 배치 단위로 처리
-      for (let i = 0; i < imageFiles.length; i += this.BATCH_SIZE) {
-        const batch = imageFiles.slice(i, i + this.BATCH_SIZE);
+      for (let i = 0; i < filesWithExistingOriginals.length; i += this.BATCH_SIZE) {
+        const batch = filesWithExistingOriginals.slice(i, i + this.BATCH_SIZE);
         const batchResults = await Promise.allSettled(
           batch.map((file) => this.regenerateThumbnail(file))
         );
 
-        // 결과 집계
         batchResults.forEach((result, index) => {
           const file = batch[index];
           totalProcessed++;
@@ -197,22 +183,20 @@ export class ThumbnailRegenerationService {
           }
         });
 
-        // 진행 상황 로그
-        if ((i + this.BATCH_SIZE) % 100 === 0 || i + this.BATCH_SIZE >= imageFiles.length) {
+        if ((i + this.BATCH_SIZE) % 100 === 0 || i + this.BATCH_SIZE >= filesWithExistingOriginals.length) {
           console.log(
-            `  ⏳ 진행: ${totalProcessed}/${imageFiles.length} (생성: ${thumbnailsGenerated}개)`
+            `  ⏳ 진행: ${totalProcessed}/${filesWithExistingOriginals.length} (생성: ${thumbnailsGenerated}개)`
           );
         }
 
-        // 배치 간 짧은 대기 (시스템 부하 방지)
-        if (i + this.BATCH_SIZE < imageFiles.length) {
+        if (i + this.BATCH_SIZE < filesWithExistingOriginals.length) {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
       }
 
       const duration = Date.now() - startTime;
 
-      console.log(`✅ 썸네일 재생성 완료`);
+      console.log('✅ 썸네일 재생성 완료');
       console.log(`  📊 총 처리: ${totalProcessed}개`);
       console.log(`  🗑️  삭제된 썸네일: ${thumbnailsDeleted}개`);
       console.log(`  🖼️  생성된 썸네일: ${thumbnailsGenerated}개`);
@@ -233,7 +217,6 @@ export class ThumbnailRegenerationService {
       throw error;
     } finally {
       this.isRunning = false;
-      // Reset progress after 5 seconds
       setTimeout(() => {
         this.currentProgress = {
           totalFiles: 0,
@@ -252,19 +235,17 @@ export class ThumbnailRegenerationService {
    */
   private static async regenerateThumbnail(file: ImageFileRecord): Promise<boolean> {
     try {
-      // 원본 파일 존재 확인
-      if (!fs.existsSync(file.original_file_path)) {
+      const originalPath = resolveUploadsPath(file.original_file_path);
+      if (!fs.existsSync(originalPath)) {
         console.warn(`  ⚠️  원본 파일 없음: ${file.original_file_path}`);
         return false;
       }
 
-      // ThumbnailGenerator를 사용하여 썸네일 생성 (temp/thumbnails/{날짜}/{해시}.webp 형식)
       const thumbnailPath = await ThumbnailGenerator.generateThumbnail(
-        file.original_file_path,
+        originalPath,
         file.composite_hash
       );
 
-      // media_metadata 업데이트 (DB 저장용 상대 경로)
       db.prepare(`
         UPDATE media_metadata
         SET thumbnail_path = ?

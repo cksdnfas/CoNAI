@@ -58,7 +58,7 @@ export function PromptSidebar({
       className={cn('sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}
       bodyClassName="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
       headerExtra={
-        <div className="flex flex-wrap gap-2 border-b border-white/5 pb-3">
+        <div className="flex flex-wrap justify-end gap-2 border-b border-white/5 pb-3">
           <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} aria-label="상태" title="상태">
             <BarChart3 className="h-4 w-4" />
           </Button>
@@ -97,7 +97,7 @@ export function PromptSidebar({
           <PromptTree groups={groups} selectedGroupId={selectedGroupId} totalCount={totalCount} onSelectGroup={onSelectGroup} />
 
           <div className="border-t border-white/5 pt-3">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp} aria-label="위로 이동" title="위로 이동">
                 <ChevronUp className="h-4 w-4" />
               </Button>

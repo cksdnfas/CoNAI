@@ -96,7 +96,11 @@ export type NAIFormDraft = {
   maskImage?: SelectedImageDraft
 }
 
-export type WorkflowFieldDraftValue = string | SelectedImageDraft
+export type WorkflowTextDraftSegments = string[]
+
+export type WorkflowNodeDraftValue = Record<string, unknown>
+
+export type WorkflowFieldDraftValue = string | WorkflowTextDraftSegments | SelectedImageDraft | WorkflowNodeDraftValue
 
 export type ComfyUIServerFormDraft = {
   name: string
@@ -350,24 +354,102 @@ function buildComfyWorkflowDraftStorageKey(workflowId: number) {
   return `${COMFY_WORKFLOW_DRAFT_STORAGE_KEY_PREFIX}${workflowId}`
 }
 
+/** Check whether one stored draft value is a string-array textarea payload. */
+function isWorkflowTextDraftSegments(value: unknown): value is WorkflowTextDraftSegments {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+/** Keep at least one visible textarea segment even when the stored value is empty. */
+function normalizeWorkflowTextDraftSegments(value: unknown): WorkflowTextDraftSegments {
+  if (isWorkflowTextDraftSegments(value)) {
+    return value.length > 0 ? value : ['']
+  }
+
+  if (typeof value === 'string') {
+    return [value]
+  }
+
+  return ['']
+}
+
+function isSelectedImageDraft(value: unknown): value is SelectedImageDraft {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return typeof record.fileName === 'string' && typeof record.dataUrl === 'string'
+}
+
+function isWorkflowNodeDraftValue(value: unknown): value is WorkflowNodeDraftValue {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && !isSelectedImageDraft(value)
+}
+
+function cloneWorkflowNodeDraftValue(value: WorkflowNodeDraftValue): WorkflowNodeDraftValue {
+  return JSON.parse(JSON.stringify(value)) as WorkflowNodeDraftValue
+}
+
+/** Normalize one prompt segment before comma-joining it for API submission. */
+function normalizeWorkflowPromptSegment(value: string) {
+  return value
+    .trim()
+    .replace(/^[,\s]+/, '')
+    .replace(/[,\s]+$/, '')
+    .trim()
+}
+
+/** Join textarea segments into one API-safe comma-separated prompt string. */
+export function joinWorkflowPromptSegments(segments: WorkflowTextDraftSegments) {
+  return segments
+    .map(normalizeWorkflowPromptSegment)
+    .filter((segment) => segment.length > 0)
+    .join(', ')
+}
+
+/** Restore one persisted draft value in the shape expected by the current field type. */
+function normalizeWorkflowDraftValue(field: WorkflowMarkedField, value: unknown): WorkflowFieldDraftValue {
+  if (field.type === 'textarea') {
+    return normalizeWorkflowTextDraftSegments(value)
+  }
+
+  if (field.type === 'node') {
+    return isWorkflowNodeDraftValue(value) ? cloneWorkflowNodeDraftValue(value) : {}
+  }
+
+  if (field.type === 'image') {
+    return isSelectedImageDraft(value) ? value : ''
+  }
+
+  return typeof value === 'string' ? value : ''
+}
+
 /** Restore one persisted Comfy workflow draft, limited to text/select/number fields. */
-export function loadPersistedComfyWorkflowDraft(workflowId: number): Record<string, WorkflowFieldDraftValue> {
+export function loadPersistedComfyWorkflowDraft(workflowId: number, fields?: WorkflowMarkedField[]): Record<string, WorkflowFieldDraftValue> {
   const rawValue = readLocalStorageJson<Record<string, unknown>>(buildComfyWorkflowDraftStorageKey(workflowId))
   if (!rawValue) {
     return {}
   }
 
+  const persistedEntries = Object.entries(rawValue)
+    .filter(([, value]) => typeof value === 'string' || isWorkflowTextDraftSegments(value) || isWorkflowNodeDraftValue(value))
+
+  if (!fields) {
+    return Object.fromEntries(persistedEntries) as Record<string, WorkflowFieldDraftValue>
+  }
+
+  const fieldMap = new Map(fields.map((field) => [field.id, field]))
   return Object.fromEntries(
-    Object.entries(rawValue)
-      .filter(([, value]) => typeof value === 'string')
-      .map(([fieldId, value]) => [fieldId, value as WorkflowFieldDraftValue]),
+    persistedEntries.flatMap(([fieldId, value]) => {
+      const field = fieldMap.get(fieldId)
+      return field ? [[fieldId, normalizeWorkflowDraftValue(field, value)]] : []
+    }),
   ) as Record<string, WorkflowFieldDraftValue>
 }
 
 /** Persist one Comfy workflow draft, skipping image payload fields. */
 export function persistComfyWorkflowDraft(workflowId: number, draft: Record<string, WorkflowFieldDraftValue>) {
   const persistableDraft = Object.fromEntries(
-    Object.entries(draft).filter(([, value]) => typeof value === 'string'),
+    Object.entries(draft).filter(([, value]) => typeof value === 'string' || isWorkflowTextDraftSegments(value) || isWorkflowNodeDraftValue(value)),
   )
 
   writeLocalStorageJson(buildComfyWorkflowDraftStorageKey(workflowId), persistableDraft)
@@ -403,8 +485,7 @@ export function formatHistoryDate(value?: string | null) {
 /** Build the initial draft object for workflow marked fields. */
 export function buildWorkflowDraft(fields: WorkflowMarkedField[]) {
   return fields.reduce<Record<string, WorkflowFieldDraftValue>>((draft, field) => {
-    const defaultValue = field.default_value
-    draft[field.id] = defaultValue === undefined || defaultValue === null ? '' : String(defaultValue)
+    draft[field.id] = normalizeWorkflowDraftValue(field, field.default_value)
     return draft
   }, {})
 }
@@ -469,24 +550,40 @@ export function hasWorkflowFieldValue(value: WorkflowFieldDraftValue | undefined
     return false
   }
 
+  if (Array.isArray(value)) {
+    return joinWorkflowPromptSegments(value).length > 0
+  }
+
   if (typeof value === 'string') {
     return value.trim().length > 0
   }
 
-  return value.dataUrl.trim().length > 0
+  if (isSelectedImageDraft(value)) {
+    return value.dataUrl.trim().length > 0
+  }
+
+  return Object.keys(value).length > 0
 }
 
 /** Convert workflow field input strings into the payload expected by the backend. */
 export function buildWorkflowPromptData(fields: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>) {
-  return fields.reduce<Record<string, string | number | SelectedImageDraft>>((payload, field) => {
+  return fields.reduce<Record<string, unknown>>((payload, field) => {
     const value = draft[field.id]
 
     if (!hasWorkflowFieldValue(value)) {
       return payload
     }
 
+    if (Array.isArray(value)) {
+      const joinedValue = joinWorkflowPromptSegments(value)
+      if (joinedValue.length > 0) {
+        payload[field.id] = joinedValue
+      }
+      return payload
+    }
+
     if (typeof value !== 'string') {
-      payload[field.id] = value
+      payload[field.id] = isWorkflowNodeDraftValue(value) ? cloneWorkflowNodeDraftValue(value) : value
       return payload
     }
 
@@ -512,6 +609,22 @@ export function resolveHistoryImageSource(record: GenerationHistoryRecord) {
   }
 }
 
+/** Resolve the effective history display status for list surfaces.
+ * A completed history without a linked main-image record is still treated as in-flight,
+ * because thumbnail/detail routes are not ready yet and should not look like a real failure.
+ */
+export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): GenerationHistoryRecord['generation_status'] {
+  if (record.generation_status === 'failed') {
+    return 'failed'
+  }
+
+  if (record.generation_status === 'pending' || record.generation_status === 'processing') {
+    return record.generation_status
+  }
+
+  return record.actual_composite_hash ? 'completed' : 'processing'
+}
+
 /** Resolve the most useful image detail route for a history item. */
 export function getHistoryDetailHref(record: GenerationHistoryRecord) {
   return resolveHistoryImageSource(record).detailHref
@@ -525,8 +638,8 @@ export function getHistoryServiceLabel(serviceType: GenerationServiceType) {
 /** Resolve a compact label for the history status badge. */
 export function getHistoryStatusLabel(status: GenerationHistoryRecord['generation_status']) {
   if (status === 'completed') return '완료'
-  if (status === 'failed') return '실패'
-  if (status === 'processing') return '처리 중'
+  if (status === 'failed') return '생성 실패'
+  if (status === 'processing') return '작업 중'
   return '대기 중'
 }
 

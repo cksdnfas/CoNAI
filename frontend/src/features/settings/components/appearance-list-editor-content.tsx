@@ -37,7 +37,7 @@ export function AppearanceListEditorContent({
       </section>
 
       <section className="space-y-4">
-        <EditorSectionLead title="유사 / 중복 이미지" />
+        <EditorSectionLead title="상세페이지 유사 / 중복 이미지" />
         <div className="grid gap-4 lg:grid-cols-2">
           <RelatedImageColumnSlider
             label="모바일 한 줄 카드 수"

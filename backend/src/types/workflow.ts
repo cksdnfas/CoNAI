@@ -24,7 +24,9 @@ export interface MarkedField {
   label: string; // 사용자에게 표시될 라벨 (예: "Positive Prompt")
   description?: string; // 필드 사용 가이드 (MCP 및 사용자용)
   jsonPath: string; // JSON 경로 (예: "6.inputs.text")
-  type: 'text' | 'number' | 'select' | 'textarea' | 'image';
+  type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'node';
+  default_collapsed?: boolean;
+  simple_upload_only?: boolean;
   default_value?: any;
   placeholder?: string;
   dropdown_list_name?: string; // 커스텀 드롭다운 목록 이름 (참조)
@@ -32,6 +34,14 @@ export interface MarkedField {
   required?: boolean;
   min?: number; // number 타입인 경우 최소값
   max?: number; // number 타입인 경우 최대값
+  step?: number; // number 타입인 경우 증감 단위
+  node_class_type?: string;
+  node_editor?: 'power_lora_loader_rgthree';
+  node_items?: Array<{
+    key: string;
+    label: string;
+    lora?: string;
+  }>;
 }
 
 /**
@@ -81,14 +91,20 @@ export interface ComfyUIPromptResponse {
   node_errors?: Record<string, any>;
 }
 
+export interface ComfyUIOutputFile {
+  filename: string;
+  subfolder: string;
+  type: string;
+  format?: string;
+}
+
 export interface ComfyUIHistoryItem {
   prompt: any[];
   outputs: Record<string, {
-    images?: Array<{
-      filename: string;
-      subfolder: string;
-      type: string;
-    }>;
+    images?: ComfyUIOutputFile[];
+    gifs?: ComfyUIOutputFile[];
+    videos?: ComfyUIOutputFile[];
+    files?: ComfyUIOutputFile[];
   }>;
   status: {
     status_str: string;

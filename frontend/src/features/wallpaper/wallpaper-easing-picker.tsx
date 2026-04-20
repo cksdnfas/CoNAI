@@ -4,7 +4,7 @@ import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
-import { SettingsField } from '@/features/settings/components/settings-primitives'
+import { SettingsField, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { cn } from '@/lib/utils'
 import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset } from './wallpaper-types'
@@ -763,14 +763,14 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
             </div>
           )}
 
-          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+          <SettingsModalFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               취소
             </Button>
             <Button type="button" onClick={handleApplySelection}>
               저장
             </Button>
-          </div>
+          </SettingsModalFooter>
         </div>
       </SettingsModal>
     </>

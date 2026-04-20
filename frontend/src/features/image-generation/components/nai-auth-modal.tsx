@@ -2,6 +2,7 @@ import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { FormField } from '../image-generation-shared'
 import type { NaiLoginMode } from './use-nai-auth-controller'
 
@@ -49,7 +50,7 @@ export function NaiAuthModal({
       description="계정 로그인 또는 access token 저장으로 연결할 수 있어. 토큰은 서버에 저장돼."
       widthClassName="max-w-2xl"
     >
-      <div className="space-y-4">
+      <SettingsModalBody>
         <SegmentedTabBar
           value={loginMode}
           items={[
@@ -83,12 +84,15 @@ export function NaiAuthModal({
 
         {showStatusHint ? <div className="text-xs text-[#ffb4ab]">{connectionHint}</div> : null}
 
-        <div className="flex justify-end border-t border-border/70 pt-4">
+        <SettingsModalFooter className="justify-between">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+            취소
+          </Button>
           <Button type="button" onClick={onSubmit} disabled={submitDisabled}>
             {isSubmitting ? '연결 중…' : loginMode === 'account' ? '로그인' : '토큰 저장'}
           </Button>
-        </div>
-      </div>
+        </SettingsModalFooter>
+      </SettingsModalBody>
     </SettingsModal>
   )
 }

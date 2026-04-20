@@ -20,6 +20,7 @@ import {
   type GenerationWorkflowDetail,
 } from '@/lib/api'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
+import { cn } from '@/lib/utils'
 import type { ImageSaveSettings } from '@/types/settings'
 import {
   buildWorkflowDraft,
@@ -44,7 +45,9 @@ type ComfyGenerationPanelProps = {
   onHistoryRefresh: () => void
   selectedWorkflowId: number | null
   onSelectedWorkflowChange: (workflowId: number | null) => void
+  splitPaneScroll?: boolean
   headerPortalTargetId?: string
+  compactActionBarContentTargetId?: string
 }
 
 type ComfyWorkflowEditorState = {
@@ -57,7 +60,9 @@ export function ComfyGenerationPanel({
   onHistoryRefresh,
   selectedWorkflowId,
   onSelectedWorkflowChange,
+  splitPaneScroll = false,
   headerPortalTargetId,
+  compactActionBarContentTargetId,
 }: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
@@ -189,7 +194,7 @@ export function ComfyGenerationPanel({
     moduleSaveWorkflowFields.map((field) => ({
       key: field.id,
       label: field.label,
-      dataType: field.type === 'number' ? 'number' : field.type === 'image' ? 'image' : 'text',
+      dataType: field.type === 'number' ? 'number' : field.type === 'image' ? 'image' : field.type === 'node' ? 'json' : 'text',
       options: field.options,
     }))
   ), [moduleSaveWorkflowFields])
@@ -213,7 +218,7 @@ export function ComfyGenerationPanel({
     }
 
     const baseDraft = buildWorkflowDraft(selectedWorkflowFields)
-    const persistedDraft = loadPersistedComfyWorkflowDraft(selectedWorkflow.id)
+    const persistedDraft = loadPersistedComfyWorkflowDraft(selectedWorkflow.id, selectedWorkflowFields)
     const validFieldIds = new Set(selectedWorkflowFields.map((field) => field.id))
     const filteredPersistedDraft = Object.fromEntries(
       Object.entries(persistedDraft).filter(([fieldId]) => validFieldIds.has(fieldId)),
@@ -448,7 +453,7 @@ export function ComfyGenerationPanel({
 
   return (
     <>
-      <div className="space-y-5">
+      <div className={cn(splitPaneScroll && selectedWorkflowId !== null ? 'flex min-h-0 flex-1 flex-col gap-5' : 'space-y-5')}>
         {workflowsQuery.isError ? (
           <Alert variant="destructive">
             <AlertTitle>워크플로우를 불러오지 못했어</AlertTitle>
@@ -511,7 +516,9 @@ export function ComfyGenerationPanel({
             workflowDraft={workflowDraft}
             queueRegistrationCount={queueRegistrationCount}
             isGenerating={isComfyGenerating}
+            splitPaneScroll={splitPaneScroll}
             headerPortalTargetId={headerPortalTargetId}
+            compactActionBarContentTargetId={compactActionBarContentTargetId}
             onBack={() => onSelectedWorkflowChange(null)}
             onSelectTarget={setSelectedTarget}
             onQueueRegistrationCountChange={setQueueRegistrationCount}

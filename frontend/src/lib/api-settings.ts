@@ -83,6 +83,18 @@ export interface WallpaperRuntimeSettings {
   wallpaperActivePresetId: string | null
 }
 
+export interface FileVerificationRunResult {
+  totalChecked: number
+  missingFound: number
+  deletedRecords: number
+  duration: number
+  errors: Array<{
+    fileId: number
+    filePath: string
+    error: string
+  }>
+}
+
 export async function getAppSettings() {
   const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings')
   if (!response.success) {
@@ -99,12 +111,40 @@ export async function getPublicAppearanceSettings() {
   return response.data
 }
 
+export async function getRuntimeAppearanceSettings() {
+  const response = await fetchJson<ApiResponse<AppearanceSettings>>('/api/runtime-appearance')
+  if (!response.success) {
+    throw new Error(response.error || '런타임 테마 설정을 불러오지 못했어.')
+  }
+  return response.data
+}
+
+export async function getRuntimeSimilaritySettings() {
+  const response = await fetchJson<ApiResponse<SimilaritySettings>>('/api/runtime-media-settings/similarity')
+  if (!response.success) {
+    throw new Error(response.error || '런타임 유사도 설정을 불러오지 못했어.')
+  }
+  return response.data
+}
+
 export async function getWallpaperRuntimeSettings() {
   const response = await fetchJson<ApiResponse<WallpaperRuntimeSettings>>('/api/wallpaper-runtime/settings')
   if (!response.success) {
     throw new Error(response.error || '월페이퍼 라이브 설정을 불러오지 못했어.')
   }
   return response.data
+}
+
+export async function runFileVerification() {
+  const response = await fetchJson<{ success: boolean; result?: FileVerificationRunResult; error?: string }>('/api/file-verification/verify', {
+    method: 'POST',
+  })
+
+  if (!response.success || !response.result) {
+    throw new Error(response.error || '파일 검증을 실행하지 못했어.')
+  }
+
+  return response.result
 }
 
 export async function updateMetadataSettings(settings: Partial<MetadataExtractionSettings>) {

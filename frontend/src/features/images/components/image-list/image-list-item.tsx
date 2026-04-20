@@ -5,9 +5,11 @@ import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/
 import { ImageEditAction } from '@/features/images/components/detail/image-edit-action'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
+import { ImageListVideoPreview } from './image-list-video-preview'
 import {
   getImageListDisplayName,
   getImageListItemId,
+  getImageListMediaKind,
   getImageListPreviewUrl,
 } from './image-list-utils'
 
@@ -48,6 +50,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   const imageId = itemId ?? getImageListItemId(image)
   const displayName = getImageListDisplayName(image)
   const [hasPreviewError, setHasPreviewError] = useState(false)
+  const mediaKind = getImageListMediaKind(image)
   const aspectRatio = image.width && image.height ? `${image.width} / ${image.height}` : undefined
   const mediaFrameStyle = gridItemHeight
     ? { height: gridItemHeight }
@@ -69,16 +72,27 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   const placeholderLabel = getImagePreviewStateLabel(previewState)
 
   const content = previewUrl && !hasPreviewError ? (
-    <ImagePreviewMedia
-      image={image}
-      alt={displayName}
-      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-      style={mediaFrameStyle}
-      loading="lazy"
-      draggable={false}
-      onDragStart={preventNativeDrag}
-      onError={() => setHasPreviewError(true)}
-    />
+    mediaKind === 'video' ? (
+      <ImageListVideoPreview
+        image={image}
+        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+        style={mediaFrameStyle}
+        draggable={false}
+        onDragStart={preventNativeDrag}
+        onError={() => setHasPreviewError(true)}
+      />
+    ) : (
+      <ImagePreviewMedia
+        image={image}
+        alt={displayName}
+        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+        style={mediaFrameStyle}
+        loading="lazy"
+        draggable={false}
+        onDragStart={preventNativeDrag}
+        onError={() => setHasPreviewError(true)}
+      />
+    )
   ) : (
     <ImagePreviewPlaceholder
       label={placeholderLabel}
@@ -131,7 +145,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
         </div>
         {blurPreview ? <div className="pointer-events-none absolute inset-0 z-10 bg-black/18" /> : null}
       </div>
-      {renderPersistentOverlay ? <div className="absolute inset-x-0 bottom-0 z-30 p-2">{renderPersistentOverlay}</div> : null}
+      {renderPersistentOverlay ? <div className="image-list-persistent-overlay absolute inset-x-0 bottom-0 z-30 p-2">{renderPersistentOverlay}</div> : null}
       {quickActions}
       <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
     </div>

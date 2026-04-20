@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { FormField, type ComfyUIServerFormDraft } from '../image-generation-shared'
 
 type ComfyServerRegistrationModalProps = {
@@ -29,7 +30,7 @@ export function ComfyServerRegistrationModal({
 
   return (
     <SettingsModal open={open} onClose={onClose} title={title} widthClassName="max-w-2xl">
-      <div className="space-y-4">
+      <SettingsModalBody>
         <div className="grid gap-3 md:grid-cols-2">
           <FormField label="Name">
             <Input value={form.name} onChange={(event) => onFieldChange('name', event.target.value)} placeholder="Local ComfyUI" />
@@ -47,7 +48,7 @@ export function ComfyServerRegistrationModal({
           <Input value={form.routingTags} onChange={(event) => onFieldChange('routingTags', event.target.value)} placeholder="gpu4090, high-vram, fast-lane" />
         </FormField>
 
-        <div className="flex justify-end gap-2 border-t border-border/70 pt-4">
+        <SettingsModalFooter>
           <Button type="button" variant="ghost" onClick={onReset} disabled={isSubmitting}>
             초기화
           </Button>
@@ -57,8 +58,8 @@ export function ComfyServerRegistrationModal({
           <Button type="button" onClick={onSubmit} disabled={isSubmitting || form.name.trim().length === 0 || form.endpoint.trim().length === 0}>
             {isSubmitting ? '저장 중…' : submitLabel}
           </Button>
-        </div>
-      </div>
+        </SettingsModalFooter>
+      </SettingsModalBody>
     </SettingsModal>
   )
 }

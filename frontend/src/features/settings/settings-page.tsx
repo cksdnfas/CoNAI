@@ -55,7 +55,7 @@ const ImageSaveTabLazy = lazy(async () => {
 type AppSettingsRecord = Awaited<ReturnType<typeof getAppSettings>>
 
 function SettingsSectionFallback() {
-  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+  return <div className="min-h-[16rem] rounded-sm border border-border/80 bg-surface-low/50 animate-pulse" />
 }
 
 /** Keep the settings page as a composition root for tab-level state and access. */
@@ -85,6 +85,8 @@ export function SettingsPage() {
 
   const syncSettingsCache = (nextSettings: AppSettingsRecord) => {
     queryClient.setQueryData(['app-settings'], nextSettings)
+    queryClient.setQueryData(['runtime-appearance-settings'], nextSettings.appearance)
+    queryClient.setQueryData(['runtime-appearance'], nextSettings.appearance)
   }
 
   const refreshAutoQueries = async () => {
@@ -167,10 +169,10 @@ export function SettingsPage() {
     <div className="space-y-6">
       <PageHeader title="설정" />
 
-      <div className={cn('grid gap-8', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
+      <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[248px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />
 
-        <section className="space-y-8">
+        <section className="space-y-6">
           <Suspense fallback={<SettingsSectionFallback />}>
             {activeTab === 'folders' ? <FoldersTabLazy {...foldersTabProps} /> : null}
 

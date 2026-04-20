@@ -1,6 +1,7 @@
-import { AlertTriangle, CheckCircle2, CircleHelp } from 'lucide-react'
+import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
+import { TechnicalReferenceHint } from './module-graph-field-shared'
 
 export type WorkflowValidationIssue = {
   id: string
@@ -10,14 +11,6 @@ export type WorkflowValidationIssue = {
   severity: 'error' | 'warning'
   title: string
   detail: string
-}
-
-function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
-  return (
-    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
-      <CircleHelp className="h-3.5 w-3.5" />
-    </span>
-  )
 }
 
 type WorkflowValidationPanelProps = {

@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
+import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
+import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import type { ImageRecord } from '@/types/image'
 import {
   cleanupFailedGenerationHistory,
@@ -23,6 +26,7 @@ import { cn } from '@/lib/utils'
 import {
   getErrorMessage,
   getHistoryStatusLabel,
+  resolveHistoryDisplayStatus,
   resolveHistoryImageSource,
 } from '../image-generation-shared'
 
@@ -38,11 +42,10 @@ type GenerationHistoryPanelProps = {
 const GENERATION_HISTORY_PAGE_SIZE = 40
 
 function hasInFlightHistory(records: GenerationHistoryResponse['records']) {
-  return records.some((record) => record.generation_status === 'pending' || record.generation_status === 'processing')
-}
-
-function isResultFocusedHistoryRecord(record: GenerationHistoryResponse['records'][number]) {
-  return record.generation_status === 'completed' || record.generation_status === 'failed'
+  return records.some((record) => {
+    const displayStatus = resolveHistoryDisplayStatus(record)
+    return displayStatus === 'pending' || displayStatus === 'processing'
+  })
 }
 
 function getGenerationHistorySelectionId(record: GenerationHistoryResponse['records'][number]) {
@@ -51,19 +54,23 @@ function getGenerationHistorySelectionId(record: GenerationHistoryResponse['reco
 
 function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['records'][number]): ImageRecord {
   const imageSource = resolveHistoryImageSource(record)
+  const displayStatus = resolveHistoryDisplayStatus(record)
+  const hasLinkedImage = Boolean(record.actual_composite_hash)
 
   return {
     id: `generation-history-${record.id}`,
-    composite_hash: imageSource.compositeHash,
+    composite_hash: hasLinkedImage ? imageSource.compositeHash : null,
     original_file_path: null,
-    thumbnail_url: imageSource.thumbnailUrl,
-    image_url: imageSource.imageUrl,
+    thumbnail_url: hasLinkedImage ? imageSource.thumbnailUrl : null,
+    image_url: hasLinkedImage ? imageSource.imageUrl : null,
+    mime_type: record.actual_mime_type ?? null,
     width: record.actual_width ?? null,
     height: record.actual_height ?? null,
-    is_processing: record.generation_status === 'pending' || record.generation_status === 'processing',
-    preview_status: record.generation_status === 'failed'
+    rating_score: record.rating_score ?? null,
+    is_processing: displayStatus === 'pending' || displayStatus === 'processing',
+    preview_status: displayStatus === 'failed'
       ? 'failed'
-      : record.generation_status === 'pending' || record.generation_status === 'processing'
+      : displayStatus === 'pending' || displayStatus === 'processing'
         ? 'processing'
         : undefined,
   }
@@ -73,6 +80,14 @@ function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['record
 export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
   const authStatusQuery = useAuthStatusQuery()
+  const {
+    columnCount: historyColumnCount,
+    setColumnCount: setHistoryColumnCount,
+    resetColumnCount: resetHistoryColumnCount,
+    defaultColumnCount: defaultHistoryColumnCount,
+    minColumnCount: minHistoryColumnCount,
+    maxColumnCount: maxHistoryColumnCount,
+  } = useImageListColumnPreference('history')
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [isDownloadingSelection, setIsDownloadingSelection] = useState(false)
@@ -130,22 +145,33 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => (historyQuery.data?.pages ?? []).flatMap((page) => page.records),
     [historyQuery.data?.pages],
   )
-  const visibleHistoryRecords = useMemo(
-    () => historyRecords.filter((record) => isResultFocusedHistoryRecord(record)),
+  const inFlightHistoryCount = useMemo(
+    () => historyRecords.filter((record) => {
+      const displayStatus = resolveHistoryDisplayStatus(record)
+      return displayStatus === 'pending' || displayStatus === 'processing'
+    }).length,
     [historyRecords],
   )
-  const inFlightHistoryCount = useMemo(
-    () => historyRecords.filter((record) => !isResultFocusedHistoryRecord(record)).length,
+  const completedHistoryCount = useMemo(
+    () => historyRecords.filter((record) => resolveHistoryDisplayStatus(record) === 'completed').length,
     [historyRecords],
   )
   const failedHistoryCount = useMemo(
     () => historyRecords.filter((record) => record.generation_status === 'failed').length,
     [historyRecords],
   )
-  const historyImages = useMemo(() => visibleHistoryRecords.map((record) => mapHistoryRecordToImageRecord(record)), [visibleHistoryRecords])
+  const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
+  const {
+    renderItemPersistentOverlay,
+    shouldBlurItemPreview,
+  } = useImageFeedSafety({
+    items: historyImages,
+    enabled: historyImages.length > 0,
+    visibilityMode: 'badge-only',
+  })
   const historyRecordMap = useMemo(
-    () => new Map(visibleHistoryRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
-    [visibleHistoryRecords],
+    () => new Map(historyRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
+    [historyRecords],
   )
   const selectedHistoryRecords = useMemo(
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
@@ -156,7 +182,14 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     [selectedHistoryRecords],
   )
   const historyLabel = isPublicView ? 'Public Workflow' : serviceType === 'novelai' ? 'NAI' : workflowId ? 'ComfyUI Workflow' : 'ComfyUI'
-  const getHistoryImageHref = (image: ImageRecord) => (image?.composite_hash ? `/images/${image.composite_hash}` : undefined)
+  const getHistoryImageHref = (image: ImageRecord) => {
+    const record = historyRecordMap.get(String(image?.id ?? ''))
+    if (!record || resolveHistoryDisplayStatus(record) !== 'completed' || !image?.composite_hash) {
+      return undefined
+    }
+
+    return `/images/${image.composite_hash}`
+  }
 
   useEffect(() => {
     setSelectedHistoryIds((current) => current.filter((id) => historyRecordMap.has(id)))
@@ -216,7 +249,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   }
 
   return (
-    <section className={cn('space-y-4', splitPaneScroll && 'flex min-h-0 flex-1 flex-col')}>
+    <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden' : 'space-y-4')}>
       <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -238,9 +271,10 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{historyLabel}</Badge>
-          <Badge variant="outline">결과 {visibleHistoryRecords.length}</Badge>
+          <Badge variant="outline">기록 {historyRecords.length}</Badge>
           {!isPublicView ? <Badge variant="outline">{isAdmin ? '전체 사용자' : '내 기록'}</Badge> : null}
-          {inFlightHistoryCount > 0 ? <Badge variant="secondary">진행 중 {inFlightHistoryCount}</Badge> : null}
+          {completedHistoryCount > 0 ? <Badge variant="outline">완료 {completedHistoryCount}</Badge> : null}
+          {inFlightHistoryCount > 0 ? <Badge variant="secondary">작업 중 {inFlightHistoryCount}</Badge> : null}
           <Button
             type="button"
             size="sm"
@@ -266,7 +300,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
       {isHistoryLoading ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
 
-      <div className={cn(splitPaneScroll && 'min-h-0 flex-1')}>
+      <div className={cn(splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
         {!isHistoryLoading && historyImages.length === 0 ? (
           <div className="py-4 text-sm text-muted-foreground">아직 표시할 생성 결과가 없어.</div>
         ) : null}
@@ -287,11 +321,11 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             selectedIds={selectedHistoryIds}
             onSelectedIdsChange={setSelectedHistoryIds}
             minColumnWidth={220}
+            preferredColumnCount={historyColumnCount}
             columnGap={splitPaneScroll ? 12 : 16}
             rowGap={splitPaneScroll ? 12 : 16}
-            className={cn(splitPaneScroll && 'h-full pr-3 pb-1')}
+            className={cn(splitPaneScroll && 'min-h-0 flex-1 overflow-hidden pr-3 pb-1')}
             scrollMode={splitPaneScroll ? 'container' : 'window'}
-            viewportHeight={splitPaneScroll ? '100%' : undefined}
             hasMore={Boolean(historyQuery.hasNextPage)}
             isLoadingMore={historyQuery.isFetchingNextPage}
             onLoadMore={historyQuery.fetchNextPage}
@@ -302,19 +336,38 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               }
 
               const record = historyRecordMap.get(String(imageSelectionId))
-              if (!record || record.generation_status === 'completed') {
+              if (!record) {
+                return null
+              }
+
+              const displayStatus = resolveHistoryDisplayStatus(record)
+              if (displayStatus === 'completed') {
                 return null
               }
 
               return (
                 <Badge variant="outline">
-                  {getHistoryStatusLabel(record.generation_status)}
+                  {getHistoryStatusLabel(displayStatus)}
                 </Badge>
               )
             }}
+            renderItemPersistentOverlay={renderItemPersistentOverlay}
+            shouldBlurItemPreview={shouldBlurItemPreview}
           />
         ) : null}
       </div>
+
+      {historyImages.length > 0 ? (
+        <ImageListColumnFloatingControl
+          value={historyColumnCount}
+          defaultValue={defaultHistoryColumnCount}
+          min={minHistoryColumnCount}
+          max={maxHistoryColumnCount}
+          title="히스토리 한 줄 카드 수"
+          onChange={setHistoryColumnCount}
+          onReset={resetHistoryColumnCount}
+        />
+      ) : null}
 
       <ImageSelectionBar
         selectedCount={selectedHistoryRecords.length}
@@ -324,9 +377,15 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           ? `${downloadableCompositeHashes.length.toLocaleString('ko-KR')}개 다운로드 가능`
           : '다운로드 가능한 결과가 없어'}
         extraActions={!isPublicView ? (
-          <Button size="sm" onClick={() => void handleDeleteSelected()} disabled={selectedHistoryRecords.length === 0 || isDeletingSelection} data-no-select-drag="true">
+          <Button
+            size="icon-sm"
+            onClick={() => void handleDeleteSelected()}
+            disabled={selectedHistoryRecords.length === 0 || isDeletingSelection}
+            title={isDeletingSelection ? '삭제 중' : '선택 삭제'}
+            aria-label={isDeletingSelection ? '삭제 중' : '선택 삭제'}
+            data-no-select-drag="true"
+          >
             <Trash2 className="h-4 w-4" />
-            {isDeletingSelection ? '삭제 중…' : '선택 삭제'}
           </Button>
         ) : undefined}
         onDownloadSelect={handleDownloadSelected}

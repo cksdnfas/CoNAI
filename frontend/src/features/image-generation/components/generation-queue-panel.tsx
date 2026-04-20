@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { RefreshCw, RotateCcw, Square } from 'lucide-react'
+import { Clipboard, RefreshCw, RotateCcw, Square } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import {
   cancelGenerationQueueJob,
   getGenerationQueue,
+  getGenerationQueueRequestDebug,
   getGenerationQueueStats,
   retryGenerationQueueJob,
 } from '@/lib/api-image-generation-queue'
@@ -20,6 +22,7 @@ import {
   formatGenerationQueueTimestamp,
   getGenerationQueueEtaLabel,
   getGenerationQueuePositionLabel,
+  getGenerationQueueRequesterLabel,
   getGenerationQueueStatusLabel,
   isActiveGenerationQueueStatus,
 } from './generation-queue-ui'
@@ -33,7 +36,9 @@ type GenerationQueuePanelProps = {
 /** Render a lightweight queue operations panel for image-generation jobs. */
 export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: GenerationQueuePanelProps) {
   const { showSnackbar } = useSnackbar()
+  const authStatusQuery = useAuthStatusQuery()
   const [pendingJobId, setPendingJobId] = useState<number | null>(null)
+  const [debugLoadingJobId, setDebugLoadingJobId] = useState<number | null>(null)
 
   const queueQuery = useQuery({
     queryKey: ['image-generation-queue', serviceType, workflowId ?? null],
@@ -113,6 +118,23 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
     }
   }
 
+  const handleCopyRequestDebug = async (jobId: number) => {
+    if (debugLoadingJobId !== null) {
+      return
+    }
+
+    try {
+      setDebugLoadingJobId(jobId)
+      const response = await getGenerationQueueRequestDebug(jobId)
+      await navigator.clipboard.writeText(JSON.stringify(response.data, null, 2))
+      showSnackbar({ message: `큐 작업 ${jobId}의 최종 요청 JSON을 복사했어.`, tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, '아직 최종 요청 로그가 없거나 복사에 실패했어.'), tone: 'error' })
+    } finally {
+      setDebugLoadingJobId(null)
+    }
+  }
+
   return (
     <section className="space-y-3">
       <Card>
@@ -156,11 +178,15 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
                 const isCancelRequested = hasCancelRequest && isActiveGenerationQueueStatus(record.status)
                 const completedAfterCancel = hasCancelRequest && record.status === 'completed'
                 const failedAfterCancel = hasCancelRequest && record.status === 'failed'
-                const canCancel = (record.status === 'queued' || record.status === 'dispatching' || record.status === 'running') && !isCancelRequested
-                const canRetry = record.status === 'failed' || record.status === 'cancelled'
+                const canManageRecord = authStatusQuery.data?.isAdmin === true || record.is_mine === true
+                const canCancel = canManageRecord && (record.status === 'queued' || record.status === 'dispatching' || record.status === 'running') && !isCancelRequested
+                const canRetry = canManageRecord && (record.status === 'failed' || record.status === 'cancelled')
+                const canCopyRequestDebug = record.service_type === 'comfyui'
                 const isBusy = pendingJobId === record.id
+                const isDebugBusy = debugLoadingJobId === record.id
                 const queuePositionLabel = getGenerationQueuePositionLabel(record)
                 const queueEtaLabel = getGenerationQueueEtaLabel(record)
+                const requesterLabel = getGenerationQueueRequesterLabel(record)
 
                 return (
                   <div key={record.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
@@ -181,6 +207,7 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
 
                         <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
                           <span>job #{record.id}</span>
+                          <span>{record.is_mine ? `${requesterLabel} (나)` : requesterLabel}</span>
                           {queuedAt ? <span>queued {queuedAt}</span> : null}
                           {startedAt ? <span>started {startedAt}</span> : null}
                           {completedAt ? <span>done {completedAt}</span> : null}
@@ -201,6 +228,19 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
                       </div>
 
                       <div className="flex shrink-0 gap-1">
+                        {canCopyRequestDebug ? (
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
+                            onClick={() => void handleCopyRequestDebug(record.id)}
+                            disabled={isDebugBusy}
+                            aria-label={`큐 작업 ${record.id} 최종 요청 복사`}
+                            title="최종 요청 복사"
+                          >
+                            <Clipboard className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : null}
                         {canRetry ? (
                           <Button
                             type="button"

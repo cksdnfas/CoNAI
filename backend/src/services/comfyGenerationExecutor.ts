@@ -25,8 +25,8 @@ export interface ExecuteComfyGenerationResult {
 }
 
 /**
- * Submit one ComfyUI workflow, wait for completion, then save downloaded images
- * into the main generated-image pipeline.
+ * Submit one ComfyUI workflow, wait for completion, then save downloaded outputs
+ * into the main generated-media pipeline.
  */
 export async function executeComfyGeneration(
   input: ExecuteComfyGenerationInput,
@@ -36,18 +36,18 @@ export async function executeComfyGeneration(
   const promptId = await comfyService.submitPrompt(workflow)
   await onPromptSubmitted?.(promptId)
 
-  const tempFilePaths = await comfyService.collectGeneratedImages(promptId)
+  const collectedOutputs = await comfyService.collectGeneratedOutputs(promptId)
 
   let savedImageCount = 0
   let representativeImage: ComfyGenerationRepresentativeImage | null = null
 
-  for (const tempPath of tempFilePaths) {
+  for (const output of collectedOutputs) {
     try {
-      const imageBuffer = await fs.promises.readFile(tempPath)
-      const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, 'comfyui', {
+      const processedPaths = await APIImageProcessor.processGeneratedFile(output.tempPath, 'comfyui', {
         ...imageSaveOptions,
-        sourcePathForMetadata: tempPath,
-        originalFileName: path.basename(tempPath),
+        sourcePathForMetadata: output.tempPath,
+        sourceMimeType: output.format,
+        originalFileName: path.basename(output.filename || output.tempPath),
       })
 
       savedImageCount += 1
@@ -59,21 +59,21 @@ export async function executeComfyGeneration(
         }
       }
 
-      console.log(`✅ ComfyUI image saved: ${processedPaths.originalPath}`)
+      console.log(`✅ ComfyUI output saved: ${processedPaths.originalPath}`)
     } catch (error) {
-      console.error(`❌ Failed to save ComfyUI image ${tempPath}:`, error)
+      console.error(`❌ Failed to save ComfyUI output ${output.tempPath}:`, error)
     } finally {
       try {
-        await fs.promises.unlink(tempPath)
+        await fs.promises.unlink(output.tempPath)
       } catch (cleanupError) {
-        console.warn(`⚠️ Failed to remove temp ComfyUI image ${tempPath}:`, cleanupError)
+        console.warn(`⚠️ Failed to remove temp ComfyUI output ${output.tempPath}:`, cleanupError)
       }
     }
   }
 
   return {
     promptId,
-    attemptedImageCount: tempFilePaths.length,
+    attemptedImageCount: collectedOutputs.length,
     savedImageCount,
     representativeImage,
   }

@@ -4,7 +4,11 @@ import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
 import type { WildcardRecord, WildcardTool } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import type { WildcardWorkspaceTab } from './wildcard-generation-panel-helpers'
+import {
+  getWildcardPromptSyntax,
+  getWildcardPromptSyntaxLabel,
+  type WildcardWorkspaceTab,
+} from './wildcard-generation-panel-helpers'
 import { countWildcardItemsForTool } from './wildcard-inline-picker-helpers'
 
 type WildcardInlinePickerExplorerProps = {
@@ -14,7 +18,7 @@ type WildcardInlinePickerExplorerProps = {
   tool: WildcardTool
   treeNodes: WildcardRecord[]
   onChangeActiveTab: (tab: WildcardWorkspaceTab) => void
-  onInsertWildcard: (wildcardName: string) => void
+  onInsertWildcard: (wildcardName: string, syntaxText?: string) => void
   onSelectWildcard: (wildcardId: number) => void
   onToggleExpanded: (wildcardId: number) => void
 }
@@ -65,9 +69,12 @@ export function WildcardInlinePickerExplorer({
             onSelectWildcard(node.id)
           }
 
+          const insertSyntax = getWildcardPromptSyntax(node.name, { type: node.type, tab: activeTab })
+          const insertLabel = getWildcardPromptSyntaxLabel({ type: node.type, tab: activeTab })
+
           const handleInsert: MouseEventHandler<HTMLButtonElement> = (event) => {
             event.preventDefault()
-            onInsertWildcard(node.name)
+            onInsertWildcard(node.name, insertSyntax)
           }
 
           return (
@@ -109,8 +116,8 @@ export function WildcardInlinePickerExplorer({
                   type="button"
                   onMouseDown={handleInsert}
                   className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border bg-surface-lowest text-muted-foreground transition-colors hover:bg-surface-high hover:text-foreground"
-                  aria-label={`++${node.name}++ 추가`}
-                  title={`++${node.name}++ 추가`}
+                  aria-label={`${insertSyntax} 추가`}
+                  title={`${insertLabel} ${insertSyntax} 추가`}
                 >
                   <Plus className="h-4 w-4" />
                 </button>

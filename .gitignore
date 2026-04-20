@@ -135,3 +135,9 @@ shared/src/**/*.js.map
 shared/src/**/*.d.ts
 shared/src/**/*.d.ts.map
 shared/tsconfig.tsbuildinfo
+
+# Graphify generated artifacts and local AI helper files
+/graphify-out/
+/.graphify_detect.json
+/.graphifyignore
+/AGENTS.md

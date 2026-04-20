@@ -1,8 +1,11 @@
+import type { ReactNode } from 'react'
 import { ArrowUp, ExternalLink, RotateCcw, Save, Settings2, Sparkles } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
+import { CompactGenerationActionSurface } from './shared-generation-controller'
 import { PromptToggleField } from './prompt-toggle-field'
 
 export interface NaiConnectionHeaderProps {
@@ -41,6 +44,38 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenA
   )
 }
 
+type NaiControllerSectionProps = {
+  heading: ReactNode
+  actions?: ReactNode
+  children: ReactNode
+  className?: string
+  contentClassName?: string
+}
+
+/** Render one minimal NAI controller section with stronger borders and less card-heavy chrome. */
+export function NaiControllerSection({ heading, actions, children, className, contentClassName }: NaiControllerSectionProps) {
+  return (
+    <section className={cn('overflow-hidden rounded-sm border border-border/85 bg-surface-container/30', className)}>
+      <div className="px-4 py-3 border-b border-border/85">
+        <SectionHeading variant="inside" className="border-b-0 pb-0" heading={heading} actions={actions} />
+      </div>
+      <div className={cn('space-y-4 px-4 py-4', contentClassName)}>
+        {children}
+      </div>
+    </section>
+  )
+}
+
+type NaiControllerInsetBlockProps = {
+  children: ReactNode
+  className?: string
+}
+
+/** Render one dense inset block inside the NAI controller surface. */
+export function NaiControllerInsetBlock({ children, className }: NaiControllerInsetBlockProps) {
+  return <div className={cn('border-t border-border/70 pt-4', className)}>{children}</div>
+}
+
 export interface NaiPromptSectionProps {
   prompt: string
   negativePrompt: string
@@ -56,27 +91,20 @@ export function NaiPromptSection({
   onNegativePromptChange,
 }: NaiPromptSectionProps) {
   return (
-    <section className="space-y-3">
-      <Card>
-        <CardContent className="space-y-4">
-          <SectionHeading variant="inside" className="border-b border-border/70 pb-4" heading="Prompt" />
-          <PromptToggleField
-            tool="nai"
-            positiveValue={prompt}
-            negativeValue={negativePrompt}
-            onPositiveChange={onPromptChange}
-            onNegativeChange={onNegativePromptChange}
-            positiveRows={6}
-            negativeRows={6}
-          />
-        </CardContent>
-      </Card>
-    </section>
+    <PromptToggleField
+      tool="nai"
+      positiveValue={prompt}
+      negativeValue={negativePrompt}
+      onPositiveChange={onPromptChange}
+      onNegativeChange={onNegativePromptChange}
+      positiveRows={6}
+      negativeRows={6}
+    />
   )
 }
 
 export interface NaiActionSectionProps {
-  variant?: 'card' | 'inline'
+  variant?: 'card' | 'inline' | 'compact'
   canUpscale: boolean
   isUpscaling: boolean
   isGenerating: boolean
@@ -173,6 +201,79 @@ export function NaiActionSection({
       <section className="space-y-3">
         {actionContent}
       </section>
+    )
+  }
+
+  if (variant === 'compact') {
+    return (
+      <CompactGenerationActionSurface className="max-w-full">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onOpenModuleSave}
+          disabled={isGenerating || isUpscaling}
+          aria-label="모듈 저장"
+          title="모듈 저장"
+          className="rounded-none border-r border-border/70 shadow-none"
+        >
+          <Save className="h-4 w-4" />
+        </Button>
+
+        {canUpscale ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onUpscale}
+            disabled={isUpscaling || isGenerating}
+            aria-label={isUpscaling ? '업스케일 중' : '소스 2x 업스케일'}
+            title={isUpscaling ? '업스케일 중' : '소스 2x 업스케일'}
+            className="rounded-none border-r border-border/70 shadow-none"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+        ) : null}
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onReset}
+          disabled={isGenerating || isUpscaling}
+          aria-label="초기화"
+          title="초기화"
+          className="rounded-none shadow-none"
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+
+        <Button
+          type="button"
+          size="sm"
+          onClick={onGenerate}
+          disabled={isGenerating || !canGenerate}
+          className="rounded-none border-l border-border/70 shadow-none"
+          aria-label={generateButtonLabel}
+          title={generateButtonLabel}
+        >
+          <Sparkles className="h-4 w-4" />
+          {generateButtonLabel}
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onOpenSaveOptions}
+          disabled={isGenerating || isUpscaling}
+          aria-label="생성 결과 저장 옵션"
+          title="생성 결과 저장 옵션"
+          className="rounded-none border-l border-border/70 shadow-none"
+        >
+          <Settings2 className="h-4 w-4" />
+        </Button>
+      </CompactGenerationActionSurface>
     )
   }
 

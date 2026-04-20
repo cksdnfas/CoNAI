@@ -4,8 +4,29 @@ import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer
 import { createComfyUIService, getComfyUIServerRuntimeStatuses, ParallelGenerationService } from '../services/comfyuiService';
 import { ComfyUIServerResponse, ComfyUIServerCreateData, ComfyUIServerUpdateData } from '../types/comfyuiServer';
 import { asyncHandler } from '../middleware/errorHandler';
+import { sendRouteBadRequest } from './routeValidation';
 
 const router = Router();
+const INVALID_SERVER_ID_ERROR = 'Invalid server ID';
+
+/** Parse the server route id once and keep the legacy 400 response body on invalid input. */
+function getServerIdOrSendBadRequest(req: Request, res: Response): number | null {
+  const id = Number.parseInt(routeParam(req.params.id), 10);
+  if (Number.isNaN(id)) {
+    sendRouteBadRequest(res, INVALID_SERVER_ID_ERROR);
+    return null;
+  }
+
+  return id;
+}
+
+/** Send the legacy not-found response for missing ComfyUI servers. */
+function sendServerNotFound(res: Response) {
+  return res.status(404).json({
+    success: false,
+    error: 'Server not found'
+  } as ComfyUIServerResponse);
+}
 
 function normalizeRoutingTag(value: string) {
   return value.trim().toLowerCase();
@@ -135,22 +156,15 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
  * NOTE: Must be defined before /:id route
  */
 router.get('/:id/status', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid server ID'
-    } as ComfyUIServerResponse);
+  const id = getServerIdOrSendBadRequest(req, res);
+  if (id === null) {
+    return;
   }
 
   try {
     const server = await ComfyUIServerModel.findById(id);
     if (!server) {
-      return res.status(404).json({
-        success: false,
-        error: 'Server not found'
-      } as ComfyUIServerResponse);
+      return sendServerNotFound(res);
     }
 
     const status = await createComfyUIService(server.endpoint).getRuntimeStatus(server);
@@ -173,22 +187,15 @@ router.get('/:id/status', asyncHandler(async (req: Request, res: Response) => {
  * NOTE: Must be defined before /:id route
  */
 router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid server ID'
-    } as ComfyUIServerResponse);
+  const id = getServerIdOrSendBadRequest(req, res);
+  if (id === null) {
+    return;
   }
 
   try {
     const server = await ComfyUIServerModel.findById(id);
     if (!server) {
-      return res.status(404).json({
-        success: false,
-        error: 'Server not found'
-      } as ComfyUIServerResponse);
+      return sendServerNotFound(res);
     }
 
     const results = await ParallelGenerationService.testMultipleConnections([
@@ -217,13 +224,9 @@ router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Respon
  * NOTE: Must be defined before /:id route
  */
 router.get('/:id/workflows', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid server ID'
-    } as ComfyUIServerResponse);
+  const id = getServerIdOrSendBadRequest(req, res);
+  if (id === null) {
+    return;
   }
 
   try {
@@ -251,23 +254,16 @@ router.get('/:id/workflows', asyncHandler(async (req: Request, res: Response) =>
  * NOTE: Must be defined after specific routes
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid server ID'
-    } as ComfyUIServerResponse);
+  const id = getServerIdOrSendBadRequest(req, res);
+  if (id === null) {
+    return;
   }
 
   try {
     const server = await ComfyUIServerModel.findById(id);
 
     if (!server) {
-      return res.status(404).json({
-        success: false,
-        error: 'Server not found'
-      } as ComfyUIServerResponse);
+      return sendServerNotFound(res);
     }
 
     // 서버 통계 조회
@@ -358,15 +354,12 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  * PUT /api/comfyui-servers/:id
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
-  const { name, endpoint, description, is_active } = req.body;
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid server ID'
-    } as ComfyUIServerResponse);
+  const id = getServerIdOrSendBadRequest(req, res);
+  if (id === null) {
+    return;
   }
+
+  const { name, endpoint, description, is_active } = req.body;
 
   try {
     // 이름 중복 확인 (변경하는 경우)
@@ -392,10 +385,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const updated = await ComfyUIServerModel.update(id, serverData);
 
     if (!updated) {
-      return res.status(404).json({
-        success: false,
-        error: 'Server not found'
-      } as ComfyUIServerResponse);
+      return sendServerNotFound(res);
     }
 
     const response: ComfyUIServerResponse = {
@@ -428,23 +418,16 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  * DELETE /api/comfyui-servers/:id
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid server ID'
-    } as ComfyUIServerResponse);
+  const id = getServerIdOrSendBadRequest(req, res);
+  if (id === null) {
+    return;
   }
 
   try {
     const deleted = await ComfyUIServerModel.delete(id);
 
     if (!deleted) {
-      return res.status(404).json({
-        success: false,
-        error: 'Server not found'
-      } as ComfyUIServerResponse);
+      return sendServerNotFound(res);
     }
 
     const response: ComfyUIServerResponse = {

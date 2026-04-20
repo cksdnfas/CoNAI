@@ -54,7 +54,7 @@ export function AutoTab({
   isRunningKaloscopeAutoTest,
 }: AutoTabProps) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <section>
         <AutoOverviewCard
           heading="개요"

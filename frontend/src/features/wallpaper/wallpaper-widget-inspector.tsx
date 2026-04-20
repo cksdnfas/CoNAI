@@ -1,3 +1,4 @@
+import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { cn } from '@/lib/utils'
@@ -53,8 +54,8 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
     <div className="space-y-3">
       <WallpaperInspectorSectionCard title="기본">
         <SettingsField label="제목">
-          <input
-            className="theme-settings-control h-9 w-full rounded-sm border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary"
+          <Input
+            variant="settings"
             value={selectedWidget.settings.title}
             onChange={(event) => {
               updateWidgetSettings({ title: event.target.value })

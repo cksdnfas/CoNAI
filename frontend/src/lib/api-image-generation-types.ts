@@ -48,6 +48,25 @@ export interface CreateGenerationQueueJobPayload {
   request_summary?: string | null
 }
 
+export interface GenerationQueueRequestDebugSnapshot {
+  service_type: 'comfyui'
+  stage: 'prepared' | 'submitted' | 'failed' | 'completed'
+  captured_at: string
+  queue_job_id?: number | null
+  history_id?: number | null
+  workflow_id?: number | null
+  workflow_name?: string | null
+  server_id?: number | null
+  server_name?: string | null
+  endpoint?: string | null
+  prompt_id?: string | null
+  error_message?: string | null
+  raw_prompt_data?: Record<string, unknown>
+  prepared_prompt_data?: Record<string, unknown>
+  resolved_prompt_data?: Record<string, unknown>
+  request_body?: Record<string, unknown>
+}
+
 export interface GenerationQueueStatusCounts {
   queued: number
   dispatching: number
@@ -83,6 +102,8 @@ export interface GenerationHistoryRecord {
   // Main-DB resolved display fields
   actual_width?: number | null
   actual_height?: number | null
+  actual_mime_type?: string | null
+  rating_score?: number | null
 
   // Detail/compat-only legacy fields
   width?: number | null
@@ -104,14 +125,24 @@ export interface WorkflowMarkedField {
   label: string
   description?: string
   jsonPath: string
-  type: 'text' | 'number' | 'select' | 'textarea' | 'image'
-  default_value?: string | number | boolean | null
+  type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'node'
+  default_collapsed?: boolean
+  simple_upload_only?: boolean
+  default_value?: string | number | boolean | Record<string, unknown> | null
   placeholder?: string
   dropdown_list_name?: string
   options?: string[]
   required?: boolean
   min?: number
   max?: number
+  step?: number
+  node_class_type?: string
+  node_editor?: 'power_lora_loader_rgthree'
+  node_items?: Array<{
+    key: string
+    label: string
+    lora?: string
+  }>
 }
 
 export interface GenerationWorkflow {
@@ -339,7 +370,7 @@ export interface GenerationImageSaveOptions {
 }
 
 export interface ComfyUIGenerationPayload {
-  prompt_data: Record<string, string | number | ComfyUIImageFieldValue>
+  prompt_data: Record<string, string | number | Record<string, unknown> | ComfyUIImageFieldValue>
   server_id?: number
   imageSaveOptions?: GenerationImageSaveOptions
 }

@@ -4,7 +4,7 @@
  * Chokidar를 사용한 폴더별 파일 시스템 이벤트 감지
  * - 새 파일 추가 감지 및 자동 처리
  * - 파일 수정 감지 및 메타데이터 업데이트
- * - 파일 삭제 감지 및 상태 변경
+ * - 파일 삭제 감지 및 DB 정리
  * - 오류 복구 및 재시도 메커니즘
  */
 
@@ -17,7 +17,7 @@ import {
   disableWatcherInDatabase,
   findWatchedFolderForWatcher,
   listAutoScanWatcherFolders,
-  markWatchedFileMissing,
+  deleteWatchedFileRecord,
   updateWatcherLastEventInDatabase,
   updateWatcherStatusInDatabase,
   watchedFolderExists,
@@ -257,12 +257,12 @@ async function runChangeFolderScan(scanState: FileWatcherScanState, folderId: nu
   }
 }
 
-/** Persist a missing-file state update for one unlink event. */
-function markWatcherFileMissing(filePath: string): void {
-  const changes = markWatchedFileMissing(filePath, new Date().toISOString());
+/** Delete one tracked file row for an unlink event. A later scan can relink moved/renamed duplicates by hash. */
+function deleteWatcherFileRecord(filePath: string): void {
+  const changes = deleteWatchedFileRecord(filePath);
 
   if (changes > 0) {
-    console.warn(`⚠️  Watched file missing: ${path.basename(filePath)}`);
+    console.warn(`⚠️  Watched file deleted from DB: ${path.basename(filePath)}`);
   } else if (isVerboseScanDebugEnabled) {
     console.log(`  ℹ️  파일이 데이터베이스에 없음: ${path.basename(filePath)}`);
   }
@@ -542,7 +542,7 @@ export class FileWatcherService {
    */
   private static handleUnlinkEvent(filePath: string): void {
     try {
-      markWatcherFileMissing(filePath);
+      deleteWatcherFileRecord(filePath);
     } catch (error) {
       console.error(`  ❌ 파일 상태 변경 실패: ${path.basename(filePath)}`, error);
     }

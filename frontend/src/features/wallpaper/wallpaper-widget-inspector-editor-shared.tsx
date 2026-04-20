@@ -145,7 +145,7 @@ export function WallpaperInspectorSectionCard({
   className?: string
 }) {
   return (
-    <section className={cn('space-y-3 rounded-sm border border-border bg-surface-low p-3', className)}>
+    <section className={cn('space-y-3 rounded-sm border border-border/70 bg-background/35 p-3', className)}>
       <div className="text-sm font-semibold text-foreground">{title}</div>
       {children}
     </section>

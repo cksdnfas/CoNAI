@@ -20,6 +20,9 @@ export interface WildcardExplorerSidebarPanelProps {
   selectedWildcard: WildcardRecord | null
   searchInput: string
   canCreateInActiveTab: boolean
+  canEditInActiveTab: boolean
+  canDeleteInActiveTab: boolean
+  canScanLora: boolean
   isLoading: boolean
   isError: boolean
   isDeleting: boolean
@@ -46,6 +49,9 @@ export function WildcardExplorerSidebarPanel({
   selectedWildcard,
   searchInput,
   canCreateInActiveTab,
+  canEditInActiveTab,
+  canDeleteInActiveTab,
+  canScanLora,
   isLoading,
   isError,
   isDeleting,
@@ -73,17 +79,19 @@ export function WildcardExplorerSidebarPanel({
           <div className="flex flex-wrap items-center justify-end gap-2">
             {activeWorkspaceTab === 'lora' ? (
               <>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  className="bg-surface-low"
-                  onClick={onOpenLoraCollect}
-                  aria-label="자동 수집"
-                  title="자동 수집"
-                >
-                  <Upload className="h-4 w-4" />
-                </Button>
+                {canScanLora ? (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="outline"
+                    className="bg-surface-low"
+                    onClick={onOpenLoraCollect}
+                    aria-label="자동 수집"
+                    title="자동 수집"
+                  >
+                    <Upload className="h-4 w-4" />
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="icon-sm"
@@ -99,42 +107,48 @@ export function WildcardExplorerSidebarPanel({
               </>
             ) : (
               <>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  className="bg-surface-low"
-                  onClick={() => onOpenCreate(selectedWildcard?.id ?? null)}
-                  disabled={!canCreateInActiveTab}
-                  aria-label="항목 추가"
-                  title="항목 추가"
-                >
-                  <FolderPlus className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  className="bg-surface-low"
-                  onClick={onOpenEdit}
-                  disabled={!selectedWildcard}
-                  aria-label="편집"
-                  title="편집"
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  className="border-rose-500/30 bg-surface-low text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
-                  onClick={onDeleteSelected}
-                  disabled={!selectedWildcard || isDeleting}
-                  aria-label="삭제"
-                  title="삭제"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {canEditInActiveTab ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      className="bg-surface-low"
+                      onClick={() => onOpenCreate(selectedWildcard?.id ?? null)}
+                      disabled={!canCreateInActiveTab}
+                      aria-label="항목 추가"
+                      title="항목 추가"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      className="bg-surface-low"
+                      onClick={onOpenEdit}
+                      disabled={!selectedWildcard}
+                      aria-label="편집"
+                      title="편집"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : null}
+                {canDeleteInActiveTab ? (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="outline"
+                    className="border-rose-500/30 bg-surface-low text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
+                    onClick={onDeleteSelected}
+                    disabled={!selectedWildcard || isDeleting}
+                    aria-label="삭제"
+                    title="삭제"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : null}
               </>
             )}
           </div>

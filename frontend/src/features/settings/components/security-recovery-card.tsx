@@ -1,7 +1,5 @@
-import { SectionHeading } from '@/components/common/section-heading'
-import { Card, CardContent } from '@/components/ui/card'
 import type { AuthDatabaseInfoRecord } from '@/lib/api-auth'
-import { SettingsValueTile } from './settings-primitives'
+import { SettingsSection, SettingsValueTile } from './settings-primitives'
 
 interface SecurityRecoveryCardProps {
   databaseInfo: AuthDatabaseInfoRecord | null
@@ -10,22 +8,19 @@ interface SecurityRecoveryCardProps {
 /** Show auth DB recovery location and the current recovery guidance text. */
 export function SecurityRecoveryCard({ databaseInfo }: SecurityRecoveryCardProps) {
   return (
-    <Card>
-      <CardContent className="space-y-4">
-        <SectionHeading variant="inside" heading="복구" />
-        <div className="grid gap-3 md:grid-cols-2">
-          <SettingsValueTile
-            label="인증 DB"
-            value={databaseInfo?.authDbPath ?? '불러오는 중…'}
-            valueClassName="break-all text-xs font-medium"
-          />
-          <SettingsValueTile
-            label="방법"
-            value={databaseInfo?.recoveryInstructions.ko ?? '불러오는 중…'}
-            valueClassName="text-xs font-medium leading-6"
-          />
-        </div>
-      </CardContent>
-    </Card>
+    <SettingsSection heading="복구">
+      <div className="grid gap-3 md:grid-cols-2">
+        <SettingsValueTile
+          label="인증 DB"
+          value={databaseInfo?.authDbPath ?? '불러오는 중…'}
+          valueClassName="break-all text-xs font-medium"
+        />
+        <SettingsValueTile
+          label="방법"
+          value={databaseInfo?.recoveryInstructions.ko ?? '불러오는 중…'}
+          valueClassName="text-xs font-medium leading-6"
+        />
+      </div>
+    </SettingsSection>
   )
 }

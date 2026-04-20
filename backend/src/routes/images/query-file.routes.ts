@@ -20,10 +20,35 @@ import {
   streamCacheableFile,
   streamRangeFile,
   type ImageDownloadType,
+  type ImageServeDiagnostics,
 } from './query-file-helpers';
 import { routeParam } from '../routeParam';
+import { logger } from '../../utils/logger';
 
 const router = Router();
+const SLOW_IMAGE_REQUEST_MS = 300;
+
+function attachImagePerfLog(
+  req: Request,
+  res: Response,
+  label: string,
+  details: Record<string, unknown>,
+) {
+  const startedAt = Date.now();
+
+  res.once('finish', () => {
+    const elapsedMs = Date.now() - startedAt;
+    if (elapsedMs >= SLOW_IMAGE_REQUEST_MS) {
+      logger.debug(`[ImagePerf][${label}]`, {
+        method: req.method,
+        url: req.originalUrl,
+        statusCode: res.statusCode,
+        elapsedMs,
+        ...details,
+      });
+    }
+  });
+}
 
 function parseImageDownloadType(value: unknown): ImageDownloadType {
   return value === 'thumbnail' ? 'thumbnail' : 'original';
@@ -114,34 +139,47 @@ router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Respon
     return;
   }
 
+  const details: Record<string, unknown> = { compositeHash };
+  attachImagePerfLog(req, res, 'file', details);
+
   try {
+    const metadataStartedAt = Date.now();
     if (!(await getVisibleMetadataOrBlock(res, compositeHash))) {
       return;
     }
+    details.metadataMs = Date.now() - metadataStartedAt;
 
+    const fileLookupStartedAt = Date.now();
     const file = await getActiveFileOrBlock(res, compositeHash, 'File not found');
+    details.fileLookupMs = Date.now() - fileLookupStartedAt;
 
     if (!file) {
       return;
     }
 
+    const pathCheckStartedAt = Date.now();
     const originalPath = getExistingActiveFilePathOrBlock(res, file, {
       missingError: 'File not found on disk',
       warnMessage: `[ImageServe] File missing on disk during raw file access: ${resolveUploadsPath(file.original_file_path)}`,
     });
+    details.pathCheckMs = Date.now() - pathCheckStartedAt;
 
     if (!originalPath) {
       return;
     }
 
     const mimeType = file.mime_type;
+    details.mimeType = mimeType;
 
     if (mimeType && mimeType.startsWith('video/')) {
+      details.streamMode = 'video';
       streamRangeFile(req, res, originalPath, mimeType);
       return;
     }
 
-    await streamCacheableFile(req, res, originalPath, mimeType);
+    const diagnostics: ImageServeDiagnostics = { mode: 'original' };
+    await streamCacheableFile(req, res, originalPath, mimeType, diagnostics);
+    Object.assign(details, diagnostics);
     return;
   } catch (error) {
     console.error('File serve error:', error);
@@ -160,19 +198,28 @@ router.get('/:compositeHash/thumbnail', asyncHandler(async (req: Request, res: R
     return;
   }
 
+  const details: Record<string, unknown> = { compositeHash };
+  attachImagePerfLog(req, res, 'thumbnail', details);
+
   try {
+    const metadataStartedAt = Date.now();
     const metadata = await getVisibleMetadataOrBlock(res, compositeHash);
+    details.metadataMs = Date.now() - metadataStartedAt;
 
     if (!metadata) {
       return;
     }
 
+    const fileLookupStartedAt = Date.now();
     const file = await getActiveFileOrBlock(res, compositeHash, 'Image file not found');
+    details.fileLookupMs = Date.now() - fileLookupStartedAt;
     if (!file) {
       return;
     }
 
-    await serveThumbnailOrOriginal(req, res, compositeHash, metadata, file);
+    const diagnostics: ImageServeDiagnostics = {};
+    await serveThumbnailOrOriginal(req, res, compositeHash, metadata, file, diagnostics);
+    Object.assign(details, diagnostics);
     return;
   } catch (error) {
     console.error('Thumbnail error:', error);

@@ -16,6 +16,10 @@ export function resolveRoutePermissionKey(pathname: string) {
     return 'page.generation.view'
   }
 
+  if (pathname === '/wildcards') {
+    return 'page.wildcards.view'
+  }
+
   if (pathname.startsWith('/images/') && pathname.endsWith('/metadata')) {
     return 'page.metadata-editor.view'
   }

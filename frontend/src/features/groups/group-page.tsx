@@ -1,4 +1,4 @@
-import { FolderMinus, FolderPlus, Play, RotateCcw } from 'lucide-react'
+import { Download, FolderMinus, FolderPlus, Pencil, Play, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -21,6 +21,8 @@ import { GroupImageSection } from './components/group-image-section'
 import { GroupDownloadModal } from './components/group-download-modal'
 import { GroupDetailHeaderCard } from './components/group-detail-header-card'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
+import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
+import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { formatGroupTimestamp, getGroupCardGridClassName, groupSources, normalizeGroupSourceKey, type GroupEditorState, type GroupSourceKey } from './group-page-shared'
 import { useGroupPageQueries } from './use-group-page-queries'
 import { useGroupPageActions } from './use-group-page-actions'
@@ -28,6 +30,14 @@ import { useGroupPageActions } from './use-group-page-actions'
 export function GroupPage() {
   const navigate = useNavigate()
   const { showSnackbar } = useSnackbar()
+  const {
+    columnCount: groupColumnCount,
+    setColumnCount: setGroupColumnCount,
+    resetColumnCount: resetGroupColumnCount,
+    defaultColumnCount: defaultGroupColumnCount,
+    minColumnCount: minGroupColumnCount,
+    maxColumnCount: maxGroupColumnCount,
+  } = useImageListColumnPreference('group')
   const { groupId } = useParams<{ groupId?: string }>()
   const [searchParams] = useSearchParams()
   const [editorState, setEditorState] = useState<GroupEditorState | null>(null)
@@ -133,27 +143,12 @@ export function GroupPage() {
       <PageHeader
         eyebrow={isWideLayout ? 'Image' : undefined}
         title="Groups"
-        actions={
-          <>
-            {isCustomSource ? (
-              <>
-                <Button type="button" size="sm" variant="secondary" onClick={() => void handleRunAutoCollectAll()} disabled={autoCollectAllMutation.isPending}>
-                  <Play className="h-4 w-4" />
-                  {autoCollectAllMutation.isPending ? '전체 자동수집 실행 중…' : '전체 자동수집'}
-                </Button>
-                <Button type="button" size="sm" onClick={handleOpenCreateModal}>
-                  <FolderPlus className="h-4 w-4" />
-                  {selectedGroupId ? '하위 그룹 추가' : '새 그룹'}
-                </Button>
-              </>
-            ) : (
-              <Button type="button" size="sm" variant="secondary" onClick={() => void handleRebuildAutoFolderGroups()} disabled={rebuildAutoFolderGroupsMutation.isPending}>
-                <RotateCcw className="h-4 w-4" />
-                {rebuildAutoFolderGroupsMutation.isPending ? '감시폴더 재구축 중…' : '감시폴더 재구축'}
-              </Button>
-            )}
-          </>
-        }
+        actions={!selectedGroupId && !isCustomSource ? (
+          <Button type="button" size="sm" variant="secondary" onClick={() => void handleRebuildAutoFolderGroups()} disabled={rebuildAutoFolderGroupsMutation.isPending}>
+            <RotateCcw className="h-4 w-4" />
+            {rebuildAutoFolderGroupsMutation.isPending ? '감시폴더 재구축 중…' : '감시폴더 재구축'}
+          </Button>
+        ) : undefined}
       />
 
       <SegmentedTabBar
@@ -162,7 +157,7 @@ export function GroupPage() {
         onChange={(nextSourceKey) => handleSelectSource(nextSourceKey as GroupSourceKey)}
       />
 
-      <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
+      <div className={cn('grid gap-6', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <GroupExplorerSidebarPanel
           isWideLayout={isWideLayout}
           groups={allGroups}
@@ -170,11 +165,65 @@ export function GroupPage() {
           isLoading={groupsQuery.isLoading}
           isError={groupsQuery.isError}
           errorMessage={groupsQuery.error instanceof Error ? groupsQuery.error.message : null}
+          headerExtra={isCustomSource ? (
+            <div className="flex flex-wrap justify-end gap-2 border-b border-white/5 pb-3">
+              {selectedGroupId ? (
+                <>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="outline"
+                    className="bg-surface-low"
+                    onClick={handleOpenGroupDownloadModal}
+                    disabled={groupFileCountsQuery.isLoading || (downloadGroupArchiveMutation.isPending && downloadScope === 'group')}
+                    aria-label="현재 그룹 다운로드"
+                    title={downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? '다운로드 준비 중…' : '현재 그룹 다운로드'}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="outline"
+                    className="bg-surface-low"
+                    onClick={handleOpenEditModal}
+                    aria-label="현재 그룹 편집"
+                    title="현재 그룹 편집"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                className="bg-surface-low"
+                onClick={() => void handleRunAutoCollectAll()}
+                disabled={autoCollectAllMutation.isPending}
+                aria-label="전체 자동수집"
+                title={autoCollectAllMutation.isPending ? '전체 자동수집 실행 중…' : '전체 자동수집'}
+              >
+                <Play className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                className="bg-surface-low"
+                onClick={handleOpenCreateModal}
+                aria-label="새 그룹"
+                title="새 그룹"
+              >
+                <FolderPlus className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : undefined}
           onSelectGroup={handleOpenGroup}
         />
 
-        <section className="space-y-8">
-          {isWideLayout && selectedGroupId ? (
+        <section className="space-y-6">
+          {isWideLayout && selectedGroupId && !isCustomSource ? (
             <GroupBreadcrumbs
               items={breadcrumbQuery.data ?? []}
               selectedGroupId={selectedGroupId}
@@ -207,25 +256,26 @@ export function GroupPage() {
           ) : null}
 
           {selectedGroupId && selectedGroupQuery.data ? (
-            <div className="space-y-8">
-              <GroupDetailHeaderCard
-                group={selectedGroupQuery.data}
-                selectedGroupHierarchy={selectedGroupHierarchy}
-                isCustomSource={isCustomSource}
-                groupImageCollectionFilter={groupImageCollectionFilter}
-                isGroupFileCountsLoading={groupFileCountsQuery.isLoading}
-                isDownloadingGroup={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
-                isAutoCollectPending={autoCollectMutation.isPending}
-                isDeletePending={deleteGroupMutation.isPending}
-                lastAutoCollectLabel={formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
-                parentGroupLabel={selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
-                onOpenDownload={handleOpenGroupDownloadModal}
-                onOpenCreateModal={handleOpenCreateModal}
-                onOpenEditModal={handleOpenEditModal}
-                onRunAutoCollect={() => void handleRunAutoCollect()}
-                onDeleteGroup={() => void handleDeleteSelectedGroup()}
-                onFilterChange={setGroupImageCollectionFilter}
-              />
+            <div className="space-y-6">
+              {isCustomSource ? null : (
+                <GroupDetailHeaderCard
+                  group={selectedGroupQuery.data}
+                  selectedGroupHierarchy={selectedGroupHierarchy}
+                  isCustomSource={isCustomSource}
+                  isWideLayout={isWideLayout}
+                  isGroupFileCountsLoading={groupFileCountsQuery.isLoading}
+                  isDownloadingGroup={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
+                  isAutoCollectPending={autoCollectMutation.isPending}
+                  isDeletePending={deleteGroupMutation.isPending}
+                  lastAutoCollectLabel={formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
+                  parentGroupLabel={selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
+                  onOpenDownload={handleOpenGroupDownloadModal}
+                  onOpenCreateModal={handleOpenCreateModal}
+                  onOpenEditModal={handleOpenEditModal}
+                  onRunAutoCollect={() => void handleRunAutoCollect()}
+                  onDeleteGroup={() => void handleDeleteSelectedGroup()}
+                />
+              )}
 
               {backNavigationGroup ? (
                 <GroupNavigationGridSection
@@ -239,6 +289,7 @@ export function GroupPage() {
                   loadPreviewImage={selectedSource.getPreviewImage}
                   onOpenGroup={handleOpenGroup}
                   onOpenRoot={handleOpenRoot}
+                  isWideLayout={isWideLayout}
                 />
               ) : null}
 
@@ -251,11 +302,25 @@ export function GroupPage() {
                 hasMore={Boolean(groupImagesQuery.hasNextPage)}
                 isLoadingMore={groupImagesQuery.isFetchingNextPage}
                 onLoadMore={() => void groupImagesQuery.fetchNextPage()}
-                hideHeader
+                preferredColumnCount={groupColumnCount}
                 selectable={true}
                 selectedIds={selectedGroupImageIds}
                 onSelectedIdsChange={setSelectedGroupImageIds}
+                collectionFilter={isCustomSource ? groupImageCollectionFilter : undefined}
+                onCollectionFilterChange={isCustomSource ? setGroupImageCollectionFilter : undefined}
               />
+
+              {groupImages.length > 0 ? (
+                <ImageListColumnFloatingControl
+                  value={groupColumnCount}
+                  defaultValue={defaultGroupColumnCount}
+                  min={minGroupColumnCount}
+                  max={maxGroupColumnCount}
+                  title="그룹 한 줄 카드 수"
+                  onChange={setGroupColumnCount}
+                  onReset={resetGroupColumnCount}
+                />
+              ) : null}
             </div>
           ) : null}
         </section>

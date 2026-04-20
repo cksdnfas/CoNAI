@@ -1,4 +1,5 @@
 import { Navigate, createHashRouter } from 'react-router-dom'
+import { RouteErrorBoundary } from '@/app/route-error-boundary'
 import { ProtectedAppShell } from '@/features/auth/protected-app-shell'
 import { RequireAuthPermission } from '@/features/auth/require-auth-permission'
 import {
@@ -10,6 +11,7 @@ import {
   ImageMetadataEditRoute,
   LoginRoute,
   PublicComfyWorkflowRoute,
+  WildcardRoute,
   NotFoundRoute,
   PromptRoute,
   SettingsRoute,
@@ -22,10 +24,12 @@ export const appRouter = createHashRouter([
   {
     path: '/login',
     element: <LoginRoute />,
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: '/',
     element: <ProtectedAppShell />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         path: 'access',
@@ -50,6 +54,10 @@ export const appRouter = createHashRouter([
       {
         path: 'generation',
         element: <RequireAuthPermission permissionKey="page.generation.view"><ImageGenerationRoute /></RequireAuthPermission>,
+      },
+      {
+        path: 'wildcards',
+        element: <RequireAuthPermission permissionKey="page.wildcards.view"><WildcardRoute /></RequireAuthPermission>,
       },
       {
         path: 'public/workflows/:slug',

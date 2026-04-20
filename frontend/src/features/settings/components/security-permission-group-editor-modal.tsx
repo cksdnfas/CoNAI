@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,16 +9,18 @@ import type {
   AuthPermissionGroupMemberItem,
   AuthPermissionGroupSummaryItem,
   PageAccessPermissionItem,
+  PermissionGroupListItem,
 } from '@/lib/api-auth'
 import { SettingsField } from './settings-primitives'
 import { SettingsModal } from './settings-modal'
+import { SecurityAccountManagementList } from './security-account-management-list'
 import {
-  getAccountStatusLabel,
   getAccountTypeLabel,
   getPagePermissionLabel,
   getPermissionGroupDisplayName,
   getPermissionGroupKindLabel,
 } from './security-ui-text'
+import type { SecurityGroupColorMap } from './security-group-color-utils'
 
 interface PermissionGroupDraft {
   name: string
@@ -30,7 +33,9 @@ interface SecurityPermissionGroupEditorModalProps {
   mode: 'create' | 'edit' | null
   group: AuthPermissionGroupSummaryItem | null
   members: AuthPermissionGroupMemberItem[]
+  allAccounts: AuthAccountListItem[]
   addableAccounts: AuthAccountListItem[]
+  availableGroups: PermissionGroupListItem[]
   selectedAddMemberAccountId: number | null
   permissionCatalog: PageAccessPermissionItem[]
   draft: PermissionGroupDraft
@@ -39,10 +44,15 @@ interface SecurityPermissionGroupEditorModalProps {
   isDeleting: boolean
   isAddingMember: boolean
   isRemovingMember: boolean
+  isUpdatingAccountGroup: boolean
+  isUpdatingAccountPassword: boolean
+  isDeletingAccount: boolean
   canEditFields: boolean
   canEditPermissions: boolean
   canManageMembers: boolean
   canDelete: boolean
+  groupColors: SecurityGroupColorMap
+  groupLabels: Record<string, string>
   onClose: () => void
   onDraftChange: (patch: Partial<PermissionGroupDraft>) => void
   onTogglePermission: (permissionKey: string, enabled: boolean) => void
@@ -51,6 +61,9 @@ interface SecurityPermissionGroupEditorModalProps {
   onDelete: (groupId: number) => void
   onAddMember: () => void
   onRemoveMember: (accountId: number) => void
+  onAccountGroupChange: (accountId: number, groupKey: 'admin' | 'guest') => Promise<boolean>
+  onAccountPasswordChange: (accountId: number, password: string) => Promise<boolean>
+  onAccountDelete: (accountId: number) => Promise<boolean>
 }
 
 /** Render the permission-group create/edit modal with page-permission and membership controls. */
@@ -59,7 +72,9 @@ export function SecurityPermissionGroupEditorModal({
   mode,
   group,
   members,
+  allAccounts,
   addableAccounts,
+  availableGroups,
   selectedAddMemberAccountId,
   permissionCatalog,
   draft,
@@ -68,10 +83,15 @@ export function SecurityPermissionGroupEditorModal({
   isDeleting,
   isAddingMember,
   isRemovingMember,
+  isUpdatingAccountGroup,
+  isUpdatingAccountPassword,
+  isDeletingAccount,
   canEditFields,
   canEditPermissions,
   canManageMembers,
   canDelete,
+  groupColors,
+  groupLabels,
   onClose,
   onDraftChange,
   onTogglePermission,
@@ -80,8 +100,18 @@ export function SecurityPermissionGroupEditorModal({
   onDelete,
   onAddMember,
   onRemoveMember,
+  onAccountGroupChange,
+  onAccountPasswordChange,
+  onAccountDelete,
 }: SecurityPermissionGroupEditorModalProps) {
   const isCreateMode = mode === 'create'
+  const memberAccounts = useMemo(() => {
+    const accountMap = new Map(allAccounts.map((account) => [account.id, account]))
+    return members
+      .map((member) => accountMap.get(member.id) ?? null)
+      .filter((account): account is AuthAccountListItem => account !== null)
+  }, [allAccounts, members])
+
   const title = isCreateMode
     ? '새 권한 그룹'
     : group
@@ -208,39 +238,35 @@ export function SecurityPermissionGroupEditorModal({
                 </div>
               ) : null}
 
-              <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
-                {members.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">멤버가 없어.</div>
-                ) : (
-                  members.map((member) => (
-                    <div
-                      key={member.id}
-                      className="flex flex-col gap-3 rounded-sm border border-border/60 bg-background/40 px-3 py-3 md:flex-row md:items-center md:justify-between"
+              <div className="rounded-sm border border-border bg-surface-container p-3">
+                <SecurityAccountManagementList
+                  accounts={memberAccounts}
+                  availableGroups={availableGroups}
+                  groupColors={groupColors}
+                  groupLabels={groupLabels}
+                  pageSize={10}
+                  searchPlaceholder="멤버 검색"
+                  searchAriaLabel="그룹 멤버 검색"
+                  emptyMessage={members.length === 0 ? '멤버가 없어.' : '멤버 계정 정보를 불러오는 중이야.'}
+                  paginationClassName="pt-4"
+                  isUpdatingAccountGroup={isUpdatingAccountGroup}
+                  isUpdatingAccountPassword={isUpdatingAccountPassword}
+                  isDeletingAccount={isDeletingAccount}
+                  renderExtraActions={(account) => canManageMembers ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={isRemovingMember || isBusy}
+                      onClick={() => onRemoveMember(account.id)}
                     >
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="truncate text-sm font-semibold text-foreground">{member.username}</div>
-                          <Badge variant={member.accountType === 'admin' ? 'secondary' : 'outline'}>
-                            {getAccountTypeLabel(member.accountType)}
-                          </Badge>
-                          <Badge variant="outline">{getAccountStatusLabel(member.status)}</Badge>
-                        </div>
-                      </div>
-
-                      {canManageMembers ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          disabled={isRemovingMember || isBusy}
-                          onClick={() => onRemoveMember(member.id)}
-                        >
-                          제거
-                        </Button>
-                      ) : null}
-                    </div>
-                  ))
-                )}
+                      멤버 제거
+                    </Button>
+                  ) : null}
+                  onAccountGroupChange={onAccountGroupChange}
+                  onAccountPasswordChange={onAccountPasswordChange}
+                  onAccountDelete={onAccountDelete}
+                />
               </div>
             </section>
           ) : null}

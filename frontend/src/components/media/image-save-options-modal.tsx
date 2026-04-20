@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { calculateImageSaveOutputSize, resolveImageSaveFormat, type ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageSaveSettings } from '@/types/settings'
 
@@ -37,7 +37,7 @@ export function ImageSaveOptionsModal({
 
   return (
     <SettingsModal open={open} onClose={onClose} title={title} widthClassName="max-w-2xl">
-      <div className="space-y-5">
+      <SettingsModalBody className="space-y-5">
         <div className="flex flex-wrap gap-2">
           {sourceInfo ? (
             <>
@@ -107,7 +107,7 @@ export function ImageSaveOptionsModal({
           </SettingsField>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-border/70 pt-4">
+        <SettingsModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
             취소
           </Button>
@@ -115,8 +115,8 @@ export function ImageSaveOptionsModal({
             <Save className="h-4 w-4" />
             {isSaving ? '적용 중…' : '적용'}
           </Button>
-        </div>
-      </div>
+        </SettingsModalFooter>
+      </SettingsModalBody>
     </SettingsModal>
   )
 }

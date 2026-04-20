@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import type { LoraFileData, LoraScanRequest } from '@/lib/api'
 
 type LoraAutoCollectModalProps = {
@@ -219,7 +220,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
       description="폴더 덤프를 읽어서 자동 수집용 LoRA 와일드카드 트리를 다시 만들자."
       widthClassName="max-w-3xl"
     >
-      <div className="space-y-5">
+      <SettingsModalBody className="space-y-5">
         {formError ? (
           <Alert variant="destructive">
             <AlertTitle>수집 준비 실패</AlertTitle>
@@ -227,12 +228,9 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
           </Alert>
         ) : null}
 
-        <Alert>
-          <AlertTitle>동작 방식</AlertTitle>
-          <AlertDescription>
-            선택한 폴더 안의 `.safetensors`와 같은 이름의 `.txt`, 그리고 지정한 공용 텍스트 파일을 읽어서 auto-collected LoRA 트리를 다시 만든다.
-          </AlertDescription>
-        </Alert>
+        <SettingsInsetBlock className="text-sm text-muted-foreground">
+          선택한 폴더 안의 `.safetensors`, 같은 이름의 `.txt`, 그리고 지정한 공용 텍스트 파일을 읽어서 auto-collected LoRA 트리를 다시 만든다.
+        </SettingsInsetBlock>
 
         <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => void handleFileChange(event)} />
 
@@ -263,44 +261,36 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">기본 LoRA weight</p>
+          <SettingsField label="기본 LoRA weight">
             <Input type="number" min="0.1" max="2.0" step="0.1" value={loraWeight} onChange={(event) => setLoraWeight(event.target.value)} />
-            <p className="text-xs text-muted-foreground">생성되는 auto-collected 항목에 기본으로 박을 weight 값.</p>
-          </div>
+          </SettingsField>
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">중복 이름 처리</p>
+          <SettingsField label="중복 이름 처리">
             <Select value={duplicateHandling} onChange={(event) => setDuplicateHandling(event.target.value as 'number' | 'parent')}>
               <option value="number">숫자 suffix 붙이기</option>
               <option value="parent">부모 경로 이름 붙이기</option>
             </Select>
-          </div>
+          </SettingsField>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">프롬프트 매칭 모드</p>
+          <SettingsField label="프롬프트 매칭 모드">
             <Select value={matchingMode} onChange={(event) => handleMatchingModeChange(event.target.value as MatchingMode)}>
               <option value="filename">개별 txt 먼저, 없으면 공용 txt</option>
               <option value="common">공용 txt 먼저, 없으면 개별 txt</option>
             </Select>
-          </div>
+          </SettingsField>
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">공용 txt 파일명</p>
+          <SettingsField label="공용 txt 파일명">
             <Input value={commonTextFilename} onChange={(event) => handleCommonTextFilenameChange(event.target.value)} placeholder="예: add.txt" />
-          </div>
+          </SettingsField>
         </div>
 
-        <Alert>
-          <AlertTitle>주의</AlertTitle>
-          <AlertDescription>
-            실행하면 기존 auto-collected LoRA 항목은 지워지고, 이번 폴더 기준으로 다시 생성된다.
-          </AlertDescription>
-        </Alert>
+        <SettingsInsetBlock className="text-sm text-muted-foreground">
+          실행하면 기존 auto-collected LoRA 항목은 지워지고, 이번 폴더 기준으로 다시 생성된다.
+        </SettingsInsetBlock>
 
-        <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
+        <SettingsModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting || isPreparingFiles}>
             취소
           </Button>
@@ -308,8 +298,8 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
             <Upload className="h-4 w-4" />
             {isSubmitting ? '수집 중…' : '자동 수집 실행'}
           </Button>
-        </div>
-      </div>
+        </SettingsModalFooter>
+      </SettingsModalBody>
     </SettingsModal>
   )
 }

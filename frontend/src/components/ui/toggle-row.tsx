@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils'
 const toggleRowVariants = cva('flex items-center gap-3 rounded-sm text-sm text-foreground', {
   variants: {
     variant: {
-      settings: 'theme-settings-panel bg-surface-container',
-      detail: 'border border-border bg-surface-container px-3 py-2.5',
+      settings: 'theme-settings-panel theme-input-surface',
+      detail: 'theme-input-surface border px-3 py-2.5',
     },
   },
   defaultVariants: {

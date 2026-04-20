@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CircleUserRound, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { logoutLocalAccount } from '@/lib/api'
-import { cn } from '@/lib/utils'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
 /** Render one compact header account button with a mini popup for logout. */
@@ -29,31 +29,6 @@ export function HeaderAccountMenu() {
     }
     return '계정'
   }, [authStatus?.accountType])
-
-  useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isOpen])
 
   const logoutMutation = useMutation({
     mutationFn: logoutLocalAccount,
@@ -99,17 +74,10 @@ export function HeaderAccountMenu() {
         <CircleUserRound className="h-4 w-4" />
       </button>
 
-      {isOpen ? (
-        <div
-          className={cn(
-            'absolute right-0 top-full z-50 mt-2 w-[220px] rounded-sm border border-border/80 bg-background/98 p-3 shadow-lg backdrop-blur-sm',
-            'space-y-3',
-          )}
-          role="menu"
-          aria-label="계정 메뉴"
-        >
+      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom" closeOnBack>
+        <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`} role="menu" aria-label="계정 메뉴">
           <div className="space-y-1">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">현재 계정</div>
+            <div className={anchoredPopupLabelClassName}>현재 계정</div>
             <div className="text-sm font-semibold text-foreground">{authStatus?.username}</div>
             <div className="text-xs text-muted-foreground">{accountTypeLabel}</div>
           </div>
@@ -126,7 +94,7 @@ export function HeaderAccountMenu() {
             {logoutMutation.isPending ? '로그아웃 중…' : '로그아웃'}
           </Button>
         </div>
-      ) : null}
+      </AnchoredPopup>
     </div>
   )
 }

@@ -3,6 +3,23 @@ import { copyTextToClipboard } from '@/lib/clipboard'
 
 export type WildcardWorkspaceTab = 'wildcards' | 'preprocess' | 'lora'
 
+/** Build the prompt syntax text used for each wildcard workspace tab. */
+export function getWildcardPromptSyntax(
+  name: string,
+  options?: { type?: 'wildcard' | 'chain' | null; tab?: WildcardWorkspaceTab | null },
+) {
+  if (options?.type === 'chain' || options?.tab === 'preprocess') {
+    return name
+  }
+
+  return `++${name}++`
+}
+
+/** Return the human label for the syntax/token currently shown in the wildcard workspace. */
+export function getWildcardPromptSyntaxLabel(options?: { type?: 'wildcard' | 'chain' | null; tab?: WildcardWorkspaceTab | null }) {
+  return options?.type === 'chain' || options?.tab === 'preprocess' ? '전처리 키워드' : '와일드카드 문법'
+}
+
 export type WildcardTreeEntry = {
   wildcard: WildcardRecord
   depth: number

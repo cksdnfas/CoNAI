@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, RefreshCcw, ScanSearch } from 'lucide-react'
+import { Plus, RefreshCcw, ScanSearch, ShieldCheck } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { SectionHeading } from '@/components/common/section-heading'
 import type { BackupSource, BackupSourceUpdateInput, FolderScanLog, WatchedFolder, WatchedFolderUpdateInput, WatchersHealthSummary } from '@/types/folder'
 import { formatDateTime, type NewBackupSourceDraft, type NewWatchedFolderDraft } from '../settings-utils'
-import { SettingsValueTile } from './settings-primitives'
+import { SettingsSection, SettingsValueTile } from './settings-primitives'
+import { SettingsResourceTable } from './settings-resource-shared'
 import { WatchedFolderCard } from './watched-folder-card'
 import { WatchedFolderListItem } from './watched-folder-list-item'
 import { WatchedFolderCreateForm } from './watched-folder-create-form'
@@ -16,6 +14,14 @@ import { BackupSourceCard } from './backup-source-card'
 import { BackupSourceListItem } from './backup-source-list-item'
 import { BackupSourceCreateForm } from './backup-source-create-form'
 import { SettingsModal } from './settings-modal'
+
+const WATCHED_FOLDER_TABLE_GRID = 'grid-cols-[minmax(180px,1.05fr)_minmax(420px,2.4fr)_72px_72px_56px] gap-3'
+const BACKUP_SOURCE_TABLE_GRID = 'grid-cols-[minmax(180px,0.95fr)_minmax(280px,1.55fr)_minmax(240px,1.25fr)_72px_72px_56px] gap-3'
+const SCAN_LOG_TABLE_GRID = 'grid-cols-[minmax(180px,1fr)_120px_88px_88px_88px_88px_120px] gap-3'
+
+function formatTableNumber(value: number | null | undefined) {
+  return (value ?? 0).toLocaleString('ko-KR')
+}
 
 interface FoldersTabProps {
   newFolder: NewWatchedFolderDraft
@@ -33,6 +39,8 @@ interface FoldersTabProps {
   onValidateBackupPath: () => void
   onAddBackupSource: () => Promise<boolean>
   onRefresh: () => void
+  onVerifyAllFiles: () => void
+  isVerifyingAllFiles: boolean
   onScanAll: () => void
   folders: WatchedFolder[]
   foldersLoading: boolean
@@ -73,6 +81,8 @@ export function FoldersTab({
   onValidateBackupPath,
   onAddBackupSource,
   onRefresh,
+  onVerifyAllFiles,
+  isVerifyingAllFiles,
   onScanAll,
   folders,
   foldersLoading,
@@ -140,33 +150,39 @@ export function FoldersTab({
 
   return (
     <>
-      <div className="space-y-8">
-        <Card>
-          <CardContent className="space-y-4">
-            <SectionHeading
-              variant="inside"
-              heading="감시 폴더 운영"
-              actions={
-                <>
-                  <Button size="icon-sm" variant="outline" onClick={onRefresh} aria-label="새로고침" title="새로고침">
-                    <RefreshCcw className="h-4 w-4" />
-                  </Button>
-                  <Button size="icon-sm" onClick={onScanAll} aria-label="전체 스캔" title="전체 스캔">
-                    <ScanSearch className="h-4 w-4" />
-                  </Button>
-                </>
-              }
-            />
-            <div className="grid gap-3 text-sm md:grid-cols-6">
-              <SettingsValueTile label="folders" value={folders.length} valueClassName="text-xl" />
-              <SettingsValueTile label="backup sources" value={backupSources.length} valueClassName="text-xl" />
-              <SettingsValueTile label="watching" value={watchersHealth?.watching ?? 0} valueClassName="text-xl" />
-              <SettingsValueTile label="errors" value={watchersHealth?.error ?? 0} valueClassName="text-xl" />
-              <SettingsValueTile label="events 24h" value={watchersHealth?.totalEvents24h ?? 0} valueClassName="text-xl" />
-              <SettingsValueTile label="latest scan log" value={scanLogs[0]?.folder_name ?? '—'} />
-            </div>
-          </CardContent>
-        </Card>
+      <div className="space-y-6">
+        <SettingsSection
+          heading="감시 폴더 운영"
+          actions={
+            <>
+              <Button size="icon-sm" variant="outline" onClick={onRefresh} aria-label="새로고침" title="새로고침">
+                <RefreshCcw className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="outline"
+                onClick={onVerifyAllFiles}
+                disabled={isVerifyingAllFiles}
+                aria-label="전체 파일 검증"
+                title="전체 파일 검증"
+              >
+                <ShieldCheck className="h-4 w-4" />
+              </Button>
+              <Button size="icon-sm" onClick={onScanAll} aria-label="전체 스캔" title="전체 스캔">
+                <ScanSearch className="h-4 w-4" />
+              </Button>
+            </>
+          }
+        >
+          <div className="grid gap-3 text-sm md:grid-cols-6">
+            <SettingsValueTile label="folders" value={folders.length} valueClassName="text-xl" />
+            <SettingsValueTile label="backup sources" value={backupSources.length} valueClassName="text-xl" />
+            <SettingsValueTile label="watching" value={watchersHealth?.watching ?? 0} valueClassName="text-xl" />
+            <SettingsValueTile label="errors" value={watchersHealth?.error ?? 0} valueClassName="text-xl" />
+            <SettingsValueTile label="events 24h" value={watchersHealth?.totalEvents24h ?? 0} valueClassName="text-xl" />
+            <SettingsValueTile label="latest scan log" value={scanLogs[0]?.folder_name ?? '—'} />
+          </div>
+        </SettingsSection>
 
         <section className="space-y-4">
           {foldersLoading ? (
@@ -185,51 +201,42 @@ export function FoldersTab({
           ) : null}
 
           {!foldersLoading && !foldersError ? (
-            <Card className="overflow-hidden">
-              <CardContent className="p-0">
-                <SectionHeading
-                  variant="inside"
-                  className="border-b border-border/70 px-4 pb-4"
-                  heading="등록된 감시 폴더"
-                  description={`${folders.length.toLocaleString('ko-KR')}개 항목`}
-                  actions={
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      onClick={() => setIsAddFolderModalOpen(true)}
-                      aria-label="감시 폴더 추가"
-                      title="감시 폴더 추가"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  }
-                />
-                {folders.length > 0 ? (
-                  <>
-                    <div className="hidden border-b border-border/70 bg-surface-low/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(220px,0.9fr)_auto] md:items-center md:gap-3">
-                      <span>표시 이름</span>
-                      <span>경로</span>
-                      <span>상태</span>
-                      <span className="text-right">옵션</span>
-                    </div>
-
-                    <div className="space-y-4 px-4 pt-4">
-                      {folders.map((folder) => (
-                        <WatchedFolderListItem
-                          key={folder.id}
-                          folder={folder}
-                          watcherState={folderWatcherMap.get(folder.id)}
-                          selected={selectedFolderId === folder.id}
-                          onOpenOptions={setSelectedFolderId}
-                        />
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <div className="px-4 py-6 text-sm text-muted-foreground">등록된 감시 폴더가 없어.</div>
-                )}
-              </CardContent>
-            </Card>
+            <SettingsSection
+              heading="등록된 감시 폴더"
+              actions={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  onClick={() => setIsAddFolderModalOpen(true)}
+                  aria-label="감시 폴더 추가"
+                  title="감시 폴더 추가"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              }
+              bodyClassName="px-0 py-0"
+            >
+              {folders.length > 0 ? (
+                <SettingsResourceTable
+                  gridClassName={WATCHED_FOLDER_TABLE_GRID}
+                  minWidthClassName="min-w-[860px]"
+                  headers={['이름', '경로', '활성', '감시', '']}
+                >
+                  {folders.map((folder) => (
+                    <WatchedFolderListItem
+                      key={folder.id}
+                      folder={folder}
+                      watcherState={folderWatcherMap.get(folder.id)}
+                      selected={selectedFolderId === folder.id}
+                      gridClassName={WATCHED_FOLDER_TABLE_GRID}
+                      onOpenOptions={setSelectedFolderId}
+                    />
+                  ))}
+                </SettingsResourceTable>
+              ) : (
+                <div className="px-4 py-6 text-sm text-muted-foreground">등록된 감시 폴더가 없어.</div>
+              )}
+            </SettingsSection>
           ) : null}
         </section>
 
@@ -250,88 +257,79 @@ export function FoldersTab({
           ) : null}
 
           {!backupSourcesLoading && !backupSourcesError ? (
-            <Card className="overflow-hidden">
-              <CardContent className="p-0">
-                <SectionHeading
-                  variant="inside"
-                  className="border-b border-border/70 px-4 pb-4"
-                  heading="등록된 백업 소스"
-                  description={`${backupSources.length.toLocaleString('ko-KR')}개 항목`}
-                  actions={
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      onClick={() => setIsAddBackupSourceModalOpen(true)}
-                      aria-label="백업 소스 추가"
-                      title="백업 소스 추가"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  }
-                />
-                {backupSources.length > 0 ? (
-                  <>
-                    <div className="hidden border-b border-border/70 bg-surface-low/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(220px,0.9fr)_auto] md:items-center md:gap-3">
-                      <span>표시 이름</span>
-                      <span>경로</span>
-                      <span>상태</span>
-                      <span className="text-right">옵션</span>
-                    </div>
-
-                    <div className="space-y-4 px-4 pt-4">
-                      {backupSources.map((source) => (
-                        <BackupSourceListItem
-                          key={source.id}
-                          source={source}
-                          selected={selectedBackupSourceId === source.id}
-                          onOpenOptions={setSelectedBackupSourceId}
-                        />
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <div className="px-4 py-6 text-sm text-muted-foreground">등록된 백업 소스가 없어.</div>
-                )}
-              </CardContent>
-            </Card>
+            <SettingsSection
+              heading="등록된 백업 소스"
+              actions={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  onClick={() => setIsAddBackupSourceModalOpen(true)}
+                  aria-label="백업 소스 추가"
+                  title="백업 소스 추가"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              }
+              bodyClassName="px-0 py-0"
+            >
+              {backupSources.length > 0 ? (
+                <SettingsResourceTable
+                  gridClassName={BACKUP_SOURCE_TABLE_GRID}
+                  minWidthClassName="min-w-[1120px]"
+                  headers={['이름', '원본 경로', '대상', '활성', '감시', '']}
+                >
+                  {backupSources.map((source) => (
+                    <BackupSourceListItem
+                      key={source.id}
+                      source={source}
+                      selected={selectedBackupSourceId === source.id}
+                      gridClassName={BACKUP_SOURCE_TABLE_GRID}
+                      onOpenOptions={setSelectedBackupSourceId}
+                    />
+                  ))}
+                </SettingsResourceTable>
+              ) : (
+                <div className="px-4 py-6 text-sm text-muted-foreground">등록된 백업 소스가 없어.</div>
+              )}
+            </SettingsSection>
           ) : null}
         </section>
 
         <section className="space-y-4">
-          <Card>
-            <CardContent className="space-y-4">
-              <SectionHeading
-                variant="inside"
-                heading="최근 스캔 로그"
-                description={`${scanLogs.length.toLocaleString('ko-KR')}개 로그`}
-              />
-              {scanLogsLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <Skeleton key={index} className="h-14 w-full rounded-sm" />
-                  ))}
-                </div>
-              ) : null}
+          <SettingsSection heading="최근 스캔 로그" bodyClassName="px-0 py-0">
+            {scanLogsLoading ? (
+              <div className="space-y-2 px-4 py-4">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <Skeleton key={index} className="h-14 w-full rounded-sm" />
+                ))}
+              </div>
+            ) : null}
 
-              {!scanLogsLoading && scanLogs.length === 0 ? <p className="text-sm text-muted-foreground">최근 스캔 로그가 없어.</p> : null}
+            {!scanLogsLoading && scanLogs.length === 0 ? <p className="px-4 py-6 text-sm text-muted-foreground">최근 스캔 로그가 없어.</p> : null}
 
-              {scanLogs.map((log) => (
-                <div key={log.id} className="rounded-sm bg-surface-low px-4 py-3 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-medium text-foreground">{log.folder_name || `Folder #${log.folder_id}`}</div>
-                    <div className="text-xs text-muted-foreground">{formatDateTime(log.scan_date)}</div>
+            {!scanLogsLoading && scanLogs.length > 0 ? (
+              <SettingsResourceTable
+                gridClassName={SCAN_LOG_TABLE_GRID}
+                minWidthClassName="min-w-[980px]"
+                headers={['폴더', '상태', '스캔', '신규', '기존', '오류', '시각']}
+              >
+                {scanLogs.map((log) => (
+                  <div key={log.id} className={`grid items-center px-4 py-3 text-sm transition-colors hover:bg-surface-high/60 ${SCAN_LOG_TABLE_GRID}`}>
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-foreground">{log.folder_name || `Folder #${log.folder_id}`}</div>
+                      {log.folder_path ? <div className="truncate font-mono text-[11px] text-muted-foreground">{log.folder_path}</div> : null}
+                    </div>
+                    <div className="text-center text-xs uppercase tracking-[0.14em] text-muted-foreground">{log.status}</div>
+                    <div className="text-center font-medium text-foreground">{formatTableNumber(log.total_scanned)}</div>
+                    <div className="text-center font-medium text-foreground">{formatTableNumber(log.new_images)}</div>
+                    <div className="text-center font-medium text-foreground">{formatTableNumber(log.existing_images)}</div>
+                    <div className="text-center font-medium text-foreground">{formatTableNumber(log.error_count)}</div>
+                    <div className="text-center text-xs text-muted-foreground">{formatDateTime(log.scan_date)}</div>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <span>status {log.status}</span>
-                    <span>scanned {log.total_scanned}</span>
-                    <span>new {log.new_images}</span>
-                    <span>existing {log.existing_images}</span>
-                    <span>errors {log.error_count}</span>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                ))}
+              </SettingsResourceTable>
+            ) : null}
+          </SettingsSection>
         </section>
       </div>
 

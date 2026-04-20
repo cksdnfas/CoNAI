@@ -10,6 +10,7 @@ interface SelectionActionBarProps {
   actions?: ReactNode
   onClear?: () => void
   clearLabel?: string
+  compactActions?: boolean
   className?: string
 }
 
@@ -21,6 +22,7 @@ export function SelectionActionBar({
   actions,
   onClear,
   clearLabel = '선택 해제',
+  compactActions = false,
   className,
 }: SelectionActionBarProps) {
   if (selectedCount <= 0) {
@@ -41,10 +43,23 @@ export function SelectionActionBar({
         </div>
 
         {onClear ? (
-          <Button size="sm" variant="secondary" onClick={onClear} data-no-select-drag="true">
-            <X className="h-4 w-4" />
-            {clearLabel}
-          </Button>
+          compactActions ? (
+            <Button
+              size="icon-sm"
+              variant="secondary"
+              onClick={onClear}
+              title={clearLabel}
+              aria-label={clearLabel}
+              data-no-select-drag="true"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={onClear} data-no-select-drag="true">
+              <X className="h-4 w-4" />
+              {clearLabel}
+            </Button>
+          )
         ) : null}
 
         {actions}

@@ -309,7 +309,7 @@ export function PromptPage() {
         onChange={(nextType) => handleChangeType(nextType as PromptTypeFilter)}
       />
 
-      <div className={cn('grid gap-8', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
+      <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <PromptSidebar
           groups={groupsQuery.data ?? []}
           selectedGroupId={selectedGroupId}
@@ -335,26 +335,27 @@ export function PromptPage() {
         />
 
         <section className="relative z-0 space-y-4">
-          <div className="space-y-2">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">{currentSectionCount.toLocaleString('ko-KR')}개 표시됨</p>
-              <PromptToolbar
-                searchInput={searchInput}
-                sortBy={sortBy}
-                sortOrder={sortOrder}
-                onSearchInputChange={setSearchInput}
-                onApplySearch={handleApplySearch}
-                onChangeSortBy={(value) => {
-                  setSortBy(value)
-                  setPage(1)
-                }}
-                onChangeSortOrder={(value) => {
-                  setSortOrder(value)
-                  setPage(1)
-                }}
-              />
+          <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
+              <div className="mt-1 text-sm text-muted-foreground">{currentSectionCount.toLocaleString('ko-KR')}개 표시됨</div>
             </div>
+
+            <PromptToolbar
+              searchInput={searchInput}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              onSearchInputChange={setSearchInput}
+              onApplySearch={handleApplySearch}
+              onChangeSortBy={(value) => {
+                setSortBy(value)
+                setPage(1)
+              }}
+              onChangeSortOrder={(value) => {
+                setSortOrder(value)
+                setPage(1)
+              }}
+            />
           </div>
 
           <PromptListPanel

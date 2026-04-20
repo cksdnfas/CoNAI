@@ -109,6 +109,9 @@ export class SystemSettingsService {
    */
   static isFileVerificationEnabled(): boolean {
     const value = this.getSetting('file_verification_enabled');
+    if (value === null) {
+      return true;
+    }
     return value === 'true';
   }
 

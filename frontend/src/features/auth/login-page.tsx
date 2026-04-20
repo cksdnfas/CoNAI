@@ -3,13 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleHelp, ShieldCheck, UserPlus } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
-import { SectionHeading } from '@/components/common/section-heading'
+import { PageSection } from '@/components/common/page-surface'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { createGuestAccount, getAuthDatabaseInfo, loginLocalAccount, type AuthMutationRecord } from '@/lib/api'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
@@ -120,56 +120,50 @@ export function LoginPage() {
           />
 
           <div className="grid gap-6">
-            <Card className="border-primary/15 bg-card">
-              <CardContent className="space-y-4">
-                <SectionHeading
-                  variant="inside"
-                  heading="계정 로그인"
-                  actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">로컬 계정</Badge>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        onClick={() => setIsRecoveryModalOpen(true)}
-                        aria-label="복구 안내"
-                        title="복구 안내"
-                      >
-                        <CircleHelp className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  }
-                />
-
-                <form
-                  className="space-y-4"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    void loginMutation.mutateAsync({ nextUsername: username.trim(), nextPassword: password })
-                  }}
-                >
-                  <label className="block space-y-2 text-sm">
-                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">아이디</span>
-                    <Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
-                  </label>
-                  <label className="block space-y-2 text-sm">
-                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">비밀번호</span>
-                    <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
-                  </label>
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <Button type="button" variant="outline" onClick={() => setIsGuestModalOpen(true)}>
-                      <UserPlus className="h-4 w-4" />
-                      게스트 계정 만들기
-                    </Button>
-                    <Button type="submit" disabled={loginMutation.isPending || username.trim().length === 0 || password.length === 0}>
-                      {loginMutation.isPending ? '로그인 중…' : '로그인'}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-
+            <PageSection
+              title="계정 로그인"
+              className="border-primary/15 bg-card"
+              bodyClassName="space-y-4"
+              actions={
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">로컬 계정</Badge>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={() => setIsRecoveryModalOpen(true)}
+                    aria-label="복구 안내"
+                    title="복구 안내"
+                  >
+                    <CircleHelp className="h-4 w-4" />
+                  </Button>
+                </div>
+              }
+            >
+              <form
+                className="space-y-4"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void loginMutation.mutateAsync({ nextUsername: username.trim(), nextPassword: password })
+                }}
+              >
+                <SettingsField label="아이디">
+                  <Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
+                </SettingsField>
+                <SettingsField label="비밀번호">
+                  <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
+                </SettingsField>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Button type="button" variant="outline" onClick={() => setIsGuestModalOpen(true)}>
+                    <UserPlus className="h-4 w-4" />
+                    게스트 계정 만들기
+                  </Button>
+                  <Button type="submit" disabled={loginMutation.isPending || username.trim().length === 0 || password.length === 0}>
+                    {loginMutation.isPending ? '로그인 중…' : '로그인'}
+                  </Button>
+                </div>
+              </form>
+            </PageSection>
           </div>
         </div>
       </div>
@@ -180,21 +174,21 @@ export function LoginPage() {
         title="복구 안내"
         widthClassName="max-w-lg"
       >
-        <div className="space-y-4">
+        <SettingsModalBody>
           <div className="flex items-start gap-3">
             <div className="rounded-2xl bg-primary/12 p-3 text-primary">
               <ShieldCheck className="h-6 w-6" />
             </div>
             <div className="space-y-1">
               <div className="text-sm font-semibold text-foreground">auth.db</div>
-              <div className="text-sm text-muted-foreground break-all">{databaseInfo?.authDbPath ?? '불러오는 중…'}</div>
+              <div className="break-all text-sm text-muted-foreground">{databaseInfo?.authDbPath ?? '불러오는 중…'}</div>
             </div>
           </div>
 
-          <div className="rounded-sm border border-border bg-surface-container/72 px-3 py-3 text-sm text-muted-foreground">
+          <SettingsInsetBlock className="text-sm text-muted-foreground">
             {databaseInfo?.recoveryInstructions.ko ?? '복구 안내를 불러오는 중…'}
-          </div>
-        </div>
+          </SettingsInsetBlock>
+        </SettingsModalBody>
       </SettingsModal>
 
       <SettingsModal
@@ -215,28 +209,28 @@ export function LoginPage() {
             void guestSignupMutation.mutateAsync({ nextUsername: guestUsername.trim(), nextPassword: guestPassword })
           }}
         >
-          <label className="block space-y-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">아이디</span>
-            <Input value={guestUsername} onChange={(event) => setGuestUsername(event.target.value)} autoComplete="username" />
-          </label>
+          <SettingsModalBody>
+            <SettingsField label="아이디">
+              <Input value={guestUsername} onChange={(event) => setGuestUsername(event.target.value)} autoComplete="username" />
+            </SettingsField>
 
-          <label className="block space-y-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">비밀번호</span>
-            <Input type="password" value={guestPassword} onChange={(event) => setGuestPassword(event.target.value)} autoComplete="new-password" />
-          </label>
+            <SettingsField label="비밀번호">
+              <Input type="password" value={guestPassword} onChange={(event) => setGuestPassword(event.target.value)} autoComplete="new-password" />
+            </SettingsField>
 
-          <div className="text-sm text-muted-foreground">
-            게스트 계정은 언제든 초기화될 수 있어.
-          </div>
+            <SettingsInsetBlock className="text-sm text-muted-foreground">
+              게스트 계정은 언제든 초기화될 수 있어.
+            </SettingsInsetBlock>
 
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => setIsGuestModalOpen(false)} disabled={guestSignupMutation.isPending}>
-              취소
-            </Button>
-            <Button type="submit" disabled={guestSignupMutation.isPending || guestUsername.trim().length === 0 || guestPassword.length === 0}>
-              {guestSignupMutation.isPending ? '생성 중…' : '만들고 바로 시작'}
-            </Button>
-          </div>
+            <SettingsModalFooter>
+              <Button type="button" variant="ghost" onClick={() => setIsGuestModalOpen(false)} disabled={guestSignupMutation.isPending}>
+                취소
+              </Button>
+              <Button type="submit" disabled={guestSignupMutation.isPending || guestUsername.trim().length === 0 || guestPassword.length === 0}>
+                {guestSignupMutation.isPending ? '생성 중…' : '만들고 바로 시작'}
+              </Button>
+            </SettingsModalFooter>
+          </SettingsModalBody>
         </form>
       </SettingsModal>
     </>

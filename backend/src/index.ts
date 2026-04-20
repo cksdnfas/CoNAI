@@ -31,10 +31,11 @@ if (process.env.NODE_ENV === 'production' || isPackagedRuntime()) {
 }
 
 import https from 'https';
-import express from 'express';
+import express, { type Response as ExpressResponse } from 'express';
 import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
+import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import BetterSqlite3Store from 'better-sqlite3-session-store';
@@ -62,6 +63,36 @@ const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
 const isDevelopment = process.env.NODE_ENV !== 'production';
 const isSafeSmokeMode = process.env.SAFE_SMOKE_MODE === 'true';
+
+/** Resolve the Express trust-proxy setting for direct and proxied deployments. */
+function resolveTrustProxySetting() {
+  const configuredValue = process.env.TRUST_PROXY?.trim();
+
+  if (!configuredValue) {
+    const hasExternalOriginHint = Boolean(process.env.PUBLIC_BASE_URL || process.env.BACKEND_HOST || process.env.PUBLIC_HOST);
+    const usesHttpsOrigin = (process.env.BACKEND_PROTOCOL || '').toLowerCase() === 'https';
+    return hasExternalOriginHint || usesHttpsOrigin ? 1 : false;
+  }
+
+  if (configuredValue === 'true') {
+    return true;
+  }
+
+  if (configuredValue === 'false') {
+    return false;
+  }
+
+  const numericValue = Number(configuredValue);
+  if (Number.isInteger(numericValue) && numericValue >= 0) {
+    return numericValue;
+  }
+
+  return configuredValue;
+}
+
+const trustProxySetting = resolveTrustProxySetting();
+app.set('trust proxy', trustProxySetting);
+console.log(`[Config] Express trust proxy: ${String(trustProxySetting)}`);
 
 // Rate limiting for login endpoint (prevent brute-force attacks)
 const loginLimiter = rateLimit({
@@ -103,7 +134,10 @@ const readOnlyLimiter = rateLimit({
 // Middleware
 const isSecureContext = (process.env.BACKEND_PROTOCOL || '').toLowerCase() === 'https';
 
-
+app.use((_req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
 
 app.use(helmet({
 
@@ -120,6 +154,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'script-src': [
+        "'self'",
+        (_req, res) => `'nonce-${(res as ExpressResponse).locals.cspNonce as string}'`,
+      ],
       'upgrade-insecure-requests': null, // HTTP 접속 허용
       'connect-src': ["'self'", 'http://localhost:*', 'ws:', 'wss:'], // API 연결 허용
       'img-src': ["'self'", 'data:', 'blob:', 'http:', 'https:'], // 외부 네트워크 이미지 + 로컬 blob 미리보기 허용

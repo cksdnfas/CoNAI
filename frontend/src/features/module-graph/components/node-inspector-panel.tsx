@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { ChevronDown, ChevronRight, CircleHelp } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,10 +10,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
-import type { GraphExecutionArtifactRecord, ModulePortDefinition } from '@/lib/api'
+import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
+import { TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import { getWorkflowInputSourcePort } from '../module-graph-workflow-inputs'
 import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, normalizeModulePortDescription, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
@@ -49,30 +50,9 @@ type NodeOutputArtifactGroup = {
   artifacts: GraphExecutionArtifactRecord[]
 }
 
-const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
-  image: '이미지',
-  mask: '마스크',
-  prompt: '프롬프트',
-  text: '텍스트',
-  number: '숫자',
-  boolean: '불리언',
-  json: 'JSON',
-  any: '임의',
-}
-
-/** Check whether a node input has any explicit or default value. */
-function hasMeaningfulValue(value: unknown) {
-  return value !== undefined && value !== null && value !== ''
-}
-
-/** Render a compact tooltip icon for internal node, edge, and port references. */
-function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
-  return (
-    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
-      <CircleHelp className="h-3.5 w-3.5" />
-    </span>
-  )
-}
+const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-3'
+const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'space-y-3 rounded-sm border border-border/70 bg-background/35 p-4'
+const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'rounded-sm border border-border/70 bg-background/35 p-4'
 
 /** Resolve whether one node input is already satisfied by a connection or value. */
 function isNodeInputSatisfied(node: ModuleGraphNode, port: ModulePortDefinition) {
@@ -89,7 +69,7 @@ function findNodeUiField(node: ModuleGraphNode, portKey: string) {
 function PortBadges({ port, missingRequired = false }: { port: ModulePortDefinition; missingRequired?: boolean }) {
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      <Badge variant="outline">{PORT_TYPE_LABELS[port.data_type]}</Badge>
+      <Badge variant="outline">{getModuleGraphPortTypeLabel(port.data_type)}</Badge>
       <Badge variant="secondary">{port.key}</Badge>
       {port.required ? <Badge variant="outline">필수</Badge> : null}
       {missingRequired ? <Badge variant="secondary">입력 필요</Badge> : null}
@@ -129,6 +109,12 @@ function PortHeader({
   )
 }
 
+/** Find editable UI-only fields that are not backed by module input ports. */
+function getStandaloneNodeUiFields(node: ModuleGraphNode) {
+  const portKeys = new Set((node.data.module.exposed_inputs ?? []).map((port) => port.key))
+  return (node.data.module.ui_schema ?? []).filter((field) => !portKeys.has(field.key))
+}
+
 /** Resolve a selected edge endpoint back into its node and module port metadata. */
 function resolveEdgeEndpoint(nodes: ModuleGraphNode[], nodeId: string, handleId: string | null | undefined, direction: 'in' | 'out'): ResolvedEdgeEndpoint {
   const node = nodes.find((item) => item.id === nodeId) ?? null
@@ -160,7 +146,7 @@ function EdgeEndpointCard({
   role: '입력' | '출력'
 }) {
   return (
-    <div className="rounded-sm border border-border bg-surface-low px-3 py-3">
+    <div className="rounded-sm border border-border/70 bg-background/35 px-3 py-3">
       <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{heading}</div>
       <div className="mt-2 flex items-center gap-1">
         <div className="text-sm font-medium text-foreground">{endpoint.node ? getModuleNodeDisplayLabel(endpoint.node) : '알 수 없는 노드'}</div>
@@ -264,7 +250,7 @@ export function NodeInspectorPanel({
 
     if (isNaiCharacterPromptPort(port.key, port.data_type)) {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <NaiCharacterPromptsInput value={rawValue} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
         </div>
@@ -273,7 +259,7 @@ export function NodeInspectorPanel({
 
     if (isNaiVibePort(port.key, port.data_type)) {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <NaiReusableAssetInput kind="vibes" value={rawValue} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
         </div>
@@ -282,7 +268,7 @@ export function NodeInspectorPanel({
 
     if (isNaiCharacterReferencePort(port.key, port.data_type)) {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <NaiReusableAssetInput kind="character_refs" value={rawValue} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
         </div>
@@ -291,7 +277,7 @@ export function NodeInspectorPanel({
 
     if (uiField?.data_type === 'select' && Array.isArray(uiField.options) && uiField.options.length > 0) {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Select
             value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
@@ -308,7 +294,7 @@ export function NodeInspectorPanel({
 
     if (port.data_type === 'prompt' || port.data_type === 'json') {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Textarea
             rows={port.data_type === 'json' ? 6 : 4}
@@ -322,7 +308,7 @@ export function NodeInspectorPanel({
 
     if (port.data_type === 'number') {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Input
             type="number"
@@ -338,7 +324,7 @@ export function NodeInspectorPanel({
 
     if (port.data_type === 'boolean') {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <Select
             value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
@@ -354,7 +340,7 @@ export function NodeInspectorPanel({
 
     if (port.data_type === 'image' || port.data_type === 'mask') {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <ImageAttachmentPickerButton label={hasExplicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={port.label} allowSaveDialog={false} onSelect={(image) => void onNodeImageChange(node.id, port.key, image)} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:') ? (
@@ -366,7 +352,7 @@ export function NodeInspectorPanel({
 
     if (port.data_type === 'any') {
       return (
-        <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <div className="text-sm text-muted-foreground">
             이 포트는 연결된 업스트림 값을 그대로 받아. 직접 편집은 지원하지 않아.
@@ -376,13 +362,133 @@ export function NodeInspectorPanel({
     }
 
     return (
-      <div key={port.key} className="space-y-2 rounded-sm border border-border bg-surface-low p-3" style={cardStyle}>
+      <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
         <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
         <Input
           value={typeof rawValue === 'string' ? rawValue : rawValue ? String(rawValue) : ''}
           onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
           placeholder={uiField?.placeholder || normalizedDescription || port.label}
         />
+      </div>
+    )
+  }
+
+  const renderStandaloneUiField = (node: ModuleGraphNode, field: ModuleUiFieldDefinition) => {
+    const rawValue = node.data.inputValues?.[field.key]
+    const normalizedDescription = normalizeModulePortDescription(field.description)
+    const hasExplicitValue = hasMeaningfulValue(rawValue)
+    const clearFieldValue = () => onNodeValueClear(node.id, field.key)
+
+    if (field.data_type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
+      return (
+        <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <div className="text-sm font-medium text-foreground">{field.label}</div>
+                <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
+              </div>
+              {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
+            </div>
+            <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
+              값 지우기
+            </Button>
+          </div>
+          <Select
+            value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
+            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value)}
+          >
+            <option value="">{hasMeaningfulValue(field.default_value) ? '기본값 사용' : '선택'}</option>
+            {field.options.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </Select>
+        </div>
+      )
+    }
+
+    if (field.data_type === 'number') {
+      return (
+        <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <div className="text-sm font-medium text-foreground">{field.label}</div>
+                <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
+              </div>
+              {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
+            </div>
+            <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
+              값 지우기
+            </Button>
+          </div>
+          <Input
+            type="number"
+            min={field.min}
+            max={field.max}
+            value={typeof rawValue === 'number' ? String(rawValue) : typeof rawValue === 'string' ? rawValue : ''}
+            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value === '' ? '' : Number(event.target.value))}
+            placeholder={field.placeholder || field.label}
+          />
+        </div>
+      )
+    }
+
+    if (field.data_type === 'boolean') {
+      return (
+        <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1">
+                <div className="text-sm font-medium text-foreground">{field.label}</div>
+                <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
+              </div>
+              {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
+            </div>
+            <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
+              값 지우기
+            </Button>
+          </div>
+          <Select
+            value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
+            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value === 'true')}
+          >
+            <option value="">기본값 사용</option>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </Select>
+        </div>
+      )
+    }
+
+    return (
+      <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1">
+              <div className="text-sm font-medium text-foreground">{field.label}</div>
+              <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
+            </div>
+            {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
+          </div>
+          <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
+            값 지우기
+          </Button>
+        </div>
+        {field.data_type === 'json' || field.data_type === 'prompt' || field.data_type === 'text' ? (
+          <Textarea
+            rows={field.data_type === 'json' ? 6 : 2}
+            value={typeof rawValue === 'string' ? rawValue : rawValue ? JSON.stringify(rawValue, null, 2) : ''}
+            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value)}
+            placeholder={field.placeholder || normalizedDescription || field.label}
+          />
+        ) : (
+          <Input
+            value={typeof rawValue === 'string' ? rawValue : rawValue ? String(rawValue) : ''}
+            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value)}
+            placeholder={field.placeholder || normalizedDescription || field.label}
+          />
+        )}
       </div>
     )
   }
@@ -398,6 +504,7 @@ export function NodeInspectorPanel({
     ? (selectedNode.data.module.exposed_inputs ?? []).filter((port) => port.required && !isNodeInputSatisfied(selectedNode, port))
     : []
   const selectedNodeWorkflowInputPort = selectedNode ? getWorkflowInputSourcePort(selectedNode) : null
+  const selectedNodeStandaloneUiFields = selectedNode ? getStandaloneNodeUiFields(selectedNode) : []
   const sortedSelectedNodeInputs = selectedNode && !selectedNodeWorkflowInputPort
     ? [...(selectedNode.data.module.exposed_inputs ?? [])].sort((left, right) => {
         const leftHighlighted = left.key === highlightedPortKey ? 1 : 0
@@ -449,7 +556,7 @@ export function NodeInspectorPanel({
         ) : null}
 
         {!selectedNode && selectedEdge && sourceEndpoint && targetEndpoint ? (
-          <div className="space-y-3 rounded-sm bg-surface-low p-4">
+          <div className={NODE_INSPECTOR_EDGE_SURFACE_CLASS}>
             <div className="flex items-center gap-2">
               <div className="font-medium text-foreground">선택한 엣지</div>
               {selectedEdgeType ? <Badge variant="outline">{selectedEdgeType}</Badge> : null}
@@ -464,7 +571,7 @@ export function NodeInspectorPanel({
 
         {selectedNode ? (
           <>
-            <div className="rounded-sm bg-surface-low p-4">
+            <div className={NODE_INSPECTOR_NODE_SURFACE_CLASS}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -553,7 +660,7 @@ export function NodeInspectorPanel({
                             {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                             <span className="truncate text-sm font-medium text-foreground">{group.portLabel}</span>
                             <Badge variant="secondary">{group.portKey}</Badge>
-                            {group.portType ? <Badge variant="outline">{PORT_TYPE_LABELS[group.portType]}</Badge> : null}
+                            {group.portType ? <Badge variant="outline">{getModuleGraphPortTypeLabel(group.portType)}</Badge> : null}
                           </div>
                           <Badge variant="outline">{group.artifacts.length}</Badge>
                         </button>
@@ -573,9 +680,16 @@ export function NodeInspectorPanel({
             </div>
 
             {(selectedNode.data.module.exposed_inputs ?? []).length === 0 || selectedNodeWorkflowInputPort ? (
-              <div className="text-sm text-muted-foreground">이 노드 입력은 카드에서 바로 편집해.</div>
+              selectedNodeStandaloneUiFields.length > 0 ? (
+                <div className="space-y-4">{selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}</div>
+              ) : (
+                <div className="text-sm text-muted-foreground">이 노드 입력은 카드에서 바로 편집해.</div>
+              )
             ) : (
-              <div className="space-y-4">{sortedSelectedNodeInputs.map((port) => renderPortInput(selectedNode, port))}</div>
+              <div className="space-y-4">
+                {sortedSelectedNodeInputs.map((port) => renderPortInput(selectedNode, port))}
+                {selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}
+              </div>
             )}
           </>
         ) : null}

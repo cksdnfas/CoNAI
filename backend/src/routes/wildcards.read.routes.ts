@@ -2,11 +2,11 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/errorHandler';
 import { WildcardModel } from '../models/Wildcard';
-import fs from 'fs';
-import path from 'path';
-import { runtimePaths } from '../config/runtimePaths';
+import { requirePermission } from '../middleware/authMiddleware';
 
 const router = Router();
+
+router.use(requirePermission('page.wildcards.view'));
 
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {

@@ -7,10 +7,10 @@ const selectVariants = cva(
   {
     variants: {
       variant: {
-        default: 'h-9 border border-border bg-surface-container px-3 transition focus:border-primary',
-        settings: 'theme-settings-control h-10 border border-border bg-surface-container focus:ring-1 focus:ring-primary',
-        detail: 'h-10 border border-border bg-surface-container px-3 focus:border-primary',
-        detailNested: 'h-10 border border-border bg-surface-low px-3 focus:border-primary',
+        default: 'theme-input-surface h-9 border px-3 transition focus:border-primary',
+        settings: 'theme-settings-control theme-input-surface h-10 border focus:ring-1 focus:ring-primary',
+        detail: 'theme-input-surface h-10 border px-3 focus:border-primary',
+        detailNested: 'theme-input-surface h-10 border px-3 focus:border-primary',
       },
     },
     defaultVariants: {

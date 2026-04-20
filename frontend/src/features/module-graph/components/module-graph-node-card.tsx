@@ -10,7 +10,8 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import type { ModulePortDefinition } from '@/lib/api'
+import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
+import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import {
   WORKFLOW_INPUT_ENABLED_KEY,
   WORKFLOW_INPUT_REQUIRED_KEY,
@@ -22,23 +23,13 @@ import {
   getModuleBaseDisplayName,
   getModuleColor,
   getModuleNodeDisplayLabelFromData,
+  getModuleOperationKey,
   getPortTypeColor,
   hasCustomModuleNodeLabel,
   isFinalResultModule,
   normalizeModulePortDescription,
   type ModuleGraphNode,
 } from '../module-graph-shared'
-
-const PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], string> = {
-  image: '이미지',
-  mask: '마스크',
-  prompt: '프롬프트',
-  text: '텍스트',
-  number: '숫자',
-  boolean: '불리언',
-  json: 'JSON',
-  any: '임의',
-}
 
 const ENGINE_TYPE_LABELS = {
   nai: 'NAI',
@@ -49,6 +40,8 @@ const ENGINE_TYPE_LABELS = {
 
 const TEXT_PORT_COLOR = getPortTypeColor('text')
 const PROMPT_PORT_COLOR = getPortTypeColor('prompt')
+const MODULE_GRAPH_INLINE_CONTROL_CLASS = 'theme-input-surface border-border/80 focus:border-primary'
+const MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS = 'theme-input-surface border-border/80'
 
 type PortCellProps = {
   nodeId: string
@@ -60,11 +53,6 @@ type PortCellProps = {
   requiredMissing: boolean
   requiredMissingLabel?: string
   onDisconnectInput?: (nodeId: string, portKey: string) => void
-}
-
-/** Check whether a node input has any explicit or default value. */
-function hasMeaningfulValue(value: unknown) {
-  return value !== undefined && value !== null && value !== ''
 }
 
 /** Flag prompt/text ports that can bridge within the string family. */
@@ -88,7 +76,7 @@ function buildPortTooltip(port: ModulePortDefinition, statusLabel: string) {
   return [
     port.label,
     `키: ${port.key}`,
-    `타입: ${PORT_TYPE_LABELS[port.data_type]}`,
+    `타입: ${getModuleGraphPortTypeLabel(port.data_type)}`,
     `상태: ${statusLabel}`,
     isStringBridgePort(port.data_type) ? '브리지: 텍스트 ↔ 프롬프트' : null,
     port.required ? '필수' : null,
@@ -168,7 +156,7 @@ function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requi
             className="shrink-0 px-1.5 py-0 text-[9px] font-medium uppercase tracking-[0.08em]"
             style={{ borderColor: `${portTypeColor}66`, color: portTypeColor } as CSSProperties}
           >
-            {PORT_TYPE_LABELS[port.data_type]}
+            {getModuleGraphPortTypeLabel(port.data_type)}
           </Badge>
         )}
       </div>
@@ -206,7 +194,7 @@ function SourceNodeOutputPort({ port, connected, accentColor }: { port: ModulePo
             className="shrink-0 px-1.5 py-0 text-[9px] font-medium uppercase tracking-[0.08em]"
             style={{ borderColor: `${portTypeColor}66`, color: portTypeColor } as CSSProperties}
           >
-            {PORT_TYPE_LABELS[port.data_type]}
+            {getModuleGraphPortTypeLabel(port.data_type)}
           </Badge>
         </div>
       </div>
@@ -235,11 +223,11 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
   }
 
   return (
-    <div className="nodrag nowheel mt-2.5 space-y-2.5 rounded-sm border border-border/70 bg-background/40 p-2.5" onMouseDown={stopNodeInteraction}>
+    <div className="nodrag nowheel mt-2.5 space-y-2 px-0.5 pt-1" onMouseDown={stopNodeInteraction}>
       <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">직접 값 설정</div>
 
       <div className="grid gap-2">
-        <ToggleRow variant="detail" className="nodrag nowheel justify-between px-2.5 py-2" onMouseDown={stopNodeInteraction}>
+        <ToggleRow variant="detail" className={`nodrag nowheel justify-between px-2.5 py-2 ${MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS}`} onMouseDown={stopNodeInteraction}>
           <div className="min-w-0 text-xs font-medium text-foreground">실행 입력으로 노출</div>
           <input
             type="checkbox"
@@ -251,7 +239,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
         </ToggleRow>
 
         {workflowInputEnabled ? (
-          <ToggleRow variant="detail" className="nodrag nowheel justify-between px-2.5 py-2" onMouseDown={stopNodeInteraction}>
+          <ToggleRow variant="detail" className={`nodrag nowheel justify-between px-2.5 py-2 ${MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS}`} onMouseDown={stopNodeInteraction}>
             <div className="min-w-0 text-xs font-medium text-foreground">실행 시 필수</div>
             <input
               type="checkbox"
@@ -271,7 +259,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
           onChange={(event) => handleValueChange(event.target.value)}
           onMouseDown={stopNodeInteraction}
           placeholder={sourcePort.label}
-          className="text-sm"
+          className={`text-sm ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
         />
       ) : null}
 
@@ -282,6 +270,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
           onChange={(event) => handleValueChange(event.target.value === '' ? '' : Number(event.target.value))}
           onMouseDown={stopNodeInteraction}
           placeholder={sourcePort.label}
+          className={MODULE_GRAPH_INLINE_CONTROL_CLASS}
         />
       ) : null}
 
@@ -290,6 +279,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
           value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
           onChange={(event) => handleValueChange(event.target.value === 'true')}
           onMouseDown={stopNodeInteraction}
+          className={MODULE_GRAPH_INLINE_CONTROL_CLASS}
         >
           <option value="">선택</option>
           <option value="true">true</option>
@@ -325,6 +315,251 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
           </Button>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+/** Resolve one inline UI-field string value from node state with a default fallback. */
+function getInlineUiFieldValue(rawValue: unknown, field?: ModuleUiFieldDefinition | null) {
+  if (typeof rawValue === 'string') {
+    return rawValue
+  }
+
+  if (typeof field?.default_value === 'string') {
+    return field.default_value
+  }
+
+  return rawValue == null ? '' : String(rawValue)
+}
+
+/** Render one compact inline separator editor that matches normal node row height. */
+function TextMergeSeparatorCell({ id, data, field }: { id: string; data: ModuleGraphNode['data']; field: ModuleUiFieldDefinition }) {
+  const rawValue = data.inputValues?.[field.key]
+  const value = rawValue == null
+    ? (typeof field.default_value === 'string' && field.default_value.length > 0 ? field.default_value : ',')
+    : String(rawValue)
+
+  return (
+    <Input
+      value={value}
+      onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
+      onMouseDown={stopNodeInteraction}
+      className={`nodrag nowheel h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+    />
+  )
+}
+
+/** Render the dedicated text-merge node layout with top output and A/B/C rows. */
+function TextMergeNodeLayout({
+  id,
+  data,
+  accentColor,
+  connectedInputKeys,
+  connectedOutputKeys,
+}: {
+  id: string
+  data: ModuleGraphNode['data']
+  accentColor: string
+  connectedInputKeys: Set<string>
+  connectedOutputKeys: Set<string>
+}) {
+  const inputPorts = data.module.exposed_inputs ?? []
+  const outputPort = data.module.output_ports[0]
+  const separatorAbField = data.module.ui_schema?.find((field) => field.key === 'separator_ab') ?? {
+    key: 'separator_ab',
+    label: 'A 뒤 문자열',
+    data_type: 'text',
+    default_value: ',',
+  }
+  const separatorBcField = data.module.ui_schema?.find((field) => field.key === 'separator_bc') ?? {
+    key: 'separator_bc',
+    label: 'B 뒤 문자열',
+    data_type: 'text',
+    default_value: ',',
+  }
+
+  const buildInputCell = (port?: ModulePortDefinition) => {
+    const connected = Boolean(port && connectedInputKeys.has(port.key))
+    const satisfied = Boolean(port && (connected || hasMeaningfulValue(data.inputValues?.[port.key]) || hasMeaningfulValue(port.default_value)))
+
+    return (
+      <PortCell
+        nodeId={id}
+        port={port}
+        side="input"
+        accentColor={accentColor}
+        connected={connected}
+        satisfied={satisfied}
+        requiredMissing={false}
+        onDisconnectInput={data.onDisconnectNodeInput}
+      />
+    )
+  }
+
+  return (
+    <div className="mt-2.5 grid gap-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        <div aria-hidden="true" />
+        <PortCell
+          nodeId={id}
+          port={outputPort}
+          side="output"
+          accentColor={accentColor}
+          connected={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
+          satisfied={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
+          requiredMissing={false}
+        />
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        {buildInputCell(inputPorts[0])}
+        <TextMergeSeparatorCell id={id} data={data} field={separatorAbField} />
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        {buildInputCell(inputPorts[1])}
+        <TextMergeSeparatorCell id={id} data={data} field={separatorBcField} />
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        {buildInputCell(inputPorts[2])}
+        <div aria-hidden="true" />
+      </div>
+    </div>
+  )
+}
+
+/** Render one minimal inline field for transform-style system nodes without extra card chrome. */
+function TextTransformInlineField({
+  id,
+  data,
+  field,
+}: {
+  id: string
+  data: ModuleGraphNode['data']
+  field: ModuleUiFieldDefinition
+}) {
+  const rawValue = data.inputValues?.[field.key]
+  const normalizedValue = rawValue ?? field.default_value
+
+  return (
+    <label className="nodrag nowheel grid gap-1" onMouseDown={stopNodeInteraction} title={field.description || field.label}>
+      <span className="text-[11px] font-medium text-foreground">{field.label}</span>
+      {field.data_type === 'select' ? (
+        <Select
+          value={typeof normalizedValue === 'string' ? normalizedValue : String(normalizedValue ?? '')}
+          onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
+          onMouseDown={stopNodeInteraction}
+          className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+        >
+          {(field.options ?? []).map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </Select>
+      ) : field.data_type === 'number' ? (
+        <Input
+          type="number"
+          value={typeof normalizedValue === 'number' || typeof normalizedValue === 'string' ? normalizedValue : ''}
+          onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
+          onMouseDown={stopNodeInteraction}
+          placeholder={field.placeholder || field.description || field.label}
+          className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+        />
+      ) : (
+        <Input
+          value={typeof normalizedValue === 'string' ? normalizedValue : normalizedValue == null ? '' : String(normalizedValue)}
+          onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
+          onMouseDown={stopNodeInteraction}
+          placeholder={field.placeholder || field.description || field.label}
+          className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+        />
+      )}
+    </label>
+  )
+}
+
+/** Render the regex/text transform node with one source input and inline transform settings. */
+function TextTransformNodeLayout({
+  id,
+  data,
+  accentColor,
+  connectedInputKeys,
+  connectedOutputKeys,
+}: {
+  id: string
+  data: ModuleGraphNode['data']
+  accentColor: string
+  connectedInputKeys: Set<string>
+  connectedOutputKeys: Set<string>
+}) {
+  const inputPort = data.module.exposed_inputs[0]
+  const outputPort = data.module.output_ports[0]
+  const uiFields = data.module.ui_schema ?? []
+  const modeField = uiFields.find((field) => field.key === 'mode')
+  const patternField = uiFields.find((field) => field.key === 'pattern')
+  const flagsField = uiFields.find((field) => field.key === 'flags')
+  const replacementField = uiFields.find((field) => field.key === 'replacement')
+  const groupIndexField = uiFields.find((field) => field.key === 'group_index')
+  const prefixField = uiFields.find((field) => field.key === 'prefix')
+  const suffixField = uiFields.find((field) => field.key === 'suffix')
+  const currentMode = getInlineUiFieldValue(data.inputValues?.mode, modeField)
+  const hasAdvancedFlagsValue = hasMeaningfulValue(data.inputValues?.flags)
+  const [showAdvancedFields, setShowAdvancedFields] = useState(hasAdvancedFlagsValue)
+
+  useEffect(() => {
+    if (hasAdvancedFlagsValue) {
+      setShowAdvancedFields(true)
+    }
+  }, [hasAdvancedFlagsValue])
+
+  return (
+    <div className="mt-2.5 space-y-1.5">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        <PortCell
+          nodeId={id}
+          port={inputPort}
+          side="input"
+          accentColor={accentColor}
+          connected={Boolean(inputPort && connectedInputKeys.has(inputPort.key))}
+          satisfied={Boolean(inputPort && (connectedInputKeys.has(inputPort.key) || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))}
+          requiredMissing={Boolean(inputPort?.required && !connectedInputKeys.has(inputPort.key) && !hasMeaningfulValue(data.inputValues?.[inputPort.key]) && !hasMeaningfulValue(inputPort.default_value))}
+          onDisconnectInput={data.onDisconnectNodeInput}
+        />
+        <PortCell
+          nodeId={id}
+          port={outputPort}
+          side="output"
+          accentColor={accentColor}
+          connected={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
+          satisfied={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
+          requiredMissing={false}
+        />
+      </div>
+
+      <div className="grid gap-2 px-0.5 pt-1">
+        {modeField ? <TextTransformInlineField id={id} data={data} field={modeField} /> : null}
+        {patternField ? <TextTransformInlineField id={id} data={data} field={patternField} /> : null}
+        {currentMode === 'replace'
+          ? (replacementField ? <TextTransformInlineField id={id} data={data} field={replacementField} /> : null)
+          : (groupIndexField ? <TextTransformInlineField id={id} data={data} field={groupIndexField} /> : null)}
+        {prefixField ? <TextTransformInlineField id={id} data={data} field={prefixField} /> : null}
+        {suffixField ? <TextTransformInlineField id={id} data={data} field={suffixField} /> : null}
+
+        {flagsField ? (
+          <div className="grid gap-1">
+            <button
+              type="button"
+              className="nodrag nowheel flex h-7 items-center justify-between rounded-sm border border-border/60 px-2 text-[11px] font-medium text-muted-foreground transition hover:text-foreground"
+              onMouseDown={stopNodeActionEvent}
+              onClick={() => setShowAdvancedFields((current) => !current)}
+            >
+              <span>고급 옵션</span>
+              <span>{showAdvancedFields ? '숨기기' : '플래그'}</span>
+            </button>
+            {showAdvancedFields ? <TextTransformInlineField id={id} data={data} field={flagsField} /> : null}
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -423,7 +658,10 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const outputGroups = data.executionOutputGroups ?? []
   const hasOutputGroups = outputGroups.length > 0
   const hasStandaloneArtifactPreview = hasArtifactPreview && !hasOutputGroups
+  const operationKey = getModuleOperationKey(module)
   const isFinalResult = isFinalResultModule(module)
+  const isTextMergeModule = operationKey === 'system.merge_text'
+  const isTextTransformModule = operationKey === 'system.regex_text_transform'
   const summaryText = isWorkflowInputSource
     ? `${ENGINE_TYPE_LABELS[module.engine_type] ?? module.engine_type} · 값 ${sourceValueConfigured ? 1 : 0}/${sourceValuePort ? 1 : 0} · 출력 ${connectedOutputCount}/${sourceOutputPort ? 1 : outputPorts.length}`
     : `${ENGINE_TYPE_LABELS[module.engine_type] ?? module.engine_type} · 입력 ${connectedInputCount}/${inputPorts.length} · 출력 ${connectedOutputCount}/${outputPorts.length}`
@@ -469,7 +707,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                   }
                 }}
                 placeholder={moduleBaseLabel}
-                className="nodrag nowheel h-8 text-sm"
+                className={`nodrag nowheel h-8 text-sm ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
               />
             ) : (
               <button
@@ -544,40 +782,58 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
       {isWorkflowInputSource ? <InlineWorkflowInputEditor id={id} data={data} /> : null}
 
       {!isWorkflowInputSource ? (
-        <div className="mt-2.5 grid gap-1">
-          {Array.from({ length: portRowCount }, (_, index) => {
-            const inputPort = inputPorts[index]
-            const outputPort = outputPorts[index]
-            const inputConnected = Boolean(inputPort && connectedInputKeys.has(inputPort.key))
-            const inputSatisfied = Boolean(inputPort && (inputConnected || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))
-            const inputRequiredMissing = Boolean(inputPort && inputPort.required && !inputSatisfied)
-            const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
+        isTextMergeModule ? (
+          <TextMergeNodeLayout
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
+          />
+        ) : isTextTransformModule ? (
+          <TextTransformNodeLayout
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
+          />
+        ) : (
+          <div className="mt-2.5 grid gap-1">
+            {Array.from({ length: portRowCount }, (_, index) => {
+              const inputPort = inputPorts[index]
+              const outputPort = outputPorts[index]
+              const inputConnected = Boolean(inputPort && connectedInputKeys.has(inputPort.key))
+              const inputSatisfied = Boolean(inputPort && (inputConnected || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))
+              const inputRequiredMissing = Boolean(inputPort && inputPort.required && !inputSatisfied)
+              const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
 
-            return (
-              <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
-                <PortCell
-                  nodeId={id}
-                  port={inputPort}
-                  side="input"
-                  accentColor={accentColor}
-                  connected={inputConnected}
-                  satisfied={inputSatisfied}
-                  requiredMissing={inputRequiredMissing}
-                  onDisconnectInput={data.onDisconnectNodeInput}
-                />
-                <PortCell
-                  nodeId={id}
-                  port={outputPort}
-                  side="output"
-                  accentColor={accentColor}
-                  connected={outputConnected}
-                  satisfied={outputConnected}
-                  requiredMissing={false}
-                />
-              </div>
-            )
-          })}
-        </div>
+              return (
+                <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+                  <PortCell
+                    nodeId={id}
+                    port={inputPort}
+                    side="input"
+                    accentColor={accentColor}
+                    connected={inputConnected}
+                    satisfied={inputSatisfied}
+                    requiredMissing={inputRequiredMissing}
+                    onDisconnectInput={data.onDisconnectNodeInput}
+                  />
+                  <PortCell
+                    nodeId={id}
+                    port={outputPort}
+                    side="output"
+                    accentColor={accentColor}
+                    connected={outputConnected}
+                    satisfied={outputConnected}
+                    requiredMissing={false}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )
       ) : null}
 
       {hasStandaloneArtifactPreview ? (
@@ -638,7 +894,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                   <div className="flex shrink-0 items-center gap-1">
                     {group.portType ? (
                       <Badge variant="outline" className="px-1.5 py-0 text-[9px] uppercase tracking-[0.08em]">
-                        {PORT_TYPE_LABELS[group.portType]}
+                        {getModuleGraphPortTypeLabel(group.portType)}
                       </Badge>
                     ) : null}
                     <Badge variant="secondary" className="px-1.5 py-0 text-[9px]">{group.artifactCount}</Badge>

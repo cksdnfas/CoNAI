@@ -133,7 +133,7 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
   }
 
   if (source.density !== undefined) {
-    if (!isEnumValue(source.density, ['compact', 'comfortable', 'spacious'])) return null
+    if (!isEnumValue(source.density, ['ultra-compact', 'compact', 'comfortable', 'spacious'])) return null
     next.density = source.density
   }
 

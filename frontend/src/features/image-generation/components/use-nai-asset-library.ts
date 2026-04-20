@@ -21,6 +21,15 @@ import {
 } from '../image-generation-shared'
 import { deriveNaiAssetLabel } from './nai-generation-panel-helpers'
 
+function isUnauthorizedAssetRequestError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  return message.includes('unauthorized') || message.includes('invalid or expired token')
+}
+
 type AssetSaveTarget =
   | { mode: 'create'; kind: 'vibe'; index: number }
   | { mode: 'create'; kind: 'reference'; index: number }
@@ -52,13 +61,11 @@ export function useNaiAssetLibrary({
   const savedVibesQuery = useQuery({
     queryKey: ['image-generation-nai-vibe-assets', naiForm.model],
     queryFn: () => listNaiVibeAssets(naiForm.model),
-    enabled: naiUserEnabled,
   })
 
   const savedCharacterReferencesQuery = useQuery({
     queryKey: ['image-generation-nai-character-reference-assets'],
     queryFn: listNaiCharacterReferenceAssets,
-    enabled: naiUserEnabled,
   })
 
   const filteredSavedVibes = useMemo(() => {
@@ -130,7 +137,12 @@ export function useNaiAssetLibrary({
       }
       return response.encoded
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'Vibe 인코딩에 실패했어.'), tone: 'error' })
+      if (isUnauthorizedAssetRequestError(error)) {
+        await refetchUserData().catch(() => undefined)
+        showSnackbar({ message: 'Vibe 저장 전에 NovelAI 로그인을 다시 해줘. 토큰이 없거나 만료됐어.', tone: 'error' })
+      } else {
+        showSnackbar({ message: getErrorMessage(error, 'Vibe 인코딩에 실패했어.'), tone: 'error' })
+      }
       return null
     } finally {
       setEncodingVibeIndex(null)
@@ -190,6 +202,11 @@ export function useNaiAssetLibrary({
     const vibe = naiForm.vibes[index]
     if (!vibe?.image) {
       showSnackbar({ message: '저장하려면 먼저 Vibe 이미지를 넣어줘.', tone: 'error' })
+      return
+    }
+
+    if (!naiUserEnabled) {
+      showSnackbar({ message: 'Vibe 저장은 NovelAI 로그인 상태가 필요해.', tone: 'error' })
       return
     }
 
@@ -392,7 +409,17 @@ export function useNaiAssetLibrary({
 
       closeAssetSaveModal()
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '저장에 실패했어.'), tone: 'error' })
+      if (isUnauthorizedAssetRequestError(error)) {
+        await refetchUserData().catch(() => undefined)
+        showSnackbar({
+          message: assetSaveTarget.kind === 'vibe'
+            ? 'Vibe 저장 전에 NovelAI 로그인을 다시 해줘. 토큰이 없거나 만료됐어.'
+            : '저장 권한을 다시 확인해줘. 로그인 세션이 끊겼을 수도 있어.',
+          tone: 'error',
+        })
+      } else {
+        showSnackbar({ message: getErrorMessage(error, '저장에 실패했어.'), tone: 'error' })
+      }
     } finally {
       setIsSavingAsset(false)
     }

@@ -29,6 +29,8 @@ function getThemeModeLabel(mode: AppearanceSettings['themeMode']) {
 
 function getDensityLabel(density: AppearanceSettings['density']) {
   switch (density) {
+    case 'ultra-compact':
+      return '아주 촘촘하게'
     case 'compact':
       return '촘촘하게'
     case 'comfortable':

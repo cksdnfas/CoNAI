@@ -1,4 +1,5 @@
 import type { RefObject } from 'react'
+import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -45,7 +46,7 @@ export function PromptListPanel({
   canDeletePromptItem,
 }: PromptListPanelProps) {
   return (
-    <section className="space-y-6">
+    <section className="space-y-4">
       {isError ? (
         <Alert variant="destructive">
           <AlertTitle>프롬프트 목록을 불러오지 못했어</AlertTitle>
@@ -54,12 +55,12 @@ export function PromptListPanel({
       ) : null}
 
       {!isLoading && items.length === 0 ? (
-        <div className="rounded-sm bg-surface-container px-4 py-3 text-sm text-muted-foreground">항목 없음</div>
+        <PageInset className="text-sm text-muted-foreground">항목 없음</PageInset>
       ) : null}
 
       <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>
         <div className="space-y-1">
-          <div className="hidden grid-cols-[32px_minmax(0,1fr)_auto] border-b border-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground sm:grid">
+          <div className="hidden grid-cols-[32px_minmax(0,1fr)_auto] border-b border-border/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground sm:grid">
             <span />
             <span>Prompt</span>
             <span className="text-right">Usage / Actions</span>
@@ -95,7 +96,7 @@ export function PromptListPanel({
       </div>
 
       {totalPages > 0 ? (
-        <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-4 text-sm text-muted-foreground">
           <span>
             page {page} / {totalPages} · total {total.toLocaleString('ko-KR')}
           </span>

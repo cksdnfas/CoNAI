@@ -2,8 +2,66 @@ import 'plyr/dist/plyr.css'
 import './image-detail-media.css'
 
 import type Plyr from 'plyr'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useCachedVideoSource } from '@/features/images/components/video/use-cached-video-source'
 import { cn } from '@/lib/utils'
+
+function destroyPlyrSafely(player: Plyr | null) {
+  if (!player) {
+    return
+  }
+
+  try {
+    player.destroy()
+  } catch (error) {
+    console.warn('[EnhancedVideoPlayer] Failed to destroy Plyr cleanly.', error)
+  }
+}
+
+function supportsPictureInPicture(video: HTMLVideoElement) {
+  if (typeof document === 'undefined') {
+    return false
+  }
+
+  return Boolean(
+    'pictureInPictureEnabled' in document
+    && (document as Document & { pictureInPictureEnabled?: boolean }).pictureInPictureEnabled
+    && !video.disablePictureInPicture,
+  )
+}
+
+function supportsAirplay(video: HTMLVideoElement) {
+  return typeof (video as HTMLVideoElement & { webkitShowPlaybackTargetPicker?: () => void }).webkitShowPlaybackTargetPicker === 'function'
+}
+
+function supportsFullscreen() {
+  if (typeof document === 'undefined') {
+    return false
+  }
+
+  return Boolean(
+    document.fullscreenEnabled
+    || (document as Document & { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled,
+  )
+}
+
+function buildPlyrControls(video: HTMLVideoElement) {
+  const controls: Plyr.Options['controls'] = ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume']
+
+  if (supportsPictureInPicture(video)) {
+    controls.push('pip')
+  }
+
+  if (supportsAirplay(video)) {
+    controls.push('airplay')
+  }
+
+  if (supportsFullscreen()) {
+    controls.push('fullscreen')
+  }
+
+  return controls
+}
 
 interface EnhancedVideoPlayerProps {
   renderUrl: string
@@ -21,10 +79,23 @@ export function EnhancedVideoPlayer({
   autoPlay = false,
   preload = 'metadata',
 }: EnhancedVideoPlayerProps) {
+  const { resolvedSourceUrl } = useCachedVideoSource(renderUrl)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playerRef = useRef<Plyr | null>(null)
+  const [useNativeControlsFallback, setUseNativeControlsFallback] = useState(false)
 
   useEffect(() => {
+    setUseNativeControlsFallback(false)
+  }, [resolvedSourceUrl])
+
+  useEffect(() => {
+    if (!resolvedSourceUrl) {
+      const activePlayer = playerRef.current
+      playerRef.current = null
+      destroyPlyrSafely(activePlayer)
+      return
+    }
+
     let disposed = false
 
     const setup = async () => {
@@ -33,28 +104,45 @@ export function EnhancedVideoPlayer({
         return
       }
 
-      const { default: PlyrClass } = await import('plyr')
-      if (disposed || !videoRef.current) {
-        return
-      }
+      const previousPlayer = playerRef.current
+      playerRef.current = null
+      destroyPlyrSafely(previousPlayer)
 
-      playerRef.current?.destroy()
-      playerRef.current = new PlyrClass(videoRef.current, {
-        autoplay: autoPlay,
-        controls: ['play-large', 'restart', 'rewind', 'play', 'fast-forward', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'pip', 'airplay', 'fullscreen'],
-        hideControls: true,
-        keyboard: { focused: true, global: false },
-        clickToPlay: true,
-        resetOnEnd: false,
-        seekTime: 5,
-        fullscreen: { enabled: true, iosNative: true },
-        tooltips: { controls: true, seek: true },
-      })
+      try {
+        const { default: PlyrClass } = await import('plyr')
+        if (disposed || videoRef.current !== node) {
+          return
+        }
 
-      if (autoPlay) {
-        void videoRef.current.play().catch(() => {
-          // Browser autoplay policy may still block unmuted playback.
+        const createdPlayer = new PlyrClass(node, {
+          autoplay: autoPlay,
+          iconUrl: '/vendor/plyr.svg',
+          controls: buildPlyrControls(node),
+          hideControls: true,
+          keyboard: { focused: true, global: false },
+          clickToPlay: true,
+          resetOnEnd: false,
+          seekTime: 5,
+          fullscreen: { enabled: supportsFullscreen(), iosNative: true },
+          tooltips: { controls: true, seek: true },
+          settings: [],
         })
+
+        if (disposed || videoRef.current !== node) {
+          destroyPlyrSafely(createdPlayer)
+          return
+        }
+
+        playerRef.current = createdPlayer
+
+        if (autoPlay) {
+          void node.play().catch(() => {
+            // Browser autoplay policy may still block unmuted playback.
+          })
+        }
+      } catch (error) {
+        console.warn('[EnhancedVideoPlayer] Falling back to native video controls.', error)
+        setUseNativeControlsFallback(true)
       }
     }
 
@@ -62,41 +150,49 @@ export function EnhancedVideoPlayer({
 
     return () => {
       disposed = true
-      playerRef.current?.destroy()
+      const activePlayer = playerRef.current
       playerRef.current = null
+      destroyPlyrSafely(activePlayer)
     }
-  }, [autoPlay, renderUrl])
+  }, [autoPlay, resolvedSourceUrl])
 
   return (
     <div
-      className={cn('conai-video-player w-full overflow-hidden rounded-sm bg-black', className)}
+      className={cn('conai-video-player relative w-full overflow-hidden rounded-sm bg-black', className)}
       style={{
         ['--plyr-color-main' as string]: 'var(--primary)',
         ['--plyr-control-icon-size' as string]: '18px',
-        ['--plyr-control-spacing' as string]: '0.5rem',
+        ['--plyr-control-spacing' as string]: '0.56rem',
         ['--plyr-control-radius' as string]: '999px',
-        ['--plyr-video-control-background-hover' as string]: 'color-mix(in srgb, var(--primary) 32%, black)',
-        ['--plyr-video-controls-background' as string]: 'linear-gradient(transparent, rgba(0, 0, 0, 0.82))',
+        ['--plyr-video-control-color' as string]: 'rgb(255 255 255 / 0.96)',
+        ['--plyr-video-control-color-hover' as string]: '#fff',
+        ['--plyr-video-control-background-hover' as string]: 'color-mix(in srgb, var(--primary) 38%, black)',
+        ['--plyr-video-controls-background' as string]: 'linear-gradient(180deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.78))',
         ['--plyr-menu-background' as string]: 'rgba(18, 18, 22, 0.96)',
         ['--plyr-menu-color' as string]: 'white',
         ['--plyr-menu-radius' as string]: '14px',
         ['--plyr-range-thumb-height' as string]: '13px',
         ['--plyr-range-thumb-shadow' as string]: '0 0 0 4px rgb(249 94 20 / 0.18)',
+        ['--plyr-video-range-track-background' as string]: 'rgb(255 255 255 / 0.18)',
         ['--plyr-video-progress-buffered-background' as string]: 'rgb(255 255 255 / 0.14)',
       }}
     >
-      <video
-        key={renderUrl}
-        ref={videoRef}
-        className="conai-video-player__media h-full w-full bg-black object-contain"
-        autoPlay={autoPlay}
-        controls
-        loop={loop}
-        playsInline
-        preload={preload}
-      >
-        <source src={renderUrl} />
-      </video>
+      {!resolvedSourceUrl ? (
+        <div className="absolute inset-0 z-10 animate-pulse bg-surface-lowest" aria-hidden="true" />
+      ) : (
+        <video
+          key={resolvedSourceUrl}
+          ref={videoRef}
+          className="conai-video-player__media h-full w-full bg-black object-contain"
+          autoPlay={autoPlay}
+          controls={useNativeControlsFallback}
+          loop={loop}
+          playsInline
+          preload={preload}
+        >
+          <source src={resolvedSourceUrl} />
+        </video>
+      )}
     </div>
   )
 }

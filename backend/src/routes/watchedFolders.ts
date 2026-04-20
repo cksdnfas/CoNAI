@@ -8,6 +8,14 @@ import { successResponse, errorResponse } from '@conai/shared';
 
 const router = Router();
 
+function sendWatchedFolderBadRequest(res: Response, message: string) {
+  return res.status(400).json(errorResponse(message));
+}
+
+function parseWatchedFolderRouteId(value: string | string[] | undefined) {
+  return parseInt(routeParam(routeParam(value)));
+}
+
 /**
  * GET /api/folders
  * 감시 폴더 목록 조회
@@ -38,10 +46,10 @@ router.get('/scan-logs/recent', asyncHandler(async (req: Request, res: Response)
  * 중요: 파라미터 라우트는 특정 문자열 경로 뒤에 정의되어야 합니다.
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseWatchedFolderRouteId(req.params.id);
 
   if (isNaN(id)) {
-    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+    return sendWatchedFolderBadRequest(res, '유효하지 않은 폴더 ID입니다');
   }
 
   const folder = await WatchedFolderService.getFolder(id);
@@ -71,7 +79,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   } = req.body;
 
   if (!folder_path) {
-    return res.status(400).json(errorResponse('folder_path가 필요합니다'));
+    return sendWatchedFolderBadRequest(res, 'folder_path가 필요합니다');
   }
 
   try {
@@ -107,7 +115,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     }));
   } catch (error) {
     const message = error instanceof Error ? error.message : '폴더 등록 실패';
-    return res.status(400).json(errorResponse(message));
+    return sendWatchedFolderBadRequest(res, message);
   }
 }));
 
@@ -143,13 +151,13 @@ router.post('/validate-path', asyncHandler(async (req: Request, res: Response) =
   const { folder_path } = req.body;
 
   if (!folder_path) {
-    return res.status(400).json(errorResponse('folder_path가 필요합니다'));
+    return sendWatchedFolderBadRequest(res, 'folder_path가 필요합니다');
   }
 
   const validation = await WatchedFolderService.validateFolderPath(folder_path);
 
   if (!validation.exists || !validation.isDirectory) {
-    return res.status(400).json(errorResponse(validation.error || '유효하지 않은 경로'));
+    return sendWatchedFolderBadRequest(res, validation.error || '유효하지 않은 경로');
   }
 
   return res.json(successResponse({
@@ -163,10 +171,10 @@ router.post('/validate-path', asyncHandler(async (req: Request, res: Response) =
  * 폴더 설정 업데이트
  */
 router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseWatchedFolderRouteId(req.params.id);
 
   if (isNaN(id)) {
-    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+    return sendWatchedFolderBadRequest(res, '유효하지 않은 폴더 ID입니다');
   }
 
   const updates = req.body;
@@ -239,11 +247,11 @@ router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 폴더 스캔 실행
  */
 router.post('/:id/scan', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseWatchedFolderRouteId(req.params.id);
   const fullRescan = req.query.full === 'true';
 
   if (isNaN(id)) {
-    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+    return sendWatchedFolderBadRequest(res, '유효하지 않은 폴더 ID입니다');
   }
 
   try {
@@ -260,11 +268,11 @@ router.post('/:id/scan', asyncHandler(async (req: Request, res: Response) => {
  * 폴더 삭제
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseWatchedFolderRouteId(req.params.id);
   const deleteFiles = req.query.delete_files === 'true';
 
   if (isNaN(id)) {
-    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+    return sendWatchedFolderBadRequest(res, '유효하지 않은 폴더 ID입니다');
   }
 
   const folder = await WatchedFolderService.getFolder(id);
@@ -274,7 +282,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (folder.is_default === 1 && folder.folder_name === 'Upload') {
-    return res.status(400).json(errorResponse('기본 Upload 폴더는 삭제할 수 없습니다'));
+    return sendWatchedFolderBadRequest(res, '기본 Upload 폴더는 삭제할 수 없습니다');
   }
 
   // Stop watcher before deletion to clean up in-memory state
@@ -304,11 +312,11 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 특정 폴더의 스캔 로그 조회
  */
 router.get('/:id/scan-logs', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseWatchedFolderRouteId(req.params.id);
   const limit = parseInt(req.query.limit as string) || 50;
 
   if (isNaN(id)) {
-    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+    return sendWatchedFolderBadRequest(res, '유효하지 않은 폴더 ID입니다');
   }
 
   const logs = FolderScanService.getScanLogs(id, limit);
@@ -322,10 +330,10 @@ router.get('/:id/scan-logs', asyncHandler(async (req: Request, res: Response) =>
  * 워처 상태 조회
  */
 router.get('/:id/watcher/status', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseWatchedFolderRouteId(req.params.id);
 
   if (isNaN(id)) {
-    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+    return sendWatchedFolderBadRequest(res, '유효하지 않은 폴더 ID입니다');
   }
 
   const status = FileWatcherService.getWatcherStatus(id);
@@ -357,10 +365,10 @@ router.get('/:id/watcher/status', asyncHandler(async (req: Request, res: Respons
  * 워처 시작
  */
 router.post('/:id/watcher/start', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseWatchedFolderRouteId(req.params.id);
 
   if (isNaN(id)) {
-    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+    return sendWatchedFolderBadRequest(res, '유효하지 않은 폴더 ID입니다');
   }
 
   // 폴더 확인
@@ -370,7 +378,7 @@ router.post('/:id/watcher/start', asyncHandler(async (req: Request, res: Respons
   }
 
   if (!folder.is_active) {
-    return res.status(400).json(errorResponse('비활성화된 폴더입니다'));
+    return sendWatchedFolderBadRequest(res, '비활성화된 폴더입니다');
   }
 
   // 워처 시작
@@ -397,10 +405,10 @@ router.post('/:id/watcher/start', asyncHandler(async (req: Request, res: Respons
  * 워처 중지
  */
 router.post('/:id/watcher/stop', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseWatchedFolderRouteId(req.params.id);
 
   if (isNaN(id)) {
-    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+    return sendWatchedFolderBadRequest(res, '유효하지 않은 폴더 ID입니다');
   }
 
   try {
@@ -425,10 +433,10 @@ router.post('/:id/watcher/stop', asyncHandler(async (req: Request, res: Response
  * 워처 재시작
  */
 router.post('/:id/watcher/restart', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseWatchedFolderRouteId(req.params.id);
 
   if (isNaN(id)) {
-    return res.status(400).json(errorResponse('유효하지 않은 폴더 ID입니다'));
+    return sendWatchedFolderBadRequest(res, '유효하지 않은 폴더 ID입니다');
   }
 
   const folder = await WatchedFolderService.getFolder(id);

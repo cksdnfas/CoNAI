@@ -552,13 +552,14 @@ export function ModuleWorkflowOutputManagementPanel({
             : '다운로드 가능 항목 없음'}
           extraActions={(
             <Button
-              size="sm"
+              size="icon-sm"
               variant="secondary"
               onClick={() => setIsCopyPanelOpen((current) => !current)}
+              title="폴더로 복사"
+              aria-label="폴더로 복사"
               data-no-select-drag="true"
             >
               <CopyPlus className="h-4 w-4" />
-              Copy to Folder
             </Button>
           )}
           onDownload={() => handleDownloadItems(downloadableSelectedItems)}

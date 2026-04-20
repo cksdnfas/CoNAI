@@ -1,8 +1,8 @@
 import { Download, ImageIcon, Images } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import type { ImageDownloadType } from '@/lib/api'
 
 interface ImageDownloadOptionModalProps {
@@ -45,45 +45,45 @@ export function ImageDownloadOptionModal({ open, targetCount, isDownloading = fa
       description={isBatch ? `${targetCount.toLocaleString('ko-KR')}개를 ZIP으로 받을 방식을 골라줘.` : '받을 파일 종류를 골라줘.'}
       widthClassName="max-w-xl"
     >
-      <div className="space-y-4">
+      <SettingsModalBody>
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
           <Badge variant="outline">대상 {targetCount.toLocaleString('ko-KR')}개</Badge>
           <Badge variant="outline">형식 {isBatch ? 'ZIP' : '파일'}</Badge>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
           {downloadCards.map((card) => {
             const Icon = card.icon
             return (
-              <Card key={card.type}>
-                <CardHeader className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-surface-highest text-foreground">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <Badge variant="secondary">{card.type === 'thumbnail' ? 'preview' : 'full'}</Badge>
-                  </div>
-                  <div className="space-y-2">
-                    <CardTitle className="text-base">{card.title}</CardTitle>
-                    <CardDescription>{card.description}</CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    type="button"
-                    className="w-full"
-                    onClick={() => void onSelect(card.type)}
-                    disabled={isDownloading}
-                  >
-                    <Download className="h-4 w-4" />
-                    {isDownloading ? '준비 중…' : (isBatch ? `${card.title} ZIP 다운로드` : `${card.title} 다운로드`)}
-                  </Button>
-                </CardContent>
-              </Card>
+              <Button
+                key={card.type}
+                type="button"
+                variant="outline"
+                className="h-auto w-full justify-between px-3 py-3 text-left"
+                onClick={() => void onSelect(card.type)}
+                disabled={isDownloading}
+              >
+                <span className="flex min-w-0 items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-border/70 bg-surface-low/45 text-foreground">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-foreground">{card.title}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">{card.description}</span>
+                  </span>
+                </span>
+                <Badge variant="secondary" className="shrink-0">{card.type === 'thumbnail' ? 'preview' : 'full'}</Badge>
+              </Button>
             )
           })}
         </div>
-      </div>
+
+        <SettingsModalFooter>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isDownloading}>
+            취소
+          </Button>
+        </SettingsModalFooter>
+      </SettingsModalBody>
     </SettingsModal>
   )
 }

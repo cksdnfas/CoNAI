@@ -12,21 +12,38 @@ import { RatingScoreService } from '../../services/ratingScoreService';
 import { logger } from '../../utils/logger';
 import { QueryCacheService } from '../../services/QueryCacheService';
 import { buildMergedAutoTags, extractRatingData } from './tagging.shared';
+import { sendRouteBadRequest } from '../routeValidation';
 
 const router = Router();
 
+/** Read the shared image tagging route param without redundant re-normalization. */
+function getTaggingCompositeHash(req: Request): string {
+  return routeParam(req.params.id);
+}
+
+/** Validate the existing batch-tag payload shape without changing the 400 response body. */
+function validateBatchImageIds(res: Response, imageIds: unknown): imageIds is any[] {
+  if (!Array.isArray(imageIds) || imageIds.length === 0) {
+    sendRouteBadRequest(res, 'image_ids must be a non-empty array');
+    return false;
+  }
+
+  return true;
+}
+
 router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
-  const compositeHash = routeParam(routeParam(req.params.id));
+  const compositeHash = getTaggingCompositeHash(req);
 
   console.log('[TagRoute] POST /:id/tag hit!');
   logger.debug('[TagRoute] POST /:id/tag hit!');
-  logger.debug(`[TagRoute] routeParam(routeParam(req.params.id)): ${compositeHash}`);
+  logger.debug(`[TagRoute] routeParam(req.params.id): ${compositeHash}`);
   logger.debug(`[TagRoute] req.url: ${req.url}`);
   logger.debug(`[TagRoute] req.path: ${req.path}`);
 
-  if (!compositeHash || typeof compositeHash !== 'string') {
+  if (!compositeHash) {
     logger.debug(`[TagRoute] Invalid composite hash: ${compositeHash}`);
-    return res.status(400).json({ success: false, error: 'Invalid composite hash' });
+    sendRouteBadRequest(res, 'Invalid composite hash');
+    return;
   }
 
   try {
@@ -139,8 +156,8 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
 router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
   const { image_ids } = req.body;
 
-  if (!Array.isArray(image_ids) || image_ids.length === 0) {
-    return res.status(400).json({ success: false, error: 'image_ids must be a non-empty array' });
+  if (!validateBatchImageIds(res, image_ids)) {
+    return;
   }
 
   try {

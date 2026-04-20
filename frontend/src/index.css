@@ -81,8 +81,8 @@
   --theme-shell-header-height: 4rem;
   --theme-shell-inline-padding: 1.5rem;
   --theme-shell-main-padding-bottom: 4rem;
-  --theme-card-padding-x: 1rem;
-  --theme-card-padding-y: 1rem;
+  --theme-card-padding-x: 0.5rem;
+  --theme-card-padding-y: 0.5rem;
   --theme-card-gap: 1rem;
   --theme-field-gap: 0.5rem;
   --theme-control-height: 2.5rem;
@@ -96,7 +96,7 @@
   --theme-bottom-drawer-radius: calc(var(--radius) + 0.75rem);
   --theme-selection-bar-padding-x: 1.25rem;
   --theme-selection-bar-padding-y: 0.75rem;
-  --theme-selection-bar-radius: calc(var(--radius) + 0.75rem);
+  --theme-selection-bar-radius: var(--radius);
   --theme-ui-scale: 1;
   --theme-text-scale: 1;
   --theme-body-font-weight: 400;
@@ -309,6 +309,11 @@
     padding-block: var(--theme-panel-padding-y);
   }
 
+  .theme-input-surface {
+    background: color-mix(in srgb, var(--surface-low) 65%, transparent);
+    border-color: color-mix(in srgb, var(--border) 85%, transparent);
+  }
+
   .theme-drawer-header {
     padding-inline: var(--theme-drawer-header-padding-x);
     padding-block: var(--theme-drawer-header-padding-y);
@@ -327,6 +332,11 @@
   .theme-selection-bar {
     padding-inline: var(--theme-selection-bar-padding-x);
     padding-block: var(--theme-selection-bar-padding-y);
+    border-width: 3px;
+    border-color: color-mix(in srgb, var(--primary) 42%, var(--theme-floating-border));
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 16%, transparent),
+      var(--theme-floating-shadow);
     border-radius: var(--theme-selection-bar-radius);
   }
 
@@ -358,7 +368,7 @@
 
   .image-list-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(var(--image-list-min-column-width, 300px), 1fr));
+    grid-template-columns: repeat(var(--image-list-column-repeat, 1), minmax(0, 1fr));
     gap: var(--image-list-row-gap, 24px) var(--image-list-column-gap, 24px);
     align-items: start;
   }
@@ -415,8 +425,22 @@
     backdrop-filter: blur(var(--theme-floating-blur));
   }
 
+  .image-list-root [data-testid='virtuoso-scroller'] {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .image-list-root [data-testid='virtuoso-list'] {
+    min-width: 0;
+    min-height: 0;
+    flex-basis: 0;
+  }
+
   .image-list-grid-item {
     display: flex;
+    min-width: 0;
   }
 
   .related-image-gallery-grid {

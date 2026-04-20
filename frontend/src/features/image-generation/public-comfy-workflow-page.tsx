@@ -3,21 +3,21 @@ import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { ArrowLeft, Play, RotateCcw, SlidersHorizontal } from 'lucide-react'
-import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
+import { ArrowLeft, Play, RotateCcw } from 'lucide-react'
+import { BottomDrawerNotice, BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getAppSettings, getPublicGenerationWorkflow, queuePublicGenerationWorkflowJob, type WorkflowMarkedField } from '@/lib/api'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
+import { cn } from '@/lib/utils'
 import { refreshGenerationQueueViews } from './components/generation-queue-actions'
 import { GenerationHistoryPanel } from './components/generation-history-panel'
-import { WorkflowFieldInput } from './components/workflow-field-input'
+import { CompactGenerationActionSurface, CompactGenerationControllerActionBar, GenerationControllerFieldStack } from './components/shared-generation-controller'
+import { WorkflowFieldDisclosureCard } from './components/workflow-field-disclosure-card'
 import {
   buildWorkflowDraft,
   buildWorkflowPromptData,
@@ -69,6 +69,7 @@ export function PublicComfyWorkflowPage() {
   const workflow = workflowQuery.data ?? null
   const workflowFields = workflow?.marked_fields ?? []
   const generationSaveOptions = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
+  const useWideSplitPaneScroll = isWideLayout && workflow !== null
 
   useEffect(() => {
     if (!workflow) {
@@ -76,7 +77,7 @@ export function PublicComfyWorkflowPage() {
     }
 
     const baseDraft = buildWorkflowDraft(workflowFields)
-    const persistedDraft = loadPersistedComfyWorkflowDraft(workflow.id)
+    const persistedDraft = loadPersistedComfyWorkflowDraft(workflow.id, workflowFields)
     setWorkflowDraft({ ...baseDraft, ...persistedDraft })
   }, [workflow, workflowFields])
 
@@ -201,7 +202,7 @@ export function PublicComfyWorkflowPage() {
     : null
   void drawerHeaderPortalRevision
 
-  const controllerActions = (
+  const desktopControllerActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <Button
         type="button"
@@ -241,7 +242,7 @@ export function PublicComfyWorkflowPage() {
     </div>
   )
 
-  const controllerHeaderContent = workflow ? (
+  const desktopControllerHeaderContent = workflow ? (
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-3">
@@ -263,7 +264,24 @@ export function PublicComfyWorkflowPage() {
         </div>
       </div>
 
-      {controllerActions}
+      {desktopControllerActions}
+    </div>
+  ) : null
+
+  const drawerControllerHeaderContent = workflow ? (
+    <div className="flex items-center gap-3">
+      <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">{workflow.name}</div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={handleResetDraft}
+        disabled={isQueueSubmitting}
+        aria-label="초기화"
+        title="초기화"
+      >
+        <RotateCcw className="h-4 w-4" />
+      </Button>
     </div>
   ) : null
 
@@ -277,44 +295,80 @@ export function PublicComfyWorkflowPage() {
       ) : null}
 
       {workflowFields.length === 0 ? (
-        <div className="text-sm text-muted-foreground">노출된 입력 필드가 아직 없어.</div>
+        <BottomDrawerNotice>노출된 입력 필드가 아직 없어.</BottomDrawerNotice>
       ) : (
-        <div className="overflow-hidden rounded-sm border border-border/70 divide-y divide-border/70">
+        <GenerationControllerFieldStack>
           {workflowFields.map((field) => (
-            <div key={field.id} className="bg-background/20 px-4 py-4">
-              <WorkflowFieldInput
-                field={field}
-                value={workflowDraft[field.id] ?? ''}
-                onChange={(value) => handleFieldChange(field.id, value)}
-                onImageChange={(image) => handleImageChange(field.id, image)}
-              />
-            </div>
+            <WorkflowFieldDisclosureCard
+              key={field.id}
+              field={field}
+              value={workflowDraft[field.id] ?? ''}
+              onChange={(value) => handleFieldChange(field.id, value)}
+              onImageChange={(image) => handleImageChange(field.id, image)}
+            />
           ))}
-        </div>
+        </GenerationControllerFieldStack>
       )}
     </>
   )
 
   const controllerPanel = workflow ? (
     isWideLayout ? (
-      <section className="space-y-3">
-        <div className="border-b border-border/70 pb-4">{controllerHeaderContent}</div>
-        <Card>
-          <CardContent className="space-y-5">{controllerBodyContent}</CardContent>
-        </Card>
+      <section className={cn(useWideSplitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-3 overflow-hidden' : 'space-y-3')}>
+        <div className="border-b border-border/70 pb-4">{desktopControllerHeaderContent}</div>
+        <div className={cn(useWideSplitPaneScroll ? 'min-h-0 flex-1 overflow-y-auto pr-2' : 'space-y-5')}>
+          <div className="space-y-5">{controllerBodyContent}</div>
+        </div>
       </section>
     ) : (
-      <Card>
-        <CardContent className="space-y-5">{controllerBodyContent}</CardContent>
-      </Card>
+      <div className="space-y-4 px-5 pb-5">{controllerBodyContent}</div>
     )
   ) : null
 
   const shouldUseControllerDrawer = !isWideLayout && workflow !== null
   const isDrawerOpen = shouldUseControllerDrawer && isControllerOpen
+  const compactControllerActionBar = workflow && !isWideLayout ? (
+    <CompactGenerationControllerActionBar
+      isExpanded={isDrawerOpen}
+      onToggle={() => setIsControllerOpen((current) => !current)}
+      expandedContent={(
+        <CompactGenerationActionSurface>
+          <ScrubbableNumberInput
+            min={1}
+            max={32}
+            step={1}
+            scrubRatio={1}
+            variant="detail"
+            className="h-8 w-[54px] shrink-0 !rounded-none !border-0 !bg-transparent px-0 text-center text-xs"
+            value={queueRegistrationCount}
+            onChange={setQueueRegistrationCount}
+            disabled={isQueueSubmitting}
+            aria-label="큐 등록 개수"
+            inputMode="numeric"
+          />
+          <Button
+            type="button"
+            size="icon-sm"
+            className="rounded-none border-l border-border/70 shadow-none"
+            onClick={() => void handleQueueSubmit()}
+            disabled={isQueueSubmitting || workflowFields.length === 0}
+            aria-label={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+            title={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+          >
+            <Play className="h-4 w-4 fill-current" />
+          </Button>
+        </CompactGenerationActionSurface>
+      )}
+    />
+  ) : null
 
   return (
-    <div className={isWideLayout ? 'space-y-6' : 'space-y-6 pb-24'}>
+    <div
+      className={cn(
+        isWideLayout ? 'space-y-6' : 'space-y-6 pb-24',
+        useWideSplitPaneScroll && 'flex h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
+      )}
+    >
       {workflowQuery.isError ? (
         <Alert variant="destructive">
           <AlertTitle>공용 워크플로우를 불러오지 못했어</AlertTitle>
@@ -326,14 +380,24 @@ export function PublicComfyWorkflowPage() {
 
       {workflow ? (
         isWideLayout ? (
-          <div className="grid items-start gap-8 grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]">
-            {controllerPanel}
-            <GenerationHistoryPanel
-              refreshNonce={historyRefreshNonce}
-              serviceType="comfyui"
-              workflowId={workflow.id}
-              publicWorkflowSlug={slug}
-            />
+          <div
+            className={cn(
+              'grid items-start gap-8 grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]',
+              useWideSplitPaneScroll && 'min-h-0 flex-1 items-stretch',
+            )}
+          >
+            <div className={cn(useWideSplitPaneScroll && 'min-h-0 flex flex-col overflow-hidden')}>
+              {controllerPanel}
+            </div>
+            <div className={cn(useWideSplitPaneScroll && 'min-h-0 flex flex-col overflow-hidden')}>
+              <GenerationHistoryPanel
+                refreshNonce={historyRefreshNonce}
+                serviceType="comfyui"
+                workflowId={workflow.id}
+                publicWorkflowSlug={slug}
+                splitPaneScroll={useWideSplitPaneScroll}
+              />
+            </div>
           </div>
         ) : (
           <>
@@ -345,10 +409,7 @@ export function PublicComfyWorkflowPage() {
               onBack={() => navigate('/access')}
             />
 
-            <FloatingBottomAction type="button" onClick={() => setIsControllerOpen(true)}>
-              <SlidersHorizontal className="h-4 w-4" />
-              컨트롤
-            </FloatingBottomAction>
+            {compactControllerActionBar}
 
             <BottomDrawerSheet
               open={isDrawerOpen}
@@ -356,9 +417,13 @@ export function PublicComfyWorkflowPage() {
               headerContentId={drawerHeaderContentId}
               ariaLabel={`${workflow.name} 컨트롤 패널`}
               onClose={() => setIsControllerOpen(false)}
-              bodyClassName="p-4 pb-20"
+              surfaceVariant="controller"
+              bodyClassName="p-0 pb-24"
+              headerPortalClassName="mt-0 border-t-0 pt-0"
+              footer={null}
+              hideHandle
             >
-              {drawerHeaderPortalTarget && controllerHeaderContent ? createPortal(controllerHeaderContent, drawerHeaderPortalTarget) : null}
+              {drawerHeaderPortalTarget && drawerControllerHeaderContent ? createPortal(drawerControllerHeaderContent, drawerHeaderPortalTarget) : null}
               {controllerPanel}
             </BottomDrawerSheet>
           </>

@@ -1,8 +1,13 @@
-import { useMemo, useState } from 'react'
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
-import { Badge } from '@/components/ui/badge'
+import { useState } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { WildcardTool } from '@/lib/api'
-import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
+import { cn } from '@/lib/utils'
+import { TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
+import {
+  WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS,
+  WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS,
+  WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS,
+} from './workflow-field-disclosure-card'
 
 type PromptToggleFieldProps = {
   tool: WildcardTool
@@ -18,8 +23,6 @@ type PromptToggleFieldProps = {
   negativePlaceholder?: string
 }
 
-type PromptToggleTab = 'positive' | 'negative'
-
 /** Return a lightweight prompt segment count using commas and line breaks. */
 function countPromptSegments(value: string) {
   return value
@@ -29,68 +32,98 @@ function countPromptSegments(value: string) {
     .length
 }
 
-/** Render one reusable positive/negative prompt editor with toggle tabs. */
+function PromptSpreadsheetDisclosure({
+  tool,
+  label,
+  value,
+  placeholder,
+  isExpanded,
+  onToggle,
+  onChange,
+}: {
+  tool: WildcardTool
+  label: string
+  value: string
+  placeholder: string
+  isExpanded: boolean
+  onToggle: () => void
+  onChange: (value: string) => void
+}) {
+  const segmentCount = countPromptSegments(value)
+  const rowCount = getTextSegmentSpreadsheetRows(value).length
+  const hasValue = value.trim().length > 0
+
+  return (
+    <div className={cn(WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS, hasValue && WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS)}>
+      <div className="px-4 py-3">
+        <button
+          type="button"
+          className="flex w-full items-start gap-3 text-left"
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+        >
+          {isExpanded ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-medium text-foreground">{label}</span>
+              <div className="shrink-0 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                {value.trim().length.toLocaleString('ko-KR')}자 · {segmentCount.toLocaleString('ko-KR')}개 · {rowCount.toLocaleString('ko-KR')}행
+              </div>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {isExpanded ? (
+        <div className={cn(WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS, 'px-0 py-0')}>
+          <TextSegmentSpreadsheetInput
+            tool={tool}
+            value={value}
+            placeholder={placeholder}
+            onChange={(nextRows) => onChange(nextRows.join('\n'))}
+          />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/** Render one reusable positive/negative prompt editor with expandable spreadsheet-style rows. */
 export function PromptToggleField({
   tool,
   positiveValue,
   negativeValue,
   onPositiveChange,
   onNegativeChange,
-  positiveRows = 6,
-  negativeRows = 6,
   positiveLabel = '포지티브',
   negativeLabel = '네거티브',
   positivePlaceholder = '',
   negativePlaceholder = '',
 }: PromptToggleFieldProps) {
-  const [activeTab, setActiveTab] = useState<PromptToggleTab>('positive')
-  const isPositiveTab = activeTab === 'positive'
-  const activeValue = isPositiveTab ? positiveValue : negativeValue
-
-  const promptStats = useMemo(() => ({
-    positiveCharacters: positiveValue.trim().length,
-    negativeCharacters: negativeValue.trim().length,
-    positiveSegments: countPromptSegments(positiveValue),
-    negativeSegments: countPromptSegments(negativeValue),
-  }), [negativeValue, positiveValue])
-
-  const activeCharacters = isPositiveTab ? promptStats.positiveCharacters : promptStats.negativeCharacters
-  const activeSegments = isPositiveTab ? promptStats.positiveSegments : promptStats.negativeSegments
+  const [isPositiveExpanded, setIsPositiveExpanded] = useState(true)
+  const [isNegativeExpanded, setIsNegativeExpanded] = useState(true)
 
   return (
     <div className="space-y-3">
-      <SegmentedTabBar
-        value={activeTab}
-        items={[
-          { value: 'positive', label: positiveLabel },
-          { value: 'negative', label: negativeLabel },
-        ]}
-        onChange={(nextTab) => setActiveTab(nextTab as PromptToggleTab)}
-        fullWidth
-        size="sm"
+      <PromptSpreadsheetDisclosure
+        tool={tool}
+        label={positiveLabel}
+        value={positiveValue}
+        placeholder={positivePlaceholder}
+        isExpanded={isPositiveExpanded}
+        onToggle={() => setIsPositiveExpanded((current) => !current)}
+        onChange={onPositiveChange}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant={promptStats.positiveCharacters > 0 ? 'secondary' : 'outline'}>
-            {positiveLabel} {promptStats.positiveCharacters > 0 ? '입력됨' : '비어있음'}
-          </Badge>
-          <Badge variant={promptStats.negativeCharacters > 0 ? 'secondary' : 'outline'}>
-            {negativeLabel} {promptStats.negativeCharacters > 0 ? '입력됨' : '비어있음'}
-          </Badge>
-        </div>
-        <div>
-          현재 {activeCharacters.toLocaleString('ko-KR')}자 · 약 {activeSegments.toLocaleString('ko-KR')}개 항목
-        </div>
-      </div>
-
-      <WildcardInlinePickerField
+      <PromptSpreadsheetDisclosure
         tool={tool}
-        multiline
-        rows={isPositiveTab ? positiveRows : negativeRows}
-        value={activeValue}
-        onChange={isPositiveTab ? onPositiveChange : onNegativeChange}
-        placeholder={isPositiveTab ? positivePlaceholder : negativePlaceholder}
+        label={negativeLabel}
+        value={negativeValue}
+        placeholder={negativePlaceholder}
+        isExpanded={isNegativeExpanded}
+        onToggle={() => setIsNegativeExpanded((current) => !current)}
+        onChange={onNegativeChange}
       />
     </div>
   )

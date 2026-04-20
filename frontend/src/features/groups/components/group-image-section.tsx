@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
-import { SectionHeading } from '@/components/common/section-heading'
+import { Bot, Images, Pencil } from 'lucide-react'
+import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
@@ -20,11 +22,20 @@ interface GroupImageSectionProps {
   onLoadMore: () => void
   hideHeader?: boolean
   presentation?: 'page' | 'drawer'
+  preferredColumnCount?: number
   selectable?: boolean
   selectedIds?: string[]
   onSelectedIdsChange?: (selectedIds: string[]) => void
   renderItemOverlay?: (image: ImageRecord) => ReactNode
+  collectionFilter?: 'all' | 'manual' | 'auto'
+  onCollectionFilterChange?: (value: 'all' | 'manual' | 'auto') => void
 }
+
+const COLLECTION_FILTER_OPTIONS = [
+  { value: 'all', icon: Images, label: '전체 이미지' },
+  { value: 'manual', icon: Pencil, label: '수동 추가만' },
+  { value: 'auto', icon: Bot, label: '자동 수집만' },
+] as const
 
 export function GroupImageSection({
   group,
@@ -37,10 +48,13 @@ export function GroupImageSection({
   onLoadMore,
   hideHeader = false,
   presentation = 'page',
+  preferredColumnCount,
   selectable = false,
   selectedIds = [],
   onSelectedIdsChange,
   renderItemOverlay,
+  collectionFilter,
+  onCollectionFilterChange,
 }: GroupImageSectionProps) {
   const shouldShowCollectionCounts = group.manual_added_count !== undefined || group.auto_collected_count !== undefined
   const {
@@ -58,18 +72,38 @@ export function GroupImageSection({
   })
 
   return (
-    <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-4' : 'space-y-4'}>
+    <section className={presentation === 'drawer' ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-4'}>
       {!hideHeader ? (
-        <SectionHeading
-          heading="이미지"
-          description={`${visibleGroupImages.length.toLocaleString('ko-KR')}개 항목`}
-          actions={shouldShowCollectionCounts ? (
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-              <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-            </div>
-          ) : undefined}
-        />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">이미지</h2>
+            <div className="mt-1 text-sm text-muted-foreground">{visibleGroupImages.length.toLocaleString('ko-KR')}개 항목</div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {typeof onCollectionFilterChange === 'function' ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {COLLECTION_FILTER_OPTIONS.map(({ value, icon: Icon, label }) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    size="icon-sm"
+                    variant={collectionFilter === value ? 'default' : 'secondary'}
+                    onClick={() => onCollectionFilterChange(value)}
+                    aria-label={label}
+                    title={label}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </Button>
+                ))}
+              </div>
+            ) : shouldShowCollectionCounts ? (
+              <>
+                <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+                <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+              </>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       {isLoading ? (
@@ -100,6 +134,7 @@ export function GroupImageSection({
           isLoadingMore={isLoadingMore}
           onLoadMore={onLoadMore}
           minColumnWidth={presentation === 'drawer' ? 180 : 280}
+          preferredColumnCount={preferredColumnCount}
           columnGap={presentation === 'drawer' ? 12 : 20}
           rowGap={presentation === 'drawer' ? 12 : 20}
           gridItemHeight={presentation === 'drawer' ? 220 : 260}
@@ -114,11 +149,15 @@ export function GroupImageSection({
       ) : null}
 
       {!isLoading && !isError && visibleGroupImages.length === 0 ? (
-        <Card >
-          <CardContent className="text-sm text-muted-foreground">
+        presentation === 'drawer' ? (
+          <BottomDrawerNotice>
             {hasOnlyHiddenItems ? '현재 등급 표시 정책 때문에 이 목록에서는 숨겨진 상태야.' : '표시할 이미지가 없어.'}
-          </CardContent>
-        </Card>
+          </BottomDrawerNotice>
+        ) : (
+          <PageInset className="text-sm text-muted-foreground">
+            {hasOnlyHiddenItems ? '현재 등급 표시 정책 때문에 이 목록에서는 숨겨진 상태야.' : '표시할 이미지가 없어.'}
+          </PageInset>
+        )
       ) : null}
     </section>
   )

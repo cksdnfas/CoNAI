@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  buildWallpaperImageTransitionTransform,
+  resolveWallpaperImageTransitionFrame,
+} from './wallpaper-image-transition-utils'
 import type { WallpaperAnimationEasing, WallpaperImageHoverMotion, WallpaperImageTransitionStyle } from './wallpaper-types'
 import {
   evaluateWallpaperAnimationEasingAtTime,
@@ -114,99 +118,14 @@ function getWallpaperTransitionPreviewKeyframes(
   transitionStyle: WallpaperImageTransitionStyle,
   layer: 'current' | 'previous',
 ): Array<Record<string, string | number>> {
-  if (transitionStyle === 'none') {
-    return layer === 'current'
-      ? [
-          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
-          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
-        ]
-      : [
-          { opacity: 0, transform: 'scale(1)', filter: 'blur(0px)' },
-          { opacity: 0, transform: 'scale(1)', filter: 'blur(0px)' },
-        ]
-  }
-
-  if (transitionStyle === 'fade') {
-    return layer === 'current'
-      ? [
-          { opacity: 0, transform: 'scale(1.02)', filter: 'blur(3px)' },
-          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
-        ]
-      : [
-          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
-          { opacity: 0, transform: 'scale(0.98)', filter: 'blur(4px)' },
-        ]
-  }
-
-  if (transitionStyle === 'zoom') {
-    return layer === 'current'
-      ? [
-          { opacity: 0, transform: 'scale(1.14)', filter: 'blur(2px)' },
-          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
-        ]
-      : [
-          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
-          { opacity: 0, transform: 'scale(0.86)', filter: 'blur(3px)' },
-        ]
-  }
-
-  if (transitionStyle === 'slide') {
-    return layer === 'current'
-      ? [
-          { opacity: 0, transform: 'translateY(12px) scale(0.985)', filter: 'blur(2px)' },
-          { opacity: 1, transform: 'translateY(0px) scale(1)', filter: 'blur(0px)' },
-        ]
-      : [
-          { opacity: 1, transform: 'translateY(0px) scale(1)', filter: 'blur(0px)' },
-          { opacity: 0, transform: 'translateY(-12px) scale(1.015)', filter: 'blur(4px)' },
-        ]
-  }
-
-  if (transitionStyle === 'blur') {
-    return layer === 'current'
-      ? [
-          { opacity: 0, transform: 'scale(1.035)', filter: 'blur(14px)' },
-          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
-        ]
-      : [
-          { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
-          { opacity: 0, transform: 'scale(0.97)', filter: 'blur(18px)' },
-        ]
-  }
-
-  if (transitionStyle === 'flip') {
-    return layer === 'current'
-      ? [
-          { opacity: 0, transform: 'perspective(1200px) rotateX(-84deg) scale(0.96)', filter: 'blur(2px)' },
-          { opacity: 1, transform: 'perspective(1200px) rotateX(0deg) scale(1)', filter: 'blur(0px)' },
-        ]
-      : [
-          { opacity: 1, transform: 'perspective(1200px) rotateX(0deg) scale(1)', filter: 'blur(0px)' },
-          { opacity: 0, transform: 'perspective(1200px) rotateX(84deg) scale(1.03)', filter: 'blur(4px)' },
-        ]
-  }
-
-  if (transitionStyle === 'shuffle') {
-    return layer === 'current'
-      ? [
-          { opacity: 0, transform: 'translate(-12px, 8px) rotate(-3deg) scale(0.92)', filter: 'blur(4px)' },
-          { opacity: 1, transform: 'translate(0px, 0px) rotate(0deg) scale(1)', filter: 'blur(0px)' },
-        ]
-      : [
-          { opacity: 1, transform: 'translate(0px, 0px) rotate(0deg) scale(1)', filter: 'blur(0px)' },
-          { opacity: 0, transform: 'translate(12px, -8px) rotate(3deg) scale(1.05)', filter: 'blur(5px)' },
-        ]
-  }
-
-  return layer === 'current'
-    ? [
-        { opacity: 0, transform: 'translateY(2%) scale(0.9)', filter: 'blur(4px)' },
-        { opacity: 1, transform: 'translateY(0px) scale(1)', filter: 'blur(0px)' },
-      ]
-    : [
-        { opacity: 1, transform: 'translateY(0px) scale(1)', filter: 'blur(0px)' },
-        { opacity: 0, transform: 'translateY(-2%) scale(1.08)', filter: 'blur(6px)' },
-      ]
+  return [0, 1].map((progress) => {
+    const frame = resolveWallpaperImageTransitionFrame(transitionStyle, layer, progress)
+    return {
+      opacity: frame.opacity,
+      transform: buildWallpaperImageTransitionTransform(frame, 'translate'),
+      filter: `blur(${frame.blur}px)`,
+    }
+  })
 }
 
 // Build sampled graph points for one easing preview thumbnail.

@@ -15,11 +15,23 @@ type WorkflowJsonNodeRecord = {
 
 type WorkflowJsonRecord = Record<string, WorkflowJsonNodeRecord>
 
+type WorkflowNodeItem = NonNullable<WorkflowMarkedField['node_items']>[number]
+
+type PowerLoraLoaderInputValue = {
+  on?: boolean
+  lora?: string
+  strength?: number
+}
+
 export type EditableWorkflowInput = {
   key: string
   label: string
-  value: string | number | boolean | null
+  value: unknown
   inferredType: WorkflowMarkedField['type']
+  jsonPath?: string
+  typeLabel?: string
+  nodeEditor?: WorkflowMarkedField['node_editor']
+  nodeItems?: WorkflowNodeItem[]
 }
 
 export type AuthoringNodeData = {
@@ -29,7 +41,7 @@ export type AuthoringNodeData = {
   markedJsonPaths: string[]
   searchMatched?: boolean
   searchCurrent?: boolean
-  onAddField: (nodeId: string, classType: string, input: EditableWorkflowInput) => void
+  onAddField: (nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => void
 }
 
 export type AuthoringNode = Node<AuthoringNodeData, 'comfyAuthoring'>
@@ -53,6 +65,48 @@ function humanizeWorkflowInputKey(value: string) {
 /** Keep generated marked-field ids stable and React-safe. */
 function sanitizeWorkflowFieldId(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_')
+}
+
+const POWER_LORA_LOADER_CLASS_TYPE = 'Power Lora Loader (rgthree)'
+const POWER_LORA_NODE_INPUT_KEY = '__power_lora_loader_node__'
+
+function inferWorkflowNumberStep(value: number) {
+  if (!Number.isFinite(value)) {
+    return undefined
+  }
+
+  const normalized = `${value}`
+  const decimalPart = normalized.includes('.') ? normalized.split('.')[1] ?? '' : ''
+  if (decimalPart.length === 0) {
+    return 1
+  }
+
+  return Number(`0.${'0'.repeat(Math.max(decimalPart.length - 1, 0))}1`)
+}
+
+function isPowerLoraLoaderInputValue(value: unknown): value is PowerLoraLoaderInputValue {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return typeof record.lora === 'string'
+    && typeof record.on === 'boolean'
+    && typeof record.strength === 'number'
+}
+
+function buildPowerLoraNodeItems(inputs: Record<string, unknown>): WorkflowNodeItem[] {
+  return Object.entries(inputs)
+    .filter(([inputKey, inputValue]) => /^lora_/i.test(inputKey) && isPowerLoraLoaderInputValue(inputValue))
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey, undefined, { numeric: true }))
+    .map(([inputKey, inputValue]) => {
+      const loraInput = inputValue as PowerLoraLoaderInputValue & { lora: string }
+      return {
+        key: inputKey,
+        label: loraInput.lora.split(/[/\\]/).pop() || loraInput.lora,
+        lora: loraInput.lora,
+      }
+    })
 }
 
 /** Infer the most useful authoring field type from the raw workflow value. */
@@ -238,11 +292,9 @@ function layoutAuthoringGraph(
 /** Convert the raw Comfy workflow JSON into authoring graph nodes and edges. */
 export function parseWorkflowGraph(params: {
   workflowJson: string
-  markedFields: WorkflowMarkedField[]
-  onAddField: (nodeId: string, classType: string, input: EditableWorkflowInput) => void
+  onAddField: (nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => void
 }): ParsedWorkflowGraph {
   const workflow = parseWorkflowDefinition(params.workflowJson)
-  const markedPaths = new Set(params.markedFields.map((field) => field.jsonPath))
 
   const nodes: AuthoringNode[] = []
   const edges: AuthoringEdge[] = []
@@ -251,6 +303,23 @@ export function parseWorkflowGraph(params: {
   for (const [nodeId, nodeData] of Object.entries(workflow)) {
     const inputs = nodeData.inputs ?? {}
     const editableInputs: EditableWorkflowInput[] = []
+    const classType = nodeData.class_type || 'Unknown'
+
+    if (classType === POWER_LORA_LOADER_CLASS_TYPE) {
+      const powerLoraNodeItems = buildPowerLoraNodeItems(inputs)
+      if (powerLoraNodeItems.length > 0) {
+        editableInputs.push({
+          key: POWER_LORA_NODE_INPUT_KEY,
+          label: 'Add Lora',
+          value: inputs,
+          inferredType: 'node',
+          jsonPath: `${nodeId}.inputs`,
+          typeLabel: 'Node',
+          nodeEditor: 'power_lora_loader_rgthree',
+          nodeItems: powerLoraNodeItems,
+        })
+      }
+    }
 
     for (const [inputKey, inputValue] of Object.entries(inputs)) {
       if (Array.isArray(inputValue) && inputValue.length >= 2) {
@@ -260,6 +329,10 @@ export function parseWorkflowGraph(params: {
           target: nodeId,
           label: inputKey,
         })
+        continue
+      }
+
+      if (classType === POWER_LORA_LOADER_CLASS_TYPE && inputKey === '➕ Add Lora') {
         continue
       }
 
@@ -273,7 +346,6 @@ export function parseWorkflowGraph(params: {
       }
     }
 
-    const classType = nodeData.class_type || 'Unknown'
     const title = resolveWorkflowNodeTitle(nodeId, nodeData)
 
     explicitPositions.set(nodeId, resolveWorkflowNodePosition(nodeData))
@@ -286,7 +358,7 @@ export function parseWorkflowGraph(params: {
         title,
         classType,
         editableInputs,
-        markedJsonPaths: editableInputs.map((input) => `${nodeId}.inputs.${input.key}`).filter((path) => markedPaths.has(path)),
+        markedJsonPaths: [],
         onAddField: params.onAddField,
       },
     })
@@ -301,27 +373,34 @@ export function parseWorkflowGraph(params: {
 /** Build a marked-field draft from a clicked graph input. */
 export function buildWorkflowMarkedFieldFromInput(
   nodeId: string,
+  nodeTitle: string,
   classType: string,
   input: EditableWorkflowInput,
 ): WorkflowMarkedField {
   const fieldType = input.inferredType
   const dropdownOptions = typeof input.value === 'boolean' ? ['true', 'false'] : undefined
+  const resolvedJsonPath = input.jsonPath ?? `${nodeId}.inputs.${input.key}`
 
   return {
     id: sanitizeWorkflowFieldId(`${nodeId}_${input.key}`),
-    label: humanizeWorkflowInputKey(input.key),
-    description: `${classType} · ${input.key}`,
-    jsonPath: `${nodeId}.inputs.${input.key}`,
+    label: `${nodeTitle}-${input.label}`,
+    description: input.typeLabel ? `${classType} · ${input.typeLabel}` : `${classType} · ${input.key}`,
+    jsonPath: resolvedJsonPath,
     type: fieldType,
+    default_collapsed: false,
     default_value:
       input.value === null
         ? undefined
         : typeof input.value === 'boolean'
           ? String(input.value)
-          : input.value,
+          : input.value as WorkflowMarkedField['default_value'],
     placeholder: fieldType === 'text' || fieldType === 'textarea' ? humanizeWorkflowInputKey(input.key) : undefined,
     options: dropdownOptions,
     required: false,
+    step: typeof input.value === 'number' ? inferWorkflowNumberStep(input.value) : undefined,
+    node_class_type: fieldType === 'node' ? classType : undefined,
+    node_editor: fieldType === 'node' ? input.nodeEditor : undefined,
+    node_items: fieldType === 'node' ? input.nodeItems : undefined,
   }
 }
 
@@ -369,13 +448,13 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
       {data.editableInputs.length > 0 ? (
         <div className="mt-3 space-y-1.5">
           {data.editableInputs.map((input) => {
-            const path = `${id}.inputs.${input.key}`
+            const path = input.jsonPath ?? `${id}.inputs.${input.key}`
             const selected = data.markedJsonPaths.includes(path)
             return (
               <button
                 key={path}
                 type="button"
-                onClick={() => data.onAddField(id, data.classType, input)}
+                onClick={() => data.onAddField(id, data.title, data.classType, input)}
                 className={selected
                   ? 'nodrag nopan flex w-full items-center justify-between rounded-sm border border-primary/40 bg-primary/10 px-2 py-1.5 text-left text-xs text-foreground'
                   : 'nodrag nopan flex w-full items-center justify-between rounded-sm border border-border bg-surface-low px-2 py-1.5 text-left text-xs text-foreground hover:bg-surface-high'}

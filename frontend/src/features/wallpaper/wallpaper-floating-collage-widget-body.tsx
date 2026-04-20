@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { cn } from '@/lib/utils'
+import {
+  buildWallpaperImageTransitionTransform,
+  resolveWallpaperImageTransitionFrame,
+} from './wallpaper-image-transition-utils'
 import type { WallpaperImageTransitionStyle, WallpaperWidgetInstance } from './wallpaper-types'
 import { useWallpaperGroupPreviewImagesQuery } from './wallpaper-widget-data'
 import { type WallpaperWidgetPreviewImage } from './wallpaper-widget-preview-surface'
@@ -156,168 +160,24 @@ function clampWallpaperFloatingCollageTransitionDurationMs(value: number | undef
   return getWallpaperImageTransitionDurationMs(undefined, value)
 }
 
-function interpolateWallpaperFloatingCollageMetric(start: number, end: number, progress: number) {
-  return start + ((end - start) * progress)
-}
-
 function resolveWallpaperFloatingCollageTransitionLayerStyle(
   transitionStyle: WallpaperImageTransitionStyle,
   layer: 'current' | 'previous',
   progress: number,
 ): CSSProperties {
-  if (transitionStyle === 'none') {
-    return layer === 'current'
-      ? { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)', filter: 'blur(0px)' }
-      : { opacity: 0, transform: 'translate3d(0, 0, 0) scale(1)', filter: 'blur(0px)' }
+  const frame = resolveWallpaperImageTransitionFrame(transitionStyle, layer, clampWallpaperMetric(progress, 0, 1))
+
+  return {
+    position: 'absolute',
+    inset: 0,
+    opacity: frame.opacity,
+    transform: buildWallpaperImageTransitionTransform(frame),
+    filter: `blur(${frame.blur}px)`,
+    backfaceVisibility: 'hidden',
+    transformStyle: 'preserve-3d',
+    willChange: 'transform, opacity, filter',
+    pointerEvents: 'none',
   }
-
-  const currentProgress = clampWallpaperMetric(progress, 0, 1)
-  const previousProgress = 1 - currentProgress
-
-  const buildStyle = ({
-    opacity,
-    translateX = 0,
-    translateY = 0,
-    scale = 1,
-    rotate = 0,
-    rotateX = 0,
-    blur = 0,
-  }: {
-    opacity: number
-    translateX?: number
-    translateY?: number
-    scale?: number
-    rotate?: number
-    rotateX?: number
-    blur?: number
-  }): CSSProperties => {
-    const transforms = [
-      rotateX !== 0 ? `perspective(1200px) rotateX(${rotateX}deg)` : null,
-      `translate3d(${translateX}px, ${translateY}px, 0)`,
-      rotate !== 0 ? `rotate(${rotate}deg)` : null,
-      `scale(${scale})`,
-    ].filter((value): value is string => Boolean(value))
-
-    return {
-      position: 'absolute',
-      inset: 0,
-      opacity,
-      transform: transforms.join(' '),
-      filter: `blur(${blur}px)`,
-      backfaceVisibility: 'hidden',
-      transformStyle: 'preserve-3d',
-      willChange: 'transform, opacity, filter',
-      pointerEvents: 'none',
-    }
-  }
-
-  if (transitionStyle === 'fade') {
-    return layer === 'current'
-      ? buildStyle({
-          opacity: currentProgress,
-          scale: interpolateWallpaperFloatingCollageMetric(1.02, 1, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(3, 0, currentProgress),
-        })
-      : buildStyle({
-          opacity: previousProgress,
-          scale: interpolateWallpaperFloatingCollageMetric(1, 0.98, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(0, 4, currentProgress),
-        })
-  }
-
-  if (transitionStyle === 'zoom') {
-    return layer === 'current'
-      ? buildStyle({
-          opacity: currentProgress,
-          scale: interpolateWallpaperFloatingCollageMetric(1.14, 1, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(2, 0, currentProgress),
-        })
-      : buildStyle({
-          opacity: previousProgress,
-          scale: interpolateWallpaperFloatingCollageMetric(1, 0.86, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(0, 3, currentProgress),
-        })
-  }
-
-  if (transitionStyle === 'slide') {
-    return layer === 'current'
-      ? buildStyle({
-          opacity: currentProgress,
-          translateY: interpolateWallpaperFloatingCollageMetric(12, 0, currentProgress),
-          scale: interpolateWallpaperFloatingCollageMetric(0.985, 1, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(2, 0, currentProgress),
-        })
-      : buildStyle({
-          opacity: previousProgress,
-          translateY: interpolateWallpaperFloatingCollageMetric(0, -12, currentProgress),
-          scale: interpolateWallpaperFloatingCollageMetric(1, 1.015, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(0, 4, currentProgress),
-        })
-  }
-
-  if (transitionStyle === 'blur') {
-    return layer === 'current'
-      ? buildStyle({
-          opacity: currentProgress,
-          scale: interpolateWallpaperFloatingCollageMetric(1.035, 1, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(14, 0, currentProgress),
-        })
-      : buildStyle({
-          opacity: previousProgress,
-          scale: interpolateWallpaperFloatingCollageMetric(1, 0.97, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(0, 18, currentProgress),
-        })
-  }
-
-  if (transitionStyle === 'flip') {
-    return layer === 'current'
-      ? buildStyle({
-          opacity: currentProgress,
-          rotateX: interpolateWallpaperFloatingCollageMetric(-84, 0, currentProgress),
-          scale: interpolateWallpaperFloatingCollageMetric(0.96, 1, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(2, 0, currentProgress),
-        })
-      : buildStyle({
-          opacity: previousProgress,
-          rotateX: interpolateWallpaperFloatingCollageMetric(0, 84, currentProgress),
-          scale: interpolateWallpaperFloatingCollageMetric(1, 1.03, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(0, 4, currentProgress),
-        })
-  }
-
-  if (transitionStyle === 'shuffle') {
-    return layer === 'current'
-      ? buildStyle({
-          opacity: currentProgress,
-          translateX: interpolateWallpaperFloatingCollageMetric(-12, 0, currentProgress),
-          translateY: interpolateWallpaperFloatingCollageMetric(8, 0, currentProgress),
-          rotate: interpolateWallpaperFloatingCollageMetric(-3, 0, currentProgress),
-          scale: interpolateWallpaperFloatingCollageMetric(0.92, 1, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(4, 0, currentProgress),
-        })
-      : buildStyle({
-          opacity: previousProgress,
-          translateX: interpolateWallpaperFloatingCollageMetric(0, 12, currentProgress),
-          translateY: interpolateWallpaperFloatingCollageMetric(0, -8, currentProgress),
-          rotate: interpolateWallpaperFloatingCollageMetric(0, 3, currentProgress),
-          scale: interpolateWallpaperFloatingCollageMetric(1, 1.05, currentProgress),
-          blur: interpolateWallpaperFloatingCollageMetric(0, 5, currentProgress),
-        })
-  }
-
-  return layer === 'current'
-    ? buildStyle({
-        opacity: currentProgress,
-        translateY: interpolateWallpaperFloatingCollageMetric(2, 0, currentProgress),
-        scale: interpolateWallpaperFloatingCollageMetric(0.9, 1, currentProgress),
-        blur: interpolateWallpaperFloatingCollageMetric(4, 0, currentProgress),
-      })
-    : buildStyle({
-        opacity: previousProgress,
-        translateY: interpolateWallpaperFloatingCollageMetric(0, -2, currentProgress),
-        scale: interpolateWallpaperFloatingCollageMetric(1, 1.08, currentProgress),
-        blur: interpolateWallpaperFloatingCollageMetric(0, 6, currentProgress),
-      })
 }
 
 /** Prefer the real image aspect ratio when the widget is configured to use it. */

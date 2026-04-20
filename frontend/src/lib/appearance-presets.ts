@@ -324,6 +324,27 @@ export const SHADOW_PRESETS: Record<ShadowPreset, ShadowPresetDefinition> = {
 }
 
 export const DENSITY_PRESETS: Record<DensityPreset, DensityPresetDefinition> = {
+  'ultra-compact': {
+    label: 'Ultra Compact',
+    description: '정보량을 더 우선해서 여백과 컨트롤 높이를 한 단계 더 줄인다',
+    shellHeaderHeight: '3rem',
+    shellInlinePadding: '0.9rem',
+    shellMainPaddingBottom: '2.25rem',
+    cardPaddingX: '0.8rem',
+    cardPaddingY: '0.8rem',
+    cardGap: '0.7rem',
+    fieldGap: '0.3rem',
+    controlHeight: '2.1rem',
+    controlPaddingX: '0.6rem',
+    panelPaddingX: '0.65rem',
+    panelPaddingY: '0.55rem',
+    drawerHeaderPaddingX: '0.75rem',
+    drawerHeaderPaddingY: '0.55rem',
+    drawerBodyPaddingX: '0.75rem',
+    drawerBodyPaddingY: '0.75rem',
+    selectionBarPaddingX: '0.75rem',
+    selectionBarPaddingY: '0.55rem',
+  },
   compact: {
     label: 'Compact',
     description: '패널과 컨트롤 높이를 줄여 더 촘촘하게 본다',

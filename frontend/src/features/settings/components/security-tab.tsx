@@ -63,7 +63,7 @@ export function SecurityTab() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <section>
         <SecurityStatusCard
           authStatus={securityTabData.authStatus}
@@ -146,7 +146,9 @@ export function SecurityTab() {
         mode={securityTabData.permissionGroupEditorMode}
         group={securityTabData.activePermissionGroup}
         members={securityTabData.activePermissionGroupMembers}
+        allAccounts={securityTabData.accounts}
         addableAccounts={securityTabData.addableAccounts}
+        availableGroups={securityTabData.availableGroups}
         selectedAddMemberAccountId={securityTabData.selectedAddMemberAccountId}
         permissionCatalog={securityTabData.pagePermissionCatalog}
         draft={securityTabData.permissionGroupDraft}
@@ -155,10 +157,15 @@ export function SecurityTab() {
         isDeleting={securityTabData.isDeletingPermissionGroup}
         isAddingMember={securityTabData.isAddingPermissionGroupMember}
         isRemovingMember={securityTabData.isRemovingPermissionGroupMember}
+        isUpdatingAccountGroup={securityTabData.isUpdatingAccountGroup}
+        isUpdatingAccountPassword={securityTabData.isUpdatingAccountPassword}
+        isDeletingAccount={securityTabData.isDeletingAccount}
         canEditFields={securityTabData.canEditPermissionGroupFields}
         canEditPermissions={securityTabData.canEditPermissionGroupPermissions}
         canManageMembers={securityTabData.canManagePermissionGroupMembers}
         canDelete={securityTabData.canDeletePermissionGroup}
+        groupColors={groupColors}
+        groupLabels={groupLabels}
         onClose={securityTabData.closePermissionGroupEditor}
         onDraftChange={securityTabData.patchPermissionGroupDraft}
         onTogglePermission={securityTabData.togglePermissionKey}
@@ -167,6 +174,9 @@ export function SecurityTab() {
         onDelete={securityTabData.deletePermissionGroup}
         onAddMember={securityTabData.addPermissionGroupMember}
         onRemoveMember={securityTabData.removePermissionGroupMember}
+        onAccountGroupChange={securityTabData.updateAccountGroup}
+        onAccountPasswordChange={securityTabData.updateAccountPassword}
+        onAccountDelete={securityTabData.deleteAccount}
       />
 
       <SecurityGroupColorEditorModal

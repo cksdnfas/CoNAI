@@ -1,4 +1,4 @@
-import { Router, type Request, type RequestHandler } from 'express';
+import { Router, type Request, type RequestHandler, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import { AuthCredentials } from '../models/AuthCredentials';
@@ -26,6 +26,53 @@ type SessionResponseAccount = {
   account_type: 'admin' | 'guest';
 };
 
+/** Send the auth route's legacy 400 payload shape without changing response contracts. */
+function sendAuthBadRequest(res: Response, error: string) {
+  res.status(400).json({ error });
+  return false;
+}
+
+/** Parse one auth route integer while preserving the current Number.parseInt semantics. */
+function parseAuthInteger(value: unknown) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+/** Parse one required integer param/body value or send the route's legacy invalid-id payload. */
+function parseRequiredAuthInteger(res: Response, value: unknown, error: string) {
+  const parsed = parseAuthInteger(value);
+  if (parsed === null) {
+    sendAuthBadRequest(res, error);
+    return null;
+  }
+
+  return parsed;
+}
+
+/** Reuse the permission-group route error/status mapping without changing response contracts. */
+function sendPermissionGroupRouteError(res: Response, error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+  const statusCode = (
+    message === 'Invalid group id'
+    || message === 'Group name is required'
+    || message === 'One or more permission keys are invalid'
+    || message === 'System groups cannot be modified through this endpoint'
+  ) ? 400 : (message === 'Permission group not found' || message === 'Account not found') ? 404 : 500;
+
+  res.status(statusCode).json({ error: message });
+}
+
+/** Normalize SQLite UTC timestamps into ISO strings so clients parse them consistently. */
+function formatSqliteUtcTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+    ? `${value.replace(' ', 'T')}Z`
+    : value;
+}
+
 /** Build the shared authenticated-session response payload. */
 function buildSessionAccountResponse(req: Request, message: string, account: SessionResponseAccount) {
   return {
@@ -40,8 +87,16 @@ function buildSessionAccountResponse(req: Request, message: string, account: Ses
   };
 }
 
-/** Format one page permission resource into the current UI label shape. */
-function formatPagePermissionLabel(resource: string): string {
+/** Format one editable built-in permission into the current UI label shape. */
+function formatBuiltInPermissionLabel(permissionKey: string, resource: string): string {
+  if (permissionKey === 'wildcards.edit') {
+    return 'Wildcard Edit';
+  }
+
+  if (permissionKey === 'wildcards.delete') {
+    return 'Wildcard Delete';
+  }
+
   return resource
     .replace(/^page\./, '')
     .replace(/\.runtime$/, ' runtime')
@@ -84,7 +139,7 @@ const handleLogin: RequestHandler = async (req, res) => {
   const password = String(req.body?.password || '');
 
   if (!username || !password) {
-    res.status(400).json({ error: 'Username and password are required' });
+    sendAuthBadRequest(res, 'Username and password are required');
     return;
   }
 
@@ -140,7 +195,7 @@ const handleSetup: RequestHandler = async (req, res) => {
   const password = String(req.body?.password || '');
 
   if (!username || !password) {
-    res.status(400).json({ error: 'Username and password are required' });
+    sendAuthBadRequest(res, 'Username and password are required');
     return;
   }
 
@@ -180,7 +235,7 @@ const handleUpdateCredentials: RequestHandler = async (req, res) => {
   const newPassword = String(req.body?.newPassword || '');
 
   if (!currentPassword || !newUsername || !newPassword) {
-    res.status(400).json({ error: 'Current password, new username, and new password are required' });
+    sendAuthBadRequest(res, 'Current password, new username, and new password are required');
     return;
   }
 
@@ -227,7 +282,7 @@ const handleGuestAccountCreate: RequestHandler = async (req, res) => {
   const password = String(req.body?.password || '');
 
   if (!username || !password) {
-    res.status(400).json({ error: 'Username and password are required' });
+    sendAuthBadRequest(res, 'Username and password are required');
     return;
   }
 
@@ -267,9 +322,9 @@ const handleAccountsList: RequestHandler = async (_req, res) => {
       status: account.status,
       groupKeys: account.group_keys,
       createdByAccountId: account.created_by_account_id,
-      lastLoginAt: account.last_login_at,
-      createdAt: account.created_at,
-      updatedAt: account.updated_at,
+      lastLoginAt: formatSqliteUtcTimestamp(account.last_login_at),
+      createdAt: formatSqliteUtcTimestamp(account.created_at),
+      updatedAt: formatSqliteUtcTimestamp(account.updated_at),
       syncedLegacyAdmin: account.sync_key === 'legacy-admin',
     })),
   });
@@ -314,9 +369,8 @@ const handlePermissionGroups: RequestHandler = async (req, res) => {
 
 /** Handle one permission-group detail read with its current members. */
 const handlePermissionGroupDetail: RequestHandler = async (req, res) => {
-  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
-  if (!Number.isInteger(groupId)) {
-    res.status(400).json({ error: 'Invalid group id' });
+  const groupId = parseRequiredAuthInteger(res, req.params.groupId, 'Invalid group id');
+  if (groupId === null) {
     return;
   }
 
@@ -357,17 +411,14 @@ const handlePermissionGroupCreate: RequestHandler = async (req, res) => {
       data: formatPermissionGroupSummary(group),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to create permission group';
-    const statusCode = message === 'Group name is required' || message === 'One or more permission keys are invalid' ? 400 : 500;
-    res.status(statusCode).json({ error: message });
+    sendPermissionGroupRouteError(res, error, 'Failed to create permission group');
   }
 };
 
 /** Handle one custom permission-group update. */
 const handlePermissionGroupUpdate: RequestHandler = async (req, res) => {
-  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
-  if (!Number.isInteger(groupId)) {
-    res.status(400).json({ error: 'Invalid group id' });
+  const groupId = parseRequiredAuthInteger(res, req.params.groupId, 'Invalid group id');
+  if (groupId === null) {
     return;
   }
 
@@ -385,22 +436,14 @@ const handlePermissionGroupUpdate: RequestHandler = async (req, res) => {
       data: formatPermissionGroupSummary(group),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to update permission group';
-    const statusCode = (
-      message === 'Invalid group id'
-      || message === 'Group name is required'
-      || message === 'One or more permission keys are invalid'
-      || message === 'System groups cannot be modified through this endpoint'
-    ) ? 400 : message === 'Permission group not found' ? 404 : 500;
-    res.status(statusCode).json({ error: message });
+    sendPermissionGroupRouteError(res, error, 'Failed to update permission group');
   }
 };
 
 /** Handle one custom permission-group deletion. */
 const handlePermissionGroupDelete: RequestHandler = async (req, res) => {
-  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
-  if (!Number.isInteger(groupId)) {
-    res.status(400).json({ error: 'Invalid group id' });
+  const groupId = parseRequiredAuthInteger(res, req.params.groupId, 'Invalid group id');
+  if (groupId === null) {
     return;
   }
 
@@ -411,26 +454,19 @@ const handlePermissionGroupDelete: RequestHandler = async (req, res) => {
       message: 'Permission group deleted successfully',
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to delete permission group';
-    const statusCode = (
-      message === 'System groups cannot be modified through this endpoint'
-    ) ? 400 : message === 'Permission group not found' ? 404 : 500;
-    res.status(statusCode).json({ error: message });
+    sendPermissionGroupRouteError(res, error, 'Failed to delete permission group');
   }
 };
 
 /** Handle adding one account membership to one custom permission group. */
 const handlePermissionGroupMemberAdd: RequestHandler = async (req, res) => {
-  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
-  const accountId = Number.parseInt(String(req.body?.accountId || ''), 10);
-
-  if (!Number.isInteger(groupId)) {
-    res.status(400).json({ error: 'Invalid group id' });
+  const groupId = parseRequiredAuthInteger(res, req.params.groupId, 'Invalid group id');
+  if (groupId === null) {
     return;
   }
 
-  if (!Number.isInteger(accountId)) {
-    res.status(400).json({ error: 'Invalid account id' });
+  const accountId = parseRequiredAuthInteger(res, req.body?.accountId, 'Invalid account id');
+  if (accountId === null) {
     return;
   }
 
@@ -441,26 +477,19 @@ const handlePermissionGroupMemberAdd: RequestHandler = async (req, res) => {
       message: 'Group member added successfully',
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to add group member';
-    const statusCode = (
-      message === 'System groups cannot be modified through this endpoint'
-    ) ? 400 : (message === 'Permission group not found' || message === 'Account not found') ? 404 : 500;
-    res.status(statusCode).json({ error: message });
+    sendPermissionGroupRouteError(res, error, 'Failed to add group member');
   }
 };
 
 /** Handle removing one account membership from one custom permission group. */
 const handlePermissionGroupMemberRemove: RequestHandler = async (req, res) => {
-  const groupId = Number.parseInt(String(req.params.groupId || ''), 10);
-  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
-
-  if (!Number.isInteger(groupId)) {
-    res.status(400).json({ error: 'Invalid group id' });
+  const groupId = parseRequiredAuthInteger(res, req.params.groupId, 'Invalid group id');
+  if (groupId === null) {
     return;
   }
 
-  if (!Number.isInteger(accountId)) {
-    res.status(400).json({ error: 'Invalid account id' });
+  const accountId = parseRequiredAuthInteger(res, req.params.accountId, 'Invalid account id');
+  if (accountId === null) {
     return;
   }
 
@@ -471,17 +500,13 @@ const handlePermissionGroupMemberRemove: RequestHandler = async (req, res) => {
       message: 'Group member removed successfully',
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to remove group member';
-    const statusCode = (
-      message === 'System groups cannot be modified through this endpoint'
-    ) ? 400 : (message === 'Permission group not found' || message === 'Account not found') ? 404 : 500;
-    res.status(statusCode).json({ error: message });
+    sendPermissionGroupRouteError(res, error, 'Failed to remove group member');
   }
 };
 
-/** Handle built-in page-access matrix reads. */
+/** Handle built-in guest/anonymous permission matrix reads. */
 const handlePageAccessList: RequestHandler = async (_req, res) => {
-  const permissions = AuthPermissionGroup.listPagePermissions();
+  const permissions = AuthPermissionGroup.listBuiltInEditablePermissions();
   const groups = AuthPermissionGroup.listBuiltInPageAccess(['anonymous', 'guest', 'admin']);
 
   res.json({
@@ -489,7 +514,7 @@ const handlePageAccessList: RequestHandler = async (_req, res) => {
     data: {
       permissions: permissions.map((permission) => ({
         permissionKey: permission.permission_key,
-        label: formatPagePermissionLabel(permission.resource),
+        label: formatBuiltInPermissionLabel(permission.permission_key, permission.resource),
         description: permission.description,
       })),
       groups: groups.map((group) => ({
@@ -502,7 +527,7 @@ const handlePageAccessList: RequestHandler = async (_req, res) => {
   });
 };
 
-/** Handle built-in page-access replacements for anonymous or guest. */
+/** Handle built-in guest/anonymous permission replacements. */
 const handlePageAccessReplace: RequestHandler = async (req, res) => {
   const groupKey = String(req.params.groupKey || '').trim();
   const permissionKeys = Array.isArray(req.body?.permissionKeys)
@@ -510,12 +535,12 @@ const handlePageAccessReplace: RequestHandler = async (req, res) => {
     : null;
 
   if (groupKey !== 'anonymous' && groupKey !== 'guest') {
-    res.status(400).json({ error: 'groupKey must be one of: anonymous, guest' });
+    sendAuthBadRequest(res, 'groupKey must be one of: anonymous, guest');
     return;
   }
 
   if (!permissionKeys) {
-    res.status(400).json({ error: 'permissionKeys must be an array' });
+    sendAuthBadRequest(res, 'permissionKeys must be an array');
     return;
   }
 
@@ -523,7 +548,7 @@ const handlePageAccessReplace: RequestHandler = async (req, res) => {
     const updatedGroup = AuthPermissionGroup.replaceBuiltInPageAccess(groupKey, permissionKeys);
     res.json({
       success: true,
-      message: `${updatedGroup.name} page access updated successfully`,
+      message: `${updatedGroup.name} built-in access updated successfully`,
       data: {
         groupKey: updatedGroup.group_key,
         name: updatedGroup.name,
@@ -540,16 +565,16 @@ const handlePageAccessReplace: RequestHandler = async (req, res) => {
 
 /** Handle system-group changes for one local account. */
 const handleAccountSystemGroupUpdate: RequestHandler = async (req, res) => {
-  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+  const accountId = parseAuthInteger(req.params.accountId);
   const groupKey = String(req.body?.groupKey || '').trim() as AssignableSystemGroupKey;
 
-  if (!Number.isInteger(accountId)) {
-    res.status(400).json({ error: 'Invalid account id' });
+  if (accountId === null) {
+    sendAuthBadRequest(res, 'Invalid account id');
     return;
   }
 
   if (groupKey !== 'guest' && groupKey !== 'admin') {
-    res.status(400).json({ error: 'groupKey must be one of: guest, admin' });
+    sendAuthBadRequest(res, 'groupKey must be one of: guest, admin');
     return;
   }
 
@@ -560,12 +585,12 @@ const handleAccountSystemGroupUpdate: RequestHandler = async (req, res) => {
   }
 
   if (req.session.accountId === accountId && groupKey !== 'admin') {
-    res.status(400).json({ error: 'You cannot demote your current admin session' });
+    sendAuthBadRequest(res, 'You cannot demote your current admin session');
     return;
   }
 
   if (targetAccount.account_type === 'admin' && groupKey !== 'admin' && AuthAccount.countActiveAdmins() <= 1) {
-    res.status(400).json({ error: 'At least one active admin account must remain' });
+    sendAuthBadRequest(res, 'At least one active admin account must remain');
     return;
   }
 
@@ -589,16 +614,16 @@ const handleAccountSystemGroupUpdate: RequestHandler = async (req, res) => {
 
 /** Handle admin-side password changes for one local account. */
 const handleAccountPasswordUpdate: RequestHandler = async (req, res) => {
-  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+  const accountId = parseAuthInteger(req.params.accountId);
   const newPassword = String(req.body?.newPassword || '');
 
-  if (!Number.isInteger(accountId)) {
-    res.status(400).json({ error: 'Invalid account id' });
+  if (accountId === null) {
+    sendAuthBadRequest(res, 'Invalid account id');
     return;
   }
 
   if (!newPassword.trim()) {
-    res.status(400).json({ error: 'newPassword is required' });
+    sendAuthBadRequest(res, 'newPassword is required');
     return;
   }
 
@@ -620,15 +645,15 @@ const handleAccountPasswordUpdate: RequestHandler = async (req, res) => {
 
 /** Handle one removable account deletion from the admin UI. */
 const handleAccountDelete: RequestHandler = async (req, res) => {
-  const accountId = Number.parseInt(String(req.params.accountId || ''), 10);
+  const accountId = parseAuthInteger(req.params.accountId);
 
-  if (!Number.isInteger(accountId)) {
-    res.status(400).json({ error: 'Invalid account id' });
+  if (accountId === null) {
+    sendAuthBadRequest(res, 'Invalid account id');
     return;
   }
 
   if (req.session.accountId === accountId) {
-    res.status(400).json({ error: 'You cannot delete your current session account' });
+    sendAuthBadRequest(res, 'You cannot delete your current session account');
     return;
   }
 

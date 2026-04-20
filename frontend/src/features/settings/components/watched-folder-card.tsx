@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Play, RotateCcw, ScanSearch, Square } from 'lucide-react'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { WatchedFolder, WatchedFolderUpdateInput } from '@/types/folder'
 import { formatDateTime, parseCommaSeparatedInput, parseJsonArray, toCommaSeparatedInput } from '../settings-utils'
-import { SettingsField, SettingsToggleRow } from './settings-primitives'
+import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import {
-  SettingsResourceCardHeader,
   SettingsResourceFooterActions,
   SettingsResourceMetaList,
   getWatcherBadgeVariant,
@@ -70,128 +70,111 @@ export function WatchedFolderCard({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <SettingsResourceCardHeader
-          title={folder.folder_name || '이름 없는 폴더'}
-          badges={[
-            ...(folder.is_default === 1 ? [{ label: 'default', variant: 'secondary' as const }] : []),
-            { label: draft.is_active ? 'active' : 'inactive', variant: draft.is_active ? 'outline' : 'secondary' },
-            { label: `watcher ${watcherState || 'stopped'}`, variant: getWatcherBadgeVariant(watcherState) },
-          ]}
-          details={[folder.folder_path]}
-          actions={[
-            {
-              label: '폴더 스캔',
-              title: '폴더 스캔',
-              icon: <ScanSearch className="h-4 w-4" />,
-              disabled: isBusy,
-              onClick: () => void handleAction(() => onScan(folder.id)),
-            },
-            {
-              label: 'watcher 시작',
-              title: 'watcher 시작',
-              icon: <Play className="h-4 w-4" />,
-              disabled: isBusy,
-              onClick: () => void handleAction(() => onStartWatcher(folder.id)),
-            },
-            {
-              label: 'watcher 중지',
-              title: 'watcher 중지',
-              icon: <Square className="h-4 w-4" />,
-              disabled: isBusy,
-              onClick: () => void handleAction(() => onStopWatcher(folder.id)),
-            },
-            {
-              label: 'watcher 재시작',
-              title: 'watcher 재시작',
-              icon: <RotateCcw className="h-4 w-4" />,
-              disabled: isBusy,
-              onClick: () => void handleAction(() => onRestartWatcher(folder.id)),
-            },
-          ]}
-        />
-      </CardHeader>
-
-      <CardContent className="space-y-5">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <SettingsField label="표시 이름">
-            <Input variant="settings" value={draft.folder_name} onChange={(event) => setDraft((current) => ({ ...current, folder_name: event.target.value }))} />
-          </SettingsField>
-
-          <SettingsField label="스캔 주기(분)">
-            <Input type="number" min={1} variant="settings" value={draft.scan_interval} onChange={(event) => setDraft((current) => ({ ...current, scan_interval: Number(event.target.value) || 1 }))} />
-          </SettingsField>
-
-          <SettingsField label="제외 확장자">
-            <Input variant="settings" value={draft.exclude_extensions} onChange={(event) => setDraft((current) => ({ ...current, exclude_extensions: event.target.value }))} placeholder="tmp, db, txt" />
-          </SettingsField>
-
-          <SettingsField label="제외 패턴">
-            <Input variant="settings" value={draft.exclude_patterns} onChange={(event) => setDraft((current) => ({ ...current, exclude_patterns: event.target.value }))} placeholder="@eaDir, thumbs, cache" />
-          </SettingsField>
-
-          <SettingsToggleRow>
-            <input type="checkbox" checked={draft.auto_scan} onChange={(event) => setDraft((current) => ({ ...current, auto_scan: event.target.checked }))} />
-            자동 스캔
-          </SettingsToggleRow>
-
-          <SettingsToggleRow>
-            <input type="checkbox" checked={draft.recursive} onChange={(event) => setDraft((current) => ({ ...current, recursive: event.target.checked }))} />
-            하위 폴더 포함
-          </SettingsToggleRow>
-
-          <SettingsToggleRow>
-            <input
-              type="checkbox"
-              checked={draft.watcher_enabled}
-              onChange={(event) => setDraft((current) => ({ ...current, watcher_enabled: event.target.checked }))}
-            />
-            watcher 사용
-          </SettingsToggleRow>
-
-          <SettingsToggleRow>
-            <input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))} />
-            폴더 활성화
-          </SettingsToggleRow>
+    <SettingsSection
+      heading={folder.folder_name || '이름 없는 폴더'}
+      bodyClassName="space-y-5"
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onScan(folder.id))} title="폴더 스캔" aria-label="폴더 스캔">
+            <ScanSearch className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStartWatcher(folder.id))} title="watcher 시작" aria-label="watcher 시작">
+            <Play className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onStopWatcher(folder.id))} title="watcher 중지" aria-label="watcher 중지">
+            <Square className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" disabled={isBusy} onClick={() => void handleAction(() => onRestartWatcher(folder.id))} title="watcher 재시작" aria-label="watcher 재시작">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
         </div>
+      }
+    >
+      <div className="flex flex-wrap gap-2">
+        {folder.is_default === 1 ? <Badge variant="secondary">default</Badge> : null}
+        <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? 'active' : 'inactive'}</Badge>
+        <Badge variant={getWatcherBadgeVariant(watcherState)}>{`watcher ${watcherState || 'stopped'}`}</Badge>
+      </div>
 
-        <SettingsResourceMetaList
-          items={[
-            { label: '최근 스캔', value: formatDateTime(folder.last_scan_date) },
-            { label: '최근 상태', value: folder.last_scan_status || '—' },
-            { label: '최근 신규 이미지', value: folder.last_scan_found.toLocaleString('ko-KR') },
-          ]}
-        />
+      <div className="break-all font-mono text-xs text-muted-foreground">{folder.folder_path}</div>
 
-        <SettingsResourceFooterActions
-          dangerLabel="폴더 제거"
-          dangerDisabled={isBusy || folder.is_default === 1}
-          onDanger={() => {
-            if (!window.confirm(`정말 ${folder.folder_name || folder.folder_path} 폴더를 삭제할까?`)) {
-              return
-            }
-            void handleAction(() => onDelete(folder.id))
-          }}
-          primaryLabel={isBusy ? '처리 중…' : '폴더 설정 저장'}
-          primaryDisabled={isBusy}
-          onPrimary={() =>
-            void handleAction(() =>
-              onSave(folder.id, {
-                folder_name: draft.folder_name,
-                auto_scan: draft.auto_scan,
-                scan_interval: draft.scan_interval,
-                recursive: draft.recursive,
-                watcher_enabled: draft.watcher_enabled,
-                watcher_polling_interval: draft.watcher_enabled ? draft.watcher_polling_interval : null,
-                exclude_extensions: parseCommaSeparatedInput(draft.exclude_extensions),
-                exclude_patterns: parseCommaSeparatedInput(draft.exclude_patterns),
-                is_active: draft.is_active,
-              }),
-            )
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SettingsField label="표시 이름">
+          <Input variant="settings" value={draft.folder_name} onChange={(event) => setDraft((current) => ({ ...current, folder_name: event.target.value }))} />
+        </SettingsField>
+
+        <SettingsField label="스캔 주기(분)">
+          <Input type="number" min={1} variant="settings" value={draft.scan_interval} onChange={(event) => setDraft((current) => ({ ...current, scan_interval: Number(event.target.value) || 1 }))} />
+        </SettingsField>
+
+        <SettingsField label="제외 확장자">
+          <Input variant="settings" value={draft.exclude_extensions} onChange={(event) => setDraft((current) => ({ ...current, exclude_extensions: event.target.value }))} placeholder="tmp, db, txt" />
+        </SettingsField>
+
+        <SettingsField label="제외 패턴">
+          <Input variant="settings" value={draft.exclude_patterns} onChange={(event) => setDraft((current) => ({ ...current, exclude_patterns: event.target.value }))} placeholder="@eaDir, thumbs, cache" />
+        </SettingsField>
+
+        <SettingsToggleRow>
+          <input type="checkbox" checked={draft.auto_scan} onChange={(event) => setDraft((current) => ({ ...current, auto_scan: event.target.checked }))} />
+          자동 스캔
+        </SettingsToggleRow>
+
+        <SettingsToggleRow>
+          <input type="checkbox" checked={draft.recursive} onChange={(event) => setDraft((current) => ({ ...current, recursive: event.target.checked }))} />
+          하위 폴더 포함
+        </SettingsToggleRow>
+
+        <SettingsToggleRow>
+          <input
+            type="checkbox"
+            checked={draft.watcher_enabled}
+            onChange={(event) => setDraft((current) => ({ ...current, watcher_enabled: event.target.checked }))}
+          />
+          watcher 사용
+        </SettingsToggleRow>
+
+        <SettingsToggleRow>
+          <input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))} />
+          폴더 활성화
+        </SettingsToggleRow>
+      </div>
+
+      <SettingsResourceMetaList
+        items={[
+          { label: '최근 스캔', value: formatDateTime(folder.last_scan_date) },
+          { label: '최근 상태', value: folder.last_scan_status || '—' },
+          { label: '최근 신규 이미지', value: folder.last_scan_found.toLocaleString('ko-KR') },
+        ]}
+      />
+
+      <SettingsResourceFooterActions
+        dangerLabel="폴더 제거"
+        dangerDisabled={isBusy || folder.is_default === 1}
+        onDanger={() => {
+          if (!window.confirm(`정말 ${folder.folder_name || folder.folder_path} 폴더를 삭제할까?`)) {
+            return
           }
-        />
-      </CardContent>
-    </Card>
+          void handleAction(() => onDelete(folder.id))
+        }}
+        primaryLabel={isBusy ? '처리 중…' : '폴더 설정 저장'}
+        primaryDisabled={isBusy}
+        onPrimary={() =>
+          void handleAction(() =>
+            onSave(folder.id, {
+              folder_name: draft.folder_name,
+              auto_scan: draft.auto_scan,
+              scan_interval: draft.scan_interval,
+              recursive: draft.recursive,
+              watcher_enabled: draft.watcher_enabled,
+              watcher_polling_interval: draft.watcher_enabled ? draft.watcher_polling_interval : null,
+              exclude_extensions: parseCommaSeparatedInput(draft.exclude_extensions),
+              exclude_patterns: parseCommaSeparatedInput(draft.exclude_patterns),
+              is_active: draft.is_active,
+            }),
+          )
+        }
+      />
+    </SettingsSection>
   )
 }
