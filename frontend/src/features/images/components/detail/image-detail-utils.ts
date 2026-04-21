@@ -1,5 +1,6 @@
 import type { ImageRecord } from '@/types/image'
 import type { SimilaritySettings } from '@/types/settings'
+import { parseTaglistTokens } from '@/components/common/tag-result-utils'
 import { buildImageDownloadUrl } from '@/lib/api'
 import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 
@@ -183,12 +184,23 @@ export function getImageGenerationParamItems(image: ImageRecord): ImageGeneratio
     .map((item) => ({ ...item, value: item.value as string }))
 }
 
+function getLegacyAutoTagTaglist(autoTags?: ImageRecord['auto_tags'] | null) {
+  const value = (autoTags as Record<string, unknown> | null | undefined)?.taglist
+  return typeof value === 'string' ? value : null
+}
+
+function getDisplayTags(taglist: string | null | undefined, fallbackEntries: Array<[string, number]>) {
+  const parsedTags = parseTaglistTokens(taglist ?? undefined)
+  return parsedTags.length > 0 ? parsedTags : fallbackEntries.map(([tag]) => tag)
+}
+
 /** Build extracted auto prompt content for the detail metadata card. */
 export function getImageAutoPromptContent(image: ImageRecord) {
   const tagger = image.auto_tags?.tagger
   const ratingEntries = getSortedTagEntries(tagger?.rating ?? image.auto_tags?.rating)
   const characterEntries = getSortedTagEntries(tagger?.character ?? image.auto_tags?.character)
   const generalEntries = getSortedTagEntries(tagger?.general ?? image.auto_tags?.general)
+  const generalTags = getDisplayTags(tagger?.taglist ?? getLegacyAutoTagTaglist(image.auto_tags), generalEntries)
 
   if (ratingEntries.length === 0 && characterEntries.length === 0 && generalEntries.length === 0) {
     return null
@@ -197,7 +209,7 @@ export function getImageAutoPromptContent(image: ImageRecord) {
   return {
     ratingEntries,
     characterEntries,
-    generalTags: generalEntries.map(([tag]) => tag),
+    generalTags,
     generalEntries,
   }
 }
@@ -231,7 +243,7 @@ export function getImageArtistPromptSection(image: ImageRecord) {
 
   return {
     label: 'artist',
-    tags: entries.map(([tag]) => tag),
+    tags: getDisplayTags(image.auto_tags?.kaloscope?.taglist, entries),
     entries,
   }
 }
