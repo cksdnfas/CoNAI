@@ -118,6 +118,17 @@ export class PromptCollectionService {
     return PromptRelationService.getGraph(type, options);
   }
 
+  static getPromptTaxonomyRelatedPrompts(
+    prompt: string,
+    type: PromptRelationPromptType = 'positive',
+    options?: {
+      relationKind?: 'same_family' | 'string_variant' | 'all';
+      limit?: number;
+    },
+  ) {
+    return PromptTaxonomyService.getRelatedPrompts(prompt, type, options);
+  }
+
   static getPromptTaxonomyGraph(
     type: PromptRelationPromptType = 'positive',
     options?: {

@@ -99,6 +99,32 @@ export interface PromptTaxonomyGraphResult {
   };
 }
 
+export interface PromptTaxonomyRelatedItem {
+  id: number;
+  prompt: string;
+  usage_count: number;
+  group_id: number | null;
+  inferred_type: PromptTaxonomyInferredType;
+  cluster_id: string | null;
+  canonical_prompt: string | null;
+  relation_kind: PromptTaxonomyRelationKind;
+  score: number;
+}
+
+export interface PromptTaxonomyRelatedResult {
+  items: PromptTaxonomyRelatedItem[];
+  total: number;
+  source: {
+    prompt: string;
+    type: PromptRelationPromptType;
+    usage_count: number;
+    group_id: number | null;
+    inferred_type: PromptTaxonomyInferredType | 'unknown';
+    cluster_id: string | null;
+    canonical_prompt: string | null;
+  };
+}
+
 export interface PromptTaxonomyRebuildResult {
   processed: number;
   nodes: number;

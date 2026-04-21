@@ -54,6 +54,7 @@ export function usePromptPageMutations({
       queryClient.invalidateQueries({ queryKey: ['prompt-related'] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-graph'] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-graph'] }),
+      queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-related'] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-statistics'] }),
     ])
     await onAfterRefresh?.()
@@ -184,7 +185,10 @@ export function usePromptPageMutations({
     mutationFn: rebuildPromptTaxonomy,
     onSuccess: async (result) => {
       onInfo(result.message)
-      await queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-graph'] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-graph'] }),
+        queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-related'] }),
+      ])
     },
     onError: (error) => {
       onError(error instanceof Error ? error.message : '프롬프트 taxonomy 재구축에 실패했어.')

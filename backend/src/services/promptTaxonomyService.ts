@@ -6,6 +6,8 @@ import type {
   PromptTaxonomyGraphResult,
   PromptTaxonomyInferredType,
   PromptTaxonomyNodeItem,
+  PromptTaxonomyRelatedItem,
+  PromptTaxonomyRelatedResult,
   PromptTaxonomyRelationKind,
   PromptTaxonomyRebuildResult,
 } from '../types/promptRelations';
@@ -56,6 +58,28 @@ interface TaxonomyGraphRow {
   target_inferred_type: PromptTaxonomyInferredType;
   target_cluster_id: string | null;
   target_canonical_prompt: string | null;
+}
+
+interface PromptTaxonomySourceRow {
+  id: number;
+  prompt: string;
+  usage_count: number;
+  group_id: number | null;
+  inferred_type: PromptTaxonomyInferredType;
+  cluster_id: string | null;
+  canonical_prompt: string | null;
+}
+
+interface PromptTaxonomyRelatedRow {
+  relation_kind: PromptTaxonomyRelationKind;
+  score: number;
+  related_id: number;
+  related_prompt: string;
+  related_usage_count: number;
+  related_group_id: number | null;
+  related_inferred_type: PromptTaxonomyInferredType;
+  related_cluster_id: string | null;
+  related_canonical_prompt: string | null;
 }
 
 const ANALYSIS_VERSION = 1;
@@ -301,6 +325,131 @@ export class PromptTaxonomyService {
     transaction();
 
     return { processed, nodes, clusters, relations };
+  }
+
+  static getRelatedPrompts(
+    prompt: string,
+    type: PromptRelationPromptType = 'positive',
+    options?: {
+      relationKind?: PromptTaxonomyRelationKind | 'all';
+      limit?: number;
+    },
+  ): PromptTaxonomyRelatedResult {
+    const normalizedPrompt = cleanPromptTerm(prompt).trim();
+    const relationKind = options?.relationKind ?? 'all';
+    const limit = Number.isFinite(options?.limit) ? Math.max(1, Math.min(50, Math.round(Number(options?.limit)))) : 12;
+
+    const source = db.prepare(`
+      SELECT
+        collection.id,
+        collection.prompt,
+        collection.usage_count,
+        collection.group_id,
+        analysis.inferred_type,
+        analysis.cluster_id,
+        analysis.canonical_prompt
+      FROM ${getPromptTableName(type)} collection
+      LEFT JOIN prompt_term_analysis analysis
+        ON analysis.prompt_type = ?
+       AND analysis.prompt = collection.prompt
+      WHERE collection.prompt = ?
+      LIMIT 1
+    `).get(type, normalizedPrompt) as PromptTaxonomySourceRow | undefined;
+
+    if (!source) {
+      return {
+        items: [],
+        total: 0,
+        source: {
+          prompt: normalizedPrompt,
+          type,
+          usage_count: 0,
+          group_id: null,
+          inferred_type: 'unknown',
+          cluster_id: null,
+          canonical_prompt: null,
+        },
+      };
+    }
+
+    const rows = relationKind === 'all'
+      ? db.prepare(`
+          SELECT
+            rel.relation_kind,
+            rel.score,
+            relatedCollection.id AS related_id,
+            relatedCollection.prompt AS related_prompt,
+            relatedCollection.usage_count AS related_usage_count,
+            relatedCollection.group_id AS related_group_id,
+            relatedAnalysis.inferred_type AS related_inferred_type,
+            relatedAnalysis.cluster_id AS related_cluster_id,
+            relatedAnalysis.canonical_prompt AS related_canonical_prompt
+          FROM prompt_term_similarity_relations rel
+          INNER JOIN ${getPromptTableName(type)} relatedCollection
+            ON relatedCollection.prompt = CASE
+              WHEN rel.source_prompt = ? THEN rel.target_prompt
+              ELSE rel.source_prompt
+            END
+          LEFT JOIN prompt_term_analysis relatedAnalysis
+            ON relatedAnalysis.prompt_type = rel.prompt_type
+           AND relatedAnalysis.prompt = relatedCollection.prompt
+          WHERE rel.prompt_type = ?
+            AND (rel.source_prompt = ? OR rel.target_prompt = ?)
+          ORDER BY rel.score DESC, relatedCollection.usage_count DESC, relatedCollection.prompt ASC
+          LIMIT ?
+        `).all(normalizedPrompt, type, normalizedPrompt, normalizedPrompt, limit) as PromptTaxonomyRelatedRow[]
+      : db.prepare(`
+          SELECT
+            rel.relation_kind,
+            rel.score,
+            relatedCollection.id AS related_id,
+            relatedCollection.prompt AS related_prompt,
+            relatedCollection.usage_count AS related_usage_count,
+            relatedCollection.group_id AS related_group_id,
+            relatedAnalysis.inferred_type AS related_inferred_type,
+            relatedAnalysis.cluster_id AS related_cluster_id,
+            relatedAnalysis.canonical_prompt AS related_canonical_prompt
+          FROM prompt_term_similarity_relations rel
+          INNER JOIN ${getPromptTableName(type)} relatedCollection
+            ON relatedCollection.prompt = CASE
+              WHEN rel.source_prompt = ? THEN rel.target_prompt
+              ELSE rel.source_prompt
+            END
+          LEFT JOIN prompt_term_analysis relatedAnalysis
+            ON relatedAnalysis.prompt_type = rel.prompt_type
+           AND relatedAnalysis.prompt = relatedCollection.prompt
+          WHERE rel.prompt_type = ?
+            AND rel.relation_kind = ?
+            AND (rel.source_prompt = ? OR rel.target_prompt = ?)
+          ORDER BY rel.score DESC, relatedCollection.usage_count DESC, relatedCollection.prompt ASC
+          LIMIT ?
+        `).all(normalizedPrompt, type, relationKind, normalizedPrompt, normalizedPrompt, limit) as PromptTaxonomyRelatedRow[];
+
+    const items: PromptTaxonomyRelatedItem[] = rows.map((row) => ({
+      id: row.related_id,
+      prompt: row.related_prompt,
+      usage_count: row.related_usage_count,
+      group_id: row.related_group_id,
+      inferred_type: row.related_inferred_type ?? 'unknown',
+      cluster_id: row.related_cluster_id,
+      canonical_prompt: row.related_canonical_prompt,
+      relation_kind: row.relation_kind,
+      score: row.score,
+    }));
+
+    return {
+      items,
+      total: items.length,
+      source: {
+        prompt: source.prompt,
+        type,
+        usage_count: source.usage_count,
+        group_id: source.group_id,
+        inferred_type: source.inferred_type ?? 'unknown',
+        cluster_id: source.cluster_id,
+        canonical_prompt: source.canonical_prompt,
+      },
+    };
   }
 
   static getGraph(

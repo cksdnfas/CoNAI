@@ -141,6 +141,30 @@ router.get('/related', async (req: Request, res: Response) => {
 });
 
 /**
+ * 자동 taxonomy 연관 프롬프트 조회
+ * GET /api/prompt-collection/taxonomy-related
+ */
+router.get('/taxonomy-related', async (req: Request, res: Response) => {
+  try {
+    const { prompt = '', type = 'positive', relationKind = 'all', limit = '12' } = req.query;
+
+    const result = PromptCollectionService.getPromptTaxonomyRelatedPrompts(
+      String(prompt),
+      type as 'positive' | 'negative' | 'auto',
+      {
+        relationKind: relationKind as 'same_family' | 'string_variant' | 'all',
+        limit: parseInt(limit as string, 10),
+      }
+    );
+
+    return res.json(successResponse(result));
+  } catch (error) {
+    console.error('Error getting prompt taxonomy related prompts:', error);
+    return res.status(500).json(errorResponse('Failed to get prompt taxonomy related prompts'));
+  }
+});
+
+/**
  * 전체 프롬프트 관계 그래프 조회
  * GET /api/prompt-collection/graph
  */

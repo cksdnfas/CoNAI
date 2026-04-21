@@ -130,6 +130,32 @@ export interface PromptTaxonomyPayload {
   }
 }
 
+export interface PromptTaxonomyRelatedItem {
+  id: number
+  prompt: string
+  usage_count: number
+  group_id: number | null
+  inferred_type: PromptTaxonomyInferredType
+  cluster_id: string | null
+  canonical_prompt: string | null
+  relation_kind: PromptTaxonomyRelationKind
+  score: number
+}
+
+export interface PromptTaxonomyRelatedPayload {
+  items: PromptTaxonomyRelatedItem[]
+  total: number
+  source: {
+    prompt: string
+    type: PromptTypeFilter
+    usage_count: number
+    group_id: number | null
+    inferred_type: PromptTaxonomyInferredType | 'unknown'
+    cluster_id: string | null
+    canonical_prompt: string | null
+  }
+}
+
 export interface PromptGroupResolveInfo extends Partial<PromptGroupRecord> {
   id: number
   group_name: string

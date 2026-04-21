@@ -15,6 +15,7 @@ import { PromptGroupEditorModal } from './components/prompt-group-editor-modal'
 import { PromptListPanel } from './components/prompt-list-panel'
 import { PromptRelatedPanel } from './components/prompt-related-panel'
 import { PromptTaxonomyGraphPanel } from './components/prompt-taxonomy-graph-panel'
+import { PromptTaxonomyRelatedPanel } from './components/prompt-taxonomy-related-panel'
 import { PromptSelectionBar } from './components/prompt-selection-bar'
 import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
@@ -82,6 +83,7 @@ export function PromptPage() {
     groupStatisticsQuery,
     promptSearchQuery,
     relatedPromptsQuery,
+    promptTaxonomyRelatedQuery,
     promptGraphQuery,
     promptTaxonomyGraphQuery,
     selectedGroup,
@@ -504,6 +506,18 @@ export function PromptPage() {
                     })
                     .catch(() => undefined)
                 }}
+                onSelectPrompt={(prompt) => handleSelectActivePrompt(prompt, activePrompt?.type ?? promptType)}
+                onCopyPrompt={(prompt) => {
+                  void handleCopyPrompt(prompt)
+                }}
+              />
+
+              <PromptTaxonomyRelatedPanel
+                activePrompt={activePrompt}
+                data={promptTaxonomyRelatedQuery.data}
+                isLoading={promptTaxonomyRelatedQuery.isLoading}
+                isError={promptTaxonomyRelatedQuery.isError}
+                errorMessage={promptTaxonomyRelatedQuery.error instanceof Error ? promptTaxonomyRelatedQuery.error.message : null}
                 onSelectPrompt={(prompt) => handleSelectActivePrompt(prompt, activePrompt?.type ?? promptType)}
                 onCopyPrompt={(prompt) => {
                   void handleCopyPrompt(prompt)
