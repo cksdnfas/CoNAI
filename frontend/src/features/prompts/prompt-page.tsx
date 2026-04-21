@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import type { PromptCollectionItem, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
 import { PromptCollectModal } from './components/prompt-collect-modal'
 import { PromptGroupAssignModal } from './components/prompt-group-assign-modal'
+import { PromptGraphPanel } from './components/prompt-graph-panel'
 import { PromptGroupEditorModal } from './components/prompt-group-editor-modal'
 import { PromptListPanel } from './components/prompt-list-panel'
 import { PromptRelatedPanel } from './components/prompt-related-panel'
@@ -49,6 +50,7 @@ export function PromptPage() {
   const [page, setPage] = useState(1)
   const [selectedPromptIds, setSelectedPromptIds] = useState<number[]>([])
   const [activePrompt, setActivePrompt] = useState<{ prompt: string; type: PromptTypeFilter } | null>(null)
+  const [contentTab, setContentTab] = useState<'list' | 'graph'>('list')
   const [assignModalState, setAssignModalState] = useState<AssignModalState>(null)
   const [groupEditorState, setGroupEditorState] = useState<GroupEditorState>(null)
 
@@ -182,6 +184,11 @@ export function PromptPage() {
     setPromptType(nextType)
     setSelectedGroupId(undefined)
     setPage(1)
+  }
+
+  const handleActivatePrompt = async (prompt: string, type: PromptTypeFilter = promptType) => {
+    setActivePrompt({ prompt, type })
+    await handleCopyPrompt(prompt)
   }
 
   const handleTogglePromptSelection = (promptId: number, checked: boolean) => {
@@ -385,54 +392,89 @@ export function PromptPage() {
             />
           </div>
 
-          <PromptRelatedPanel
-            activePrompt={activePrompt}
-            items={relatedPromptsQuery.data?.items ?? []}
-            isLoading={relatedPromptsQuery.isLoading}
-            isError={relatedPromptsQuery.isError}
-            errorMessage={relatedPromptsQuery.error instanceof Error ? relatedPromptsQuery.error.message : null}
-            isRebuilding={rebuildPromptRelationsMutation.isPending}
-            onRebuild={() => {
-              void rebuildPromptRelationsMutation.mutateAsync()
-                .then(() => {
-                  if (activePrompt?.prompt) {
-                    void relatedPromptsQuery.refetch()
-                  }
-                })
-                .catch(() => undefined)
-            }}
-            onSelectPrompt={(prompt) => handleSelectActivePrompt(prompt, activePrompt?.type ?? promptType)}
-            onCopyPrompt={(prompt) => {
-              void handleCopyPrompt(prompt)
-            }}
+          <SegmentedTabBar
+            value={contentTab}
+            items={[
+              { value: 'list', label: 'List' },
+              { value: 'graph', label: 'Graph' },
+            ]}
+            onChange={(value) => setContentTab(value as 'list' | 'graph')}
           />
 
-          <PromptListPanel
-            items={items}
-            selectedPromptIds={selectedPromptIds}
-            activePrompt={activePrompt}
-            isLoading={promptSearchQuery.isLoading}
-            isError={promptSearchQuery.isError}
-            errorMessage={promptSearchQuery.error instanceof Error ? promptSearchQuery.error.message : null}
-            isDraggingSelection={isDraggingSelection}
-            totalPages={pagination?.totalPages ?? 0}
-            page={pagination?.page ?? 1}
-            total={pagination?.total ?? 0}
-            promptListRef={promptListRef}
-            onPageChange={setPage}
-            onTogglePromptSelection={handleTogglePromptSelection}
-            onAssignPrompt={(item) => setAssignModalState({ mode: 'single', item })}
-            onDeletePrompt={(item) => void handleDeleteSinglePrompt(item)}
-            onActivatePrompt={(item) => {
-              if (shouldSuppressClick()) {
-                return
-              }
-              setActivePrompt({ prompt: item.prompt, type: item.type })
-              void handleCopyPrompt(item.prompt)
-            }}
-            isLockedPromptItem={isLockedPromptItem}
-            canDeletePromptItem={canDeletePromptItem}
-          />
+          {contentTab === 'list' ? (
+            <>
+              <PromptRelatedPanel
+                activePrompt={activePrompt}
+                items={relatedPromptsQuery.data?.items ?? []}
+                isLoading={relatedPromptsQuery.isLoading}
+                isError={relatedPromptsQuery.isError}
+                errorMessage={relatedPromptsQuery.error instanceof Error ? relatedPromptsQuery.error.message : null}
+                isRebuilding={rebuildPromptRelationsMutation.isPending}
+                onRebuild={() => {
+                  void rebuildPromptRelationsMutation.mutateAsync()
+                    .then(() => {
+                      if (activePrompt?.prompt) {
+                        void relatedPromptsQuery.refetch()
+                      }
+                    })
+                    .catch(() => undefined)
+                }}
+                onSelectPrompt={(prompt) => handleSelectActivePrompt(prompt, activePrompt?.type ?? promptType)}
+                onCopyPrompt={(prompt) => {
+                  void handleCopyPrompt(prompt)
+                }}
+              />
+
+              <PromptListPanel
+                items={items}
+                selectedPromptIds={selectedPromptIds}
+                activePrompt={activePrompt}
+                isLoading={promptSearchQuery.isLoading}
+                isError={promptSearchQuery.isError}
+                errorMessage={promptSearchQuery.error instanceof Error ? promptSearchQuery.error.message : null}
+                isDraggingSelection={isDraggingSelection}
+                totalPages={pagination?.totalPages ?? 0}
+                page={pagination?.page ?? 1}
+                total={pagination?.total ?? 0}
+                promptListRef={promptListRef}
+                onPageChange={setPage}
+                onTogglePromptSelection={handleTogglePromptSelection}
+                onAssignPrompt={(item) => setAssignModalState({ mode: 'single', item })}
+                onDeletePrompt={(item) => void handleDeleteSinglePrompt(item)}
+                onActivatePrompt={(item) => {
+                  if (shouldSuppressClick()) {
+                    return
+                  }
+                  void handleActivatePrompt(item.prompt, item.type)
+                }}
+                isLockedPromptItem={isLockedPromptItem}
+                canDeletePromptItem={canDeletePromptItem}
+              />
+            </>
+          ) : (
+            <PromptGraphPanel
+              activePrompt={activePrompt}
+              items={relatedPromptsQuery.data?.items ?? []}
+              isLoading={relatedPromptsQuery.isLoading}
+              isError={relatedPromptsQuery.isError}
+              errorMessage={relatedPromptsQuery.error instanceof Error ? relatedPromptsQuery.error.message : null}
+              isRebuilding={rebuildPromptRelationsMutation.isPending}
+              canApplySearchPrompt={searchInput.trim().length > 0 && searchInput.trim() !== activePrompt?.prompt}
+              onApplySearchPrompt={() => handleSelectActivePrompt(searchInput.trim(), promptType)}
+              onRebuild={() => {
+                void rebuildPromptRelationsMutation.mutateAsync()
+                  .then(() => {
+                    if (activePrompt?.prompt) {
+                      void relatedPromptsQuery.refetch()
+                    }
+                  })
+                  .catch(() => undefined)
+              }}
+              onSelectPrompt={(prompt) => {
+                void handleActivatePrompt(prompt, activePrompt?.type ?? promptType)
+              }}
+            />
+          )}
         </section>
       </div>
 
