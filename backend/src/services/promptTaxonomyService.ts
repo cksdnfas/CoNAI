@@ -60,22 +60,24 @@ interface TaxonomyGraphRow {
 
 const ANALYSIS_VERSION = 1;
 const STOP_TOKENS = new Set(['a', 'an', 'and', 'the', 'of', 'with', 'on', 'in', 'at', 'to', 'from']);
-const QUALITY_TOKENS = new Set(['masterpiece', 'best', 'quality', 'amazing', 'great', 'highres', 'absurdres', 'ultra', 'detailed', 'detaileds', 'detailedly']);
-const COUNT_OR_COMPOSITION_TOKENS = new Set(['solo', 'duo', 'group', 'multiple', 'portrait', 'close', 'up', 'shot', 'cowboy', 'full', 'upper', 'body', 'from', 'above', 'below', 'looking', 'viewer']);
-const SUBJECT_TOKENS = new Set(['girl', 'girls', 'boy', 'boys', 'woman', 'women', 'man', 'men', 'person', 'people', 'character']);
-const HAIR_FACE_TOKENS = new Set(['hair', 'bangs', 'ponytail', 'braid', 'braids', 'eyes', 'eye', 'eyebrows', 'eyelashes', 'face', 'lips', 'mouth', 'teeth', 'smile']);
-const BODY_EXPRESSION_TOKENS = new Set(['blush', 'smile', 'smiling', 'crying', 'tears', 'breasts', 'chest', 'hips', 'legs', 'arm', 'arms', 'hand', 'hands', 'expression', 'embarrassed']);
-const POSE_ACTION_TOKENS = new Set(['standing', 'sitting', 'lying', 'kneeling', 'running', 'walking', 'jumping', 'dancing', 'hugging', 'holding', 'posing']);
-const CLOTHING_TOKENS = new Set(['dress', 'shirt', 'skirt', 'jacket', 'coat', 'hoodie', 'sweater', 'uniform', 'gloves', 'boots', 'shoes', 'hat', 'cap', 'ribbon', 'tie', 'bikini', 'underwear']);
-const BACKGROUND_TOKENS = new Set(['room', 'bedroom', 'street', 'city', 'school', 'classroom', 'forest', 'park', 'beach', 'sky', 'clouds', 'tree', 'trees', 'flower', 'flowers', 'water', 'indoors', 'outdoors']);
-const LIGHTING_TOKENS = new Set(['light', 'lighting', 'shadow', 'shadows', 'sunlight', 'backlight', 'backlighting', 'glow', 'glowing', 'dark', 'bright', 'night', 'sunset']);
-const STYLE_TOKENS = new Set(['anime', 'realistic', 'illustration', 'painting', 'sketch', 'render', 'pixel', 'cinematic', 'stylized']);
-const META_TOKENS = new Set(['lora', 'score', 'source', 'watermark', 'signature', 'text', 'username', 'commentary']);
+const QUALITY_TOKENS = new Set(['masterpiece', 'best', 'quality', 'amazing', 'great', 'highres', 'absurdres', 'ultra', 'detailed', 'detaileds', 'detailedly', 'aesthetic', 'newest', '4k', 'hdr', 'raw', 'intricate', 'detail', 'resolution']);
+const COUNT_OR_COMPOSITION_TOKENS = new Set(['solo', 'duo', 'group', 'multiple', 'portrait', 'close', 'up', 'shot', 'cowboy', 'full', 'upper', 'body', 'from', 'above', 'below', 'looking', 'viewer', 'side', 'view', 'profile']);
+const SUBJECT_TOKENS = new Set(['girl', 'girls', 'boy', 'boys', 'woman', 'women', 'man', 'men', 'person', 'people', 'character', '1girl', '1boy', '2girls', '2boys']);
+const HAIR_FACE_TOKENS = new Set(['hair', 'bangs', 'ponytail', 'braid', 'braids', 'eyes', 'eye', 'eyebrows', 'eyelashes', 'face', 'facial', 'lips', 'mouth', 'teeth', 'smile', 'mark']);
+const BODY_EXPRESSION_TOKENS = new Set(['blush', 'smile', 'smiling', 'crying', 'tears', 'breasts', 'chest', 'hips', 'legs', 'arm', 'arms', 'hand', 'hands', 'expression', 'embarrassed', 'tongue', 'sweat', 'sweating', 'breath']);
+const POSE_ACTION_TOKENS = new Set(['standing', 'sitting', 'lying', 'kneeling', 'running', 'walking', 'jumping', 'dancing', 'hugging', 'holding', 'posing', 'dynamic', 'pointing', 'wiping']);
+const CLOTHING_TOKENS = new Set(['dress', 'shirt', 'skirt', 'jacket', 'coat', 'hoodie', 'sweater', 'uniform', 'gloves', 'boots', 'shoes', 'hat', 'cap', 'ribbon', 'tie', 'bikini', 'underwear', 'bodysuit', 'clothes', 'clothing']);
+const OBJECT_TOKENS = new Set(['gun', 'weapon', 'sword', 'blade', 'staff', 'book', 'towel', 'umbrella', 'phone']);
+const BACKGROUND_TOKENS = new Set(['room', 'bedroom', 'street', 'city', 'school', 'classroom', 'forest', 'park', 'beach', 'sky', 'clouds', 'tree', 'trees', 'flower', 'flowers', 'water', 'indoors', 'outdoors', 'steam']);
+const LIGHTING_TOKENS = new Set(['light', 'lighting', 'shadow', 'shadows', 'sunlight', 'backlight', 'backlighting', 'glow', 'glowing', 'dark', 'bright', 'night', 'sunset', 'twilight']);
+const STYLE_TOKENS = new Set(['anime', 'realistic', 'illustration', 'illustrations', 'painting', 'sketch', 'render', 'pixel', 'cinematic', 'stylized', 'artwork', 'film', 'realism']);
+const META_TOKENS = new Set(['lora', 'score', 'source', 'watermark', 'signature', 'text', 'username', 'commentary', 'year2024']);
 const FAMILY_ANCHOR_TOKENS = new Set([
   ...HAIR_FACE_TOKENS,
   ...BODY_EXPRESSION_TOKENS,
   ...POSE_ACTION_TOKENS,
   ...CLOTHING_TOKENS,
+  ...OBJECT_TOKENS,
   ...BACKGROUND_TOKENS,
   ...LIGHTING_TOKENS,
   ...STYLE_TOKENS,
@@ -103,12 +105,25 @@ function normalizePrompt(prompt: string): string {
 }
 
 function tokenizePrompt(prompt: string): string[] {
-  return normalizePrompt(prompt)
+  const base = normalizePrompt(prompt)
     .replace(/[_\-/]+/g, ' ')
-    .replace(/[^a-z0-9\s]+/g, ' ')
+    .replace(/[^a-z0-9\s]+/g, ' ');
+
+  const baseTokens = base
     .split(/\s+/)
     .map((token) => token.trim())
     .filter((token) => token.length > 0);
+
+  return [...new Set(baseTokens.flatMap((token) => {
+    const splitTokens = token
+      .replace(/([0-9])([a-z])/g, '$1 $2')
+      .replace(/([a-z])([0-9])/g, '$1 $2')
+      .split(/\s+/)
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+
+    return splitTokens.length > 1 ? [token, ...splitTokens] : [token];
+  }))];
 }
 
 function buildCompactKey(prompt: string): string {
@@ -129,37 +144,46 @@ function inferPromptType(prompt: string, tokens: string[]): { inferredType: Prom
   const normalized = normalizePrompt(prompt);
   const tokenSet = new Set(tokens);
   const hasAny = (values: Set<string>) => [...values].some((value) => tokenSet.has(value));
+  const hasAll = (...values: string[]) => values.every((value) => tokenSet.has(value));
 
   if (normalized.startsWith('by ') || normalized.includes('artist:')) {
     return { inferredType: 'artist_or_source', subtype: 'artist' };
   }
 
-  if (normalized.startsWith('score_') || normalized.startsWith('source_') || hasAny(META_TOKENS)) {
+  if (normalized.startsWith('score_') || normalized.startsWith('source_') || /year\d{4}/.test(normalized) || hasAny(META_TOKENS)) {
     return { inferredType: 'meta_or_technical', subtype: null };
   }
 
-  if (hasAny(QUALITY_TOKENS)) {
+  if (hasAny(QUALITY_TOKENS) || hasAll('high', 'resolution') || hasAll('very', 'aesthetic') || hasAll('hyper', 'aesthetic')) {
     return { inferredType: 'quality', subtype: null };
   }
 
-  if (hasAny(COUNT_OR_COMPOSITION_TOKENS)) {
+  if (hasAny(SUBJECT_TOKENS)) {
+    return { inferredType: 'subject', subtype: getAnchorToken(tokens) };
+  }
+
+  if (hasAny(COUNT_OR_COMPOSITION_TOKENS) || hasAll('side', 'view')) {
     return { inferredType: 'count_or_composition', subtype: getAnchorToken(tokens) };
   }
 
-  if (hasAny(POSE_ACTION_TOKENS)) {
+  if (hasAny(POSE_ACTION_TOKENS) || hasAll('dynamic', 'pose')) {
     return { inferredType: 'pose_or_action', subtype: getAnchorToken(tokens) };
   }
 
-  if (hasAny(HAIR_FACE_TOKENS)) {
+  if (hasAny(HAIR_FACE_TOKENS) || hasAll('facial', 'mark')) {
     return { inferredType: 'hair_or_face', subtype: getAnchorToken(tokens) };
   }
 
-  if (hasAny(BODY_EXPRESSION_TOKENS)) {
+  if (hasAny(BODY_EXPRESSION_TOKENS) || hasAll('tongue', 'out')) {
     return { inferredType: 'body_or_expression', subtype: getAnchorToken(tokens) };
   }
 
   if (hasAny(CLOTHING_TOKENS)) {
     return { inferredType: 'clothing_or_accessory', subtype: getAnchorToken(tokens) };
+  }
+
+  if (hasAny(OBJECT_TOKENS)) {
+    return { inferredType: 'prop_or_object', subtype: getAnchorToken(tokens) };
   }
 
   if (hasAny(BACKGROUND_TOKENS)) {
@@ -170,12 +194,8 @@ function inferPromptType(prompt: string, tokens: string[]): { inferredType: Prom
     return { inferredType: 'lighting_or_mood', subtype: getAnchorToken(tokens) };
   }
 
-  if (hasAny(STYLE_TOKENS)) {
+  if (hasAny(STYLE_TOKENS) || hasAll('official', 'illustrations') || hasAll('soft', 'realism')) {
     return { inferredType: 'style', subtype: getAnchorToken(tokens) };
-  }
-
-  if (hasAny(SUBJECT_TOKENS)) {
-    return { inferredType: 'subject', subtype: getAnchorToken(tokens) };
   }
 
   return { inferredType: 'unknown', subtype: getAnchorToken(tokens) };

@@ -60,6 +60,7 @@ export type PromptTaxonomyInferredType =
   | 'body_or_expression'
   | 'hair_or_face'
   | 'clothing_or_accessory'
+  | 'prop_or_object'
   | 'background_or_setting'
   | 'lighting_or_mood'
   | 'style'
