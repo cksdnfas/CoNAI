@@ -58,21 +58,22 @@ function PromptGraphNodeCard({ data, selected }: NodeProps<PromptGraphCanvasNode
     : data.degree >= 4
       ? 'border-primary/60 bg-primary/70'
       : 'border-white/45 bg-white/65'
+  const centerHandleClassName = '!left-1/2 !top-1/2 !h-0 !w-0 !min-h-0 !min-w-0 !border-0 !bg-transparent -translate-x-1/2 -translate-y-1/2 opacity-0'
 
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Left} className="h-0 w-0 border-0 opacity-0" />
+      <Handle type="target" position={Position.Top} className={centerHandleClassName} />
       <div
         className={cn('rounded-full border shadow-[0_0_0_1px_rgba(0,0,0,0.18)] transition-transform', fillTone, selected ? 'scale-125 ring-2 ring-primary/45' : null)}
         style={{ width: data.sizePx, height: data.sizePx }}
         title={data.prompt}
       />
       {data.showLabel ? (
-        <div className="pointer-events-none absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-xs bg-background/88 px-1.5 py-0.5 text-[10px] leading-none font-medium text-foreground shadow-sm">
+        <div className="pointer-events-none absolute left-1/2 bottom-full z-20 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-xs bg-background/92 px-1.5 py-0.5 text-[10px] leading-none font-medium text-foreground shadow-sm">
           {data.prompt}
         </div>
       ) : null}
-      <Handle type="source" position={Position.Right} className="h-0 w-0 border-0 opacity-0" />
+      <Handle type="source" position={Position.Top} className={centerHandleClassName} />
     </div>
   )
 }
@@ -226,9 +227,9 @@ function buildPromptGraphElements(nodes: PromptGraphNodeItem[], edges: PromptGra
     type: 'straight',
     animated: false,
     style: {
-      strokeWidth: Math.max(1, Math.min(2.6, edge.shared_count / 40 + edge.score / 120)),
-      stroke: 'rgba(255,255,255,0.42)',
-      opacity: 0.95,
+      strokeWidth: Math.max(1.2, Math.min(3.2, edge.shared_count / 34 + edge.score / 100)),
+      stroke: 'rgba(255,255,255,0.68)',
+      opacity: 1,
     },
   }))
 
@@ -263,14 +264,15 @@ export function PromptGraphPanel({
   const graphElements = useMemo(() => buildPromptGraphElements(data?.nodes ?? [], data?.edges ?? [], zoom), [data?.nodes, data?.edges, zoom])
 
   useEffect(() => {
-    if (!reactFlowInstance || graphElements.nodes.length === 0) {
+    if (!reactFlowInstance || (data?.nodes.length ?? 0) === 0) {
       return
     }
 
     window.requestAnimationFrame(() => {
       void reactFlowInstance.fitView({ padding: 0.15, maxZoom: 1.1, duration: 250 })
+      setZoom(reactFlowInstance.getZoom())
     })
-  }, [graphElements.edges, graphElements.nodes, reactFlowInstance])
+  }, [data?.edges.length, data?.nodes.length, reactFlowInstance])
 
   return (
     <PageSection
