@@ -51,3 +51,55 @@ export interface PromptGraphResult {
     limit: number;
   };
 }
+
+export type PromptTaxonomyInferredType =
+  | 'quality'
+  | 'subject'
+  | 'count_or_composition'
+  | 'pose_or_action'
+  | 'body_or_expression'
+  | 'hair_or_face'
+  | 'clothing_or_accessory'
+  | 'background_or_setting'
+  | 'lighting_or_mood'
+  | 'style'
+  | 'artist_or_source'
+  | 'meta_or_technical'
+  | 'unknown';
+
+export type PromptTaxonomyRelationKind = 'same_family' | 'string_variant';
+
+export interface PromptTaxonomyNodeItem {
+  id: number;
+  prompt: string;
+  usage_count: number;
+  group_id: number | null;
+  inferred_type: PromptTaxonomyInferredType;
+  cluster_id: string | null;
+  canonical_prompt: string | null;
+}
+
+export interface PromptTaxonomyEdgeItem {
+  source_prompt: string;
+  target_prompt: string;
+  relation_kind: PromptTaxonomyRelationKind;
+  score: number;
+}
+
+export interface PromptTaxonomyGraphResult {
+  nodes: PromptTaxonomyNodeItem[];
+  edges: PromptTaxonomyEdgeItem[];
+  filters: {
+    type: PromptRelationPromptType;
+    inferred_type: PromptTaxonomyInferredType | 'all';
+    min_score: number;
+    limit: number;
+  };
+}
+
+export interface PromptTaxonomyRebuildResult {
+  processed: number;
+  nodes: number;
+  clusters: number;
+  relations: number;
+}

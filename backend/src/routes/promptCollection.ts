@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { PromptCollectionService } from '../services/promptCollectionService';
+import type { PromptTaxonomyInferredType } from '../types/promptRelations';
 import { PromptCollectionResponse,
 successResponse,
 errorResponse,
@@ -167,6 +168,53 @@ router.get('/graph', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error getting prompt graph:', error);
     return res.status(500).json(errorResponse('Failed to get prompt graph'));
+  }
+});
+
+/**
+ * 자동 taxonomy 그래프 조회
+ * GET /api/prompt-collection/taxonomy-graph
+ */
+router.get('/taxonomy-graph', async (req: Request, res: Response) => {
+  try {
+    const {
+      type = 'positive',
+      inferredType = 'all',
+      minScore = '0.58',
+      limit = '180',
+    } = req.query;
+
+    const result = PromptCollectionService.getPromptTaxonomyGraph(
+      type as 'positive' | 'negative' | 'auto',
+      {
+        inferredType: inferredType as PromptTaxonomyInferredType | 'all',
+        minScore: Number(minScore),
+        limit: Number(limit),
+      }
+    );
+
+    return res.json(successResponse(result));
+  } catch (error) {
+    console.error('Error getting prompt taxonomy graph:', error);
+    return res.status(500).json(errorResponse('Failed to get prompt taxonomy graph'));
+  }
+});
+
+/**
+ * 자동 taxonomy 재구축
+ * POST /api/prompt-collection/rebuild-taxonomy
+ */
+router.post('/rebuild-taxonomy', async (_req: Request, res: Response) => {
+  try {
+    const result = PromptCollectionService.rebuildTaxonomy();
+
+    return res.json(successResponse({
+      ...result,
+      message: `Prompt taxonomy rebuild complete (${result.nodes} terms, ${result.relations} relations)`
+    }));
+  } catch (error) {
+    console.error('Error rebuilding prompt taxonomy:', error);
+    return res.status(500).json(errorResponse('Failed to rebuild prompt taxonomy'));
   }
 });
 

@@ -3,7 +3,8 @@ import { PromptCollectionIngestService } from './promptCollectionIngestService';
 import { PromptCollectionMutationService } from './promptCollectionMutationService';
 import { PromptCollectionQueryService } from './promptCollectionQueryService';
 import { PromptRelationService } from './promptRelationService';
-import type { PromptRelationPromptType } from '../types/promptRelations';
+import { PromptTaxonomyService } from './promptTaxonomyService';
+import type { PromptRelationPromptType, PromptTaxonomyInferredType } from '../types/promptRelations';
 
 export class PromptCollectionService {
   static async collectFromImage(prompt: string | null, negativePrompt: string | null, characterPromptText: string | null = null): Promise<void> {
@@ -115,6 +116,21 @@ export class PromptCollectionService {
     },
   ) {
     return PromptRelationService.getGraph(type, options);
+  }
+
+  static getPromptTaxonomyGraph(
+    type: PromptRelationPromptType = 'positive',
+    options?: {
+      inferredType?: PromptTaxonomyInferredType | 'all';
+      minScore?: number;
+      limit?: number;
+    },
+  ) {
+    return PromptTaxonomyService.getGraph(type, options);
+  }
+
+  static rebuildTaxonomy() {
+    return PromptTaxonomyService.rebuildAll();
   }
 
   static rebuildRelations() {
