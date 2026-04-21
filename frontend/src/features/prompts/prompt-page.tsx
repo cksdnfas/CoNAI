@@ -7,7 +7,7 @@ import { exportPromptGroups } from '@/lib/api'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import type { PromptCollectionItem, PromptGraphMode, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTaxonomyInferredType, PromptTypeFilter } from '@/types/prompt'
+import type { PromptCollectionItem, PromptGraphMode, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTaxonomyInferredType, PromptTaxonomyRelationKind, PromptTypeFilter } from '@/types/prompt'
 import { PromptCollectModal } from './components/prompt-collect-modal'
 import { PromptGroupAssignModal } from './components/prompt-group-assign-modal'
 import { PromptGraphPanel } from './components/prompt-graph-panel'
@@ -70,8 +70,8 @@ export function PromptPage() {
   const [graphMode, setGraphMode] = useState<PromptGraphMode>('usage')
   const [graphDraftFilters, setGraphDraftFilters] = useState({ type: 'positive' as PromptTypeFilter, minScore: 55, minSharedCount: 3, minUsageCount: 2, limit: 180 })
   const [graphFilters, setGraphFilters] = useState({ type: 'positive' as PromptTypeFilter, minScore: 55, minSharedCount: 3, minUsageCount: 2, limit: 180 })
-  const [taxonomyGraphDraftFilters, setTaxonomyGraphDraftFilters] = useState({ type: 'positive' as PromptTypeFilter, inferredType: 'all' as PromptTaxonomyInferredType | 'all', minScore: 0.58, limit: 180 })
-  const [taxonomyGraphFilters, setTaxonomyGraphFilters] = useState({ type: 'positive' as PromptTypeFilter, inferredType: 'all' as PromptTaxonomyInferredType | 'all', minScore: 0.58, limit: 180 })
+  const [taxonomyGraphDraftFilters, setTaxonomyGraphDraftFilters] = useState({ type: 'positive' as PromptTypeFilter, inferredType: 'all' as PromptTaxonomyInferredType | 'all', relationKind: 'all' as PromptTaxonomyRelationKind | 'all', minScore: 0.58, limit: 180 })
+  const [taxonomyGraphFilters, setTaxonomyGraphFilters] = useState({ type: 'positive' as PromptTypeFilter, inferredType: 'all' as PromptTaxonomyInferredType | 'all', relationKind: 'all' as PromptTaxonomyRelationKind | 'all', minScore: 0.58, limit: 180 })
   const [assignModalState, setAssignModalState] = useState<AssignModalState>(null)
   const [groupEditorState, setGroupEditorState] = useState<GroupEditorState>(null)
 

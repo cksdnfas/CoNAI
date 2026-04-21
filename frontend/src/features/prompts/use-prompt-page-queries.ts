@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getPromptGraph, getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getPromptTaxonomyGraph, getRelatedPrompts, getTopPrompts, searchPromptCollection } from '@/lib/api'
-import type { PromptSortBy, PromptSortOrder, PromptTaxonomyInferredType, PromptTypeFilter } from '@/types/prompt'
+import type { PromptSortBy, PromptSortOrder, PromptTaxonomyInferredType, PromptTaxonomyRelationKind, PromptTypeFilter } from '@/types/prompt'
 import { getPromptTypeTotal, getSortedSiblingGroups } from './prompt-page-utils'
 
 interface ActivePromptParams {
@@ -29,6 +29,7 @@ interface UsePromptPageQueriesParams {
   taxonomyGraphFilters?: {
     type: PromptTypeFilter
     inferredType: PromptTaxonomyInferredType | 'all'
+    relationKind: PromptTaxonomyRelationKind | 'all'
     minScore: number
     limit: number
   }
@@ -92,10 +93,11 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
   })
 
   const promptTaxonomyGraphQuery = useQuery({
-    queryKey: ['prompt-taxonomy-graph', taxonomyGraphFilters?.type ?? 'positive', taxonomyGraphFilters?.inferredType ?? 'all', taxonomyGraphFilters?.minScore ?? 0.58, taxonomyGraphFilters?.limit ?? 180],
+    queryKey: ['prompt-taxonomy-graph', taxonomyGraphFilters?.type ?? 'positive', taxonomyGraphFilters?.inferredType ?? 'all', taxonomyGraphFilters?.relationKind ?? 'all', taxonomyGraphFilters?.minScore ?? 0.58, taxonomyGraphFilters?.limit ?? 180],
     queryFn: () => getPromptTaxonomyGraph({
       type: taxonomyGraphFilters?.type ?? 'positive',
       inferredType: taxonomyGraphFilters?.inferredType ?? 'all',
+      relationKind: taxonomyGraphFilters?.relationKind ?? 'all',
       minScore: taxonomyGraphFilters?.minScore ?? 0.58,
       limit: taxonomyGraphFilters?.limit ?? 180,
     }),

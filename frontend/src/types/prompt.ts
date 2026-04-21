@@ -123,6 +123,7 @@ export interface PromptTaxonomyPayload {
   filters: {
     type: PromptTypeFilter
     inferred_type: PromptTaxonomyInferredType | 'all'
+    relation_kind: PromptTaxonomyRelationKind | 'all'
     min_score: number
     limit: number
   }

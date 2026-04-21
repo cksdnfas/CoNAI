@@ -180,6 +180,7 @@ router.get('/taxonomy-graph', async (req: Request, res: Response) => {
     const {
       type = 'positive',
       inferredType = 'all',
+      relationKind = 'all',
       minScore = '0.58',
       limit = '180',
     } = req.query;
@@ -188,6 +189,7 @@ router.get('/taxonomy-graph', async (req: Request, res: Response) => {
       type as 'positive' | 'negative' | 'auto',
       {
         inferredType: inferredType as PromptTaxonomyInferredType | 'all',
+        relationKind: relationKind as 'same_family' | 'string_variant' | 'all',
         minScore: Number(minScore),
         limit: Number(limit),
       }

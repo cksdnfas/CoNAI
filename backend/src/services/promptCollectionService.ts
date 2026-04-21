@@ -122,6 +122,7 @@ export class PromptCollectionService {
     type: PromptRelationPromptType = 'positive',
     options?: {
       inferredType?: PromptTaxonomyInferredType | 'all';
+      relationKind?: 'same_family' | 'string_variant' | 'all';
       minScore?: number;
       limit?: number;
     },

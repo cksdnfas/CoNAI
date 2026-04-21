@@ -14,6 +14,7 @@ import type {
   PromptStatistics,
   PromptTaxonomyInferredType,
   PromptTaxonomyPayload,
+  PromptTaxonomyRelationKind,
   PromptTypeFilter,
 } from '@/types/prompt'
 
@@ -375,12 +376,14 @@ export async function getPromptGraph(params?: {
 export async function getPromptTaxonomyGraph(params?: {
   type?: PromptTypeFilter
   inferredType?: PromptTaxonomyInferredType | 'all'
+  relationKind?: PromptTaxonomyRelationKind | 'all'
   minScore?: number
   limit?: number
 }) {
   const searchParams = new URLSearchParams()
   searchParams.set('type', params?.type ?? 'positive')
   searchParams.set('inferredType', params?.inferredType ?? 'all')
+  searchParams.set('relationKind', params?.relationKind ?? 'all')
   searchParams.set('minScore', String(params?.minScore ?? 0.58))
   searchParams.set('limit', String(params?.limit ?? 180))
 
@@ -394,6 +397,9 @@ export async function getPromptTaxonomyGraph(params?: {
     : 'positive'
   const normalizedInferredType: PromptTaxonomyInferredType | 'all' = TAXONOMY_INFERRED_TYPE_VALUES.has(response.data.filters.inferred_type as PromptTaxonomyInferredType)
     ? response.data.filters.inferred_type as PromptTaxonomyInferredType
+    : 'all'
+  const normalizedRelationKind: PromptTaxonomyRelationKind | 'all' = response.data.filters.relation_kind === 'same_family' || response.data.filters.relation_kind === 'string_variant'
+    ? response.data.filters.relation_kind
     : 'all'
 
   return {
@@ -419,6 +425,7 @@ export async function getPromptTaxonomyGraph(params?: {
       ...response.data.filters,
       type: normalizedType,
       inferred_type: normalizedInferredType,
+      relation_kind: normalizedRelationKind,
       min_score: Number(response.data.filters.min_score ?? 0),
       limit: Number(response.data.filters.limit ?? 0),
     },

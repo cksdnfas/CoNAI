@@ -287,15 +287,17 @@ export class PromptTaxonomyService {
     type: PromptRelationPromptType = 'positive',
     options?: {
       inferredType?: PromptTaxonomyInferredType | 'all';
+      relationKind?: PromptTaxonomyRelationKind | 'all';
       minScore?: number;
       limit?: number;
     },
   ): PromptTaxonomyGraphResult {
     const inferredType = options?.inferredType ?? 'all';
+    const relationKind = options?.relationKind ?? 'all';
     const minScore = Number.isFinite(options?.minScore) ? Math.max(0, Math.min(1, Number(options?.minScore))) : 0.58;
     const limit = Number.isFinite(options?.limit) ? Math.max(20, Math.min(800, Math.round(Number(options?.limit)))) : 180;
 
-    const rows = inferredType === 'all'
+    const rows = inferredType === 'all' && relationKind === 'all'
       ? db.prepare(`
           SELECT
             rel.source_prompt,
@@ -330,7 +332,44 @@ export class PromptTaxonomyService {
           ORDER BY rel.score DESC, sourceCollection.usage_count DESC, targetCollection.usage_count DESC
           LIMIT ?
         `).all(type, minScore, limit) as TaxonomyGraphRow[]
-      : db.prepare(`
+      : inferredType === 'all'
+        ? db.prepare(`
+          SELECT
+            rel.source_prompt,
+            rel.target_prompt,
+            rel.relation_kind,
+            rel.score,
+            sourceCollection.id AS source_id,
+            sourceCollection.usage_count AS source_usage_count,
+            sourceCollection.group_id AS source_group_id,
+            sourceAnalysis.inferred_type AS source_inferred_type,
+            sourceAnalysis.cluster_id AS source_cluster_id,
+            sourceAnalysis.canonical_prompt AS source_canonical_prompt,
+            targetCollection.id AS target_id,
+            targetCollection.usage_count AS target_usage_count,
+            targetCollection.group_id AS target_group_id,
+            targetAnalysis.inferred_type AS target_inferred_type,
+            targetAnalysis.cluster_id AS target_cluster_id,
+            targetAnalysis.canonical_prompt AS target_canonical_prompt
+          FROM prompt_term_similarity_relations rel
+          INNER JOIN prompt_term_analysis sourceAnalysis
+            ON sourceAnalysis.prompt_type = rel.prompt_type
+           AND sourceAnalysis.prompt = rel.source_prompt
+          INNER JOIN prompt_term_analysis targetAnalysis
+            ON targetAnalysis.prompt_type = rel.prompt_type
+           AND targetAnalysis.prompt = rel.target_prompt
+          INNER JOIN ${getPromptTableName(type)} sourceCollection
+            ON sourceCollection.prompt = rel.source_prompt
+          INNER JOIN ${getPromptTableName(type)} targetCollection
+            ON targetCollection.prompt = rel.target_prompt
+          WHERE rel.prompt_type = ?
+            AND rel.score >= ?
+            AND rel.relation_kind = ?
+          ORDER BY rel.score DESC, sourceCollection.usage_count DESC, targetCollection.usage_count DESC
+          LIMIT ?
+        `).all(type, minScore, relationKind, limit) as TaxonomyGraphRow[]
+      : relationKind === 'all'
+        ? db.prepare(`
           SELECT
             rel.source_prompt,
             rel.target_prompt,
@@ -365,7 +404,44 @@ export class PromptTaxonomyService {
             AND targetAnalysis.inferred_type = ?
           ORDER BY rel.score DESC, sourceCollection.usage_count DESC, targetCollection.usage_count DESC
           LIMIT ?
-        `).all(type, minScore, inferredType, inferredType, limit) as TaxonomyGraphRow[];
+        `).all(type, minScore, inferredType, inferredType, limit) as TaxonomyGraphRow[]
+        : db.prepare(`
+          SELECT
+            rel.source_prompt,
+            rel.target_prompt,
+            rel.relation_kind,
+            rel.score,
+            sourceCollection.id AS source_id,
+            sourceCollection.usage_count AS source_usage_count,
+            sourceCollection.group_id AS source_group_id,
+            sourceAnalysis.inferred_type AS source_inferred_type,
+            sourceAnalysis.cluster_id AS source_cluster_id,
+            sourceAnalysis.canonical_prompt AS source_canonical_prompt,
+            targetCollection.id AS target_id,
+            targetCollection.usage_count AS target_usage_count,
+            targetCollection.group_id AS target_group_id,
+            targetAnalysis.inferred_type AS target_inferred_type,
+            targetAnalysis.cluster_id AS target_cluster_id,
+            targetAnalysis.canonical_prompt AS target_canonical_prompt
+          FROM prompt_term_similarity_relations rel
+          INNER JOIN prompt_term_analysis sourceAnalysis
+            ON sourceAnalysis.prompt_type = rel.prompt_type
+           AND sourceAnalysis.prompt = rel.source_prompt
+          INNER JOIN prompt_term_analysis targetAnalysis
+            ON targetAnalysis.prompt_type = rel.prompt_type
+           AND targetAnalysis.prompt = rel.target_prompt
+          INNER JOIN ${getPromptTableName(type)} sourceCollection
+            ON sourceCollection.prompt = rel.source_prompt
+          INNER JOIN ${getPromptTableName(type)} targetCollection
+            ON targetCollection.prompt = rel.target_prompt
+          WHERE rel.prompt_type = ?
+            AND rel.score >= ?
+            AND rel.relation_kind = ?
+            AND sourceAnalysis.inferred_type = ?
+            AND targetAnalysis.inferred_type = ?
+          ORDER BY rel.score DESC, sourceCollection.usage_count DESC, targetCollection.usage_count DESC
+          LIMIT ?
+        `).all(type, minScore, relationKind, inferredType, inferredType, limit) as TaxonomyGraphRow[];
 
     const nodeMap = new Map<string, PromptTaxonomyNodeItem>();
     const edges: PromptTaxonomyEdgeItem[] = [];
@@ -409,6 +485,7 @@ export class PromptTaxonomyService {
       filters: {
         type,
         inferred_type: inferredType,
+        relation_kind: relationKind,
         min_score: minScore,
         limit,
       },
