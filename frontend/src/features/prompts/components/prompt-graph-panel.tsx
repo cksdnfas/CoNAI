@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Background, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow, type Edge, type Node, type NodeProps, type ReactFlowInstance } from '@xyflow/react'
+import { Background, Controls, Handle, MiniMap, Position, ReactFlow, type Edge, type Node, type NodeProps, type ReactFlowInstance } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { RefreshCw } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -35,6 +35,8 @@ type PromptGraphCanvasNodeData = {
   prompt: string
   usageCount: number
   degree: number
+  showLabel: boolean
+  sizePx: number
 }
 
 type PromptGraphCanvasNode = Node<PromptGraphCanvasNodeData, 'prompt'>
@@ -51,17 +53,26 @@ const PROMPT_GRAPH_NODE_TYPES = {
 }
 
 function PromptGraphNodeCard({ data, selected }: NodeProps<PromptGraphCanvasNode>) {
-  const degreeTone = data.degree >= 8 ? 'border-primary/70 bg-primary/10' : data.degree >= 4 ? 'border-primary/40 bg-surface-high/90' : 'border-border/80 bg-surface-container/95'
+  const fillTone = data.degree >= 8
+    ? 'border-primary/80 bg-primary'
+    : data.degree >= 4
+      ? 'border-primary/60 bg-primary/70'
+      : 'border-white/45 bg-white/65'
 
   return (
-    <div className={cn('min-w-[184px] max-w-[220px] rounded-sm border px-3 py-2 shadow-sm transition-colors', degreeTone, selected ? 'ring-2 ring-primary/50' : null)}>
-      <Handle type="target" position={Position.Left} className="opacity-0" />
-      <div className="line-clamp-3 break-all text-sm font-semibold text-foreground">{data.prompt}</div>
-      <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-        <span>{data.usageCount.toLocaleString('ko-KR')}</span>
-        <span>{data.degree.toLocaleString('ko-KR')}</span>
-      </div>
-      <Handle type="source" position={Position.Right} className="opacity-0" />
+    <div className="relative">
+      <Handle type="target" position={Position.Left} className="h-0 w-0 border-0 opacity-0" />
+      <div
+        className={cn('rounded-full border shadow-[0_0_0_1px_rgba(0,0,0,0.18)] transition-transform', fillTone, selected ? 'scale-125 ring-2 ring-primary/45' : null)}
+        style={{ width: data.sizePx, height: data.sizePx }}
+        title={data.prompt}
+      />
+      {data.showLabel ? (
+        <div className="pointer-events-none absolute left-1/2 bottom-full mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-xs bg-background/88 px-1.5 py-0.5 text-[10px] leading-none font-medium text-foreground shadow-sm">
+          {data.prompt}
+        </div>
+      ) : null}
+      <Handle type="source" position={Position.Right} className="h-0 w-0 border-0 opacity-0" />
     </div>
   )
 }
@@ -123,13 +134,13 @@ function layoutPromptComponent(component: PromptGraphNodeItem[]) {
 
   if (ordered.length === 1) {
     positions.set(ordered[0].prompt, { x: 0, y: 0 })
-    return { positions, width: 320, height: 240 }
+    return { positions, width: 220, height: 160 }
   }
 
   if (ordered.length === 2) {
-    positions.set(ordered[0].prompt, { x: -150, y: 0 })
-    positions.set(ordered[1].prompt, { x: 150, y: 0 })
-    return { positions, width: 520, height: 260 }
+    positions.set(ordered[0].prompt, { x: -95, y: 0 })
+    positions.set(ordered[1].prompt, { x: 95, y: 0 })
+    return { positions, width: 360, height: 180 }
   }
 
   positions.set(ordered[0].prompt, { x: 0, y: 0 })
@@ -138,8 +149,8 @@ function layoutPromptComponent(component: PromptGraphNodeItem[]) {
   let ringIndex = 0
   let maxRadius = 0
   while (startIndex < ordered.length) {
-    const radius = 190 + ringIndex * 150
-    const capacity = ringIndex === 0 ? 8 : 12 + ringIndex * 6
+    const radius = 120 + ringIndex * 92
+    const capacity = ringIndex === 0 ? 10 : 16 + ringIndex * 8
     const ringNodes = ordered.slice(startIndex, startIndex + capacity)
     const ringCount = ringNodes.length
 
@@ -156,18 +167,18 @@ function layoutPromptComponent(component: PromptGraphNodeItem[]) {
     ringIndex += 1
   }
 
-  const width = Math.max(460, maxRadius * 2 + 360)
-  const height = Math.max(360, maxRadius * 2 + 300)
+  const width = Math.max(320, maxRadius * 2 + 220)
+  const height = Math.max(260, maxRadius * 2 + 220)
   return { positions, width, height }
 }
 
-function buildPromptGraphElements(nodes: PromptGraphNodeItem[], edges: PromptGraphEdgeItem[]) {
+function buildPromptGraphElements(nodes: PromptGraphNodeItem[], edges: PromptGraphEdgeItem[], zoom: number) {
   if (nodes.length === 0) {
     return { nodes: [] as PromptGraphCanvasNode[], edges: [] as PromptGraphCanvasEdge[] }
   }
 
   const positionedNodes: PromptGraphCanvasNode[] = []
-  const maxRowWidth = 2400
+  const maxRowWidth = 2000
   let cursorX = 0
   let cursorY = 0
   let rowHeight = 0
@@ -177,7 +188,7 @@ function buildPromptGraphElements(nodes: PromptGraphNodeItem[], edges: PromptGra
 
     if (cursorX > 0 && cursorX + layout.width > maxRowWidth) {
       cursorX = 0
-      cursorY += rowHeight + 180
+      cursorY += rowHeight + 120
       rowHeight = 0
     }
 
@@ -198,24 +209,26 @@ function buildPromptGraphElements(nodes: PromptGraphNodeItem[], edges: PromptGra
           prompt: node.prompt,
           usageCount: node.usage_count,
           degree: node.degree,
+          showLabel: zoom >= 0.72,
+          sizePx: node.degree >= 10 ? 18 : node.degree >= 6 ? 14 : 10,
         },
         draggable: false,
       })
     }
 
-    cursorX += layout.width + 180
+    cursorX += layout.width + 120
   }
 
   const positionedEdges: PromptGraphCanvasEdge[] = edges.map((edge) => ({
     id: `edge:${edge.source_prompt}:${edge.target_prompt}`,
     source: `prompt:${edge.source_prompt}`,
     target: `prompt:${edge.target_prompt}`,
-    markerEnd: { type: MarkerType.ArrowClosed },
-    animated: edge.score >= 85,
+    type: 'straight',
+    animated: false,
     style: {
-      strokeWidth: Math.max(1.5, Math.min(6, edge.shared_count / 20 + edge.score / 45)),
-      stroke: 'hsl(var(--primary))',
-      opacity: 0.42,
+      strokeWidth: Math.max(1, Math.min(2.6, edge.shared_count / 40 + edge.score / 120)),
+      stroke: 'rgba(255,255,255,0.42)',
+      opacity: 0.95,
     },
   }))
 
@@ -246,7 +259,8 @@ export function PromptGraphPanel({
   onRebuild,
 }: PromptGraphPanelProps) {
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<PromptGraphCanvasNode, PromptGraphCanvasEdge> | null>(null)
-  const graphElements = useMemo(() => buildPromptGraphElements(data?.nodes ?? [], data?.edges ?? []), [data?.nodes, data?.edges])
+  const [zoom, setZoom] = useState(0.42)
+  const graphElements = useMemo(() => buildPromptGraphElements(data?.nodes ?? [], data?.edges ?? [], zoom), [data?.nodes, data?.edges, zoom])
 
   useEffect(() => {
     if (!reactFlowInstance || graphElements.nodes.length === 0) {
@@ -335,7 +349,13 @@ export function PromptGraphPanel({
             nodes={graphElements.nodes}
             edges={graphElements.edges}
             nodeTypes={PROMPT_GRAPH_NODE_TYPES}
-            onInit={setReactFlowInstance}
+            onInit={(instance) => {
+              setReactFlowInstance(instance)
+              setZoom(instance.getZoom())
+            }}
+            onMoveEnd={(_event, viewport) => {
+              setZoom(viewport.zoom)
+            }}
             fitView
             fitViewOptions={{ padding: 0.15, maxZoom: 1.1 }}
             nodesDraggable={false}
