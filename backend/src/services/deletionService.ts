@@ -76,11 +76,13 @@ export class DeletionService {
    */
   private static async cleanupPromptCollection(
     prompt: string | null,
-    negativePrompt: string | null
+    negativePrompt: string | null,
+    characterPromptText: string | null = null,
+    autoTags: string | null = null,
   ): Promise<void> {
     try {
       console.log('🔍 Removing prompts from collection...');
-      await PromptCollectionService.removeFromImage(prompt, negativePrompt);
+      await PromptCollectionService.removeFromImage(prompt, negativePrompt, characterPromptText, autoTags);
       console.log('✅ Prompts removed from collection successfully');
     } catch (error) {
       console.warn('⚠️ Failed to remove prompts from collection (non-critical):', error);
@@ -150,7 +152,9 @@ export class DeletionService {
         // 프롬프트 정리
         await this.cleanupPromptCollection(
           metadata.prompt || null,
-          metadata.negative_prompt || null
+          metadata.negative_prompt || null,
+          metadata.character_prompt_text || null,
+          metadata.auto_tags || null,
         );
 
         // 썸네일 삭제
@@ -175,7 +179,9 @@ export class DeletionService {
       // 5. 프롬프트 정리 (먼저 실행 - 실패해도 계속 진행)
       await this.cleanupPromptCollection(
         metadata.prompt || null,
-        metadata.negative_prompt || null
+        metadata.negative_prompt || null,
+        metadata.character_prompt_text || null,
+        metadata.auto_tags || null,
       );
 
       // 6. 물리적 파일 삭제
@@ -268,7 +274,12 @@ export class DeletionService {
         const metadata = MediaMetadataModel.findByHash(composite_hash);
         if (metadata) {
           // 프롬프트 수집에서 제거
-          await this.cleanupPromptCollection(metadata.prompt, metadata.negative_prompt);
+          await this.cleanupPromptCollection(
+            metadata.prompt,
+            metadata.negative_prompt,
+            metadata.character_prompt_text,
+            metadata.auto_tags,
+          );
 
           // 썸네일 삭제
           if (metadata.thumbnail_path) {

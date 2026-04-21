@@ -119,6 +119,45 @@ router.get('/top', async (req: Request, res: Response) => {
 });
 
 /**
+ * 연관 프롬프트 조회
+ * GET /api/prompt-collection/related
+ */
+router.get('/related', async (req: Request, res: Response) => {
+  try {
+    const { prompt = '', type = 'positive', limit = '12' } = req.query;
+
+    const result = PromptCollectionService.getRelatedPrompts(
+      String(prompt),
+      type as 'positive' | 'negative' | 'auto',
+      parseInt(limit as string, 10)
+    );
+
+    return res.json(successResponse(result));
+  } catch (error) {
+    console.error('Error getting related prompts:', error);
+    return res.status(500).json(errorResponse('Failed to get related prompts'));
+  }
+});
+
+/**
+ * 프롬프트 관계 재구축
+ * POST /api/prompt-collection/rebuild-relations
+ */
+router.post('/rebuild-relations', async (_req: Request, res: Response) => {
+  try {
+    const result = PromptCollectionService.rebuildRelations();
+
+    return res.json(successResponse({
+      ...result,
+      message: `Prompt relation rebuild complete (${result.updated}/${result.processed})`
+    }));
+  } catch (error) {
+    console.error('Error rebuilding prompt relations:', error);
+    return res.status(500).json(errorResponse('Failed to rebuild prompt relations'));
+  }
+});
+
+/**
  * 그룹 프롬프트 조회
  * GET /api/prompt-collection/group/:groupId
  */

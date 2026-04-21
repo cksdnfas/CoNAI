@@ -6,6 +6,7 @@ import type {
   PromptGroupImportResult,
   PromptGroupRecord,
   PromptGroupResolveItem,
+  PromptRelatedPayload,
   PromptSearchPayload,
   PromptSortBy,
   PromptSortOrder,
@@ -109,6 +110,30 @@ export async function getTopPrompts(params?: { type?: PromptTypeFilter; limit?: 
     throw new Error(response.error || '상위 프롬프트를 불러오지 못했어.')
   }
   return response.data.map((item) => normalizePromptItem(item as PromptCollectionItem & { synonyms?: string[] | null; type?: string | null }))
+}
+
+export async function getRelatedPrompts(params: { prompt: string; type?: PromptTypeFilter; limit?: number }) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('prompt', params.prompt)
+  searchParams.set('type', params.type ?? 'positive')
+  searchParams.set('limit', String(params.limit ?? 12))
+
+  const response = await fetchJson<ApiResponse<PromptRelatedPayload>>(`/api/prompt-collection/related?${searchParams.toString()}`)
+  if (!response.success) {
+    throw new Error(response.error || '연관 프롬프트를 불러오지 못했어.')
+  }
+
+  return {
+    ...response.data,
+    items: response.data.items.map((item) => ({
+      ...item,
+      prompt: String(item.prompt),
+      usage_count: Number(item.usage_count ?? 0),
+      group_id: item.group_id ?? null,
+      shared_count: Number(item.shared_count ?? 0),
+      score: Number(item.score ?? 0),
+    })),
+  }
 }
 
 export async function assignPromptToGroup(promptId: number, groupId: number | null, type: PromptTypeFilter = 'positive') {
@@ -272,6 +297,18 @@ export async function collectPrompts(input: { prompt?: string; negativePrompt?: 
 
   if (!response.success || !response.data) {
     throw new Error(response.error || '프롬프트 수집 실행에 실패했어.')
+  }
+
+  return response.data
+}
+
+export async function rebuildPromptRelations() {
+  const response = await fetchJson<ApiResponse<{ processed: number; updated: number; cleared: number; message: string }>>('/api/prompt-collection/rebuild-relations', {
+    method: 'POST',
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '프롬프트 관계 재구축에 실패했어.')
   }
 
   return response.data

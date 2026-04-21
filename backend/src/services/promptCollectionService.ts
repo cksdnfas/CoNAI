@@ -2,6 +2,8 @@ import { PromptSearchResult, PromptStatistics } from '@conai/shared';
 import { PromptCollectionIngestService } from './promptCollectionIngestService';
 import { PromptCollectionMutationService } from './promptCollectionMutationService';
 import { PromptCollectionQueryService } from './promptCollectionQueryService';
+import { PromptRelationService } from './promptRelationService';
+import type { PromptRelationPromptType } from '../types/promptRelations';
 
 export class PromptCollectionService {
   static async collectFromImage(prompt: string | null, negativePrompt: string | null, characterPromptText: string | null = null): Promise<void> {
@@ -51,8 +53,13 @@ export class PromptCollectionService {
     return PromptCollectionMutationService.deletePrompt(id, type);
   }
 
-  static async removeFromImage(prompt: string | null, negativePrompt: string | null): Promise<void> {
-    return PromptCollectionIngestService.removeFromImage(prompt, negativePrompt);
+  static async removeFromImage(
+    prompt: string | null,
+    negativePrompt: string | null,
+    characterPromptText: string | null = null,
+    autoTags: string | null = null,
+  ): Promise<void> {
+    return PromptCollectionIngestService.removeFromImage(prompt, negativePrompt, characterPromptText, autoTags);
   }
 
   static async getTopPrompts(limit: number = 20, type: 'positive' | 'negative' | 'auto' | 'both' = 'both') {
@@ -92,5 +99,13 @@ export class PromptCollectionService {
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<Array<{ query: string; matched_prompt: string | null; group_info: any | null }>> {
     return PromptCollectionQueryService.resolvePromptsWithGroups(prompts, type);
+  }
+
+  static getRelatedPrompts(prompt: string, type: PromptRelationPromptType = 'positive', limit = 12) {
+    return PromptRelationService.getRelatedPrompts(prompt, type, limit);
+  }
+
+  static rebuildRelations() {
+    return PromptRelationService.rebuildAll();
   }
 }

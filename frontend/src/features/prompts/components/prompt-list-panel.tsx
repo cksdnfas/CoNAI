@@ -19,6 +19,7 @@ interface PromptListPanelProps {
   promptListRef: RefObject<HTMLDivElement | null>
   onPageChange: (page: number) => void
   onTogglePromptSelection: (promptId: number, checked: boolean) => void
+  activePrompt?: { prompt: string; type: PromptCollectionItem['type'] } | null
   onAssignPrompt: (item: PromptCollectionItem) => void
   onDeletePrompt: (item: PromptCollectionItem) => void
   onActivatePrompt: (item: PromptCollectionItem) => void
@@ -39,6 +40,7 @@ export function PromptListPanel({
   promptListRef,
   onPageChange,
   onTogglePromptSelection,
+  activePrompt,
   onAssignPrompt,
   onDeletePrompt,
   onActivatePrompt,
@@ -82,6 +84,7 @@ export function PromptListPanel({
                   key={`${item.type}-${item.id}`}
                   item={item}
                   selected={selectedPromptIds.includes(item.id)}
+                  active={activePrompt?.type === item.type && activePrompt?.prompt === item.prompt}
                   canAssign={!isLocked}
                   canDelete={canDeletePromptItem(item)}
                   onToggleSelect={(checked) => onTogglePromptSelection(item.id, checked)}

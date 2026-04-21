@@ -1,10 +1,12 @@
-import { FolderInput, Trash2 } from 'lucide-react'
+import { FolderInput, Sparkles, Trash2 } from 'lucide-react'
 import type { MouseEvent } from 'react'
+import { cn } from '@/lib/utils'
 import type { PromptCollectionItem } from '@/types/prompt'
 
 interface PromptListItemProps {
   item: PromptCollectionItem
   selected?: boolean
+  active?: boolean
   canAssign?: boolean
   canDelete?: boolean
   onToggleSelect?: (checked: boolean) => void
@@ -13,7 +15,7 @@ interface PromptListItemProps {
   onActivate?: () => void
 }
 
-export function PromptListItem({ item, selected = false, canAssign = true, canDelete = true, onToggleSelect, onAssignGroup, onDelete, onActivate }: PromptListItemProps) {
+export function PromptListItem({ item, selected = false, active = false, canAssign = true, canDelete = true, onToggleSelect, onAssignGroup, onDelete, onActivate }: PromptListItemProps) {
   const stopAction = (event: MouseEvent<HTMLElement>) => {
     event.preventDefault()
     event.stopPropagation()
@@ -21,9 +23,13 @@ export function PromptListItem({ item, selected = false, canAssign = true, canDe
 
   return (
     <div
-      className="prompt-list-selectable group relative grid cursor-pointer grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-x-2 rounded-sm bg-surface-container px-3 py-2 transition-colors hover:bg-surface-high"
+      className={cn(
+        'prompt-list-selectable group relative grid cursor-pointer grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-x-2 rounded-sm bg-surface-container px-3 py-2 transition-colors hover:bg-surface-high',
+        active ? 'ring-1 ring-primary/50 bg-surface-high' : null,
+      )}
       data-prompt-id={item.id}
       data-selected={selected ? 'true' : 'false'}
+      data-active={active ? 'true' : 'false'}
       onClick={() => onActivate?.()}
       title="클릭해서 복사"
     >
@@ -34,6 +40,7 @@ export function PromptListItem({ item, selected = false, canAssign = true, canDe
         <div className="break-all text-sm leading-5 font-semibold text-foreground">{item.prompt}</div>
       </div>
       <div className="flex items-center justify-end gap-1 sm:gap-1.5" data-no-select-drag="true" onClick={stopAction}>
+        {active ? <Sparkles className="h-3.5 w-3.5 text-primary" /> : null}
         <span className="min-w-[2.5rem] text-right text-[11px] font-mono text-muted-foreground sm:min-w-[3rem]">{item.usage_count.toLocaleString('ko-KR')}</span>
         <button
           type="button"

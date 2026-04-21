@@ -1,7 +1,12 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getTopPrompts, searchPromptCollection } from '@/lib/api'
+import { getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getRelatedPrompts, getTopPrompts, searchPromptCollection } from '@/lib/api'
 import type { PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
+
+interface ActivePromptParams {
+  prompt: string
+  type: PromptTypeFilter
+}
 import { getPromptTypeTotal, getSortedSiblingGroups } from './prompt-page-utils'
 
 interface UsePromptPageQueriesParams {
@@ -11,9 +16,10 @@ interface UsePromptPageQueriesParams {
   page: number
   sortBy: PromptSortBy
   sortOrder: PromptSortOrder
+  activePrompt: ActivePromptParams | null
 }
 
-export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder }: UsePromptPageQueriesParams) {
+export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder, activePrompt }: UsePromptPageQueriesParams) {
   const groupsQuery = useQuery({
     queryKey: ['prompt-groups', promptType],
     queryFn: () => getPromptGroups(promptType),
@@ -48,6 +54,16 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
       }),
   })
 
+  const relatedPromptsQuery = useQuery({
+    queryKey: ['prompt-related', activePrompt?.type ?? promptType, activePrompt?.prompt ?? ''],
+    queryFn: () => getRelatedPrompts({
+      prompt: activePrompt?.prompt ?? '',
+      type: activePrompt?.type ?? promptType,
+      limit: 12,
+    }),
+    enabled: Boolean(activePrompt?.prompt),
+  })
+
   const selectedGroup = useMemo(
     () => (groupsQuery.data ?? []).find((group) => group.id === selectedGroupId) ?? null,
     [groupsQuery.data, selectedGroupId],
@@ -69,6 +85,7 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
     topPromptsQuery,
     groupStatisticsQuery,
     promptSearchQuery,
+    relatedPromptsQuery,
     selectedGroup,
     siblingGroups,
     totalCount,

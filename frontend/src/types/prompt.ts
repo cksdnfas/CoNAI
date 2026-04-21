@@ -37,6 +37,24 @@ export interface PromptSearchPayload {
   }
 }
 
+export interface PromptRelatedItem {
+  id: number
+  prompt: string
+  usage_count: number
+  group_id: number | null
+  shared_count: number
+  score: number
+}
+
+export interface PromptRelatedPayload {
+  items: PromptRelatedItem[]
+  total: number
+  source: {
+    prompt: string
+    type: PromptTypeFilter
+  }
+}
+
 export interface PromptGroupResolveInfo extends Partial<PromptGroupRecord> {
   id: number
   group_name: string

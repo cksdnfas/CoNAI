@@ -1,6 +1,7 @@
 import { PromptCollectionModel } from '../models/PromptCollection';
 import { PromptGroupModel } from '../models/PromptGroup';
 import { isLoRAModel, cleanPromptTerm, parsePromptWithLoRAs, removeLoRAWeight } from '@conai/shared';
+import { PromptRelationService } from './promptRelationService';
 
 export class PromptCollectionIngestService {
   /**
@@ -188,6 +189,8 @@ export class PromptCollectionIngestService {
         console.log(`⚠️ Skipping invalid negative prompt: "${negativePrompt}"`);
       }
 
+      PromptRelationService.collectFromImage(prompt, negativePrompt, characterPromptText);
+
       console.log(`⏱️ [PromptCollection] ✅ Total collection time: ${Date.now() - startTime}ms`);
     } catch (error) {
       console.error(`⏱️ [PromptCollection] ❌ Failed after ${Date.now() - startTime}ms:`, error);
@@ -204,12 +207,27 @@ export class PromptCollectionIngestService {
     }
   }
 
-  static async removeFromImage(prompt: string | null, negativePrompt: string | null): Promise<void> {
+  static async removeFromImage(
+    prompt: string | null,
+    negativePrompt: string | null,
+    characterPromptText: string | null = null,
+    autoTags: string | null = null,
+  ): Promise<void> {
     try {
       if (prompt) {
         const { terms } = parsePromptWithLoRAs(prompt);
         for (const term of terms) {
-          const cleaned = term.trim();
+          const cleaned = cleanPromptTerm(term.trim());
+          if (cleaned) {
+            await PromptCollectionModel.decrementUsage(cleaned, 'positive');
+          }
+        }
+      }
+
+      if (characterPromptText) {
+        const { terms } = parsePromptWithLoRAs(characterPromptText);
+        for (const term of terms) {
+          const cleaned = cleanPromptTerm(term.trim());
           if (cleaned) {
             await PromptCollectionModel.decrementUsage(cleaned, 'positive');
           }
@@ -219,12 +237,31 @@ export class PromptCollectionIngestService {
       if (negativePrompt) {
         const { terms } = parsePromptWithLoRAs(negativePrompt);
         for (const term of terms) {
-          const cleaned = term.trim();
+          const cleaned = cleanPromptTerm(term.trim());
           if (cleaned) {
             await PromptCollectionModel.decrementUsage(cleaned, 'negative');
           }
         }
       }
+
+      if (autoTags) {
+        try {
+          const parsed = JSON.parse(autoTags) as {
+            tagger?: {
+              caption?: string | null;
+              taglist?: string | null;
+            } | null;
+          };
+          const autoPromptText = parsed?.tagger?.taglist || parsed?.tagger?.caption || '';
+          for (const term of autoPromptText.split(',').map((value) => value.trim()).filter((value) => value.length > 0)) {
+            await PromptCollectionModel.decrementUsage(term, 'auto');
+          }
+        } catch (autoTagError) {
+          console.warn('Failed to parse auto tags during prompt removal:', autoTagError);
+        }
+      }
+
+      PromptRelationService.removeFromImage(prompt, negativePrompt, characterPromptText, autoTags);
     } catch (error) {
       console.error('Error removing prompts from image:', error);
       throw error;

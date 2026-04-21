@@ -7,6 +7,7 @@ import {
   deletePrompt,
   deletePromptGroup,
   importPromptGroups,
+  rebuildPromptRelations,
   reorderPromptGroups,
   updatePromptGroup,
 } from '@/lib/api'
@@ -49,6 +50,7 @@ export function usePromptPageMutations({
       queryClient.invalidateQueries({ queryKey: ['prompt-group-statistics', promptType] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-top', promptType] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-search', promptType] }),
+      queryClient.invalidateQueries({ queryKey: ['prompt-related'] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-statistics'] }),
     ])
     await onAfterRefresh?.()
@@ -161,6 +163,17 @@ export function usePromptPageMutations({
     },
   })
 
+  const rebuildPromptRelationsMutation = useMutation({
+    mutationFn: rebuildPromptRelations,
+    onSuccess: async (result) => {
+      onInfo(result.message)
+      await queryClient.invalidateQueries({ queryKey: ['prompt-related'] })
+    },
+    onError: (error) => {
+      onError(error instanceof Error ? error.message : '프롬프트 관계 재구축에 실패했어.')
+    },
+  })
+
   return {
     assignSinglePromptMutation,
     batchAssignPromptsMutation,
@@ -171,6 +184,7 @@ export function usePromptPageMutations({
     importPromptGroupsMutation,
     deletePromptMutation,
     collectPromptsMutation,
+    rebuildPromptRelationsMutation,
     refreshPromptQueries,
   }
 }

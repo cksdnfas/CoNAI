@@ -6,6 +6,7 @@ import { imageTaggerService } from './imageTaggerService';
 import { SystemSettingsService } from './systemSettingsService';
 import { RatingScoreService } from './ratingScoreService';
 import { PromptCollectionService } from './promptCollectionService';
+import { PromptRelationService } from './promptRelationService';
 import { AutoTagsComposeService } from './autoTagsComposeService';
 import { kaloscopeTaggerService } from './kaloscopeTaggerService';
 import { RatingData } from '../types/autoTag';
@@ -289,6 +290,7 @@ export class AutoTagScheduler {
       }
 
       await PromptCollectionService.batchAddOrIncrementAuto(tags.map((tag) => ({ prompt: tag })));
+      PromptRelationService.collectAutoPromptRelations(tags);
     } catch (error) {
       console.error('[AutoTagScheduler] Failed to collect auto prompts:', error);
     }

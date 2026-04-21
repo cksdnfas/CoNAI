@@ -11,6 +11,7 @@ import { PromptCollectModal } from './components/prompt-collect-modal'
 import { PromptGroupAssignModal } from './components/prompt-group-assign-modal'
 import { PromptGroupEditorModal } from './components/prompt-group-editor-modal'
 import { PromptListPanel } from './components/prompt-list-panel'
+import { PromptRelatedPanel } from './components/prompt-related-panel'
 import { PromptSelectionBar } from './components/prompt-selection-bar'
 import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
@@ -47,6 +48,7 @@ export function PromptPage() {
   const [sortOrder, setSortOrder] = useState<PromptSortOrder>('DESC')
   const [page, setPage] = useState(1)
   const [selectedPromptIds, setSelectedPromptIds] = useState<number[]>([])
+  const [activePrompt, setActivePrompt] = useState<{ prompt: string; type: PromptTypeFilter } | null>(null)
   const [assignModalState, setAssignModalState] = useState<AssignModalState>(null)
   const [groupEditorState, setGroupEditorState] = useState<GroupEditorState>(null)
 
@@ -56,6 +58,7 @@ export function PromptPage() {
     topPromptsQuery,
     groupStatisticsQuery,
     promptSearchQuery,
+    relatedPromptsQuery,
     selectedGroup,
     siblingGroups,
     totalCount,
@@ -66,6 +69,7 @@ export function PromptPage() {
     page,
     sortBy,
     sortOrder,
+    activePrompt,
   })
 
   const isSelectedGroupLocked = isLockedPromptGroup(selectedGroup)
@@ -102,6 +106,7 @@ export function PromptPage() {
     importPromptGroupsMutation,
     deletePromptMutation,
     collectPromptsMutation,
+    rebuildPromptRelationsMutation,
   } = usePromptPageMutations({
     promptType,
     onInfo: (message) => showSnackbar({ message, tone: 'info' }),
@@ -121,6 +126,10 @@ export function PromptPage() {
     onAfterImport: () => setSelectedGroupId(undefined),
     onAfterDeletePrompt: (promptId) => {
       setSelectedPromptIds((current) => current.filter((id) => id !== promptId))
+      const deletedItem = items.find((item) => item.id === promptId)
+      if (deletedItem && activePrompt?.type === deletedItem.type && activePrompt.prompt === deletedItem.prompt) {
+        setActivePrompt(null)
+      }
     },
   })
 
@@ -137,6 +146,16 @@ export function PromptPage() {
     setAssignModalState(null)
   }, [promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder])
 
+  useEffect(() => {
+    if (!activePrompt) {
+      return
+    }
+
+    if (activePrompt.type !== promptType) {
+      setActivePrompt(null)
+    }
+  }, [activePrompt, promptType])
+
   const handleCopyPrompt = async (text: string) => {
     try {
       await copyTextToClipboard(text)
@@ -148,6 +167,14 @@ export function PromptPage() {
 
   const handleApplySearch = () => {
     setSearchQuery(searchInput)
+    setPage(1)
+  }
+
+  const handleSelectActivePrompt = (prompt: string, type: PromptTypeFilter = promptType) => {
+    setActivePrompt({ prompt, type })
+    setSearchInput(prompt)
+    setSearchQuery(prompt)
+    setSelectedGroupId(undefined)
     setPage(1)
   }
 
@@ -358,9 +385,32 @@ export function PromptPage() {
             />
           </div>
 
+          <PromptRelatedPanel
+            activePrompt={activePrompt}
+            items={relatedPromptsQuery.data?.items ?? []}
+            isLoading={relatedPromptsQuery.isLoading}
+            isError={relatedPromptsQuery.isError}
+            errorMessage={relatedPromptsQuery.error instanceof Error ? relatedPromptsQuery.error.message : null}
+            isRebuilding={rebuildPromptRelationsMutation.isPending}
+            onRebuild={() => {
+              void rebuildPromptRelationsMutation.mutateAsync()
+                .then(() => {
+                  if (activePrompt?.prompt) {
+                    void relatedPromptsQuery.refetch()
+                  }
+                })
+                .catch(() => undefined)
+            }}
+            onSelectPrompt={(prompt) => handleSelectActivePrompt(prompt, activePrompt?.type ?? promptType)}
+            onCopyPrompt={(prompt) => {
+              void handleCopyPrompt(prompt)
+            }}
+          />
+
           <PromptListPanel
             items={items}
             selectedPromptIds={selectedPromptIds}
+            activePrompt={activePrompt}
             isLoading={promptSearchQuery.isLoading}
             isError={promptSearchQuery.isError}
             errorMessage={promptSearchQuery.error instanceof Error ? promptSearchQuery.error.message : null}
@@ -377,6 +427,7 @@ export function PromptPage() {
               if (shouldSuppressClick()) {
                 return
               }
+              setActivePrompt({ prompt: item.prompt, type: item.type })
               void handleCopyPrompt(item.prompt)
             }}
             isLockedPromptItem={isLockedPromptItem}
