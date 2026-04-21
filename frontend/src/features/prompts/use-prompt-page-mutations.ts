@@ -51,6 +51,7 @@ export function usePromptPageMutations({
       queryClient.invalidateQueries({ queryKey: ['prompt-top', promptType] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-search', promptType] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-related'] }),
+      queryClient.invalidateQueries({ queryKey: ['prompt-graph'] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-statistics'] }),
     ])
     await onAfterRefresh?.()
@@ -167,7 +168,10 @@ export function usePromptPageMutations({
     mutationFn: rebuildPromptRelations,
     onSuccess: async (result) => {
       onInfo(result.message)
-      await queryClient.invalidateQueries({ queryKey: ['prompt-related'] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['prompt-related'] }),
+        queryClient.invalidateQueries({ queryKey: ['prompt-graph'] }),
+      ])
     },
     onError: (error) => {
       onError(error instanceof Error ? error.message : '프롬프트 관계 재구축에 실패했어.')

@@ -105,6 +105,18 @@ export class PromptCollectionService {
     return PromptRelationService.getRelatedPrompts(prompt, type, limit);
   }
 
+  static getPromptGraph(
+    type: PromptRelationPromptType = 'positive',
+    options?: {
+      minScore?: number;
+      minSharedCount?: number;
+      minUsageCount?: number;
+      limit?: number;
+    },
+  ) {
+    return PromptRelationService.getGraph(type, options);
+  }
+
   static rebuildRelations() {
     return PromptRelationService.rebuildAll();
   }

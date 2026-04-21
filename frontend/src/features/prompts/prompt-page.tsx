@@ -18,7 +18,7 @@ import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
 import { PromptToolbar } from './components/prompt-toolbar'
 import { usePromptListSelection } from './components/use-prompt-list-selection'
-import { PROMPT_TYPE_TABS, canDeletePromptItem, isLockedPromptGroup, isLockedPromptItem } from './prompt-page-utils'
+import { canDeletePromptItem, isLockedPromptGroup, isLockedPromptItem } from './prompt-page-utils'
 import { usePromptPageMutations } from './use-prompt-page-mutations'
 import { usePromptPageQueries } from './use-prompt-page-queries'
 
@@ -32,6 +32,15 @@ type GroupEditorState =
   | { mode: 'edit'; group: PromptGroupRecord }
   | null
 
+type PromptPageTopTab = PromptTypeFilter | 'graph'
+
+const PROMPT_PAGE_TABS: Array<{ value: PromptPageTopTab; label: string }> = [
+  { value: 'positive', label: 'Positive' },
+  { value: 'negative', label: 'Negative' },
+  { value: 'auto', label: 'Auto' },
+  { value: 'graph', label: 'Graph' },
+]
+
 export function PromptPage() {
   const { showSnackbar } = useSnackbar()
   const importInputRef = useRef<HTMLInputElement | null>(null)
@@ -41,6 +50,7 @@ export function PromptPage() {
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false)
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false)
+  const [activeTopTab, setActiveTopTab] = useState<PromptPageTopTab>('positive')
   const [promptType, setPromptType] = useState<PromptTypeFilter>('positive')
   const [selectedGroupId, setSelectedGroupId] = useState<number | null | undefined>(undefined)
   const [searchInput, setSearchInput] = useState('')
@@ -50,7 +60,8 @@ export function PromptPage() {
   const [page, setPage] = useState(1)
   const [selectedPromptIds, setSelectedPromptIds] = useState<number[]>([])
   const [activePrompt, setActivePrompt] = useState<{ prompt: string; type: PromptTypeFilter } | null>(null)
-  const [contentTab, setContentTab] = useState<'list' | 'graph'>('list')
+  const [graphDraftFilters, setGraphDraftFilters] = useState({ type: 'positive' as PromptTypeFilter, minScore: 55, minSharedCount: 3, minUsageCount: 2, limit: 180 })
+  const [graphFilters, setGraphFilters] = useState({ type: 'positive' as PromptTypeFilter, minScore: 55, minSharedCount: 3, minUsageCount: 2, limit: 180 })
   const [assignModalState, setAssignModalState] = useState<AssignModalState>(null)
   const [groupEditorState, setGroupEditorState] = useState<GroupEditorState>(null)
 
@@ -61,6 +72,7 @@ export function PromptPage() {
     groupStatisticsQuery,
     promptSearchQuery,
     relatedPromptsQuery,
+    promptGraphQuery,
     selectedGroup,
     siblingGroups,
     totalCount,
@@ -72,6 +84,8 @@ export function PromptPage() {
     sortBy,
     sortOrder,
     activePrompt,
+    graphEnabled: activeTopTab === 'graph',
+    graphFilters,
   })
 
   const isSelectedGroupLocked = isLockedPromptGroup(selectedGroup)
@@ -146,7 +160,7 @@ export function PromptPage() {
   useEffect(() => {
     setSelectedPromptIds([])
     setAssignModalState(null)
-  }, [promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder])
+  }, [activeTopTab, promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder])
 
   useEffect(() => {
     if (!activePrompt) {
@@ -180,8 +194,16 @@ export function PromptPage() {
     setPage(1)
   }
 
-  const handleChangeType = (nextType: PromptTypeFilter) => {
-    setPromptType(nextType)
+  const handleChangeTopTab = (nextTab: PromptPageTopTab) => {
+    setActiveTopTab(nextTab)
+
+    if (nextTab === 'graph') {
+      setGraphDraftFilters((current) => ({ ...current, type: promptType }))
+      setGraphFilters((current) => ({ ...current, type: promptType }))
+      return
+    }
+
+    setPromptType(nextTab)
     setSelectedGroupId(undefined)
     setPage(1)
   }
@@ -189,6 +211,10 @@ export function PromptPage() {
   const handleActivatePrompt = async (prompt: string, type: PromptTypeFilter = promptType) => {
     setActivePrompt({ prompt, type })
     await handleCopyPrompt(prompt)
+  }
+
+  const handleApplyGraphFilters = () => {
+    setGraphFilters(graphDraftFilters)
   }
 
   const handleTogglePromptSelection = (promptId: number, checked: boolean) => {
@@ -338,71 +364,81 @@ export function PromptPage() {
       <PageHeader title="Prompts" />
 
       <SegmentedTabBar
-        value={promptType}
-        items={PROMPT_TYPE_TABS}
-        onChange={(nextType) => handleChangeType(nextType as PromptTypeFilter)}
+        value={activeTopTab}
+        items={PROMPT_PAGE_TABS}
+        onChange={(nextTab) => handleChangeTopTab(nextTab as PromptPageTopTab)}
       />
 
-      <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
-        <PromptSidebar
-          groups={groupsQuery.data ?? []}
-          selectedGroupId={selectedGroupId}
-          totalCount={sidebarTotalCount}
-          groupsLoading={groupsQuery.isLoading}
-          groupsError={groupsQuery.error instanceof Error ? groupsQuery.error.message : groupsQuery.isError ? '알 수 없는 오류가 발생했어.' : null}
-          canCollect={promptType !== 'auto'}
-          onSelectGroup={(groupId) => {
-            setSelectedGroupId(groupId)
-            setPage(1)
+      {activeTopTab === 'graph' ? (
+        <PromptGraphPanel
+          data={promptGraphQuery.data}
+          draftFilters={graphDraftFilters}
+          isLoading={promptGraphQuery.isLoading}
+          isFetching={promptGraphQuery.isFetching}
+          isError={promptGraphQuery.isError}
+          errorMessage={promptGraphQuery.error instanceof Error ? promptGraphQuery.error.message : null}
+          isRebuilding={rebuildPromptRelationsMutation.isPending}
+          onDraftFiltersChange={(patch) => setGraphDraftFilters((current) => ({ ...current, ...patch }))}
+          onApplyFilters={handleApplyGraphFilters}
+          onRebuild={() => {
+            void rebuildPromptRelationsMutation.mutateAsync()
+              .then(() => {
+                void promptGraphQuery.refetch()
+              })
+              .catch(() => undefined)
           }}
-          onCreateGroup={() => setGroupEditorState({ mode: 'create', defaultParentId: isSelectedGroupLocked ? null : (selectedGroupId ?? null) })}
-          onEditGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => setGroupEditorState({ mode: 'edit', group: selectedGroup }) : undefined}
-          onDeleteGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => void handleDeleteSelectedGroup() : undefined}
-          onMoveGroupUp={canMoveGroupUp ? () => void handleMoveSelectedGroup('up') : undefined}
-          onMoveGroupDown={canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
-          onExportGroups={() => void handleExportGroups()}
-          onImportGroups={() => importInputRef.current?.click()}
-          onOpenSummary={() => setIsSummaryModalOpen(true)}
-          onOpenCollect={() => setIsCollectModalOpen(true)}
-          canMoveGroupUp={canMoveGroupUp}
-          canMoveGroupDown={canMoveGroupDown}
         />
-
-        <section className="relative z-0 space-y-4">
-          <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 flex-1">
-              <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
-              <div className="mt-1 text-sm text-muted-foreground">{currentSectionCount.toLocaleString('ko-KR')}개 표시됨</div>
-            </div>
-
-            <PromptToolbar
-              searchInput={searchInput}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              onSearchInputChange={setSearchInput}
-              onApplySearch={handleApplySearch}
-              onChangeSortBy={(value) => {
-                setSortBy(value)
+      ) : (
+        <>
+          <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
+            <PromptSidebar
+              groups={groupsQuery.data ?? []}
+              selectedGroupId={selectedGroupId}
+              totalCount={sidebarTotalCount}
+              groupsLoading={groupsQuery.isLoading}
+              groupsError={groupsQuery.error instanceof Error ? groupsQuery.error.message : groupsQuery.isError ? '알 수 없는 오류가 발생했어.' : null}
+              canCollect={promptType !== 'auto'}
+              onSelectGroup={(groupId) => {
+                setSelectedGroupId(groupId)
                 setPage(1)
               }}
-              onChangeSortOrder={(value) => {
-                setSortOrder(value)
-                setPage(1)
-              }}
+              onCreateGroup={() => setGroupEditorState({ mode: 'create', defaultParentId: isSelectedGroupLocked ? null : (selectedGroupId ?? null) })}
+              onEditGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => setGroupEditorState({ mode: 'edit', group: selectedGroup }) : undefined}
+              onDeleteGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => void handleDeleteSelectedGroup() : undefined}
+              onMoveGroupUp={canMoveGroupUp ? () => void handleMoveSelectedGroup('up') : undefined}
+              onMoveGroupDown={canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
+              onExportGroups={() => void handleExportGroups()}
+              onImportGroups={() => importInputRef.current?.click()}
+              onOpenSummary={() => setIsSummaryModalOpen(true)}
+              onOpenCollect={() => setIsCollectModalOpen(true)}
+              canMoveGroupUp={canMoveGroupUp}
+              canMoveGroupDown={canMoveGroupDown}
             />
-          </div>
 
-          <SegmentedTabBar
-            value={contentTab}
-            items={[
-              { value: 'list', label: 'List' },
-              { value: 'graph', label: 'Graph' },
-            ]}
-            onChange={(value) => setContentTab(value as 'list' | 'graph')}
-          />
+            <section className="relative z-0 space-y-4">
+              <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
+                  <div className="mt-1 text-sm text-muted-foreground">{currentSectionCount.toLocaleString('ko-KR')}개 표시됨</div>
+                </div>
 
-          {contentTab === 'list' ? (
-            <>
+                <PromptToolbar
+                  searchInput={searchInput}
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onSearchInputChange={setSearchInput}
+                  onApplySearch={handleApplySearch}
+                  onChangeSortBy={(value) => {
+                    setSortBy(value)
+                    setPage(1)
+                  }}
+                  onChangeSortOrder={(value) => {
+                    setSortOrder(value)
+                    setPage(1)
+                  }}
+                />
+              </div>
+
               <PromptRelatedPanel
                 activePrompt={activePrompt}
                 items={relatedPromptsQuery.data?.items ?? []}
@@ -450,42 +486,19 @@ export function PromptPage() {
                 isLockedPromptItem={isLockedPromptItem}
                 canDeletePromptItem={canDeletePromptItem}
               />
-            </>
-          ) : (
-            <PromptGraphPanel
-              activePrompt={activePrompt}
-              items={relatedPromptsQuery.data?.items ?? []}
-              isLoading={relatedPromptsQuery.isLoading}
-              isError={relatedPromptsQuery.isError}
-              errorMessage={relatedPromptsQuery.error instanceof Error ? relatedPromptsQuery.error.message : null}
-              isRebuilding={rebuildPromptRelationsMutation.isPending}
-              canApplySearchPrompt={searchInput.trim().length > 0 && searchInput.trim() !== activePrompt?.prompt}
-              onApplySearchPrompt={() => handleSelectActivePrompt(searchInput.trim(), promptType)}
-              onRebuild={() => {
-                void rebuildPromptRelationsMutation.mutateAsync()
-                  .then(() => {
-                    if (activePrompt?.prompt) {
-                      void relatedPromptsQuery.refetch()
-                    }
-                  })
-                  .catch(() => undefined)
-              }}
-              onSelectPrompt={(prompt) => {
-                void handleActivatePrompt(prompt, activePrompt?.type ?? promptType)
-              }}
-            />
-          )}
-        </section>
-      </div>
+            </section>
+          </div>
 
-      <PromptSelectionBar
-        selectedCount={selectedPromptItems.length}
-        isSubmitting={batchAssignPromptsMutation.isPending}
-        isDeleting={deletePromptMutation.isPending}
-        onAssignGroup={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: 'LoRA 항목은 변경할 수 없어.', tone: 'error' }) : handleOpenMultiAssignModal}
-        onDeleteSelected={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: 'LoRA 항목은 삭제할 수 없어.', tone: 'error' }) : () => void handleDeleteSelectedPrompts()}
-        onClear={() => setSelectedPromptIds([])}
-      />
+          <PromptSelectionBar
+            selectedCount={selectedPromptItems.length}
+            isSubmitting={batchAssignPromptsMutation.isPending}
+            isDeleting={deletePromptMutation.isPending}
+            onAssignGroup={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: 'LoRA 항목은 변경할 수 없어.', tone: 'error' }) : handleOpenMultiAssignModal}
+            onDeleteSelected={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: 'LoRA 항목은 삭제할 수 없어.', tone: 'error' }) : () => void handleDeleteSelectedPrompts()}
+            onClear={() => setSelectedPromptIds([])}
+          />
+        </>
+      )}
 
       <PromptGroupAssignModal
         open={assignModalState !== null}

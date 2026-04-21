@@ -55,6 +55,33 @@ export interface PromptRelatedPayload {
   }
 }
 
+export interface PromptGraphNodeItem {
+  id: number
+  prompt: string
+  usage_count: number
+  group_id: number | null
+  degree: number
+}
+
+export interface PromptGraphEdgeItem {
+  source_prompt: string
+  target_prompt: string
+  shared_count: number
+  score: number
+}
+
+export interface PromptGraphPayload {
+  nodes: PromptGraphNodeItem[]
+  edges: PromptGraphEdgeItem[]
+  filters: {
+    type: PromptTypeFilter
+    min_score: number
+    min_shared_count: number
+    min_usage_count: number
+    limit: number
+  }
+}
+
 export interface PromptGroupResolveInfo extends Partial<PromptGroupRecord> {
   id: number
   group_name: string

@@ -1,12 +1,33 @@
 import { cleanPromptTerm, parsePromptWithLoRAs } from '@conai/shared';
 import { db } from '../database/init';
-import type { PromptRelationPromptType, PromptRelationRebuildResult, PromptRelatedPromptItem, PromptRelatedPromptResult } from '../types/promptRelations';
+import type {
+  PromptGraphEdgeItem,
+  PromptGraphNodeItem,
+  PromptGraphResult,
+  PromptRelationPromptType,
+  PromptRelationRebuildResult,
+  PromptRelatedPromptItem,
+  PromptRelatedPromptResult,
+} from '../types/promptRelations';
 
 interface PromptRelationMetadataRow {
   prompt: string | null;
   negative_prompt: string | null;
   character_prompt_text: string | null;
   auto_tags: string | null;
+}
+
+interface PromptGraphRelationRow {
+  source_id: number;
+  source_prompt: string;
+  source_usage_count: number;
+  source_group_id: number | null;
+  target_id: number;
+  target_prompt: string;
+  target_usage_count: number;
+  target_group_id: number | null;
+  shared_count: number;
+  score: number;
 }
 
 const PROMPT_RELATION_KIND = 'co_occurrence';
@@ -168,6 +189,116 @@ export class PromptRelationService {
       source: {
         prompt: normalizedPrompt,
         type,
+      },
+    };
+  }
+
+  static getGraph(
+    type: PromptRelationPromptType = 'positive',
+    options?: {
+      minScore?: number;
+      minSharedCount?: number;
+      minUsageCount?: number;
+      limit?: number;
+    },
+  ): PromptGraphResult {
+    const tableName = getPromptTableName(type);
+    const minScore = Number.isFinite(options?.minScore)
+      ? Math.max(0, Math.min(1000, Number(options?.minScore)))
+      : 55;
+    const minSharedCount = Number.isFinite(options?.minSharedCount)
+      ? Math.max(1, Math.min(9999, Math.round(Number(options?.minSharedCount))))
+      : 3;
+    const minUsageCount = Number.isFinite(options?.minUsageCount)
+      ? Math.max(1, Math.min(999999, Math.round(Number(options?.minUsageCount))))
+      : 2;
+    const limit = Number.isFinite(options?.limit)
+      ? Math.max(20, Math.min(800, Math.round(Number(options?.limit))))
+      : 180;
+
+    const rows = db.prepare(`
+      SELECT
+        source.id AS source_id,
+        source.prompt AS source_prompt,
+        source.usage_count AS source_usage_count,
+        source.group_id AS source_group_id,
+        target.id AS target_id,
+        target.prompt AS target_prompt,
+        target.usage_count AS target_usage_count,
+        target.group_id AS target_group_id,
+        rel.shared_count,
+        rel.score
+      FROM prompt_term_relations rel
+      INNER JOIN ${tableName} source
+        ON source.prompt = rel.source_prompt
+      INNER JOIN ${tableName} target
+        ON target.prompt = rel.target_prompt
+      WHERE rel.prompt_type = ?
+        AND rel.relation_type = ?
+        AND rel.source_prompt < rel.target_prompt
+        AND rel.shared_count >= ?
+        AND rel.score >= ?
+        AND source.usage_count >= ?
+        AND target.usage_count >= ?
+      ORDER BY rel.score DESC, rel.shared_count DESC, (source.usage_count + target.usage_count) DESC, source.prompt ASC, target.prompt ASC
+      LIMIT ?
+    `).all(type, PROMPT_RELATION_KIND, minSharedCount, minScore, minUsageCount, minUsageCount, limit) as PromptGraphRelationRow[];
+
+    const nodeMap = new Map<string, PromptGraphNodeItem>();
+    const edges: PromptGraphEdgeItem[] = [];
+
+    for (const row of rows) {
+      const sourceExisting = nodeMap.get(row.source_prompt);
+      if (sourceExisting) {
+        sourceExisting.degree += 1;
+      } else {
+        nodeMap.set(row.source_prompt, {
+          id: row.source_id,
+          prompt: row.source_prompt,
+          usage_count: row.source_usage_count,
+          group_id: row.source_group_id,
+          degree: 1,
+        });
+      }
+
+      const targetExisting = nodeMap.get(row.target_prompt);
+      if (targetExisting) {
+        targetExisting.degree += 1;
+      } else {
+        nodeMap.set(row.target_prompt, {
+          id: row.target_id,
+          prompt: row.target_prompt,
+          usage_count: row.target_usage_count,
+          group_id: row.target_group_id,
+          degree: 1,
+        });
+      }
+
+      edges.push({
+        source_prompt: row.source_prompt,
+        target_prompt: row.target_prompt,
+        shared_count: row.shared_count,
+        score: row.score,
+      });
+    }
+
+    return {
+      nodes: [...nodeMap.values()].sort((left, right) => {
+        if (right.degree !== left.degree) {
+          return right.degree - left.degree;
+        }
+        if (right.usage_count !== left.usage_count) {
+          return right.usage_count - left.usage_count;
+        }
+        return left.prompt.localeCompare(right.prompt);
+      }),
+      edges,
+      filters: {
+        type,
+        min_score: minScore,
+        min_shared_count: minSharedCount,
+        min_usage_count: minUsageCount,
+        limit,
       },
     };
   }

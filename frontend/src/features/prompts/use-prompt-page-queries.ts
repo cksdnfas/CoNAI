@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getRelatedPrompts, getTopPrompts, searchPromptCollection } from '@/lib/api'
+import { getPromptGraph, getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getRelatedPrompts, getTopPrompts, searchPromptCollection } from '@/lib/api'
 import type { PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
 
 interface ActivePromptParams {
@@ -17,9 +17,17 @@ interface UsePromptPageQueriesParams {
   sortBy: PromptSortBy
   sortOrder: PromptSortOrder
   activePrompt: ActivePromptParams | null
+  graphEnabled?: boolean
+  graphFilters?: {
+    type: PromptTypeFilter
+    minScore: number
+    minSharedCount: number
+    minUsageCount: number
+    limit: number
+  }
 }
 
-export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder, activePrompt }: UsePromptPageQueriesParams) {
+export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder, activePrompt, graphEnabled = false, graphFilters }: UsePromptPageQueriesParams) {
   const groupsQuery = useQuery({
     queryKey: ['prompt-groups', promptType],
     queryFn: () => getPromptGroups(promptType),
@@ -64,6 +72,18 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
     enabled: Boolean(activePrompt?.prompt),
   })
 
+  const promptGraphQuery = useQuery({
+    queryKey: ['prompt-graph', graphFilters?.type ?? 'positive', graphFilters?.minScore ?? 55, graphFilters?.minSharedCount ?? 3, graphFilters?.minUsageCount ?? 2, graphFilters?.limit ?? 180],
+    queryFn: () => getPromptGraph({
+      type: graphFilters?.type ?? 'positive',
+      minScore: graphFilters?.minScore ?? 55,
+      minSharedCount: graphFilters?.minSharedCount ?? 3,
+      minUsageCount: graphFilters?.minUsageCount ?? 2,
+      limit: graphFilters?.limit ?? 180,
+    }),
+    enabled: graphEnabled,
+  })
+
   const selectedGroup = useMemo(
     () => (groupsQuery.data ?? []).find((group) => group.id === selectedGroupId) ?? null,
     [groupsQuery.data, selectedGroupId],
@@ -86,6 +106,7 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
     groupStatisticsQuery,
     promptSearchQuery,
     relatedPromptsQuery,
+    promptGraphQuery,
     selectedGroup,
     siblingGroups,
     totalCount,

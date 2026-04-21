@@ -140,6 +140,37 @@ router.get('/related', async (req: Request, res: Response) => {
 });
 
 /**
+ * 전체 프롬프트 관계 그래프 조회
+ * GET /api/prompt-collection/graph
+ */
+router.get('/graph', async (req: Request, res: Response) => {
+  try {
+    const {
+      type = 'positive',
+      minScore = '55',
+      minSharedCount = '3',
+      minUsageCount = '2',
+      limit = '180',
+    } = req.query;
+
+    const result = PromptCollectionService.getPromptGraph(
+      type as 'positive' | 'negative' | 'auto',
+      {
+        minScore: Number(minScore),
+        minSharedCount: Number(minSharedCount),
+        minUsageCount: Number(minUsageCount),
+        limit: Number(limit),
+      }
+    );
+
+    return res.json(successResponse(result));
+  } catch (error) {
+    console.error('Error getting prompt graph:', error);
+    return res.status(500).json(errorResponse('Failed to get prompt graph'));
+  }
+});
+
+/**
  * 프롬프트 관계 재구축
  * POST /api/prompt-collection/rebuild-relations
  */
