@@ -8,6 +8,7 @@ import {
   deletePromptGroup,
   importPromptGroups,
   rebuildPromptRelations,
+  rebuildPromptTaxonomy,
   reorderPromptGroups,
   updatePromptGroup,
 } from '@/lib/api'
@@ -52,6 +53,7 @@ export function usePromptPageMutations({
       queryClient.invalidateQueries({ queryKey: ['prompt-search', promptType] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-related'] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-graph'] }),
+      queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-graph'] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-statistics'] }),
     ])
     await onAfterRefresh?.()
@@ -178,6 +180,17 @@ export function usePromptPageMutations({
     },
   })
 
+  const rebuildPromptTaxonomyMutation = useMutation({
+    mutationFn: rebuildPromptTaxonomy,
+    onSuccess: async (result) => {
+      onInfo(result.message)
+      await queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-graph'] })
+    },
+    onError: (error) => {
+      onError(error instanceof Error ? error.message : '프롬프트 taxonomy 재구축에 실패했어.')
+    },
+  })
+
   return {
     assignSinglePromptMutation,
     batchAssignPromptsMutation,
@@ -189,6 +202,7 @@ export function usePromptPageMutations({
     deletePromptMutation,
     collectPromptsMutation,
     rebuildPromptRelationsMutation,
+    rebuildPromptTaxonomyMutation,
     refreshPromptQueries,
   }
 }

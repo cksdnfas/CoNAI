@@ -1,4 +1,5 @@
 export type PromptTypeFilter = 'positive' | 'negative' | 'auto'
+export type PromptGraphMode = 'usage' | 'taxonomy'
 export type PromptSortBy = 'usage_count' | 'created_at' | 'prompt'
 export type PromptSortOrder = 'ASC' | 'DESC'
 
@@ -78,6 +79,51 @@ export interface PromptGraphPayload {
     min_score: number
     min_shared_count: number
     min_usage_count: number
+    limit: number
+  }
+}
+
+export type PromptTaxonomyInferredType =
+  | 'quality'
+  | 'subject'
+  | 'count_or_composition'
+  | 'pose_or_action'
+  | 'body_or_expression'
+  | 'hair_or_face'
+  | 'clothing_or_accessory'
+  | 'background_or_setting'
+  | 'lighting_or_mood'
+  | 'style'
+  | 'artist_or_source'
+  | 'meta_or_technical'
+  | 'unknown'
+
+export type PromptTaxonomyRelationKind = 'same_family' | 'string_variant'
+
+export interface PromptTaxonomyNodeItem {
+  id: number
+  prompt: string
+  usage_count: number
+  group_id: number | null
+  inferred_type: PromptTaxonomyInferredType
+  cluster_id: string | null
+  canonical_prompt: string | null
+}
+
+export interface PromptTaxonomyEdgeItem {
+  source_prompt: string
+  target_prompt: string
+  relation_kind: PromptTaxonomyRelationKind
+  score: number
+}
+
+export interface PromptTaxonomyPayload {
+  nodes: PromptTaxonomyNodeItem[]
+  edges: PromptTaxonomyEdgeItem[]
+  filters: {
+    type: PromptTypeFilter
+    inferred_type: PromptTaxonomyInferredType | 'all'
+    min_score: number
     limit: number
   }
 }

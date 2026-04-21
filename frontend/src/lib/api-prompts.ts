@@ -12,8 +12,26 @@ import type {
   PromptSortBy,
   PromptSortOrder,
   PromptStatistics,
+  PromptTaxonomyInferredType,
+  PromptTaxonomyPayload,
   PromptTypeFilter,
 } from '@/types/prompt'
+
+const TAXONOMY_INFERRED_TYPE_VALUES = new Set<PromptTaxonomyInferredType>([
+  'quality',
+  'subject',
+  'count_or_composition',
+  'pose_or_action',
+  'body_or_expression',
+  'hair_or_face',
+  'clothing_or_accessory',
+  'background_or_setting',
+  'lighting_or_mood',
+  'style',
+  'artist_or_source',
+  'meta_or_technical',
+  'unknown',
+])
 
 function normalizePromptItem(item: PromptCollectionItem & { synonyms?: string[] | null; type?: string | null }): PromptCollectionItem {
   return {
@@ -354,6 +372,59 @@ export async function getPromptGraph(params?: {
   }
 }
 
+export async function getPromptTaxonomyGraph(params?: {
+  type?: PromptTypeFilter
+  inferredType?: PromptTaxonomyInferredType | 'all'
+  minScore?: number
+  limit?: number
+}) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('type', params?.type ?? 'positive')
+  searchParams.set('inferredType', params?.inferredType ?? 'all')
+  searchParams.set('minScore', String(params?.minScore ?? 0.58))
+  searchParams.set('limit', String(params?.limit ?? 180))
+
+  const response = await fetchJson<ApiResponse<PromptTaxonomyPayload>>(`/api/prompt-collection/taxonomy-graph?${searchParams.toString()}`)
+  if (!response.success) {
+    throw new Error(response.error || '프롬프트 taxonomy 그래프를 불러오지 못했어.')
+  }
+
+  const normalizedType: PromptTypeFilter = response.data.filters.type === 'negative' || response.data.filters.type === 'auto'
+    ? response.data.filters.type
+    : 'positive'
+  const normalizedInferredType: PromptTaxonomyInferredType | 'all' = TAXONOMY_INFERRED_TYPE_VALUES.has(response.data.filters.inferred_type as PromptTaxonomyInferredType)
+    ? response.data.filters.inferred_type as PromptTaxonomyInferredType
+    : 'all'
+
+  return {
+    ...response.data,
+    nodes: response.data.nodes.map((node) => ({
+      ...node,
+      id: Number(node.id),
+      prompt: String(node.prompt),
+      usage_count: Number(node.usage_count ?? 0),
+      group_id: node.group_id ?? null,
+      inferred_type: node.inferred_type,
+      cluster_id: node.cluster_id ?? null,
+      canonical_prompt: node.canonical_prompt ?? null,
+    })),
+    edges: response.data.edges.map((edge) => ({
+      ...edge,
+      source_prompt: String(edge.source_prompt),
+      target_prompt: String(edge.target_prompt),
+      relation_kind: edge.relation_kind,
+      score: Number(edge.score ?? 0),
+    })),
+    filters: {
+      ...response.data.filters,
+      type: normalizedType,
+      inferred_type: normalizedInferredType,
+      min_score: Number(response.data.filters.min_score ?? 0),
+      limit: Number(response.data.filters.limit ?? 0),
+    },
+  }
+}
+
 export async function rebuildPromptRelations() {
   const response = await fetchJson<ApiResponse<{ processed: number; updated: number; cleared: number; message: string }>>('/api/prompt-collection/rebuild-relations', {
     method: 'POST',
@@ -361,6 +432,18 @@ export async function rebuildPromptRelations() {
 
   if (!response.success) {
     throw new Error(response.error || '프롬프트 관계 재구축에 실패했어.')
+  }
+
+  return response.data
+}
+
+export async function rebuildPromptTaxonomy() {
+  const response = await fetchJson<ApiResponse<{ processed: number; nodes: number; clusters: number; relations: number; message: string }>>('/api/prompt-collection/rebuild-taxonomy', {
+    method: 'POST',
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '프롬프트 taxonomy 재구축에 실패했어.')
   }
 
   return response.data

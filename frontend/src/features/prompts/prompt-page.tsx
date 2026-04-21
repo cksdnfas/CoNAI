@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { PageHeader } from '@/components/common/page-header'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { exportPromptGroups } from '@/lib/api'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import type { PromptCollectionItem, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
+import type { PromptCollectionItem, PromptGraphMode, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTaxonomyInferredType, PromptTypeFilter } from '@/types/prompt'
 import { PromptCollectModal } from './components/prompt-collect-modal'
 import { PromptGroupAssignModal } from './components/prompt-group-assign-modal'
 import { PromptGraphPanel } from './components/prompt-graph-panel'
 import { PromptGroupEditorModal } from './components/prompt-group-editor-modal'
 import { PromptListPanel } from './components/prompt-list-panel'
 import { PromptRelatedPanel } from './components/prompt-related-panel'
+import { PromptTaxonomyGraphPanel } from './components/prompt-taxonomy-graph-panel'
 import { PromptSelectionBar } from './components/prompt-selection-bar'
 import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
@@ -41,6 +43,11 @@ const PROMPT_PAGE_TABS: Array<{ value: PromptPageTopTab; label: string }> = [
   { value: 'graph', label: 'Graph' },
 ]
 
+const PROMPT_GRAPH_MODE_ITEMS: Array<{ value: PromptGraphMode; label: string }> = [
+  { value: 'usage', label: 'Usage' },
+  { value: 'taxonomy', label: 'Taxonomy' },
+]
+
 export function PromptPage() {
   const { showSnackbar } = useSnackbar()
   const importInputRef = useRef<HTMLInputElement | null>(null)
@@ -60,8 +67,11 @@ export function PromptPage() {
   const [page, setPage] = useState(1)
   const [selectedPromptIds, setSelectedPromptIds] = useState<number[]>([])
   const [activePrompt, setActivePrompt] = useState<{ prompt: string; type: PromptTypeFilter } | null>(null)
+  const [graphMode, setGraphMode] = useState<PromptGraphMode>('usage')
   const [graphDraftFilters, setGraphDraftFilters] = useState({ type: 'positive' as PromptTypeFilter, minScore: 55, minSharedCount: 3, minUsageCount: 2, limit: 180 })
   const [graphFilters, setGraphFilters] = useState({ type: 'positive' as PromptTypeFilter, minScore: 55, minSharedCount: 3, minUsageCount: 2, limit: 180 })
+  const [taxonomyGraphDraftFilters, setTaxonomyGraphDraftFilters] = useState({ type: 'positive' as PromptTypeFilter, inferredType: 'all' as PromptTaxonomyInferredType | 'all', minScore: 0.58, limit: 180 })
+  const [taxonomyGraphFilters, setTaxonomyGraphFilters] = useState({ type: 'positive' as PromptTypeFilter, inferredType: 'all' as PromptTaxonomyInferredType | 'all', minScore: 0.58, limit: 180 })
   const [assignModalState, setAssignModalState] = useState<AssignModalState>(null)
   const [groupEditorState, setGroupEditorState] = useState<GroupEditorState>(null)
 
@@ -73,6 +83,7 @@ export function PromptPage() {
     promptSearchQuery,
     relatedPromptsQuery,
     promptGraphQuery,
+    promptTaxonomyGraphQuery,
     selectedGroup,
     siblingGroups,
     totalCount,
@@ -84,8 +95,10 @@ export function PromptPage() {
     sortBy,
     sortOrder,
     activePrompt,
-    graphEnabled: activeTopTab === 'graph',
+    graphEnabled: activeTopTab === 'graph' && graphMode === 'usage',
     graphFilters,
+    taxonomyGraphEnabled: activeTopTab === 'graph' && graphMode === 'taxonomy',
+    taxonomyGraphFilters,
   })
 
   const isSelectedGroupLocked = isLockedPromptGroup(selectedGroup)
@@ -123,6 +136,7 @@ export function PromptPage() {
     deletePromptMutation,
     collectPromptsMutation,
     rebuildPromptRelationsMutation,
+    rebuildPromptTaxonomyMutation,
   } = usePromptPageMutations({
     promptType,
     onInfo: (message) => showSnackbar({ message, tone: 'info' }),
@@ -200,6 +214,8 @@ export function PromptPage() {
     if (nextTab === 'graph') {
       setGraphDraftFilters((current) => ({ ...current, type: promptType }))
       setGraphFilters((current) => ({ ...current, type: promptType }))
+      setTaxonomyGraphDraftFilters((current) => ({ ...current, type: promptType }))
+      setTaxonomyGraphFilters((current) => ({ ...current, type: promptType }))
       return
     }
 
@@ -215,6 +231,10 @@ export function PromptPage() {
 
   const handleApplyGraphFilters = () => {
     setGraphFilters(graphDraftFilters)
+  }
+
+  const handleApplyTaxonomyGraphFilters = () => {
+    setTaxonomyGraphFilters(taxonomyGraphDraftFilters)
   }
 
   const handleTogglePromptSelection = (promptId: number, checked: boolean) => {
@@ -370,24 +390,53 @@ export function PromptPage() {
       />
 
       {activeTopTab === 'graph' ? (
-        <PromptGraphPanel
-          data={promptGraphQuery.data}
-          draftFilters={graphDraftFilters}
-          isLoading={promptGraphQuery.isLoading}
-          isFetching={promptGraphQuery.isFetching}
-          isError={promptGraphQuery.isError}
-          errorMessage={promptGraphQuery.error instanceof Error ? promptGraphQuery.error.message : null}
-          isRebuilding={rebuildPromptRelationsMutation.isPending}
-          onDraftFiltersChange={(patch) => setGraphDraftFilters((current) => ({ ...current, ...patch }))}
-          onApplyFilters={handleApplyGraphFilters}
-          onRebuild={() => {
-            void rebuildPromptRelationsMutation.mutateAsync()
-              .then(() => {
-                void promptGraphQuery.refetch()
-              })
-              .catch(() => undefined)
-          }}
-        />
+        <div className="space-y-4">
+          <SegmentedControl
+            value={graphMode}
+            items={PROMPT_GRAPH_MODE_ITEMS}
+            onChange={(value) => setGraphMode(value as PromptGraphMode)}
+          />
+
+          {graphMode === 'usage' ? (
+            <PromptGraphPanel
+              data={promptGraphQuery.data}
+              draftFilters={graphDraftFilters}
+              isLoading={promptGraphQuery.isLoading}
+              isFetching={promptGraphQuery.isFetching}
+              isError={promptGraphQuery.isError}
+              errorMessage={promptGraphQuery.error instanceof Error ? promptGraphQuery.error.message : null}
+              isRebuilding={rebuildPromptRelationsMutation.isPending}
+              onDraftFiltersChange={(patch) => setGraphDraftFilters((current) => ({ ...current, ...patch }))}
+              onApplyFilters={handleApplyGraphFilters}
+              onRebuild={() => {
+                void rebuildPromptRelationsMutation.mutateAsync()
+                  .then(() => {
+                    void promptGraphQuery.refetch()
+                  })
+                  .catch(() => undefined)
+              }}
+            />
+          ) : (
+            <PromptTaxonomyGraphPanel
+              data={promptTaxonomyGraphQuery.data}
+              draftFilters={taxonomyGraphDraftFilters}
+              isLoading={promptTaxonomyGraphQuery.isLoading}
+              isFetching={promptTaxonomyGraphQuery.isFetching}
+              isError={promptTaxonomyGraphQuery.isError}
+              errorMessage={promptTaxonomyGraphQuery.error instanceof Error ? promptTaxonomyGraphQuery.error.message : null}
+              isRebuilding={rebuildPromptTaxonomyMutation.isPending}
+              onDraftFiltersChange={(patch) => setTaxonomyGraphDraftFilters((current) => ({ ...current, ...patch }))}
+              onApplyFilters={handleApplyTaxonomyGraphFilters}
+              onRebuild={() => {
+                void rebuildPromptTaxonomyMutation.mutateAsync()
+                  .then(() => {
+                    void promptTaxonomyGraphQuery.refetch()
+                  })
+                  .catch(() => undefined)
+              }}
+            />
+          )}
+        </div>
       ) : (
         <>
           <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>

@@ -1,13 +1,13 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getPromptGraph, getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getRelatedPrompts, getTopPrompts, searchPromptCollection } from '@/lib/api'
-import type { PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
+import { getPromptGraph, getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getPromptTaxonomyGraph, getRelatedPrompts, getTopPrompts, searchPromptCollection } from '@/lib/api'
+import type { PromptSortBy, PromptSortOrder, PromptTaxonomyInferredType, PromptTypeFilter } from '@/types/prompt'
+import { getPromptTypeTotal, getSortedSiblingGroups } from './prompt-page-utils'
 
 interface ActivePromptParams {
   prompt: string
   type: PromptTypeFilter
 }
-import { getPromptTypeTotal, getSortedSiblingGroups } from './prompt-page-utils'
 
 interface UsePromptPageQueriesParams {
   promptType: PromptTypeFilter
@@ -25,9 +25,16 @@ interface UsePromptPageQueriesParams {
     minUsageCount: number
     limit: number
   }
+  taxonomyGraphEnabled?: boolean
+  taxonomyGraphFilters?: {
+    type: PromptTypeFilter
+    inferredType: PromptTaxonomyInferredType | 'all'
+    minScore: number
+    limit: number
+  }
 }
 
-export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder, activePrompt, graphEnabled = false, graphFilters }: UsePromptPageQueriesParams) {
+export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder, activePrompt, graphEnabled = false, graphFilters, taxonomyGraphEnabled = false, taxonomyGraphFilters }: UsePromptPageQueriesParams) {
   const groupsQuery = useQuery({
     queryKey: ['prompt-groups', promptType],
     queryFn: () => getPromptGroups(promptType),
@@ -84,6 +91,17 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
     enabled: graphEnabled,
   })
 
+  const promptTaxonomyGraphQuery = useQuery({
+    queryKey: ['prompt-taxonomy-graph', taxonomyGraphFilters?.type ?? 'positive', taxonomyGraphFilters?.inferredType ?? 'all', taxonomyGraphFilters?.minScore ?? 0.58, taxonomyGraphFilters?.limit ?? 180],
+    queryFn: () => getPromptTaxonomyGraph({
+      type: taxonomyGraphFilters?.type ?? 'positive',
+      inferredType: taxonomyGraphFilters?.inferredType ?? 'all',
+      minScore: taxonomyGraphFilters?.minScore ?? 0.58,
+      limit: taxonomyGraphFilters?.limit ?? 180,
+    }),
+    enabled: taxonomyGraphEnabled,
+  })
+
   const selectedGroup = useMemo(
     () => (groupsQuery.data ?? []).find((group) => group.id === selectedGroupId) ?? null,
     [groupsQuery.data, selectedGroupId],
@@ -107,6 +125,7 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
     promptSearchQuery,
     relatedPromptsQuery,
     promptGraphQuery,
+    promptTaxonomyGraphQuery,
     selectedGroup,
     siblingGroups,
     totalCount,
