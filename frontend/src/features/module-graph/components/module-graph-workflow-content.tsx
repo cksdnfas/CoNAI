@@ -175,7 +175,7 @@ export function ModuleGraphWorkflowEditorContent({
       hasSelectedNode={Boolean(selectedNode)}
       hasSelectedEdge={Boolean(selectedEdge)}
       isEditorSupportOpen={isEditorSupportOpen}
-      editorSupportTitle="Execution Results"
+      editorSupportTitle="Inspector & Results"
       editorSupportSubtitle={editorSupportSubtitle}
       workflowEditorSupportPanels={workflowEditorSupportPanels}
       workflowSaveModal={workflowSaveModal}

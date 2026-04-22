@@ -42,6 +42,9 @@ export function useModuleGraphPageEditorPanels({
   nodes,
   edges,
   selectedGraphId,
+  selectedNode,
+  selectedEdge,
+  highlightedPortKey = null,
   workflowName,
   workflowDescription,
   isDirty,
@@ -81,6 +84,9 @@ export function useModuleGraphPageEditorPanels({
   onSaveGraph,
   setEditorSupportSectionRef,
   onNodeLabelChange,
+  onExecuteSelectedNode,
+  onForceExecuteSelectedNode,
+  executeSelectedNodeDisabled = false,
   onNodeValueChange,
   onNodeValueClear,
   onNodeImageChange,
@@ -116,6 +122,9 @@ export function useModuleGraphPageEditorPanels({
   nodes: ModuleGraphNode[]
   edges: ModuleGraphEdge[]
   selectedGraphId: number | null
+  selectedNode: ModuleGraphNode | null
+  selectedEdge: ModuleGraphEdge | null
+  highlightedPortKey?: string | null
   workflowName: string
   workflowDescription: string
   isDirty: boolean
@@ -155,6 +164,9 @@ export function useModuleGraphPageEditorPanels({
   onSaveGraph: () => Promise<boolean>
   setEditorSupportSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
   onNodeLabelChange: (nodeId: string, label: string) => void
+  onExecuteSelectedNode?: () => void
+  onForceExecuteSelectedNode?: () => void
+  executeSelectedNodeDisabled?: boolean
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => void
@@ -273,7 +285,18 @@ export function useModuleGraphPageEditorPanels({
       executionDetailError={executionDetailError}
       executionDetailIsError={executionDetailIsError}
       selectedExecutionStatus={selectedExecutionStatus}
+      nodes={nodes}
+      selectedNode={selectedNode}
+      selectedEdge={selectedEdge}
+      highlightedPortKey={highlightedPortKey}
       setSectionRef={setEditorSupportSectionRef}
+      onNodeLabelChange={onNodeLabelChange}
+      onNodeValueChange={onNodeValueChange}
+      onNodeValueClear={onNodeValueClear}
+      onNodeImageChange={onNodeImageChange}
+      onExecuteSelectedNode={onExecuteSelectedNode}
+      onForceExecuteSelectedNode={onForceExecuteSelectedNode}
+      executeSelectedNodeDisabled={executeSelectedNodeDisabled}
       onSelectExecution={onSelectExecution}
       onRerunGraph={onRerunSelectedGraph}
       onRetryExecution={onRetrySelectedExecution}

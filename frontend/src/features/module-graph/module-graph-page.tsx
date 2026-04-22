@@ -63,6 +63,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     setSelectedNodeId,
     selectedEdgeId,
     setSelectedEdgeId,
+    selectedValidationPortKey,
     setSelectedValidationPortKey,
     lastSavedSnapshot,
     setLastSavedSnapshot,
@@ -344,6 +345,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     nodes,
     edges,
     selectedGraphId,
+    selectedNode,
+    selectedEdge,
+    highlightedPortKey: selectedValidationPortKey,
     workflowName,
     workflowDescription,
     isDirty,
@@ -383,6 +387,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     onSaveGraph: handleSaveGraph,
     setEditorSupportSectionRef,
     onNodeLabelChange: handleNodeLabelChange,
+    onExecuteSelectedNode: selectedNode ? () => void handleExecuteNodeById(selectedNode.id, false) : undefined,
+    onForceExecuteSelectedNode: selectedNode ? () => void handleExecuteNodeById(selectedNode.id, true) : undefined,
+    executeSelectedNodeDisabled: executingGraphId !== null || selectedNode === null,
     onNodeValueChange: handleNodeValueChange,
     onNodeValueClear: handleNodeValueClear,
     onNodeImageChange: handleNodeImageChange,
@@ -492,7 +499,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             onRemoveSelectedNode={handleRemoveSelectedNode}
             onRemoveSelectedEdge={handleRemoveSelectedEdge}
             onResetCanvas={handleResetCanvas}
-            onOpenEditorSupport={() => openEditorSupport('results')}
+            onOpenEditorSupport={() => openEditorSupport(selectedNode || selectedEdge ? 'inspector' : 'results')}
             onCloseEditorSupport={closeEditorSupport}
           />
         </Suspense>

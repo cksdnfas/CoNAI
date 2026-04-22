@@ -184,6 +184,7 @@ export class GraphWorkflowExecutor {
       workflow,
       modulesById,
       artifactsByNode: reusedArtifacts.artifactsByNode,
+      shouldCancel: options?.shouldCancel,
     }
 
     try {

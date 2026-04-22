@@ -36,6 +36,7 @@ export type ExecutionContext = {
   workflow: ParsedGraphWorkflow
   modulesById: Map<number, ParsedModuleDefinition>
   artifactsByNode: Map<string, Record<string, RuntimeArtifact>>
+  shouldCancel?: () => boolean
 }
 
 /** Persist a structured execution log row for graph runs. */

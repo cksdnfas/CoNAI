@@ -14,6 +14,7 @@ import { executeNaiGeneration } from './naiGenerationExecutor'
 import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser'
 import { reconcileComfyModelSelectionValues } from './comfyModelSelectionResolver'
 import { getComfyRequestDebugRelativePath, writeComfyRequestDebugSnapshot, type ComfyRequestDebugSnapshot } from './generationRequestDebugService'
+import { FileDiscoveryService } from './folderScan/fileDiscoveryService'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type { NAIMetadataInputParams } from '../utils/nai/metadata'
@@ -73,7 +74,8 @@ function parseNaiQueuePayload(record: GenerationQueueJobRecord) {
 
 function updateQueueRequestDebugMeta(record: GenerationQueueJobRecord, meta: Record<string, unknown>) {
   try {
-    const payload = parseStoredRequestPayload(record)
+    const latestRecord = GenerationQueueModel.findById(record.id) ?? record
+    const payload = parseStoredRequestPayload(latestRecord)
     const currentDebug = payload._debug && typeof payload._debug === 'object' && !Array.isArray(payload._debug)
       ? payload._debug as Record<string, unknown>
       : {}
@@ -590,6 +592,15 @@ export class GenerationQueueService {
       console.error(`⚠️ Failed to create ComfyUI queue history for job ${job.id}:`, historyError)
     }
 
+    updateQueueRequestDebugMeta(job, {
+      history_id: historyId ?? null,
+      workflow_id: workflow.id,
+      workflow_name: workflow.name,
+      server_id: assignedServer?.id ?? job.assigned_server_id ?? null,
+      server_name: assignedServer?.name ?? null,
+      endpoint: apiEndpoint,
+    })
+
     const debugSnapshotBase = {
       service_type: 'comfyui' as const,
       queue_job_id: job.id,
@@ -654,6 +665,17 @@ export class GenerationQueueService {
         })
         GenerationHistoryModel.updateStatus(historyId, 'completed')
       }
+
+      updateQueueRequestDebugMeta(job, {
+        history_id: historyId ?? null,
+        result_prompt_id: result.promptId,
+        result_composite_hash: result.representativeImage.compositeHash,
+        result_original_path: result.representativeImage.originalPath,
+        result_file_size: result.representativeImage.fileSize,
+        result_mime_type: FileDiscoveryService.getMimeType(result.representativeImage.originalPath),
+        attempted_image_count: result.attemptedImageCount,
+        saved_image_count: result.savedImageCount,
+      })
 
       await writeQueueComfyDebugSnapshot(job, {
         ...debugSnapshotBase,

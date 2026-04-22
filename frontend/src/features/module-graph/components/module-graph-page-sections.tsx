@@ -7,8 +7,10 @@ import type { SelectedImageDraft } from '@/features/image-generation/image-gener
 import type { EditorSupportSectionKey } from './module-workflow-editor-support-panel'
 import { GraphExecutionPanel } from './graph-execution-panel'
 import { ModuleWorkflowEditorSupportPanel } from './module-workflow-editor-support-panel'
+import { NodeInspectorPanel } from './node-inspector-panel'
 import { WorkflowRunnerPanel } from './workflow-runner-panel'
 import { type WorkflowValidationIssue } from './workflow-validation-panel'
+import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
 
 export { ModuleGraphWorkflowListSidebar } from './module-graph-workflow-list-sidebar'
 export { ModuleGraphWorkflowBrowseContent, ModuleGraphWorkflowEditorContent } from './module-graph-workflow-content'
@@ -131,7 +133,7 @@ export function ModuleGraphWorkflowBrowseSidePanel({
   )
 }
 
-/** Render the execution-results-only support content for the workflow editor drawer. */
+/** Render node inspector and execution support content for the workflow editor drawer. */
 export function ModuleGraphWorkflowEditorSupportPanels({
   selectedGraphId,
   selectedGraphRecord,
@@ -145,7 +147,18 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   executionDetailError,
   executionDetailIsError,
   selectedExecutionStatus,
+  nodes,
+  selectedNode,
+  selectedEdge,
+  highlightedPortKey,
   setSectionRef,
+  onNodeLabelChange,
+  onNodeValueChange,
+  onNodeValueClear,
+  onNodeImageChange,
+  onExecuteSelectedNode,
+  onForceExecuteSelectedNode,
+  executeSelectedNodeDisabled,
   onSelectExecution,
   onRerunGraph,
   onRetryExecution,
@@ -163,7 +176,18 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   executionDetailError: string
   executionDetailIsError: boolean
   selectedExecutionStatus: GraphExecutionRecord['status'] | null
+  nodes: ModuleGraphNode[]
+  selectedNode: ModuleGraphNode | null
+  selectedEdge: ModuleGraphEdge | null
+  highlightedPortKey?: string | null
   setSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
+  onNodeLabelChange: (nodeId: string, label: string) => void
+  onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
+  onNodeValueClear: (nodeId: string, portKey: string) => void
+  onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void
+  onExecuteSelectedNode?: () => void
+  onForceExecuteSelectedNode?: () => void
+  executeSelectedNodeDisabled?: boolean
   onSelectExecution: (executionId: number | null) => void
   onRerunGraph: () => void
   onRetryExecution: () => void
@@ -172,6 +196,24 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   return (
     <ModuleWorkflowEditorSupportPanel
       setSectionRef={setSectionRef}
+      inspectorPanel={
+        <NodeInspectorPanel
+          nodes={nodes}
+          selectedNode={selectedNode}
+          selectedEdge={selectedEdge}
+          selectedExecutionId={selectedExecutionId}
+          selectedExecutionArtifacts={executionDetail?.artifacts}
+          onNodeLabelChange={onNodeLabelChange}
+          onNodeValueChange={onNodeValueChange}
+          onNodeValueClear={onNodeValueClear}
+          onNodeImageChange={onNodeImageChange}
+          onExecuteSelectedNode={onExecuteSelectedNode}
+          onForceExecuteSelectedNode={onForceExecuteSelectedNode}
+          executeSelectedNodeDisabled={executeSelectedNodeDisabled}
+          highlightedPortKey={highlightedPortKey ?? null}
+          showHeader={false}
+        />
+      }
       resultsPanel={
         <GraphExecutionPanel
           selectedGraphId={selectedGraphId}
