@@ -62,6 +62,29 @@ router.put(
     // Validate language if provided
     if (!validateStringEnumIfDefined(res, generalSettings.language, validLanguages, `Invalid language. Must be one of: ${validLanguages.join(', ')}`)) return;
 
+    if (generalSettings.deleteProtection !== undefined) {
+      if (generalSettings.deleteProtection && typeof generalSettings.deleteProtection !== 'object') {
+        sendRouteBadRequest(res, 'deleteProtection must be an object');
+        return;
+      }
+
+      if (
+        generalSettings.deleteProtection?.enabled !== undefined
+        && typeof generalSettings.deleteProtection.enabled !== 'boolean'
+      ) {
+        sendRouteBadRequest(res, 'deleteProtection.enabled must be a boolean');
+        return;
+      }
+
+      if (
+        generalSettings.deleteProtection?.recycleBinPath !== undefined
+        && (typeof generalSettings.deleteProtection.recycleBinPath !== 'string' || generalSettings.deleteProtection.recycleBinPath.trim().length === 0)
+      ) {
+        sendRouteBadRequest(res, 'deleteProtection.recycleBinPath must be a non-empty string');
+        return;
+      }
+    }
+
     // Update settings
     const updatedSettings = settingsService.updateGeneralSettings(generalSettings);
 

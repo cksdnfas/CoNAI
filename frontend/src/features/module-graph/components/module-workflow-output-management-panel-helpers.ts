@@ -10,6 +10,7 @@ import { buildArtifactTextPreview, getArtifactPreviewUrl, parseMetadataValue } f
 
 export type ModuleWorkflowGeneratedOutputItem = {
   id: string
+  sourceArtifactId: number
   type: string
   mimeType: string | null
   previewUrl: string | null
@@ -206,6 +207,7 @@ export function buildModuleWorkflowOutputCollections({
       const label = getArtifactLabel(result)
       return {
         id: `final-${result.id}`,
+        sourceArtifactId: result.source_artifact_id,
         type: result.artifact_type,
         mimeType: resolveArtifactMimeType(result),
         previewUrl: downloadUrl,
@@ -225,6 +227,7 @@ export function buildModuleWorkflowOutputCollections({
       const label = getArtifactLabel(artifact)
       return {
         id: `artifact-${artifact.id}`,
+        sourceArtifactId: artifact.id,
         type: artifact.artifact_type,
         mimeType: resolveArtifactMimeType(artifact),
         previewUrl: downloadUrl,

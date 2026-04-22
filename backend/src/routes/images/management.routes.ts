@@ -69,13 +69,26 @@ router.patch('/:compositeHash/metadata', asyncHandler(async (req: Request, res: 
 }));
 
 /**
+ * 다중 이미지 삭제 (composite_hash 기반)
+ * DELETE /api/images/bulk
+ *
+ * Body: { compositeHashes: string[] }
+ */
+router.delete('/bulk', asyncHandler(async (req: Request, res: Response) => {
+  const { compositeHashes } = req.body as { compositeHashes: string[] };
+
+  if (!Array.isArray(compositeHashes) || compositeHashes.length === 0) {
+    return res.status(400).json(errorResponse('compositeHashes array is required'));
+  }
+
+  const result = await ImageManagementService.deleteImagesBulk(compositeHashes);
+
+  return res.json(successResponse(result));
+}));
+
+/**
  * 이미지 삭제 (composite_hash 기반, 통합 삭제 서비스 사용)
  * DELETE /api/images/:compositeHash
- *
- * 삭제 전략:
- * - composite_hash 중복 시: image_files 테이블에서만 삭제
- * - composite_hash 단일 시: 파일 + 메타데이터 모두 삭제
- * - RecycleBin 설정에 따라 파일 보호 또는 완전 삭제
  */
 router.delete('/:compositeHash', asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = routeParam(req.params.compositeHash);

@@ -3,6 +3,7 @@ import type { ApiResponse } from '@/types/image'
 import type {
   AppearanceSettings,
   AppSettings,
+  GeneralSettings,
   ImageSaveSettings,
   KaloscopeServerStatus,
   KaloscopeSettings,
@@ -146,6 +147,22 @@ export async function runFileVerification() {
   }
 
   return response.result
+}
+
+export async function updateGeneralSettings(settings: Partial<GeneralSettings>) {
+  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/general', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '일반 설정을 저장하지 못했어.')
+  }
+
+  return response.data
 }
 
 export async function updateMetadataSettings(settings: Partial<MetadataExtractionSettings>) {

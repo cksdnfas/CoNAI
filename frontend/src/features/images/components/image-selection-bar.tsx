@@ -13,6 +13,7 @@ interface ImageSelectionBarProps {
   showDownloadAction?: boolean
   statusText?: ReactNode
   extraActions?: ReactNode
+  trailingActions?: ReactNode
   onDownload?: () => void
   onDownloadSelect?: (type: ImageDownloadType) => Promise<void> | void
   onClear?: () => void
@@ -26,6 +27,7 @@ export function ImageSelectionBar({
   showDownloadAction = true,
   statusText,
   extraActions,
+  trailingActions,
   onDownload,
   onDownloadSelect,
   onClear,
@@ -83,6 +85,8 @@ export function ImageSelectionBar({
               ) : null}
             </span>
           ) : null}
+
+          {trailingActions}
         </>
       )}
     />

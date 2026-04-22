@@ -17,6 +17,10 @@ export function applyGeneralSettingsUpdate(currentSettings: AppSettings, general
     general: {
       ...currentSettings.general,
       ...generalSettings,
+      deleteProtection: {
+        ...currentSettings.general.deleteProtection,
+        ...generalSettings.deleteProtection,
+      },
     },
   };
 }

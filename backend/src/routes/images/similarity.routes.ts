@@ -342,61 +342,6 @@ router.post('/similarity/rebuild-hashes', asyncHandler(async (req: Request, res:
 }));
 
 /**
- * DELETE /api/images/files/bulk
- * 개별 파일 삭제 (file_id 기반)
- * 중복 이미지에서 특정 파일만 선택적으로 삭제할 때 사용
- *
- * RecycleBin 설정을 준수하며, 물리적 파일과 DB 레코드를 모두 삭제합니다.
- */
-router.delete('/files/bulk', asyncHandler(async (req: Request, res: Response) => {
-  const { fileIds } = req.body;
-
-  if (!Array.isArray(fileIds) || fileIds.length === 0) {
-    sendRouteBadRequest(res, 'fileIds must be a non-empty array');
-    return;
-  }
-
-  // Validate all fileIds are numbers
-  const validFileIds = fileIds.filter(id => typeof id === 'number' && !isNaN(id));
-  if (validFileIds.length !== fileIds.length) {
-    sendRouteBadRequest(res, 'All fileIds must be valid numbers');
-    return;
-  }
-
-  const { DeletionService } = await import('../../services/deletionService');
-
-  const deletedFiles: number[] = [];
-  const failedFiles: Array<{ fileId: number; error: string }> = [];
-
-  console.log(`🗑️ Starting bulk file deletion: ${validFileIds.length} files`);
-
-  for (const fileId of validFileIds) {
-    try {
-      const success = await DeletionService.deleteImageFile(fileId);
-
-      if (success) {
-        deletedFiles.push(fileId);
-      } else {
-        failedFiles.push({ fileId, error: 'File not found' });
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`❌ Error deleting file_id ${fileId}:`, error);
-      failedFiles.push({ fileId, error: errorMessage });
-    }
-  }
-
-  console.log(`✅ Bulk deletion completed: ${deletedFiles.length} success, ${failedFiles.length} failed`);
-
-  return res.json(successResponse({
-    message: `Deleted ${deletedFiles.length} files${failedFiles.length > 0 ? `, ${failedFiles.length} failed` : ''}`,
-    deletedFiles,
-    failedFiles: failedFiles.length > 0 ? failedFiles : undefined,
-    total: fileIds.length
-  }));
-}));
-
-/**
  * GET /api/images/similarity/stats
  * 유사도 검색 통계 (image_files 테이블 기반)
  */

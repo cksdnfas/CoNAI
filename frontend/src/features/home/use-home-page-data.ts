@@ -6,7 +6,7 @@ import { useHomeSearch } from '@/features/home/home-search-context'
 import { buildComplexFilterPayload } from '@/features/search/search-utils'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
-import { addImagesToGroup, downloadImageSelection, getGroupsHierarchyAll, getImages, searchImagesComplex } from '@/lib/api'
+import { addImagesToGroup, deleteImagesBulk, downloadImageSelection, getGroupsHierarchyAll, getImages, searchImagesComplex } from '@/lib/api'
 
 interface UseHomePageDataOptions {
   /** Show a success/info snackbar for Home page actions. */
@@ -22,6 +22,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const { appliedChips } = useHomeSearch()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [isDownloading, setIsDownloading] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
 
   const canViewHome = hasAuthPermission(authStatusQuery.data?.permissionKeys, 'page.home.view')
@@ -144,6 +145,36 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     }
   }
 
+  const handleDeleteSelected = async () => {
+    if (selectedCompositeHashes.length === 0 || isDeleting) {
+      return
+    }
+
+    const confirmed = window.confirm(`선택한 ${selectedCompositeHashes.length.toLocaleString('ko-KR')}개 항목을 휴지통으로 보낼까?`)
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      const result = await deleteImagesBulk(selectedCompositeHashes)
+      setSelectedIds([])
+      notifyInfo(result.details.failed > 0
+        ? `${result.details.deleted.toLocaleString('ko-KR')}개 삭제, ${result.details.failed.toLocaleString('ko-KR')}개 실패했어.`
+        : `${result.details.deleted.toLocaleString('ko-KR')}개를 RecycleBin으로 보냈어.`)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['home-images'] }),
+        queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
+      ])
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : '선택 항목 삭제에 실패했어.')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const handleOpenAssignModal = () => {
     if (selectedCompositeHashes.length === 0) {
       return
@@ -188,6 +219,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     setSelectedIds,
     selectedCompositeHashes,
     isDownloading,
+    isDeleting,
     isAssignModalOpen,
     setIsAssignModalOpen,
     emptyStateTitle,
@@ -197,6 +229,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     handleRetryInitialLoad,
     handleRetryNextPage,
     handleDownloadSelected,
+    handleDeleteSelected,
     handleOpenAssignModal,
     handleAssignToGroup,
   }

@@ -1,4 +1,4 @@
-import { Download, FolderMinus, FolderPlus, Pencil, Play, RotateCcw } from 'lucide-react'
+import { Download, FolderMinus, FolderPlus, Pencil, Play, RotateCcw, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -91,6 +91,7 @@ export function GroupPage() {
     downloadGroupArchiveMutation,
     assignToGroupMutation,
     removeGroupImagesMutation,
+    deleteSelectedImagesMutation,
     handleOpenGroup,
     handleOpenRoot,
     handleSelectSource,
@@ -104,6 +105,7 @@ export function GroupPage() {
     handleOpenGroupDownloadModal,
     handleOpenSelectionDownloadModal,
     handleDownloadArchive,
+    handleDeleteSelectedImages,
     handleOpenAssignModal,
     handleAssignSelectedImages,
     handleRemoveSelectedImages,
@@ -356,6 +358,19 @@ export function GroupPage() {
               </Button>
             ) : null}
           </>
+        }
+        trailingActions={
+          <Button
+            size="icon-sm"
+            variant="destructive"
+            onClick={() => void handleDeleteSelectedImages()}
+            disabled={deleteSelectedImagesMutation.isPending || selectedGroupCompositeHashes.length === 0}
+            title={deleteSelectedImagesMutation.isPending ? '삭제 중' : '선택 삭제'}
+            aria-label={deleteSelectedImagesMutation.isPending ? '삭제 중' : '선택 삭제'}
+            data-no-select-drag="true"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         }
         onDownload={handleOpenSelectionDownloadModal}
         onClear={() => setSelectedGroupImageIds([])}

@@ -254,6 +254,7 @@ export interface GraphWorkflowArtifactDeleteResult {
   deleted_artifact_ids: number[]
   deleted_file_count: number
   skipped_files: Array<{ artifact_id: number; path: string; reason: string }>
+  execution_cleanup?: GraphWorkflowEmptyExecutionCleanupResult
 }
 
 export interface CreateNaiModuleFromSnapshotPayload {
@@ -646,6 +647,9 @@ export async function copyGraphWorkflowArtifactsToFolder(payload: {
 }) {
   const response = await requestJson<ApiEnvelope<GraphWorkflowArtifactCopyResult>>('/api/graph-workflows/artifacts/copy-to-folder', {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(payload),
   })
   return response.data
@@ -657,6 +661,9 @@ export async function cleanupGraphWorkflowEmptyExecutions(payload: {
 }) {
   const response = await requestJson<ApiEnvelope<GraphWorkflowEmptyExecutionCleanupResult>>('/api/graph-workflows/executions/cleanup-empty', {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(payload),
   })
   return response.data
@@ -668,6 +675,9 @@ export async function deleteGraphWorkflowArtifacts(payload: {
 }) {
   const response = await requestJson<ApiEnvelope<GraphWorkflowArtifactDeleteResult>>('/api/graph-workflows/artifacts/delete', {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(payload),
   })
   return response.data

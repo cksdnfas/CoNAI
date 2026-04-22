@@ -347,29 +347,29 @@ export function ModuleWorkflowOutputManagementPanel({
             ? `${downloadableSelectedItems.length.toLocaleString('ko-KR')}개 다운로드 가능`
             : '다운로드 가능 항목 없음'}
           extraActions={(
-            <>
-              <Button
-                size="icon-sm"
-                variant="destructive"
-                onClick={() => void handleDeleteSelectedOutputs()}
-                disabled={isDeletingOutputs || selectedOutputItems.length === 0}
-                title={isDeletingOutputs ? '삭제 중' : '선택 삭제'}
-                aria-label={isDeletingOutputs ? '삭제 중' : '선택 삭제'}
-                data-no-select-drag="true"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon-sm"
-                variant="secondary"
-                onClick={() => setIsCopyPanelOpen((current) => !current)}
-                title="폴더로 복사"
-                aria-label="폴더로 복사"
-                data-no-select-drag="true"
-              >
-                <CopyPlus className="h-4 w-4" />
-              </Button>
-            </>
+            <Button
+              size="icon-sm"
+              variant="secondary"
+              onClick={() => setIsCopyPanelOpen((current) => !current)}
+              title="폴더로 복사"
+              aria-label="폴더로 복사"
+              data-no-select-drag="true"
+            >
+              <CopyPlus className="h-4 w-4" />
+            </Button>
+          )}
+          trailingActions={(
+            <Button
+              size="icon-sm"
+              variant="destructive"
+              onClick={() => void handleDeleteSelectedOutputs()}
+              disabled={isDeletingOutputs || selectedOutputItems.length === 0}
+              title={isDeletingOutputs ? '삭제 중' : '선택 삭제'}
+              aria-label={isDeletingOutputs ? '삭제 중' : '선택 삭제'}
+              data-no-select-drag="true"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           )}
           onDownload={() => handleDownloadItems(downloadableSelectedItems)}
           onClear={() => setSelectedOutputIds([])}

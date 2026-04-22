@@ -1,4 +1,4 @@
-export type SettingsTab = 'folders' | 'appearance' | 'security' | 'auto' | 'metadata' | 'image-save'
+export type SettingsTab = 'general' | 'folders' | 'appearance' | 'security' | 'auto' | 'metadata' | 'image-save'
 
 export interface SettingsTabItem {
   value: SettingsTab
@@ -6,6 +6,7 @@ export interface SettingsTabItem {
 }
 
 export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
+  { value: 'general', label: '일반' },
   { value: 'folders', label: '감시 폴더' },
   { value: 'appearance', label: '외형' },
   { value: 'security', label: '보안' },

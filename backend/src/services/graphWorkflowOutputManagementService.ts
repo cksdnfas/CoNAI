@@ -5,6 +5,8 @@ import { GraphExecutionArtifactModel } from '../models/GraphExecutionArtifact'
 import { GraphExecutionFinalResultModel } from '../models/GraphExecutionFinalResult'
 import { GraphExecutionLogModel } from '../models/GraphExecutionLog'
 import { GraphExecutionModel } from '../models/GraphExecution'
+import { deleteFile as recycleBinDeleteFile } from '../utils/recycleBin'
+import { settingsService } from './settingsService'
 import { WatchedFolderService } from './watchedFolderService'
 import { decorateGraphExecutionRecord } from './graphWorkflowViewService'
 
@@ -85,10 +87,26 @@ export async function deleteGraphExecutionArtifacts(artifactIds: number[]) {
   const foundArtifactIds = new Set(artifacts.map((artifact) => artifact.id))
   const missing = artifactIds.filter((artifactId) => !foundArtifactIds.has(artifactId))
   const graphExecutionTempRoot = path.resolve(runtimePaths.tempDir, 'graph-executions')
+  const executionById = new Map(GraphExecutionModel.findByIds(Array.from(new Set(artifacts.map((artifact) => artifact.execution_id)))).map((execution) => [execution.id, execution]))
+  const settings = settingsService.loadSettings()
+  const useRecycleBin = settings.general.deleteProtection.enabled
   const deletedFiles: string[] = []
   const skippedFiles: Array<{ artifact_id: number; path: string; reason: string }> = []
+  const deletableArtifacts = artifacts.filter((artifact) => {
+    const execution = executionById.get(artifact.execution_id)
+    if (execution?.status === 'queued' || execution?.status === 'running') {
+      skippedFiles.push({
+        artifact_id: artifact.id,
+        path: artifact.storage_path ?? '',
+        reason: 'Artifact belongs to an active execution',
+      })
+      return false
+    }
 
-  for (const artifact of artifacts) {
+    return true
+  })
+
+  for (const artifact of deletableArtifacts) {
     if (!artifact.storage_path) {
       continue
     }
@@ -100,7 +118,7 @@ export async function deleteGraphExecutionArtifacts(artifactIds: number[]) {
     }
 
     try {
-      await fs.promises.unlink(resolvedPath)
+      await recycleBinDeleteFile(resolvedPath, useRecycleBin)
       deletedFiles.push(resolvedPath)
     } catch (error) {
       if ((error as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') {
@@ -109,16 +127,18 @@ export async function deleteGraphExecutionArtifacts(artifactIds: number[]) {
     }
   }
 
-  GraphExecutionFinalResultModel.deleteBySourceArtifactIds(artifacts.map((artifact) => artifact.id))
-  const deletedCount = GraphExecutionArtifactModel.deleteByIds(artifacts.map((artifact) => artifact.id))
+  GraphExecutionFinalResultModel.deleteBySourceArtifactIds(deletableArtifacts.map((artifact) => artifact.id))
+  const deletedCount = GraphExecutionArtifactModel.deleteByIds(deletableArtifacts.map((artifact) => artifact.id))
+  const executionCleanup = cleanupEmptyGraphExecutions(Array.from(new Set(deletableArtifacts.map((artifact) => artifact.execution_id))))
 
   return {
     requested_count: artifactIds.length,
     deleted_count: deletedCount,
     missing,
-    deleted_artifact_ids: artifacts.map((artifact) => artifact.id),
+    deleted_artifact_ids: deletableArtifacts.map((artifact) => artifact.id),
     deleted_file_count: deletedFiles.length,
     skipped_files: skippedFiles,
+    execution_cleanup: executionCleanup,
   }
 }
 

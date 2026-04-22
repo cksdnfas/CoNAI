@@ -200,12 +200,17 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       return
     }
 
+    const confirmed = window.confirm(`선택한 ${selectedHistoryRecords.length.toLocaleString('ko-KR')}개 결과를 휴지통으로 보내고 히스토리도 정리할까?`)
+    if (!confirmed) {
+      return
+    }
+
     try {
       setIsDeletingSelection(true)
-      await Promise.all(selectedHistoryRecords.map((record) => deleteGenerationHistoryRecord(record.id)))
+      await Promise.all(selectedHistoryRecords.map((record) => deleteGenerationHistoryRecord(record.id, true)))
       setSelectedHistoryIds([])
       await refetchHistory()
-      showSnackbar({ message: `${selectedHistoryRecords.length.toLocaleString('ko-KR')}개 히스토리를 삭제했어.`, tone: 'info' })
+      showSnackbar({ message: `${selectedHistoryRecords.length.toLocaleString('ko-KR')}개 결과를 RecycleBin으로 보냈어.`, tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, '히스토리 삭제에 실패했어.'), tone: 'error' })
     } finally {
@@ -376,7 +381,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         statusText={downloadableCompositeHashes.length > 0
           ? `${downloadableCompositeHashes.length.toLocaleString('ko-KR')}개 다운로드 가능`
           : '다운로드 가능한 결과가 없어'}
-        extraActions={!isPublicView ? (
+        trailingActions={!isPublicView ? (
           <Button
             size="icon-sm"
             onClick={() => void handleDeleteSelected()}

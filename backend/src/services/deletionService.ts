@@ -21,21 +21,6 @@ export class DeletionService {
   private static UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
 
   /**
-   * composite_hash 중복 여부 확인
-   *
-   * @param compositeHash - 확인할 composite_hash
-   * @returns true면 중복 존재 (2개 이상), false면 단일 파일
-   */
-  static async checkCompositeHashDuplication(compositeHash: string): Promise<boolean> {
-    const count = db.prepare(`
-      SELECT COUNT(*) as count FROM image_files
-      WHERE composite_hash = ? AND file_status = 'active'
-    `).get(compositeHash) as { count: number };
-
-    return count.count > 1;
-  }
-
-  /**
    * 파일 삭제 (RecycleBin 또는 완전 삭제)
    *
    * @param filePath - 삭제할 파일 경로 (상대 경로 또는 절대 경로)
@@ -90,10 +75,10 @@ export class DeletionService {
   }
 
   /**
-   * 이미지/비디오 삭제 (전략적 삭제 로직)
+   * 이미지/비디오 삭제
    *
-   * - composite_hash 중복 시: image_files 테이블에서만 삭제
-   * - composite_hash 단일 시: 파일 + media_metadata + image_files 모두 삭제
+   * - 연결된 원본 파일은 모두 RecycleBin(또는 즉시 삭제) 처리
+   * - image_files / media_metadata 관련 DB 레코드는 함께 정리
    *
    * @param compositeHash - 삭제할 composite_hash (이미지: 48자, 비디오: 32자)
    * @returns 삭제 성공 여부
@@ -120,99 +105,51 @@ export class DeletionService {
       console.warn(`⚠️ No active files found for composite_hash: ${compositeHash}`);
     }
 
-    // 4. 중복 검사
-    const isDuplicated = await this.checkCompositeHashDuplication(compositeHash);
     const settings = settingsService.loadSettings();
     const useRecycleBin = settings.general.deleteProtection.enabled;
 
     console.log(`🗑️ Deleting image ${compositeHash}:`, {
-      isDuplicated,
       useRecycleBin,
-      recycleBinPath: settings.general.deleteProtection.recycleBinPath,
-      fileCount: files.length
+      recycleBinPath: settings.general.deleteProtection.recycleBinPath || runtimePaths.recycleBinDir,
+      fileCount: files.length,
     });
 
-    if (isDuplicated) {
-      // ===== 중복 파일 존재: image_files 테이블에서만 삭제 =====
-      console.log('📋 Duplicate composite_hash detected - deleting only from image_files table');
+    // 4. 프롬프트 정리 (먼저 실행 - 실패해도 계속 진행)
+    await this.cleanupPromptCollection(
+      metadata.prompt || null,
+      metadata.negative_prompt || null,
+      metadata.character_prompt_text || null,
+      metadata.auto_tags || null,
+    );
 
-      // image_files 테이블에서 삭제
-      for (const file of files) {
-        db.prepare('DELETE FROM image_files WHERE id = ?').run(file.id);
-        console.log(`✅ Deleted image_file record: ${file.id} (${file.original_file_path})`);
+    // 5. 물리적 파일 삭제
+    // 원본 파일들 - RecycleBin 설정에 따라 백업 또는 삭제
+    for (const file of files) {
+      try {
+        await this.deletePhysicalFile(file.original_file_path, useRecycleBin);
+      } catch (error) {
+        console.warn(`⚠️ Failed to delete original file (continuing): ${file.original_file_path}`, error);
       }
-
-      // 삭제 후 남은 파일 확인
-      const remainingFiles = ImageFileModel.findActiveByHash(compositeHash);
-
-      if (remainingFiles.length === 0) {
-        // 모든 파일이 삭제되었으면 메타데이터와 썸네일도 삭제
-        console.log('⚠️ No remaining files after deletion - cleaning up metadata');
-
-        // 프롬프트 정리
-        await this.cleanupPromptCollection(
-          metadata.prompt || null,
-          metadata.negative_prompt || null,
-          metadata.character_prompt_text || null,
-          metadata.auto_tags || null,
-        );
-
-        // 썸네일 삭제
-        if (metadata.thumbnail_path) {
-          try {
-            await this.deletePhysicalFile(metadata.thumbnail_path, false);
-          } catch (error) {
-            console.warn(`⚠️ Failed to delete thumbnail: ${metadata.thumbnail_path}`, error);
-          }
-        }
-
-        // 메타데이터 삭제
-        MediaMetadataModel.delete(compositeHash);
-        console.log(`✅ Metadata cleaned up for ${compositeHash}`);
-      }
-
-      return true;
-    } else {
-      // ===== 단일 파일: 완전 삭제 =====
-      console.log('🗑️ Single composite_hash - performing full deletion');
-
-      // 5. 프롬프트 정리 (먼저 실행 - 실패해도 계속 진행)
-      await this.cleanupPromptCollection(
-        metadata.prompt || null,
-        metadata.negative_prompt || null,
-        metadata.character_prompt_text || null,
-        metadata.auto_tags || null,
-      );
-
-      // 6. 물리적 파일 삭제
-      // 원본 파일들 - RecycleBin 설정에 따라 백업 또는 삭제
-      for (const file of files) {
-        try {
-          await this.deletePhysicalFile(file.original_file_path, useRecycleBin);
-        } catch (error) {
-          console.warn(`⚠️ Failed to delete original file (continuing): ${file.original_file_path}`, error);
-        }
-      }
-
-      // 썸네일 파일 - 항상 즉시 삭제 (복구 시 자동 생성 가능)
-      if (metadata.thumbnail_path) {
-        try {
-          await this.deletePhysicalFile(metadata.thumbnail_path, false);
-        } catch (error) {
-          console.warn(`⚠️ Failed to delete thumbnail (continuing): ${metadata.thumbnail_path}`, error);
-        }
-      }
-
-      // 7. 데이터베이스 삭제 (CASCADE로 image_files 자동 삭제)
-      const deleted = MediaMetadataModel.delete(compositeHash);
-
-      if (!deleted) {
-        throw new Error('Failed to delete image from database');
-      }
-
-      console.log(`✅ Image ${compositeHash} deleted successfully`);
-      return true;
     }
+
+    // 썸네일 파일 - 항상 즉시 삭제 (복구 시 자동 생성 가능)
+    if (metadata.thumbnail_path) {
+      try {
+        await this.deletePhysicalFile(metadata.thumbnail_path, false);
+      } catch (error) {
+        console.warn(`⚠️ Failed to delete thumbnail (continuing): ${metadata.thumbnail_path}`, error);
+      }
+    }
+
+    // 6. 데이터베이스 삭제 (CASCADE로 image_files 자동 삭제)
+    const deleted = MediaMetadataModel.delete(compositeHash);
+
+    if (!deleted) {
+      throw new Error('Failed to delete image from database');
+    }
+
+    console.log(`✅ Image ${compositeHash} deleted successfully`);
+    return true;
   }
 
   /**

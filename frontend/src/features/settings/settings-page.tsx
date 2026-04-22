@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   getAppSettings,
+  updateGeneralSettings,
   updateImageSaveSettings,
   updateMetadataSettings,
   updateVideoOptimizationSettings,
@@ -14,6 +15,7 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import type {
+  GeneralSettings,
   ImageSaveSettings,
   MetadataExtractionSettings,
   VideoOptimizationSettings,
@@ -23,6 +25,11 @@ import type { SettingsTab } from './settings-tabs'
 import { useFolderSettingsTab } from './use-folder-settings-tab'
 import { useAppearanceSettingsTab } from './use-appearance-settings-tab'
 import { useAutoSettingsTab } from './use-auto-settings-tab'
+
+const GeneralTabLazy = lazy(async () => {
+  const module = await import('./components/general-tab')
+  return { default: module.GeneralTab }
+})
 
 const FoldersTabLazy = lazy(async () => {
   const module = await import('./components/folders-tab')
@@ -65,7 +72,8 @@ export function SettingsPage() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const authStatusQuery = useAuthStatusQuery()
-  const [activeTab, setActiveTab] = useState<SettingsTab>('folders')
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const [generalDraft, setGeneralDraft] = useState<GeneralSettings | null>(null)
   const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
   const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
   const [videoOptimizationDraft, setVideoOptimizationDraft] = useState<VideoOptimizationSettings | null>(null)
@@ -127,6 +135,18 @@ export function SettingsPage() {
     notifyError,
   })
 
+  const generalMutation = useMutation({
+    mutationFn: updateGeneralSettings,
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setGeneralDraft(settings.general)
+      notifyInfo('일반 설정을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '일반 설정 저장에 실패했어.')
+    },
+  })
+
   const metadataMutation = useMutation({
     mutationFn: updateMetadataSettings,
     onSuccess: (settings) => {
@@ -171,6 +191,24 @@ export function SettingsPage() {
     return <Navigate to="/" replace />
   }
 
+  const effectiveGeneralDraft = generalDraft ?? settingsQuery.data?.general ?? null
+
+  const patchGeneralDraft = (patch: Partial<GeneralSettings>) => {
+    if (!effectiveGeneralDraft) return
+    setGeneralDraft({ ...effectiveGeneralDraft, ...patch })
+  }
+
+  const patchDeleteProtectionDraft = (patch: Partial<GeneralSettings['deleteProtection']>) => {
+    if (!effectiveGeneralDraft) return
+    setGeneralDraft({
+      ...effectiveGeneralDraft,
+      deleteProtection: {
+        ...effectiveGeneralDraft.deleteProtection,
+        ...patch,
+      },
+    })
+  }
+
   const patchMetadataDraft = (patch: Partial<MetadataExtractionSettings>) => {
     if (!effectiveMetadataDraft) return
     setMetadataDraft({ ...effectiveMetadataDraft, ...patch })
@@ -195,6 +233,16 @@ export function SettingsPage() {
 
         <section className="space-y-6">
           <Suspense fallback={<SettingsSectionFallback />}>
+            {activeTab === 'general' ? (
+              <GeneralTabLazy
+                generalDraft={effectiveGeneralDraft}
+                onPatchGeneral={patchGeneralDraft}
+                onPatchDeleteProtection={patchDeleteProtectionDraft}
+                onSave={() => effectiveGeneralDraft && void generalMutation.mutateAsync(effectiveGeneralDraft)}
+                isSaving={generalMutation.isPending}
+              />
+            ) : null}
+
             {activeTab === 'folders' ? <FoldersTabLazy {...foldersTabProps} /> : null}
 
             {activeTab === 'appearance' ? (

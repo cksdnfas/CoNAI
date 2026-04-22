@@ -57,6 +57,29 @@ export async function getImage(compositeHash: string) {
   return response.data
 }
 
+export async function deleteImagesBulk(compositeHashes: string[]) {
+  const response = await fetchJson<ApiResponse<{
+    message: string
+    details: {
+      deleted: number
+      failed: number
+      errors: string[]
+    }
+  }>>('/api/images/bulk', {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ compositeHashes }),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '이미지 삭제에 실패했어.')
+  }
+
+  return response.data
+}
+
 /** Load a specific ordered set of images by composite hash for viewer navigation UI. */
 export async function getImagesBatch(compositeHashes: string[]) {
   const response = await fetchJson<ApiResponse<Omit<ImageListPayload, 'hasMore'>>>(`/api/images/batch`, {

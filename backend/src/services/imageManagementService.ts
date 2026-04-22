@@ -7,6 +7,12 @@ export interface BulkDeleteImageFilesResult {
   errors: string[];
 }
 
+export interface BulkDeleteImagesResult {
+  deleted: number;
+  failed: number;
+  errors: string[];
+}
+
 export class ImageManagementService {
   /** Delete one image and invalidate dependent caches. */
   static async deleteImageByCompositeHash(compositeHash: string): Promise<{ message: string }> {
@@ -16,6 +22,25 @@ export class ImageManagementService {
 
     return {
       message: 'Image deleted successfully',
+    };
+  }
+
+  /** Delete multiple image hashes in one batch while reusing the shared deletion service. */
+  static async deleteImagesBulk(compositeHashes: string[]): Promise<{ message: string; details: BulkDeleteImagesResult }> {
+    console.log(`🗑️ Bulk image deletion requested: ${compositeHashes.length} images`);
+
+    const batchResult = await DeletionService.deleteMultipleImages(compositeHashes);
+
+    QueryCacheService.invalidateImageCache(undefined, true);
+    console.log('🗑️ All caches invalidated after bulk image deletion');
+
+    return {
+      message: `Deleted ${batchResult.success} image(s)`,
+      details: {
+        deleted: batchResult.success,
+        failed: batchResult.failed,
+        errors: batchResult.errors.map((entry) => `Image ${entry.hash}: ${entry.error}`),
+      },
     };
   }
 

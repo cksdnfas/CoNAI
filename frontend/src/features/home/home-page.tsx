@@ -1,4 +1,4 @@
-import { FolderPlus, Loader2 } from 'lucide-react'
+import { FolderPlus, Loader2, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { PageHeader } from '@/components/common/page-header'
@@ -39,6 +39,7 @@ export function HomePage() {
     setSelectedIds,
     selectedCompositeHashes,
     isDownloading,
+    isDeleting,
     isAssignModalOpen,
     setIsAssignModalOpen,
     emptyStateTitle,
@@ -48,6 +49,7 @@ export function HomePage() {
     handleRetryInitialLoad,
     handleRetryNextPage,
     handleDownloadSelected,
+    handleDeleteSelected,
     handleOpenAssignModal,
     handleAssignToGroup,
   } = useHomePageData({
@@ -187,6 +189,19 @@ export function HomePage() {
                 data-no-select-drag="true"
               >
                 <FolderPlus className="h-4 w-4" />
+              </Button>
+            }
+            trailingActions={
+              <Button
+                size="icon-sm"
+                variant="destructive"
+                onClick={() => void handleDeleteSelected()}
+                disabled={isDeleting || selectedCompositeHashes.length === 0}
+                title={isDeleting ? '삭제 중' : '선택 삭제'}
+                aria-label={isDeleting ? '삭제 중' : '선택 삭제'}
+                data-no-select-drag="true"
+              >
+                <Trash2 className="h-4 w-4" />
               </Button>
             }
             onDownloadSelect={handleDownloadSelected}

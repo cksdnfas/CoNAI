@@ -3,6 +3,7 @@ import {
   addImagesToGroup,
   createGroup,
   deleteGroup,
+  deleteImagesBulk,
   downloadAutoFolderGroupArchive,
   downloadGroupArchive,
   rebuildAutoFolderGroups,
@@ -161,6 +162,26 @@ export function useGroupPageActions({
     },
   })
 
+  const deleteSelectedImagesMutation = useMutation({
+    mutationFn: (compositeHashes: string[]) => deleteImagesBulk(compositeHashes),
+    onSuccess: async (result) => {
+      setSelectedGroupImageIds([])
+      showSnackbar({
+        message: result.details.failed > 0
+          ? `${result.details.deleted.toLocaleString('ko-KR')}개 삭제, ${result.details.failed.toLocaleString('ko-KR')}개 실패했어.`
+          : `${result.details.deleted.toLocaleString('ko-KR')}개를 RecycleBin으로 보냈어.`,
+        tone: result.details.failed > 0 ? 'error' : 'info',
+      })
+      await Promise.all([
+        refreshCustomGroupQueries(),
+        refreshFolderGroupQueries(),
+      ])
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : '선택 항목 삭제에 실패했어.', tone: 'error' })
+    },
+  })
+
   const assignToGroupMutation = useMutation({
     mutationFn: ({ groupId: targetGroupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(targetGroupId, compositeHashes),
     onSuccess: async (result) => {
@@ -308,6 +329,19 @@ export function useGroupPageActions({
     await downloadGroupArchiveMutation.mutateAsync({ type, scope: downloadScope })
   }
 
+  const handleDeleteSelectedImages = async () => {
+    if (selectedGroupCompositeHashes.length === 0 || deleteSelectedImagesMutation.isPending) {
+      return
+    }
+
+    const confirmed = window.confirm(`선택한 ${selectedGroupCompositeHashes.length.toLocaleString('ko-KR')}개 항목을 휴지통으로 보낼까?`)
+    if (!confirmed) {
+      return
+    }
+
+    await deleteSelectedImagesMutation.mutateAsync(selectedGroupCompositeHashes)
+  }
+
   const handleOpenAssignModal = () => {
     if (selectedGroupCompositeHashes.length === 0) {
       return
@@ -364,6 +398,7 @@ export function useGroupPageActions({
     downloadGroupArchiveMutation,
     assignToGroupMutation,
     removeGroupImagesMutation,
+    deleteSelectedImagesMutation,
     handleOpenGroup,
     handleOpenRoot,
     handleSelectSource,
@@ -377,6 +412,7 @@ export function useGroupPageActions({
     handleOpenGroupDownloadModal,
     handleOpenSelectionDownloadModal,
     handleDownloadArchive,
+    handleDeleteSelectedImages,
     handleOpenAssignModal,
     handleAssignSelectedImages,
     handleRemoveSelectedImages,
