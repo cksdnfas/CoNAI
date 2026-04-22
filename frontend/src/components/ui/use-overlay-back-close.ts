@@ -6,6 +6,18 @@ interface UseOverlayBackCloseOptions {
   enabled?: boolean
 }
 
+const OVERLAY_HISTORY_BACK_BYPASS_WINDOW_MS = 1000
+let overlayHistoryBackBypassUntil = 0
+
+/** Temporarily suppress unsaved-change guards while one overlay closes via its own history entry rewind. */
+export function shouldBypassOverlayHistoryBackNavigation() {
+  return overlayHistoryBackBypassUntil > Date.now()
+}
+
+function markOverlayHistoryBackBypassWindow() {
+  overlayHistoryBackBypassUntil = Date.now() + OVERLAY_HISTORY_BACK_BYPASS_WINDOW_MS
+}
+
 /** Close one open overlay before browser back navigates away from the current page. */
 export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverlayBackCloseOptions) {
   const overlayId = useId()
@@ -50,6 +62,7 @@ export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverla
       }
 
       programmaticBackRef.current = true
+      markOverlayHistoryBackBypassWindow()
       window.history.back()
     }
   }, [enabled, open, overlayId])
