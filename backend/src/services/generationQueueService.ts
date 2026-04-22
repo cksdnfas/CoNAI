@@ -9,7 +9,7 @@ import { createComfyUIService, getComfyUIServerRuntimeStatuses } from './comfyui
 import { isGenerationQueueComfyJobCompatibleWithServer } from './generationQueueRouting'
 import { prepareComfyPromptData } from './prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from './workflowPromptValueResolver'
-import { executeComfyGeneration } from './comfyGenerationExecutor'
+import { executeComfyGeneration, isComfyGenerationCancelledError } from './comfyGenerationExecutor'
 import { executeNaiGeneration } from './naiGenerationExecutor'
 import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser'
 import { reconcileComfyModelSelectionValues } from './comfyModelSelectionResolver'
@@ -31,6 +31,7 @@ const ALLOWED_TRANSITIONS: Record<GenerationQueueJobStatus, GenerationQueueJobSt
 
 const DISPATCH_INTERVAL_MS = 3000
 const NAI_WORKER_KEY = 'novelai'
+const GENERATION_QUEUE_CANCELLATION_MESSAGE = '__GENERATION_QUEUE_CANCELLATION__'
 
 function parseStoredRequestPayload(record: GenerationQueueJobRecord) {
   try {
@@ -47,6 +48,10 @@ function parseStoredRequestPayload(record: GenerationQueueJobRecord) {
 
 function resolveFailureMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown queue execution error'
+}
+
+function isGenerationQueueCancellationError(error: unknown) {
+  return error instanceof Error && error.message === GENERATION_QUEUE_CANCELLATION_MESSAGE
 }
 
 function parseComfyQueuePayload(record: GenerationQueueJobRecord) {
@@ -177,6 +182,85 @@ export class GenerationQueueService {
     })
 
     return true
+  }
+
+  private static resolveComfyCancellationEndpoint(job: GenerationQueueJobRecord, assignedServer?: ComfyUIServerRecord | null) {
+    if (assignedServer?.endpoint) {
+      return assignedServer.endpoint
+    }
+
+    if (job.assigned_server_id) {
+      const server = ComfyUIServerModel.findById(job.assigned_server_id)
+      if (server?.endpoint) {
+        return server.endpoint
+      }
+    }
+
+    if (job.workflow_id) {
+      const workflow = WorkflowModel.findById(job.workflow_id)
+      if (workflow?.api_endpoint) {
+        return workflow.api_endpoint
+      }
+    }
+
+    return null
+  }
+
+  static async attemptUpstreamCancellation(jobId: number, options?: {
+    assignedServer?: ComfyUIServerRecord | null
+    providerJobId?: string | null
+  }) {
+    const latest = GenerationQueueModel.findById(jobId)
+    if (!latest || latest.service_type !== 'comfyui') {
+      return null
+    }
+
+    const promptId = options?.providerJobId ?? latest.provider_job_id ?? null
+    if (!promptId) {
+      return null
+    }
+
+    const endpoint = this.resolveComfyCancellationEndpoint(latest, options?.assignedServer)
+    if (!endpoint) {
+      return null
+    }
+
+    const comfyService = createComfyUIService(endpoint)
+    return comfyService.cancelPrompt(promptId)
+  }
+
+  static async requestCancellation(jobId: number) {
+    const latest = GenerationQueueModel.findById(jobId)
+    if (!latest) {
+      throw new Error(`Queue job ${jobId} not found`)
+    }
+
+    if (latest.status === 'completed' || latest.status === 'failed' || latest.status === 'cancelled') {
+      return latest
+    }
+
+    if (latest.status === 'running') {
+      const changed = GenerationQueueModel.requestCancelIfCurrentStatus(jobId, ['running'])
+      if (!changed) {
+        throw new Error(`Queue job ${jobId} changed state before cancellation request could be applied`)
+      }
+
+      try {
+        await this.attemptUpstreamCancellation(jobId)
+      } catch (error) {
+        console.warn(`⚠️ Failed to request upstream ComfyUI cancellation for queue job ${jobId}:`, error)
+      }
+
+      this.requestDispatch()
+      return GenerationQueueModel.findById(jobId)
+    }
+
+    const updated = this.transitionJob(jobId, 'cancelled', {
+      expectedCurrentStatuses: [latest.status],
+    })
+
+    this.requestDispatch()
+    return updated
   }
 
   /** Validate and apply one queue job state transition. */
@@ -545,6 +629,11 @@ export class GenerationQueueService {
 
       throw new Error(`Unsupported queue service type: ${job.service_type}`)
     } catch (error) {
+      if (isGenerationQueueCancellationError(error) || (GenerationQueueModel.findById(job.id)?.cancel_requested ?? 0) > 0) {
+        await this.cancelJobIfActive(job.id)
+        return
+      }
+
       await this.failJobIfActive(job.id, error)
       throw error
     }
@@ -631,6 +720,13 @@ export class GenerationQueueService {
         comfyService,
         workflow: substitutedWorkflow,
         imageSaveOptions: payload.imageSaveOptions,
+        shouldCancel: () => (GenerationQueueModel.findById(job.id)?.cancel_requested ?? 0) > 0,
+        onCancelRequested: async (promptId) => {
+          await this.attemptUpstreamCancellation(job.id, {
+            assignedServer,
+            providerJobId: promptId,
+          })
+        },
         onPromptSubmitted: async (promptId) => {
           this.transitionJob(job.id, 'running', {
             assignedServerId: assignedServer?.id ?? job.assigned_server_id ?? null,
@@ -690,6 +786,23 @@ export class GenerationQueueService {
 
       console.log(`✅ Queue job ${job.id} completed via ComfyUI (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`)
     } catch (error) {
+      const cancellationRequested = isComfyGenerationCancelledError(error) || (GenerationQueueModel.findById(job.id)?.cancel_requested ?? 0) > 0
+      if (cancellationRequested) {
+        await writeQueueComfyDebugSnapshot(job, {
+          ...debugSnapshotBase,
+          stage: 'cancelled',
+          captured_at: new Date().toISOString(),
+          prompt_id: GenerationQueueModel.findById(job.id)?.provider_job_id ?? null,
+          error_message: 'Queue job cancelled before ComfyUI output handoff completed',
+        })
+
+        if (historyId) {
+          GenerationHistoryModel.recordError(historyId, 'Cancelled by user')
+        }
+
+        throw new Error(GENERATION_QUEUE_CANCELLATION_MESSAGE)
+      }
+
       const failureMessage = resolveFailureMessage(error)
       await writeQueueComfyDebugSnapshot(job, {
         ...debugSnapshotBase,
@@ -754,6 +867,25 @@ export class GenerationQueueService {
     })
 
     console.log(`✅ Queue job ${job.id} completed via NovelAI (${historyIds.length} histories)`)
+  }
+
+  private static async cancelJobIfActive(jobId: number) {
+    const latest = GenerationQueueModel.findById(jobId)
+    if (!latest) {
+      return
+    }
+
+    if (latest.status === 'failed' || latest.status === 'completed' || latest.status === 'cancelled') {
+      return
+    }
+
+    try {
+      this.transitionJob(jobId, 'cancelled', {
+        expectedCurrentStatuses: [latest.status],
+      })
+    } catch (transitionError) {
+      console.warn(`⚠️ Failed to mark queue job ${jobId} as cancelled:`, transitionError)
+    }
   }
 
   private static async failJobIfActive(jobId: number, error: unknown) {

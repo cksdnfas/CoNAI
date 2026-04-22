@@ -145,7 +145,15 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
             heading="Queue"
             actions={(
               <>
-                <Badge variant="outline">{serviceType === 'novelai' ? 'NAI' : workflowId ? 'ComfyUI Workflow' : 'ComfyUI'}</Badge>
+                <Badge variant="outline">
+                  {serviceType === 'novelai'
+                    ? 'NAI'
+                    : serviceType === 'codex'
+                      ? 'Codex'
+                      : workflowId
+                        ? 'ComfyUI Workflow'
+                        : 'ComfyUI'}
+                </Badge>
                 <Badge variant={activeCount > 0 ? 'secondary' : 'outline'}>활성 {activeCount}</Badge>
                 <Badge variant="outline">표시 {visibleRecords.length}</Badge>
                 <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleRefresh()} title="큐 새로고침" aria-label="큐 새로고침">
@@ -214,10 +222,10 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
                         </div>
 
                         {isCancelRequested ? (
-                          <div className="text-[11px] text-amber-700 dark:text-amber-300">시스템에서 취소 요청을 기록했어. 업스트림 실행은 마무리될 때까지 계속될 수 있어.</div>
+                          <div className="text-[11px] text-amber-700 dark:text-amber-300">취소 요청을 기록했고, 가능하면 ComfyUI 업스트림 실행도 함께 중단시키는 쪽으로 시도 중이야.</div>
                         ) : null}
                         {completedAfterCancel ? (
-                          <div className="text-[11px] text-amber-700 dark:text-amber-300">중간에 취소 요청은 기록됐지만 업스트림 작업이 이미 완료까지 도달했어.</div>
+                          <div className="text-[11px] text-amber-700 dark:text-amber-300">취소 요청은 들어갔지만 업스트림 작업이 너무 빨리 끝나서 완료까지 도달했어.</div>
                         ) : null}
                         {failedAfterCancel ? (
                           <div className="text-[11px] text-amber-700 dark:text-amber-300">중간에 취소 요청은 기록됐고, 최종 업스트림 종료 결과는 실패로 남았어.</div>

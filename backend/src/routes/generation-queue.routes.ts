@@ -699,19 +699,7 @@ router.post('/:id/cancel', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const updated = existing.status === 'running'
-      ? (() => {
-          const changed = GenerationQueueModel.requestCancelIfCurrentStatus(jobId, ['running'])
-          if (!changed) {
-            throw new Error(`Queue job ${jobId} changed state before cancellation request could be applied`)
-          }
-          return GenerationQueueModel.findById(jobId)
-        })()
-      : GenerationQueueService.transitionJob(jobId, 'cancelled', {
-          expectedCurrentStatuses: [existing.status],
-        })
-
-    GenerationQueueService.requestDispatch()
+    const updated = await GenerationQueueService.requestCancellation(jobId)
 
     res.json({
       success: true,

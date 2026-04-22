@@ -4,7 +4,7 @@ import { runtimePaths } from '../config/runtimePaths'
 
 export interface ComfyRequestDebugSnapshot {
   service_type: 'comfyui'
-  stage: 'prepared' | 'submitted' | 'failed' | 'completed'
+  stage: 'prepared' | 'submitted' | 'failed' | 'completed' | 'cancelled'
   captured_at: string
   queue_job_id?: number | null
   history_id?: number | null

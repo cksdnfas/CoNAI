@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { APIImageProcessor } from './APIImageProcessor'
-import { ComfyUIService } from './comfyuiService'
+import { COMFYUI_EXECUTION_CANCELLED_MESSAGE, ComfyUIService } from './comfyuiService'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
 
 export interface ComfyGenerationRepresentativeImage {
@@ -15,6 +15,8 @@ export interface ExecuteComfyGenerationInput {
   workflow: Record<string, any>
   imageSaveOptions?: GeneratedImageSaveOptions
   onPromptSubmitted?: (promptId: string) => void | Promise<void>
+  shouldCancel?: () => boolean | Promise<boolean>
+  onCancelRequested?: (promptId: string) => void | Promise<void>
 }
 
 export interface ExecuteComfyGenerationResult {
@@ -24,6 +26,10 @@ export interface ExecuteComfyGenerationResult {
   representativeImage: ComfyGenerationRepresentativeImage | null
 }
 
+export function isComfyGenerationCancelledError(error: unknown) {
+  return error instanceof Error && error.message === COMFYUI_EXECUTION_CANCELLED_MESSAGE
+}
+
 /**
  * Submit one ComfyUI workflow, wait for completion, then save downloaded outputs
  * into the main generated-media pipeline.
@@ -31,12 +37,20 @@ export interface ExecuteComfyGenerationResult {
 export async function executeComfyGeneration(
   input: ExecuteComfyGenerationInput,
 ): Promise<ExecuteComfyGenerationResult> {
-  const { comfyService, workflow, imageSaveOptions, onPromptSubmitted } = input
+  const { comfyService, workflow, imageSaveOptions, onPromptSubmitted, shouldCancel, onCancelRequested } = input
 
   const promptId = await comfyService.submitPrompt(workflow)
   await onPromptSubmitted?.(promptId)
 
-  const collectedOutputs = await comfyService.collectGeneratedOutputs(promptId)
+  if (await shouldCancel?.()) {
+    await onCancelRequested?.(promptId)
+    throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
+  }
+
+  const collectedOutputs = await comfyService.collectGeneratedOutputs(promptId, {
+    shouldCancel,
+    onCancelRequested,
+  })
 
   let savedImageCount = 0
   let representativeImage: ComfyGenerationRepresentativeImage | null = null

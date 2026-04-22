@@ -13,9 +13,24 @@ type ComfyUIQueueResponse = {
 
 type ComfyOutputKind = 'image' | 'animated' | 'video';
 
+export const COMFYUI_EXECUTION_CANCELLED_MESSAGE = '__COMFYUI_EXECUTION_CANCELLED__';
+
 type CollectedComfyOutput = ComfyUIOutputFile & {
   nodeId: string;
   kind: ComfyOutputKind;
+};
+
+type WaitForCompletionOptions = {
+  shouldCancel?: () => boolean | Promise<boolean>;
+  onCancelRequested?: (promptId: string) => void | Promise<void>;
+};
+
+export type ComfyUICancelPromptResult = {
+  promptId: string;
+  matchedRunning: boolean;
+  matchedPending: boolean;
+  interrupted: boolean;
+  deleted: boolean;
 };
 
 function normalizeQueueEntries(value: unknown): unknown[] {
@@ -229,9 +244,31 @@ export class ComfyUIService {
   async waitForCompletion(
     promptId: string,
     maxAttempts: number = 1800,
-    intervalMs: number = 2000
+    intervalMs: number = 2000,
+    options?: WaitForCompletionOptions,
   ): Promise<ComfyUIHistoryResponse> {
+    let cancelHandled = false;
+    const maybeCancel = async () => {
+      if (!options?.shouldCancel) {
+        return;
+      }
+
+      const shouldCancel = await options.shouldCancel();
+      if (!shouldCancel) {
+        return;
+      }
+
+      if (!cancelHandled) {
+        cancelHandled = true;
+        await options.onCancelRequested?.(promptId);
+      }
+
+      throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE);
+    };
+
     for (let i = 0; i < maxAttempts; i++) {
+      await maybeCancel();
+
       const history = await this.getHistory(promptId);
 
       if (history[promptId]) {
@@ -244,6 +281,8 @@ export class ComfyUIService {
           throw new Error(`ComfyUI execution error: ${JSON.stringify(item.status.messages)}`);
         }
       }
+
+      await maybeCancel();
 
       // 대기
       await new Promise(resolve => setTimeout(resolve, intervalMs));
@@ -371,8 +410,8 @@ export class ComfyUIService {
   /**
    * Wait for one submitted ComfyUI prompt and download its generated outputs.
    */
-  async collectGeneratedOutputs(promptId: string): Promise<Array<CollectedComfyOutput & { tempPath: string }>> {
-    const history = await this.waitForCompletion(promptId);
+  async collectGeneratedOutputs(promptId: string, options?: WaitForCompletionOptions): Promise<Array<CollectedComfyOutput & { tempPath: string }>> {
+    const history = await this.waitForCompletion(promptId, 1800, 2000, options);
     const outputInfos = this.extractOutputInfo(history, promptId);
 
     if (outputInfos.length === 0) {
@@ -393,6 +432,50 @@ export class ComfyUIService {
     }
 
     return tempFiles;
+  }
+
+  /**
+   * Try to cancel one submitted prompt on the upstream ComfyUI server.
+   * Pending prompts are removed from the queue and running prompts trigger /interrupt.
+   */
+  async cancelPrompt(promptId: string): Promise<ComfyUICancelPromptResult> {
+    const normalizedPromptId = typeof promptId === 'string' ? promptId.trim() : '';
+    if (!normalizedPromptId) {
+      throw new Error('ComfyUI prompt cancellation requires a prompt id');
+    }
+
+    try {
+      const queueState = await this.getQueueState();
+      const pendingPromptIds = queueState.pending_prompt_ids ?? [];
+      const runningPromptIds = queueState.running_prompt_ids ?? [];
+      const matchedPending = pendingPromptIds.includes(normalizedPromptId);
+      const matchedRunning = runningPromptIds.includes(normalizedPromptId)
+        || (queueState.running_count > 0 && runningPromptIds.length === 0);
+
+      let deleted = false;
+      if (matchedPending) {
+        await this.axiosInstance.post('/queue', {
+          delete: [normalizedPromptId],
+        });
+        deleted = true;
+      }
+
+      let interrupted = false;
+      if (matchedRunning) {
+        await this.axiosInstance.post('/interrupt', {});
+        interrupted = true;
+      }
+
+      return {
+        promptId: normalizedPromptId,
+        matchedRunning,
+        matchedPending,
+        interrupted,
+        deleted,
+      };
+    } catch (error) {
+      throw new Error(`ComfyUI prompt cancellation error: ${resolveAxiosErrorMessage(error)}`);
+    }
   }
 
   /**

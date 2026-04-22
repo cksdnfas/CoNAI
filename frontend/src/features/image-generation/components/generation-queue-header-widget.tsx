@@ -27,7 +27,7 @@ import {
 const ACTIVE_QUEUE_STATUSES: Array<GenerationQueueJobRecord['status']> = ['queued', 'dispatching', 'running']
 const LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY = 'conai:image-generation-queue:last-seen-job-id'
 
-type QueueFilterValue = 'all' | 'novelai' | 'comfyui' | `workflow:${number}`
+type QueueFilterValue = 'all' | 'novelai' | 'codex' | 'comfyui' | `workflow:${number}`
 type HeaderPopupTab = 'jobs' | 'reservations'
 
 function readLastSeenQueueJobId() {
@@ -61,6 +61,10 @@ function parseQueueFilter(value: QueueFilterValue) {
     return { serviceType: 'novelai' as const, workflowId: undefined }
   }
 
+  if (value === 'codex') {
+    return { serviceType: 'codex' as const, workflowId: undefined }
+  }
+
   if (value === 'comfyui') {
     return { serviceType: 'comfyui' as const, workflowId: undefined }
   }
@@ -92,7 +96,15 @@ function getQueueLaneLabel(record: GenerationQueueJobRecord, queuePositionLabel:
     return `태그 #${record.requested_server_tag}`
   }
 
-  return record.service_type === 'comfyui' ? '자동 분산' : '기본 대기열'
+  if (record.service_type === 'comfyui') {
+    return '자동 분산'
+  }
+
+  if (record.service_type === 'codex') {
+    return 'Codex 큐'
+  }
+
+  return '기본 대기열'
 }
 
 function getQueueProgressToneClass(record: GenerationQueueJobRecord) {
@@ -377,6 +389,7 @@ export function GenerationQueueHeaderWidget() {
               <Select value={selectedFilter} onChange={(event) => setSelectedFilter(event.target.value as QueueFilterValue)} className="h-9 w-full min-w-0">
                 <option value="all">전체 큐</option>
                 <option value="novelai">NAI</option>
+                <option value="codex">Codex</option>
                 <option value="comfyui">ComfyUI 전체</option>
                 {workflows.map((workflow) => (
                   <option key={workflow.id} value={`workflow:${workflow.id}`}>{workflow.name}</option>
@@ -461,7 +474,7 @@ export function GenerationQueueHeaderWidget() {
                             </div>
 
                             {isCancelRequested ? (
-                              <div className="text-[11px] text-amber-700 dark:text-amber-300">시스템에 취소 요청은 들어갔고, 업스트림 작업은 잠깐 더 돌 수 있어.</div>
+                              <div className="text-[11px] text-amber-700 dark:text-amber-300">취소 요청은 들어갔고, 가능하면 ComfyUI 업스트림 실행도 같이 멈추게 시도 중이야.</div>
                             ) : null}
                           </div>
 

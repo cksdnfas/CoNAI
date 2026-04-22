@@ -201,15 +201,7 @@ async function requestQueueCancellation(jobId: number) {
     return
   }
 
-  if (latest.status === 'running') {
-    GenerationQueueModel.requestCancelIfCurrentStatus(jobId, ['running'])
-  } else {
-    GenerationQueueService.transitionJob(jobId, 'cancelled', {
-      expectedCurrentStatuses: [latest.status],
-    })
-  }
-
-  GenerationQueueService.requestDispatch()
+  await GenerationQueueService.requestCancellation(jobId)
 }
 
 async function waitForQueueCompletion(context: ExecutionContext, nodeId: string, jobId: number) {
