@@ -7,9 +7,9 @@ const HomeSearchDrawerContentLazy = lazy(async () => {
   return { default: module.HomeSearchDrawerContent }
 })
 
-/** Render the header search control as a drawer-open button only. */
+/** Render the header search control as a drawer toggle button. */
 export function HomeSearchHeaderBox({ active }: { active: boolean }) {
-  const { appliedChips, openDrawer } = useHomeSearch()
+  const { appliedChips, isDrawerOpen, openDrawer, closeDrawer } = useHomeSearch()
 
   if (!active) {
     return null
@@ -18,13 +18,25 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
   return (
     <button
       type="button"
-      onClick={openDrawer}
-      className="theme-floating-panel inline-flex items-center gap-2 rounded-full p-2 text-sm text-foreground transition hover:bg-surface-high"
-      aria-label="검색 열기"
-      title="검색"
+      onClick={() => {
+        if (isDrawerOpen) {
+          closeDrawer()
+          return
+        }
+
+        openDrawer()
+      }}
+      data-state={isDrawerOpen ? 'open' : appliedChips.length > 0 ? 'active' : 'closed'}
+      className="theme-shell-icon-button relative inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+      aria-label={isDrawerOpen ? '검색 닫기' : '검색 열기'}
+      title={isDrawerOpen ? '검색 닫기' : '검색'}
     >
       <Search className="h-4 w-4" />
-      {appliedChips.length > 0 ? <span className="rounded-full bg-primary/14 px-2 py-0.5 text-[11px] font-semibold text-primary">{appliedChips.length}</span> : null}
+      {appliedChips.length > 0 ? (
+        <span className="absolute -right-1 -top-1 inline-flex min-w-[1rem] items-center justify-center rounded-sm border border-primary/25 bg-primary/16 px-1 text-[10px] font-semibold leading-4 text-primary shadow-[0_0_0_2px_var(--background)]">
+          {appliedChips.length}
+        </span>
+      ) : null}
     </button>
   )
 }

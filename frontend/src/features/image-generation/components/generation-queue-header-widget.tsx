@@ -226,14 +226,19 @@ export function GenerationQueueHeaderWidget() {
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="theme-floating-panel relative inline-flex items-center gap-2 rounded-full p-2 text-sm text-foreground transition hover:bg-surface-high"
+        data-state={isOpen ? 'open' : globalActiveCount > 0 ? 'active' : 'closed'}
+        className="theme-shell-icon-button relative inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
         aria-label="작업 큐 열기"
         aria-expanded={isOpen}
         title="작업 큐"
       >
         <ListTodo className="h-4 w-4" />
-        {globalActiveCount > 0 ? <span className="rounded-full bg-primary/14 px-2 py-0.5 text-[11px] font-semibold text-primary">{globalActiveCount}</span> : null}
-        {hasUnreadQueueUpdate ? <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-rose-500 shadow-[0_0_0_2px_var(--background)]" aria-hidden="true" /> : null}
+        {globalActiveCount > 0 ? (
+          <span className="absolute -right-1 -bottom-1 inline-flex min-w-[1rem] items-center justify-center rounded-sm border border-primary/25 bg-primary/16 px-1 text-[10px] font-semibold leading-4 text-primary shadow-[0_0_0_2px_var(--background)]">
+            {globalActiveCount}
+          </span>
+        ) : null}
+        {hasUnreadQueueUpdate ? <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-rose-500 shadow-[0_0_0_2px_var(--background)]" aria-hidden="true" /> : null}
       </button>
 
       <div

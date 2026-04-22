@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { BottomDrawerNotice, BottomDrawerSection } from '@/components/ui/bottom-drawer-sheet'
+import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { SearchScopeTabs } from '@/features/search/components/search-scope-tabs'
 import { SearchSuggestionList } from '@/features/search/components/search-suggestion-list'
@@ -192,6 +192,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
   const handleSubmitSearchFromInput = () => {
     submitSearchFromInput()
     setIsSuggestionPanelOpen(false)
+    closeDrawer()
   }
 
   const handleAddSuggestionChip = (value: string) => {
@@ -212,11 +213,13 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
   const handleApplySearch = () => {
     applySearch()
     setIsSuggestionPanelOpen(false)
+    closeDrawer()
   }
 
   const handleClearSearch = () => {
     clearSearch()
     setIsSuggestionPanelOpen(false)
+    closeDrawer()
   }
 
   return (
@@ -244,7 +247,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
         </div>
 
         <div className="theme-drawer-body flex-1 space-y-4 overflow-y-auto">
-          <BottomDrawerSection ref={searchSectionRef} bodyClassName="space-y-3">
+          <section ref={searchSectionRef} className="space-y-3">
             <HomeSearchInputBox
               searchInput={searchInput}
               setSearchInput={setSearchInput}
@@ -266,9 +269,13 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                 onClose={handleCloseSuggestionPanel}
               />
             ) : null}
-          </BottomDrawerSection>
+          </section>
 
-          <BottomDrawerSection heading="Current filters" bodyClassName="space-y-3">
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Current filters</div>
+            </div>
+
             <SearchChipList chips={draftChips} title={null} emptyMessage="No filters" onCycleOperator={cycleChipOperator} onRemove={removeChip} />
 
             <div className="flex gap-2">
@@ -279,24 +286,33 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                 초기화
               </Button>
             </div>
-          </BottomDrawerSection>
+          </section>
 
-          <BottomDrawerSection
-            heading="Recent searches"
-            actions={(
-              <button type="button" onClick={() => void clearHistoryEntries()} className="text-xs text-muted-foreground transition hover:text-foreground">
-                Clear History
-              </button>
-            )}
-            bodyClassName="space-y-0"
-          >
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Recent searches</div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button type="button" onClick={() => void clearHistoryEntries()} className="text-xs text-muted-foreground transition hover:text-foreground">
+                  Clear History
+                </button>
+              </div>
+            </div>
+
             {historyLoading ? <BottomDrawerNotice>Loading…</BottomDrawerNotice> : null}
             {!historyLoading && historyEntries.length === 0 ? <BottomDrawerNotice>No history</BottomDrawerNotice> : null}
             {!historyLoading && historyEntries.length > 0 ? (
-              <div className="overflow-hidden rounded-sm border border-border/70 bg-background/45">
-                {historyEntries.map((entry, index) => (
-                  <div key={entry.id} className={cn('flex items-start gap-3 px-4 py-3', index > 0 && 'border-t border-border/70')}>
-                    <button type="button" onClick={() => selectHistoryEntry(entry)} className="min-w-0 flex-1 text-left">
+              <div className="space-y-2">
+                {historyEntries.map((entry) => (
+                  <div key={entry.id} className="flex items-start gap-3 rounded-sm border border-border/70 bg-background/45 px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        selectHistoryEntry(entry)
+                        setIsSuggestionPanelOpen(false)
+                        closeDrawer()
+                      }}
+                      className="min-w-0 flex-1 text-left"
+                    >
                       <div className="flex flex-wrap gap-2">
                         {entry.chips.map((chip) => (
                           <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1.5 text-xs text-foreground">
@@ -320,7 +336,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                 ))}
               </div>
             ) : null}
-          </BottomDrawerSection>
+          </section>
         </div>
       </aside>
     </>

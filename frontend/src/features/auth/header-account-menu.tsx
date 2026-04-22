@@ -65,7 +65,8 @@ export function HeaderAccountMenu() {
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="theme-floating-panel inline-flex items-center gap-2 rounded-full p-2 text-sm text-foreground transition hover:bg-surface-high"
+        data-state={isOpen ? 'open' : 'closed'}
+        className="theme-shell-icon-button inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
         aria-label="계정 메뉴"
         aria-haspopup="menu"
         aria-expanded={isOpen}
