@@ -1,13 +1,8 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getPromptGraph, getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getPromptTaxonomyGraph, getPromptTaxonomyRelated, getRelatedPrompts, getTopPrompts, searchPromptCollection } from '@/lib/api'
+import { getPromptGraph, getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getPromptTaxonomyGraph, getTopPrompts, searchPromptCollection } from '@/lib/api'
 import type { PromptSortBy, PromptSortOrder, PromptTaxonomyInferredType, PromptTaxonomyRelationKind, PromptTypeFilter } from '@/types/prompt'
 import { getPromptTypeTotal, getSortedSiblingGroups } from './prompt-page-utils'
-
-interface ActivePromptParams {
-  prompt: string
-  type: PromptTypeFilter
-}
 
 interface UsePromptPageQueriesParams {
   promptType: PromptTypeFilter
@@ -16,7 +11,6 @@ interface UsePromptPageQueriesParams {
   page: number
   sortBy: PromptSortBy
   sortOrder: PromptSortOrder
-  activePrompt: ActivePromptParams | null
   graphEnabled?: boolean
   graphFilters?: {
     type: PromptTypeFilter
@@ -35,7 +29,7 @@ interface UsePromptPageQueriesParams {
   }
 }
 
-export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder, activePrompt, graphEnabled = false, graphFilters, taxonomyGraphEnabled = false, taxonomyGraphFilters }: UsePromptPageQueriesParams) {
+export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder, graphEnabled = false, graphFilters, taxonomyGraphEnabled = false, taxonomyGraphFilters }: UsePromptPageQueriesParams) {
   const groupsQuery = useQuery({
     queryKey: ['prompt-groups', promptType],
     queryFn: () => getPromptGroups(promptType),
@@ -68,27 +62,6 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
         sortOrder,
         groupId: selectedGroupId ?? undefined,
       }),
-  })
-
-  const relatedPromptsQuery = useQuery({
-    queryKey: ['prompt-related', activePrompt?.type ?? promptType, activePrompt?.prompt ?? ''],
-    queryFn: () => getRelatedPrompts({
-      prompt: activePrompt?.prompt ?? '',
-      type: activePrompt?.type ?? promptType,
-      limit: 12,
-    }),
-    enabled: Boolean(activePrompt?.prompt),
-  })
-
-  const promptTaxonomyRelatedQuery = useQuery({
-    queryKey: ['prompt-taxonomy-related', activePrompt?.type ?? promptType, activePrompt?.prompt ?? ''],
-    queryFn: () => getPromptTaxonomyRelated({
-      prompt: activePrompt?.prompt ?? '',
-      type: activePrompt?.type ?? promptType,
-      relationKind: 'all',
-      limit: 12,
-    }),
-    enabled: Boolean(activePrompt?.prompt),
   })
 
   const promptGraphQuery = useQuery({
@@ -136,8 +109,6 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
     topPromptsQuery,
     groupStatisticsQuery,
     promptSearchQuery,
-    relatedPromptsQuery,
-    promptTaxonomyRelatedQuery,
     promptGraphQuery,
     promptTaxonomyGraphQuery,
     selectedGroup,

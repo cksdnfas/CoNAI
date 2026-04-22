@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, Search } from 'lucide-react'
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, Search, X } from 'lucide-react'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -11,6 +11,7 @@ interface PromptToolbarProps {
   sortOrder: PromptSortOrder
   onSearchInputChange: (value: string) => void
   onApplySearch: () => void
+  onClearSearch: () => void
   onChangeSortBy: (value: PromptSortBy) => void
   onChangeSortOrder: (value: PromptSortOrder) => void
 }
@@ -85,6 +86,7 @@ export function PromptToolbar({
   sortOrder,
   onSearchInputChange,
   onApplySearch,
+  onClearSearch,
   onChangeSortBy,
   onChangeSortOrder,
 }: PromptToolbarProps) {
@@ -104,6 +106,11 @@ export function PromptToolbar({
           placeholder="프롬프트 검색"
           className="w-full min-w-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
         />
+        {searchInput.length > 0 ? (
+          <Button type="button" size="icon-xs" variant="ghost" onClick={onClearSearch} aria-label="검색 초기화" title="검색 초기화">
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
         <Button type="button" size="icon-xs" variant="secondary" onClick={onApplySearch} aria-label="검색" title="검색">
           <Search className="h-3.5 w-3.5" />
         </Button>

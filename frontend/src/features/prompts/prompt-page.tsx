@@ -13,9 +13,7 @@ import { PromptGroupAssignModal } from './components/prompt-group-assign-modal'
 import { PromptGraphPanel } from './components/prompt-graph-panel'
 import { PromptGroupEditorModal } from './components/prompt-group-editor-modal'
 import { PromptListPanel } from './components/prompt-list-panel'
-import { PromptRelatedPanel } from './components/prompt-related-panel'
 import { PromptTaxonomyGraphPanel } from './components/prompt-taxonomy-graph-panel'
-import { PromptTaxonomyRelatedPanel } from './components/prompt-taxonomy-related-panel'
 import { PromptSelectionBar } from './components/prompt-selection-bar'
 import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
@@ -82,8 +80,6 @@ export function PromptPage() {
     topPromptsQuery,
     groupStatisticsQuery,
     promptSearchQuery,
-    relatedPromptsQuery,
-    promptTaxonomyRelatedQuery,
     promptGraphQuery,
     promptTaxonomyGraphQuery,
     selectedGroup,
@@ -96,7 +92,6 @@ export function PromptPage() {
     page,
     sortBy,
     sortOrder,
-    activePrompt,
     graphEnabled: activeTopTab === 'graph' && graphMode === 'usage',
     graphFilters,
     taxonomyGraphEnabled: activeTopTab === 'graph' && graphMode === 'taxonomy',
@@ -202,11 +197,9 @@ export function PromptPage() {
     setPage(1)
   }
 
-  const handleSelectActivePrompt = (prompt: string, type: PromptTypeFilter = promptType) => {
-    setActivePrompt({ prompt, type })
-    setSearchInput(prompt)
-    setSearchQuery(prompt)
-    setSelectedGroupId(undefined)
+  const handleClearSearch = () => {
+    setSearchInput('')
+    setSearchQuery('')
     setPage(1)
   }
 
@@ -479,6 +472,7 @@ export function PromptPage() {
                   sortOrder={sortOrder}
                   onSearchInputChange={setSearchInput}
                   onApplySearch={handleApplySearch}
+                  onClearSearch={handleClearSearch}
                   onChangeSortBy={(value) => {
                     setSortBy(value)
                     setPage(1)
@@ -489,40 +483,6 @@ export function PromptPage() {
                   }}
                 />
               </div>
-
-              <PromptRelatedPanel
-                activePrompt={activePrompt}
-                items={relatedPromptsQuery.data?.items ?? []}
-                isLoading={relatedPromptsQuery.isLoading}
-                isError={relatedPromptsQuery.isError}
-                errorMessage={relatedPromptsQuery.error instanceof Error ? relatedPromptsQuery.error.message : null}
-                isRebuilding={rebuildPromptRelationsMutation.isPending}
-                onRebuild={() => {
-                  void rebuildPromptRelationsMutation.mutateAsync()
-                    .then(() => {
-                      if (activePrompt?.prompt) {
-                        void relatedPromptsQuery.refetch()
-                      }
-                    })
-                    .catch(() => undefined)
-                }}
-                onSelectPrompt={(prompt) => handleSelectActivePrompt(prompt, activePrompt?.type ?? promptType)}
-                onCopyPrompt={(prompt) => {
-                  void handleCopyPrompt(prompt)
-                }}
-              />
-
-              <PromptTaxonomyRelatedPanel
-                activePrompt={activePrompt}
-                data={promptTaxonomyRelatedQuery.data}
-                isLoading={promptTaxonomyRelatedQuery.isLoading}
-                isError={promptTaxonomyRelatedQuery.isError}
-                errorMessage={promptTaxonomyRelatedQuery.error instanceof Error ? promptTaxonomyRelatedQuery.error.message : null}
-                onSelectPrompt={(prompt) => handleSelectActivePrompt(prompt, activePrompt?.type ?? promptType)}
-                onCopyPrompt={(prompt) => {
-                  void handleCopyPrompt(prompt)
-                }}
-              />
 
               <PromptListPanel
                 items={items}
