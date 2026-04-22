@@ -36,7 +36,12 @@ const ModuleWorkflowWorkspaceLazy = lazy(async () => {
   return { default: module.ModuleWorkflowWorkspace }
 })
 
-type ImageGenerationTab = 'nai' | 'comfyui' | 'wildcards' | 'workflows'
+const WorkflowReservationsPanelLazy = lazy(async () => {
+  const module = await import('./components/workflow-reservations-panel')
+  return { default: module.WorkflowReservationsPanel }
+})
+
+type ImageGenerationTab = 'nai' | 'comfyui' | 'wildcards' | 'workflows' | 'reservations'
 
 function PanelFallback() {
   return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
@@ -47,10 +52,11 @@ const IMAGE_GENERATION_TABS: Array<{ value: ImageGenerationTab; label: string }>
   { value: 'comfyui', label: 'ComfyUI' },
   { value: 'wildcards', label: 'Wildcard' },
   { value: 'workflows', label: 'Workflow' },
+  { value: 'reservations', label: '예약작업' },
 ]
 
 function parseImageGenerationTab(value?: string | null): ImageGenerationTab {
-  if (value === 'nai' || value === 'comfyui' || value === 'wildcards' || value === 'workflows' || value === 'workflow') {
+  if (value === 'nai' || value === 'comfyui' || value === 'wildcards' || value === 'workflows' || value === 'workflow' || value === 'reservations') {
     return value === 'workflow' ? 'workflows' : value
   }
 
@@ -173,7 +179,13 @@ export function ImageGenerationPage() {
         </Suspense>
       ) : null}
 
-      {activeTab !== 'workflows' && controllerPanel ? (
+      {activeTab === 'reservations' ? (
+        <Suspense fallback={<PanelFallback />}>
+          <WorkflowReservationsPanelLazy />
+        </Suspense>
+      ) : null}
+
+      {activeTab !== 'workflows' && activeTab !== 'reservations' && controllerPanel ? (
         isWideLayout ? (
           <div
             className={cn(

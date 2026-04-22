@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ListTodo, RefreshCw, Square, Trash2 } from 'lucide-react'
+import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -9,12 +10,12 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import { cancelGenerationQueueJob, getGenerationQueue } from '@/lib/api-image-generation-queue'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
+import { getGraphWorkflowSchedules, getGraphWorkflows, type GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '../image-generation-shared'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
   formatGenerationQueueTimestamp,
-  getGenerationQueueEtaLabel,
   getGenerationQueuePositionLabel,
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
@@ -27,6 +28,7 @@ const ACTIVE_QUEUE_STATUSES: Array<GenerationQueueJobRecord['status']> = ['queue
 const LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY = 'conai:image-generation-queue:last-seen-job-id'
 
 type QueueFilterValue = 'all' | 'novelai' | 'comfyui' | `workflow:${number}`
+type HeaderPopupTab = 'jobs' | 'reservations'
 
 function readLastSeenQueueJobId() {
   if (typeof window === 'undefined') {
@@ -101,11 +103,64 @@ function getQueueProgressToneClass(record: GenerationQueueJobRecord) {
   return 'bg-secondary'
 }
 
+function formatReservationTimestamp(value?: string | null) {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function getReservationStatusVariant(status: GraphWorkflowScheduleRecord['status']) {
+  if (status === 'active') {
+    return 'secondary' as const
+  }
+
+  if (status === 'error_stopped' || status === 'overlap_stopped') {
+    return 'destructive' as const
+  }
+
+  return 'outline' as const
+}
+
+function getReservationTypeLabel(scheduleType: GraphWorkflowScheduleRecord['schedule_type']) {
+  if (scheduleType === 'once') {
+    return '1회 실행'
+  }
+  if (scheduleType === 'interval') {
+    return 'N분마다'
+  }
+  return '매일'
+}
+
+function getReservationTimingLabel(schedule: GraphWorkflowScheduleRecord) {
+  if (schedule.schedule_type === 'once') {
+    return formatReservationTimestamp(schedule.run_at) ?? '시각 미설정'
+  }
+
+  if (schedule.schedule_type === 'interval') {
+    return `${schedule.interval_minutes ?? '?'}분마다`
+  }
+
+  return `${schedule.daily_time ?? '--:--'} 매일`
+}
+
 /** Render the global generation queue widget beside the header search action. */
 export function GenerationQueueHeaderWidget() {
   const { showSnackbar } = useSnackbar()
   const authStatusQuery = useAuthStatusQuery()
   const [isOpen, setIsOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<HeaderPopupTab>('jobs')
   const [pendingJobId, setPendingJobId] = useState<number | null>(null)
   const [selectedFilter, setSelectedFilter] = useState<QueueFilterValue>('all')
   const [lastSeenQueueJobId, setLastSeenQueueJobId] = useState<number | null>(() => readLastSeenQueueJobId())
@@ -146,11 +201,52 @@ export function GenerationQueueHeaderWidget() {
     },
   })
 
+  const reservationWorkflowQuery = useQuery({
+    queryKey: ['graph-workflows', 'header-widget'],
+    queryFn: () => getGraphWorkflows(true),
+    enabled: isOpen && hasGenerationPermission,
+    staleTime: 60_000,
+  })
+
+  const reservationSchedulesQuery = useQuery({
+    queryKey: ['graph-workflow-schedules', 'header-widget'],
+    queryFn: () => getGraphWorkflowSchedules(),
+    enabled: isOpen && hasGenerationPermission,
+    staleTime: 30_000,
+    refetchInterval: (query) => {
+      const activeCount = query.state.data?.filter((schedule) => schedule.status === 'active').length ?? 0
+      return activeCount > 0 || isOpen ? 4000 : false
+    },
+  })
+
   const globalRecords = useMemo(() => globalQueueQuery.data?.records ?? [], [globalQueueQuery.data?.records])
   const records = useMemo(() => filteredQueueQuery.data?.records ?? [], [filteredQueueQuery.data?.records])
   const globalActiveCount = globalRecords.length
   const filteredActiveCount = records.length
   const latestQueueJobId = useMemo(() => globalRecords.reduce((maxId, record) => Math.max(maxId, record.id), 0), [globalRecords])
+  const reservationWorkflowNameById = useMemo(
+    () => new Map((reservationWorkflowQuery.data ?? []).map((workflow) => [workflow.id, workflow.name] as const)),
+    [reservationWorkflowQuery.data],
+  )
+
+  const reservationSchedules = useMemo(() => {
+    const schedules = reservationSchedulesQuery.data ?? []
+    return [...schedules].sort((left, right) => {
+      const leftActive = left.status === 'active' ? 1 : 0
+      const rightActive = right.status === 'active' ? 1 : 0
+      if (leftActive !== rightActive) {
+        return rightActive - leftActive
+      }
+
+      const leftTime = left.next_run_at ?? left.updated_date
+      const rightTime = right.next_run_at ?? right.updated_date
+      return rightTime.localeCompare(leftTime)
+    })
+  }, [reservationSchedulesQuery.data])
+  const activeReservationCount = useMemo(
+    () => reservationSchedules.filter((schedule) => schedule.status === 'active').length,
+    [reservationSchedules],
+  )
 
   useEffect(() => {
     if (globalQueueQuery.isPending || globalQueueQuery.isError || isNotificationBaselineReady) {
@@ -199,7 +295,12 @@ export function GenerationQueueHeaderWidget() {
   const hasUnreadQueueUpdate = isNotificationBaselineReady && latestQueueJobId > (lastSeenQueueJobId ?? 0)
 
   const handleRefresh = async () => {
-    await Promise.all([globalQueueQuery.refetch(), filteredQueueQuery.refetch()])
+    await Promise.all([
+      globalQueueQuery.refetch(),
+      filteredQueueQuery.refetch(),
+      activeTab === 'reservations' ? reservationSchedulesQuery.refetch() : Promise.resolve(undefined),
+      activeTab === 'reservations' ? reservationWorkflowQuery.refetch() : Promise.resolve(undefined),
+    ])
   }
 
   const handleCancel = async (jobId: number) => {
@@ -228,9 +329,9 @@ export function GenerationQueueHeaderWidget() {
         onClick={() => setIsOpen((current) => !current)}
         data-state={isOpen ? 'open' : globalActiveCount > 0 ? 'active' : 'closed'}
         className="theme-shell-icon-button relative inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-        aria-label="작업 큐 열기"
+        aria-label="작업 큐 및 예약작업 열기"
         aria-expanded={isOpen}
-        title="작업 큐"
+        title="작업 큐 / 예약작업"
       >
         <ListTodo className="h-4 w-4" />
         {globalActiveCount > 0 ? (
@@ -247,131 +348,208 @@ export function GenerationQueueHeaderWidget() {
           isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-border/70 px-3 py-3 sm:px-4">
-          <div className="text-sm font-semibold text-foreground">작업 큐</div>
-          <Button type="button" size="icon-xs" variant="ghost" onClick={() => void handleRefresh()} title="큐 새로고침" aria-label="큐 새로고침">
-            <RefreshCw className="h-3.5 w-3.5" />
-          </Button>
+        <div className="px-3 py-3 sm:px-4">
+          <SegmentedTabBar
+            value={activeTab}
+            items={[
+              { value: 'jobs', label: '작업 큐' },
+              { value: 'reservations', label: '예약작업' },
+            ]}
+            onChange={(nextTab) => setActiveTab(nextTab as HeaderPopupTab)}
+            size="sm"
+            fullWidth
+            className="border-b-0 pb-0"
+            actions={(
+              <Button type="button" size="icon-xs" variant="ghost" onClick={() => void handleRefresh()} title="팝업 새로고침" aria-label="팝업 새로고침">
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          />
         </div>
 
-        <div className="space-y-3 border-b border-border/70 px-3 py-3 sm:px-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Scope</div>
-            <Badge variant={filteredActiveCount > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">큐 대기열 · {filteredActiveCount}</Badge>
-          </div>
-          <Select value={selectedFilter} onChange={(event) => setSelectedFilter(event.target.value as QueueFilterValue)} className="h-9 w-full min-w-0">
-            <option value="all">전체 큐</option>
-            <option value="novelai">NAI</option>
-            <option value="comfyui">ComfyUI 전체</option>
-            {workflows.map((workflow) => (
-              <option key={workflow.id} value={`workflow:${workflow.id}`}>{workflow.name}</option>
-            ))}
-          </Select>
-          {hasGenerationPermission && workflowsQuery.isError ? <div className="text-[11px] text-amber-700 dark:text-amber-300">워크플로우 목록을 못 불러와서 기본 큐 필터만 보여주고 있어.</div> : null}
-        </div>
-
-        <div className="max-h-[min(24rem,calc(100vh-var(--theme-shell-header-height)-5rem))] space-y-3 overflow-y-auto px-3 py-3 sm:max-h-[min(28rem,calc(100vh-var(--theme-shell-header-height)-2rem))] sm:px-4">
-          {filteredQueueQuery.isError ? (
-            <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-3 text-sm text-danger">
-              {getErrorMessage(filteredQueueQuery.error, '큐를 불러오지 못했어.')}
+        {activeTab === 'jobs' ? (
+          <>
+            <div className="space-y-3 border-y border-border/70 px-3 py-3 sm:px-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Scope</div>
+                <Badge variant={filteredActiveCount > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">작업 큐 · {filteredActiveCount}</Badge>
+              </div>
+              <Select value={selectedFilter} onChange={(event) => setSelectedFilter(event.target.value as QueueFilterValue)} className="h-9 w-full min-w-0">
+                <option value="all">전체 큐</option>
+                <option value="novelai">NAI</option>
+                <option value="comfyui">ComfyUI 전체</option>
+                {workflows.map((workflow) => (
+                  <option key={workflow.id} value={`workflow:${workflow.id}`}>{workflow.name}</option>
+                ))}
+              </Select>
+              {hasGenerationPermission && workflowsQuery.isError ? <div className="text-[11px] text-amber-700 dark:text-amber-300">워크플로우 목록을 못 불러와서 기본 큐 필터만 보여주고 있어.</div> : null}
             </div>
-          ) : null}
 
-          {!filteredQueueQuery.isError && filteredQueueQuery.isPending ? <div className="text-sm text-muted-foreground">큐 불러오는 중…</div> : null}
+            <div className="max-h-[min(24rem,calc(100vh-var(--theme-shell-header-height)-5rem))] space-y-3 overflow-y-auto px-3 py-3 sm:max-h-[min(28rem,calc(100vh-var(--theme-shell-header-height)-2rem))] sm:px-4">
+              {filteredQueueQuery.isError ? (
+                <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-3 text-sm text-danger">
+                  {getErrorMessage(filteredQueueQuery.error, '큐를 불러오지 못했어.')}
+                </div>
+              ) : null}
 
-          {!filteredQueueQuery.isPending && !filteredQueueQuery.isError && records.length === 0 ? (
-            <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">
-              지금 진행 중인 큐 작업이 없어.
-            </div>
-          ) : null}
+              {!filteredQueueQuery.isError && filteredQueueQuery.isPending ? <div className="text-sm text-muted-foreground">큐 불러오는 중…</div> : null}
 
-          {records.length > 0 ? (
-            <div className="space-y-2">
-              {records.map((record) => {
-                const isBusy = pendingJobId === record.id
-                const queuePositionLabel = getGenerationQueuePositionLabel(record)
-                const queuedAt = formatGenerationQueueTimestamp(record.queued_at)
-                const startedAt = formatGenerationQueueTimestamp(record.started_at)
-                const isCancelRequested = record.cancel_requested > 0
-                const workflowLabel = getGenerationQueueWorkflowLabel(record)
-                const creatorLabel = getGenerationQueueRequesterLabel(record)
-                const remainingLabel = getGenerationQueueRemainingLabel(record)
-                const progressPercent = getGenerationQueueProgressPercent(record)
-                const shownProgressPercent = progressPercent == null ? null : Math.min(100, Math.max(progressPercent, progressPercent > 0 ? 8 : 0))
-                const laneLabel = getQueueLaneLabel(record, queuePositionLabel)
-                const canManageRecord = !isCancelRequested && (authStatusQuery.data?.isAdmin === true || record.is_mine === true)
-                const isRunning = record.status === 'running'
-                const progressCaption = isRunning
-                  ? (progressPercent == null ? '계산 중' : `${progressPercent}%`)
-                  : getGenerationQueueStatusLabel(record)
+              {!filteredQueueQuery.isPending && !filteredQueueQuery.isError && records.length === 0 ? (
+                <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">
+                  지금 진행 중인 큐 작업이 없어.
+                </div>
+              ) : null}
 
-                return (
-                  <div key={record.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary">{getGenerationQueueStatusLabel(record)}</Badge>
-                          <Badge variant="outline" className="max-w-full truncate">{laneLabel}</Badge>
-                          {isCancelRequested ? <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">취소 요청됨</Badge> : null}
-                        </div>
+              {records.length > 0 ? (
+                <div className="space-y-2">
+                  {records.map((record) => {
+                    const isBusy = pendingJobId === record.id
+                    const queuePositionLabel = getGenerationQueuePositionLabel(record)
+                    const queuedAt = formatGenerationQueueTimestamp(record.queued_at)
+                    const startedAt = formatGenerationQueueTimestamp(record.started_at)
+                    const isCancelRequested = record.cancel_requested > 0
+                    const workflowLabel = getGenerationQueueWorkflowLabel(record)
+                    const creatorLabel = getGenerationQueueRequesterLabel(record)
+                    const remainingLabel = getGenerationQueueRemainingLabel(record)
+                    const progressPercent = getGenerationQueueProgressPercent(record)
+                    const shownProgressPercent = progressPercent == null ? null : Math.min(100, Math.max(progressPercent, progressPercent > 0 ? 8 : 0))
+                    const laneLabel = getQueueLaneLabel(record, queuePositionLabel)
+                    const canManageRecord = !isCancelRequested && (authStatusQuery.data?.isAdmin === true || record.is_mine === true)
+                    const isRunning = record.status === 'running'
+                    const progressCaption = isRunning
+                      ? (progressPercent == null ? '계산 중' : `${progressPercent}%`)
+                      : getGenerationQueueStatusLabel(record)
 
-                        <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-x-2 gap-y-1 text-[11px]">
-                          <span className="text-muted-foreground">생성자</span>
-                          <span className="truncate text-foreground/92">{record.is_mine ? `${creatorLabel} (나)` : creatorLabel}</span>
-                          <span className="text-muted-foreground">워크플로</span>
-                          <span className="truncate font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
-                        </div>
+                    return (
+                      <div key={record.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1 space-y-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="secondary">{getGenerationQueueStatusLabel(record)}</Badge>
+                              <Badge variant="outline" className="max-w-full truncate">{laneLabel}</Badge>
+                              {isCancelRequested ? <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">취소 요청됨</Badge> : null}
+                            </div>
 
-                        <div className="rounded-sm border border-border/70 bg-background/45 px-2.5 py-2">
-                          <div className="flex items-center justify-between gap-3 text-[11px]">
-                            <span className="font-medium text-muted-foreground">남은 시간</span>
-                            <span className="shrink-0 font-semibold text-foreground">{remainingLabel ? `약 ${remainingLabel}` : '계산 중'}</span>
+                            <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-x-2 gap-y-1 text-[11px]">
+                              <span className="text-muted-foreground">생성자</span>
+                              <span className="truncate text-foreground/92">{record.is_mine ? `${creatorLabel} (나)` : creatorLabel}</span>
+                              <span className="text-muted-foreground">워크플로</span>
+                              <span className="truncate font-medium text-foreground" title={workflowLabel}>{workflowLabel}</span>
+                            </div>
+
+                            <div className="rounded-sm border border-border/70 bg-background/45 px-2.5 py-2">
+                              <div className="flex items-center justify-between gap-3 text-[11px]">
+                                <span className="font-medium text-muted-foreground">남은 시간</span>
+                                <span className="shrink-0 font-semibold text-foreground">{remainingLabel ? `약 ${remainingLabel}` : '계산 중'}</span>
+                              </div>
+                              <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-lowest">
+                                <div
+                                  className={cn('h-full rounded-full transition-[width] duration-500', getQueueProgressToneClass(record))}
+                                  style={{ width: `${shownProgressPercent ?? 0}%` }}
+                                />
+                              </div>
+                              <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                                <span>{progressCaption}</span>
+                                <span className="truncate">{isRunning ? '실행 진행도' : laneLabel}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                              <span>job #{record.id}</span>
+                              {queuedAt ? <span>queued {queuedAt}</span> : null}
+                              {startedAt ? <span>started {startedAt}</span> : null}
+                            </div>
+
+                            {isCancelRequested ? (
+                              <div className="text-[11px] text-amber-700 dark:text-amber-300">시스템에 취소 요청은 들어갔고, 업스트림 작업은 잠깐 더 돌 수 있어.</div>
+                            ) : null}
                           </div>
-                          <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-lowest">
-                            <div
-                              className={cn('h-full rounded-full transition-[width] duration-500', getQueueProgressToneClass(record))}
-                              style={{ width: `${shownProgressPercent ?? 0}%` }}
-                            />
-                          </div>
-                          <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-                            <span>{progressCaption}</span>
-                            <span className="truncate">{isRunning ? '실행 진행도' : laneLabel}</span>
-                          </div>
-                        </div>
 
-                        <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                          <span>job #{record.id}</span>
-                          {queuedAt ? <span>queued {queuedAt}</span> : null}
-                          {startedAt ? <span>started {startedAt}</span> : null}
+                          {canManageRecord ? (
+                            <div className="flex shrink-0 gap-1">
+                              <Button
+                                type="button"
+                                size="icon-xs"
+                                variant="ghost"
+                                onClick={() => void handleCancel(record.id)}
+                                disabled={isBusy}
+                                aria-label={isRunning ? `큐 작업 ${record.id} 중지 요청` : `큐 작업 ${record.id} 삭제`}
+                                title={isRunning ? '중지 요청' : '삭제'}
+                              >
+                                {isRunning ? <Square className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
-
-                        {isCancelRequested ? (
-                          <div className="text-[11px] text-amber-700 dark:text-amber-300">시스템에 취소 요청은 들어갔고, 업스트림 작업은 잠깐 더 돌 수 있어.</div>
-                        ) : null}
                       </div>
-
-                      {canManageRecord ? (
-                        <div className="flex shrink-0 gap-1">
-                          <Button
-                            type="button"
-                            size="icon-xs"
-                            variant="ghost"
-                            onClick={() => void handleCancel(record.id)}
-                            disabled={isBusy}
-                            aria-label={isRunning ? `큐 작업 ${record.id} 중지 요청` : `큐 작업 ${record.id} 삭제`}
-                            title={isRunning ? '중지 요청' : '삭제'}
-                          >
-                            {isRunning ? <Square className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
-                          </Button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                )
-              })}
+                    )
+                  })}
+                </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-3 border-y border-border/70 px-3 py-3 sm:px-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Summary</div>
+                <Badge variant={reservationSchedules.length > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">예약작업 · {reservationSchedules.length}</Badge>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant={activeReservationCount > 0 ? 'secondary' : 'outline'}>활성 {activeReservationCount}</Badge>
+                <Badge variant="outline">전체 {reservationSchedules.length}</Badge>
+              </div>
+            </div>
+
+            <div className="max-h-[min(24rem,calc(100vh-var(--theme-shell-header-height)-5rem))] space-y-3 overflow-y-auto px-3 py-3 sm:max-h-[min(28rem,calc(100vh-var(--theme-shell-header-height)-2rem))] sm:px-4">
+              {reservationSchedulesQuery.isError ? (
+                <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-3 text-sm text-danger">
+                  {getErrorMessage(reservationSchedulesQuery.error, '예약작업을 불러오지 못했어.')}
+                </div>
+              ) : null}
+
+              {!reservationSchedulesQuery.isError && reservationSchedulesQuery.isPending ? <div className="text-sm text-muted-foreground">예약작업 불러오는 중…</div> : null}
+
+              {!reservationSchedulesQuery.isPending && !reservationSchedulesQuery.isError && reservationSchedules.length === 0 ? (
+                <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">
+                  등록된 예약작업이 아직 없어.
+                </div>
+              ) : null}
+
+              {reservationSchedules.length > 0 ? (
+                <div className="space-y-2">
+                  {reservationSchedules.map((schedule) => {
+                    const nextRunAt = formatReservationTimestamp(schedule.next_run_at)
+                    const lastEnqueuedAt = formatReservationTimestamp(schedule.last_enqueued_at)
+                    return (
+                      <div key={schedule.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="truncate text-sm font-medium text-foreground">{schedule.name}</div>
+                            <Badge variant={getReservationStatusVariant(schedule.status)}>{schedule.status}</Badge>
+                            <Badge variant="outline">{getReservationTypeLabel(schedule.schedule_type)}</Badge>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {reservationWorkflowNameById.get(schedule.graph_workflow_id) ?? `Workflow #${schedule.graph_workflow_id}`} · {getReservationTimingLabel(schedule)}
+                          </div>
+                          <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                            {nextRunAt ? <span>다음 등록 시도 {nextRunAt}</span> : null}
+                            {lastEnqueuedAt ? <span>최근 큐 등록 {lastEnqueuedAt}</span> : null}
+                          </div>
+                          {schedule.stop_reason_message ? (
+                            <div className="rounded-sm border border-border/70 bg-background/45 px-2.5 py-2 text-[11px] text-muted-foreground">
+                              {schedule.stop_reason_message}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : null}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

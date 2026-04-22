@@ -130,7 +130,7 @@ export function WorkflowRunnerPanel({
                   <Badge variant="outline">{reviewRequiredSchedules.length}개</Badge>
                 </AlertTitle>
                 <AlertDescription className="pt-2 text-sm text-muted-foreground">
-                  이 워크플로우가 바뀌어서 연결된 자동 실행이 일시정지됐어. 선택을 해제한 뒤 `대기열 · 빈 실행` 탭의 `자동 실행` 섹션에서 확인하고 다시 켜줘.
+                  이 워크플로우가 바뀌어서 연결된 자동 실행이 일시정지됐어. 선택을 해제한 뒤 `예약작업` 탭에서 확인하고 다시 켜줘.
                 </AlertDescription>
               </Alert>
             ) : null}
