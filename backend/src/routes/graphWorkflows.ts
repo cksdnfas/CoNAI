@@ -27,6 +27,7 @@ import {
   GraphWorkflowScheduleType,
 } from '../types/moduleGraph'
 import { asyncHandler } from '../middleware/errorHandler'
+import { requireAdmin } from '../middleware/authMiddleware'
 import { parsePositiveInteger, sendRouteBadRequest } from './routeValidation'
 
 const router = Router()
@@ -682,7 +683,7 @@ router.post('/artifacts/copy-to-folder', asyncHandler(async (req: Request, res: 
   }
 }))
 
-router.post('/artifacts/delete', asyncHandler(async (req: Request, res: Response) => {
+router.post('/artifacts/delete', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const artifactIds: number[] = Array.isArray(req.body?.artifact_ids)
     ? Array.from(new Set<number>(req.body.artifact_ids
       .map((value: unknown) => Number(value))

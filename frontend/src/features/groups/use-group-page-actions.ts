@@ -1,4 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import {
   addImagesToGroup,
   createGroup,
@@ -56,6 +57,9 @@ export function useGroupPageActions({
   refreshCustomGroupQueries: () => Promise<unknown>
   refreshFolderGroupQueries: () => Promise<unknown>
 }) {
+  const authStatusQuery = useAuthStatusQuery()
+  const canDeleteImages = authStatusQuery.data?.isAdmin === true
+
   const createGroupMutation = useMutation({
     mutationFn: createGroup,
     onSuccess: async (result) => {
@@ -330,6 +334,11 @@ export function useGroupPageActions({
   }
 
   const handleDeleteSelectedImages = async () => {
+    if (!canDeleteImages) {
+      showSnackbar({ message: '삭제는 관리자 계정만 할 수 있어.', tone: 'error' })
+      return
+    }
+
     if (selectedGroupCompositeHashes.length === 0 || deleteSelectedImagesMutation.isPending) {
       return
     }
@@ -399,6 +408,7 @@ export function useGroupPageActions({
     assignToGroupMutation,
     removeGroupImagesMutation,
     deleteSelectedImagesMutation,
+    canDeleteImages,
     handleOpenGroup,
     handleOpenRoot,
     handleSelectSource,

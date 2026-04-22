@@ -28,6 +28,7 @@ export function HomePage() {
   const {
     authStatusQuery,
     canViewHome,
+    canDeleteImages,
     isAnonymousSession,
     imagesQuery,
     groupsQuery,
@@ -191,7 +192,7 @@ export function HomePage() {
                 <FolderPlus className="h-4 w-4" />
               </Button>
             }
-            trailingActions={
+            trailingActions={canDeleteImages ? (
               <Button
                 size="icon-sm"
                 variant="destructive"
@@ -203,7 +204,7 @@ export function HomePage() {
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
-            }
+            ) : undefined}
             onDownloadSelect={handleDownloadSelected}
             onClear={() => setSelectedIds([])}
           />

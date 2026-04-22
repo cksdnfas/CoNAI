@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
 import { asyncHandler } from '../../middleware/errorHandler';
+import { requireAdmin } from '../../middleware/authMiddleware';
 import { ImageMetadataEditError, ImageMetadataEditService } from '../../services/imageMetadataEditService';
 import { ImageManagementService } from '../../services/imageManagementService';
 import { successResponse, errorResponse } from '@conai/shared';
@@ -74,7 +75,7 @@ router.patch('/:compositeHash/metadata', asyncHandler(async (req: Request, res: 
  *
  * Body: { compositeHashes: string[] }
  */
-router.delete('/bulk', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/bulk', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { compositeHashes } = req.body as { compositeHashes: string[] };
 
   if (!Array.isArray(compositeHashes) || compositeHashes.length === 0) {
@@ -90,7 +91,7 @@ router.delete('/bulk', asyncHandler(async (req: Request, res: Response) => {
  * 이미지 삭제 (composite_hash 기반, 통합 삭제 서비스 사용)
  * DELETE /api/images/:compositeHash
  */
-router.delete('/:compositeHash', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:compositeHash', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = routeParam(req.params.compositeHash);
   const result = await ImageManagementService.deleteImageByCompositeHash(compositeHash);
 
@@ -107,7 +108,7 @@ router.delete('/:compositeHash', asyncHandler(async (req: Request, res: Response
  * - 각 file_id의 물리 파일을 RecycleBin으로 이동
  * - 마지막 파일이면 메타데이터도 정리
  */
-router.delete('/files/bulk', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/files/bulk', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { fileIds } = req.body as { fileIds: number[] };
 
   if (!Array.isArray(fileIds) || fileIds.length === 0) {

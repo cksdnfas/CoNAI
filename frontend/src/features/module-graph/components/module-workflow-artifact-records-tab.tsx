@@ -20,6 +20,7 @@ export function ModuleWorkflowArtifactRecordsTab({
   artifactTypeFilter,
   artifactTypeOptions,
   isDeletingArtifacts,
+  canDeleteArtifacts,
   onArtifactSearchTermChange,
   onArtifactTypeFilterChange,
   onToggleVisibleSelection,
@@ -36,6 +37,7 @@ export function ModuleWorkflowArtifactRecordsTab({
   artifactTypeFilter: string
   artifactTypeOptions: string[]
   isDeletingArtifacts: boolean
+  canDeleteArtifacts: boolean
   onArtifactSearchTermChange: (value: string) => void
   onArtifactTypeFilterChange: (value: string) => void
   onToggleVisibleSelection: () => void
@@ -152,21 +154,23 @@ export function ModuleWorkflowArtifactRecordsTab({
                       >
                         {isSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                       </Button>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="destructive"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onDeleteSingle(artifact.id)
-                        }}
-                        disabled={isDeletingArtifacts}
-                        title="Delete artifact"
-                        aria-label="Delete artifact"
-                        data-no-select-drag="true"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {canDeleteArtifacts ? (
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="destructive"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onDeleteSingle(artifact.id)
+                          }}
+                          disabled={isDeletingArtifacts}
+                          title="Delete artifact"
+                          aria-label="Delete artifact"
+                          data-no-select-drag="true"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 </div>

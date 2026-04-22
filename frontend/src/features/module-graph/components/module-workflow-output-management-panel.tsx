@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { CopyPlus, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
@@ -46,6 +47,8 @@ export function ModuleWorkflowOutputManagementPanel({
   onRefresh?: () => Promise<unknown> | unknown
 }) {
   const { showSnackbar } = useSnackbar()
+  const authStatusQuery = useAuthStatusQuery()
+  const canDeleteArtifacts = authStatusQuery.data?.isAdmin === true
   const [activeTab, setActiveTab] = useState<BrowseTab>('outputs')
   const [selectedOutputIds, setSelectedOutputIds] = useState<string[]>([])
   const [selectedArtifactIds, setSelectedArtifactIds] = useState<number[]>([])
@@ -192,6 +195,11 @@ export function ModuleWorkflowOutputManagementPanel({
   }
 
   const handleDeleteSelectedOutputs = async (artifactIds?: number[]) => {
+    if (!canDeleteArtifacts) {
+      showSnackbar({ message: '삭제는 관리자 계정만 할 수 있어.', tone: 'error' })
+      return
+    }
+
     const targetArtifactIds = Array.from(new Set((artifactIds ?? selectedOutputItems.map((item) => item.sourceArtifactId)).filter((value) => Number.isFinite(value))))
     if (targetArtifactIds.length === 0) {
       return
@@ -228,6 +236,11 @@ export function ModuleWorkflowOutputManagementPanel({
   }
 
   const handleDeleteSelectedArtifacts = async (artifactIds?: number[]) => {
+    if (!canDeleteArtifacts) {
+      showSnackbar({ message: '삭제는 관리자 계정만 할 수 있어.', tone: 'error' })
+      return
+    }
+
     const targetArtifactIds = artifactIds ?? selectedArtifacts.map((artifact) => artifact.id)
     if (targetArtifactIds.length === 0) {
       return
@@ -325,6 +338,7 @@ export function ModuleWorkflowOutputManagementPanel({
           artifactTypeFilter={artifactTypeFilter}
           artifactTypeOptions={artifactTypeOptions}
           isDeletingArtifacts={isDeletingArtifacts}
+          canDeleteArtifacts={canDeleteArtifacts}
           onArtifactSearchTermChange={setArtifactSearchTerm}
           onArtifactTypeFilterChange={setArtifactTypeFilter}
           onToggleVisibleSelection={() => setSelectedArtifactIds(allArtifactSelected ? [] : filteredTechnicalArtifacts.map((artifact) => artifact.id))}
@@ -358,7 +372,7 @@ export function ModuleWorkflowOutputManagementPanel({
               <CopyPlus className="h-4 w-4" />
             </Button>
           )}
-          trailingActions={(
+          trailingActions={canDeleteArtifacts ? (
             <Button
               size="icon-sm"
               variant="destructive"
@@ -370,7 +384,7 @@ export function ModuleWorkflowOutputManagementPanel({
             >
               <Trash2 className="h-4 w-4" />
             </Button>
-          )}
+          ) : undefined}
           onDownload={() => handleDownloadItems(downloadableSelectedItems)}
           onClear={() => setSelectedOutputIds([])}
         />
@@ -381,7 +395,7 @@ export function ModuleWorkflowOutputManagementPanel({
           selectedCount={selectedArtifacts.length}
           summary={`${selectedArtifacts.length.toLocaleString('ko-KR')}개 아티팩트 선택됨`}
           onClear={() => setSelectedArtifactIds([])}
-          actions={(
+          actions={canDeleteArtifacts ? (
             <Button
               size="icon-sm"
               variant="destructive"
@@ -393,7 +407,7 @@ export function ModuleWorkflowOutputManagementPanel({
             >
               <Trash2 className="h-4 w-4" />
             </Button>
-          )}
+          ) : undefined}
         />
       ) : null}
 

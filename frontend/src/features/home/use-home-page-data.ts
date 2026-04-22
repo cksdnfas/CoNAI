@@ -26,6 +26,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
 
   const canViewHome = hasAuthPermission(authStatusQuery.data?.permissionKeys, 'page.home.view')
+  const canDeleteImages = authStatusQuery.data?.isAdmin === true
   const hasCredentials = authStatusQuery.data?.hasCredentials === true
   const isAuthenticated = authStatusQuery.data?.authenticated === true
   const isAnonymousSession = hasCredentials && !isAuthenticated
@@ -146,6 +147,11 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   }
 
   const handleDeleteSelected = async () => {
+    if (!canDeleteImages) {
+      notifyError('삭제는 관리자 계정만 할 수 있어.')
+      return
+    }
+
     if (selectedCompositeHashes.length === 0 || isDeleting) {
       return
     }
@@ -208,6 +214,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   return {
     authStatusQuery,
     canViewHome,
+    canDeleteImages,
     isAnonymousSession,
     imagesQuery,
     groupsQuery,

@@ -3,6 +3,7 @@ import { routeParam } from './routeParam';
 import multer from 'multer';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { asyncHandler } from '../middleware/errorHandler';
+import { requireAdmin } from '../middleware/authMiddleware';
 import { GenerationHistoryModel, ServiceType } from '../models/GenerationHistory';
 
 const router = express.Router();
@@ -363,6 +364,7 @@ router.post(
  */
 router.delete(
   '/:id',
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const id = routeParam(req.params.id);
     const deleteFiles = req.query.deleteFiles === 'true';

@@ -92,6 +92,7 @@ export function GroupPage() {
     assignToGroupMutation,
     removeGroupImagesMutation,
     deleteSelectedImagesMutation,
+    canDeleteImages,
     handleOpenGroup,
     handleOpenRoot,
     handleSelectSource,
@@ -359,7 +360,7 @@ export function GroupPage() {
             ) : null}
           </>
         }
-        trailingActions={
+        trailingActions={canDeleteImages ? (
           <Button
             size="icon-sm"
             variant="destructive"
@@ -371,7 +372,7 @@ export function GroupPage() {
           >
             <Trash2 className="h-4 w-4" />
           </Button>
-        }
+        ) : undefined}
         onDownload={handleOpenSelectionDownloadModal}
         onClear={() => setSelectedGroupImageIds([])}
       />

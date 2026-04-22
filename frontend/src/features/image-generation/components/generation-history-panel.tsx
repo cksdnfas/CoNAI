@@ -196,6 +196,11 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   }, [historyRecordMap])
 
   const handleDeleteSelected = async () => {
+    if (!isAdmin) {
+      showSnackbar({ message: '삭제는 관리자 계정만 할 수 있어.', tone: 'error' })
+      return
+    }
+
     if (selectedHistoryRecords.length === 0 || isDeletingSelection) {
       return
     }
@@ -381,7 +386,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         statusText={downloadableCompositeHashes.length > 0
           ? `${downloadableCompositeHashes.length.toLocaleString('ko-KR')}개 다운로드 가능`
           : '다운로드 가능한 결과가 없어'}
-        trailingActions={!isPublicView ? (
+        trailingActions={!isPublicView && isAdmin ? (
           <Button
             size="icon-sm"
             onClick={() => void handleDeleteSelected()}
