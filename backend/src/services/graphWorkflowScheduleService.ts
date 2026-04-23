@@ -169,7 +169,7 @@ export class GraphWorkflowScheduleService {
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'paused',
         stop_reason_code: 'workflow_changed',
-        stop_reason_message: 'Workflow changed and schedule review is required before restart.',
+        stop_reason_message: '워크플로우가 바뀌어서 다시 시작 전에 검토가 필요해.',
       })
     }
 
@@ -220,7 +220,7 @@ export class GraphWorkflowScheduleService {
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'paused',
         stop_reason_code: 'workflow_missing',
-        stop_reason_message: 'Linked workflow no longer exists.',
+        stop_reason_message: '연결된 워크플로우가 더 이상 없어.',
         next_run_at: null,
       })
       return
@@ -230,7 +230,7 @@ export class GraphWorkflowScheduleService {
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'paused',
         stop_reason_code: 'workflow_changed',
-        stop_reason_message: 'Workflow changed and schedule review is required before restart.',
+        stop_reason_message: '워크플로우가 바뀌어서 다시 시작 전에 검토가 필요해.',
       })
       GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds([schedule.id])
       return
@@ -245,7 +245,7 @@ export class GraphWorkflowScheduleService {
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'error_stopped',
         stop_reason_code: 'execution_failed',
-        stop_reason_message: lastExecution.error_message || 'Scheduled execution failed.',
+        stop_reason_message: lastExecution.error_message || '예약 실행에 실패했어.',
         next_run_at: null,
       })
       return
@@ -255,7 +255,7 @@ export class GraphWorkflowScheduleService {
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'overlap_stopped',
         stop_reason_code: 'overlap_detected',
-        stop_reason_message: 'The next scheduled run arrived while a prior run was still queued or running.',
+        stop_reason_message: '이전 실행이 아직 대기 중이거나 실행 중일 때 다음 예약 시점이 도착했어.',
         next_run_at: null,
       })
       return
@@ -266,7 +266,7 @@ export class GraphWorkflowScheduleService {
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'completed',
         stop_reason_code: 'max_run_count_reached',
-        stop_reason_message: 'Maximum scheduled run count has been reserved or completed.',
+        stop_reason_message: '최대 예약 횟수에 도달했어.',
         next_run_at: null,
       })
       return
@@ -295,9 +295,9 @@ export class GraphWorkflowScheduleService {
         ? 'max_run_count_reached'
         : null
     const completionReasonMessage = schedule.schedule_type === 'once'
-      ? 'One-time schedule has been consumed.'
+      ? '1회 실행 예약이 이미 사용됐어.'
       : nextStatus === 'completed'
-        ? 'Maximum scheduled run count has been reserved or completed.'
+        ? '최대 예약 횟수에 도달했어.'
         : null
 
     GraphWorkflowScheduleModel.update(schedule.id, {

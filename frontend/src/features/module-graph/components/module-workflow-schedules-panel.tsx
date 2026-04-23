@@ -86,17 +86,7 @@ function getScheduleTypeLabel(scheduleType: GraphWorkflowScheduleType) {
 
 function getScheduleRunSummaryLabel(schedule: GraphWorkflowScheduleRecord) {
   const completedCount = schedule.completed_run_count ?? 0
-  const queuedCount = schedule.queued_run_count ?? 0
-  const runningCount = schedule.running_run_count ?? 0
-  const reservedCount = schedule.reserved_run_count ?? (completedCount + queuedCount + runningCount)
-  const activeReservedCount = queuedCount + runningCount
-
-  if (schedule.max_run_count === null || schedule.max_run_count === undefined) {
-    return `완료 ${completedCount}회${activeReservedCount > 0 ? ` · 대기/실행 ${activeReservedCount}회` : ''} · 무제한`
-  }
-
-  const remainingCount = Math.max(schedule.remaining_run_count ?? Math.max(schedule.max_run_count - reservedCount, 0), 0)
-  return `완료 ${completedCount}회 · 예약/완료 ${reservedCount}/${schedule.max_run_count}회 · 남은 ${remainingCount}회`
+  return `${completedCount}/${schedule.max_run_count ?? '-'}`
 }
 
 /** Render workflow autorun list and inline create/edit controls inside the queue tab. */
@@ -132,7 +122,7 @@ export function ModuleWorkflowSchedulesPanel({
   const [draftRunAt, setDraftRunAt] = useState('')
   const [draftIntervalMinutes, setDraftIntervalMinutes] = useState('60')
   const [draftDailyTime, setDraftDailyTime] = useState('09:00')
-  const [draftMaxRunCount, setDraftMaxRunCount] = useState('')
+  const [draftMaxRunCount, setDraftMaxRunCount] = useState('-1')
   const [draftInputValues, setDraftInputValues] = useState<Record<string, unknown>>({})
 
   const selectedWorkflowRecord = useMemo(
@@ -151,7 +141,7 @@ export function ModuleWorkflowSchedulesPanel({
     setDraftRunAt('')
     setDraftIntervalMinutes('60')
     setDraftDailyTime('09:00')
-    setDraftMaxRunCount('')
+    setDraftMaxRunCount('-1')
     setDraftInputValues({})
   }
 
@@ -176,7 +166,7 @@ export function ModuleWorkflowSchedulesPanel({
     setDraftRunAt(formatDateTimeLocalInput(schedule.run_at))
     setDraftIntervalMinutes(schedule.interval_minutes ? String(schedule.interval_minutes) : '60')
     setDraftDailyTime(schedule.daily_time || '09:00')
-    setDraftMaxRunCount(schedule.max_run_count ? String(schedule.max_run_count) : '')
+    setDraftMaxRunCount(schedule.max_run_count ? String(schedule.max_run_count) : '-1')
     setDraftInputValues(parseStoredInputValues(schedule.input_values))
   }
 
@@ -192,7 +182,8 @@ export function ModuleWorkflowSchedulesPanel({
       ? (draftIntervalMinutes.trim() ? Number(draftIntervalMinutes) : null)
       : null
     const dailyTime = draftScheduleType === 'daily' ? draftDailyTime.trim() || null : null
-    const maxRunCount = draftMaxRunCount.trim() ? Number(draftMaxRunCount) : null
+    const normalizedMaxRunCountText = draftMaxRunCount.trim()
+    const maxRunCount = normalizedMaxRunCountText ? Number(normalizedMaxRunCountText) : null
 
     return {
       name,
@@ -201,7 +192,7 @@ export function ModuleWorkflowSchedulesPanel({
       run_at: runAt,
       interval_minutes: intervalMinutes && intervalMinutes > 0 ? intervalMinutes : null,
       daily_time: dailyTime,
-      max_run_count: maxRunCount && maxRunCount > 0 ? maxRunCount : null,
+      max_run_count: maxRunCount === -1 ? -1 : maxRunCount && maxRunCount > 0 ? maxRunCount : null,
       input_values: Object.keys(draftInputValues).length > 0 ? draftInputValues : null,
     }
   }
@@ -277,7 +268,7 @@ export function ModuleWorkflowSchedulesPanel({
           <div className="space-y-3">
             {schedules.map((schedule) => {
               const workflowName = workflowNameById.get(schedule.graph_workflow_id) ?? `워크플로우 #${schedule.graph_workflow_id}`
-              const reservedCountLabel = schedule.max_run_count ? `최대 ${schedule.max_run_count}회` : '무제한'
+              const reservedCountLabel = `최대 ${schedule.max_run_count ?? -1}회`
               const runSummaryLabel = getScheduleRunSummaryLabel(schedule)
               const scheduleTimingLabel = schedule.schedule_type === 'once'
                 ? (schedule.run_at ? formatDateTime(schedule.run_at) : '시각 미설정')
@@ -369,10 +360,7 @@ export function ModuleWorkflowSchedulesPanel({
               <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} disabled={isMutating} />
             </SettingsField>
             <SettingsField label="최대 예약 횟수">
-              <div className="space-y-2">
-                <Input type="number" min={1} value={draftMaxRunCount} onChange={(event) => setDraftMaxRunCount(event.target.value)} placeholder="무제한" disabled={isMutating} />
-                <div className="text-[11px] text-muted-foreground">비워두면 무제한으로 계속 돌아가. 숫자를 넣으면 그 횟수만큼 예약/완료 후 자동 종료돼.</div>
-              </div>
+              <Input type="number" min={-1} value={draftMaxRunCount} onChange={(event) => setDraftMaxRunCount(event.target.value)} disabled={isMutating} />
             </SettingsField>
             {draftScheduleType === 'once' ? (
               <SettingsField label="실행 시각">

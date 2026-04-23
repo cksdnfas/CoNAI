@@ -12,6 +12,7 @@ import { GraphWorkflowScheduleService } from '../services/graphWorkflowScheduleS
 import {
   buildGraphWorkflowBrowseContent,
   decorateGraphExecutionRecord,
+  decorateGraphWorkflowScheduleRecords,
   parseStoredGraphWorkflow,
 } from '../services/graphWorkflowViewService'
 import {
@@ -50,6 +51,23 @@ function parseScheduleInputValues(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
 }
 
+function parseScheduleMaxRunCount(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return null
+  }
+
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed)) {
+    return null
+  }
+
+  if (parsed === -1) {
+    return null
+  }
+
+  return parsed > 0 ? parsed : null
+}
+
 function parseGraphRouteInteger(value: string | string[] | undefined) {
   return parseInt(routeParam(routeParam(value)))
 }
@@ -86,7 +104,7 @@ function findGraphWorkflowOrRespond(res: Response, workflowId: number) {
 }
 
 function findGraphWorkflowScheduleOrRespond(res: Response, scheduleId: number) {
-  return GraphWorkflowScheduleModel.findById(scheduleId) ?? sendGraphRouteNotFound(res, 'Graph workflow schedule not found')
+  return GraphWorkflowScheduleModel.findById(scheduleId) ?? sendGraphRouteNotFound(res, '예약작업을 찾지 못했어.')
 }
 
 function findScheduleWorkflowContextOrRespond(res: Response, scheduleId: number) {
@@ -238,7 +256,7 @@ router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
 
   try {
     if (workflowIdParam !== null && Number.isFinite(workflowIdParam)) {
-      return res.json({ success: true, data: GraphWorkflowScheduleModel.findByWorkflowId(workflowIdParam) } as ModuleGraphResponse)
+      return res.json({ success: true, data: decorateGraphWorkflowScheduleRecords(GraphWorkflowScheduleModel.findByWorkflowId(workflowIdParam)) } as ModuleGraphResponse)
     }
 
     if (folderIdParam !== null && Number.isFinite(folderIdParam)) {
@@ -248,10 +266,10 @@ router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
       }
 
       const workflowIds = GraphWorkflowModel.findByFolderIds(GraphWorkflowFolderModel.getSubtreeFolderIds(folder.id), true).map((workflow) => workflow.id)
-      return res.json({ success: true, data: GraphWorkflowScheduleModel.findByWorkflowIds(workflowIds) } as ModuleGraphResponse)
+      return res.json({ success: true, data: decorateGraphWorkflowScheduleRecords(GraphWorkflowScheduleModel.findByWorkflowIds(workflowIds)) } as ModuleGraphResponse)
     }
 
-    return res.json({ success: true, data: GraphWorkflowScheduleModel.findAll() } as ModuleGraphResponse)
+    return res.json({ success: true, data: decorateGraphWorkflowScheduleRecords(GraphWorkflowScheduleModel.findAll()) } as ModuleGraphResponse)
   } catch (error) {
     console.error('Error getting graph workflow schedules:', error)
     return res.status(500).json({ success: false, error: 'Failed to get graph workflow schedules' } as ModuleGraphResponse)
@@ -266,20 +284,21 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const runAt = parseOptionalTrimmedString(req.body?.run_at)
   const intervalMinutes = parsePositiveInteger(req.body?.interval_minutes)
   const dailyTime = parseOptionalTrimmedString(req.body?.daily_time)
-  const maxRunCount = parsePositiveInteger(req.body?.max_run_count)
+  const rawMaxRunCount = req.body?.max_run_count
+  const maxRunCount = parseScheduleMaxRunCount(rawMaxRunCount)
   const timezone = parseOptionalTrimmedString(req.body?.timezone)
   const inputValues = parseScheduleInputValues(req.body?.input_values)
 
   if (!Number.isFinite(workflowId)) {
-    return sendRouteBadRequest(res, 'graph_workflow_id is required')
+    return sendRouteBadRequest(res, '워크플로우 ID가 필요해.')
   }
 
   if (!name) {
-    return sendRouteBadRequest(res, 'name is required')
+    return sendRouteBadRequest(res, '이름이 필요해.')
   }
 
   if (!scheduleType) {
-    return sendRouteBadRequest(res, 'schedule_type must be once, interval, or daily')
+    return sendRouteBadRequest(res, 'schedule_type은 once, interval, daily 중 하나여야 해.')
   }
 
   const workflow = findGraphWorkflowOrRespond(res, workflowId)
@@ -288,15 +307,19 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (scheduleType === 'once' && !runAt) {
-    return sendRouteBadRequest(res, 'run_at is required for one-time schedules')
+    return sendRouteBadRequest(res, '1회 실행 예약에는 실행 시각이 필요해.')
   }
 
   if (scheduleType === 'interval' && !intervalMinutes) {
-    return sendRouteBadRequest(res, 'interval_minutes is required for interval schedules')
+    return sendRouteBadRequest(res, '반복 예약에는 간격(분)이 필요해.')
   }
 
   if (scheduleType === 'daily' && !dailyTime) {
-    return sendRouteBadRequest(res, 'daily_time is required for daily schedules')
+    return sendRouteBadRequest(res, '매일 예약에는 실행 시각이 필요해.')
+  }
+
+  if (rawMaxRunCount !== undefined && rawMaxRunCount !== null && rawMaxRunCount !== '' && maxRunCount === null && Number(rawMaxRunCount) !== -1) {
+    return sendRouteBadRequest(res, '최대 예약 횟수는 양의 정수 또는 -1이어야 해.')
   }
 
   try {
@@ -324,18 +347,18 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
       confirmed_input_signature: GraphWorkflowScheduleService.buildInputSignature(inputValues),
       next_run_at: nextRunAt,
       stop_reason_code: status === 'active' ? null : 'manual_pause',
-      stop_reason_message: status === 'active' ? null : 'Schedule created in paused state.',
+      stop_reason_message: status === 'active' ? null : '예약작업이 일시정지 상태로 생성됐어.',
     })
 
-    return res.status(201).json({ success: true, data: { id: scheduleId, message: 'Graph workflow schedule created successfully' } } as ModuleGraphResponse)
+    return res.status(201).json({ success: true, data: { id: scheduleId, message: '예약작업을 생성했어.' } } as ModuleGraphResponse)
   } catch (error) {
     console.error('Error creating graph workflow schedule:', error)
-    return res.status(500).json({ success: false, error: 'Failed to create graph workflow schedule' } as ModuleGraphResponse)
+    return res.status(500).json({ success: false, error: '예약작업 생성에 실패했어.' } as ModuleGraphResponse)
   }
 }))
 
 router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, 'Invalid schedule ID')
+  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, '잘못된 예약작업 ID야.')
   if (scheduleId === null) {
     return
   }
@@ -353,16 +376,21 @@ router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Resp
   const runAt = req.body?.run_at !== undefined ? parseOptionalTrimmedString(req.body.run_at) : undefined
   const intervalMinutes = req.body?.interval_minutes !== undefined ? parsePositiveInteger(req.body.interval_minutes) : undefined
   const dailyTime = req.body?.daily_time !== undefined ? parseOptionalTrimmedString(req.body.daily_time) : undefined
-  const maxRunCount = req.body?.max_run_count !== undefined ? parsePositiveInteger(req.body.max_run_count) : undefined
+  const rawMaxRunCount = req.body?.max_run_count
+  const maxRunCount = req.body?.max_run_count !== undefined ? parseScheduleMaxRunCount(req.body.max_run_count) : undefined
   const timezone = req.body?.timezone !== undefined ? parseOptionalTrimmedString(req.body.timezone) : undefined
   const inputValues = req.body?.input_values !== undefined ? parseScheduleInputValues(req.body.input_values) : undefined
 
   if (name !== undefined && !name) {
-    return sendRouteBadRequest(res, 'name is required')
+    return sendRouteBadRequest(res, '이름이 필요해.')
   }
 
   if (req.body?.schedule_type !== undefined && !scheduleType) {
-    return sendRouteBadRequest(res, 'schedule_type must be once, interval, or daily')
+    return sendRouteBadRequest(res, 'schedule_type은 once, interval, daily 중 하나여야 해.')
+  }
+
+  if (rawMaxRunCount !== undefined && rawMaxRunCount !== null && rawMaxRunCount !== '' && maxRunCount === null && Number(rawMaxRunCount) !== -1) {
+    return sendRouteBadRequest(res, '최대 예약 횟수는 양의 정수 또는 -1이어야 해.')
   }
 
   try {
@@ -397,18 +425,18 @@ router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Resp
       confirmed_input_signature: GraphWorkflowScheduleService.buildInputSignature(finalInputValues),
       next_run_at: nextRunAt,
       stop_reason_code: finalStatus === 'active' ? null : schedule.stop_reason_code ?? 'manual_pause',
-      stop_reason_message: finalStatus === 'active' ? null : schedule.stop_reason_message ?? 'Schedule paused.',
+      stop_reason_message: finalStatus === 'active' ? null : schedule.stop_reason_message ?? '예약작업이 일시정지 상태야.',
     })
 
-    return res.json({ success: updated, data: { id: scheduleId, message: updated ? 'Graph workflow schedule updated successfully' : 'No schedule changes applied' } } as ModuleGraphResponse)
+    return res.json({ success: updated, data: { id: scheduleId, message: updated ? '예약작업을 업데이트했어.' : '예약작업 변경사항이 없어.' } } as ModuleGraphResponse)
   } catch (error) {
     console.error('Error updating graph workflow schedule:', error)
-    return res.status(500).json({ success: false, error: 'Failed to update graph workflow schedule' } as ModuleGraphResponse)
+    return res.status(500).json({ success: false, error: '예약작업 수정에 실패했어.' } as ModuleGraphResponse)
   }
 }))
 
 router.post('/schedules/:scheduleId/pause', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, 'Invalid schedule ID')
+  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, '잘못된 예약작업 ID야.')
   if (scheduleId === null) {
     return
   }
@@ -421,15 +449,15 @@ router.post('/schedules/:scheduleId/pause', asyncHandler(async (req: Request, re
     status: 'paused',
     next_run_at: null,
     stop_reason_code: 'manual_pause',
-    stop_reason_message: 'Schedule paused by user.',
+    stop_reason_message: '사용자가 예약작업을 일시정지했어.',
   })
   const queueCleanup = GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds([scheduleId])
 
-  return res.json({ success: updated, data: { id: scheduleId, message: 'Graph workflow schedule paused', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
+  return res.json({ success: updated, data: { id: scheduleId, message: '예약작업을 일시정지했어.', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
 }))
 
 router.post('/schedules/:scheduleId/resume', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, 'Invalid schedule ID')
+  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, '잘못된 예약작업 ID야.')
   if (scheduleId === null) {
     return
   }
@@ -456,11 +484,11 @@ router.post('/schedules/:scheduleId/resume', asyncHandler(async (req: Request, r
     stop_reason_message: null,
   })
 
-  return res.json({ success: updated, data: { id: scheduleId, message: 'Graph workflow schedule resumed' } } as ModuleGraphResponse)
+  return res.json({ success: updated, data: { id: scheduleId, message: '예약작업을 다시 켰어.' } } as ModuleGraphResponse)
 }))
 
 router.post('/schedules/:scheduleId/run-now', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, 'Invalid schedule ID')
+  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, '잘못된 예약작업 ID야.')
   if (scheduleId === null) {
     return
   }
@@ -486,15 +514,15 @@ router.post('/schedules/:scheduleId/run-now', asyncHandler(async (req: Request, 
       last_enqueued_at: new Date().toISOString(),
     })
 
-    return res.status(201).json({ success: true, data: { ...result, message: 'Graph workflow schedule run enqueued' } } as ModuleGraphResponse)
+    return res.status(201).json({ success: true, data: { ...result, message: '예약작업 즉시 실행을 등록했어.' } } as ModuleGraphResponse)
   } catch (error) {
     console.error('Error running graph workflow schedule now:', error)
-    return res.status(500).json({ success: false, error: 'Failed to run graph workflow schedule now' } as ModuleGraphResponse)
+    return res.status(500).json({ success: false, error: '예약작업 즉시 실행 등록에 실패했어.' } as ModuleGraphResponse)
   }
 }))
 
 router.delete('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Response) => {
-  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, 'Invalid schedule ID')
+  const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, '잘못된 예약작업 ID야.')
   if (scheduleId === null) {
     return
   }
@@ -505,7 +533,7 @@ router.delete('/schedules/:scheduleId', asyncHandler(async (req: Request, res: R
 
   const queueCleanup = GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds([scheduleId])
   const deleted = GraphWorkflowScheduleModel.delete(scheduleId)
-  return res.json({ success: deleted, data: { id: scheduleId, message: 'Graph workflow schedule deleted', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
+  return res.json({ success: deleted, data: { id: scheduleId, message: '예약작업을 삭제했어.', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
 }))
 
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {

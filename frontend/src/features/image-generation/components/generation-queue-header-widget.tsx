@@ -13,6 +13,7 @@ import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 import { getGraphWorkflowSchedules, getGraphWorkflows, type GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '../image-generation-shared'
+import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '@/features/module-graph/module-graph-shared'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
   formatGenerationQueueTimestamp,
@@ -166,6 +167,11 @@ function getReservationTimingLabel(schedule: GraphWorkflowScheduleRecord) {
   }
 
   return `${schedule.daily_time ?? '--:--'} 매일`
+}
+
+function getReservationRunSummaryLabel(schedule: GraphWorkflowScheduleRecord) {
+  const completedCount = schedule.completed_run_count ?? 0
+  return `${completedCount}/${schedule.max_run_count ?? '-'}`
 }
 
 /** Render the global generation queue widget beside the header search action. */
@@ -507,7 +513,7 @@ export function GenerationQueueHeaderWidget() {
           <>
             <div className="space-y-3 border-y border-border/70 px-3 py-3 sm:px-4">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Summary</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">요약</div>
                 <Badge variant={reservationSchedules.length > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">예약작업 · {reservationSchedules.length}</Badge>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -536,24 +542,26 @@ export function GenerationQueueHeaderWidget() {
                   {reservationSchedules.map((schedule) => {
                     const nextRunAt = formatReservationTimestamp(schedule.next_run_at)
                     const lastEnqueuedAt = formatReservationTimestamp(schedule.last_enqueued_at)
+                    const runSummaryLabel = getReservationRunSummaryLabel(schedule)
                     return (
                       <div key={schedule.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
                         <div className="space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="truncate text-sm font-medium text-foreground">{schedule.name}</div>
-                            <Badge variant={getReservationStatusVariant(schedule.status)}>{schedule.status}</Badge>
+                            <Badge variant={getReservationStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status)}</Badge>
                             <Badge variant="outline">{getReservationTypeLabel(schedule.schedule_type)}</Badge>
                           </div>
                           <div className="text-[11px] text-muted-foreground">
-                            {reservationWorkflowNameById.get(schedule.graph_workflow_id) ?? `Workflow #${schedule.graph_workflow_id}`} · {getReservationTimingLabel(schedule)}
+                            {reservationWorkflowNameById.get(schedule.graph_workflow_id) ?? `워크플로우 #${schedule.graph_workflow_id}`} · {getReservationTimingLabel(schedule)}
                           </div>
                           <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                            <span>{runSummaryLabel}</span>
                             {nextRunAt ? <span>다음 등록 시도 {nextRunAt}</span> : null}
                             {lastEnqueuedAt ? <span>최근 큐 등록 {lastEnqueuedAt}</span> : null}
                           </div>
-                          {schedule.stop_reason_message ? (
+                          {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message) ? (
                             <div className="rounded-sm border border-border/70 bg-background/45 px-2.5 py-2 text-[11px] text-muted-foreground">
-                              {schedule.stop_reason_message}
+                              {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message)}
                             </div>
                           ) : null}
                         </div>

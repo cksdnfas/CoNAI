@@ -7,6 +7,7 @@ import type {
   GraphExecutionStatus,
   GraphWorkflowMetadata,
   GraphWorkflowRecord,
+  GraphWorkflowScheduleStatus,
   ModuleDefinitionRecord,
   ModulePortDataType,
   ModulePortDefinition,
@@ -328,6 +329,102 @@ export function formatDateTime(value?: string | null) {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(date)
+}
+
+const GRAPH_WORKFLOW_STOP_REASON_LABELS: Partial<Record<string, string>> = {
+  manual_pause: '사용자가 예약작업을 일시정지했어.',
+  workflow_changed: '워크플로우가 바뀌어서 다시 시작 전에 검토가 필요해.',
+  workflow_missing: '연결된 워크플로우가 더 이상 없어.',
+  execution_failed: '예약 실행에 실패했어.',
+  overlap_detected: '이전 실행이 아직 대기 중이거나 실행 중일 때 다음 예약 시점이 도착했어.',
+  max_run_count_reached: '최대 예약 횟수에 도달했어.',
+  one_time_consumed: '1회 실행 예약이 이미 사용됐어.',
+}
+
+const GRAPH_WORKFLOW_ERROR_MESSAGE_LABELS: Record<string, string> = {
+  'Workflow changed and schedule review is required before restart.': '워크플로우가 바뀌어서 다시 시작 전에 검토가 필요해.',
+  'Linked workflow no longer exists.': '연결된 워크플로우가 더 이상 없어.',
+  'Scheduled execution failed.': '예약 실행에 실패했어.',
+  'The next scheduled run arrived while a prior run was still queued or running.': '이전 실행이 아직 대기 중이거나 실행 중일 때 다음 예약 시점이 도착했어.',
+  'Maximum scheduled run count has been reserved or completed.': '최대 예약 횟수에 도달했어.',
+  'One-time schedule has been consumed.': '1회 실행 예약이 이미 사용됐어.',
+  'Schedule paused by user.': '사용자가 예약작업을 일시정지했어.',
+  'Schedule paused.': '예약작업이 일시정지 상태야.',
+  'Schedule created in paused state.': '예약작업이 일시정지 상태로 생성됐어.',
+  'Queue job cancelled before ComfyUI output handoff completed': '취소 요청 뒤에 ComfyUI 결과 전달이 끝나기 전에 작업이 정리됐어.',
+}
+
+function looksMostlyEnglishMessage(value: string) {
+  return /[A-Za-z]/.test(value) && !/[가-힣]/.test(value)
+}
+
+/** Resolve one localized label for graph workflow schedule status badges. */
+export function getGraphWorkflowScheduleStatusLabel(status: GraphWorkflowScheduleStatus) {
+  if (status === 'active') {
+    return '활성'
+  }
+  if (status === 'paused') {
+    return '일시정지'
+  }
+  if (status === 'error_stopped') {
+    return '오류로 중지'
+  }
+  if (status === 'overlap_stopped') {
+    return '중복으로 중지'
+  }
+  return '완료'
+}
+
+/** Resolve one localized label for graph execution status badges. */
+export function getGraphExecutionStatusLabel(status: GraphExecutionStatus) {
+  if (status === 'draft') {
+    return '초안'
+  }
+  if (status === 'queued') {
+    return '대기 중'
+  }
+  if (status === 'running') {
+    return '실행 중'
+  }
+  if (status === 'completed') {
+    return '완료'
+  }
+  if (status === 'failed') {
+    return '실패'
+  }
+  return '취소됨'
+}
+
+/** Convert one graph workflow error string into Korean when the source is a known English backend message. */
+export function localizeGraphWorkflowErrorMessage(message?: string | null, fallback = '오류가 발생했어.') {
+  const trimmedMessage = typeof message === 'string' ? message.trim() : ''
+  if (!trimmedMessage) {
+    return null
+  }
+
+  const exactLabel = GRAPH_WORKFLOW_ERROR_MESSAGE_LABELS[trimmedMessage]
+  if (exactLabel) {
+    return exactLabel
+  }
+
+  if (looksMostlyEnglishMessage(trimmedMessage)) {
+    return fallback
+  }
+
+  return trimmedMessage
+}
+
+/** Resolve one localized stop reason for workflow reservations, preferring stable reason codes. */
+export function getGraphWorkflowStopReasonLabel(stopReasonCode?: string | null, stopReasonMessage?: string | null) {
+  if (stopReasonCode && GRAPH_WORKFLOW_STOP_REASON_LABELS[stopReasonCode]) {
+    if (stopReasonCode === 'execution_failed' && stopReasonMessage) {
+      return localizeGraphWorkflowErrorMessage(stopReasonMessage, '예약 실행에 실패했어.')
+    }
+
+    return GRAPH_WORKFLOW_STOP_REASON_LABELS[stopReasonCode] ?? null
+  }
+
+  return localizeGraphWorkflowErrorMessage(stopReasonMessage, '예약작업이 중지됐어.')
 }
 
 /** Map a stored temp artifact path back into a backend-served /temp URL. */
