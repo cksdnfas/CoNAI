@@ -223,6 +223,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
       interval_minutes INTEGER,
       daily_time TEXT,
       max_run_count INTEGER,
+      failure_policy TEXT CHECK(failure_policy IN ('stop', 'continue')) DEFAULT 'stop',
       input_values TEXT,
       confirmed_graph_version INTEGER,
       confirmed_input_signature TEXT,
@@ -455,6 +456,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
         interval_minutes INTEGER,
         daily_time TEXT,
         max_run_count INTEGER,
+        failure_policy TEXT CHECK(failure_policy IN ('stop', 'continue')) DEFAULT 'stop',
         input_values TEXT,
         confirmed_graph_version INTEGER,
         confirmed_input_signature TEXT,
@@ -469,6 +471,12 @@ export function createUserSettingsSchema(db: Database.Database): void {
         FOREIGN KEY (last_execution_id) REFERENCES graph_executions(id) ON DELETE SET NULL
       )
     `);
+  }
+
+  if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='graph_workflow_schedules'").get() && !hasColumn('graph_workflow_schedules', 'failure_policy')) {
+    console.log('  Migrating graph_workflow_schedules: adding failure_policy column');
+    db.exec("ALTER TABLE graph_workflow_schedules ADD COLUMN failure_policy TEXT CHECK(failure_policy IN ('stop', 'continue')) DEFAULT 'stop'");
+    db.exec("UPDATE graph_workflow_schedules SET failure_policy = COALESCE(failure_policy, 'stop') WHERE failure_policy IS NULL");
   }
 
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='generation_queue_jobs'").get()) {

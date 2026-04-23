@@ -7,7 +7,13 @@ import { Select } from '@/components/ui/select'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { SettingsField, SettingsInsetBlock, SettingsSection } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import type { GraphWorkflowRecord, GraphWorkflowScheduleRecord, GraphWorkflowScheduleStatus, GraphWorkflowScheduleType } from '@/lib/api'
+import type {
+  GraphWorkflowRecord,
+  GraphWorkflowScheduleFailurePolicy,
+  GraphWorkflowScheduleRecord,
+  GraphWorkflowScheduleStatus,
+  GraphWorkflowScheduleType,
+} from '@/lib/api'
 import { formatDateTime, getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '../module-graph-shared'
 import { WorkflowInputFields } from './workflow-input-fields'
 
@@ -19,6 +25,7 @@ type ScheduleMutationPayload = {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
 }
 
@@ -89,6 +96,10 @@ function getScheduleRunSummaryLabel(schedule: GraphWorkflowScheduleRecord) {
   return `${completedCount}/${schedule.max_run_count ?? '-'}`
 }
 
+function getScheduleFailurePolicyLabel(failurePolicy?: GraphWorkflowScheduleFailurePolicy | null) {
+  return failurePolicy === 'continue' ? '실패 시 계속' : '실패 시 중지'
+}
+
 /** Render workflow autorun list and inline create/edit controls inside the queue tab. */
 export function ModuleWorkflowSchedulesPanel({
   schedules,
@@ -123,6 +134,7 @@ export function ModuleWorkflowSchedulesPanel({
   const [draftIntervalMinutes, setDraftIntervalMinutes] = useState('60')
   const [draftDailyTime, setDraftDailyTime] = useState('09:00')
   const [draftMaxRunCount, setDraftMaxRunCount] = useState('-1')
+  const [draftFailurePolicy, setDraftFailurePolicy] = useState<GraphWorkflowScheduleFailurePolicy>('stop')
   const [draftInputValues, setDraftInputValues] = useState<Record<string, unknown>>({})
 
   const selectedWorkflowRecord = useMemo(
@@ -142,6 +154,7 @@ export function ModuleWorkflowSchedulesPanel({
     setDraftIntervalMinutes('60')
     setDraftDailyTime('09:00')
     setDraftMaxRunCount('-1')
+    setDraftFailurePolicy('stop')
     setDraftInputValues({})
   }
 
@@ -167,6 +180,7 @@ export function ModuleWorkflowSchedulesPanel({
     setDraftIntervalMinutes(schedule.interval_minutes ? String(schedule.interval_minutes) : '60')
     setDraftDailyTime(schedule.daily_time || '09:00')
     setDraftMaxRunCount(schedule.max_run_count ? String(schedule.max_run_count) : '-1')
+    setDraftFailurePolicy(schedule.failure_policy === 'continue' ? 'continue' : 'stop')
     setDraftInputValues(parseStoredInputValues(schedule.input_values))
   }
 
@@ -193,6 +207,7 @@ export function ModuleWorkflowSchedulesPanel({
       interval_minutes: intervalMinutes && intervalMinutes > 0 ? intervalMinutes : null,
       daily_time: dailyTime,
       max_run_count: maxRunCount === -1 ? -1 : maxRunCount && maxRunCount > 0 ? maxRunCount : null,
+      failure_policy: draftFailurePolicy,
       input_values: Object.keys(draftInputValues).length > 0 ? draftInputValues : null,
     }
   }
@@ -213,7 +228,7 @@ export function ModuleWorkflowSchedulesPanel({
       return true
     }
     return false
-  }, [draftDailyTime, draftEnabled, draftInputValues, draftIntervalMinutes, draftMaxRunCount, draftName, draftRunAt, draftScheduleType, draftWorkflowId])
+  }, [draftDailyTime, draftEnabled, draftFailurePolicy, draftInputValues, draftIntervalMinutes, draftMaxRunCount, draftName, draftRunAt, draftScheduleType, draftWorkflowId])
 
   const handleSubmit = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
@@ -270,6 +285,7 @@ export function ModuleWorkflowSchedulesPanel({
               const workflowName = workflowNameById.get(schedule.graph_workflow_id) ?? `워크플로우 #${schedule.graph_workflow_id}`
               const reservedCountLabel = `최대 ${schedule.max_run_count ?? -1}회`
               const runSummaryLabel = getScheduleRunSummaryLabel(schedule)
+              const failurePolicyLabel = getScheduleFailurePolicyLabel(schedule.failure_policy)
               const scheduleTimingLabel = schedule.schedule_type === 'once'
                 ? (schedule.run_at ? formatDateTime(schedule.run_at) : '시각 미설정')
                 : schedule.schedule_type === 'interval'
@@ -286,7 +302,7 @@ export function ModuleWorkflowSchedulesPanel({
                         <Badge variant="outline">{getScheduleTypeLabel(schedule.schedule_type)}</Badge>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {workflowName} · {scheduleTimingLabel} · {reservedCountLabel}
+                        {workflowName} · {scheduleTimingLabel} · {reservedCountLabel} · {failurePolicyLabel}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                         <span>{runSummaryLabel}</span>
@@ -361,6 +377,12 @@ export function ModuleWorkflowSchedulesPanel({
             </SettingsField>
             <SettingsField label="최대 예약 횟수">
               <Input type="number" min={-1} value={draftMaxRunCount} onChange={(event) => setDraftMaxRunCount(event.target.value)} disabled={isMutating} />
+            </SettingsField>
+            <SettingsField label="실패 처리">
+              <Select value={draftFailurePolicy} onChange={(event) => setDraftFailurePolicy(event.target.value as GraphWorkflowScheduleFailurePolicy)} disabled={isMutating}>
+                <option value="stop">실패 시 중지</option>
+                <option value="continue">실패해도 계속</option>
+              </Select>
             </SettingsField>
             {draftScheduleType === 'once' ? (
               <SettingsField label="실행 시각">

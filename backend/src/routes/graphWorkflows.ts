@@ -24,6 +24,7 @@ import {
   ModuleGraphResponse,
   GraphWorkflowCreateData,
   GraphWorkflowUpdateData,
+  GraphWorkflowScheduleFailurePolicy,
   GraphWorkflowScheduleStatus,
   GraphWorkflowScheduleType,
 } from '../types/moduleGraph'
@@ -41,6 +42,10 @@ function parseScheduleStatus(value: unknown): GraphWorkflowScheduleStatus | null
   return value === 'active' || value === 'paused' || value === 'error_stopped' || value === 'overlap_stopped' || value === 'completed'
     ? value
     : null
+}
+
+function parseScheduleFailurePolicy(value: unknown): GraphWorkflowScheduleFailurePolicy | null {
+  return value === 'stop' || value === 'continue' ? value : null
 }
 
 function parseOptionalTrimmedString(value: unknown) {
@@ -286,6 +291,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const dailyTime = parseOptionalTrimmedString(req.body?.daily_time)
   const rawMaxRunCount = req.body?.max_run_count
   const maxRunCount = parseScheduleMaxRunCount(rawMaxRunCount)
+  const failurePolicy = parseScheduleFailurePolicy(req.body?.failure_policy) ?? 'stop'
   const timezone = parseOptionalTrimmedString(req.body?.timezone)
   const inputValues = parseScheduleInputValues(req.body?.input_values)
 
@@ -299,6 +305,10 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
 
   if (!scheduleType) {
     return sendRouteBadRequest(res, 'schedule_type은 once, interval, daily 중 하나여야 해.')
+  }
+
+  if (req.body?.failure_policy !== undefined && !parseScheduleFailurePolicy(req.body.failure_policy)) {
+    return sendRouteBadRequest(res, '실패 처리 방식은 stop 또는 continue여야 해.')
   }
 
   const workflow = findGraphWorkflowOrRespond(res, workflowId)
@@ -342,6 +352,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
       interval_minutes: intervalMinutes,
       daily_time: dailyTime,
       max_run_count: maxRunCount,
+      failure_policy: failurePolicy,
       input_values: inputValues,
       confirmed_graph_version: workflow.version,
       confirmed_input_signature: GraphWorkflowScheduleService.buildInputSignature(inputValues),
@@ -378,6 +389,7 @@ router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Resp
   const dailyTime = req.body?.daily_time !== undefined ? parseOptionalTrimmedString(req.body.daily_time) : undefined
   const rawMaxRunCount = req.body?.max_run_count
   const maxRunCount = req.body?.max_run_count !== undefined ? parseScheduleMaxRunCount(req.body.max_run_count) : undefined
+  const failurePolicy = req.body?.failure_policy !== undefined ? parseScheduleFailurePolicy(req.body.failure_policy) : undefined
   const timezone = req.body?.timezone !== undefined ? parseOptionalTrimmedString(req.body.timezone) : undefined
   const inputValues = req.body?.input_values !== undefined ? parseScheduleInputValues(req.body.input_values) : undefined
 
@@ -387,6 +399,10 @@ router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Resp
 
   if (req.body?.schedule_type !== undefined && !scheduleType) {
     return sendRouteBadRequest(res, 'schedule_type은 once, interval, daily 중 하나여야 해.')
+  }
+
+  if (req.body?.failure_policy !== undefined && !failurePolicy) {
+    return sendRouteBadRequest(res, '실패 처리 방식은 stop 또는 continue여야 해.')
   }
 
   if (rawMaxRunCount !== undefined && rawMaxRunCount !== null && rawMaxRunCount !== '' && maxRunCount === null && Number(rawMaxRunCount) !== -1) {
@@ -420,6 +436,7 @@ router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Resp
       interval_minutes: intervalMinutes,
       daily_time: dailyTime,
       max_run_count: maxRunCount,
+      failure_policy: failurePolicy,
       input_values: inputValues,
       confirmed_graph_version: workflow.version,
       confirmed_input_signature: GraphWorkflowScheduleService.buildInputSignature(finalInputValues),

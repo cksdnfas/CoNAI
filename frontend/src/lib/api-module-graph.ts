@@ -130,6 +130,7 @@ export type GraphExecutionStatus = 'draft' | 'queued' | 'running' | 'completed' 
 export type GraphExecutionTriggerType = 'manual' | 'schedule'
 export type GraphWorkflowScheduleType = 'once' | 'interval' | 'daily'
 export type GraphWorkflowScheduleStatus = 'active' | 'paused' | 'error_stopped' | 'overlap_stopped' | 'completed'
+export type GraphWorkflowScheduleFailurePolicy = 'stop' | 'continue'
 
 export interface GraphExecutionRecord {
   id: number
@@ -160,6 +161,7 @@ export interface GraphWorkflowScheduleRecord {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: string | null
   confirmed_graph_version?: number | null
   confirmed_input_signature?: string | null
@@ -588,6 +590,7 @@ export async function createGraphWorkflowSchedule(payload: {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
 }) {
   const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/graph-workflows/schedules', {
@@ -611,6 +614,7 @@ export async function updateGraphWorkflowSchedule(scheduleId: number, payload: {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
 }) {
   const response = await requestJson<ApiEnvelope<CreateEnvelope>>(`/api/graph-workflows/schedules/${scheduleId}`, {

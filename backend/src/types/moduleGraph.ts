@@ -10,6 +10,7 @@ export type GraphExecutionStatus = 'draft' | 'queued' | 'running' | 'completed' 
 export type GraphExecutionTriggerType = 'manual' | 'schedule'
 export type GraphWorkflowScheduleType = 'once' | 'interval' | 'daily'
 export type GraphWorkflowScheduleStatus = 'active' | 'paused' | 'error_stopped' | 'overlap_stopped' | 'completed'
+export type GraphWorkflowScheduleFailurePolicy = 'stop' | 'continue'
 
 export interface ModulePortDefinition {
   key: string
@@ -224,6 +225,7 @@ export interface GraphWorkflowScheduleRecord {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: string | null
   confirmed_graph_version?: number | null
   confirmed_input_signature?: string | null
@@ -252,6 +254,7 @@ export interface GraphWorkflowScheduleCreateData {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
   confirmed_graph_version?: number | null
   confirmed_input_signature?: string | null
@@ -271,6 +274,7 @@ export interface GraphWorkflowScheduleUpdateData {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
   confirmed_graph_version?: number | null
   confirmed_input_signature?: string | null

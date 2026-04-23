@@ -239,9 +239,10 @@ export class GraphWorkflowScheduleService {
     const existingExecutions = GraphExecutionModel.findByScheduleIds([schedule.id], 500)
     const executionSummary = summarizeScheduleExecutions(existingExecutions)
     const activeOverlapCount = executionSummary.queued + executionSummary.running
+    const reservedRunCount = executionSummary.completed + executionSummary.queued + executionSummary.running
     const lastExecution = schedule.last_execution_id ? GraphExecutionModel.findById(schedule.last_execution_id) : null
 
-    if (lastExecution?.status === 'failed') {
+    if (lastExecution?.status === 'failed' && (schedule.failure_policy ?? 'stop') !== 'continue') {
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'error_stopped',
         stop_reason_code: 'execution_failed',
@@ -251,23 +252,30 @@ export class GraphWorkflowScheduleService {
       return
     }
 
-    if ((schedule.max_run_count === null || schedule.max_run_count === undefined) && activeOverlapCount > 0) {
-      GraphWorkflowScheduleModel.update(schedule.id, {
-        status: 'overlap_stopped',
-        stop_reason_code: 'overlap_detected',
-        stop_reason_message: '이전 실행이 아직 대기 중이거나 실행 중일 때 다음 예약 시점이 도착했어.',
-        next_run_at: null,
-      })
-      return
-    }
-
-    const reservedRunCount = executionSummary.completed + executionSummary.queued + executionSummary.running
     if (schedule.max_run_count !== null && schedule.max_run_count !== undefined && reservedRunCount >= schedule.max_run_count) {
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'completed',
         stop_reason_code: 'max_run_count_reached',
         stop_reason_message: '최대 예약 횟수에 도달했어.',
         next_run_at: null,
+      })
+      return
+    }
+
+    if (schedule.schedule_type !== 'once' && activeOverlapCount > 0) {
+      const deferredNextRunAt = GraphWorkflowScheduleService.buildInitialNextRunAt({
+        scheduleType: schedule.schedule_type,
+        runAt: schedule.run_at,
+        intervalMinutes: schedule.interval_minutes,
+        dailyTime: schedule.daily_time,
+        now,
+      })
+
+      GraphWorkflowScheduleModel.update(schedule.id, {
+        status: 'active',
+        next_run_at: deferredNextRunAt,
+        stop_reason_code: null,
+        stop_reason_message: null,
       })
       return
     }

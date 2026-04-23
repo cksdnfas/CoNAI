@@ -74,11 +74,11 @@ export class GraphWorkflowScheduleModel {
     const info = db.prepare(`
       INSERT INTO graph_workflow_schedules (
         graph_workflow_id, name, schedule_type, status, timezone, run_at,
-        interval_minutes, daily_time, max_run_count, input_values,
+        interval_minutes, daily_time, max_run_count, failure_policy, input_values,
         confirmed_graph_version, confirmed_input_signature,
         stop_reason_code, stop_reason_message,
         last_execution_id, next_run_at, last_enqueued_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.graph_workflow_id,
       data.name,
@@ -89,6 +89,7 @@ export class GraphWorkflowScheduleModel {
       data.interval_minutes ?? null,
       data.daily_time ?? null,
       data.max_run_count ?? null,
+      data.failure_policy ?? 'stop',
       stringifyInputValues(data.input_values) ?? null,
       data.confirmed_graph_version ?? null,
       data.confirmed_input_signature ?? null,
