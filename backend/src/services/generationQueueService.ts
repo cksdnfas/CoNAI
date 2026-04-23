@@ -18,6 +18,7 @@ import { getComfyRequestDebugRelativePath, writeComfyRequestDebugSnapshot, type 
 import { FileDiscoveryService } from './folderScan/fileDiscoveryService'
 import { settingsService } from './settingsService'
 import { ImageUploadService } from './imageUploadService'
+import { WildcardService } from './wildcardService'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
 import type { AIMetadata } from './metadata/types'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
@@ -88,9 +89,22 @@ function parseNaiQueuePayload(record: GenerationQueueJobRecord) {
   return payload as unknown as NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }
 }
 
+function parseCodexWildcardText(value: unknown) {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  return WildcardService.parseWildcards(trimmed, 'nai')
+}
+
 function parseCodexQueuePayload(record: GenerationQueueJobRecord) {
   const payload = parseStoredRequestPayload(record)
-  const prompt = typeof payload.prompt === 'string' ? payload.prompt.trim() : ''
+  const prompt = parseCodexWildcardText(payload.prompt)
   if (!prompt) {
     throw new Error(`Queue job ${record.id} is missing string request_payload.prompt for Codex execution`)
   }
@@ -110,7 +124,7 @@ function parseCodexQueuePayload(record: GenerationQueueJobRecord) {
   return {
     prompt,
     model: typeof payload.model === 'string' && payload.model.trim().length > 0 ? payload.model.trim() : undefined,
-    negative_prompt: typeof payload.negative_prompt === 'string' && payload.negative_prompt.trim().length > 0 ? payload.negative_prompt.trim() : undefined,
+    negative_prompt: parseCodexWildcardText(payload.negative_prompt),
     size: typeof payload.size === 'string' && payload.size.trim().length > 0 ? payload.size.trim() : undefined,
     quality: typeof payload.quality === 'string' && payload.quality.trim().length > 0 ? payload.quality.trim() : undefined,
     background,
