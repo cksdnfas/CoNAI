@@ -8,6 +8,7 @@ import {
   normalizeGenerationQueueRoutingTag,
   resolveGenerationQueueLaneMeta,
 } from '../services/generationQueueRouting'
+import { getCodexAvailabilityStatus } from '../services/codexGenerationExecutor'
 import { GenerationQueueService } from '../services/generationQueueService'
 import { readComfyRequestDebugSnapshot } from '../services/generationRequestDebugService'
 import { AuthAccessControlService } from '../services/authAccessControlService'
@@ -419,6 +420,15 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     visible: visibleStatusCounts,
     total_visible: visibleRecords.length,
     active_visible: visibleRecords.filter((record) => ACTIVE_QUEUE_STATUSES.includes(record.status)).length,
+  })
+}))
+
+/** GET /api/generation-queue/codex/status */
+router.get('/codex/status', asyncHandler(async (_req: Request, res: Response) => {
+  const status = await getCodexAvailabilityStatus()
+  res.json({
+    success: true,
+    data: status,
   })
 }))
 

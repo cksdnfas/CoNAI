@@ -88,6 +88,17 @@ export interface GenerationQueueStatusCounts {
   cancelled: number
 }
 
+export interface CodexGenerationStatus {
+  installed: boolean
+  authenticated: boolean
+  available: boolean
+  authMode: string | null
+  command: string
+  rawOutput: string
+  message: string
+  exitCode: number | null
+}
+
 export interface GenerationHistoryRecord {
   id: number
   service_type: GenerationServiceType

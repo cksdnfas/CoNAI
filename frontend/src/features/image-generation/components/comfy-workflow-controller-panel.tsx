@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, ChevronDown, Play, RotateCcw, Save, Settings2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Play, RotateCcw, Save } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
@@ -168,7 +168,6 @@ type ComfyWorkflowControllerPanelProps = {
   onFieldChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
   onOpenModuleSave: () => void
-  onOpenSaveOptions: () => void
   onResetDraft: () => void
   onGenerateSelected: () => void
 }
@@ -193,7 +192,6 @@ export function ComfyWorkflowControllerPanel({
   onFieldChange,
   onImageChange,
   onOpenModuleSave,
-  onOpenSaveOptions,
   onResetDraft,
   onGenerateSelected,
 }: ComfyWorkflowControllerPanelProps) {
@@ -322,19 +320,6 @@ export function ComfyWorkflowControllerPanel({
         >
           <Play className="h-4 w-4 fill-current" />
         </Button>
-
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          onClick={onOpenSaveOptions}
-          disabled={isGenerating || workflowFields.length === 0}
-          aria-label="생성 결과 저장 옵션"
-          title="생성 결과 저장 옵션"
-          className="rounded-none border-l border-border/70 shadow-none"
-        >
-          <Settings2 className="h-4 w-4" />
-        </Button>
       </CompactGenerationActionSurface>
     </div>
   )
@@ -454,19 +439,6 @@ export function ComfyWorkflowControllerPanel({
           className="rounded-none border-l border-border/70 shadow-none"
         >
           <Play className="h-4 w-4 fill-current" />
-        </Button>
-
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          onClick={onOpenSaveOptions}
-          disabled={isGenerating || workflowFields.length === 0}
-          aria-label="생성 결과 저장 옵션"
-          title="생성 결과 저장 옵션"
-          className="rounded-none border-l border-border/70 shadow-none"
-        >
-          <Settings2 className="h-4 w-4" />
         </Button>
       </CompactGenerationActionSurface>
     </div>

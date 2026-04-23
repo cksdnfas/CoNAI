@@ -33,6 +33,17 @@ export type CodexGenerationResult = {
   stderrPath: string
 }
 
+export type CodexAvailabilityStatus = {
+  installed: boolean
+  authenticated: boolean
+  available: boolean
+  authMode: string | null
+  command: string
+  rawOutput: string
+  message: string
+  exitCode: number | null
+}
+
 const SUPPORTED_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp'])
 const SUPPORTED_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp'])
 
@@ -158,7 +169,7 @@ function buildCodexPrompt(payload: CodexGenerationPayload, outputFileNames: stri
   return lines.join('\n')
 }
 
-function resolveCodexCommand() {
+export function resolveCodexCommand() {
   if (process.platform === 'win32') {
     const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
     const npmCodexJsPath = path.join(appData, 'npm', 'node_modules', '@openai', 'codex', 'bin', 'codex.js')
@@ -182,6 +193,66 @@ function resolveCodexCommand() {
     command: 'codex',
     prefixArgs: [] as string[],
   }
+}
+
+export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilityStatus> {
+  const resolvedCommand = resolveCodexCommand()
+
+  return await new Promise<CodexAvailabilityStatus>((resolve) => {
+    const args = [...resolvedCommand.prefixArgs, 'login', 'status']
+    let stdout = ''
+    let stderr = ''
+
+    const child = spawn(resolvedCommand.command, args, {
+      cwd: runtimePaths.tempDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: process.env,
+      windowsHide: true,
+    })
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString()
+    })
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
+
+    child.once('error', (error) => {
+      resolve({
+        installed: false,
+        authenticated: false,
+        available: false,
+        authMode: null,
+        command: resolvedCommand.command,
+        rawOutput: '',
+        message: `Codex command unavailable: ${error.message}`,
+        exitCode: null,
+      })
+    })
+
+    child.once('close', (code) => {
+      const rawOutput = `${stdout}\n${stderr}`.trim()
+      const normalized = rawOutput.toLowerCase()
+      const authenticated = normalized.includes('logged in')
+      const authModeMatch = rawOutput.match(/logged in using\s+(.+)/i)
+      const installed = code === 0 || rawOutput.length > 0
+      const message = authenticated
+        ? (authModeMatch?.[0]?.trim() || rawOutput || 'Logged in')
+        : (rawOutput || `Codex login status exited with code ${code ?? 'unknown'}`)
+
+      resolve({
+        installed,
+        authenticated,
+        available: installed && authenticated,
+        authMode: authModeMatch?.[1]?.trim() ?? null,
+        command: resolvedCommand.command,
+        rawOutput,
+        message,
+        exitCode: code,
+      })
+    })
+  })
 }
 
 async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: string[]) {

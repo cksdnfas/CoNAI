@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ArrowUp, ExternalLink, RotateCcw, Save, Settings2, Sparkles } from 'lucide-react'
+import { ArrowUp, ExternalLink, RotateCcw, Save, Sparkles } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -112,7 +112,6 @@ export interface NaiActionSectionProps {
   generateButtonLabel: string
   costErrorMessage?: string | null
   onOpenModuleSave: () => void
-  onOpenSaveOptions: () => void
   onUpscale: () => void
   onReset: () => void
   onGenerate: () => void
@@ -128,7 +127,6 @@ export function NaiActionSection({
   generateButtonLabel,
   costErrorMessage,
   onOpenModuleSave,
-  onOpenSaveOptions,
   onUpscale,
   onReset,
   onGenerate,
@@ -178,17 +176,6 @@ export function NaiActionSection({
           <Button type="button" onClick={onGenerate} disabled={isGenerating || !canGenerate}>
             <Sparkles className="h-4 w-4" />
             {generateButtonLabel}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            onClick={onOpenSaveOptions}
-            disabled={isGenerating || isUpscaling}
-            aria-label="생성 결과 저장 옵션"
-            title="생성 결과 저장 옵션"
-          >
-            <Settings2 className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -261,18 +248,6 @@ export function NaiActionSection({
           {generateButtonLabel}
         </Button>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onOpenSaveOptions}
-          disabled={isGenerating || isUpscaling}
-          aria-label="생성 결과 저장 옵션"
-          title="생성 결과 저장 옵션"
-          className="rounded-none border-l border-border/70 shadow-none"
-        >
-          <Settings2 className="h-4 w-4" />
-        </Button>
       </CompactGenerationActionSurface>
     )
   }

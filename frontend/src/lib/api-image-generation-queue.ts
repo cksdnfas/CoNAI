@@ -1,5 +1,5 @@
 import { requestJson } from './api-image-generation-request'
-import type { CreateGenerationQueueJobPayload, GenerationQueueJobRecord, GenerationQueueJobStatus, GenerationQueueRequestDebugSnapshot, GenerationQueueStatusCounts } from './api-image-generation-types'
+import type { CodexGenerationStatus, CreateGenerationQueueJobPayload, GenerationQueueJobRecord, GenerationQueueJobStatus, GenerationQueueRequestDebugSnapshot, GenerationQueueStatusCounts } from './api-image-generation-types'
 
 interface GenerationQueueListResponse {
   success: boolean
@@ -24,6 +24,11 @@ interface GenerationQueueStatsResponse {
 interface GenerationQueueRequestDebugResponse {
   success: boolean
   data: GenerationQueueRequestDebugSnapshot
+}
+
+interface CodexGenerationStatusResponse {
+  success: boolean
+  data: CodexGenerationStatus
 }
 
 /** Load queue jobs for the image generation workspace. */
@@ -82,6 +87,11 @@ export async function createGenerationQueueJob(payload: CreateGenerationQueueJob
 /** Load the final upstream request snapshot captured for one queue job. */
 export async function getGenerationQueueRequestDebug(queueJobId: number) {
   return requestJson<GenerationQueueRequestDebugResponse>(`/api/generation-queue/${queueJobId}/request-debug`)
+}
+
+/** Load current Codex CLI availability/authentication state for the image-generation workspace. */
+export async function getCodexGenerationStatus() {
+  return requestJson<CodexGenerationStatusResponse>('/api/generation-queue/codex/status')
 }
 
 /** Retry one failed or cancelled queue job. */
