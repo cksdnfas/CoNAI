@@ -166,7 +166,7 @@ export function normalizeBase64ImageData(value?: string): string | undefined {
     return undefined
   }
 
-  return value.replace(/^data:image\/\w+;base64,/, '')
+  return value.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, '')
 }
 
 /** Convert an image buffer into a data URL for downstream graph nodes. */

@@ -93,9 +93,9 @@ function decodeDataUrl(dataUrl: string) {
     throw new Error('Image payload is empty')
   }
 
-  const mimeMatch = /^data:([^;]+);base64,/i.exec(normalized)
+  const mimeMatch = /^data:([^;]+);base64,/i.exec(dataUrl)
   const mimeType = mimeMatch?.[1]?.toLowerCase() ?? 'image/png'
-  const base64 = normalized.replace(/^data:[^;]+;base64,/i, '')
+  const base64 = normalized
 
   let extension = '.png'
   if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') {

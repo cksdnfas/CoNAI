@@ -259,7 +259,7 @@ export class ImageEditorService {
       throw new Error(`Image file not found: ${imageId}`);
     }
 
-    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '');
+    const base64Data = imageData.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, '');
     const imageBuffer = Buffer.from(base64Data, 'base64');
 
     const originalPath = imageFile.original_file_path;

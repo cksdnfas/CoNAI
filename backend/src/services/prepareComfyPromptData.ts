@@ -12,7 +12,7 @@ function normalizeBase64ImageData(value?: string) {
     return undefined
   }
 
-  return value.replace(/^data:image\/\w+;base64,/, '')
+  return value.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, '')
 }
 
 function sanitizeUploadSegment(value: string) {

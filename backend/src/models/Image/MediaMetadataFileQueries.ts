@@ -1,5 +1,6 @@
 import { db } from '../../database/init';
 import { ImageSafetyService } from '../../services/imageSafetyService';
+import type { FileType } from '../../types/image';
 
 function getVisibleMediaMetadataCondition() {
   return ImageSafetyService.buildVisibleScoreCondition('mm.rating_score');
@@ -163,16 +164,16 @@ export class MediaMetadataFileQueries {
     return db.prepare(query).all(...compositeHashes);
   }
 
-  /** Pick one random active image row without ORDER BY RANDOM(). */
-  static getRandomImage(): any | null {
+  /** Pick one random active media row for a specific file type without ORDER BY RANDOM(). */
+  static getRandomByFileType(fileType: Extract<FileType, 'image' | 'video'>): any | null {
     const visibleCondition = getVisibleMediaMetadataCondition();
     const countStmt = db.prepare(`
       SELECT COUNT(*) as total
       FROM image_files if
       LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
-      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition}
+      WHERE if.file_status = 'active' AND if.file_type = ? AND if.composite_hash IS NOT NULL AND ${visibleCondition}
     `);
-    const countRow = countStmt.get() as { total: number };
+    const countRow = countStmt.get(fileType) as { total: number };
 
     if (!countRow || countRow.total === 0) {
       return null;
@@ -224,13 +225,23 @@ export class MediaMetadataFileQueries {
         if.file_type
       FROM image_files if
       LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
-      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition}
+      WHERE if.file_status = 'active' AND if.file_type = ? AND if.composite_hash IS NOT NULL AND ${visibleCondition}
       LIMIT 1 OFFSET ?
     `);
 
-    const row = stmt.get(randomOffset);
-    console.log('[MediaMetadataModel] Random image selected:', (row as any)?.composite_hash?.substring(0, 8));
+    const row = stmt.get(fileType, randomOffset);
+    console.log(`[MediaMetadataModel] Random ${fileType} selected:`, (row as any)?.composite_hash?.substring(0, 8));
 
     return row || null;
+  }
+
+  /** Pick one random active image row without ORDER BY RANDOM(). */
+  static getRandomImage(): any | null {
+    return this.getRandomByFileType('image');
+  }
+
+  /** Pick one random active video row without ORDER BY RANDOM(). */
+  static getRandomVideo(): any | null {
+    return this.getRandomByFileType('video');
   }
 }

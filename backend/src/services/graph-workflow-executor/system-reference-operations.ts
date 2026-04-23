@@ -222,7 +222,7 @@ export async function executeRandomImageFromLibrary(
   }
 
   const activeFiles = ImageFileModel.findActiveByHash(metadata.composite_hash)
-  const activeFile = activeFiles[0]
+  const activeFile = activeFiles.find((file) => file.file_type === 'image') ?? activeFiles[0]
   if (!activeFile) {
     throw new Error(`Random library image file not found: ${metadata.composite_hash}`)
   }
@@ -293,6 +293,102 @@ export async function executeRandomImageFromLibrary(
     details: {
       engine: 'system',
       operationKey: 'system.random_image_from_library',
+      compositeHash: metadata.composite_hash,
+      storagePath,
+    },
+  })
+}
+
+/** Load one random library video into a graph file artifact. */
+export async function executeRandomVideoFromLibrary(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+) {
+  const metadata = MediaMetadataModel.getRandomVideo()
+  if (!metadata || typeof metadata.composite_hash !== 'string' || !metadata.composite_hash.trim()) {
+    throw new Error('Random Video From Library requires at least one indexed video in the library')
+  }
+
+  const activeFiles = ImageFileModel.findActiveByHash(metadata.composite_hash)
+  const activeFile = activeFiles.find((file) => file.file_type === 'video') ?? activeFiles[0]
+  if (!activeFile) {
+    throw new Error(`Random library video file not found: ${metadata.composite_hash}`)
+  }
+
+  const videoBuffer = await fs.promises.readFile(activeFile.original_file_path)
+  const mimeType = activeFile.mime_type || 'video/mp4'
+  const videoDataUrl = bufferToDataUrl(videoBuffer, mimeType)
+  const { storagePath, artifactRecordId } = await saveArtifactBuffer(context.executionId, node.id, 'video', 'file', videoBuffer, {
+    mimeType,
+    sourcePathForMetadata: activeFile.original_file_path,
+    originalFileName: path.basename(activeFile.original_file_path),
+  })
+
+  const referenceValue = {
+    composite_hash: metadata.composite_hash,
+    original_file_path: activeFile.original_file_path,
+    mime_type: activeFile.mime_type,
+    file_size: activeFile.file_size,
+    thumbnail_path: metadata.thumbnail_path,
+    duration: metadata.duration,
+    fps: metadata.fps,
+    video_codec: metadata.video_codec,
+    audio_codec: metadata.audio_codec,
+    prompt: metadata.prompt,
+    negative_prompt: metadata.negative_prompt,
+    auto_tags: metadata.auto_tags,
+  }
+
+  const metadataValue = {
+    composite_hash: metadata.composite_hash,
+    ai_tool: metadata.ai_tool,
+    model_name: metadata.model_name,
+    width: metadata.width,
+    height: metadata.height,
+    duration: metadata.duration,
+    fps: metadata.fps,
+    video_codec: metadata.video_codec,
+    audio_codec: metadata.audio_codec,
+    prompt: metadata.prompt,
+    negative_prompt: metadata.negative_prompt,
+    auto_tags: metadata.auto_tags,
+    first_seen_date: metadata.first_seen_date,
+    metadata_updated_date: metadata.metadata_updated_date,
+  }
+
+  const nodeArtifacts = {
+    video: {
+      type: 'file' as const,
+      value: videoDataUrl,
+      storagePath,
+      artifactRecordId,
+      metadata: {
+        kind: 'system-random-video-from-library',
+        composite_hash: metadata.composite_hash,
+        mimeType,
+      },
+    },
+    video_ref: buildRuntimeArtifact(context.executionId, node.id, 'video_ref', 'json', referenceValue, {
+      kind: 'system-random-video-reference',
+      composite_hash: metadata.composite_hash,
+    }),
+    metadata: buildRuntimeArtifact(context.executionId, node.id, 'metadata', 'json', metadataValue, {
+      kind: 'system-random-video-metadata',
+      composite_hash: metadata.composite_hash,
+    }),
+  }
+
+  context.artifactsByNode.set(node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId: node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey: 'system.random_video_from_library',
       compositeHash: metadata.composite_hash,
       storagePath,
     },

@@ -24,6 +24,7 @@ import {
   executeLoadImageFromReference,
   executeLoadPromptFromReference,
   executeRandomImageFromLibrary,
+  executeRandomVideoFromLibrary,
 } from './system-reference-operations'
 import { executeCodexImageGenerationNode } from './system-codex-operations'
 
@@ -50,6 +51,8 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.load_image_from_reference': executeLoadImageFromReference,
   'system.random_image_from_library': async (context, node, moduleDefinition) =>
     executeRandomImageFromLibrary(context, node, moduleDefinition),
+  'system.random_video_from_library': async (context, node, moduleDefinition) =>
+    executeRandomVideoFromLibrary(context, node, moduleDefinition),
   'system.extract_tags_from_image': executeExtractTagsFromImage,
   'system.extract_artist_from_image': executeExtractArtistFromImage,
   'system.final_result': executeFinalResultNode,

@@ -756,6 +756,42 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
   );
 
   upsertBuiltinModule(
+    '라이브러리 랜덤 비디오',
+    '현재 라이브러리에서 비디오 하나를 무작위로 골라 재사용 가능한 그래프 결과물로 꺼내와.',
+    'video',
+    [],
+    [
+      {
+        key: 'video',
+        label: '비디오',
+        direction: 'output',
+        data_type: 'any',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'video_ref',
+        label: '비디오 참조',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+      {
+        key: 'metadata',
+        label: '메타데이터',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.random_video_from_library' },
+    [],
+    '#5c6bc0',
+  );
+
+  upsertBuiltinModule(
     'Codex 이미지 생성',
     'Codex를 새 에페메랄 세션으로 실행해서 이미지를 만들고, 결과 파일을 CoNAI 이미지 파이프라인으로 가져와.',
     'image',

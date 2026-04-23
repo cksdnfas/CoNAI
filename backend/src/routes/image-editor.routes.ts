@@ -215,8 +215,8 @@ router.post('/:id/save', asyncHandler(async (req: Request, res: Response) => {
     }
 
     // Convert base64 to Buffer
-    const imageBuffer = Buffer.from(imageData.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-    const maskBuffer = maskData ? Buffer.from(maskData.replace(/^data:image\/\w+;base64,/, ''), 'base64') : undefined;
+    const imageBuffer = Buffer.from(imageData.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, ''), 'base64');
+    const maskBuffer = maskData ? Buffer.from(maskData.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, ''), 'base64') : undefined;
 
     const result = await ImageEditorService.saveEditedImageAsNew(
       imageBuffer,
@@ -526,7 +526,7 @@ router.post('/canvas/:filename/save-webp', asyncHandler(async (req: Request, res
     await fs.promises.mkdir(canvasDir, { recursive: true });
 
     // Convert base64 to Buffer
-    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '');
+    const base64Data = imageData.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, '');
     const imageBuffer = Buffer.from(base64Data, 'base64');
 
     // Determine filename

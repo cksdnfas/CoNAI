@@ -456,4 +456,11 @@ export class MediaMetadataModel {
   static getRandomImage(): any | null {
     return MediaMetadataFileQueries.getRandomImage();
   }
+
+  /**
+   * 랜덤 비디오 조회 (파일 경로 포함)
+   */
+  static getRandomVideo(): any | null {
+    return MediaMetadataFileQueries.getRandomVideo();
+  }
 }
