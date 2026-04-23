@@ -2,7 +2,7 @@ import { apiGenDb } from '../database/apiGenerationDb';
 import type { AuthAccountType } from './AuthAccount';
 import { buildUpdateQuery, filterDefined } from '../utils/dynamicUpdate';
 
-export type ServiceType = 'comfyui' | 'novelai';
+export type ServiceType = 'comfyui' | 'novelai' | 'codex';
 export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface GenerationHistoryRecord {

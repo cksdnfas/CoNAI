@@ -21,6 +21,11 @@ const ComfyGenerationPanelLazy = lazy(async () => {
   return { default: module.ComfyGenerationPanel }
 })
 
+const CodexGenerationPanelLazy = lazy(async () => {
+  const module = await import('./components/codex-generation-panel')
+  return { default: module.CodexGenerationPanel }
+})
+
 const WildcardGenerationPanelLazy = lazy(async () => {
   const module = await import('./components/wildcard-generation-panel')
   return { default: module.WildcardGenerationPanel }
@@ -41,7 +46,7 @@ const WorkflowReservationsPanelLazy = lazy(async () => {
   return { default: module.WorkflowReservationsPanel }
 })
 
-type ImageGenerationTab = 'nai' | 'comfyui' | 'wildcards' | 'workflows' | 'reservations'
+type ImageGenerationTab = 'nai' | 'codex' | 'comfyui' | 'wildcards' | 'workflows' | 'reservations'
 
 function PanelFallback() {
   return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
@@ -49,6 +54,7 @@ function PanelFallback() {
 
 const IMAGE_GENERATION_TABS: Array<{ value: ImageGenerationTab; label: string }> = [
   { value: 'nai', label: 'NAI' },
+  { value: 'codex', label: 'Codex' },
   { value: 'comfyui', label: 'ComfyUI' },
   { value: 'wildcards', label: 'Wildcard' },
   { value: 'workflows', label: 'Workflow' },
@@ -56,7 +62,7 @@ const IMAGE_GENERATION_TABS: Array<{ value: ImageGenerationTab; label: string }>
 ]
 
 function parseImageGenerationTab(value?: string | null): ImageGenerationTab {
-  if (value === 'nai' || value === 'comfyui' || value === 'wildcards' || value === 'workflows' || value === 'workflow' || value === 'reservations') {
+  if (value === 'nai' || value === 'codex' || value === 'comfyui' || value === 'wildcards' || value === 'workflows' || value === 'workflow' || value === 'reservations') {
     return value === 'workflow' ? 'workflows' : value
   }
 
@@ -75,7 +81,12 @@ export function ImageGenerationPage() {
   const activeTab = visibleTabs.some((tab) => tab.value === parseImageGenerationTab(searchParams.get('tab')))
     ? parseImageGenerationTab(searchParams.get('tab'))
     : (visibleTabs[0]?.value ?? 'nai')
-  const shouldShowHistory = activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
+  const shouldShowHistory = activeTab === 'nai' || activeTab === 'codex' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
+  const historyServiceType = activeTab === 'nai'
+    ? 'novelai'
+    : activeTab === 'codex'
+      ? 'codex'
+      : 'comfyui'
   const useWideSplitPaneScroll = isWideLayout && shouldShowHistory
 
   const handleHistoryRefresh = () => {
@@ -106,20 +117,23 @@ export function ImageGenerationPage() {
     }
   }, [searchParams, setSearchParams, visibleTabs])
 
-  const controllerLabel = activeTab === 'nai' ? 'NAI' : activeTab === 'wildcards' ? 'Wildcard' : 'ComfyUI'
-  const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
+  const controllerLabel = activeTab === 'nai' ? 'NAI' : activeTab === 'codex' ? 'Codex' : activeTab === 'wildcards' ? 'Wildcard' : 'ComfyUI'
+  const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || activeTab === 'codex' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
   const useCompactNaiActionBar = activeTab === 'nai' && (useWideSplitPaneScroll || shouldUseControllerDrawer)
   const naiDrawerHeaderContentId = activeTab === 'nai' && shouldUseControllerDrawer ? 'nai-controller-drawer-header-content' : undefined
+  const codexDrawerHeaderContentId = activeTab === 'codex' && shouldUseControllerDrawer ? 'codex-controller-drawer-header-content' : undefined
   const comfyDrawerHeaderContentId = activeTab === 'comfyui' && shouldUseControllerDrawer && selectedComfyWorkflowId !== null
     ? 'comfy-controller-drawer-header-content'
     : undefined
-  const drawerHeaderContentId = naiDrawerHeaderContentId ?? comfyDrawerHeaderContentId
+  const drawerHeaderContentId = naiDrawerHeaderContentId ?? codexDrawerHeaderContentId ?? comfyDrawerHeaderContentId
   const compactActionBarContentId = shouldUseControllerDrawer
     ? activeTab === 'nai'
       ? 'nai-controller-compact-action-bar-content'
-      : activeTab === 'comfyui' && selectedComfyWorkflowId !== null
-        ? 'comfy-controller-compact-action-bar-content'
-        : undefined
+      : activeTab === 'codex'
+        ? 'codex-controller-compact-action-bar-content'
+        : activeTab === 'comfyui' && selectedComfyWorkflowId !== null
+          ? 'comfy-controller-compact-action-bar-content'
+          : undefined
     : undefined
   const useCompactControllerDrawer = Boolean(drawerHeaderContentId)
 
@@ -134,21 +148,31 @@ export function ImageGenerationPage() {
         compactActionBarContentTargetId={activeTab === 'nai' ? compactActionBarContentId : undefined}
       />
     )
-    : activeTab === 'comfyui'
+    : activeTab === 'codex'
       ? (
-        <ComfyGenerationPanelLazy
+        <CodexGenerationPanelLazy
           refreshNonce={0}
           onHistoryRefresh={handleHistoryRefresh}
-          selectedWorkflowId={selectedComfyWorkflowId}
-          onSelectedWorkflowChange={setSelectedComfyWorkflowId}
           splitPaneScroll={useWideSplitPaneScroll}
-          headerPortalTargetId={comfyDrawerHeaderContentId}
-          compactActionBarContentTargetId={activeTab === 'comfyui' ? compactActionBarContentId : undefined}
+          headerPortalTargetId={codexDrawerHeaderContentId}
+          compactActionBarContentTargetId={activeTab === 'codex' ? compactActionBarContentId : undefined}
         />
       )
-      : activeTab === 'wildcards'
-        ? <WildcardGenerationPanelLazy refreshNonce={0} />
-        : null
+      : activeTab === 'comfyui'
+        ? (
+          <ComfyGenerationPanelLazy
+            refreshNonce={0}
+            onHistoryRefresh={handleHistoryRefresh}
+            selectedWorkflowId={selectedComfyWorkflowId}
+            onSelectedWorkflowChange={setSelectedComfyWorkflowId}
+            splitPaneScroll={useWideSplitPaneScroll}
+            headerPortalTargetId={comfyDrawerHeaderContentId}
+            compactActionBarContentTargetId={activeTab === 'comfyui' ? compactActionBarContentId : undefined}
+          />
+        )
+        : activeTab === 'wildcards'
+          ? <WildcardGenerationPanelLazy refreshNonce={0} />
+          : null
 
   const isDrawerOpen = shouldUseControllerDrawer && isControllerOpen
 
@@ -204,7 +228,7 @@ export function ImageGenerationPage() {
                 <Suspense fallback={<PanelFallback />}>
                   <GenerationHistoryPanelLazy
                     refreshNonce={historyRefreshNonce}
-                    serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
+                    serviceType={historyServiceType}
                     workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
                     splitPaneScroll={useWideSplitPaneScroll}
                   />
@@ -218,7 +242,7 @@ export function ImageGenerationPage() {
               <Suspense fallback={<PanelFallback />}>
                 <GenerationHistoryPanelLazy
                   refreshNonce={historyRefreshNonce}
-                  serviceType={activeTab === 'nai' ? 'novelai' : 'comfyui'}
+                  serviceType={historyServiceType}
                   workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
                   onBack={activeTab === 'comfyui' ? () => setSelectedComfyWorkflowId(null) : undefined}
                 />

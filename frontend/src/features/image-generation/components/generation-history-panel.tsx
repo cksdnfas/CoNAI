@@ -22,6 +22,7 @@ import {
   getPublicGenerationWorkflowHistory,
 } from '@/lib/api'
 import type { GenerationHistoryResponse } from '@/lib/api-image-generation-history'
+import type { GenerationServiceType } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import {
   getErrorMessage,
@@ -34,7 +35,7 @@ import {
 
 type GenerationHistoryPanelProps = {
   refreshNonce: number
-  serviceType: 'novelai' | 'comfyui'
+  serviceType: GenerationServiceType
   workflowId?: number | null
   publicWorkflowSlug?: string | null
   splitPaneScroll?: boolean
@@ -207,7 +208,15 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => Array.from(new Set(selectedHistoryRecords.map((record) => record.composite_hash).filter((hash): hash is string => typeof hash === 'string' && hash.length > 0))),
     [selectedHistoryRecords],
   )
-  const historyLabel = isPublicView ? 'Public Workflow' : serviceType === 'novelai' ? 'NAI' : workflowId ? 'ComfyUI Workflow' : 'ComfyUI'
+  const historyLabel = isPublicView
+    ? 'Public Workflow'
+    : serviceType === 'novelai'
+      ? 'NAI'
+      : serviceType === 'codex'
+        ? 'Codex'
+        : workflowId
+          ? 'ComfyUI Workflow'
+          : 'ComfyUI'
   const getHistoryImageHref = (image: ImageRecord) => {
     const record = historyRecordMap.get(String(image?.id ?? ''))
     if (!record || resolveHistoryDisplayStatus(record) !== 'completed' || !image?.composite_hash) {

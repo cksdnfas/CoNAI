@@ -756,6 +756,102 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
   );
 
   upsertBuiltinModule(
+    'Codex 이미지 생성',
+    'Codex를 새 에페메랄 세션으로 실행해서 이미지를 만들고, 결과 파일을 CoNAI 이미지 파이프라인으로 가져와.',
+    'image',
+    [
+      {
+        key: 'prompt',
+        label: '프롬프트',
+        direction: 'input',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+        description: 'Codex 이미지 생성에 보낼 메인 프롬프트야.',
+      },
+      {
+        key: 'negative_prompt',
+        label: '네거티브 프롬프트',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        description: '피하고 싶은 요소를 적어두면 메타데이터에도 함께 남겨.',
+      },
+      {
+        key: 'width',
+        label: '가로',
+        direction: 'input',
+        data_type: 'number',
+        required: false,
+        multiple: false,
+        description: '원하는 가로 크기 힌트야. Codex가 정확히 맞추지 못할 수도 있어.',
+      },
+      {
+        key: 'height',
+        label: '세로',
+        direction: 'input',
+        data_type: 'number',
+        required: false,
+        multiple: false,
+        description: '원하는 세로 크기 힌트야. Codex가 정확히 맞추지 못할 수도 있어.',
+      },
+    ],
+    [
+      {
+        key: 'image',
+        label: '이미지',
+        direction: 'output',
+        data_type: 'image',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'image_ref',
+        label: '이미지 참조',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+      {
+        key: 'metadata',
+        label: '메타데이터',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.generate_image_codex' },
+    [
+      {
+        key: 'prompt',
+        label: '프롬프트',
+        data_type: 'text',
+        placeholder: '예: cinematic portrait of a silver-haired android under neon rain',
+      },
+      {
+        key: 'negative_prompt',
+        label: '네거티브 프롬프트',
+        data_type: 'text',
+        placeholder: '예: blurry, low detail, extra fingers',
+      },
+      {
+        key: 'width',
+        label: '가로',
+        data_type: 'number',
+      },
+      {
+        key: 'height',
+        label: '세로',
+        data_type: 'number',
+      },
+    ],
+    '#26a69a',
+  );
+
+  upsertBuiltinModule(
     '이미지에서 태그 추출',
     '설정된 이미지 태거를 실행해서 프롬프트에 쓰기 좋은 태그를 추출해.',
     'analysis',

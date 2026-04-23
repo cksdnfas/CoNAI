@@ -65,9 +65,9 @@ export function isGenerationQueueComfyJobCompatibleWithServer(job: GenerationQue
 
 /** Build the display lane metadata for queue position and ETA calculations. */
 export function resolveGenerationQueueLaneMeta(record: GenerationQueueJobRecord, activeServers: ComfyUIServerRecord[]): GenerationQueueLaneMeta {
-  if (record.service_type === 'novelai') {
+  if (record.service_type === 'novelai' || record.service_type === 'codex') {
     return {
-      laneKey: 'novelai',
+      laneKey: record.service_type,
       scope: 'service',
       serverId: null,
       serverTag: null,

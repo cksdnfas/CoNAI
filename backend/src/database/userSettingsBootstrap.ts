@@ -70,7 +70,7 @@ export function ensureApiGenerationHistoryTable(userSettingsDb: Database.Databas
   userSettingsDb.exec(`
     CREATE TABLE IF NOT EXISTS api_generation_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai')),
+      service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai', 'codex')),
       generation_status TEXT NOT NULL DEFAULT 'pending' CHECK(generation_status IN ('pending', 'processing', 'completed', 'failed')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       completed_at DATETIME,
@@ -118,6 +118,71 @@ export function ensureApiGenerationHistoryTable(userSettingsDb: Database.Databas
   }
   if (!hasColumn('api_generation_history', 'server_id')) {
     userSettingsDb.exec('ALTER TABLE api_generation_history ADD COLUMN server_id INTEGER');
+  }
+
+  const apiGenerationTableSql = userSettingsDb.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='api_generation_history'").get() as { sql?: string } | undefined;
+  if (apiGenerationTableSql?.sql && !apiGenerationTableSql.sql.includes("'codex'")) {
+    userSettingsDb.exec('BEGIN');
+    try {
+      userSettingsDb.exec('ALTER TABLE api_generation_history RENAME TO api_generation_history_legacy_codex');
+      userSettingsDb.exec(`
+        CREATE TABLE api_generation_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai', 'codex')),
+          generation_status TEXT NOT NULL DEFAULT 'pending' CHECK(generation_status IN ('pending', 'processing', 'completed', 'failed')),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          completed_at DATETIME,
+          comfyui_workflow TEXT,
+          comfyui_prompt_id TEXT,
+          workflow_id INTEGER,
+          workflow_name TEXT,
+          group_id INTEGER,
+          nai_model TEXT,
+          nai_sampler TEXT,
+          nai_seed INTEGER,
+          nai_steps INTEGER,
+          nai_scale REAL,
+          nai_parameters TEXT,
+          positive_prompt TEXT,
+          negative_prompt TEXT,
+          width INTEGER,
+          height INTEGER,
+          original_path TEXT,
+          file_size INTEGER,
+          assigned_group_id INTEGER,
+          composite_hash TEXT,
+          error_message TEXT,
+          metadata TEXT,
+          queue_job_id INTEGER,
+          requested_by_account_id INTEGER,
+          requested_by_account_type TEXT,
+          server_id INTEGER
+        )
+      `);
+      userSettingsDb.exec(`
+        INSERT INTO api_generation_history (
+          id, service_type, generation_status, created_at, completed_at,
+          comfyui_workflow, comfyui_prompt_id, workflow_id, workflow_name, group_id,
+          nai_model, nai_sampler, nai_seed, nai_steps, nai_scale, nai_parameters,
+          positive_prompt, negative_prompt, width, height, original_path, file_size,
+          assigned_group_id, composite_hash, error_message, metadata,
+          queue_job_id, requested_by_account_id, requested_by_account_type, server_id
+        )
+        SELECT
+          id, service_type, generation_status, created_at, completed_at,
+          comfyui_workflow, comfyui_prompt_id, workflow_id, workflow_name, group_id,
+          nai_model, nai_sampler, nai_seed, nai_steps, nai_scale, nai_parameters,
+          positive_prompt, negative_prompt, width, height, original_path, file_size,
+          assigned_group_id, composite_hash, error_message, metadata,
+          queue_job_id, requested_by_account_id, requested_by_account_type, server_id
+        FROM api_generation_history_legacy_codex
+      `);
+      userSettingsDb.exec('DROP TABLE api_generation_history_legacy_codex');
+      userSettingsDb.exec('COMMIT');
+    } catch (error) {
+      userSettingsDb.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   const indexes = [

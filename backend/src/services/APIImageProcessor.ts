@@ -60,12 +60,12 @@ export class APIImageProcessor {
    * Thumbnail version will be created by background scan
    *
    * @param imageBuffer - Image buffer from API response
-   * @param serviceType - 'comfyui' or 'novelai'
+   * @param serviceType - 'comfyui', 'novelai', or 'codex'
    * @returns Original image path and metadata
    */
   static async processGeneratedImage(
     imageBuffer: Buffer,
-    serviceType: 'comfyui' | 'novelai',
+    serviceType: 'comfyui' | 'novelai' | 'codex',
     saveOptions?: GeneratedImageSaveOptions,
   ): Promise<{
     originalPath: string;
@@ -92,7 +92,7 @@ export class APIImageProcessor {
    */
   static async processGeneratedFile(
     sourceFilePath: string,
-    serviceType: 'comfyui' | 'novelai',
+    serviceType: 'comfyui' | 'novelai' | 'codex',
     saveOptions?: GeneratedImageSaveOptions,
   ): Promise<{
     originalPath: string;
@@ -129,12 +129,12 @@ export class APIImageProcessor {
    * Uses existing ImageProcessor.extractMetadata() logic
    *
    * @param imageBuffer - Image buffer from ComfyUI
-   * @param serviceType - 'comfyui' or 'novelai'
+   * @param serviceType - 'comfyui', 'novelai', or 'codex'
    * @returns Extracted metadata (prompt, negative_prompt, width, height, etc.)
    */
   static async extractMetadataFromBuffer(
     imageBuffer: Buffer,
-    serviceType: 'comfyui' | 'novelai'
+    serviceType: 'comfyui' | 'novelai' | 'codex'
   ): Promise<{
     positive_prompt?: string;
     negative_prompt?: string;
@@ -142,8 +142,8 @@ export class APIImageProcessor {
     height?: number;
     metadata: any;
   }> {
-    // NovelAI history is now kept minimal, so skip history-side metadata extraction here.
-    if (serviceType === 'novelai') {
+    // NovelAI/Codex history is now kept minimal, so skip history-side metadata extraction here.
+    if (serviceType === 'novelai' || serviceType === 'codex') {
       return { metadata: {} };
     }
 

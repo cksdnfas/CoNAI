@@ -680,7 +680,15 @@ export function getHistoryDetailHref(record: GenerationHistoryRecord) {
 
 /** Resolve a compact label for the history service type. */
 export function getHistoryServiceLabel(serviceType: GenerationServiceType) {
-  return serviceType === 'novelai' ? 'NAI' : 'ComfyUI'
+  if (serviceType === 'novelai') {
+    return 'NAI'
+  }
+
+  if (serviceType === 'codex') {
+    return 'Codex'
+  }
+
+  return 'ComfyUI'
 }
 
 /** Resolve a compact label for the history status badge. */
@@ -695,6 +703,10 @@ export function getHistoryStatusLabel(status: GenerationHistoryRecord['generatio
 export function getHistoryTitle(record: GenerationHistoryRecord) {
   if (record.service_type === 'novelai') {
     return record.nai_model || 'NovelAI 생성'
+  }
+
+  if (record.service_type === 'codex') {
+    return record.workflow_name || 'Codex 생성'
   }
 
   return record.workflow_name || 'ComfyUI 워크플로우'

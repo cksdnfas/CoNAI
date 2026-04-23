@@ -72,6 +72,35 @@ export class GenerationHistoryService {
   }
 
   /**
+   * Create one lightweight Codex history row.
+   */
+  static async createCodexHistory(data: {
+    model?: string;
+    prompt: string;
+    negativePrompt?: string;
+    groupId?: number;
+    queueJobId?: number;
+    requestedByAccountId?: number;
+    requestedByAccountType?: AuthAccountType;
+    metadata?: Record<string, unknown>;
+  }): Promise<number> {
+    const historyRecord: Omit<GenerationHistoryRecord, 'id'> = {
+      service_type: 'codex',
+      generation_status: 'pending',
+      nai_model: data.model?.trim() || 'codex',
+      positive_prompt: data.prompt,
+      negative_prompt: data.negativePrompt,
+      assigned_group_id: data.groupId,
+      queue_job_id: data.queueJobId,
+      requested_by_account_id: data.requestedByAccountId,
+      requested_by_account_type: data.requestedByAccountType,
+      metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
+    };
+
+    return GenerationHistoryModel.create(historyRecord);
+  }
+
+  /**
    * Process generated image - Simple file save only
    * 1. Saves original file to uploads/API/images/YYYY-MM-DD/
    * 2. Main system will auto-detect and process (thumbnails, metadata, etc.)
@@ -107,6 +136,37 @@ export class GenerationHistoryService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       GenerationHistoryModel.recordError(historyId, errorMessage);
       console.error(`✗ Failed to process generation history ${historyId}:`, errorMessage);
+      throw error;
+    }
+  }
+
+  /**
+   * Process a generated output file that already exists on disk.
+   */
+  static async processAndUploadGeneratedFile(
+    historyId: number,
+    sourceFilePath: string,
+    serviceType: ServiceType,
+    saveOptions?: GeneratedImageSaveOptions,
+  ): Promise<void> {
+    try {
+      GenerationHistoryModel.updateStatus(historyId, 'processing');
+
+      const processedPaths = await APIImageProcessor.processGeneratedFile(sourceFilePath, serviceType, saveOptions);
+
+      GenerationHistoryModel.updateImagePaths(historyId, {
+        compositeHash: processedPaths.compositeHash
+      });
+
+      GenerationHistoryModel.updateStatus(historyId, 'completed');
+
+      console.log(`✅ ${serviceType.toUpperCase()} file saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
+      console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
+      console.log('   → Main system will auto-detect and process (thumbnails, metadata, prompts, tags, groups)');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      GenerationHistoryModel.recordError(historyId, errorMessage);
+      console.error(`✗ Failed to process generated file history ${historyId}:`, errorMessage);
       throw error;
     }
   }
@@ -226,6 +286,7 @@ export class GenerationHistoryService {
     total: number;
     comfyui: number;
     novelai: number;
+    codex: number;
     completed: number;
     failed: number;
     pending: number;
@@ -235,12 +296,13 @@ export class GenerationHistoryService {
     const total = GenerationHistoryModel.count();
     const comfyui = GenerationHistoryModel.count({ service_type: 'comfyui' });
     const novelai = GenerationHistoryModel.count({ service_type: 'novelai' });
+    const codex = GenerationHistoryModel.count({ service_type: 'codex' });
     const completed = GenerationHistoryModel.count({ generation_status: 'completed' });
     const failed = GenerationHistoryModel.count({ generation_status: 'failed' });
     const pending = GenerationHistoryModel.count({ generation_status: 'pending' });
     const processing = GenerationHistoryModel.count({ generation_status: 'processing' });
 
-    return { total, comfyui, novelai, completed, failed, pending, processing };
+    return { total, comfyui, novelai, codex, completed, failed, pending, processing };
   }
 
   /**

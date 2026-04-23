@@ -90,7 +90,7 @@ router.get(
       offset: parseInt(offset as string)
     };
 
-    if (service_type && (service_type === 'comfyui' || service_type === 'novelai')) {
+    if (service_type && (service_type === 'comfyui' || service_type === 'novelai' || service_type === 'codex')) {
       filters.service_type = service_type as ServiceType;
     }
 

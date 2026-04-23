@@ -57,7 +57,7 @@ function parseServiceType(value: unknown): GenerationQueueJobRecord['service_typ
     return undefined
   }
 
-  if (value !== 'comfyui' && value !== 'novelai') {
+  if (value !== 'comfyui' && value !== 'novelai' && value !== 'codex') {
     throw new Error(`Invalid service_type filter: ${String(value)}`)
   }
 
@@ -255,8 +255,8 @@ function getRecentCompletedDurations(records: GenerationQueueJobRecord[], predic
 }
 
 function resolveReferenceDurationSeconds(record: GenerationQueueJobRecord, completedRecords: GenerationQueueJobRecord[], queuePosition: QueuePositionEntry | undefined) {
-  if (record.service_type === 'novelai') {
-    return getMedianDurationSeconds(getRecentCompletedDurations(completedRecords, (candidate) => candidate.service_type === 'novelai'))
+  if (record.service_type === 'novelai' || record.service_type === 'codex') {
+    return getMedianDurationSeconds(getRecentCompletedDurations(completedRecords, (candidate) => candidate.service_type === record.service_type))
   }
 
   if (queuePosition?.scope === 'server' && queuePosition.serverId !== null) {
@@ -273,8 +273,8 @@ function resolveReferenceDurationSeconds(record: GenerationQueueJobRecord, compl
 }
 
 function getRunningWorkerCount(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeRecords: GenerationQueueJobRecord[]) {
-  if (record.service_type === 'novelai') {
-    return activeRecords.filter((candidate) => candidate.service_type === 'novelai' && candidate.status === 'running').length
+  if (record.service_type === 'novelai' || record.service_type === 'codex') {
+    return activeRecords.filter((candidate) => candidate.service_type === record.service_type && candidate.status === 'running').length
   }
 
   if (queuePosition?.scope === 'server' && queuePosition.serverId !== null) {
@@ -300,7 +300,7 @@ function getRunningWorkerCount(record: GenerationQueueJobRecord, queuePosition: 
 }
 
 function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeComfyServerCount: number) {
-  if (record.service_type === 'novelai') {
+  if (record.service_type === 'novelai' || record.service_type === 'codex') {
     return 1
   }
 
@@ -505,8 +505,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     request_summary,
   } = req.body ?? {}
 
-  if (service_type !== 'comfyui' && service_type !== 'novelai') {
-    sendRouteBadRequest(res, 'service_type must be either comfyui or novelai')
+  if (service_type !== 'comfyui' && service_type !== 'novelai' && service_type !== 'codex') {
+    sendRouteBadRequest(res, 'service_type must be one of comfyui, novelai, or codex')
     return
   }
 

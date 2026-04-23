@@ -11,11 +11,13 @@ import { prepareComfyPromptData } from './prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from './workflowPromptValueResolver'
 import { executeComfyGeneration, isComfyGenerationCancelledError } from './comfyGenerationExecutor'
 import { executeNaiGeneration } from './naiGenerationExecutor'
+import { executeCodexGeneration, type CodexGenerationPayload } from './codexGenerationExecutor'
 import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser'
 import { reconcileComfyModelSelectionValues } from './comfyModelSelectionResolver'
 import { getComfyRequestDebugRelativePath, writeComfyRequestDebugSnapshot, type ComfyRequestDebugSnapshot } from './generationRequestDebugService'
 import { FileDiscoveryService } from './folderScan/fileDiscoveryService'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
+import type { AIMetadata } from './metadata/types'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type { NAIMetadataInputParams } from '../utils/nai/metadata'
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus, GenerationQueueJobUpdateData } from '../types/generationQueue'
@@ -31,6 +33,7 @@ const ALLOWED_TRANSITIONS: Record<GenerationQueueJobStatus, GenerationQueueJobSt
 
 const DISPATCH_INTERVAL_MS = 3000
 const NAI_WORKER_KEY = 'novelai'
+const CODEX_WORKER_KEY = 'codex'
 const GENERATION_QUEUE_CANCELLATION_MESSAGE = '__GENERATION_QUEUE_CANCELLATION__'
 
 function parseStoredRequestPayload(record: GenerationQueueJobRecord) {
@@ -75,6 +78,65 @@ function parseComfyQueuePayload(record: GenerationQueueJobRecord) {
 function parseNaiQueuePayload(record: GenerationQueueJobRecord) {
   const payload = parseStoredRequestPayload(record)
   return payload as unknown as NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }
+}
+
+function parseCodexQueuePayload(record: GenerationQueueJobRecord) {
+  const payload = parseStoredRequestPayload(record)
+  const prompt = typeof payload.prompt === 'string' ? payload.prompt.trim() : ''
+  if (!prompt) {
+    throw new Error(`Queue job ${record.id} is missing string request_payload.prompt for Codex execution`)
+  }
+
+  const imageSaveOptions = payload.imageSaveOptions
+  if (imageSaveOptions !== undefined && (!imageSaveOptions || typeof imageSaveOptions !== 'object' || Array.isArray(imageSaveOptions))) {
+    throw new Error(`Queue job ${record.id} has invalid request_payload.imageSaveOptions`)
+  }
+
+  const rawCountSource = payload.count ?? payload.n
+  const rawCount = typeof rawCountSource === 'number' ? rawCountSource : Number(rawCountSource)
+  const count = Number.isInteger(rawCount) ? Math.max(1, Math.min(rawCount, 4)) : 1
+  const operation: CodexGenerationPayload['operation'] = payload.operation === 'edit' || payload.operation === 'infill' ? payload.operation : 'generate'
+  const background: CodexGenerationPayload['background'] = payload.background === 'transparent' || payload.background === 'opaque' ? payload.background : 'auto'
+  const outputFormat: CodexGenerationPayload['output_format'] = payload.output_format === 'jpeg' || payload.output_format === 'webp' ? payload.output_format : 'png'
+
+  return {
+    prompt,
+    model: typeof payload.model === 'string' && payload.model.trim().length > 0 ? payload.model.trim() : undefined,
+    negative_prompt: typeof payload.negative_prompt === 'string' && payload.negative_prompt.trim().length > 0 ? payload.negative_prompt.trim() : undefined,
+    size: typeof payload.size === 'string' && payload.size.trim().length > 0 ? payload.size.trim() : undefined,
+    quality: typeof payload.quality === 'string' && payload.quality.trim().length > 0 ? payload.quality.trim() : undefined,
+    background,
+    output_format: outputFormat,
+    count,
+    operation,
+    image: typeof payload.image === 'string' && payload.image.trim().length > 0 ? payload.image : undefined,
+    mask: typeof payload.mask === 'string' && payload.mask.trim().length > 0 ? payload.mask : undefined,
+    imageSaveOptions: imageSaveOptions as GeneratedImageSaveOptions | undefined,
+  }
+}
+
+function buildCodexMetadataPatch(payload: CodexGenerationPayload, outputIndex: number, totalCount: number, lastMessage: string | null): Partial<AIMetadata> {
+  const sizeMatch = typeof payload.size === 'string' ? /^(\d{2,5})x(\d{2,5})$/i.exec(payload.size.trim()) : null
+  const width = sizeMatch ? Number(sizeMatch[1]) : undefined
+  const height = sizeMatch ? Number(sizeMatch[2]) : undefined
+
+  return {
+    ai_tool: 'codex',
+    software: 'Codex CLI',
+    model: payload.model || 'codex',
+    prompt: payload.prompt,
+    positive_prompt: payload.prompt,
+    negative_prompt: payload.negative_prompt,
+    width,
+    height,
+    batch_size: totalCount,
+    batch_index: outputIndex,
+    codex_operation: payload.operation ?? 'generate',
+    codex_quality: payload.quality,
+    codex_background: payload.background,
+    codex_output_format: payload.output_format,
+    codex_last_message: lastMessage ?? undefined,
+  }
 }
 
 function updateQueueRequestDebugMeta(record: GenerationQueueJobRecord, meta: Record<string, unknown>) {
@@ -552,6 +614,7 @@ export class GenerationQueueService {
     }
 
     this.tryStartNovelAiWorker()
+    this.tryStartCodexWorker()
     await this.tryStartComfyWorkers()
   }
 
@@ -572,6 +635,27 @@ export class GenerationQueueService {
       })
       .finally(() => {
         this.activeWorkerKeys.delete(NAI_WORKER_KEY)
+        this.requestDispatch()
+      })
+  }
+
+  private static tryStartCodexWorker() {
+    if (this.activeWorkerKeys.has(CODEX_WORKER_KEY)) {
+      return
+    }
+
+    const job = this.claimNextDispatchableJob({ serviceType: 'codex' })
+    if (!job) {
+      return
+    }
+
+    this.activeWorkerKeys.add(CODEX_WORKER_KEY)
+    void this.runClaimedJob(job)
+      .catch((error) => {
+        console.error(`❌ Codex queue worker failed for job ${job.id}:`, error)
+      })
+      .finally(() => {
+        this.activeWorkerKeys.delete(CODEX_WORKER_KEY)
         this.requestDispatch()
       })
   }
@@ -661,6 +745,11 @@ export class GenerationQueueService {
 
       if (job.service_type === 'novelai') {
         await this.executeNovelAiJob(job)
+        return
+      }
+
+      if (job.service_type === 'codex') {
+        await this.executeCodexJob(job)
         return
       }
 
@@ -867,43 +956,199 @@ export class GenerationQueueService {
       groupId: job.requested_group_id ?? payload.groupId,
     }
 
-    const { metadata, imageBuffers } = await executeNaiGeneration(requestInput, token, {
-      onUpstreamAccepted: async () => {
-        this.transitionJob(job.id, 'running', {
-          expectedCurrentStatuses: ['dispatching'],
-        })
-      },
-    })
-    if (imageBuffers.length === 0) {
-      throw new Error(`Queue job ${job.id} returned no NovelAI images`)
-    }
-
-    const historyIds: number[] = []
-    const processPromises: Promise<void>[] = []
-
-    for (let index = 0; index < imageBuffers.length; index += 1) {
-      const historyId = await GenerationHistoryService.createNAIHistory({
-        model: metadata.model || 'unknown',
-        groupId: job.requested_group_id ?? metadata.groupId,
+    let placeholderHistoryId: number | null = null
+    try {
+      placeholderHistoryId = await GenerationHistoryService.createNAIHistory({
+        model: requestInput.model || 'nai-diffusion-4-5-curated',
+        groupId: job.requested_group_id ?? requestInput.groupId,
         queueJobId: job.id,
         requestedByAccountId: job.requested_by_account_id ?? undefined,
         requestedByAccountType: job.requested_by_account_type ?? undefined,
         serverId: job.assigned_server_id ?? undefined,
       })
-
-      historyIds.push(historyId)
-      processPromises.push(
-        GenerationHistoryService.processAndUploadImage(historyId, imageBuffers[index], 'novelai', payload.imageSaveOptions),
-      )
+    } catch (historyError) {
+      console.error(`⚠️ Failed to create NovelAI queue history for job ${job.id}:`, historyError)
     }
 
-    await Promise.all(processPromises)
+    try {
+      const { metadata, imageBuffers } = await executeNaiGeneration(requestInput, token, {
+        onUpstreamAccepted: async () => {
+          this.transitionJob(job.id, 'running', {
+            expectedCurrentStatuses: ['dispatching'],
+          })
 
-    this.transitionJob(job.id, 'completed', {
-      expectedCurrentStatuses: ['running'],
-    })
+          if (placeholderHistoryId) {
+            GenerationHistoryModel.updateStatus(placeholderHistoryId, 'processing')
+          }
+        },
+      })
+      if (imageBuffers.length === 0) {
+        throw new Error(`Queue job ${job.id} returned no NovelAI images`)
+      }
 
-    console.log(`✅ Queue job ${job.id} completed via NovelAI (${historyIds.length} histories)`)
+      const historyIds: number[] = []
+      const processPromises: Promise<void>[] = []
+
+      for (let index = 0; index < imageBuffers.length; index += 1) {
+        let historyId: number
+        if (index === 0 && placeholderHistoryId) {
+          historyId = placeholderHistoryId
+          GenerationHistoryModel.update(historyId, {
+            nai_model: metadata.model || 'unknown',
+            assigned_group_id: job.requested_group_id ?? metadata.groupId,
+            requested_by_account_id: job.requested_by_account_id ?? undefined,
+            requested_by_account_type: job.requested_by_account_type ?? undefined,
+            server_id: job.assigned_server_id ?? undefined,
+          })
+        } else {
+          historyId = await GenerationHistoryService.createNAIHistory({
+            model: metadata.model || 'unknown',
+            groupId: job.requested_group_id ?? metadata.groupId,
+            queueJobId: job.id,
+            requestedByAccountId: job.requested_by_account_id ?? undefined,
+            requestedByAccountType: job.requested_by_account_type ?? undefined,
+            serverId: job.assigned_server_id ?? undefined,
+          })
+        }
+
+        historyIds.push(historyId)
+        processPromises.push(
+          GenerationHistoryService.processAndUploadImage(historyId, imageBuffers[index], 'novelai', payload.imageSaveOptions),
+        )
+      }
+
+      await Promise.all(processPromises)
+
+      this.transitionJob(job.id, 'completed', {
+        expectedCurrentStatuses: ['running'],
+      })
+
+      console.log(`✅ Queue job ${job.id} completed via NovelAI (${historyIds.length} histories)`)
+    } catch (error) {
+      if (placeholderHistoryId) {
+        const latestQueue = GenerationQueueModel.findById(job.id)
+        const failureMessage = latestQueue?.status === 'cancelled' || (latestQueue?.cancel_requested ?? 0) > 0
+          ? 'Cancelled by user'
+          : resolveFailureMessage(error)
+        const placeholderHistory = GenerationHistoryModel.findById(placeholderHistoryId)
+        if (placeholderHistory && placeholderHistory.generation_status !== 'completed') {
+          GenerationHistoryModel.recordError(placeholderHistoryId, failureMessage)
+        }
+      }
+
+      throw error
+    }
+  }
+
+  private static async executeCodexJob(job: GenerationQueueJobRecord) {
+    const payload = parseCodexQueuePayload(job)
+
+    let placeholderHistoryId: number | null = null
+    try {
+      placeholderHistoryId = await GenerationHistoryService.createCodexHistory({
+        model: payload.model || 'codex',
+        prompt: payload.prompt,
+        negativePrompt: payload.negative_prompt,
+        groupId: job.requested_group_id ?? undefined,
+        queueJobId: job.id,
+        requestedByAccountId: job.requested_by_account_id ?? undefined,
+        requestedByAccountType: job.requested_by_account_type ?? undefined,
+      })
+    } catch (historyError) {
+      console.error(`⚠️ Failed to create Codex queue history for job ${job.id}:`, historyError)
+    }
+
+    try {
+      this.transitionJob(job.id, 'running', {
+        expectedCurrentStatuses: ['dispatching'],
+      })
+
+      if (placeholderHistoryId) {
+        GenerationHistoryModel.updateStatus(placeholderHistoryId, 'processing')
+      }
+
+      const result = await executeCodexGeneration(payload)
+      if (result.outputFiles.length === 0) {
+        throw new Error(`Queue job ${job.id} finished Codex execution but no outputs were discovered`)
+      }
+
+      const historyIds: number[] = []
+      const processPromises: Promise<void>[] = []
+
+      for (let index = 0; index < result.outputFiles.length; index += 1) {
+        const output = result.outputFiles[index]
+        let historyId: number
+
+        if (index === 0 && placeholderHistoryId) {
+          historyId = placeholderHistoryId
+          GenerationHistoryModel.update(historyId, {
+            metadata: JSON.stringify({
+              codex_job_directory: result.jobDirectory,
+              codex_output_file: output.absolutePath,
+              codex_last_message: result.lastMessage,
+            }),
+          })
+        } else {
+          historyId = await GenerationHistoryService.createCodexHistory({
+            model: payload.model || 'codex',
+            prompt: payload.prompt,
+            negativePrompt: payload.negative_prompt,
+            groupId: job.requested_group_id ?? undefined,
+            queueJobId: job.id,
+            requestedByAccountId: job.requested_by_account_id ?? undefined,
+            requestedByAccountType: job.requested_by_account_type ?? undefined,
+            metadata: {
+              codex_job_directory: result.jobDirectory,
+              codex_output_file: output.absolutePath,
+              codex_last_message: result.lastMessage,
+            },
+          })
+        }
+
+        historyIds.push(historyId)
+        processPromises.push(
+          GenerationHistoryService.processAndUploadGeneratedFile(historyId, output.absolutePath, 'codex', {
+            ...payload.imageSaveOptions,
+            sourcePathForMetadata: output.absolutePath,
+            sourceMimeType: output.mimeType,
+            originalFileName: output.absolutePath.split(/[/\\]/).pop(),
+            metadataPatch: buildCodexMetadataPatch(payload, index, result.outputFiles.length, result.lastMessage),
+          }),
+        )
+      }
+
+      await Promise.all(processPromises)
+
+      updateQueueRequestDebugMeta(job, {
+        history_ids: historyIds,
+        codex_job_directory: result.jobDirectory,
+        codex_stdout_path: result.stdoutPath,
+        codex_stderr_path: result.stderrPath,
+        codex_last_message: result.lastMessage,
+        attempted_image_count: payload.count ?? result.outputFiles.length,
+        saved_image_count: result.outputFiles.length,
+        result_mime_types: result.outputFiles.map((output) => output.mimeType),
+      })
+
+      this.transitionJob(job.id, 'completed', {
+        expectedCurrentStatuses: ['running'],
+      })
+
+      console.log(`✅ Queue job ${job.id} completed via Codex (${historyIds.length} histories)`)
+    } catch (error) {
+      if (placeholderHistoryId) {
+        const latestQueue = GenerationQueueModel.findById(job.id)
+        const failureMessage = latestQueue?.status === 'cancelled' || (latestQueue?.cancel_requested ?? 0) > 0
+          ? 'Cancelled by user'
+          : resolveFailureMessage(error)
+        const placeholderHistory = GenerationHistoryModel.findById(placeholderHistoryId)
+        if (placeholderHistory && placeholderHistory.generation_status !== 'completed') {
+          GenerationHistoryModel.recordError(placeholderHistoryId, failureMessage)
+        }
+      }
+
+      throw error
+    }
   }
 
   private static async cancelJobIfActive(jobId: number) {

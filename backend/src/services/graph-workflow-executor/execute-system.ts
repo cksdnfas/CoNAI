@@ -25,6 +25,7 @@ import {
   executeLoadPromptFromReference,
   executeRandomImageFromLibrary,
 } from './system-reference-operations'
+import { executeCodexImageGenerationNode } from './system-codex-operations'
 
 type SystemOperationHandler = (
   context: ExecutionContext,
@@ -43,6 +44,7 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.regex_text_transform': executeRegexTextTransformNode,
   'system.merge_text': executeTextMergeNode,
   'system.random_prompt_from_group': executeRandomPromptFromGroup,
+  'system.generate_image_codex': executeCodexImageGenerationNode,
   'system.find_similar_images': executeFindSimilarImages,
   'system.load_prompt_from_reference': executeLoadPromptFromReference,
   'system.load_image_from_reference': executeLoadImageFromReference,

@@ -3,6 +3,7 @@ import fs from 'fs';
 import sharp from 'sharp';
 import { ImageSimilarityService } from '../services/imageSimilarity';
 import { ImageMetadataWriteService, type ImageOutputFormat } from '../services/imageMetadataWriteService';
+import type { AIMetadata } from '../services/metadata/types';
 import { settingsService } from '../services/settingsService';
 import { VideoOptimizationService } from '../services/videoOptimizationService';
 import { VideoProcessor } from '../services/videoProcessor';
@@ -18,6 +19,7 @@ export type GeneratedImageSaveOptions = {
   sourcePathForMetadata?: string;
   sourceMimeType?: string;
   originalFileName?: string;
+  metadataPatch?: Partial<AIMetadata>;
 };
 
 /**
@@ -125,12 +127,12 @@ export class FileSaver {
    * API 생성 이미지를 uploads/API/images/YYYY-MM-DD/ 폴더에 저장
    *
    * @param imageBuffer - 이미지 버퍼
-   * @param serviceType - 서비스 타입 ('comfyui' | 'novelai')
+   * @param serviceType - 서비스 타입 ('comfyui' | 'novelai' | 'codex')
    * @returns 저장된 파일 정보
    */
   static async saveGeneratedImage(
     imageBuffer: Buffer,
-    serviceType: 'comfyui' | 'novelai',
+    serviceType: 'comfyui' | 'novelai' | 'codex',
     options?: GeneratedImageSaveOptions,
   ): Promise<SavedGeneratedMedia> {
     try {
@@ -152,6 +154,7 @@ export class FileSaver {
           || options.quality !== undefined
           || options.maxWidth !== undefined
           || options.maxHeight !== undefined
+          || options.metadataPatch !== undefined
         )
       );
 
@@ -166,6 +169,7 @@ export class FileSaver {
           sourcePathForMetadata: options?.sourcePathForMetadata,
           originalFileName: options?.originalFileName,
           mimeType: options?.sourceMimeType,
+          metadataPatch: options?.metadataPatch,
           maxWidth: options?.resizeEnabled ? options.maxWidth : undefined,
           maxHeight: options?.resizeEnabled ? options.maxHeight : undefined,
         });
@@ -207,7 +211,7 @@ export class FileSaver {
    */
   static async saveGeneratedFile(
     sourceFilePath: string,
-    serviceType: 'comfyui' | 'novelai',
+    serviceType: 'comfyui' | 'novelai' | 'codex',
     options?: GeneratedImageSaveOptions,
   ): Promise<SavedGeneratedMedia> {
     const sourceMimeType = (options?.sourceMimeType || this.resolveMimeTypeFromPath(sourceFilePath)).toLowerCase();

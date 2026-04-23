@@ -289,7 +289,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS generation_queue_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai')),
+      service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai', 'codex')),
       status TEXT NOT NULL CHECK(status IN ('queued', 'dispatching', 'running', 'completed', 'failed', 'cancelled')) DEFAULT 'queued',
       priority INTEGER NOT NULL DEFAULT 100,
       requested_by_account_id INTEGER,
@@ -476,7 +476,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     db.exec(`
       CREATE TABLE generation_queue_jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai')),
+        service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai', 'codex')),
         status TEXT NOT NULL CHECK(status IN ('queued', 'dispatching', 'running', 'completed', 'failed', 'cancelled')) DEFAULT 'queued',
         priority INTEGER NOT NULL DEFAULT 100,
         requested_by_account_id INTEGER,
@@ -513,6 +513,70 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (!hasColumn('generation_queue_jobs', 'provider_job_id')) {
     console.log('  Migrating generation_queue_jobs: adding provider_job_id column');
     db.exec('ALTER TABLE generation_queue_jobs ADD COLUMN provider_job_id TEXT');
+  }
+
+  const generationQueueTableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='generation_queue_jobs'").get() as { sql?: string } | undefined;
+  if (generationQueueTableSql?.sql && !generationQueueTableSql.sql.includes("'codex'")) {
+    console.log('  Migrating generation_queue_jobs: widening service_type constraint for Codex');
+    db.exec('BEGIN');
+    try {
+      db.exec('ALTER TABLE generation_queue_jobs RENAME TO generation_queue_jobs_legacy_codex');
+      db.exec(`
+        CREATE TABLE generation_queue_jobs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai', 'codex')),
+          status TEXT NOT NULL CHECK(status IN ('queued', 'dispatching', 'running', 'completed', 'failed', 'cancelled')) DEFAULT 'queued',
+          priority INTEGER NOT NULL DEFAULT 100,
+          requested_by_account_id INTEGER,
+          requested_by_account_type TEXT,
+          workflow_id INTEGER,
+          workflow_name TEXT,
+          requested_group_id INTEGER,
+          requested_server_id INTEGER,
+          requested_server_tag TEXT,
+          assigned_server_id INTEGER,
+          provider_job_id TEXT,
+          request_payload TEXT NOT NULL,
+          request_summary TEXT,
+          failure_code TEXT,
+          failure_message TEXT,
+          cancel_requested INTEGER NOT NULL DEFAULT 0,
+          queued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          started_at DATETIME,
+          completed_at DATETIME,
+          created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE SET NULL,
+          FOREIGN KEY (requested_server_id) REFERENCES comfyui_servers(id) ON DELETE SET NULL,
+          FOREIGN KEY (assigned_server_id) REFERENCES comfyui_servers(id) ON DELETE SET NULL
+        )
+      `);
+      db.exec(`
+        INSERT INTO generation_queue_jobs (
+          id, service_type, status, priority,
+          requested_by_account_id, requested_by_account_type,
+          workflow_id, workflow_name, requested_group_id,
+          requested_server_id, requested_server_tag, assigned_server_id,
+          provider_job_id, request_payload, request_summary,
+          failure_code, failure_message, cancel_requested,
+          queued_at, started_at, completed_at, created_date, updated_date
+        )
+        SELECT
+          id, service_type, status, priority,
+          requested_by_account_id, requested_by_account_type,
+          workflow_id, workflow_name, requested_group_id,
+          requested_server_id, requested_server_tag, assigned_server_id,
+          provider_job_id, request_payload, request_summary,
+          failure_code, failure_message, cancel_requested,
+          queued_at, started_at, completed_at, created_date, updated_date
+        FROM generation_queue_jobs_legacy_codex
+      `);
+      db.exec('DROP TABLE generation_queue_jobs_legacy_codex');
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   // Create indexes (now safe - all columns exist)

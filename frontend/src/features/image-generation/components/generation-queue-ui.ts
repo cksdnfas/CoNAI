@@ -70,7 +70,7 @@ export function getGenerationQueueCancellationDetail(record: GenerationQueueJobR
         return '사용자 취소로 정리된 작업이야.'
       }
       return '취소 요청을 기록했고 업스트림 정리 가능 여부를 확인 중이야.'
-    }
+  }
 }
 
 /** Check whether a queue record is still in the active lifecycle. */
@@ -160,7 +160,15 @@ export function getGenerationQueueWorkflowLabel(record: GenerationQueueJobRecord
     return record.workflow_name.trim()
   }
 
-  return record.service_type === 'novelai' ? 'NAI 생성 작업' : `ComfyUI 작업 #${record.id}`
+  if (record.service_type === 'novelai') {
+    return 'NAI 생성 작업'
+  }
+
+  if (record.service_type === 'codex') {
+    return `Codex 작업 #${record.id}`
+  }
+
+  return `ComfyUI 작업 #${record.id}`
 }
 
 /** Render the creator label for one queue entry. */
