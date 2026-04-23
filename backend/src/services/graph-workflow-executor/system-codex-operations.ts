@@ -5,6 +5,7 @@ import { GenerationHistoryModel } from '../../models/GenerationHistory'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { ImageUploadService } from '../imageUploadService'
+import { settingsService } from '../settingsService'
 import { saveArtifactBuffer, saveMetadataArtifact } from './artifacts'
 import {
   bufferToDataUrl,
@@ -88,6 +89,21 @@ function resolveCodexRequestedSize(resolvedInputs: Record<string, any>) {
     height,
     aspectRatio: aspectRatio === 'random' ? 'random' : chosenAspect.value,
     resolution: String(resolution),
+  }
+}
+
+function buildQueueImageSaveOptions() {
+  const imageSaveSettings = settingsService.loadSettings().imageSave
+  if (!imageSaveSettings.applyToWorkflowOutputs) {
+    return undefined
+  }
+
+  return {
+    format: imageSaveSettings.defaultFormat,
+    quality: imageSaveSettings.quality,
+    resizeEnabled: imageSaveSettings.resizeEnabled,
+    maxWidth: imageSaveSettings.maxWidth,
+    maxHeight: imageSaveSettings.maxHeight,
   }
 }
 
@@ -380,6 +396,7 @@ export async function executeCodexImageGenerationNode(
 
   const operation = inputImage ? (maskImage ? 'infill' : 'edit') : 'generate'
   const requestedSize = resolveCodexRequestedSize(resolvedInputs)
+  const imageSaveOptions = buildQueueImageSaveOptions()
 
   writeExecutionLog({
     executionId: context.executionId,
@@ -396,6 +413,7 @@ export async function executeCodexImageGenerationNode(
       operation,
       hasImageInput: Boolean(inputImage),
       hasMaskInput: Boolean(maskImage),
+      hasImageSaveOptions: Boolean(imageSaveOptions),
     },
   })
 
@@ -411,6 +429,7 @@ export async function executeCodexImageGenerationNode(
         operation,
         image: inputImage ?? undefined,
         mask: maskImage ?? undefined,
+        imageSaveOptions,
       },
       request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
     })
@@ -428,6 +447,7 @@ export async function executeCodexImageGenerationNode(
         requestedAspectRatio: requestedSize.aspectRatio,
         requestedResolution: requestedSize.resolution,
         operation,
+        hasImageSaveOptions: Boolean(imageSaveOptions),
       },
     })
 
