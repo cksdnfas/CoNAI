@@ -3,6 +3,7 @@ import type { ApiResponse } from '@/types/image'
 import type {
   AppearanceSettings,
   AppSettings,
+  GenerationThrottleSettings,
   GeneralSettings,
   ImageSaveSettings,
   KaloscopeServerStatus,
@@ -208,6 +209,22 @@ export async function updateImageSaveSettings(settings: Partial<ImageSaveSetting
 
   if (!response.success) {
     throw new Error(response.error || '이미지 저장 설정을 저장하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function updateGenerationThrottleSettings(settings: Partial<GenerationThrottleSettings>) {
+  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/generation-throttle', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '생성 텀 설정을 저장하지 못했어.')
   }
 
   return response.data

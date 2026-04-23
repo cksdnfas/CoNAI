@@ -10,6 +10,7 @@ import {
 } from '../services/generationQueueRouting'
 import { getCodexAvailabilityStatus } from '../services/codexGenerationExecutor'
 import { GenerationQueueService } from '../services/generationQueueService'
+import { settingsService } from '../services/settingsService'
 import { readComfyRequestDebugSnapshot } from '../services/generationRequestDebugService'
 import { AuthAccessControlService } from '../services/authAccessControlService'
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../types/generationQueue'
@@ -302,7 +303,10 @@ function getRunningWorkerCount(record: GenerationQueueJobRecord, queuePosition: 
 
 function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeComfyServerCount: number) {
   if (record.service_type === 'novelai' || record.service_type === 'codex') {
-    return 1
+    const generationThrottle = settingsService.loadSettings().generationThrottle
+    return record.service_type === 'novelai'
+      ? Math.max(generationThrottle.novelai.maxConcurrentJobs, 1)
+      : Math.max(generationThrottle.codex.maxConcurrentJobs, 1)
   }
 
   if (!queuePosition) {
@@ -624,7 +628,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const requesterAccountId = getRequesterAccountId(req)
-  const jobId = GenerationQueueModel.create({
+  const normalizedRequestSummary = typeof request_summary === 'string' && request_summary.trim().length > 0 ? request_summary.trim() : null
+  const jobCreateBase = {
     service_type,
     priority,
     workflow_id: workflowIdNumber,
@@ -632,18 +637,42 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     requested_group_id: requestedGroupIdNumber,
     requested_server_id: requestedServerIdNumber,
     requested_server_tag: parsedRequestedServerTag ?? null,
-    request_payload,
-    request_summary: typeof request_summary === 'string' && request_summary.trim().length > 0 ? request_summary.trim() : null,
     requested_by_account_id: requesterAccountId,
     requested_by_account_type: req.session?.accountType,
-  })
+  }
 
-  const record = GenerationQueueModel.findById(jobId)
+  const rawCodexCount = service_type === 'codex'
+    ? (typeof request_payload.count === 'number' ? request_payload.count : Number(request_payload.count ?? request_payload.n ?? 1))
+    : 1
+  const codexJobCount = service_type === 'codex' && Number.isInteger(rawCodexCount)
+    ? Math.max(1, Math.min(rawCodexCount, 4))
+    : 1
+
+  const jobIds: number[] = []
+  for (let index = 0; index < codexJobCount; index += 1) {
+    const expandedPayload = service_type === 'codex'
+      ? {
+          ...request_payload,
+          count: 1,
+          n: 1,
+        }
+      : request_payload
+
+    jobIds.push(GenerationQueueModel.create({
+      ...jobCreateBase,
+      request_payload: expandedPayload,
+      request_summary: codexJobCount > 1 && normalizedRequestSummary
+        ? `${normalizedRequestSummary} (${index + 1}/${codexJobCount})`
+        : normalizedRequestSummary,
+    }))
+  }
+
+  const record = GenerationQueueModel.findById(jobIds[0] ?? 0)
   GenerationQueueService.requestDispatch()
   res.status(201).json({
     success: true,
     record,
-    message: 'Generation queue job created',
+    message: codexJobCount > 1 ? `Generation queue jobs created (${codexJobCount})` : 'Generation queue job created',
   })
 }))
 

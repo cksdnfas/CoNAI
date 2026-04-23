@@ -6,6 +6,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   getAppSettings,
   updateGeneralSettings,
+  updateGenerationThrottleSettings,
   updateImageSaveSettings,
   updateMetadataSettings,
   updateVideoOptimizationSettings,
@@ -15,6 +16,7 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import type {
+  GenerationThrottleSettings,
   GeneralSettings,
   ImageSaveSettings,
   MetadataExtractionSettings,
@@ -76,6 +78,7 @@ export function SettingsPage() {
   const [generalDraft, setGeneralDraft] = useState<GeneralSettings | null>(null)
   const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
   const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
+  const [generationThrottleDraft, setGenerationThrottleDraft] = useState<GenerationThrottleSettings | null>(null)
   const [videoOptimizationDraft, setVideoOptimizationDraft] = useState<VideoOptimizationSettings | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
   const canOpenSettings = authStatusQuery.data?.isAdmin === true || authStatusQuery.data?.hasCredentials !== true
@@ -113,6 +116,7 @@ export function SettingsPage() {
 
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
   const effectiveImageSaveDraft = imageSaveDraft ?? settingsQuery.data?.imageSave ?? null
+  const effectiveGenerationThrottleDraft = generationThrottleDraft ?? settingsQuery.data?.generationThrottle ?? null
   const effectiveVideoOptimizationDraft = videoOptimizationDraft ?? settingsQuery.data?.videoOptimization ?? null
   const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
 
@@ -171,6 +175,18 @@ export function SettingsPage() {
     },
   })
 
+  const generationThrottleMutation = useMutation({
+    mutationFn: updateGenerationThrottleSettings,
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setGenerationThrottleDraft(settings.generationThrottle)
+      notifyInfo('생성 텀 설정을 저장했어.')
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '생성 텀 설정 저장에 실패했어.')
+    },
+  })
+
   const videoOptimizationMutation = useMutation({
     mutationFn: updateVideoOptimizationSettings,
     onSuccess: (settings) => {
@@ -217,6 +233,23 @@ export function SettingsPage() {
   const patchImageSaveDraft = (patch: Partial<ImageSaveSettings>) => {
     if (!effectiveImageSaveDraft) return
     setImageSaveDraft({ ...effectiveImageSaveDraft, ...patch })
+  }
+
+  const patchGenerationThrottleDraft = (patch: {
+    novelai?: Partial<GenerationThrottleSettings['novelai']>
+    codex?: Partial<GenerationThrottleSettings['codex']>
+  }) => {
+    if (!effectiveGenerationThrottleDraft) return
+    setGenerationThrottleDraft({
+      novelai: {
+        ...effectiveGenerationThrottleDraft.novelai,
+        ...patch.novelai,
+      },
+      codex: {
+        ...effectiveGenerationThrottleDraft.codex,
+        ...patch.codex,
+      },
+    })
   }
 
   const patchVideoOptimizationDraft = (patch: Partial<VideoOptimizationSettings>) => {
@@ -270,6 +303,10 @@ export function SettingsPage() {
                 onPatchImageSave={patchImageSaveDraft}
                 onSave={() => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft)}
                 isSaving={imageSaveMutation.isPending}
+                generationThrottleDraft={effectiveGenerationThrottleDraft}
+                onPatchGenerationThrottle={patchGenerationThrottleDraft}
+                onSaveGenerationThrottle={() => effectiveGenerationThrottleDraft && void generationThrottleMutation.mutateAsync(effectiveGenerationThrottleDraft)}
+                isSavingGenerationThrottle={generationThrottleMutation.isPending}
                 videoOptimizationDraft={effectiveVideoOptimizationDraft}
                 onPatchVideoOptimization={patchVideoOptimizationDraft}
                 onSaveVideoOptimization={() => effectiveVideoOptimizationDraft && void videoOptimizationMutation.mutateAsync(effectiveVideoOptimizationDraft)}

@@ -296,6 +296,18 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       applyToUpload: true,
       applyToWorkflowOutputs: true,
     },
+    generationThrottle: {
+      novelai: {
+        maxConcurrentJobs: 1,
+        cooldownAfterCompletions: 1,
+        cooldownSeconds: 3,
+      },
+      codex: {
+        maxConcurrentJobs: 3,
+        cooldownAfterCompletions: 3,
+        cooldownSeconds: 60,
+      },
+    },
     videoOptimization: {
       enabled: true,
       preset: 'balanced',
@@ -389,6 +401,16 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       ...defaults.imageSave,
       ...loadedSettings.imageSave,
     },
+    generationThrottle: {
+      novelai: {
+        ...defaults.generationThrottle.novelai,
+        ...loadedSettings.generationThrottle?.novelai,
+      },
+      codex: {
+        ...defaults.generationThrottle.codex,
+        ...loadedSettings.generationThrottle?.codex,
+      },
+    },
     videoOptimization: {
       ...defaults.videoOptimization,
       ...loadedSettings.videoOptimization,
@@ -442,6 +464,18 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
 
   for (const key of Object.keys(defaults.imageSave)) {
     if (!(key in (loaded.imageSave || {}))) {
+      return true;
+    }
+  }
+
+  for (const key of Object.keys(defaults.generationThrottle.novelai)) {
+    if (!(key in (loaded.generationThrottle?.novelai || {}))) {
+      return true;
+    }
+  }
+
+  for (const key of Object.keys(defaults.generationThrottle.codex)) {
+    if (!(key in (loaded.generationThrottle?.codex || {}))) {
       return true;
     }
   }

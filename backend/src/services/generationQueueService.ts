@@ -16,6 +16,7 @@ import { ComfyUIWorkflowParser } from '../utils/comfyuiWorkflowParser'
 import { reconcileComfyModelSelectionValues } from './comfyModelSelectionResolver'
 import { getComfyRequestDebugRelativePath, writeComfyRequestDebugSnapshot, type ComfyRequestDebugSnapshot } from './generationRequestDebugService'
 import { FileDiscoveryService } from './folderScan/fileDiscoveryService'
+import { settingsService } from './settingsService'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
 import type { AIMetadata } from './metadata/types'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
@@ -35,6 +36,12 @@ const DISPATCH_INTERVAL_MS = 3000
 const NAI_WORKER_KEY = 'novelai'
 const CODEX_WORKER_KEY = 'codex'
 const GENERATION_QUEUE_CANCELLATION_MESSAGE = '__GENERATION_QUEUE_CANCELLATION__'
+
+type ThrottledServiceType = 'novelai' | 'codex'
+type ServiceThrottleState = {
+  completedSinceCooldown: number
+  cooldownUntil: number | null
+}
 
 function parseStoredRequestPayload(record: GenerationQueueJobRecord) {
   try {
@@ -191,6 +198,10 @@ export class GenerationQueueService {
   private static dispatcherHandle: ReturnType<typeof setInterval> | null = null
   private static dispatchTickScheduled = false
   private static activeWorkerKeys = new Set<string>()
+  private static serviceThrottleState: Record<ThrottledServiceType, ServiceThrottleState> = {
+    novelai: { completedSinceCooldown: 0, cooldownUntil: null },
+    codex: { completedSinceCooldown: 0, cooldownUntil: null },
+  }
 
   /** Start queue recovery hooks and dispatcher once per process. */
   static start() {
@@ -224,6 +235,10 @@ export class GenerationQueueService {
       this.dispatcherHandle = null
     }
     this.activeWorkerKeys.clear()
+    this.serviceThrottleState = {
+      novelai: { completedSinceCooldown: 0, cooldownUntil: null },
+      codex: { completedSinceCooldown: 0, cooldownUntil: null },
+    }
     return true
   }
 
@@ -618,46 +633,84 @@ export class GenerationQueueService {
     await this.tryStartComfyWorkers()
   }
 
+  private static getServiceThrottleConfig(serviceType: ThrottledServiceType) {
+    const generationThrottle = settingsService.loadSettings().generationThrottle
+    return serviceType === 'novelai' ? generationThrottle.novelai : generationThrottle.codex
+  }
+
+  private static getActiveWorkerCountForPrefix(workerKeyPrefix: string) {
+    let count = 0
+    for (const workerKey of this.activeWorkerKeys) {
+      if (workerKey.startsWith(`${workerKeyPrefix}:`)) {
+        count += 1
+      }
+    }
+    return count
+  }
+
+  private static isServiceCoolingDown(serviceType: ThrottledServiceType) {
+    const cooldownUntil = this.serviceThrottleState[serviceType].cooldownUntil
+    return cooldownUntil !== null && cooldownUntil > Date.now()
+  }
+
+  private static noteServiceCompletion(serviceType: ThrottledServiceType) {
+    const throttle = this.getServiceThrottleConfig(serviceType)
+    const state = this.serviceThrottleState[serviceType]
+    const cooldownAfterCompletions = Math.max(1, throttle.cooldownAfterCompletions)
+    const cooldownSeconds = Math.max(0, throttle.cooldownSeconds)
+
+    if (state.cooldownUntil !== null && state.cooldownUntil <= Date.now()) {
+      state.cooldownUntil = null
+    }
+
+    state.completedSinceCooldown += 1
+    if (cooldownSeconds <= 0 || state.completedSinceCooldown < cooldownAfterCompletions) {
+      return
+    }
+
+    state.completedSinceCooldown = 0
+    state.cooldownUntil = Date.now() + cooldownSeconds * 1000
+  }
+
+  private static tryStartThrottledServiceWorkers(serviceType: ThrottledServiceType, workerKeyPrefix: string, label: string) {
+    if (this.isServiceCoolingDown(serviceType)) {
+      return
+    }
+
+    const throttle = this.getServiceThrottleConfig(serviceType)
+    const maxConcurrentJobs = Math.max(1, throttle.maxConcurrentJobs)
+    const activeWorkers = this.getActiveWorkerCountForPrefix(workerKeyPrefix)
+    const availableSlots = Math.max(0, maxConcurrentJobs - activeWorkers)
+
+    for (let slotIndex = 0; slotIndex < availableSlots; slotIndex += 1) {
+      const job = this.claimNextDispatchableJob({ serviceType })
+      if (!job) {
+        return
+      }
+
+      const workerKey = `${workerKeyPrefix}:${job.id}`
+      this.activeWorkerKeys.add(workerKey)
+      void this.runClaimedJob(job)
+        .catch((error) => {
+          console.error(`❌ ${label} queue worker failed for job ${job.id}:`, error)
+        })
+        .finally(() => {
+          this.activeWorkerKeys.delete(workerKey)
+          const latest = GenerationQueueModel.findById(job.id)
+          if (latest?.status === 'completed') {
+            this.noteServiceCompletion(serviceType)
+          }
+          this.requestDispatch()
+        })
+    }
+  }
+
   private static tryStartNovelAiWorker() {
-    if (this.activeWorkerKeys.has(NAI_WORKER_KEY)) {
-      return
-    }
-
-    const job = this.claimNextDispatchableJob({ serviceType: 'novelai' })
-    if (!job) {
-      return
-    }
-
-    this.activeWorkerKeys.add(NAI_WORKER_KEY)
-    void this.runClaimedJob(job)
-      .catch((error) => {
-        console.error(`❌ NovelAI queue worker failed for job ${job.id}:`, error)
-      })
-      .finally(() => {
-        this.activeWorkerKeys.delete(NAI_WORKER_KEY)
-        this.requestDispatch()
-      })
+    this.tryStartThrottledServiceWorkers('novelai', NAI_WORKER_KEY, 'NovelAI')
   }
 
   private static tryStartCodexWorker() {
-    if (this.activeWorkerKeys.has(CODEX_WORKER_KEY)) {
-      return
-    }
-
-    const job = this.claimNextDispatchableJob({ serviceType: 'codex' })
-    if (!job) {
-      return
-    }
-
-    this.activeWorkerKeys.add(CODEX_WORKER_KEY)
-    void this.runClaimedJob(job)
-      .catch((error) => {
-        console.error(`❌ Codex queue worker failed for job ${job.id}:`, error)
-      })
-      .finally(() => {
-        this.activeWorkerKeys.delete(CODEX_WORKER_KEY)
-        this.requestDispatch()
-      })
+    this.tryStartThrottledServiceWorkers('codex', CODEX_WORKER_KEY, 'Codex')
   }
 
   private static async tryStartComfyWorkers() {

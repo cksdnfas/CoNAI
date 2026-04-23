@@ -1,9 +1,9 @@
-import { Save } from 'lucide-react'
+import { RefreshCw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { ImageSaveSettings, VideoOptimizationSettings } from '@/types/settings'
+import type { GenerationThrottleSettings, ImageSaveSettings, VideoOptimizationSettings } from '@/types/settings'
 import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import { VideoOptimizationTab } from './video-optimization-tab'
 
@@ -14,11 +14,33 @@ const IMAGE_SAVE_SIZE_PRESETS = [
   { label: '4K', width: 3840, height: 2160 },
 ] as const
 
+const DEFAULT_GENERATION_THROTTLE_SETTINGS: GenerationThrottleSettings = {
+  novelai: {
+    maxConcurrentJobs: 1,
+    cooldownAfterCompletions: 1,
+    cooldownSeconds: 3,
+  },
+  codex: {
+    maxConcurrentJobs: 3,
+    cooldownAfterCompletions: 3,
+    cooldownSeconds: 60,
+  },
+}
+
+type GenerationThrottleDraftPatch = {
+  novelai?: Partial<GenerationThrottleSettings['novelai']>
+  codex?: Partial<GenerationThrottleSettings['codex']>
+}
+
 interface ImageSaveTabProps {
   imageSaveDraft: ImageSaveSettings | null
   onPatchImageSave: (patch: Partial<ImageSaveSettings>) => void
   onSave: () => void
   isSaving: boolean
+  generationThrottleDraft: GenerationThrottleSettings | null
+  onPatchGenerationThrottle: (patch: GenerationThrottleDraftPatch) => void
+  onSaveGenerationThrottle: () => void
+  isSavingGenerationThrottle: boolean
   videoOptimizationDraft: VideoOptimizationSettings | null
   onPatchVideoOptimization: (patch: Partial<VideoOptimizationSettings>) => void
   onSaveVideoOptimization: () => void
@@ -31,6 +53,10 @@ export function ImageSaveTab({
   onPatchImageSave,
   onSave,
   isSaving,
+  generationThrottleDraft,
+  onPatchGenerationThrottle,
+  onSaveGenerationThrottle,
+  isSavingGenerationThrottle,
   videoOptimizationDraft,
   onPatchVideoOptimization,
   onSaveVideoOptimization,
@@ -38,6 +64,87 @@ export function ImageSaveTab({
 }: ImageSaveTabProps) {
   return (
     <div className="space-y-6">
+      <section>
+        <SettingsSection
+          heading="생성 텀 / 쓰로틀"
+          actions={
+            <Button
+              size="icon-sm"
+              onClick={onSaveGenerationThrottle}
+              disabled={!generationThrottleDraft || isSavingGenerationThrottle}
+              aria-label="생성 텀 설정 저장"
+              title="생성 텀 설정 저장"
+            >
+              <Save className="h-4 w-4" />
+            </Button>
+          }
+        >
+          {generationThrottleDraft ? (
+            <div className="space-y-5">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-base font-semibold text-foreground">NovelAI</div>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    onClick={() => onPatchGenerationThrottle({ novelai: DEFAULT_GENERATION_THROTTLE_SETTINGS.novelai })}
+                    aria-label="NovelAI 생성 텀 초기값으로 되돌리기"
+                    title="NovelAI 초기값"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <SettingsField label="동시 실행 수">
+                    <Input type="number" min={1} max={8} variant="settings" value={generationThrottleDraft.novelai.maxConcurrentJobs} onChange={(event) => onPatchGenerationThrottle({ novelai: { maxConcurrentJobs: Number(event.target.value) || 1 } })} />
+                  </SettingsField>
+                  <SettingsField label="몇 건마다 쉬기">
+                    <Input type="number" min={1} max={50} variant="settings" value={generationThrottleDraft.novelai.cooldownAfterCompletions} onChange={(event) => onPatchGenerationThrottle({ novelai: { cooldownAfterCompletions: Number(event.target.value) || 1 } })} />
+                  </SettingsField>
+                  <SettingsField label="휴식 시간(초)">
+                    <Input type="number" min={0} max={3600} variant="settings" value={generationThrottleDraft.novelai.cooldownSeconds} onChange={(event) => onPatchGenerationThrottle({ novelai: { cooldownSeconds: Number(event.target.value) || 0 } })} />
+                  </SettingsField>
+                </div>
+              </div>
+
+              <div className="px-3 py-1">
+                <div className="h-px bg-border/70" />
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-base font-semibold text-foreground">Codex</div>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    onClick={() => onPatchGenerationThrottle({ codex: DEFAULT_GENERATION_THROTTLE_SETTINGS.codex })}
+                    aria-label="Codex 생성 텀 초기값으로 되돌리기"
+                    title="Codex 초기값"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <SettingsField label="동시 실행 수">
+                    <Input type="number" min={1} max={8} variant="settings" value={generationThrottleDraft.codex.maxConcurrentJobs} onChange={(event) => onPatchGenerationThrottle({ codex: { maxConcurrentJobs: Number(event.target.value) || 1 } })} />
+                  </SettingsField>
+                  <SettingsField label="몇 건마다 쉬기">
+                    <Input type="number" min={1} max={50} variant="settings" value={generationThrottleDraft.codex.cooldownAfterCompletions} onChange={(event) => onPatchGenerationThrottle({ codex: { cooldownAfterCompletions: Number(event.target.value) || 1 } })} />
+                  </SettingsField>
+                  <SettingsField label="휴식 시간(초)">
+                    <Input type="number" min={0} max={3600} variant="settings" value={generationThrottleDraft.codex.cooldownSeconds} onChange={(event) => onPatchGenerationThrottle({ codex: { cooldownSeconds: Number(event.target.value) || 0 } })} />
+                  </SettingsField>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <Skeleton className="h-52 w-full rounded-sm" />
+          )}
+        </SettingsSection>
+      </section>
+
       <section>
         <SettingsSection
           heading="이미지 저장"

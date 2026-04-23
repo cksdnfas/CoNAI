@@ -168,6 +168,12 @@ export interface GraphWorkflowScheduleRecord {
   last_execution_id?: number | null
   next_run_at?: string | null
   last_enqueued_at?: string | null
+  completed_run_count?: number
+  queued_run_count?: number
+  running_run_count?: number
+  failed_run_count?: number
+  reserved_run_count?: number
+  remaining_run_count?: number | null
   created_date: string
   updated_date: string
 }

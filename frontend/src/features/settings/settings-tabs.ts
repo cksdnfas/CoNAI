@@ -12,5 +12,5 @@ export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
   { value: 'security', label: '보안' },
   { value: 'auto', label: '자동화' },
   { value: 'metadata', label: '메타데이터' },
-  { value: 'image-save', label: '미디어 저장' },
+  { value: 'image-save', label: '미디어 생성/저장' },
 ]

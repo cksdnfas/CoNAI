@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   AppearanceSettings,
+  GenerationThrottleSettings,
   GeneralSettings,
   KaloscopeSettings,
   MetadataExtractionSettings,
@@ -130,6 +131,23 @@ export function applyImageSaveSettingsUpdate(currentSettings: AppSettings, image
     imageSave: {
       ...currentSettings.imageSave,
       ...imageSaveSettings,
+    },
+  };
+}
+
+/** Build the next settings state after applying a generation-throttle patch. */
+export function applyGenerationThrottleSettingsUpdate(currentSettings: AppSettings, generationThrottleSettings: Partial<GenerationThrottleSettings>): AppSettings {
+  return {
+    ...currentSettings,
+    generationThrottle: {
+      novelai: {
+        ...currentSettings.generationThrottle.novelai,
+        ...generationThrottleSettings.novelai,
+      },
+      codex: {
+        ...currentSettings.generationThrottle.codex,
+        ...generationThrottleSettings.codex,
+      },
     },
   };
 }

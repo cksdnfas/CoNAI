@@ -8,7 +8,7 @@ import {
   validateStringEnumIfDefined,
 } from '../routeValidation';
 import { settingsService } from '../../services/settingsService';
-import { ImageSaveSettings, MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings, VideoOptimizationSettings } from '../../types/settings';
+import { GenerationThrottleSettings, ImageSaveSettings, MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings, VideoOptimizationSettings } from '../../types/settings';
 
 const router = Router();
 
@@ -145,6 +145,42 @@ router.put(
       success: true,
       data: updatedSettings,
       message: 'Image save settings updated successfully',
+    });
+    return;
+  }),
+);
+
+router.put(
+  '/generation-throttle',
+  asyncHandler(async (req: Request, res: Response) => {
+    const generationThrottleSettings: Partial<GenerationThrottleSettings> = req.body;
+
+    const validateServiceThrottle = (serviceSettings: Partial<GenerationThrottleSettings['novelai']> | undefined, label: string) => {
+      if (serviceSettings === undefined) {
+        return true;
+      }
+
+      if (!serviceSettings || typeof serviceSettings !== 'object' || Array.isArray(serviceSettings)) {
+        res.status(400).json({ success: false, error: `${label} throttle settings must be an object` });
+        return false;
+      }
+
+      if (!validateIntegerInRangeIfDefined(res, serviceSettings.maxConcurrentJobs, 1, 8, `${label} maxConcurrentJobs must be an integer between 1 and 8`)) return false;
+      if (!validateIntegerInRangeIfDefined(res, serviceSettings.cooldownAfterCompletions, 1, 50, `${label} cooldownAfterCompletions must be an integer between 1 and 50`)) return false;
+      if (!validateIntegerInRangeIfDefined(res, serviceSettings.cooldownSeconds, 0, 3600, `${label} cooldownSeconds must be an integer between 0 and 3600`)) return false;
+
+      return true;
+    };
+
+    if (!validateServiceThrottle(generationThrottleSettings.novelai, 'NovelAI')) return;
+    if (!validateServiceThrottle(generationThrottleSettings.codex, 'Codex')) return;
+
+    const updatedSettings = settingsService.updateGenerationThrottleSettings(generationThrottleSettings);
+
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'Generation throttle settings updated successfully',
     });
     return;
   }),

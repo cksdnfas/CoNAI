@@ -222,6 +222,17 @@ export interface ImageSaveSettings {
   applyToWorkflowOutputs: boolean;
 }
 
+export interface GenerationThrottleServiceSettings {
+  maxConcurrentJobs: number;
+  cooldownAfterCompletions: number;
+  cooldownSeconds: number;
+}
+
+export interface GenerationThrottleSettings {
+  novelai: GenerationThrottleServiceSettings;
+  codex: GenerationThrottleServiceSettings;
+}
+
 export interface VideoOptimizationSettings {
   enabled: boolean;
   preset: VideoOptimizationPreset;
@@ -241,6 +252,7 @@ export interface AppSettings {
   metadataExtraction: MetadataExtractionSettings;
   thumbnail: ThumbnailSettings;
   imageSave: ImageSaveSettings;
+  generationThrottle: GenerationThrottleSettings;
   videoOptimization: VideoOptimizationSettings;
 }
 

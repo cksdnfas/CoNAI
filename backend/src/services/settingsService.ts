@@ -3,6 +3,7 @@ import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
 import {
   AppSettings,
+  GenerationThrottleSettings,
   GeneralSettings,
   TaggerSettings,
   KaloscopeSettings,
@@ -26,6 +27,7 @@ import {
 } from './settingsServiceStorage';
 import {
   applyAppearanceSettingsUpdate,
+  applyGenerationThrottleSettingsUpdate,
   applyGeneralSettingsUpdate,
   applyImageSaveSettingsUpdate,
   applyKaloscopeSettingsUpdate,
@@ -198,6 +200,16 @@ export class SettingsService {
   updateImageSaveSettings(imageSaveSettings: Partial<AppSettings['imageSave']>): AppSettings {
     const currentSettings = this.loadSettings();
     const updatedSettings = applyImageSaveSettingsUpdate(currentSettings, imageSaveSettings);
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /**
+   * Update generation throttle settings
+   */
+  updateGenerationThrottleSettings(generationThrottleSettings: Partial<GenerationThrottleSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings = applyGenerationThrottleSettingsUpdate(currentSettings, generationThrottleSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }
