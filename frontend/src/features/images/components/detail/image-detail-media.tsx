@@ -524,7 +524,7 @@ function InteractiveImageDetailMedia({
             transformOrigin: 'center center',
           }}
         >
-          <img src={renderUrl} alt={altText} className={cn(className, 'block h-auto max-h-full w-auto max-w-full object-contain pointer-events-none select-none')} draggable={false} onError={() => setHasRenderError(true)} />
+          <img src={renderUrl} alt={altText} className={cn('block h-auto w-auto pointer-events-none select-none', className)} draggable={false} onError={() => setHasRenderError(true)} />
         </div>
       </div>
     </div>
