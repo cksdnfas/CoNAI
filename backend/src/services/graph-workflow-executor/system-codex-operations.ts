@@ -1,24 +1,31 @@
 import fs from 'fs'
 import path from 'path'
-import sharp from 'sharp'
 import { resolveUploadsPath } from '../../config/runtimePaths'
+import { GenerationHistoryModel } from '../../models/GenerationHistory'
+import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
-import { type AIMetadata } from '../metadata/types'
-import { APIImageProcessor } from '../APIImageProcessor'
-import { settingsService } from '../settingsService'
-import {
-  cleanupCodexImageGenerationWorkDir,
-  CODEX_IMAGE_GENERATION_CANCELLED_MESSAGE,
-  generateImageWithCodex,
-} from '../codexImageGenerationService'
+import { ImageUploadService } from '../imageUploadService'
 import { saveArtifactBuffer, saveMetadataArtifact } from './artifacts'
-import { buildRuntimeArtifact } from './system-module-artifacts'
 import {
   bufferToDataUrl,
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
+  type RuntimeArtifact,
 } from './shared'
+import { GenerationQueueService } from '../generationQueueService'
+
+const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
+const QUEUE_POLL_INTERVAL_MS = 1500
+const CODEX_RANDOM_ASPECT_CHOICES = [
+  { value: '1:1', width: 1, height: 1 },
+  { value: '4:3', width: 4, height: 3 },
+  { value: '3:4', width: 3, height: 4 },
+  { value: '16:9', width: 16, height: 9 },
+  { value: '9:16', width: 9, height: 16 },
+] as const
+const CODEX_DEFAULT_ASPECT_RATIO = '1:1'
+const CODEX_DEFAULT_RESOLUTION = 1024
 
 function normalizeOptionalString(value: unknown) {
   if (typeof value !== 'string') {
@@ -29,18 +36,59 @@ function normalizeOptionalString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function clampPositiveInteger(value: unknown) {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const rounded = Math.round(value)
-    return rounded > 0 ? rounded : null
+function parsePositiveIntegerish(value: unknown) {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value
   }
 
   if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
     const parsed = Number.parseInt(value.trim(), 10)
-    return parsed > 0 ? parsed : null
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
   }
 
   return null
+}
+
+function roundCodexDimension(value: number) {
+  return Math.max(64, Math.round(value / 64) * 64)
+}
+
+function pickCodexAspectRatio(value: string | null) {
+  if (!value || value === 'random') {
+    const randomIndex = Math.floor(Math.random() * CODEX_RANDOM_ASPECT_CHOICES.length)
+    return CODEX_RANDOM_ASPECT_CHOICES[randomIndex] ?? CODEX_RANDOM_ASPECT_CHOICES[0]
+  }
+
+  return CODEX_RANDOM_ASPECT_CHOICES.find((option) => option.value === value) ?? CODEX_RANDOM_ASPECT_CHOICES[0]
+}
+
+function resolveCodexRequestedSize(resolvedInputs: Record<string, any>) {
+  const explicitWidth = parsePositiveIntegerish(resolvedInputs.width)
+  const explicitHeight = parsePositiveIntegerish(resolvedInputs.height)
+  if (explicitWidth && explicitHeight) {
+    return {
+      size: `${explicitWidth}x${explicitHeight}`,
+      width: explicitWidth,
+      height: explicitHeight,
+      aspectRatio: 'custom',
+      resolution: null,
+    }
+  }
+
+  const aspectRatio = normalizeOptionalString(resolvedInputs.aspect_ratio) ?? CODEX_DEFAULT_ASPECT_RATIO
+  const resolution = parsePositiveIntegerish(resolvedInputs.resolution) ?? CODEX_DEFAULT_RESOLUTION
+  const chosenAspect = pickCodexAspectRatio(aspectRatio)
+  const scale = resolution / Math.max(chosenAspect.width, chosenAspect.height)
+  const width = roundCodexDimension(chosenAspect.width * scale)
+  const height = roundCodexDimension(chosenAspect.height * scale)
+
+  return {
+    size: `${width}x${height}`,
+    width,
+    height,
+    aspectRatio: aspectRatio === 'random' ? 'random' : chosenAspect.value,
+    resolution: String(resolution),
+  }
 }
 
 function resolveMimeTypeFromPath(filePath: string) {
@@ -51,29 +99,267 @@ function resolveMimeTypeFromPath(filePath: string) {
   if (extension === '.webp') {
     return 'image/webp'
   }
+  if (extension === '.mp4') {
+    return 'video/mp4'
+  }
   return 'image/png'
 }
 
-function buildCodexMetadataPatch(params: {
-  prompt: string
-  negativePrompt: string | null
-  requestedWidth: number | null
-  requestedHeight: number | null
-}): Partial<AIMetadata> {
-  return {
-    ai_tool: 'codex',
-    model: 'codex.image_gen',
-    software: 'OpenAI Codex',
-    prompt: params.prompt,
-    positive_prompt: params.prompt,
-    negative_prompt: params.negativePrompt ?? undefined,
-    uc: params.negativePrompt ?? undefined,
-    width: params.requestedWidth ?? undefined,
-    height: params.requestedHeight ?? undefined,
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function parseStoredQueuePayload(record: { request_payload: string }) {
+  try {
+    const parsed = JSON.parse(record.request_payload) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {}
+  } catch {
+    return {}
   }
 }
 
-/** Execute one system-native Codex image-generation module and import its result through the CoNAI image pipeline. */
+function resolveQueueHistoryId(debug: Record<string, unknown>) {
+  const directHistoryId = parsePositiveIntegerish(debug.history_id)
+  if (directHistoryId) {
+    return directHistoryId
+  }
+
+  if (Array.isArray(debug.history_ids)) {
+    for (const value of debug.history_ids) {
+      const historyId = parsePositiveIntegerish(value)
+      if (historyId) {
+        return historyId
+      }
+    }
+  }
+
+  return null
+}
+
+function parseHistoryMetadata(record: { metadata?: string | null } | null | undefined) {
+  if (!record?.metadata) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(record.metadata) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+function resolveHistoryOriginalPath(historyRecords: Array<{ metadata?: string | null }>, compositeHash: string | null) {
+  if (compositeHash) {
+    const activePath = ImageUploadService.getActiveFilePath(compositeHash)
+    if (activePath) {
+      return activePath
+    }
+  }
+
+  for (const historyRecord of historyRecords) {
+    const metadata = parseHistoryMetadata(historyRecord)
+    const savedOriginalPath = normalizeOptionalString(metadata.saved_original_path)
+      ?? normalizeOptionalString(metadata.codex_saved_original_path)
+      ?? normalizeOptionalString(metadata.original_path)
+    if (savedOriginalPath) {
+      return savedOriginalPath
+    }
+
+    const generatedOutputPath = normalizeOptionalString(metadata.codex_output_file)
+    if (generatedOutputPath) {
+      return generatedOutputPath
+    }
+  }
+
+  return null
+}
+
+async function requestQueueCancellation(jobId: number) {
+  const latest = GenerationQueueModel.findById(jobId)
+  if (!latest || latest.status === 'completed' || latest.status === 'failed' || latest.status === 'cancelled') {
+    return
+  }
+
+  await GenerationQueueService.requestCancellation(jobId)
+}
+
+async function waitForQueueCompletion(context: ExecutionContext, nodeId: string, jobId: number) {
+  while (true) {
+    if (context.shouldCancel?.()) {
+      await requestQueueCancellation(jobId)
+      writeExecutionLog({
+        executionId: context.executionId,
+        nodeId,
+        level: 'warn',
+        eventType: 'node_queue_cancel_requested',
+        message: `Queue cancellation requested for Codex node job ${jobId}`,
+      })
+      throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
+    }
+
+    const job = GenerationQueueModel.findById(jobId)
+    if (!job) {
+      throw new Error(`Queue job ${jobId} disappeared before graph node completion`)
+    }
+
+    if (job.status === 'completed') {
+      return job
+    }
+
+    if (job.status === 'failed') {
+      throw new Error(job.failure_message || `Queue job ${jobId} failed`)
+    }
+
+    if (job.status === 'cancelled') {
+      throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
+    }
+
+    await sleep(QUEUE_POLL_INTERVAL_MS)
+  }
+}
+
+async function resolveQueueBackedCodexOutput(params: {
+  context: ExecutionContext
+  node: GraphWorkflowNode
+  moduleDefinition: ParsedModuleDefinition
+  completedJobId: number
+  requestedSize: ReturnType<typeof resolveCodexRequestedSize>
+}) {
+  const completedJob = GenerationQueueModel.findById(params.completedJobId)
+  if (!completedJob) {
+    throw new Error(`Completed queue job ${params.completedJobId} is no longer available`)
+  }
+
+  const storedPayload = parseStoredQueuePayload(completedJob)
+  const debug = storedPayload._debug && typeof storedPayload._debug === 'object' && !Array.isArray(storedPayload._debug)
+    ? storedPayload._debug as Record<string, unknown>
+    : {}
+
+  const historyId = resolveQueueHistoryId(debug)
+  const preferredHistoryRecord = historyId ? GenerationHistoryModel.findById(historyId) : null
+  const queueHistoryRecords = GenerationHistoryModel.findAll({
+    service_type: 'codex',
+    queue_job_id: completedJob.id,
+    order_by: 'created_at',
+    order_direction: 'ASC',
+  })
+  const historyRecords = [
+    ...(preferredHistoryRecord ? [preferredHistoryRecord] : []),
+    ...queueHistoryRecords.filter((record) => record.id !== preferredHistoryRecord?.id),
+  ]
+  const historyRecord = historyRecords[0] ?? null
+  const compositeHash = normalizeOptionalString(debug.result_composite_hash)
+    ?? historyRecords.map((record) => normalizeOptionalString(record.composite_hash)).find((value) => Boolean(value))
+    ?? null
+  const fallbackOriginalPath = normalizeOptionalString(debug.result_original_path)
+  const originalPath = fallbackOriginalPath ?? resolveHistoryOriginalPath(historyRecords, compositeHash)
+
+  if (!originalPath) {
+    throw new Error(`Queue job ${completedJob.id} completed but Codex output path could not be resolved`)
+  }
+
+  const absoluteOriginalPath = path.isAbsolute(originalPath) ? originalPath : resolveUploadsPath(originalPath)
+  const outputBuffer = await fs.promises.readFile(absoluteOriginalPath)
+  const resolvedMimeType = normalizeOptionalString(debug.result_mime_type) ?? resolveMimeTypeFromPath(absoluteOriginalPath)
+  const artifactType: 'file' | 'image' = resolvedMimeType.startsWith('video/') ? 'file' : 'image'
+  const outputDataUrl = bufferToDataUrl(outputBuffer, resolvedMimeType)
+  const originalFileName = path.basename(absoluteOriginalPath)
+  const primaryOutputPort = params.moduleDefinition.output_ports.find((port) => port.key === 'image')
+    ?? params.moduleDefinition.output_ports.find((port) => port.key !== 'metadata')
+    ?? { key: 'image', data_type: 'image' as const }
+  const { storagePath, artifactRecordId } = await saveArtifactBuffer(
+    params.context.executionId,
+    params.node.id,
+    primaryOutputPort.key,
+    artifactType,
+    outputBuffer,
+    {
+      mimeType: resolvedMimeType,
+      sourcePathForMetadata: absoluteOriginalPath,
+      originalFileName,
+    },
+  )
+
+  const referenceValue = {
+    composite_hash: compositeHash,
+    original_path: originalPath,
+    original_file_path: absoluteOriginalPath,
+    mime_type: resolvedMimeType,
+    output_file_name: originalFileName,
+    queue_job_id: completedJob.id,
+    history_id: historyId,
+    requested_width: params.requestedSize.width,
+    requested_height: params.requestedSize.height,
+    requested_aspect_ratio: params.requestedSize.aspectRatio,
+    requested_resolution: params.requestedSize.resolution,
+    codex_last_message: normalizeOptionalString(debug.codex_last_message),
+  }
+
+  const metadataValue = {
+    ...referenceValue,
+    workflow_execution_id: params.context.executionId,
+    node_id: params.node.id,
+    provider_job_id: completedJob.provider_job_id ?? null,
+  }
+
+  const nodeArtifacts: Record<string, RuntimeArtifact> = {
+    [primaryOutputPort.key]: {
+      type: artifactType,
+      value: outputDataUrl,
+      storagePath,
+      artifactRecordId,
+      metadata: {
+        kind: 'codex-queue-image',
+        queueJobId: completedJob.id,
+        historyId,
+        compositeHash,
+      },
+    },
+    image_ref: {
+      type: 'json',
+      value: referenceValue,
+      metadata: {
+        kind: 'codex-queue-image-reference',
+        queueJobId: completedJob.id,
+      },
+    },
+    metadata: {
+      type: 'json',
+      value: metadataValue,
+      metadata: {
+        kind: 'codex-queue-metadata',
+        queueJobId: completedJob.id,
+      },
+    },
+  }
+
+  saveMetadataArtifact(params.context.executionId, params.node.id, metadataValue)
+  params.context.artifactsByNode.set(params.node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: params.context.executionId,
+    nodeId: params.node.id,
+    eventType: 'node_queue_complete',
+    message: `Queue-backed Codex module completed: ${params.moduleDefinition.name}`,
+    details: {
+      queueJobId: completedJob.id,
+      historyId,
+      compositeHash,
+      storagePath,
+      requestedWidth: params.requestedSize.width,
+      requestedHeight: params.requestedSize.height,
+      requestedAspectRatio: params.requestedSize.aspectRatio,
+      requestedResolution: params.requestedSize.resolution,
+    },
+  })
+}
+
+/** Execute one Codex image-generation module through the shared generation queue and pass its result to downstream nodes. */
 export async function executeCodexImageGenerationNode(
   context: ExecutionContext,
   node: GraphWorkflowNode,
@@ -86,164 +372,77 @@ export async function executeCodexImageGenerationNode(
   }
 
   const negativePrompt = normalizeOptionalString(resolvedInputs.negative_prompt)
-  const requestedWidth = clampPositiveInteger(resolvedInputs.width)
-  const requestedHeight = clampPositiveInteger(resolvedInputs.height)
+  const inputImage = normalizeOptionalString(resolvedInputs.image)
+  const maskImage = normalizeOptionalString(resolvedInputs.mask)
+  if (maskImage && !inputImage) {
+    throw new Error('Codex mask input requires an image input')
+  }
+
+  const operation = inputImage ? (maskImage ? 'infill' : 'edit') : 'generate'
+  const requestedSize = resolveCodexRequestedSize(resolvedInputs)
 
   writeExecutionLog({
     executionId: context.executionId,
     nodeId: node.id,
     eventType: 'node_engine_start',
-    message: `System module start: ${moduleDefinition.name}`,
+    message: `Codex module start: ${moduleDefinition.name}`,
     details: {
-      engine: 'system',
-      operationKey: 'system.generate_image_codex',
-      requestedWidth,
-      requestedHeight,
+      engine: 'codex',
+      executionPath: 'generation_queue',
+      requestedSize: requestedSize.size,
+      requestedAspectRatio: requestedSize.aspectRatio,
+      requestedResolution: requestedSize.resolution,
       hasNegativePrompt: Boolean(negativePrompt),
+      operation,
+      hasImageInput: Boolean(inputImage),
+      hasMaskInput: Boolean(maskImage),
     },
   })
 
-  let workDir: string | null = null
-  let cleanupSucceeded = false
-
   try {
-    const generation = await generateImageWithCodex({
-      prompt,
-      negativePrompt,
-      width: requestedWidth,
-      height: requestedHeight,
-      contextLabel: `${context.workflow.name} / ${node.label || moduleDefinition.name}`,
-      shouldCancel: context.shouldCancel,
-    })
-
-    workDir = generation.workDir
-
-    const imageSaveSettings = settingsService.loadSettings().imageSave
-    const metadataPatch = buildCodexMetadataPatch({
-      prompt,
-      negativePrompt,
-      requestedWidth,
-      requestedHeight,
-    })
-
-    const imported = await APIImageProcessor.processGeneratedFile(generation.outputPath, 'codex', {
-      format: imageSaveSettings.applyToWorkflowOutputs ? imageSaveSettings.defaultFormat : undefined,
-      quality: imageSaveSettings.applyToWorkflowOutputs ? imageSaveSettings.quality : undefined,
-      resizeEnabled: imageSaveSettings.applyToWorkflowOutputs ? imageSaveSettings.resizeEnabled : undefined,
-      maxWidth: imageSaveSettings.applyToWorkflowOutputs ? imageSaveSettings.maxWidth : undefined,
-      maxHeight: imageSaveSettings.applyToWorkflowOutputs ? imageSaveSettings.maxHeight : undefined,
-      sourcePathForMetadata: generation.outputPath,
-      sourceMimeType: 'image/png',
-      originalFileName: path.basename(generation.outputPath),
-      metadataPatch,
-    })
-
-    const importedAbsolutePath = resolveUploadsPath(imported.originalPath)
-    const importedBuffer = await fs.promises.readFile(importedAbsolutePath)
-    const importedMimeType = resolveMimeTypeFromPath(importedAbsolutePath)
-    const importedImageMetadata = await sharp(importedBuffer).metadata()
-    const imageDataUrl = bufferToDataUrl(importedBuffer, importedMimeType)
-    const { storagePath, artifactRecordId } = await saveArtifactBuffer(
-      context.executionId,
-      node.id,
-      'image',
-      'image',
-      importedBuffer,
-      {
-        mimeType: importedMimeType,
-        sourcePathForMetadata: importedAbsolutePath,
-        originalFileName: path.basename(importedAbsolutePath),
+    const jobId = GenerationQueueModel.create({
+      service_type: 'codex',
+      workflow_name: moduleDefinition.name,
+      request_payload: {
+        prompt,
+        negative_prompt: negativePrompt ?? undefined,
+        size: requestedSize.size,
+        count: 1,
+        operation,
+        image: inputImage ?? undefined,
+        mask: maskImage ?? undefined,
       },
-    )
+      request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
+    })
 
-    const referenceValue = {
-      composite_hash: imported.compositeHash,
-      original_path: imported.originalPath,
-      original_file_path: importedAbsolutePath,
-      mime_type: importedMimeType,
-      file_size: imported.fileSize,
-      width: imported.width || importedImageMetadata.width || 0,
-      height: imported.height || importedImageMetadata.height || 0,
-      ai_tool: 'codex',
-      model: 'codex.image_gen',
-      prompt,
-      negative_prompt: negativePrompt,
-    }
-
-    const metadataValue = {
-      ...referenceValue,
-      workflow_execution_id: context.executionId,
-      node_id: node.id,
-      codex_session_id: generation.sessionId,
-      codex_work_dir: generation.workDir,
-      metadata_patch_applied: true,
-      imported_storage_path: storagePath,
-      image_artifact_id: artifactRecordId,
-    }
-
-    const nodeArtifacts = {
-      image: {
-        type: 'image' as const,
-        value: imageDataUrl,
-        storagePath,
-        artifactRecordId,
-        metadata: {
-          kind: 'system-codex-image',
-          composite_hash: imported.compositeHash,
-          codex_session_id: generation.sessionId,
-        },
-      },
-      image_ref: buildRuntimeArtifact(context.executionId, node.id, 'image_ref', 'json', referenceValue, {
-        kind: 'system-codex-image-reference',
-        composite_hash: imported.compositeHash,
-      }),
-      metadata: buildRuntimeArtifact(context.executionId, node.id, 'metadata', 'json', metadataValue, {
-        kind: 'system-codex-image-metadata',
-        composite_hash: imported.compositeHash,
-      }),
-    }
-
-    saveMetadataArtifact(context.executionId, node.id, metadataValue)
-    context.artifactsByNode.set(node.id, nodeArtifacts)
-
-    cleanupSucceeded = true
+    GenerationQueueService.requestDispatch()
 
     writeExecutionLog({
       executionId: context.executionId,
       nodeId: node.id,
-      eventType: 'node_engine_complete',
-      message: `System module completed: ${moduleDefinition.name}`,
+      eventType: 'node_queue_registered',
+      message: `Queue-backed Codex module registered: ${moduleDefinition.name}`,
       details: {
-        engine: 'system',
-        operationKey: 'system.generate_image_codex',
-        compositeHash: imported.compositeHash,
-        codexSessionId: generation.sessionId,
-        importedOriginalPath: imported.originalPath,
-        storagePath,
+        queueJobId: jobId,
+        requestedSize: requestedSize.size,
+        requestedAspectRatio: requestedSize.aspectRatio,
+        requestedResolution: requestedSize.resolution,
+        operation,
       },
     })
+
+    const completedJob = await waitForQueueCompletion(context, node.id, jobId)
+    await resolveQueueBackedCodexOutput({
+      context,
+      node,
+      moduleDefinition,
+      completedJobId: completedJob.id,
+      requestedSize,
+    })
   } catch (error) {
-    if (error instanceof Error && error.message === CODEX_IMAGE_GENERATION_CANCELLED_MESSAGE) {
+    if (error instanceof Error && error.message === GRAPH_EXECUTION_CANCELLED_MESSAGE) {
       throw new Error('__GRAPH_EXECUTION_CANCELLED__')
     }
     throw error
-  } finally {
-    if (workDir && cleanupSucceeded) {
-      try {
-        await cleanupCodexImageGenerationWorkDir(workDir)
-      } catch (cleanupError) {
-        writeExecutionLog({
-          executionId: context.executionId,
-          nodeId: node.id,
-          level: 'warn',
-          eventType: 'node_cleanup_warn',
-          message: `Codex temp cleanup failed for ${moduleDefinition.name}`,
-          details: {
-            workDir,
-            error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-          },
-        })
-      }
-    }
   }
 }

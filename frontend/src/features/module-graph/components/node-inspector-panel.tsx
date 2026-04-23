@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
@@ -9,10 +8,9 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
-import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
-import type { ComfyUIServer, GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
+import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
@@ -55,31 +53,6 @@ type NodeOutputArtifactGroup = {
 const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-3'
 const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'space-y-3 rounded-sm border border-border/70 bg-background/35 p-4'
 const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'rounded-sm border border-border/70 bg-background/35 p-4'
-const GRAPH_COMFY_TARGET_MODE_KEY = 'execution_target_mode'
-const GRAPH_COMFY_TARGET_TAG_KEY = 'execution_target_tag'
-const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
-
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function parsePositiveIntegerish(value: unknown) {
-  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
-    return value
-  }
-
-  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
-    const parsed = Number.parseInt(value.trim(), 10)
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-  }
-
-  return null
-}
 
 /** Resolve whether one node input is already satisfied by a connection or value. */
 function isNodeInputSatisfied(node: ModuleGraphNode, port: ModulePortDefinition) {
@@ -250,32 +223,6 @@ export function NodeInspectorPanel({
   showHeader = true,
 }: NodeInspectorPanelProps) {
   const [collapsedOutputGroupKeys, setCollapsedOutputGroupKeys] = useState<string[]>([])
-  const selectedNodeWorkflowId = useMemo(() => {
-    if (!selectedNode || selectedNode.data.module.engine_type !== 'comfyui') {
-      return null
-    }
-
-    return parsePositiveIntegerish(
-      selectedNode.data.module.source_workflow_id
-      ?? selectedNode.data.module.template_defaults?.workflow_id,
-    )
-  }, [selectedNode])
-  const isSelectedNodeComfy = selectedNode?.data.module.engine_type === 'comfyui'
-  const canConfigureSelectedNodeQueueTarget = Boolean(isSelectedNodeComfy && selectedNodeWorkflowId)
-
-  const comfyServersQuery = useQuery({
-    queryKey: ['generation-comfyui-servers', 'module-graph-node-targeting'],
-    queryFn: () => getGenerationComfyUIServers(true),
-    enabled: canConfigureSelectedNodeQueueTarget,
-    staleTime: 30_000,
-  })
-
-  const workflowServersQuery = useQuery({
-    queryKey: ['generation-workflow-servers', selectedNodeWorkflowId],
-    queryFn: () => getGenerationWorkflowServers(selectedNodeWorkflowId as number),
-    enabled: canConfigureSelectedNodeQueueTarget && selectedNodeWorkflowId !== null,
-    staleTime: 30_000,
-  })
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -355,6 +302,23 @@ export function NodeInspectorPanel({
             onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
             placeholder={normalizedDescription || port.label}
           />
+        </div>
+      )
+    }
+
+    if (uiField?.data_type === 'select' && Array.isArray(uiField.options) && uiField.options.length > 0) {
+      return (
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
+          <Select
+            value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
+            onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
+          >
+            <option value="">{hasMeaningfulValue(port.default_value ?? uiField.default_value) ? '기본값 사용' : '선택'}</option>
+            {uiField.options.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </Select>
         </div>
       )
     }
@@ -546,102 +510,6 @@ export function NodeInspectorPanel({
     )
   }
 
-  const renderComfyExecutionTargetPanel = (node: ModuleGraphNode) => {
-    const workflowId = parsePositiveIntegerish(node.data.module.source_workflow_id ?? node.data.module.template_defaults?.workflow_id)
-    if (!workflowId) {
-      return (
-        <div className="rounded-sm border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-          이 ComfyUI 노드는 원본 workflow 연결이 없어서 큐 타겟 설정을 붙일 수 없어.
-        </div>
-      )
-    }
-
-    const allServers = comfyServersQuery.data ?? []
-    const linkedServers = workflowServersQuery.data ?? []
-    const candidateServers: ComfyUIServer[] = linkedServers.length > 0 ? linkedServers : allServers
-    const routingTags = Array.from(new Set(candidateServers.flatMap((server) => server.routing_tags ?? []))).sort((left, right) => left.localeCompare(right))
-    const rawMode = normalizeOptionalString(node.data.inputValues?.[GRAPH_COMFY_TARGET_MODE_KEY])?.toLowerCase()
-    const selectedMode = rawMode === 'tag' || rawMode === 'server' ? rawMode : 'auto'
-    const selectedTag = normalizeOptionalString(node.data.inputValues?.[GRAPH_COMFY_TARGET_TAG_KEY]) ?? ''
-    const selectedServerId = parsePositiveIntegerish(node.data.inputValues?.[GRAPH_COMFY_TARGET_SERVER_ID_KEY])
-    const isLoadingTargets = comfyServersQuery.isLoading || workflowServersQuery.isLoading
-    const hasTargetLoadError = comfyServersQuery.isError || workflowServersQuery.isError
-
-    return (
-      <div className="space-y-3 rounded-sm border border-border bg-background/40 p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="text-sm font-medium text-foreground">Comfy 실행 대상</div>
-          <Badge variant="outline">workflow #{workflowId}</Badge>
-          <Badge variant="outline">서버 {candidateServers.length}</Badge>
-          {routingTags.length > 0 ? <Badge variant="outline">태그 {routingTags.length}</Badge> : null}
-        </div>
-
-        {isLoadingTargets ? (
-          <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-            사용 가능한 ComfyUI 서버를 불러오는 중이야…
-          </div>
-        ) : hasTargetLoadError ? (
-          <div className="rounded-sm border border-dashed border-destructive/40 px-3 py-2 text-sm text-muted-foreground">
-            서버/태그 목록을 불러오지 못했어. 저장된 값은 유지되지만 지금은 새 선택지가 비어 있을 수 있어.
-          </div>
-        ) : null}
-
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">모드</div>
-            <Select
-              value={selectedMode}
-              onChange={(event) => onNodeValueChange(node.id, GRAPH_COMFY_TARGET_MODE_KEY, event.target.value)}
-            >
-              <option value="auto">자동 분산</option>
-              <option value="tag">태그 기반</option>
-              <option value="server">개별 서버</option>
-            </Select>
-          </div>
-
-          {selectedMode === 'tag' ? (
-            <div className="space-y-1 md:col-span-2">
-              <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">라우팅 태그</div>
-              <Select
-                value={selectedTag}
-                onChange={(event) => onNodeValueChange(node.id, GRAPH_COMFY_TARGET_TAG_KEY, event.target.value)}
-                disabled={routingTags.length === 0}
-              >
-                <option value="">태그 선택</option>
-                {routingTags.map((tag) => (
-                  <option key={tag} value={tag}>#{tag}</option>
-                ))}
-              </Select>
-            </div>
-          ) : null}
-
-          {selectedMode === 'server' ? (
-            <div className="space-y-1 md:col-span-2">
-              <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">ComfyUI 서버</div>
-              <Select
-                value={selectedServerId ? String(selectedServerId) : ''}
-                onChange={(event) => onNodeValueChange(node.id, GRAPH_COMFY_TARGET_SERVER_ID_KEY, event.target.value)}
-                disabled={candidateServers.length === 0}
-              >
-                <option value="">서버 선택</option>
-                {candidateServers.map((server) => (
-                  <option key={server.id} value={server.id}>{server.name}</option>
-                ))}
-              </Select>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-          {linkedServers.length > 0 ? <Badge variant="secondary">워크플로우 연결 서버만 사용</Badge> : <Badge variant="secondary">활성 서버 전체 사용</Badge>}
-          {selectedMode === 'auto' ? <Badge variant="outline">현재: 자동 분산</Badge> : null}
-          {selectedMode === 'tag' && selectedTag ? <Badge variant="outline">현재 태그 #{selectedTag}</Badge> : null}
-          {selectedMode === 'server' && selectedServerId ? <Badge variant="outline">현재 서버 #{selectedServerId}</Badge> : null}
-        </div>
-      </div>
-    )
-  }
-
   const sourceEndpoint = selectedEdge
     ? resolveEdgeEndpoint(nodes, selectedEdge.source, selectedEdge.sourceHandle, 'out')
     : null
@@ -777,8 +645,6 @@ export function NodeInspectorPanel({
                 </div>
               </div>
             ) : null}
-
-            {selectedNode.data.module.engine_type === 'comfyui' ? renderComfyExecutionTargetPanel(selectedNode) : null}
 
             <div className="space-y-3 rounded-sm border border-border bg-background/40 p-3">
               <div className="flex flex-wrap items-center gap-2">

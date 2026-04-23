@@ -1,8 +1,8 @@
 import { buildApiUrl } from '@/lib/api-client'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation'
 
-export type ModuleEngineType = 'nai' | 'comfyui' | 'system' | 'custom_js'
-export type ModuleAuthoringSource = 'nai_form_snapshot' | 'comfyui_workflow_wrap' | 'manual' | 'custom_node_fs'
+export type ModuleEngineType = 'nai' | 'codex' | 'comfyui' | 'system' | 'custom_js'
+export type ModuleAuthoringSource = 'nai_form_snapshot' | 'codex_form_snapshot' | 'comfyui_workflow_wrap' | 'manual' | 'custom_node_fs'
 export type ModulePortDirection = 'input' | 'output'
 export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 
@@ -275,6 +275,18 @@ export interface CreateNaiModuleFromSnapshotPayload {
   is_active?: boolean
 }
 
+export interface CreateCodexModuleFromSnapshotPayload {
+  name: string
+  description?: string
+  category?: string
+  color?: string
+  snapshot: Record<string, unknown>
+  exposed_fields?: Array<string | Partial<ModulePortDefinition> & { key: string }>
+  output_ports?: ModulePortDefinition[]
+  ui_schema?: ModuleUiFieldDefinition[]
+  is_active?: boolean
+}
+
 export interface CreateComfyModuleFromWorkflowPayload {
   name?: string
   description?: string
@@ -359,6 +371,19 @@ export async function getModuleDefinitions(activeOnly = true) {
 /** Create a reusable NAI module from a captured generation-page snapshot. */
 export async function createNaiModuleFromSnapshot(payload: CreateNaiModuleFromSnapshotPayload) {
   const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/module-definitions/from-nai-snapshot', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  return response.data
+}
+
+/** Create a reusable Codex module from the current generation-tab snapshot. */
+export async function createCodexModuleFromSnapshot(payload: CreateCodexModuleFromSnapshotPayload) {
+  const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/module-definitions/from-codex-snapshot', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

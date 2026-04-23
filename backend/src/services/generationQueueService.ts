@@ -17,6 +17,7 @@ import { reconcileComfyModelSelectionValues } from './comfyModelSelectionResolve
 import { getComfyRequestDebugRelativePath, writeComfyRequestDebugSnapshot, type ComfyRequestDebugSnapshot } from './generationRequestDebugService'
 import { FileDiscoveryService } from './folderScan/fileDiscoveryService'
 import { settingsService } from './settingsService'
+import { ImageUploadService } from './imageUploadService'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
 import type { AIMetadata } from './metadata/types'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
@@ -1172,6 +1173,15 @@ export class GenerationQueueService {
 
       await Promise.all(processPromises)
 
+      const representativeHistory = historyIds
+        .map((historyId) => GenerationHistoryModel.findById(historyId))
+        .find((history) => Boolean(history?.composite_hash))
+        ?? (historyIds.length > 0 ? GenerationHistoryModel.findById(historyIds[0]) : null)
+      const representativeCompositeHash = representativeHistory?.composite_hash ?? null
+      const representativeOriginalPath = representativeCompositeHash
+        ? ImageUploadService.getActiveFilePath(representativeCompositeHash)
+        : null
+
       updateQueueRequestDebugMeta(job, {
         history_ids: historyIds,
         codex_job_directory: result.jobDirectory,
@@ -1181,6 +1191,9 @@ export class GenerationQueueService {
         attempted_image_count: payload.count ?? result.outputFiles.length,
         saved_image_count: result.outputFiles.length,
         result_mime_types: result.outputFiles.map((output) => output.mimeType),
+        result_composite_hash: representativeCompositeHash,
+        result_original_path: representativeOriginalPath,
+        result_mime_type: representativeOriginalPath ? FileDiscoveryService.getMimeType(representativeOriginalPath) : null,
       })
 
       this.transitionJob(job.id, 'completed', {

@@ -2,8 +2,8 @@
  * Generic module-graph types for modular image generation workflows.
  */
 
-export type ModuleEngineType = 'nai' | 'comfyui' | 'system' | 'custom_js'
-export type ModuleAuthoringSource = 'nai_form_snapshot' | 'comfyui_workflow_wrap' | 'manual' | 'custom_node_fs'
+export type ModuleEngineType = 'nai' | 'codex' | 'comfyui' | 'system' | 'custom_js'
+export type ModuleAuthoringSource = 'nai_form_snapshot' | 'codex_form_snapshot' | 'comfyui_workflow_wrap' | 'manual' | 'custom_node_fs'
 export type ModulePortDirection = 'input' | 'output'
 export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 export type GraphExecutionStatus = 'draft' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'

@@ -8,6 +8,7 @@ import { getIncomingArtifacts, loadRuntimeArtifactsByNode, resolveNodeInputs } f
 import { executeComfyModule } from './graph-workflow-executor/execute-comfy'
 import { executeCustomJsModule } from './graph-workflow-executor/execute-custom-js'
 import { executeNaiModule } from './graph-workflow-executor/execute-nai'
+import { executeCodexImageGenerationNode } from './graph-workflow-executor/system-codex-operations'
 import { executeSystemModule } from './graph-workflow-executor/execute-system'
 import {
   applyWorkflowRuntimeInputs,
@@ -247,6 +248,8 @@ export class GraphWorkflowExecutor {
 
         if (moduleDefinition.engine_type === 'nai') {
           await executeNaiModule(context, node, moduleDefinition, resolvedInputs)
+        } else if (moduleDefinition.engine_type === 'codex') {
+          await executeCodexImageGenerationNode(context, node, moduleDefinition, resolvedInputs)
         } else if (moduleDefinition.engine_type === 'comfyui') {
           await executeComfyModule(context, node, moduleDefinition, resolvedInputs)
         } else if (moduleDefinition.engine_type === 'system') {

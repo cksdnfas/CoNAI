@@ -50,6 +50,12 @@ const LABEL_OVERRIDES_BY_KEY: Record<string, string> = {
   composite_hash: '컴포지트 해시',
   index: '인덱스',
   image_ref: '이미지 참조',
+  aspect_ratio: '비율',
+  resolution: '해상도',
+  operation: '동작',
+  quality: '품질',
+  background: '배경',
+  output_format: '출력 포맷',
   tags_text: '태그 텍스트',
   tags_prompt: '태그 프롬프트',
   tags_json: '태그 JSON',
@@ -96,6 +102,12 @@ const LABEL_OVERRIDES_BY_TEXT: Record<string, string> = {
   'Composite Hash': '컴포지트 해시',
   'Index': '인덱스',
   'Image Reference': '이미지 참조',
+  'Aspect Ratio': '비율',
+  'Resolution': '해상도',
+  'Operation': '동작',
+  'Quality': '품질',
+  'Background': '배경',
+  'Output Format': '출력 포맷',
   'Tags Text': '태그 텍스트',
   'Tags Prompt': '태그 프롬프트',
   'Tags JSON': '태그 JSON',
@@ -214,7 +226,7 @@ function inferPortLabel(key: string): string {
   return LABEL_OVERRIDES_BY_KEY[key] ?? humanizeKey(key)
 }
 
-function createDefaultOutputPorts(engineType: 'nai' | 'comfyui' | 'system'): ModulePortDefinition[] {
+function createDefaultOutputPorts(engineType: 'nai' | 'codex' | 'comfyui' | 'system'): ModulePortDefinition[] {
   if (engineType === 'system') {
     return [
       {
@@ -239,7 +251,7 @@ function createDefaultOutputPorts(engineType: 'nai' | 'comfyui' | 'system'): Mod
   return [
     {
       key: 'image',
-      label: engineType === 'nai' ? 'Generated Image' : 'Workflow Image',
+      label: engineType === 'comfyui' ? 'Workflow Image' : 'Generated Image',
       direction: 'output',
       data_type: 'image',
       required: true,
@@ -400,6 +412,63 @@ router.post('/from-nai-snapshot', asyncHandler(async (req: Request, res: Respons
   } catch (error) {
     console.error('Error creating NAI snapshot module:', error)
     return res.status(500).json({ success: false, error: 'Failed to create NAI snapshot module' } as ModuleGraphResponse)
+  }
+}))
+
+router.post('/from-codex-snapshot', asyncHandler(async (req: Request, res: Response) => {
+  const {
+    name,
+    description,
+    category,
+    color,
+    snapshot,
+    exposed_fields,
+    output_ports,
+    ui_schema,
+    is_active,
+  } = req.body
+
+  if (!name || !snapshot || typeof snapshot !== 'object') {
+    return res.status(400).json({
+      success: false,
+      error: 'name and snapshot are required',
+    } as ModuleGraphResponse)
+  }
+
+  try {
+    const exists = ModuleDefinitionModel.existsByName(name)
+    if (exists) {
+      return res.status(409).json({ success: false, error: 'Module definition name already exists' } as ModuleGraphResponse)
+    }
+
+    const snapshotRecord = snapshot as Record<string, unknown>
+    const exposedInputs = normalizeNaiExposedFields(exposed_fields, snapshotRecord)
+    const createData: ModuleDefinitionCreateData = {
+      name,
+      description,
+      engine_type: 'codex',
+      authoring_source: 'codex_form_snapshot',
+      category,
+      template_defaults: snapshotRecord,
+      exposed_inputs: exposedInputs,
+      output_ports: Array.isArray(output_ports) && output_ports.length > 0 ? output_ports : createDefaultOutputPorts('codex'),
+      internal_fixed_values: splitFixedValues(snapshotRecord, exposedInputs),
+      ui_schema: Array.isArray(ui_schema) && ui_schema.length > 0 ? ui_schema : buildUiSchemaFromPorts(exposedInputs),
+      is_active,
+      color,
+    }
+
+    const id = ModuleDefinitionModel.create(createData)
+    return res.status(201).json({
+      success: true,
+      data: {
+        id,
+        message: 'Codex snapshot module created successfully',
+      },
+    } as ModuleGraphResponse)
+  } catch (error) {
+    console.error('Error creating Codex snapshot module:', error)
+    return res.status(500).json({ success: false, error: 'Failed to create Codex snapshot module' } as ModuleGraphResponse)
   }
 }))
 

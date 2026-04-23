@@ -246,6 +246,10 @@ export function getModuleColor(module: ModuleDefinitionRecord) {
     return '#7c4dff'
   }
 
+  if (module.engine_type === 'codex') {
+    return '#26a69a'
+  }
+
   if (module.engine_type === 'comfyui') {
     return '#2196f3'
   }

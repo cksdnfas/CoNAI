@@ -30,7 +30,7 @@ type ModuleGroup = {
 }
 
 export const SYSTEM_GROUP_ORDER = ['input', 'prompt', 'image', 'analysis', 'output', 'utility', 'other']
-export const CUSTOM_GROUP_ORDER = ['nai', 'comfyui', 'other']
+export const CUSTOM_GROUP_ORDER = ['nai', 'codex', 'comfyui', 'other']
 
 function toTitleCase(rawValue: string) {
   return rawValue
@@ -58,7 +58,7 @@ export function shouldHideFromModuleLibrary(module: ModuleDefinitionRecord) {
     return false
   }
 
-  if (operationKey === 'system.constant_prompt') {
+  if (operationKey === 'system.constant_prompt' || operationKey === 'system.generate_image_codex') {
     return true
   }
 
@@ -122,6 +122,10 @@ export function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: str
 export function getCustomModuleGroup(module: ModuleDefinitionRecord): { key: string; label: string } {
   if (module.engine_type === 'nai') {
     return { key: 'nai', label: 'NovelAI' }
+  }
+
+  if (module.engine_type === 'codex') {
+    return { key: 'codex', label: 'Codex' }
   }
 
   if (module.engine_type === 'comfyui') {

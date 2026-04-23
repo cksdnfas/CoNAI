@@ -148,7 +148,9 @@ export function ensureModuleDefinitionsSupportsCurrentShape(db: Database.Databas
   const normalizedSql = schemaRow?.sql?.toLowerCase() ?? '';
   if (
     !normalizedSql ||
-    (normalizedSql.includes("'custom_js'") &&
+    (normalizedSql.includes("'codex'") &&
+      normalizedSql.includes("'custom_js'") &&
+      normalizedSql.includes("'codex_form_snapshot'") &&
       normalizedSql.includes("'custom_node_fs'") &&
       normalizedSql.includes('external_key') &&
       normalizedSql.includes('source_path') &&
@@ -166,8 +168,8 @@ export function ensureModuleDefinitionsSupportsCurrentShape(db: Database.Databas
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
         description TEXT,
-        engine_type TEXT NOT NULL CHECK(engine_type IN ('nai', 'comfyui', 'system', 'custom_js')),
-        authoring_source TEXT NOT NULL CHECK(authoring_source IN ('nai_form_snapshot', 'comfyui_workflow_wrap', 'manual', 'custom_node_fs')),
+        engine_type TEXT NOT NULL CHECK(engine_type IN ('nai', 'codex', 'comfyui', 'system', 'custom_js')),
+        authoring_source TEXT NOT NULL CHECK(authoring_source IN ('nai_form_snapshot', 'codex_form_snapshot', 'comfyui_workflow_wrap', 'manual', 'custom_node_fs')),
         category TEXT,
         source_workflow_id INTEGER,
         template_defaults TEXT NOT NULL,

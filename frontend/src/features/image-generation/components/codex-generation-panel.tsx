@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, RotateCcw, Sparkles, X } from 'lucide-react'
+import { RefreshCw, RotateCcw, Save, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
@@ -9,10 +9,12 @@ import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getAppSettings } from '@/lib/api'
 import { createGenerationQueueJob, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
+import { createCodexModuleFromSnapshot, type ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
-import { FormField, getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
+import { FormField, getErrorMessage, type ModuleFieldOption, type SelectedImageDraft } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
+import { CodexModuleSaveModal } from './codex-module-save-modal'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
 import { NaiControllerSection, NaiPromptSection } from './nai-generation-panel-sections'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
@@ -41,6 +43,7 @@ const CODEX_COUNT_MAX = 4
 const CODEX_FORM_DRAFT_STORAGE_KEY = 'conai:image-generation:codex-form-draft:v1'
 
 const CODEX_ASPECT_RATIO_OPTIONS = [
+  { value: 'random', label: 'Random' },
   { value: '1:1', label: '1:1', width: 1, height: 1 },
   { value: '4:3', label: '4:3', width: 4, height: 3 },
   { value: '3:4', label: '3:4', width: 3, height: 4 },
@@ -62,7 +65,42 @@ const DEFAULT_CODEX_FORM: CodexFormDraft = {
   resolution: '1024',
 }
 
+const DEFAULT_CODEX_MODULE_FIELD_KEYS = ['prompt', 'negative_prompt', 'aspect_ratio', 'resolution']
+const CODEX_MODULE_FIELD_OPTIONS: ModuleFieldOption[] = [
+  { key: 'prompt', label: '프롬프트', dataType: 'prompt' },
+  { key: 'negative_prompt', label: '네거티브 프롬프트', dataType: 'prompt' },
+  { key: 'aspect_ratio', label: '비율', dataType: 'text', options: CODEX_ASPECT_RATIO_OPTIONS.map((option) => option.value) },
+  { key: 'resolution', label: '해상도', dataType: 'text', options: CODEX_RESOLUTION_OPTIONS.map((option) => option.value) },
+  { key: 'image', label: '참조 이미지', dataType: 'image' },
+  { key: 'mask', label: '마스크 이미지', dataType: 'mask' },
+]
+
 type PersistedCodexFormDraft = Pick<CodexFormDraft, 'prompt' | 'negativePrompt' | 'count' | 'aspectRatio' | 'resolution'>
+
+function buildCodexModuleSnapshot(form: CodexFormDraft) {
+  return {
+    prompt: form.prompt.trim(),
+    negative_prompt: form.negativePrompt.trim(),
+    aspect_ratio: form.aspectRatio,
+    resolution: form.resolution,
+    image: form.referenceImage?.dataUrl || null,
+    mask: form.maskImage?.dataUrl || null,
+  }
+}
+
+function buildCodexModuleUiSchema(fieldOptions: ModuleFieldOption[], snapshot: Record<string, unknown>, exposedFieldKeys: string[]): ModuleUiFieldDefinition[] {
+  const exposedFieldKeySet = new Set(exposedFieldKeys)
+
+  return fieldOptions
+    .filter((field) => exposedFieldKeySet.has(field.key))
+    .map((field): ModuleUiFieldDefinition => ({
+      key: field.key,
+      label: field.label,
+      data_type: field.options && field.options.length > 0 ? 'select' : field.dataType,
+      default_value: snapshot[field.key],
+      options: field.options,
+    }))
+}
 
 function loadPersistedCodexFormDraft(): CodexFormDraft {
   if (typeof window === 'undefined') {
@@ -123,8 +161,30 @@ function roundCodexDimension(value: number) {
   return Math.max(64, Math.round(value / 64) * 64)
 }
 
+function isSizedCodexAspectRatioOption(
+  option: (typeof CODEX_ASPECT_RATIO_OPTIONS)[number],
+): option is Extract<(typeof CODEX_ASPECT_RATIO_OPTIONS)[number], { width: number; height: number }> {
+  return 'width' in option && 'height' in option
+}
+
+function pickCodexAspectRatio(aspectRatio: string) {
+  if (aspectRatio !== 'random') {
+    return aspectRatio
+  }
+
+  const candidateOptions = CODEX_ASPECT_RATIO_OPTIONS.filter(isSizedCodexAspectRatioOption)
+  if (candidateOptions.length === 0) {
+    return '1:1'
+  }
+
+  const randomIndex = Math.floor(Math.random() * candidateOptions.length)
+  return candidateOptions[randomIndex]?.value ?? '1:1'
+}
+
 function resolveCodexSize(aspectRatio: string, resolution: string) {
-  const aspect = CODEX_ASPECT_RATIO_OPTIONS.find((option) => option.value === aspectRatio)
+  const aspect = CODEX_ASPECT_RATIO_OPTIONS
+    .filter(isSizedCodexAspectRatioOption)
+    .find((option) => option.value === aspectRatio)
   const longEdge = Number(resolution)
   if (!aspect || !Number.isFinite(longEdge) || longEdge <= 0) {
     return undefined
@@ -148,6 +208,11 @@ export function CodexGenerationPanel({
   const { showSnackbar } = useSnackbar()
   const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft())
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
+  const [codexModuleName, setCodexModuleName] = useState('Codex 모듈')
+  const [codexModuleDescription, setCodexModuleDescription] = useState('')
+  const [codexExposedFieldKeys, setCodexExposedFieldKeys] = useState<string[]>(DEFAULT_CODEX_MODULE_FIELD_KEYS)
+  const [isSavingCodexModule, setIsSavingCodexModule] = useState(false)
   const [, setPortalRevision] = useState(0)
 
   const appSettingsQuery = useQuery({
@@ -204,6 +269,7 @@ export function CodexGenerationPanel({
 
   const queueCount = useMemo(() => clampCodexCount(codexForm.count), [codexForm.count])
   const outputSize = useMemo(() => resolveCodexSize(codexForm.aspectRatio, codexForm.resolution), [codexForm.aspectRatio, codexForm.resolution])
+  const outputSizeHint = codexForm.aspectRatio === 'random' ? '랜덤 비율' : outputSize
   const useDrawerCompactChrome = Boolean(headerPortalTargetId)
   const headerPortalTarget = headerPortalTargetId && typeof document !== 'undefined'
     ? document.getElementById(headerPortalTargetId)
@@ -238,6 +304,52 @@ export function CodexGenerationPanel({
 
   const handleReset = () => {
     setCodexForm(DEFAULT_CODEX_FORM)
+  }
+
+  const handleOpenModuleSave = () => {
+    setCodexModuleName((current) => current.trim().length > 0 ? current : 'Codex 모듈')
+    setIsModuleSaveModalOpen(true)
+  }
+
+  const handleCreateCodexModule = async () => {
+    const moduleName = codexModuleName.trim()
+
+    if (moduleName.length === 0 || isSavingCodexModule) {
+      return
+    }
+
+    if (codexExposedFieldKeys.length === 0) {
+      showSnackbar({ message: '최소 1개는 입력 가능 필드로 열어줘.', tone: 'error' })
+      return
+    }
+
+    try {
+      setIsSavingCodexModule(true)
+      const snapshot = buildCodexModuleSnapshot(codexForm)
+      const exposedFields = CODEX_MODULE_FIELD_OPTIONS
+        .filter((field) => codexExposedFieldKeys.includes(field.key))
+        .map((field) => ({
+          key: field.key,
+          label: field.label,
+          data_type: field.dataType,
+        }))
+      const uiSchema = buildCodexModuleUiSchema(CODEX_MODULE_FIELD_OPTIONS, snapshot, codexExposedFieldKeys)
+
+      await createCodexModuleFromSnapshot({
+        name: moduleName,
+        description: codexModuleDescription.trim() || undefined,
+        snapshot,
+        exposed_fields: exposedFields,
+        ui_schema: uiSchema,
+      })
+
+      setIsModuleSaveModalOpen(false)
+      showSnackbar({ message: '현재 Codex 설정을 모듈로 저장했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, 'Codex 모듈 저장에 실패했어.'), tone: 'error' })
+    } finally {
+      setIsSavingCodexModule(false)
+    }
   }
 
   const handleGenerate = async () => {
@@ -276,7 +388,7 @@ export function CodexGenerationPanel({
           negative_prompt: codexForm.negativePrompt.trim() || undefined,
           count: queueCount,
           operation: codexForm.referenceImage ? (codexForm.maskImage ? 'infill' : 'edit') : 'generate',
-          size: outputSize,
+          size: resolveCodexSize(pickCodexAspectRatio(codexForm.aspectRatio), codexForm.resolution),
           image: codexForm.referenceImage?.dataUrl,
           mask: codexForm.maskImage?.dataUrl,
           imageSaveOptions: {
@@ -304,6 +416,17 @@ export function CodexGenerationPanel({
         <div className="truncate text-base font-semibold text-foreground">Codex</div>
       </div>
       <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          onClick={handleOpenModuleSave}
+          disabled={isSubmitting || isSavingCodexModule}
+          aria-label="모듈 저장"
+          title="모듈 저장"
+        >
+          <Save className="h-4 w-4" />
+        </Button>
         {showStatusRecovery ? (
           <Button
             type="button"
@@ -354,6 +477,19 @@ export function CodexGenerationPanel({
         inputMode="numeric"
       />
 
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        onClick={handleOpenModuleSave}
+        disabled={isSubmitting || isSavingCodexModule}
+        aria-label="모듈 저장"
+        title="모듈 저장"
+        className="rounded-none border-r border-border/70 shadow-none"
+      >
+        <Save className="h-4 w-4" />
+      </Button>
+
       {showStatusRecovery ? (
         <Button
           type="button"
@@ -400,6 +536,17 @@ export function CodexGenerationPanel({
 
   const actionContent = (
     <div className="flex flex-wrap items-center justify-end gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        onClick={handleOpenModuleSave}
+        disabled={isSubmitting || isSavingCodexModule}
+        aria-label="모듈 저장"
+        title="모듈 저장"
+      >
+        <Save className="h-4 w-4" />
+      </Button>
       <ScrubbableNumberInput
         min={CODEX_COUNT_MIN}
         max={CODEX_COUNT_MAX}
@@ -439,20 +586,21 @@ export function CodexGenerationPanel({
   )
 
   return (
-    <div className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
-      {useDrawerCompactChrome
-        ? (headerPortalTarget ? createPortal(headerToolbarContent, headerPortalTarget) : null)
-        : (
-          <div className="shrink-0 space-y-3 border-b border-border/70 pb-4">
-            {inlineHeaderContent}
-          </div>
-        )}
+    <>
+      <div className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
+        {useDrawerCompactChrome
+          ? (headerPortalTarget ? createPortal(headerToolbarContent, headerPortalTarget) : null)
+          : (
+            <div className="shrink-0 space-y-3 border-b border-border/70 pb-4">
+              {inlineHeaderContent}
+            </div>
+          )}
 
-      <div className={cn(
-        'space-y-6',
-        splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
-        useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
-      )}>
+        <div className={cn(
+          'space-y-6',
+          splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
+          useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
+        )}>
         <NaiPromptSection
           prompt={codexForm.prompt}
           negativePrompt={codexForm.negativePrompt}
@@ -474,7 +622,7 @@ export function CodexGenerationPanel({
               </Select>
             </FormField>
 
-            <FormField label="Resolution" hint={outputSize}>
+            <FormField label="Resolution" hint={outputSizeHint}>
               <Select
                 variant="detail"
                 value={codexForm.resolution}
@@ -549,9 +697,24 @@ export function CodexGenerationPanel({
           </div>
         </NaiControllerSection>
 
-        {!useInlineActionBar ? actionSection : null}
-        {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
+          {!useInlineActionBar ? actionSection : null}
+          {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
+        </div>
       </div>
-    </div>
+
+      <CodexModuleSaveModal
+        open={isModuleSaveModalOpen}
+        moduleName={codexModuleName}
+        moduleDescription={codexModuleDescription}
+        fieldOptions={CODEX_MODULE_FIELD_OPTIONS}
+        exposedFieldKeys={codexExposedFieldKeys}
+        isSaving={isSavingCodexModule}
+        onClose={() => setIsModuleSaveModalOpen(false)}
+        onModuleNameChange={setCodexModuleName}
+        onModuleDescriptionChange={setCodexModuleDescription}
+        onExposedFieldKeysChange={setCodexExposedFieldKeys}
+        onSave={() => void handleCreateCodexModule()}
+      />
+    </>
   )
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { ChevronDown, ChevronRight, GripVertical, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +11,8 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
+import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
+import type { ComfyUIServer, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import {
   WORKFLOW_INPUT_ENABLED_KEY,
@@ -33,6 +35,7 @@ import {
 
 const ENGINE_TYPE_LABELS = {
   nai: 'NAI',
+  codex: 'Codex',
   comfyui: 'ComfyUI',
   system: '시스템',
   custom_js: 'Custom JS',
@@ -42,6 +45,9 @@ const TEXT_PORT_COLOR = getPortTypeColor('text')
 const PROMPT_PORT_COLOR = getPortTypeColor('prompt')
 const MODULE_GRAPH_INLINE_CONTROL_CLASS = 'theme-input-surface border-border/80 focus:border-primary'
 const MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS = 'theme-input-surface border-border/80'
+const GRAPH_COMFY_TARGET_MODE_KEY = 'execution_target_mode'
+const GRAPH_COMFY_TARGET_TAG_KEY = 'execution_target_tag'
+const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
 
 type PortCellProps = {
   nodeId: string
@@ -53,6 +59,65 @@ type PortCellProps = {
   requiredMissing: boolean
   requiredMissingLabel?: string
   onDisconnectInput?: (nodeId: string, portKey: string) => void
+}
+
+function normalizeOptionalString(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function parsePositiveIntegerish(value: unknown) {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value
+  }
+
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    const parsed = Number.parseInt(value.trim(), 10)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+  }
+
+  return null
+}
+
+function resolveComfyTargetMode(inputValues: Record<string, unknown> | undefined) {
+  const rawMode = normalizeOptionalString(inputValues?.[GRAPH_COMFY_TARGET_MODE_KEY])?.toLowerCase()
+  return rawMode === 'tag' || rawMode === 'server' ? rawMode : 'auto'
+}
+
+function resolveComfyTargetValue(inputValues: Record<string, unknown> | undefined) {
+  const mode = resolveComfyTargetMode(inputValues)
+  const tag = normalizeOptionalString(inputValues?.[GRAPH_COMFY_TARGET_TAG_KEY])
+  const serverId = parsePositiveIntegerish(inputValues?.[GRAPH_COMFY_TARGET_SERVER_ID_KEY])
+
+  if (mode === 'tag' && tag) {
+    return `tag:${tag}`
+  }
+
+  if (mode === 'server' && serverId) {
+    return `server:${serverId}`
+  }
+
+  return 'auto'
+}
+
+function resolveComfyTargetBadgeLabel(inputValues: Record<string, unknown> | undefined) {
+  const mode = resolveComfyTargetMode(inputValues)
+  const tag = normalizeOptionalString(inputValues?.[GRAPH_COMFY_TARGET_TAG_KEY])
+  const serverId = parsePositiveIntegerish(inputValues?.[GRAPH_COMFY_TARGET_SERVER_ID_KEY])
+
+  if (mode === 'tag' && tag) {
+    return `#${tag}`
+  }
+
+  if (mode === 'server' && serverId) {
+    return `서버 #${serverId}`
+  }
+
+  return '자동 분산'
 }
 
 /** Flag prompt/text ports that can bridge within the string family. */
@@ -665,6 +730,58 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const summaryText = isWorkflowInputSource
     ? `${ENGINE_TYPE_LABELS[module.engine_type] ?? module.engine_type} · 값 ${sourceValueConfigured ? 1 : 0}/${sourceValuePort ? 1 : 0} · 출력 ${connectedOutputCount}/${sourceOutputPort ? 1 : outputPorts.length}`
     : `${ENGINE_TYPE_LABELS[module.engine_type] ?? module.engine_type} · 입력 ${connectedInputCount}/${inputPorts.length} · 출력 ${connectedOutputCount}/${outputPorts.length}`
+  const comfyWorkflowId = module.engine_type === 'comfyui'
+    ? parsePositiveIntegerish(module.source_workflow_id ?? module.template_defaults?.workflow_id)
+    : null
+  const canConfigureComfyTarget = Boolean(module.engine_type === 'comfyui' && comfyWorkflowId && data.onNodeValueChange)
+  const comfyTargetBadgeLabel = canConfigureComfyTarget ? resolveComfyTargetBadgeLabel(data.inputValues) : null
+  const comfyTargetValue = resolveComfyTargetValue(data.inputValues)
+  const comfyServersQuery = useQuery({
+    queryKey: ['generation-comfyui-servers', 'module-graph-node-card'],
+    queryFn: () => getGenerationComfyUIServers(true),
+    enabled: canConfigureComfyTarget,
+    staleTime: 30_000,
+  })
+  const workflowServersQuery = useQuery({
+    queryKey: ['generation-workflow-servers', comfyWorkflowId, 'module-graph-node-card'],
+    queryFn: () => getGenerationWorkflowServers(comfyWorkflowId as number),
+    enabled: canConfigureComfyTarget,
+    staleTime: 30_000,
+  })
+  const linkedComfyServers = workflowServersQuery.data ?? []
+  const candidateComfyServers: ComfyUIServer[] = linkedComfyServers.length > 0 ? linkedComfyServers : (comfyServersQuery.data ?? [])
+  const comfyRoutingTags = Array.from(new Set(candidateComfyServers.flatMap((server) => server.routing_tags ?? []))).sort((left, right) => left.localeCompare(right))
+  const knownComfyTargetValues = new Set<string>([
+    'auto',
+    ...comfyRoutingTags.map((tag) => `tag:${tag}`),
+    ...candidateComfyServers.map((server) => `server:${server.id}`),
+  ])
+  const shouldShowFallbackComfyTargetOption = comfyTargetValue !== 'auto' && !knownComfyTargetValues.has(comfyTargetValue)
+  const applyComfyTargetValue = (nextValue: string) => {
+    if (!data.onNodeValueChange) {
+      return
+    }
+
+    if (nextValue === 'auto') {
+      data.onNodeValueChange(id, GRAPH_COMFY_TARGET_MODE_KEY, 'auto')
+      data.onNodeValueChange(id, GRAPH_COMFY_TARGET_TAG_KEY, '')
+      data.onNodeValueChange(id, GRAPH_COMFY_TARGET_SERVER_ID_KEY, '')
+      return
+    }
+
+    if (nextValue.startsWith('tag:')) {
+      data.onNodeValueChange(id, GRAPH_COMFY_TARGET_MODE_KEY, 'tag')
+      data.onNodeValueChange(id, GRAPH_COMFY_TARGET_TAG_KEY, nextValue.slice('tag:'.length))
+      data.onNodeValueChange(id, GRAPH_COMFY_TARGET_SERVER_ID_KEY, '')
+      return
+    }
+
+    if (nextValue.startsWith('server:')) {
+      data.onNodeValueChange(id, GRAPH_COMFY_TARGET_MODE_KEY, 'server')
+      data.onNodeValueChange(id, GRAPH_COMFY_TARGET_TAG_KEY, '')
+      data.onNodeValueChange(id, GRAPH_COMFY_TARGET_SERVER_ID_KEY, nextValue.slice('server:'.length))
+    }
+  }
 
   return (
     <div
@@ -775,6 +892,38 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
               재실행
             </Button>
           ) : null}
+        </div>
+      ) : null}
+
+      {canConfigureComfyTarget ? (
+        <div className="nodrag nowheel mt-2">
+          <Select
+            value={comfyTargetValue}
+            onMouseDown={stopNodeInteraction}
+            onClick={stopNodeInteraction}
+            onChange={(event) => {
+              stopNodeInteraction(event)
+              applyComfyTargetValue(event.target.value)
+            }}
+            className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          >
+            {shouldShowFallbackComfyTargetOption ? <option value={comfyTargetValue}>현재 설정 유지 ({comfyTargetBadgeLabel})</option> : null}
+            <option value="auto">자동 분산</option>
+            {comfyRoutingTags.length > 0 ? (
+              <optgroup label="태그">
+                {comfyRoutingTags.map((tag) => (
+                  <option key={tag} value={`tag:${tag}`}>#{tag}</option>
+                ))}
+              </optgroup>
+            ) : null}
+            {candidateComfyServers.length > 0 ? (
+              <optgroup label="서버">
+                {candidateComfyServers.map((server) => (
+                  <option key={server.id} value={`server:${server.id}`}>{server.name}</option>
+                ))}
+              </optgroup>
+            ) : null}
+          </Select>
         </div>
       ) : null}
 
