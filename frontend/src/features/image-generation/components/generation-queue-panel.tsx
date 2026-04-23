@@ -20,6 +20,7 @@ import { getErrorMessage } from '../image-generation-shared'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
   formatGenerationQueueTimestamp,
+  getGenerationQueueCancellationDetail,
   getGenerationQueueEtaLabel,
   getGenerationQueuePositionLabel,
   getGenerationQueueRequesterLabel,
@@ -195,6 +196,7 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
                 const queuePositionLabel = getGenerationQueuePositionLabel(record)
                 const queueEtaLabel = getGenerationQueueEtaLabel(record)
                 const requesterLabel = getGenerationQueueRequesterLabel(record)
+                const cancellationDetail = getGenerationQueueCancellationDetail(record)
 
                 return (
                   <div key={record.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
@@ -221,14 +223,8 @@ export function GenerationQueuePanel({ refreshNonce, serviceType, workflowId }: 
                           {completedAt ? <span>done {completedAt}</span> : null}
                         </div>
 
-                        {isCancelRequested ? (
-                          <div className="text-[11px] text-amber-700 dark:text-amber-300">취소 요청을 기록했고, 가능하면 ComfyUI 업스트림 실행도 함께 중단시키는 쪽으로 시도 중이야.</div>
-                        ) : null}
-                        {completedAfterCancel ? (
-                          <div className="text-[11px] text-amber-700 dark:text-amber-300">취소 요청은 들어갔지만 업스트림 작업이 너무 빨리 끝나서 완료까지 도달했어.</div>
-                        ) : null}
-                        {failedAfterCancel ? (
-                          <div className="text-[11px] text-amber-700 dark:text-amber-300">중간에 취소 요청은 기록됐고, 최종 업스트림 종료 결과는 실패로 남았어.</div>
+                        {isCancelRequested || completedAfterCancel || failedAfterCancel || record.status === 'cancelled' ? (
+                          <div className="text-[11px] text-amber-700 dark:text-amber-300">{cancellationDetail}</div>
                         ) : null}
                         {record.failure_message ? (
                           <div className="text-[11px] text-danger">{record.failure_message}</div>

@@ -612,9 +612,14 @@ export function resolveHistoryImageSource(record: GenerationHistoryRecord) {
 /** Resolve the effective history display status for list surfaces.
  * A completed history without a linked main-image record is still treated as in-flight,
  * because thumbnail/detail routes are not ready yet and should not look like a real failure.
+ * If the linked queue already ended in failed/cancelled without an image, prefer the terminal state.
  */
 export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): GenerationHistoryRecord['generation_status'] {
   if (record.generation_status === 'failed') {
+    return 'failed'
+  }
+
+  if ((record.queue_status === 'failed' || record.queue_status === 'cancelled') && !record.actual_composite_hash) {
     return 'failed'
   }
 
@@ -623,6 +628,49 @@ export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): Ge
   }
 
   return record.actual_composite_hash ? 'completed' : 'processing'
+}
+
+export function getHistoryCancellationBadgeLabel(record: GenerationHistoryRecord) {
+  if ((record.queue_cancel_requested ?? 0) <= 0) {
+    return null
+  }
+
+  if (record.queue_status === 'cancelled') {
+    return '사용자 취소'
+  }
+
+  if (record.queue_status === 'completed' || (record.generation_status === 'completed' && record.actual_composite_hash)) {
+    return '취소 요청 후 완료'
+  }
+
+  if (record.queue_status === 'failed' || record.generation_status === 'failed') {
+    return '취소 요청 후 종료'
+  }
+
+  return '취소 요청됨'
+}
+
+export function getHistoryCancellationDetail(record: GenerationHistoryRecord) {
+  const badgeLabel = getHistoryCancellationBadgeLabel(record)
+  if (!badgeLabel) {
+    return null
+  }
+
+  if (badgeLabel === '사용자 취소') {
+    return '사용자 취소로 정리된 기록이야.'
+  }
+
+  if (badgeLabel === '취소 요청 후 완료') {
+    return '취소 요청은 들어갔지만 업스트림 작업이 먼저 끝났어.'
+  }
+
+  if (badgeLabel === '취소 요청 후 종료') {
+    return record.error_message && record.error_message.trim().length > 0
+      ? record.error_message.trim()
+      : '취소 요청 뒤에 작업이 종료됐어.'
+  }
+
+  return '취소 요청이 들어간 상태야.'
 }
 
 /** Resolve the most useful image detail route for a history item. */

@@ -1,4 +1,4 @@
-export type GenerationServiceType = 'novelai' | 'comfyui'
+export type GenerationServiceType = 'novelai' | 'codex' | 'comfyui'
 export type GenerationQueueJobStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface GenerationQueueJobRecord {
@@ -50,7 +50,7 @@ export interface CreateGenerationQueueJobPayload {
 
 export interface GenerationQueueRequestDebugSnapshot {
   service_type: 'comfyui'
-  stage: 'prepared' | 'submitted' | 'failed' | 'completed'
+  stage: 'prepared' | 'submitted' | 'failed' | 'completed' | 'cancelled'
   captured_at: string
   queue_job_id?: number | null
   history_id?: number | null
@@ -65,6 +65,18 @@ export interface GenerationQueueRequestDebugSnapshot {
   prepared_prompt_data?: Record<string, unknown>
   resolved_prompt_data?: Record<string, unknown>
   request_body?: Record<string, unknown>
+  cancellation_requested_at?: string | null
+  cancellation_endpoint?: string | null
+  cancellation_prompt_id?: string | null
+  cancellation_state?: 'requested' | 'not_found' | 'missing_prompt_id' | 'missing_endpoint' | 'pre_submit' | 'error' | null
+  cancellation_error?: string | null
+  cancellation_result?: {
+    promptId: string
+    matchedRunning: boolean
+    matchedPending: boolean
+    interrupted: boolean
+    deleted: boolean
+  } | null
 }
 
 export interface GenerationQueueStatusCounts {
@@ -80,6 +92,9 @@ export interface GenerationHistoryRecord {
   id: number
   service_type: GenerationServiceType
   generation_status: 'pending' | 'processing' | 'completed' | 'failed'
+  queue_status?: GenerationQueueJobStatus | null
+  queue_cancel_requested?: number | null
+  provider_job_id?: string | null
 
   // Core result-index / operations fields
   workflow_id?: number | null

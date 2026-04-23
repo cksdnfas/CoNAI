@@ -22,6 +22,17 @@ type QueuePositionScope = 'service' | 'server' | 'tag' | 'auto'
 type QueuePositionEntry = { position: number; scope: QueuePositionScope; serverId: number | null; serverTag: string | null; eligibleServerIds: number[] }
 type QueueEtaEntry = { waitSeconds: number | null; totalSeconds: number | null; durationSeconds: number | null }
 
+function parseQueueDebugMeta(job: GenerationQueueJobRecord) {
+  try {
+    const parsed = JSON.parse(job.request_payload) as { _debug?: Record<string, unknown> }
+    return parsed?._debug && typeof parsed._debug === 'object' && !Array.isArray(parsed._debug)
+      ? parsed._debug
+      : null
+  } catch {
+    return null
+  }
+}
+
 function parseStatusList(value: unknown): GenerationQueueJobStatus[] | undefined {
   if (typeof value !== 'string' || value.trim().length === 0) {
     return undefined
@@ -642,9 +653,20 @@ router.get('/:id/request-debug', asyncHandler(async (req: Request, res: Response
 
   try {
     const snapshot = await readComfyRequestDebugSnapshot(job.id)
+    const debugMeta = parseQueueDebugMeta(job)
     res.json({
       success: true,
-      data: snapshot,
+      data: {
+        ...snapshot,
+        cancellation_requested_at: typeof debugMeta?.cancellation_requested_at === 'string' ? debugMeta.cancellation_requested_at : null,
+        cancellation_endpoint: typeof debugMeta?.cancellation_endpoint === 'string' ? debugMeta.cancellation_endpoint : null,
+        cancellation_prompt_id: typeof debugMeta?.cancellation_prompt_id === 'string' ? debugMeta.cancellation_prompt_id : null,
+        cancellation_state: typeof debugMeta?.cancellation_state === 'string' ? debugMeta.cancellation_state : null,
+        cancellation_error: typeof debugMeta?.cancellation_error === 'string' ? debugMeta.cancellation_error : null,
+        cancellation_result: debugMeta?.cancellation_result && typeof debugMeta.cancellation_result === 'object' && !Array.isArray(debugMeta.cancellation_result)
+          ? debugMeta.cancellation_result
+          : null,
+      },
     })
   } catch (error) {
     res.status(404).json({

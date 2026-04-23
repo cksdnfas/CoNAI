@@ -52,35 +52,54 @@ export async function executeComfyGeneration(
     onCancelRequested,
   })
 
+  if (await shouldCancel?.()) {
+    throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
+  }
+
   let savedImageCount = 0
   let representativeImage: ComfyGenerationRepresentativeImage | null = null
+  const pendingTempPaths = new Set(collectedOutputs.map((output) => output.tempPath))
 
-  for (const output of collectedOutputs) {
-    try {
-      const processedPaths = await APIImageProcessor.processGeneratedFile(output.tempPath, 'comfyui', {
-        ...imageSaveOptions,
-        sourcePathForMetadata: output.tempPath,
-        sourceMimeType: output.format,
-        originalFileName: path.basename(output.filename || output.tempPath),
-      })
+  try {
+    for (const output of collectedOutputs) {
+      if (await shouldCancel?.()) {
+        throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
+      }
+      try {
+        const processedPaths = await APIImageProcessor.processGeneratedFile(output.tempPath, 'comfyui', {
+          ...imageSaveOptions,
+          sourcePathForMetadata: output.tempPath,
+          sourceMimeType: output.format,
+          originalFileName: path.basename(output.filename || output.tempPath),
+        })
 
-      savedImageCount += 1
-      if (!representativeImage) {
-        representativeImage = {
-          originalPath: processedPaths.originalPath,
-          fileSize: processedPaths.fileSize,
-          compositeHash: processedPaths.compositeHash,
+        savedImageCount += 1
+        if (!representativeImage) {
+          representativeImage = {
+            originalPath: processedPaths.originalPath,
+            fileSize: processedPaths.fileSize,
+            compositeHash: processedPaths.compositeHash,
+          }
+        }
+
+        console.log(`✅ ComfyUI output saved: ${processedPaths.originalPath}`)
+      } catch (error) {
+        console.error(`❌ Failed to save ComfyUI output ${output.tempPath}:`, error)
+      } finally {
+        pendingTempPaths.delete(output.tempPath)
+        try {
+          await fs.promises.unlink(output.tempPath)
+        } catch (cleanupError) {
+          console.warn(`⚠️ Failed to remove temp ComfyUI output ${output.tempPath}:`, cleanupError)
         }
       }
-
-      console.log(`✅ ComfyUI output saved: ${processedPaths.originalPath}`)
-    } catch (error) {
-      console.error(`❌ Failed to save ComfyUI output ${output.tempPath}:`, error)
-    } finally {
+    }
+  } finally {
+    for (const tempPath of pendingTempPaths) {
       try {
-        await fs.promises.unlink(output.tempPath)
-      } catch (cleanupError) {
-        console.warn(`⚠️ Failed to remove temp ComfyUI output ${output.tempPath}:`, cleanupError)
+        await fs.promises.unlink(tempPath)
+      } catch {
+        // Ignore best-effort cleanup for already-removed temp files.
       }
     }
   }

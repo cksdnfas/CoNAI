@@ -16,6 +16,7 @@ import { getErrorMessage } from '../image-generation-shared'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
   formatGenerationQueueTimestamp,
+  getGenerationQueueCancellationDetail,
   getGenerationQueuePositionLabel,
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
@@ -429,6 +430,7 @@ export function GenerationQueueHeaderWidget() {
                     const laneLabel = getQueueLaneLabel(record, queuePositionLabel)
                     const canManageRecord = !isCancelRequested && (authStatusQuery.data?.isAdmin === true || record.is_mine === true)
                     const isRunning = record.status === 'running'
+                    const cancellationDetail = getGenerationQueueCancellationDetail(record)
                     const progressCaption = isRunning
                       ? (progressPercent == null ? '계산 중' : `${progressPercent}%`)
                       : getGenerationQueueStatusLabel(record)
@@ -474,7 +476,7 @@ export function GenerationQueueHeaderWidget() {
                             </div>
 
                             {isCancelRequested ? (
-                              <div className="text-[11px] text-amber-700 dark:text-amber-300">취소 요청은 들어갔고, 가능하면 ComfyUI 업스트림 실행도 같이 멈추게 시도 중이야.</div>
+                              <div className="text-[11px] text-amber-700 dark:text-amber-300">{cancellationDetail}</div>
                             ) : null}
                           </div>
 

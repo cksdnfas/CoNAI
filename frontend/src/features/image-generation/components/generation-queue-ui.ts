@@ -1,5 +1,78 @@
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 
+function parseQueueDebugPayload(record: GenerationQueueJobRecord) {
+  try {
+    const parsed = JSON.parse(record.request_payload) as { _debug?: Record<string, unknown> }
+    return parsed?._debug && typeof parsed._debug === 'object' && !Array.isArray(parsed._debug)
+      ? parsed._debug
+      : null
+  } catch {
+    return null
+  }
+}
+
+export function getGenerationQueueCancellationMeta(record: GenerationQueueJobRecord) {
+  const debug = parseQueueDebugPayload(record)
+  const cancellationResult = debug?.cancellation_result
+  const normalizedResult = cancellationResult && typeof cancellationResult === 'object' && !Array.isArray(cancellationResult)
+    ? cancellationResult as {
+        matchedRunning?: boolean
+        matchedPending?: boolean
+        interrupted?: boolean
+        deleted?: boolean
+      }
+    : null
+
+  return {
+    state: typeof debug?.cancellation_state === 'string' ? debug.cancellation_state : null,
+    error: typeof debug?.cancellation_error === 'string' ? debug.cancellation_error : null,
+    requestedAt: typeof debug?.cancellation_requested_at === 'string' ? debug.cancellation_requested_at : null,
+    result: normalizedResult,
+  }
+}
+
+export function getGenerationQueueCancellationDetail(record: GenerationQueueJobRecord) {
+  if (record.cancel_requested <= 0) {
+    return null
+  }
+
+  const meta = getGenerationQueueCancellationMeta(record)
+  switch (meta.state) {
+    case 'pre_submit':
+      return '아직 업스트림 prompt가 만들어지기 전이라 큐 단계에서 바로 정리했어.'
+    case 'requested':
+      if (meta.result?.deleted && meta.result?.interrupted) {
+        return 'ComfyUI 대기열 삭제와 실행 중단을 둘 다 시도했어.'
+      }
+      if (meta.result?.deleted) {
+        return 'ComfyUI 대기열에서 제거를 시도했어.'
+      }
+      if (meta.result?.interrupted) {
+        return 'ComfyUI 실행 중단을 시도했어.'
+      }
+      return '가능한 업스트림 취소 경로로 중단을 시도했어.'
+    case 'not_found':
+      return '취소 시점엔 업스트림 작업이 이미 끝났거나 찾을 수 없었어.'
+    case 'missing_prompt_id':
+      return '아직 업스트림 prompt id가 없어서 큐 취소만 먼저 기록했어.'
+    case 'missing_endpoint':
+      return '업스트림 endpoint를 못 찾아서 큐 취소만 기록했어.'
+    case 'error':
+      return meta.error ? `업스트림 취소 시도 중 오류가 있었어: ${meta.error}` : '업스트림 취소 시도 중 오류가 있었어.'
+    default:
+      if (record.status === 'completed') {
+        return '취소 요청은 들어갔지만 작업이 먼저 끝났어.'
+      }
+      if (record.status === 'failed') {
+        return '취소 요청 기록은 남았고, 최종 종료 상태는 실패야.'
+      }
+      if (record.status === 'cancelled') {
+        return '사용자 취소로 정리된 작업이야.'
+      }
+      return '취소 요청을 기록했고 업스트림 정리 가능 여부를 확인 중이야.'
+    }
+}
+
 /** Check whether a queue record is still in the active lifecycle. */
 export function isActiveGenerationQueueStatus(status: GenerationQueueJobRecord['status']) {
   return status === 'queued' || status === 'dispatching' || status === 'running'

@@ -216,17 +216,29 @@ export class GenerationQueueService {
     }
 
     const promptId = options?.providerJobId ?? latest.provider_job_id ?? null
-    if (!promptId) {
-      return null
-    }
-
     const endpoint = this.resolveComfyCancellationEndpoint(latest, options?.assignedServer)
-    if (!endpoint) {
+    const requestedAt = new Date().toISOString()
+
+    if (!promptId || !endpoint) {
+      updateQueueRequestDebugMeta(latest, {
+        cancellation_requested_at: requestedAt,
+        cancellation_endpoint: endpoint,
+        cancellation_prompt_id: promptId,
+        cancellation_state: promptId ? 'missing_endpoint' : 'missing_prompt_id',
+      })
       return null
     }
 
     const comfyService = createComfyUIService(endpoint)
-    return comfyService.cancelPrompt(promptId)
+    const result = await comfyService.cancelPrompt(promptId)
+    updateQueueRequestDebugMeta(latest, {
+      cancellation_requested_at: requestedAt,
+      cancellation_endpoint: endpoint,
+      cancellation_prompt_id: promptId,
+      cancellation_state: result.interrupted || result.deleted ? 'requested' : 'not_found',
+      cancellation_result: result,
+    })
+    return result
   }
 
   static async requestCancellation(jobId: number) {
@@ -248,11 +260,36 @@ export class GenerationQueueService {
       try {
         await this.attemptUpstreamCancellation(jobId)
       } catch (error) {
+        updateQueueRequestDebugMeta(latest, {
+          cancellation_requested_at: new Date().toISOString(),
+          cancellation_prompt_id: latest.provider_job_id ?? null,
+          cancellation_state: 'error',
+          cancellation_error: resolveFailureMessage(error),
+        })
         console.warn(`⚠️ Failed to request upstream ComfyUI cancellation for queue job ${jobId}:`, error)
       }
 
       this.requestDispatch()
       return GenerationQueueModel.findById(jobId)
+    }
+
+    if (latest.provider_job_id) {
+      try {
+        await this.attemptUpstreamCancellation(jobId)
+      } catch (error) {
+        updateQueueRequestDebugMeta(latest, {
+          cancellation_requested_at: new Date().toISOString(),
+          cancellation_prompt_id: latest.provider_job_id ?? null,
+          cancellation_state: 'error',
+          cancellation_error: resolveFailureMessage(error),
+        })
+        console.warn(`⚠️ Failed to request upstream ComfyUI cancellation for queue job ${jobId}:`, error)
+      }
+    } else {
+      updateQueueRequestDebugMeta(latest, {
+        cancellation_requested_at: new Date().toISOString(),
+        cancellation_state: 'pre_submit',
+      })
     }
 
     const updated = this.transitionJob(jobId, 'cancelled', {

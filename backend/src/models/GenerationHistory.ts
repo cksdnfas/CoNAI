@@ -57,6 +57,9 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
   requested_server_tag?: string | null;
   assigned_server_id?: number | null;
   assigned_server_name?: string | null;
+  queue_status?: 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled' | null;
+  queue_cancel_requested?: number | null;
+  provider_job_id?: string | null;
 }
 
 export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
@@ -72,6 +75,9 @@ export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
   requested_server_tag?: string | null;
   assigned_server_id?: number | null;
   assigned_server_name?: string | null;
+  queue_status?: 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled' | null;
+  queue_cancel_requested?: number | null;
+  provider_job_id?: string | null;
 }
 
 export interface FilterOptions {
@@ -370,6 +376,9 @@ export class GenerationHistoryModel {
         requested_server.name as requested_server_name,
         qj.assigned_server_id,
         assigned_server.name as assigned_server_name,
+        qj.status as queue_status,
+        qj.cancel_requested as queue_cancel_requested,
+        qj.provider_job_id,
         im.composite_hash as actual_composite_hash,
         im.width as actual_width,
         im.height as actual_height,
@@ -424,6 +433,9 @@ export class GenerationHistoryModel {
         requested_server.name as requested_server_name,
         qj.assigned_server_id,
         assigned_server.name as assigned_server_name,
+        qj.status as queue_status,
+        qj.cancel_requested as queue_cancel_requested,
+        qj.provider_job_id,
         im.composite_hash as actual_composite_hash,
         im.width as actual_width,
         im.height as actual_height,

@@ -25,6 +25,8 @@ import type { GenerationHistoryResponse } from '@/lib/api-image-generation-histo
 import { cn } from '@/lib/utils'
 import {
   getErrorMessage,
+  getHistoryCancellationBadgeLabel,
+  getHistoryCancellationDetail,
   getHistoryStatusLabel,
   resolveHistoryDisplayStatus,
   resolveHistoryImageSource,
@@ -157,12 +159,16 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     [historyRecords],
   )
   const failedHistoryCount = useMemo(
-    () => historyRecords.filter((record) => record.generation_status === 'failed').length,
+    () => historyRecords.filter((record) => resolveHistoryDisplayStatus(record) === 'failed').length,
+    [historyRecords],
+  )
+  const cancellationHistoryCount = useMemo(
+    () => historyRecords.filter((record) => (record.queue_cancel_requested ?? 0) > 0).length,
     [historyRecords],
   )
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
   const {
-    renderItemPersistentOverlay,
+    renderItemPersistentOverlay: renderSafetyPersistentOverlay,
     shouldBlurItemPreview,
   } = useImageFeedSafety({
     items: historyImages,
@@ -173,6 +179,26 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => new Map(historyRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
     [historyRecords],
   )
+  const renderHistoryPersistentOverlay = (image: ImageRecord) => {
+    const record = historyRecordMap.get(String(image?.id ?? ''))
+    const safetyOverlay = renderSafetyPersistentOverlay(image)
+    const cancellationLabel = record ? getHistoryCancellationBadgeLabel(record) : null
+
+    if (!safetyOverlay && !cancellationLabel) {
+      return null
+    }
+
+    return (
+      <div className="flex flex-wrap items-end gap-2">
+        {cancellationLabel ? (
+          <Badge variant="outline" className="border-amber-500/40 bg-background/85 text-amber-700 dark:text-amber-300" title={record ? (getHistoryCancellationDetail(record) ?? cancellationLabel) : cancellationLabel}>
+            {cancellationLabel}
+          </Badge>
+        ) : null}
+        {safetyOverlay}
+      </div>
+    )
+  }
   const selectedHistoryRecords = useMemo(
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
     [historyRecordMap, selectedHistoryIds],
@@ -285,6 +311,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           {!isPublicView ? <Badge variant="outline">{isAdmin ? '전체 사용자' : '내 기록'}</Badge> : null}
           {completedHistoryCount > 0 ? <Badge variant="outline">완료 {completedHistoryCount}</Badge> : null}
           {inFlightHistoryCount > 0 ? <Badge variant="secondary">작업 중 {inFlightHistoryCount}</Badge> : null}
+          {cancellationHistoryCount > 0 ? <Badge variant="outline">취소 관련 {cancellationHistoryCount}</Badge> : null}
           <Button
             type="button"
             size="sm"
@@ -356,12 +383,19 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               }
 
               return (
-                <Badge variant="outline">
-                  {getHistoryStatusLabel(displayStatus)}
-                </Badge>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge variant="outline">
+                    {getHistoryStatusLabel(displayStatus)}
+                  </Badge>
+                  {getHistoryCancellationBadgeLabel(record) ? (
+                    <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
+                      {getHistoryCancellationBadgeLabel(record)}
+                    </Badge>
+                  ) : null}
+                </div>
               )
             }}
-            renderItemPersistentOverlay={renderItemPersistentOverlay}
+            renderItemPersistentOverlay={renderHistoryPersistentOverlay}
             shouldBlurItemPreview={shouldBlurItemPreview}
           />
         ) : null}
