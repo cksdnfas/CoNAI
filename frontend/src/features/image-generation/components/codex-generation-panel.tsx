@@ -1,18 +1,17 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { RotateCcw, Sparkles, X } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { RefreshCw, RotateCcw, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getAppSettings } from '@/lib/api'
 import { createGenerationQueueJob, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
-import { getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
+import { FormField, getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
 import { NaiControllerSection, NaiPromptSection } from './nai-generation-panel-sections'
@@ -31,17 +30,83 @@ type CodexFormDraft = {
   prompt: string
   negativePrompt: string
   count: string
+  aspectRatio: string
+  resolution: string
   referenceImage?: SelectedImageDraft
   maskImage?: SelectedImageDraft
 }
 
 const CODEX_COUNT_MIN = 1
 const CODEX_COUNT_MAX = 4
+const CODEX_FORM_DRAFT_STORAGE_KEY = 'conai:image-generation:codex-form-draft:v1'
+
+const CODEX_ASPECT_RATIO_OPTIONS = [
+  { value: '1:1', label: '1:1', width: 1, height: 1 },
+  { value: '4:3', label: '4:3', width: 4, height: 3 },
+  { value: '3:4', label: '3:4', width: 3, height: 4 },
+  { value: '16:9', label: '16:9', width: 16, height: 9 },
+  { value: '9:16', label: '9:16', width: 9, height: 16 },
+] as const
+
+const CODEX_RESOLUTION_OPTIONS = [
+  { value: '1024', label: '1024px' },
+  { value: '1536', label: '1536px' },
+  { value: '2048', label: '2048px' },
+] as const
 
 const DEFAULT_CODEX_FORM: CodexFormDraft = {
   prompt: '',
   negativePrompt: '',
   count: '1',
+  aspectRatio: '1:1',
+  resolution: '1024',
+}
+
+type PersistedCodexFormDraft = Pick<CodexFormDraft, 'prompt' | 'negativePrompt' | 'count' | 'aspectRatio' | 'resolution'>
+
+function loadPersistedCodexFormDraft(): CodexFormDraft {
+  if (typeof window === 'undefined') {
+    return DEFAULT_CODEX_FORM
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(CODEX_FORM_DRAFT_STORAGE_KEY)
+    if (!rawValue) {
+      return DEFAULT_CODEX_FORM
+    }
+
+    const parsedValue = JSON.parse(rawValue) as Partial<PersistedCodexFormDraft>
+    return {
+      ...DEFAULT_CODEX_FORM,
+      prompt: typeof parsedValue.prompt === 'string' ? parsedValue.prompt : DEFAULT_CODEX_FORM.prompt,
+      negativePrompt: typeof parsedValue.negativePrompt === 'string' ? parsedValue.negativePrompt : DEFAULT_CODEX_FORM.negativePrompt,
+      count: typeof parsedValue.count === 'string' ? parsedValue.count : DEFAULT_CODEX_FORM.count,
+      aspectRatio: typeof parsedValue.aspectRatio === 'string' ? parsedValue.aspectRatio : DEFAULT_CODEX_FORM.aspectRatio,
+      resolution: typeof parsedValue.resolution === 'string' ? parsedValue.resolution : DEFAULT_CODEX_FORM.resolution,
+    }
+  } catch {
+    return DEFAULT_CODEX_FORM
+  }
+}
+
+function persistCodexFormDraft(form: CodexFormDraft) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const persistableDraft: PersistedCodexFormDraft = {
+    prompt: form.prompt,
+    negativePrompt: form.negativePrompt,
+    count: form.count,
+    aspectRatio: form.aspectRatio,
+    resolution: form.resolution,
+  }
+
+  try {
+    window.localStorage.setItem(CODEX_FORM_DRAFT_STORAGE_KEY, JSON.stringify(persistableDraft))
+  } catch {
+    // Ignore quota/private-mode persistence failures.
+  }
 }
 
 function clampCodexCount(value: string | number, fallback = CODEX_COUNT_MIN) {
@@ -54,6 +119,23 @@ function clampCodexCount(value: string | number, fallback = CODEX_COUNT_MIN) {
   return Math.min(CODEX_COUNT_MAX, Math.max(CODEX_COUNT_MIN, integerValue))
 }
 
+function roundCodexDimension(value: number) {
+  return Math.max(64, Math.round(value / 64) * 64)
+}
+
+function resolveCodexSize(aspectRatio: string, resolution: string) {
+  const aspect = CODEX_ASPECT_RATIO_OPTIONS.find((option) => option.value === aspectRatio)
+  const longEdge = Number(resolution)
+  if (!aspect || !Number.isFinite(longEdge) || longEdge <= 0) {
+    return undefined
+  }
+
+  const scale = longEdge / Math.max(aspect.width, aspect.height)
+  const width = roundCodexDimension(aspect.width * scale)
+  const height = roundCodexDimension(aspect.height * scale)
+  return `${width}x${height}`
+}
+
 /** Render the Codex image-generation controller with the same controller chrome used by other generation tabs. */
 export function CodexGenerationPanel({
   refreshNonce,
@@ -64,7 +146,7 @@ export function CodexGenerationPanel({
 }: CodexGenerationPanelProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
-  const [codexForm, setCodexForm] = useState<CodexFormDraft>(DEFAULT_CODEX_FORM)
+  const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [, setPortalRevision] = useState(0)
 
@@ -100,6 +182,14 @@ export function CodexGenerationPanel({
     void codexStatusQuery.refetch()
   }, [codexStatusQuery, refreshNonce])
 
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      persistCodexFormDraft(codexForm)
+    }, 250)
+
+    return () => window.clearTimeout(timeout)
+  }, [codexForm])
+
   const operationLabel = useMemo(() => {
     if (codexForm.referenceImage && codexForm.maskImage) {
       return 'Infill'
@@ -113,6 +203,7 @@ export function CodexGenerationPanel({
   }, [codexForm.maskImage, codexForm.referenceImage])
 
   const queueCount = useMemo(() => clampCodexCount(codexForm.count), [codexForm.count])
+  const outputSize = useMemo(() => resolveCodexSize(codexForm.aspectRatio, codexForm.resolution), [codexForm.aspectRatio, codexForm.resolution])
   const useDrawerCompactChrome = Boolean(headerPortalTargetId)
   const headerPortalTarget = headerPortalTargetId && typeof document !== 'undefined'
     ? document.getElementById(headerPortalTargetId)
@@ -121,17 +212,22 @@ export function CodexGenerationPanel({
     ? document.getElementById(compactActionBarContentTargetId)
     : null
   const codexStatus = codexStatusQuery.data?.data ?? null
-  const canGenerateWithCodex = codexStatusQuery.isSuccess ? Boolean(codexStatus?.available) : true
+  const canGenerateWithCodex = codexStatusQuery.isSuccess ? Boolean(codexStatus?.available) : false
+  const showStatusRecovery = codexStatusQuery.isError || (codexStatusQuery.isSuccess && !codexStatus?.available)
+  const showGenerateLabel = !canGenerateWithCodex
+  const useInlineActionBar = splitPaneScroll
 
-  const statusBadge = codexStatusQuery.isPending
-    ? '확인 중'
-    : codexStatusQuery.isError
-      ? '상태 오류'
-      : codexStatus?.available
-        ? '사용 가능'
-        : codexStatus?.installed
-          ? '인증 필요'
-          : '미설치'
+  const generateButtonLabel = isSubmitting
+    ? '큐 등록 중…'
+    : codexStatusQuery.isPending
+      ? '상태 확인 중…'
+      : codexStatusQuery.isError
+        ? '재확인 후 생성'
+        : codexStatus?.available
+          ? '생성'
+          : codexStatus?.installed
+            ? '로그인 확인 후 생성'
+            : 'Codex 확인 후 생성'
 
   const handleFieldChange = <K extends keyof CodexFormDraft>(field: K, value: CodexFormDraft[K]) => {
     setCodexForm((current) => ({
@@ -180,6 +276,7 @@ export function CodexGenerationPanel({
           negative_prompt: codexForm.negativePrompt.trim() || undefined,
           count: queueCount,
           operation: codexForm.referenceImage ? (codexForm.maskImage ? 'infill' : 'edit') : 'generate',
+          size: outputSize,
           image: codexForm.referenceImage?.dataUrl,
           mask: codexForm.maskImage?.dataUrl,
           imageSaveOptions: {
@@ -201,69 +298,44 @@ export function CodexGenerationPanel({
     }
   }
 
-  const statusBlock = codexStatusQuery.isError ? (
-    <Alert>
-      <AlertTitle>Codex 상태 확인 실패</AlertTitle>
-      <AlertDescription className="space-y-3">
-        <div>{getErrorMessage(codexStatusQuery.error, 'Codex 상태를 불러오지 못했어.')}</div>
-        <div>
-          <Button type="button" variant="outline" size="sm" onClick={() => void codexStatusQuery.refetch()}>
-            다시 확인
+  const headerToolbarContent = (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0 flex items-center gap-2">
+        <div className="truncate text-base font-semibold text-foreground">Codex</div>
+      </div>
+      <div className="flex items-center gap-2">
+        {showStatusRecovery ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={() => void codexStatusQuery.refetch()}
+            disabled={codexStatusQuery.isPending}
+            aria-label="Codex 상태 재확인"
+            title="Codex 상태 재확인"
+          >
+            <RefreshCw className={cn('h-4 w-4', codexStatusQuery.isPending && 'animate-spin')} />
           </Button>
-        </div>
-      </AlertDescription>
-    </Alert>
-  ) : codexStatus ? (
-    <Alert>
-      <AlertTitle>{codexStatus.available ? 'Codex 사용 가능' : 'Codex 확인 필요'}</AlertTitle>
-      <AlertDescription className="space-y-2 text-sm">
-        <div>{codexStatus.message}</div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={codexStatus.available ? 'secondary' : 'outline'}>{codexStatus.available ? 'Ready' : 'Not ready'}</Badge>
-          {codexStatus.authMode ? <Badge variant="outline">{codexStatus.authMode}</Badge> : null}
-          <Badge variant="outline">{codexStatus.command}</Badge>
-        </div>
-        <div>
-          <Button type="button" variant="outline" size="sm" onClick={() => void codexStatusQuery.refetch()}>
-            다시 확인
-          </Button>
-        </div>
-      </AlertDescription>
-    </Alert>
-  ) : (
-    <Alert>
-      <AlertTitle>Codex 상태 확인 중</AlertTitle>
-      <AlertDescription>지금 이 서버에서 Codex 인증 상태를 확인하고 있어.</AlertDescription>
-    </Alert>
-  )
-
-  const desktopHeaderContent = (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="truncate text-base font-semibold text-foreground">Codex</div>
-          <Badge variant="outline">{operationLabel}</Badge>
-          <Badge variant={codexStatus?.available ? 'secondary' : 'outline'}>{statusBadge}</Badge>
-          {codexStatus?.authMode ? <Badge variant="outline">{codexStatus.authMode}</Badge> : null}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="icon-sm" onClick={handleReset} disabled={isSubmitting} aria-label="초기화" title="초기화">
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-        </div>
+        ) : null}
+        <Button type="button" variant="ghost" size="icon-sm" onClick={handleReset} disabled={isSubmitting} aria-label="초기화" title="초기화">
+          <RotateCcw className="h-4 w-4" />
+        </Button>
       </div>
     </div>
   )
 
-  const drawerHeaderContent = (
-    <div className="flex items-center gap-3">
-      <div className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">Codex</div>
-      <Badge variant="outline">{operationLabel}</Badge>
-      <Badge variant={codexStatus?.available ? 'secondary' : 'outline'}>{statusBadge}</Badge>
-      <Button type="button" variant="ghost" size="icon-sm" onClick={handleReset} disabled={isSubmitting} aria-label="초기화" title="초기화">
-        <RotateCcw className="h-4 w-4" />
-      </Button>
-    </div>
+  const generateButton = (
+    <Button
+      type="button"
+      size={showGenerateLabel ? 'sm' : 'icon-sm'}
+      onClick={() => void handleGenerate()}
+      disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
+      aria-label={showGenerateLabel ? generateButtonLabel : (isSubmitting ? '큐 등록 중' : '큐에 추가')}
+      title={showGenerateLabel ? generateButtonLabel : (isSubmitting ? '큐 등록 중' : '큐에 추가')}
+    >
+      <Sparkles className="h-4 w-4" />
+      {showGenerateLabel ? generateButtonLabel : null}
+    </Button>
   )
 
   const compactActionBarContent = (
@@ -282,64 +354,97 @@ export function CodexGenerationPanel({
         inputMode="numeric"
       />
 
-      <Button
-        type="button"
-        size="icon-sm"
-        onClick={() => void handleGenerate()}
-        disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
-        aria-label={isSubmitting ? '큐 등록 중' : '큐에 추가'}
-        title={isSubmitting ? '큐 등록 중' : '큐에 추가'}
-        className="rounded-none border-l border-border/70 shadow-none"
-      >
-        <Sparkles className="h-4 w-4" />
-      </Button>
+      {showStatusRecovery ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => void codexStatusQuery.refetch()}
+          disabled={codexStatusQuery.isPending}
+          aria-label="Codex 상태 재확인"
+          title="Codex 상태 재확인"
+          className="rounded-none border-l border-border/70 shadow-none"
+        >
+          <RefreshCw className={cn('h-4 w-4', codexStatusQuery.isPending && 'animate-spin')} />
+        </Button>
+      ) : null}
+
+      {showGenerateLabel ? (
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void handleGenerate()}
+          disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
+          aria-label={generateButtonLabel}
+          title={generateButtonLabel}
+          className="rounded-none border-l border-border/70 shadow-none"
+        >
+          <Sparkles className="h-4 w-4" />
+          {generateButtonLabel}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          size="icon-sm"
+          onClick={() => void handleGenerate()}
+          disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
+          aria-label={isSubmitting ? '큐 등록 중' : '큐에 추가'}
+          title={isSubmitting ? '큐 등록 중' : '큐에 추가'}
+          className="rounded-none border-l border-border/70 shadow-none"
+        >
+          <Sparkles className="h-4 w-4" />
+        </Button>
+      )}
     </CompactGenerationActionSurface>
   )
 
-  const actionSection = (
+  const actionContent = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <ScrubbableNumberInput
+        min={CODEX_COUNT_MIN}
+        max={CODEX_COUNT_MAX}
+        step={1}
+        scrubRatio={1}
+        variant="detail"
+        className="h-9 w-[72px]"
+        value={codexForm.count}
+        onChange={(value) => handleFieldChange('count', value)}
+        disabled={isSubmitting}
+        aria-label="큐 등록 개수"
+        inputMode="numeric"
+      />
+      {generateButton}
+    </div>
+  )
+
+  const actionSection = useInlineActionBar ? (
+    <section>
+      {actionContent}
+    </section>
+  ) : (
     <section className="space-y-3">
       <Card>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">{operationLabel}</Badge>
-              <Badge variant="outline">{queueCount}장</Badge>
-              {codexForm.referenceImage ? <Badge variant="secondary">참조</Badge> : null}
-              {codexForm.maskImage ? <Badge variant="secondary">마스크</Badge> : null}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <ScrubbableNumberInput
-                min={CODEX_COUNT_MIN}
-                max={CODEX_COUNT_MAX}
-                step={1}
-                scrubRatio={1}
-                variant="detail"
-                className="h-9 w-[72px]"
-                value={codexForm.count}
-                onChange={(value) => handleFieldChange('count', value)}
-                disabled={isSubmitting}
-                aria-label="큐 등록 개수"
-                inputMode="numeric"
-              />
-              <Button type="button" onClick={() => void handleGenerate()} disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}>
-                <Sparkles className="h-4 w-4" />
-                {isSubmitting ? '큐 등록 중…' : '큐에 추가'}
-              </Button>
-            </div>
-          </div>
+          {actionContent}
         </CardContent>
       </Card>
     </section>
   )
 
+  const inlineHeaderContent = (
+    <div className="space-y-3">
+      {headerToolbarContent}
+      {useInlineActionBar ? actionSection : null}
+    </div>
+  )
+
   return (
     <div className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
       {useDrawerCompactChrome
-        ? (headerPortalTarget ? createPortal(drawerHeaderContent, headerPortalTarget) : null)
+        ? (headerPortalTarget ? createPortal(headerToolbarContent, headerPortalTarget) : null)
         : (
-          <div className="space-y-3 border-b border-border/70 pb-4">
-            {desktopHeaderContent}
+          <div className="shrink-0 space-y-3 border-b border-border/70 pb-4">
+            {inlineHeaderContent}
           </div>
         )}
 
@@ -348,14 +453,40 @@ export function CodexGenerationPanel({
         splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
         useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
       )}>
-        {statusBlock}
-
         <NaiPromptSection
           prompt={codexForm.prompt}
           negativePrompt={codexForm.negativePrompt}
           onPromptChange={(value) => handleFieldChange('prompt', value)}
           onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
         />
+
+        <NaiControllerSection heading="Output">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <FormField label="Aspect Ratio">
+              <Select
+                variant="detail"
+                value={codexForm.aspectRatio}
+                onChange={(event) => handleFieldChange('aspectRatio', event.target.value)}
+              >
+                {CODEX_ASPECT_RATIO_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </Select>
+            </FormField>
+
+            <FormField label="Resolution" hint={outputSize}>
+              <Select
+                variant="detail"
+                value={codexForm.resolution}
+                onChange={(event) => handleFieldChange('resolution', event.target.value)}
+              >
+                {CODEX_RESOLUTION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </Select>
+            </FormField>
+          </div>
+        </NaiControllerSection>
 
         <NaiControllerSection heading="Images">
           <div className="grid gap-4 lg:grid-cols-2">
@@ -418,7 +549,7 @@ export function CodexGenerationPanel({
           </div>
         </NaiControllerSection>
 
-        {!useDrawerCompactChrome ? actionSection : null}
+        {!useInlineActionBar ? actionSection : null}
         {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
       </div>
     </div>
