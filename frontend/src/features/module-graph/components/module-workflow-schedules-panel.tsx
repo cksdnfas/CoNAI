@@ -2,14 +2,13 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Pause, Play, Plus, Rocket, Save, SquarePen, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import { SettingsField } from '@/features/settings/components/settings-primitives'
+import { SettingsField, SettingsInsetBlock, SettingsSection } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import type { GraphWorkflowRecord, GraphWorkflowScheduleRecord, GraphWorkflowScheduleStatus, GraphWorkflowScheduleType } from '@/lib/api'
-import { formatDateTime } from '../module-graph-shared'
+import { formatDateTime, getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '../module-graph-shared'
 import { WorkflowInputFields } from './workflow-input-fields'
 
 type ScheduleMutationPayload = {
@@ -83,6 +82,21 @@ function getScheduleTypeLabel(scheduleType: GraphWorkflowScheduleType) {
     return 'N분마다'
   }
   return '매일'
+}
+
+function getScheduleRunSummaryLabel(schedule: GraphWorkflowScheduleRecord) {
+  const completedCount = schedule.completed_run_count ?? 0
+  const queuedCount = schedule.queued_run_count ?? 0
+  const runningCount = schedule.running_run_count ?? 0
+  const reservedCount = schedule.reserved_run_count ?? (completedCount + queuedCount + runningCount)
+  const activeReservedCount = queuedCount + runningCount
+
+  if (schedule.max_run_count === null || schedule.max_run_count === undefined) {
+    return `완료 ${completedCount}회${activeReservedCount > 0 ? ` · 대기/실행 ${activeReservedCount}회` : ''} · 무제한`
+  }
+
+  const remainingCount = Math.max(schedule.remaining_run_count ?? Math.max(schedule.max_run_count - reservedCount, 0), 0)
+  return `완료 ${completedCount}회 · 예약/완료 ${reservedCount}/${schedule.max_run_count}회 · 남은 ${remainingCount}회`
 }
 
 /** Render workflow autorun list and inline create/edit controls inside the queue tab. */
@@ -243,86 +257,85 @@ export function ModuleWorkflowSchedulesPanel({
 
   return (
     <>
-      <Card>
-        <CardHeader className="space-y-0 border-b border-border/70 pb-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="min-w-0 flex-1 text-base">자동 실행</CardTitle>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Badge variant="outline">{schedules.length}</Badge>
-              <Button type="button" size="sm" variant="outline" onClick={openCreateEditor} disabled={workflows.length === 0 || isMutating}>
-                <Plus className="h-4 w-4" />
-                자동 실행 추가
-              </Button>
-            </div>
+      <SettingsSection
+        heading="자동 실행"
+        actions={(
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Badge variant="outline">{schedules.length}</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={openCreateEditor} disabled={workflows.length === 0 || isMutating}>
+              <Plus className="h-4 w-4" />
+              자동 실행 추가
+            </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {schedules.length === 0 ? (
-            <div className="rounded-sm border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
-              자동 실행 없음
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {schedules.map((schedule) => {
-                const workflowName = workflowNameById.get(schedule.graph_workflow_id) ?? `Workflow #${schedule.graph_workflow_id}`
-                const reservedCountLabel = schedule.max_run_count ? `최대 ${schedule.max_run_count}회` : '무제한'
-                const scheduleTimingLabel = schedule.schedule_type === 'once'
-                  ? (schedule.run_at ? formatDateTime(schedule.run_at) : '시각 미설정')
-                  : schedule.schedule_type === 'interval'
-                    ? `${schedule.interval_minutes ?? '?'}분마다`
-                    : `${schedule.daily_time ?? '--:--'} 매일`
+        )}
+      >
+        {schedules.length === 0 ? (
+          <SettingsInsetBlock className="border-dashed py-8 text-sm text-muted-foreground">
+            자동 실행 없음
+          </SettingsInsetBlock>
+        ) : (
+          <div className="space-y-3">
+            {schedules.map((schedule) => {
+              const workflowName = workflowNameById.get(schedule.graph_workflow_id) ?? `워크플로우 #${schedule.graph_workflow_id}`
+              const reservedCountLabel = schedule.max_run_count ? `최대 ${schedule.max_run_count}회` : '무제한'
+              const runSummaryLabel = getScheduleRunSummaryLabel(schedule)
+              const scheduleTimingLabel = schedule.schedule_type === 'once'
+                ? (schedule.run_at ? formatDateTime(schedule.run_at) : '시각 미설정')
+                : schedule.schedule_type === 'interval'
+                  ? `${schedule.interval_minutes ?? '?'}분마다`
+                  : `${schedule.daily_time ?? '--:--'} 매일`
 
-                return (
-                  <div key={schedule.id} className="rounded-sm border border-border bg-surface-low px-4 py-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="truncate text-sm font-medium text-foreground">{schedule.name}</div>
-                          <Badge variant={getScheduleStatusVariant(schedule.status)}>{schedule.status}</Badge>
-                          <Badge variant="outline">{getScheduleTypeLabel(schedule.schedule_type)}</Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {workflowName} · {scheduleTimingLabel} · {reservedCountLabel}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                          {schedule.next_run_at ? <span>다음 등록 시도 {formatDateTime(schedule.next_run_at)}</span> : null}
-                          {schedule.last_enqueued_at ? <span>최근 큐 등록 {formatDateTime(schedule.last_enqueued_at)}</span> : null}
-                        </div>
-                      </div>
+              return (
+                <SettingsInsetBlock key={schedule.id}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Button type="button" size="icon-sm" variant="outline" onClick={() => openEditEditor(schedule)} disabled={isMutating} aria-label="자동 실행 수정" title="자동 실행 수정">
-                          <SquarePen className="h-4 w-4" />
-                        </Button>
-                        {schedule.status === 'active' ? (
-                          <Button type="button" size="icon-sm" variant="outline" onClick={() => void onPauseSchedule(schedule.id)} disabled={isMutating} aria-label="자동 실행 일시정지" title="자동 실행 일시정지">
-                            <Pause className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <Button type="button" size="icon-sm" variant="outline" onClick={() => void onResumeSchedule(schedule.id)} disabled={isMutating} aria-label="자동 실행 재개" title="자동 실행 재개">
-                            <Play className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button type="button" size="icon-sm" variant="outline" onClick={() => void onRunNow(schedule.id)} disabled={isMutating} aria-label="지금 1회 실행" title="지금 1회 실행">
-                          <Rocket className="h-4 w-4" />
-                        </Button>
-                        <Button type="button" size="icon-sm" variant="outline" onClick={() => void onDeleteSchedule(schedule.id)} disabled={isMutating} aria-label="자동 실행 삭제" title="자동 실행 삭제">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="truncate text-sm font-medium text-foreground">{schedule.name}</div>
+                        <Badge variant={getScheduleStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status)}</Badge>
+                        <Badge variant="outline">{getScheduleTypeLabel(schedule.schedule_type)}</Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {workflowName} · {scheduleTimingLabel} · {reservedCountLabel}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                        <span>{runSummaryLabel}</span>
+                        {schedule.next_run_at ? <span>· 다음 등록 시도 {formatDateTime(schedule.next_run_at)}</span> : null}
+                        {schedule.last_enqueued_at ? <span>· 최근 큐 등록 {formatDateTime(schedule.last_enqueued_at)}</span> : null}
                       </div>
                     </div>
-                    {schedule.stop_reason_message ? (
-                      <div className="mt-3 rounded-sm border border-border bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">중지/정지 사유</span>
-                        <span className="ml-2">{schedule.stop_reason_message}</span>
-                      </div>
-                    ) : null}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button type="button" size="icon-sm" variant="outline" onClick={() => openEditEditor(schedule)} disabled={isMutating} aria-label="자동 실행 수정" title="자동 실행 수정">
+                        <SquarePen className="h-4 w-4" />
+                      </Button>
+                      {schedule.status === 'active' ? (
+                        <Button type="button" size="icon-sm" variant="outline" onClick={() => void onPauseSchedule(schedule.id)} disabled={isMutating} aria-label="자동 실행 일시정지" title="자동 실행 일시정지">
+                          <Pause className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <Button type="button" size="icon-sm" variant="outline" onClick={() => void onResumeSchedule(schedule.id)} disabled={isMutating} aria-label="자동 실행 재개" title="자동 실행 재개">
+                          <Play className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button type="button" size="icon-sm" variant="outline" onClick={() => void onRunNow(schedule.id)} disabled={isMutating} aria-label="지금 1회 실행" title="지금 1회 실행">
+                        <Rocket className="h-4 w-4" />
+                      </Button>
+                      <Button type="button" size="icon-sm" variant="outline" onClick={() => void onDeleteSchedule(schedule.id)} disabled={isMutating} aria-label="자동 실행 삭제" title="자동 실행 삭제">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message) ? (
+                    <SettingsInsetBlock className="mt-3 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">중지/정지 사유</span>
+                      <span className="ml-2">{getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message)}</span>
+                    </SettingsInsetBlock>
+                  ) : null}
+                </SettingsInsetBlock>
+              )
+            })}
+          </div>
+        )}
+      </SettingsSection>
 
       <SettingsModal
         open={editorMode !== null}
@@ -356,7 +369,10 @@ export function ModuleWorkflowSchedulesPanel({
               <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} disabled={isMutating} />
             </SettingsField>
             <SettingsField label="최대 예약 횟수">
-              <Input type="number" min={1} value={draftMaxRunCount} onChange={(event) => setDraftMaxRunCount(event.target.value)} placeholder="무제한" disabled={isMutating} />
+              <div className="space-y-2">
+                <Input type="number" min={1} value={draftMaxRunCount} onChange={(event) => setDraftMaxRunCount(event.target.value)} placeholder="무제한" disabled={isMutating} />
+                <div className="text-[11px] text-muted-foreground">비워두면 무제한으로 계속 돌아가. 숫자를 넣으면 그 횟수만큼 예약/완료 후 자동 종료돼.</div>
+              </div>
             </SettingsField>
             {draftScheduleType === 'once' ? (
               <SettingsField label="실행 시각">

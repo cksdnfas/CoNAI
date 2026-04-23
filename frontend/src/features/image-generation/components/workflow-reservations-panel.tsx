@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, Trash2, XCircle } from 'lucide-react'
-import { SectionHeading } from '@/components/common/section-heading'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { SettingsSection, SettingsValueTile } from '@/features/settings/components/settings-primitives'
 import {
   cleanupGraphWorkflowEmptyExecutions,
   createGraphWorkflowSchedule,
@@ -240,54 +239,36 @@ export function WorkflowReservationsPanel() {
 
   return (
     <section className="space-y-4">
-      <Card>
-        <CardContent className="space-y-4">
-          <SectionHeading
-            variant="inside"
-            className="border-b border-border/70 pb-4"
-            heading="예약작업"
-            actions={(
-              <>
-                <Badge variant={schedules.length > 0 ? 'secondary' : 'outline'}>스케줄 {schedules.length}</Badge>
-                <Badge variant={reservationExecutions.length > 0 ? 'secondary' : 'outline'}>예약 실행 {reservationExecutions.length}</Badge>
-                <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleRefresh()} title="예약작업 새로고침" aria-label="예약작업 새로고침">
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </>
-            )}
-          />
+      <SettingsSection
+        heading="예약작업"
+        actions={(
+          <>
+            <Badge variant={schedules.length > 0 ? 'secondary' : 'outline'}>스케줄 {schedules.length}</Badge>
+            <Badge variant={reservationExecutions.length > 0 ? 'secondary' : 'outline'}>예약 실행 {reservationExecutions.length}</Badge>
+            <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleRefresh()} title="예약작업 새로고침" aria-label="예약작업 새로고침">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+      >
+        {reservationsQuery.isError ? (
+          <Alert variant="destructive">
+            <AlertTitle>예약작업을 불러오지 못했어</AlertTitle>
+            <AlertDescription>{getErrorMessage(reservationsQuery.error, '예약작업 조회 실패')}</AlertDescription>
+          </Alert>
+        ) : null}
 
-          {reservationsQuery.isError ? (
-            <Alert variant="destructive">
-              <AlertTitle>예약작업을 불러오지 못했어</AlertTitle>
-              <AlertDescription>{getErrorMessage(reservationsQuery.error, '예약작업 조회 실패')}</AlertDescription>
-            </Alert>
-          ) : null}
+        {!reservationsQuery.isError && reservationsQuery.isPending ? <div className="text-sm text-muted-foreground">예약작업 불러오는 중…</div> : null}
 
-          {!reservationsQuery.isError && reservationsQuery.isPending ? <div className="text-sm text-muted-foreground">예약작업 불러오는 중…</div> : null}
-
-          {!reservationsQuery.isPending && !reservationsQuery.isError && reservationContent ? (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-                <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Schedules</div>
-                <div className="mt-1 text-lg font-semibold text-foreground">{reservationContent.scope.schedule_count}</div>
-              </div>
-              <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-                <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Reserved Runs</div>
-                <div className="mt-1 text-lg font-semibold text-foreground">{reservationContent.scope.empty_execution_count}</div>
-              </div>
-              <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-                <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Workflows</div>
-                <div className="mt-1 text-lg font-semibold text-foreground">{reservationContent.scope.workflow_count}</div>
-              </div>
-              <div className="rounded-sm border border-border bg-surface-low px-3 py-2">
-                <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Executions</div>
-                <div className="mt-1 text-lg font-semibold text-foreground">{reservationContent.scope.execution_count}</div>
-              </div>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+        {!reservationsQuery.isPending && !reservationsQuery.isError && reservationContent ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <SettingsValueTile label="예약작업" value={reservationContent.scope.schedule_count} valueClassName="text-lg" />
+            <SettingsValueTile label="예약 실행" value={reservationContent.scope.empty_execution_count} valueClassName="text-lg" />
+            <SettingsValueTile label="워크플로우" value={reservationContent.scope.workflow_count} valueClassName="text-lg" />
+            <SettingsValueTile label="실행" value={reservationContent.scope.execution_count} valueClassName="text-lg" />
+          </div>
+        ) : null}
+      </SettingsSection>
 
       {reservationContent ? (
         <ModuleWorkflowEmptyRunsTab
