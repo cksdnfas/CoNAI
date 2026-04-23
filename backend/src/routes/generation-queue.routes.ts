@@ -21,7 +21,7 @@ const router = express.Router()
 const ACTIVE_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['queued', 'dispatching', 'running']
 const TERMINAL_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['completed', 'failed', 'cancelled']
 type QueuePositionScope = 'service' | 'server' | 'tag' | 'auto'
-type QueuePositionEntry = { position: number; scope: QueuePositionScope; serverId: number | null; serverTag: string | null; eligibleServerIds: number[] }
+type QueuePositionEntry = { laneKey: string; position: number; scope: QueuePositionScope; serverId: number | null; serverTag: string | null; eligibleServerIds: number[] }
 type QueueEtaEntry = { waitSeconds: number | null; totalSeconds: number | null; durationSeconds: number | null }
 
 function parseQueueDebugMeta(job: GenerationQueueJobRecord) {
@@ -186,6 +186,7 @@ function computeQueuePositions(records: GenerationQueueJobRecord[], activeComfyS
     const lane = resolveGenerationQueueLaneMeta(record, activeComfyServers)
     const nextPosition = nextByLane.get(lane.laneKey) ?? 1
     positions.set(record.id, {
+      laneKey: lane.laneKey,
       position: nextPosition,
       scope: lane.scope,
       serverId: lane.serverId,
@@ -261,6 +262,28 @@ function resolveReferenceDurationSeconds(record: GenerationQueueJobRecord, compl
     return getMedianDurationSeconds(getRecentCompletedDurations(completedRecords, (candidate) => candidate.service_type === record.service_type))
   }
 
+  if (record.workflow_id != null) {
+    if (queuePosition?.scope === 'server' && queuePosition.serverId !== null) {
+      const workflowServerDurations = getRecentCompletedDurations(completedRecords, (candidate) => (
+        candidate.service_type === 'comfyui'
+        && candidate.workflow_id === record.workflow_id
+        && (candidate.assigned_server_id ?? candidate.requested_server_id ?? null) === queuePosition.serverId
+      ))
+      const workflowServerMedian = getMedianDurationSeconds(workflowServerDurations)
+      if (workflowServerMedian !== null) {
+        return workflowServerMedian
+      }
+    }
+
+    const workflowDurations = getRecentCompletedDurations(completedRecords, (candidate) => (
+      candidate.service_type === 'comfyui' && candidate.workflow_id === record.workflow_id
+    ))
+    const workflowMedian = getMedianDurationSeconds(workflowDurations)
+    if (workflowMedian !== null) {
+      return workflowMedian
+    }
+  }
+
   if (queuePosition?.scope === 'server' && queuePosition.serverId !== null) {
     const serverDurations = getRecentCompletedDurations(completedRecords, (candidate) => (
       candidate.service_type === 'comfyui' && (candidate.assigned_server_id ?? candidate.requested_server_id ?? null) === queuePosition.serverId
@@ -274,9 +297,9 @@ function resolveReferenceDurationSeconds(record: GenerationQueueJobRecord, compl
   return getMedianDurationSeconds(getRecentCompletedDurations(completedRecords, (candidate) => candidate.service_type === 'comfyui'))
 }
 
-function getRunningWorkerCount(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeRecords: GenerationQueueJobRecord[]) {
+function getRunningLaneRecords(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeRecords: GenerationQueueJobRecord[]) {
   if (record.service_type === 'novelai' || record.service_type === 'codex') {
-    return activeRecords.filter((candidate) => candidate.service_type === record.service_type && candidate.status === 'running').length
+    return activeRecords.filter((candidate) => candidate.service_type === record.service_type && candidate.status === 'running')
   }
 
   if (queuePosition?.scope === 'server' && queuePosition.serverId !== null) {
@@ -284,11 +307,11 @@ function getRunningWorkerCount(record: GenerationQueueJobRecord, queuePosition: 
       candidate.service_type === 'comfyui'
       && candidate.status === 'running'
       && (candidate.assigned_server_id ?? candidate.requested_server_id ?? null) === queuePosition.serverId
-    )).length
+    ))
   }
 
   if (!queuePosition || queuePosition.eligibleServerIds.length === 0) {
-    return activeRecords.filter((candidate) => candidate.service_type === 'comfyui' && candidate.status === 'running').length
+    return activeRecords.filter((candidate) => candidate.service_type === 'comfyui' && candidate.status === 'running')
   }
 
   return activeRecords.filter((candidate) => {
@@ -298,7 +321,7 @@ function getRunningWorkerCount(record: GenerationQueueJobRecord, queuePosition: 
 
     const candidateServerId = candidate.assigned_server_id ?? candidate.requested_server_id ?? null
     return candidateServerId !== null && queuePosition.eligibleServerIds.includes(candidateServerId)
-  }).length
+  })
 }
 
 function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeComfyServerCount: number) {
@@ -324,27 +347,42 @@ function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueueP
   return Math.max(activeComfyServerCount, 1)
 }
 
+function getEstimatedRunningRemainingSeconds(record: GenerationQueueJobRecord, durationSeconds: number) {
+  const startedAt = record.started_at ? new Date(record.started_at).getTime() : null
+  const elapsedSeconds = startedAt && Number.isFinite(startedAt)
+    ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+    : 0
+
+  return Math.max(durationSeconds - elapsedSeconds, 0)
+}
+
+function getEarliestSlotIndex(slotAvailabilitySeconds: number[]) {
+  let earliestIndex = 0
+  for (let index = 1; index < slotAvailabilitySeconds.length; index += 1) {
+    if (slotAvailabilitySeconds[index] < slotAvailabilitySeconds[earliestIndex]) {
+      earliestIndex = index
+    }
+  }
+  return earliestIndex
+}
+
 function estimateQueueEta(
   record: GenerationQueueJobRecord,
   queuePosition: QueuePositionEntry | undefined,
   activeRecords: GenerationQueueJobRecord[],
-  completedRecords: GenerationQueueJobRecord[],
+  queuePositions: Map<number, QueuePositionEntry>,
+  referenceDurationById: Map<number, number | null>,
   activeComfyServerCount: number,
 ): QueueEtaEntry {
-  const durationSeconds = resolveReferenceDurationSeconds(record, completedRecords, queuePosition)
+  const durationSeconds = referenceDurationById.get(record.id) ?? null
   if (durationSeconds === null) {
     return { waitSeconds: null, totalSeconds: null, durationSeconds: null }
   }
 
   if (record.status === 'running') {
-    const startedAt = record.started_at ? new Date(record.started_at).getTime() : null
-    const elapsedSeconds = startedAt && Number.isFinite(startedAt)
-      ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
-      : 0
-
     return {
       waitSeconds: 0,
-      totalSeconds: Math.max(durationSeconds - elapsedSeconds, 0),
+      totalSeconds: getEstimatedRunningRemainingSeconds(record, durationSeconds),
       durationSeconds,
     }
   }
@@ -358,11 +396,41 @@ function estimateQueueEta(
   }
 
   const capacity = getLaneCapacity(record, queuePosition, activeComfyServerCount)
-  const runningWorkers = Math.min(getRunningWorkerCount(record, queuePosition, activeRecords), capacity)
-  const freeSlots = Math.max(capacity - runningWorkers, 0)
-  const startRounds = Math.max(0, Math.ceil((queuePosition.position - freeSlots) / capacity))
-  const waitSeconds = startRounds * durationSeconds
+  const slotAvailabilitySeconds = getRunningLaneRecords(record, queuePosition, activeRecords)
+    .map((candidate) => {
+      const candidateDurationSeconds = referenceDurationById.get(candidate.id) ?? durationSeconds
+      return candidateDurationSeconds === null ? durationSeconds : getEstimatedRunningRemainingSeconds(candidate, candidateDurationSeconds)
+    })
+    .sort((left, right) => left - right)
+    .slice(0, capacity)
 
+  while (slotAvailabilitySeconds.length < capacity) {
+    slotAvailabilitySeconds.push(0)
+  }
+
+  const queuedAheadInSameLane = activeRecords
+    .filter((candidate) => {
+      if ((candidate.status !== 'queued' && candidate.status !== 'dispatching') || candidate.id === record.id) {
+        return false
+      }
+
+      const candidateQueuePosition = queuePositions.get(candidate.id)
+      return candidateQueuePosition?.laneKey === queuePosition.laneKey
+        && candidateQueuePosition.position < queuePosition.position
+    })
+    .sort((left, right) => {
+      const leftPosition = queuePositions.get(left.id)?.position ?? Number.MAX_SAFE_INTEGER
+      const rightPosition = queuePositions.get(right.id)?.position ?? Number.MAX_SAFE_INTEGER
+      return leftPosition - rightPosition
+    })
+
+  for (const queuedCandidate of queuedAheadInSameLane) {
+    const queuedDurationSeconds = referenceDurationById.get(queuedCandidate.id) ?? durationSeconds
+    const earliestSlotIndex = getEarliestSlotIndex(slotAvailabilitySeconds)
+    slotAvailabilitySeconds[earliestSlotIndex] += queuedDurationSeconds ?? durationSeconds
+  }
+
+  const waitSeconds = Math.min(...slotAvailabilitySeconds)
   return {
     waitSeconds,
     totalSeconds: waitSeconds + durationSeconds,
@@ -377,11 +445,16 @@ function computeQueueEtas(
   activeComfyServerCount: number,
 ) {
   const etaById = new Map<number, QueueEtaEntry>()
+  const referenceDurationById = new Map<number, number | null>()
+
+  for (const record of activeRecords) {
+    referenceDurationById.set(record.id, resolveReferenceDurationSeconds(record, completedRecords, queuePositions.get(record.id)))
+  }
 
   for (const record of activeRecords) {
     etaById.set(
       record.id,
-      estimateQueueEta(record, queuePositions.get(record.id), activeRecords, completedRecords, activeComfyServerCount),
+      estimateQueueEta(record, queuePositions.get(record.id), activeRecords, queuePositions, referenceDurationById, activeComfyServerCount),
     )
   }
 
