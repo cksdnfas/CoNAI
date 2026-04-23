@@ -1,5 +1,10 @@
 import type { WildcardTool } from '@/lib/api'
-import type { FlattenedWildcardRecord } from './wildcard-inline-picker-helpers'
+import {
+  countWildcardItemsForTool,
+  resolvePreferredWildcardItemTool,
+  type FlattenedWildcardRecord,
+  type PromptWildcardTool,
+} from './wildcard-inline-picker-helpers'
 
 export type PromptSyntaxTokenKind = 'wildcard' | 'preprocess' | 'lora'
 
@@ -37,7 +42,7 @@ function buildPathText(record?: FlattenedWildcardRecord | null) {
   return record.path.join(' / ')
 }
 
-function countItemsForTool(record: FlattenedWildcardRecord, tool: WildcardTool) {
+function countItemsForStorageTool(record: FlattenedWildcardRecord, tool: WildcardTool) {
   return record.items.filter((item) => item.tool === tool).length
 }
 
@@ -63,7 +68,7 @@ function createRecordMaps(records: FlattenedWildcardRecord[]) {
 
 function collectRecordPreviewItems(
   record: FlattenedWildcardRecord,
-  tool: WildcardTool,
+  tool: PromptWildcardTool,
   maps: ReturnType<typeof createRecordMaps>,
   visited: Set<number> = new Set(),
 ): string[] {
@@ -72,8 +77,9 @@ function collectRecordPreviewItems(
   }
 
   visited.add(record.id)
+  const preferredTool = resolvePreferredWildcardItemTool(record.items, tool)
   const previews = record.onlyChildren ? [] : record.items
-    .filter((item) => item.tool === tool)
+    .filter((item) => item.tool === preferredTool)
     .map((item) => item.content.trim())
     .filter(Boolean)
 
@@ -90,7 +96,7 @@ function collectRecordPreviewItems(
 function buildPreviewState(
   kind: PromptSyntaxTokenKind,
   record: FlattenedWildcardRecord | null,
-  tool: WildcardTool | undefined,
+  tool: PromptWildcardTool | undefined,
   maps: ReturnType<typeof createRecordMaps>,
 ) {
   if (!record || !tool) {
@@ -122,7 +128,7 @@ function buildToken(
   maps: ReturnType<typeof createRecordMaps>,
   options?: {
     record?: FlattenedWildcardRecord | null
-    tool?: WildcardTool
+    tool?: PromptWildcardTool
     loraWeight?: string | null
   },
 ): PromptSyntaxToken {
@@ -139,9 +145,9 @@ function buildToken(
     name: record?.name ?? value,
     count: 1,
     pathText: buildPathText(record),
-    toolItemCount: record && options?.tool ? countItemsForTool(record, options.tool) : null,
-    naiItemCount: record ? countItemsForTool(record, 'nai') : null,
-    comfyuiItemCount: record ? countItemsForTool(record, 'comfyui') : null,
+    toolItemCount: record && options?.tool ? countWildcardItemsForTool(record.items, options.tool) : null,
+    naiItemCount: record ? countItemsForStorageTool(record, 'nai') : null,
+    comfyuiItemCount: record ? countItemsForStorageTool(record, 'comfyui') : null,
     loraWeight: options?.loraWeight?.trim() || null,
     previewItems: previewState.previewItems,
     fallbackMessage: previewState.fallbackMessage,
@@ -171,7 +177,7 @@ function adjustTrimmedRange(value: string, start: number, end: number) {
 }
 
 /** Detect recognized wildcard, preprocess, and LoRA syntax ranges inside one prompt-like field value. */
-export function detectPromptSyntaxTokens(value: string, records: FlattenedWildcardRecord[], tool: WildcardTool) {
+export function detectPromptSyntaxTokens(value: string, records: FlattenedWildcardRecord[], tool: PromptWildcardTool) {
   if (!value) {
     return []
   }

@@ -1,5 +1,8 @@
 import { WildcardModel, WildcardWithItems, WildcardItem } from '../models/Wildcard';
 
+type WildcardStoredTool = 'comfyui' | 'nai'
+type WildcardResolutionTool = WildcardStoredTool | 'codex'
+
 /**
  * Wildcard Service
  * 와일드카드 파싱 및 처리 로직
@@ -10,10 +13,10 @@ export class WildcardService {
    * 중첩된 와일드카드를 재귀적으로 처리하며 순환 참조를 방지함
    *
    * @param text 파싱할 텍스트
-   * @param tool 사용할 도구 ('comfyui' | 'nai')
+   * @param tool 사용할 도구 ('comfyui' | 'nai' | 'codex')
    * @returns 파싱된 텍스트
    */
-  static parseWildcards(text: string, tool: 'comfyui' | 'nai'): string {
+  static parseWildcards(text: string, tool: WildcardResolutionTool): string {
     // 모든 와일드카드를 항목과 함께 로드
     const wildcards = WildcardModel.findAllWithItems();
 
@@ -43,7 +46,7 @@ export class WildcardService {
   private static parseChains(
     text: string,
     wildcardMap: Map<string, WildcardWithItems>,
-    tool: 'comfyui' | 'nai'
+    tool: WildcardResolutionTool
   ): string {
     // 쉼표로 분리 (이스케이프된 쉼표는 처리하지 않음 - 단순 구현)
     // TODO: 복잡한 프롬프트(괄호 내부 쉼표 등)에 대한 정교한 처리가 필요할 수 있음
@@ -76,6 +79,21 @@ export class WildcardService {
     });
 
     return processedTokens.join(', ');
+  }
+
+  private static resolvePreferredToolOrder(tool: WildcardResolutionTool): WildcardStoredTool[] {
+    return tool === 'codex' ? ['nai', 'comfyui'] : [tool]
+  }
+
+  private static collectOwnItemsForTool(wildcard: WildcardWithItems, tool: WildcardResolutionTool): WildcardItem[] {
+    for (const candidateTool of this.resolvePreferredToolOrder(tool)) {
+      const matchedItems = wildcard.items.filter(item => item.tool === candidateTool)
+      if (matchedItems.length > 0) {
+        return matchedItems
+      }
+    }
+
+    return []
   }
 
   /**
@@ -175,7 +193,7 @@ export class WildcardService {
    */
   private static collectItemsWithChildren(
     wildcard: WildcardWithItems,
-    tool: 'comfyui' | 'nai',
+    tool: WildcardResolutionTool,
     wildcardMap: Map<string, WildcardWithItems>,
     visited: Set<number> = new Set()
   ): WildcardItem[] {
@@ -189,7 +207,7 @@ export class WildcardService {
     // only_children: 자신은 제외하고 자식만 포함하는 그룹용 옵션
     const items = (wildcard.only_children === 1)
       ? []
-      : wildcard.items.filter(item => item.tool === tool);
+      : this.collectOwnItemsForTool(wildcard, tool);
 
     // 2. include_children이 활성화된 경우 하위 항목 재귀적으로 수집
     // only_children이 활성화된 경우, include_children 설정과 관계없이(혹은 함께) 자식을 포함하는 것이 의도에 부합
@@ -220,7 +238,7 @@ export class WildcardService {
   private static parseRecursive(
     text: string,
     wildcardMap: Map<string, WildcardWithItems>,
-    tool: 'comfyui' | 'nai',
+    tool: WildcardResolutionTool,
     visited: Set<string>
   ): string {
     // ++name++ 패턴 매칭 (ComfyUI의 __name__과 구분)
@@ -358,7 +376,7 @@ export class WildcardService {
    */
   static parseMultiple(
     text: string,
-    tool: 'comfyui' | 'nai',
+    tool: WildcardResolutionTool,
     count: number = 5
   ): string[] {
     const results: string[] = [];

@@ -2,20 +2,20 @@ import { ChevronRight, Folder, FolderOpen, Plus } from 'lucide-react'
 import type { MouseEventHandler } from 'react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
-import type { WildcardRecord, WildcardTool } from '@/lib/api'
+import type { WildcardRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
   getWildcardPromptSyntax,
   getWildcardPromptSyntaxLabel,
   type WildcardWorkspaceTab,
 } from './wildcard-generation-panel-helpers'
-import { countWildcardItemsForTool } from './wildcard-inline-picker-helpers'
+import { countWildcardItemsForTool, resolvePreferredWildcardItemTool, type PromptWildcardTool } from './wildcard-inline-picker-helpers'
 
 type WildcardInlinePickerExplorerProps = {
   activeTab: WildcardWorkspaceTab
   expandedWildcardIds: number[]
   selectedWildcardId: number | null
-  tool: WildcardTool
+  tool: PromptWildcardTool
   treeNodes: WildcardRecord[]
   onChangeActiveTab: (tab: WildcardWorkspaceTab) => void
   onInsertWildcard: (wildcardName: string, syntaxText?: string) => void
@@ -54,6 +54,10 @@ export function WildcardInlinePickerExplorer({
           const isSelected = selectedWildcardId === node.id
           const naiItemCount = countWildcardItemsForTool(node.items ?? [], 'nai')
           const comfyuiItemCount = countWildcardItemsForTool(node.items ?? [], 'comfyui')
+
+          const preferredBadgeTool = tool === 'codex'
+            ? (naiItemCount > 0 ? 'nai' : comfyuiItemCount > 0 ? 'comfyui' : resolvePreferredWildcardItemTool(node.items ?? [], tool))
+            : tool
 
           const handleSelect: MouseEventHandler<HTMLButtonElement> = (event) => {
             event.preventDefault()
@@ -108,8 +112,8 @@ export function WildcardInlinePickerExplorer({
                 </button>
 
                 <div className="hidden shrink-0 items-center gap-1 md:flex">
-                  <Badge variant={tool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
-                  <Badge variant={tool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
+                  <Badge variant={preferredBadgeTool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
+                  <Badge variant={preferredBadgeTool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
                 </div>
 
                 <button

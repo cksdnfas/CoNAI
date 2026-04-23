@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { inputVariants } from '@/components/ui/input'
 import { textareaVariants } from '@/components/ui/textarea'
-import { getWildcards, type WildcardTool } from '@/lib/api'
+import { getWildcards } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
   getWildcardPromptSyntax,
@@ -21,7 +21,9 @@ import {
   scoreWildcardMatch,
   writeStoredRecentWildcards,
   writeStoredWildcardFilterMode,
+  resolvePreferredWildcardItemTool,
   type FlattenedWildcardRecord,
+  type PromptWildcardTool,
   type WildcardFilterMode,
   type WildcardInsertionRange,
 } from './wildcard-inline-picker-helpers'
@@ -38,7 +40,7 @@ import { WildcardInlinePickerExplorer } from './wildcard-inline-picker-explorer'
 type WildcardInlinePickerFieldProps = {
   value: string
   onChange: (value: string) => void
-  tool: WildcardTool
+  tool: PromptWildcardTool
   multiline?: boolean
   rows?: number
   placeholder?: string
@@ -631,6 +633,10 @@ export function WildcardInlinePickerField({
     index: number
   }) => {
     const isActive = index === activeIndex
+    const preferredBadgeTool = tool === 'codex'
+      ? (naiItemCount > 0 ? 'nai' : comfyuiItemCount > 0 ? 'comfyui' : resolvePreferredWildcardItemTool(record.items, tool))
+      : tool
+
     return (
       <button
         key={record.id}
@@ -656,8 +662,8 @@ export function WildcardInlinePickerField({
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          <Badge variant={tool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
-          <Badge variant={tool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
+          <Badge variant={preferredBadgeTool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
+          <Badge variant={preferredBadgeTool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
         </div>
       </button>
     )

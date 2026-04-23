@@ -14,8 +14,8 @@ router.post('/parse', requirePermission('page.wildcards.view'), asyncHandler(asy
       return res.status(400).json({ success: false, error: 'Text is required' });
     }
 
-    if (!tool || (tool !== 'comfyui' && tool !== 'nai')) {
-      return res.status(400).json({ success: false, error: 'Valid tool is required (comfyui or nai)' });
+    if (!tool || (tool !== 'comfyui' && tool !== 'nai' && tool !== 'codex')) {
+      return res.status(400).json({ success: false, error: 'Valid tool is required (comfyui, nai, or codex)' });
     }
 
     const parsedCount = Math.min(Math.max(parseInt(count) || 1, 1), 10);

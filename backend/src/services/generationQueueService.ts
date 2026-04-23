@@ -99,7 +99,7 @@ function parseCodexWildcardText(value: unknown) {
     return undefined
   }
 
-  return WildcardService.parseWildcards(trimmed, 'nai')
+  return WildcardService.parseWildcards(trimmed, 'codex')
 }
 
 function parseCodexQueuePayload(record: GenerationQueueJobRecord) {

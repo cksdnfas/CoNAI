@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { CompactGenerationActionSurface } from './shared-generation-controller'
 import { PromptToggleField } from './prompt-toggle-field'
+import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 
 export interface NaiConnectionHeaderProps {
   connected: boolean
@@ -79,6 +80,7 @@ export function NaiControllerInsetBlock({ children, className }: NaiControllerIn
 export interface NaiPromptSectionProps {
   prompt: string
   negativePrompt: string
+  tool?: PromptWildcardTool
   onPromptChange: (value: string) => void
   onNegativePromptChange: (value: string) => void
 }
@@ -87,12 +89,13 @@ export interface NaiPromptSectionProps {
 export function NaiPromptSection({
   prompt,
   negativePrompt,
+  tool = 'nai',
   onPromptChange,
   onNegativePromptChange,
 }: NaiPromptSectionProps) {
   return (
     <PromptToggleField
-      tool="nai"
+      tool={tool}
       positiveValue={prompt}
       negativeValue={negativePrompt}
       onPositiveChange={onPromptChange}

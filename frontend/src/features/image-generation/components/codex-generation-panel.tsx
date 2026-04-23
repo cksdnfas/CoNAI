@@ -602,6 +602,7 @@ export function CodexGenerationPanel({
           useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
         )}>
         <NaiPromptSection
+          tool="codex"
           prompt={codexForm.prompt}
           negativePrompt={codexForm.negativePrompt}
           onPromptChange={(value) => handleFieldChange('prompt', value)}

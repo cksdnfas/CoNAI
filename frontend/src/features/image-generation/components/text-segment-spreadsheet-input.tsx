@@ -1,15 +1,15 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { WildcardTool } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
+import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 
 export type TextSegmentSpreadsheetValue = string | string[]
 
 export const DEFAULT_PROMPT_TEXTAREA_ROWS = 5
 
 type TextSegmentSpreadsheetInputProps = {
-  tool: WildcardTool
+  tool: PromptWildcardTool
   value: TextSegmentSpreadsheetValue
   placeholder?: string
   showDetectedSyntax?: boolean

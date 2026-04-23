@@ -1,5 +1,7 @@
 import type { WildcardItemRecord, WildcardRecord, WildcardTool } from '@/lib/api'
 
+export type PromptWildcardTool = WildcardTool | 'codex'
+
 export type FlattenedWildcardRecord = {
   id: number
   parentId: number | null
@@ -30,7 +32,7 @@ const FILTER_MODE_KEY_PREFIX = 'conai.wildcards.filter-mode.'
 export const MAX_RECENT_WILDCARDS = 8
 
 /** Read the persisted inline picker filter mode for one wildcard tool. */
-export function readStoredWildcardFilterMode(tool: WildcardTool): WildcardFilterMode {
+export function readStoredWildcardFilterMode(tool: PromptWildcardTool): WildcardFilterMode {
   if (typeof window === 'undefined') {
     return 'available-only'
   }
@@ -40,7 +42,7 @@ export function readStoredWildcardFilterMode(tool: WildcardTool): WildcardFilter
 }
 
 /** Persist the inline picker filter mode for one wildcard tool. */
-export function writeStoredWildcardFilterMode(tool: WildcardTool, mode: WildcardFilterMode) {
+export function writeStoredWildcardFilterMode(tool: PromptWildcardTool, mode: WildcardFilterMode) {
   if (typeof window === 'undefined') {
     return
   }
@@ -49,7 +51,7 @@ export function writeStoredWildcardFilterMode(tool: WildcardTool, mode: Wildcard
 }
 
 /** Read the recent wildcard names for one tool from local storage. */
-export function readStoredRecentWildcards(tool: WildcardTool): string[] {
+export function readStoredRecentWildcards(tool: PromptWildcardTool): string[] {
   if (typeof window === 'undefined') {
     return []
   }
@@ -68,7 +70,7 @@ export function readStoredRecentWildcards(tool: WildcardTool): string[] {
 }
 
 /** Persist the bounded recent wildcard list for one tool. */
-export function writeStoredRecentWildcards(tool: WildcardTool, names: string[]) {
+export function writeStoredRecentWildcards(tool: PromptWildcardTool, names: string[]) {
   if (typeof window === 'undefined') {
     return
   }
@@ -134,9 +136,18 @@ export function resolveActiveWildcardQuery(value: string, caretPosition: number)
   }
 }
 
+export function resolvePreferredWildcardItemTool(items: WildcardItemRecord[], tool: PromptWildcardTool): WildcardTool {
+  if (tool !== 'codex') {
+    return tool
+  }
+
+  return items.some((item) => item.tool === 'nai') ? 'nai' : 'comfyui'
+}
+
 /** Count wildcard items available for one tool. */
-export function countWildcardItemsForTool(items: WildcardItemRecord[], tool: WildcardTool) {
-  return items.filter((item) => item.tool === tool).length
+export function countWildcardItemsForTool(items: WildcardItemRecord[], tool: PromptWildcardTool) {
+  const preferredTool = resolvePreferredWildcardItemTool(items, tool)
+  return items.filter((item) => item.tool === preferredTool).length
 }
 
 /** Build the next prompt value for inline wildcard/preprocess insertion, auto-adding comma separators when chaining entries. */

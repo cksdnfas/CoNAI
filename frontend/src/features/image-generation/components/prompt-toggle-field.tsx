@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import type { WildcardTool } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 import { TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
 import {
   WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS,
@@ -10,7 +10,7 @@ import {
 } from './workflow-field-disclosure-card'
 
 type PromptToggleFieldProps = {
-  tool: WildcardTool
+  tool: PromptWildcardTool
   positiveValue: string
   negativeValue: string
   onPositiveChange: (value: string) => void
@@ -41,7 +41,7 @@ function PromptSpreadsheetDisclosure({
   onToggle,
   onChange,
 }: {
-  tool: WildcardTool
+  tool: PromptWildcardTool
   label: string
   value: string
   placeholder: string
