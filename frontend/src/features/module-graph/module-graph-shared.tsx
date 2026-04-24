@@ -202,7 +202,7 @@ export function readFileAsDataUrl(file: File) {
 const PORT_TYPE_COLORS: Record<ModulePortDataType, string> = {
   image: '#4fc3f7',
   mask: '#ffb74d',
-  prompt: '#ba68c8',
+  prompt: '#4db6ac',
   text: '#81c784',
   number: '#ffd54f',
   boolean: '#ef9a9a',

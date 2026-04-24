@@ -5,13 +5,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { ExecutionArtifactCard } from './execution-artifact-card'
+import { ModuleGraphSimpleValueInput } from './module-graph-simple-value-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
@@ -279,15 +278,13 @@ export function NodeInspectorPanel({
       return (
         <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <Select
-            value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
-            onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
-          >
-            <option value="">{hasMeaningfulValue(port.default_value) || hasMeaningfulValue(uiField.default_value) ? '기본값 사용' : '선택'}</option>
-            {uiField.options.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </Select>
+          <ModuleGraphSimpleValueInput
+            dataType="select"
+            value={rawValue}
+            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
+            options={uiField.options}
+            emptyLabel={hasMeaningfulValue(port.default_value ?? uiField.default_value) ? '기본값 사용' : '선택'}
+          />
         </div>
       )
     }
@@ -296,29 +293,13 @@ export function NodeInspectorPanel({
       return (
         <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <Textarea
-            rows={port.data_type === 'json' ? 6 : 4}
-            value={typeof rawValue === 'string' ? rawValue : rawValue ? JSON.stringify(rawValue, null, 2) : ''}
-            onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
+          <ModuleGraphSimpleValueInput
+            dataType={port.data_type}
+            value={rawValue}
+            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
             placeholder={normalizedDescription || port.label}
+            rows={port.data_type === 'json' ? 6 : 4}
           />
-        </div>
-      )
-    }
-
-    if (uiField?.data_type === 'select' && Array.isArray(uiField.options) && uiField.options.length > 0) {
-      return (
-        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
-          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <Select
-            value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
-            onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
-          >
-            <option value="">{hasMeaningfulValue(port.default_value ?? uiField.default_value) ? '기본값 사용' : '선택'}</option>
-            {uiField.options.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </Select>
         </div>
       )
     }
@@ -327,13 +308,13 @@ export function NodeInspectorPanel({
       return (
         <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <Input
-            type="number"
+          <ModuleGraphSimpleValueInput
+            dataType="number"
+            value={rawValue}
+            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
+            placeholder={uiField?.placeholder || port.label}
             min={uiField?.min}
             max={uiField?.max}
-            value={typeof rawValue === 'number' ? String(rawValue) : typeof rawValue === 'string' ? rawValue : ''}
-            onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value === '' ? '' : Number(event.target.value))}
-            placeholder={uiField?.placeholder || port.label}
           />
         </div>
       )
@@ -343,14 +324,11 @@ export function NodeInspectorPanel({
       return (
         <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-          <Select
-            value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
-            onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value === 'true')}
-          >
-            <option value="">기본값 사용</option>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </Select>
+          <ModuleGraphSimpleValueInput
+            dataType="boolean"
+            value={rawValue}
+            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
+          />
         </div>
       )
     }
@@ -381,9 +359,10 @@ export function NodeInspectorPanel({
     return (
       <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
         <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
-        <Input
-          value={typeof rawValue === 'string' ? rawValue : rawValue ? String(rawValue) : ''}
-          onChange={(event) => onNodeValueChange(node.id, port.key, event.target.value)}
+        <ModuleGraphSimpleValueInput
+          dataType="text"
+          value={rawValue}
+          onChange={(value) => onNodeValueChange(node.id, port.key, value)}
           placeholder={uiField?.placeholder || normalizedDescription || port.label}
         />
       </div>
@@ -396,85 +375,61 @@ export function NodeInspectorPanel({
     const hasExplicitValue = hasMeaningfulValue(rawValue)
     const clearFieldValue = () => onNodeValueClear(node.id, field.key)
 
-    if (field.data_type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
-      return (
-        <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1">
-                <div className="text-sm font-medium text-foreground">{field.label}</div>
-                <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
-              </div>
-              {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
-            </div>
-            <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
-              값 지우기
-            </Button>
-          </div>
-          <Select
-            value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
-            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value)}
-          >
-            <option value="">{hasMeaningfulValue(field.default_value) ? '기본값 사용' : '선택'}</option>
-            {field.options.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </Select>
-        </div>
-      )
-    }
+    const renderFieldInput = () => {
+      if (field.data_type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
+        return (
+          <ModuleGraphSimpleValueInput
+            dataType="select"
+            value={rawValue}
+            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
+            options={field.options}
+            emptyLabel={hasMeaningfulValue(field.default_value) ? '기본값 사용' : '선택'}
+          />
+        )
+      }
 
-    if (field.data_type === 'number') {
-      return (
-        <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1">
-                <div className="text-sm font-medium text-foreground">{field.label}</div>
-                <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
-              </div>
-              {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
-            </div>
-            <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
-              값 지우기
-            </Button>
-          </div>
-          <Input
-            type="number"
+      if (field.data_type === 'number') {
+        return (
+          <ModuleGraphSimpleValueInput
+            dataType="number"
+            value={rawValue}
+            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
+            placeholder={field.placeholder || field.label}
             min={field.min}
             max={field.max}
-            value={typeof rawValue === 'number' ? String(rawValue) : typeof rawValue === 'string' ? rawValue : ''}
-            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value === '' ? '' : Number(event.target.value))}
-            placeholder={field.placeholder || field.label}
           />
-        </div>
-      )
-    }
+        )
+      }
 
-    if (field.data_type === 'boolean') {
+      if (field.data_type === 'boolean') {
+        return (
+          <ModuleGraphSimpleValueInput
+            dataType="boolean"
+            value={rawValue}
+            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
+          />
+        )
+      }
+
+      if (field.data_type === 'json' || field.data_type === 'prompt' || field.data_type === 'text') {
+        return (
+          <ModuleGraphSimpleValueInput
+            dataType={field.data_type}
+            value={rawValue}
+            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
+            placeholder={field.placeholder || normalizedDescription || field.label}
+            rows={field.data_type === 'json' ? 6 : 2}
+          />
+        )
+      }
+
       return (
-        <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1">
-                <div className="text-sm font-medium text-foreground">{field.label}</div>
-                <TechnicalReferenceHint title={`field ${field.key}`} label="필드 내부 키 보기" />
-              </div>
-              {normalizedDescription ? <div className="mt-1 text-xs text-muted-foreground">{normalizedDescription}</div> : null}
-            </div>
-            <Button type="button" size="sm" variant="ghost" onClick={clearFieldValue} disabled={!hasExplicitValue}>
-              값 지우기
-            </Button>
-          </div>
-          <Select
-            value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
-            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value === 'true')}
-          >
-            <option value="">기본값 사용</option>
-            <option value="true">true</option>
-            <option value="false">false</option>
-          </Select>
-        </div>
+        <ModuleGraphSimpleValueInput
+          dataType="text"
+          value={rawValue}
+          onChange={(value) => onNodeValueChange(node.id, field.key, value)}
+          placeholder={field.placeholder || normalizedDescription || field.label}
+        />
       )
     }
 
@@ -492,20 +447,7 @@ export function NodeInspectorPanel({
             값 지우기
           </Button>
         </div>
-        {field.data_type === 'json' || field.data_type === 'prompt' || field.data_type === 'text' ? (
-          <Textarea
-            rows={field.data_type === 'json' ? 6 : 2}
-            value={typeof rawValue === 'string' ? rawValue : rawValue ? JSON.stringify(rawValue, null, 2) : ''}
-            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value)}
-            placeholder={field.placeholder || normalizedDescription || field.label}
-          />
-        ) : (
-          <Input
-            value={typeof rawValue === 'string' ? rawValue : rawValue ? String(rawValue) : ''}
-            onChange={(event) => onNodeValueChange(node.id, field.key, event.target.value)}
-            placeholder={field.placeholder || normalizedDescription || field.label}
-          />
-        )}
+        {renderFieldInput()}
       </div>
     )
   }

@@ -9,7 +9,8 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 2. [감시폴더 등록과 스캔](/systems/folder-watch-and-registration)
 3. [생성 저장 파이프라인](/systems/generation-pipeline)
 4. [워크플로우 실행 엔진](/systems/module-workflow-engine)
-5. [MCP와 자동화 인터페이스](/systems/mcp-and-automation)
+5. [모듈 그래프 노드 UX 개편안](/systems/module-graph-node-ux-redesign-plan)
+6. [MCP와 자동화 인터페이스](/systems/mcp-and-automation)
 
 ## 왜 이 순서인가
 
@@ -29,6 +30,10 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 - 단순 생성 UI를 넘어, 재사용 가능한 실행 구조를 담당합니다.
 - 최근 확장 중인 Workflow 기능의 중심입니다.
 
-### 5) MCP와 자동화 인터페이스
+### 5) 모듈 그래프 노드 UX 개편안
+- 워크플로우 캔버스를 ComfyUI에 가까운 직접 편집형 경험으로 끌어올리기 위한 개편 기준입니다.
+- 노드 인라인 편집, 값 가시성, 포트 표현 축소 원칙을 정리합니다.
+
+### 6) MCP와 자동화 인터페이스
 - 화면 밖에서 CoNAI를 호출하는 자동화 진입점입니다.
 - AI 에이전트 연동과 외부 도구 호출의 연결부입니다.

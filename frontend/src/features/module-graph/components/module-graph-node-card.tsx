@@ -6,12 +6,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { ToggleRow } from '@/components/ui/toggle-row'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
+import { ModuleGraphSimpleValueInput } from './module-graph-simple-value-input'
 import type { ComfyUIServer, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import {
@@ -33,18 +32,7 @@ import {
   type ModuleGraphNode,
 } from '../module-graph-shared'
 
-const ENGINE_TYPE_LABELS = {
-  nai: 'NAI',
-  codex: 'Codex',
-  comfyui: 'ComfyUI',
-  system: '시스템',
-  custom_js: 'Custom JS',
-} as const
-
-const TEXT_PORT_COLOR = getPortTypeColor('text')
-const PROMPT_PORT_COLOR = getPortTypeColor('prompt')
 const MODULE_GRAPH_INLINE_CONTROL_CLASS = 'theme-input-surface border-border/80 focus:border-primary'
-const MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS = 'theme-input-surface border-border/80'
 const GRAPH_COMFY_TARGET_MODE_KEY = 'execution_target_mode'
 const GRAPH_COMFY_TARGET_TAG_KEY = 'execution_target_tag'
 const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
@@ -120,11 +108,6 @@ function resolveComfyTargetBadgeLabel(inputValues: Record<string, unknown> | und
   return '자동 분산'
 }
 
-/** Flag prompt/text ports that can bridge within the string family. */
-function isStringBridgePort(dataType: ModulePortDefinition['data_type']) {
-  return dataType === 'text' || dataType === 'prompt'
-}
-
 /** Prevent embedded controls from triggering node drag or canvas selection. */
 function stopNodeInteraction(event: SyntheticEvent) {
   event.stopPropagation()
@@ -143,7 +126,7 @@ function buildPortTooltip(port: ModulePortDefinition, statusLabel: string) {
     `키: ${port.key}`,
     `타입: ${getModuleGraphPortTypeLabel(port.data_type)}`,
     `상태: ${statusLabel}`,
-    isStringBridgePort(port.data_type) ? '브리지: 텍스트 ↔ 프롬프트' : null,
+    null,
     port.required ? '필수' : null,
     port.multiple ? '다중' : null,
     normalizeModulePortDescription(port.description) || null,
@@ -168,25 +151,44 @@ function buildHandleStyle(params: { side: 'input' | 'output'; color: string }): 
   }
 }
 
-/** Render one standard left/right port row for general modules. */
+/** Resolve a plain one-line string preview for compact node-side value rendering. */
+function getCompactValuePreview(value: unknown) {
+  if (typeof value === 'string') {
+    const normalized = value.replace(/\s+/g, ' ').trim()
+    return normalized.length > 0 ? normalized : ''
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0 ? `${value.length} items` : ''
+  }
+
+  if (value && typeof value === 'object') {
+    return 'configured'
+  }
+
+  return ''
+}
+
+/** Render one standard minimal socket row for outputs and simple port-only surfaces. */
 function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requiredMissing, requiredMissingLabel = '입력 필요', onDisconnectInput }: PortCellProps) {
   if (!port) {
-    return <div className="min-h-[34px] rounded-sm border border-dashed border-border/35 bg-surface-low/20" aria-hidden="true" />
+    return <div className="min-h-[28px] border-b border-dashed border-border/35" aria-hidden="true" />
   }
 
   const portTypeColor = getPortTypeColor(port.data_type)
   const statusLabel = requiredMissing ? requiredMissingLabel : connected ? '연결됨' : satisfied ? '설정됨' : '대기'
-  const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}99` : `${accentColor}30`
-  const backgroundColor = requiredMissing ? 'rgba(245, 158, 11, 0.10)' : connected ? `${portTypeColor}10` : 'rgba(148, 163, 184, 0.06)'
-  const alignmentClass = side === 'input' ? 'pl-4 pr-2' : 'pl-2 pr-4'
-  const labelAlignmentClass = side === 'input' ? 'text-left' : 'text-right'
+  const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
+  const alignmentClass = side === 'input' ? 'pl-4 pr-2 text-left' : 'pl-2 pr-4 text-right'
   const rowJustifyClass = side === 'input' ? 'justify-start' : 'justify-end'
-  const usesStringBridgeBadge = isStringBridgePort(port.data_type)
 
   return (
     <div
-      className={`relative min-h-[34px] rounded-sm border ${alignmentClass}`}
-      style={{ borderColor, backgroundColor } as CSSProperties}
+      className={`relative min-h-[28px] border-b ${alignmentClass}`}
+      style={{ borderColor } as CSSProperties}
       title={buildPortTooltip(port, statusLabel)}
       onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
     >
@@ -199,70 +201,154 @@ function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requi
         onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
       />
 
-      <div className={`flex min-h-[32px] items-center gap-2 ${rowJustifyClass}`}>
-        <span className={`min-w-0 flex-1 truncate text-[11px] font-medium text-foreground ${labelAlignmentClass}`}>
+      <div className={`flex min-h-[28px] items-center gap-2 ${rowJustifyClass}`}>
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
           {port.label}
           {port.required ? <span className="ml-1 text-[11px] text-amber-300">*</span> : null}
         </span>
-        {usesStringBridgeBadge ? (
-          <span
-            className="shrink-0 rounded-sm border px-1.5 py-0 text-[9px] font-semibold uppercase tracking-[0.08em]"
-            style={{
-              borderColor: `${portTypeColor}66`,
-              color: portTypeColor,
-              background: `linear-gradient(90deg, ${TEXT_PORT_COLOR}16 0 50%, ${PROMPT_PORT_COLOR}16 50% 100%)`,
-            } as CSSProperties}
-          >
-            T↔P
-          </span>
-        ) : (
-          <Badge
-            variant="outline"
-            className="shrink-0 px-1.5 py-0 text-[9px] font-medium uppercase tracking-[0.08em]"
-            style={{ borderColor: `${portTypeColor}66`, color: portTypeColor } as CSSProperties}
-          >
-            {getModuleGraphPortTypeLabel(port.data_type)}
-          </Badge>
-        )}
       </div>
     </div>
   )
 }
 
-/** Render one top-side output port for workflow source nodes. */
-function SourceNodeOutputPort({ port, connected, accentColor }: { port: ModulePortDefinition; connected: boolean; accentColor: string }) {
+/** Render one plain inline editor row for input ports while keeping all ports visible. */
+function InputPortCell({
+  nodeId,
+  data,
+  port,
+  accentColor,
+  connected,
+  satisfied,
+  requiredMissing,
+}: {
+  nodeId: string
+  data: ModuleGraphNode['data']
+  port?: ModulePortDefinition
+  accentColor: string
+  connected: boolean
+  satisfied: boolean
+  requiredMissing: boolean
+}) {
+  if (!port) {
+    return <div className="min-h-[28px] border-b border-dashed border-border/35" aria-hidden="true" />
+  }
+
+  const rawValue = data.inputValues?.[port.key]
   const portTypeColor = getPortTypeColor(port.data_type)
-  const statusLabel = connected ? '연결됨' : '대기'
-  const borderColor = connected ? `${portTypeColor}99` : `${accentColor}30`
-  const backgroundColor = connected ? `${portTypeColor}10` : 'rgba(148, 163, 184, 0.06)'
+  const statusLabel = requiredMissing ? '입력 필요' : connected ? '연결됨' : satisfied ? '설정됨' : '대기'
+  const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
+  const uiField = data.module.ui_schema?.find((field) => field.key === port.key)
+  const selectOptions = uiField?.data_type === 'select' && Array.isArray(uiField.options) ? uiField.options : null
+  const preview = getCompactValuePreview(rawValue ?? port.default_value)
+  const isPromptLikePort = port.data_type === 'text' || port.data_type === 'prompt'
+
+  const renderEditor = () => {
+    if (connected) {
+      return <div className="truncate text-[10px] text-muted-foreground">linked</div>
+    }
+
+    if (selectOptions && data.onNodeValueChange) {
+      return (
+        <div onMouseDown={stopNodeInteraction}>
+          <ModuleGraphSimpleValueInput
+            dataType="select"
+            value={rawValue}
+            onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
+            options={selectOptions}
+            emptyLabel={hasMeaningfulValue(port.default_value ?? uiField?.default_value) ? 'default' : 'select'}
+            className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          />
+        </div>
+      )
+    }
+
+    if (port.data_type === 'number' && data.onNodeValueChange) {
+      return (
+        <div onMouseDown={stopNodeInteraction}>
+          <ModuleGraphSimpleValueInput
+            dataType="number"
+            value={rawValue}
+            onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
+            placeholder={typeof port.default_value === 'number' ? String(port.default_value) : port.label}
+            className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          />
+        </div>
+      )
+    }
+
+    if (port.data_type === 'boolean' && data.onNodeValueChange) {
+      return (
+        <div onMouseDown={stopNodeInteraction}>
+          <ModuleGraphSimpleValueInput
+            dataType="boolean"
+            value={rawValue}
+            onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
+            emptyLabel="default"
+            className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          />
+        </div>
+      )
+    }
+
+    if (isPromptLikePort) {
+      return null
+    }
+
+    return preview ? <div className="truncate text-[10px] text-muted-foreground">{preview}</div> : null
+  }
 
   return (
-    <div className="mt-2.5 space-y-1">
-      <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">출력 연결</div>
-      <div
-        className="relative min-h-[36px] rounded-sm border pl-3 pr-4"
-        style={{ borderColor, backgroundColor } as CSSProperties}
+    <div className="relative min-h-[28px] border-b pl-4 pr-2" style={{ borderColor } as CSSProperties} title={buildPortTooltip(port, statusLabel)}>
+      <Handle
+        id={buildHandleId('in', port.key)}
+        type="target"
+        position={Position.Left}
+        style={buildHandleStyle({ side: 'input', color: portTypeColor })}
         title={buildPortTooltip(port, statusLabel)}
-      >
-        <Handle
-          id={buildHandleId('out', port.key)}
-          type="source"
-          position={Position.Right}
-          style={buildHandleStyle({ side: 'output', color: portTypeColor })}
-          title={buildPortTooltip(port, statusLabel)}
-        />
+        onMouseDown={connected ? () => data.onDisconnectNodeInput?.(nodeId, port.key) : undefined}
+      />
 
-        <div className="flex min-h-[34px] items-center justify-between gap-2">
-          <span className="truncate text-xs font-medium text-foreground">{port.label}</span>
-          <Badge
-            variant="outline"
-            className="shrink-0 px-1.5 py-0 text-[9px] font-medium uppercase tracking-[0.08em]"
-            style={{ borderColor: `${portTypeColor}66`, color: portTypeColor } as CSSProperties}
-          >
-            {getModuleGraphPortTypeLabel(port.data_type)}
-          </Badge>
-        </div>
+      <div className="flex min-h-[28px] items-center gap-2">
+        <span className={`min-w-0 truncate text-[11px] font-medium text-foreground ${isPromptLikePort ? 'flex-1' : 'shrink-0'}`}>
+          {port.label}
+          {port.required ? <span className="ml-1 text-[11px] text-amber-300">*</span> : null}
+        </span>
+        {!isPromptLikePort ? <div className="min-w-0 flex-1">{renderEditor()}</div> : null}
       </div>
+    </div>
+  )
+}
+
+/** Render all workflow-input-source outputs so multi-output nodes keep every handle visible. */
+function SourceNodeOutputPorts({
+  nodeId,
+  ports,
+  connectedOutputKeys,
+  accentColor,
+}: {
+  nodeId: string
+  ports: ModulePortDefinition[]
+  connectedOutputKeys: Set<string>
+  accentColor: string
+}) {
+  if (ports.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="mt-2 grid gap-1">
+      {ports.map((port) => (
+        <PortCell
+          key={port.key}
+          nodeId={nodeId}
+          port={port}
+          side="output"
+          accentColor={accentColor}
+          connected={connectedOutputKeys.has(port.key)}
+          satisfied={connectedOutputKeys.has(port.key)}
+          requiredMissing={false}
+        />
+      ))}
     </div>
   )
 }
@@ -288,68 +374,66 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
   }
 
   return (
-    <div className="nodrag nowheel mt-2.5 space-y-2 px-0.5 pt-1" onMouseDown={stopNodeInteraction}>
-      <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">직접 값 설정</div>
+    <div className="nodrag nowheel mt-2 space-y-1" onMouseDown={stopNodeInteraction}>
+      <div className="flex min-h-[28px] items-center justify-between border-b border-border/30 px-1 pb-1 text-[11px] text-foreground">
+        <span>실행 입력</span>
+        <input
+          type="checkbox"
+          checked={workflowInputEnabled}
+          onChange={(event) => data.onNodeValueChange?.(id, WORKFLOW_INPUT_ENABLED_KEY, event.target.checked)}
+          onMouseDown={stopNodeInteraction}
+          className="h-4 w-4 shrink-0 accent-primary"
+        />
+      </div>
 
-      <div className="grid gap-2">
-        <ToggleRow variant="detail" className={`nodrag nowheel justify-between px-2.5 py-2 ${MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS}`} onMouseDown={stopNodeInteraction}>
-          <div className="min-w-0 text-xs font-medium text-foreground">실행 입력으로 노출</div>
+      {workflowInputEnabled ? (
+        <div className="flex min-h-[28px] items-center justify-between border-b border-border/30 px-1 pb-1 text-[11px] text-foreground">
+          <span>필수</span>
           <input
             type="checkbox"
-            checked={workflowInputEnabled}
-            onChange={(event) => data.onNodeValueChange?.(id, WORKFLOW_INPUT_ENABLED_KEY, event.target.checked)}
+            checked={workflowInputRequired}
+            onChange={(event) => data.onNodeValueChange?.(id, WORKFLOW_INPUT_REQUIRED_KEY, event.target.checked)}
             onMouseDown={stopNodeInteraction}
             className="h-4 w-4 shrink-0 accent-primary"
           />
-        </ToggleRow>
-
-        {workflowInputEnabled ? (
-          <ToggleRow variant="detail" className={`nodrag nowheel justify-between px-2.5 py-2 ${MODULE_GRAPH_INLINE_TOGGLE_ROW_CLASS}`} onMouseDown={stopNodeInteraction}>
-            <div className="min-w-0 text-xs font-medium text-foreground">실행 시 필수</div>
-            <input
-              type="checkbox"
-              checked={workflowInputRequired}
-              onChange={(event) => data.onNodeValueChange?.(id, WORKFLOW_INPUT_REQUIRED_KEY, event.target.checked)}
-              onMouseDown={stopNodeInteraction}
-              className="h-4 w-4 shrink-0 accent-primary"
-            />
-          </ToggleRow>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {(sourcePort.data_type === 'prompt' || sourcePort.data_type === 'text' || sourcePort.data_type === 'json') ? (
-        <Textarea
-          rows={sourcePort.data_type === 'json' ? 4 : 3}
-          value={typeof rawValue === 'string' ? rawValue : rawValue ? JSON.stringify(rawValue, null, 2) : ''}
-          onChange={(event) => handleValueChange(event.target.value)}
-          onMouseDown={stopNodeInteraction}
-          placeholder={sourcePort.label}
-          className={`text-sm ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-        />
+        <div onMouseDown={stopNodeInteraction}>
+          <ModuleGraphSimpleValueInput
+            dataType={sourcePort.data_type}
+            value={rawValue}
+            onChange={handleValueChange}
+            placeholder={sourcePort.label}
+            rows={sourcePort.data_type === 'json' ? 4 : 3}
+            className={`text-sm ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          />
+        </div>
       ) : null}
 
       {sourcePort.data_type === 'number' ? (
-        <Input
-          type="number"
-          value={typeof rawValue === 'number' ? String(rawValue) : typeof rawValue === 'string' ? rawValue : ''}
-          onChange={(event) => handleValueChange(event.target.value === '' ? '' : Number(event.target.value))}
-          onMouseDown={stopNodeInteraction}
-          placeholder={sourcePort.label}
-          className={MODULE_GRAPH_INLINE_CONTROL_CLASS}
-        />
+        <div onMouseDown={stopNodeInteraction}>
+          <ModuleGraphSimpleValueInput
+            dataType="number"
+            value={rawValue}
+            onChange={handleValueChange}
+            placeholder={sourcePort.label}
+            className={MODULE_GRAPH_INLINE_CONTROL_CLASS}
+          />
+        </div>
       ) : null}
 
       {sourcePort.data_type === 'boolean' ? (
-        <Select
-          value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
-          onChange={(event) => handleValueChange(event.target.value === 'true')}
-          onMouseDown={stopNodeInteraction}
-          className={MODULE_GRAPH_INLINE_CONTROL_CLASS}
-        >
-          <option value="">선택</option>
-          <option value="true">true</option>
-          <option value="false">false</option>
-        </Select>
+        <div onMouseDown={stopNodeInteraction}>
+          <ModuleGraphSimpleValueInput
+            dataType="boolean"
+            value={rawValue}
+            onChange={handleValueChange}
+            emptyLabel="선택"
+            className={MODULE_GRAPH_INLINE_CONTROL_CLASS}
+          />
+        </div>
       ) : null}
 
       {(sourcePort.data_type === 'image' || sourcePort.data_type === 'mask') ? (
@@ -397,6 +481,22 @@ function getInlineUiFieldValue(rawValue: unknown, field?: ModuleUiFieldDefinitio
   return rawValue == null ? '' : String(rawValue)
 }
 
+function getCompactUiFieldInputType(field: ModuleUiFieldDefinition): 'select' | 'number' | 'boolean' | 'text' {
+  if (field.data_type === 'select') {
+    return 'select'
+  }
+
+  if (field.data_type === 'number') {
+    return 'number'
+  }
+
+  if (field.data_type === 'boolean') {
+    return 'boolean'
+  }
+
+  return 'text'
+}
+
 /** Render one compact inline separator editor that matches normal node row height. */
 function TextMergeSeparatorCell({ id, data, field }: { id: string; data: ModuleGraphNode['data']; field: ModuleUiFieldDefinition }) {
   const rawValue = data.inputValues?.[field.key]
@@ -405,12 +505,14 @@ function TextMergeSeparatorCell({ id, data, field }: { id: string; data: ModuleG
     : String(rawValue)
 
   return (
-    <Input
-      value={value}
-      onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
-      onMouseDown={stopNodeInteraction}
-      className={`nodrag nowheel h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-    />
+    <div onMouseDown={stopNodeInteraction}>
+      <ModuleGraphSimpleValueInput
+        dataType="text"
+        value={value}
+        onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
+        className={`nodrag nowheel h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+      />
+    </div>
   )
 }
 
@@ -508,37 +610,19 @@ function TextTransformInlineField({
   const normalizedValue = rawValue ?? field.default_value
 
   return (
-    <label className="nodrag nowheel grid gap-1" onMouseDown={stopNodeInteraction} title={field.description || field.label}>
-      <span className="text-[11px] font-medium text-foreground">{field.label}</span>
-      {field.data_type === 'select' ? (
-        <Select
-          value={typeof normalizedValue === 'string' ? normalizedValue : String(normalizedValue ?? '')}
-          onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
-          onMouseDown={stopNodeInteraction}
-          className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-        >
-          {(field.options ?? []).map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </Select>
-      ) : field.data_type === 'number' ? (
-        <Input
-          type="number"
-          value={typeof normalizedValue === 'number' || typeof normalizedValue === 'string' ? normalizedValue : ''}
-          onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
-          onMouseDown={stopNodeInteraction}
+    <label className="nodrag nowheel flex min-h-[28px] items-center gap-2 border-b border-border/30 px-1 pb-1" onMouseDown={stopNodeInteraction} title={field.description || field.label}>
+      <span className="shrink-0 text-[11px] font-medium text-foreground">{field.label}</span>
+      <div className="min-w-0 flex-1" onMouseDown={stopNodeInteraction}>
+        <ModuleGraphSimpleValueInput
+          dataType={getCompactUiFieldInputType(field)}
+          value={normalizedValue}
+          onChange={(value) => data.onNodeValueChange?.(id, field.key, value)}
+          options={field.options ?? []}
           placeholder={field.placeholder || field.description || field.label}
-          className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          emptyLabel="선택"
+          className={`h-7 min-w-0 flex-1 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
         />
-      ) : (
-        <Input
-          value={typeof normalizedValue === 'string' ? normalizedValue : normalizedValue == null ? '' : String(normalizedValue)}
-          onChange={(event) => data.onNodeValueChange?.(id, field.key, event.target.value)}
-          onMouseDown={stopNodeInteraction}
-          placeholder={field.placeholder || field.description || field.label}
-          className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-        />
-      )}
+      </div>
     </label>
   )
 }
@@ -578,17 +662,16 @@ function TextTransformNodeLayout({
   }, [hasAdvancedFlagsValue])
 
   return (
-    <div className="mt-2.5 space-y-1.5">
+    <div className="mt-2 grid gap-1">
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
-        <PortCell
+        <InputPortCell
           nodeId={id}
+          data={data}
           port={inputPort}
-          side="input"
           accentColor={accentColor}
           connected={Boolean(inputPort && connectedInputKeys.has(inputPort.key))}
           satisfied={Boolean(inputPort && (connectedInputKeys.has(inputPort.key) || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))}
           requiredMissing={Boolean(inputPort?.required && !connectedInputKeys.has(inputPort.key) && !hasMeaningfulValue(data.inputValues?.[inputPort.key]) && !hasMeaningfulValue(inputPort.default_value))}
-          onDisconnectInput={data.onDisconnectNodeInput}
         />
         <PortCell
           nodeId={id}
@@ -601,7 +684,7 @@ function TextTransformNodeLayout({
         />
       </div>
 
-      <div className="grid gap-2 px-0.5 pt-1">
+      <div className="grid gap-1 px-0.5 pt-1">
         {modeField ? <TextTransformInlineField id={id} data={data} field={modeField} /> : null}
         {patternField ? <TextTransformInlineField id={id} data={data} field={patternField} /> : null}
         {currentMode === 'replace'
@@ -609,20 +692,17 @@ function TextTransformNodeLayout({
           : (groupIndexField ? <TextTransformInlineField id={id} data={data} field={groupIndexField} /> : null)}
         {prefixField ? <TextTransformInlineField id={id} data={data} field={prefixField} /> : null}
         {suffixField ? <TextTransformInlineField id={id} data={data} field={suffixField} /> : null}
-
+        {flagsField && showAdvancedFields ? <TextTransformInlineField id={id} data={data} field={flagsField} /> : null}
         {flagsField ? (
-          <div className="grid gap-1">
-            <button
-              type="button"
-              className="nodrag nowheel flex h-7 items-center justify-between rounded-sm border border-border/60 px-2 text-[11px] font-medium text-muted-foreground transition hover:text-foreground"
-              onMouseDown={stopNodeActionEvent}
-              onClick={() => setShowAdvancedFields((current) => !current)}
-            >
-              <span>고급 옵션</span>
-              <span>{showAdvancedFields ? '숨기기' : '플래그'}</span>
-            </button>
-            {showAdvancedFields ? <TextTransformInlineField id={id} data={data} field={flagsField} /> : null}
-          </div>
+          <button
+            type="button"
+            className="nodrag nowheel flex min-h-[28px] items-center justify-between border-b border-border/30 px-1 pb-1 text-[11px] text-muted-foreground"
+            onMouseDown={stopNodeActionEvent}
+            onClick={() => setShowAdvancedFields((current) => !current)}
+          >
+            <span>flags</span>
+            <span>{showAdvancedFields ? '−' : '+'}</span>
+          </button>
         ) : null}
       </div>
     </div>
@@ -642,17 +722,53 @@ function ArtifactTextPreviewCard({
   const canOpen = Boolean(fullText && (fullText !== preview || fullText.includes('\n')))
 
   return (
-    <div className="rounded-sm bg-surface-high px-2 py-1.5 text-[11px] leading-4 text-foreground">
+    <div className="px-1 py-1 text-[11px] leading-4 text-foreground">
       <div className="max-h-[6.25rem] overflow-hidden whitespace-pre-wrap break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">{preview}</div>
       {canOpen ? (
-        <div className="mt-2 flex justify-end">
-          <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onMouseDown={stopNodeActionEvent} onClick={onOpen}>
-            전체 보기
-          </Button>
-        </div>
+        <button type="button" className="mt-1 text-[10px] text-muted-foreground hover:text-foreground" onMouseDown={stopNodeActionEvent} onClick={onOpen}>
+          open
+        </button>
       ) : null}
     </div>
   )
+}
+
+/** Render one minimal output preview body so result nodes stay plain instead of card-heavy. */
+function NodeArtifactPreviewBody({
+  previewUrl,
+  previewAlt,
+  textPreview,
+  textValue,
+  onOpenText,
+  compact = false,
+}: {
+  previewUrl?: string | null
+  previewAlt: string
+  textPreview?: string | null
+  textValue?: string | null
+  onOpenText: () => void
+  compact?: boolean
+}) {
+  if (previewUrl) {
+    return (
+      <InlineMediaPreview
+        src={previewUrl}
+        alt={previewAlt}
+        frameClassName="mt-1 border-border/50 bg-background/30 p-1"
+        mediaClassName={compact ? 'max-h-20 w-full object-contain' : 'max-h-24 w-full object-contain'}
+      />
+    )
+  }
+
+  if (textPreview) {
+    return (
+      <div className="mt-1 border-l border-border/40 pl-2">
+        <ArtifactTextPreviewCard preview={textPreview} fullText={textValue} onOpen={onOpenText} />
+      </div>
+    )
+  }
+
+  return null
 }
 
 /** Render a cleaner module graph node card with source-node specific layout. */
@@ -667,12 +783,8 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const portRowCount = Math.max(inputPorts.length, outputPorts.length, 1)
   const connectedInputKeys = new Set(data.connectedInputKeys ?? [])
   const connectedOutputKeys = new Set(data.connectedOutputKeys ?? [])
-  const connectedInputCount = connectedInputKeys.size
-  const connectedOutputCount = connectedOutputKeys.size
   const isWorkflowInputSource = isWorkflowInputSourceModule(module)
-  const sourceValuePort = isWorkflowInputSource ? inputPorts[0] ?? null : null
-  const sourceOutputPort = isWorkflowInputSource ? outputPorts[0] ?? null : null
-  const sourceValueConfigured = Boolean(sourceValuePort && (hasMeaningfulValue(data.inputValues?.[sourceValuePort.key]) || hasMeaningfulValue(sourceValuePort.default_value)))
+  const sourceOutputPorts = isWorkflowInputSource ? outputPorts : []
   const missingRequiredInputCount = inputPorts.filter((port) => {
     const connected = connectedInputKeys.has(port.key)
     const explicitValue = hasMeaningfulValue(data.inputValues?.[port.key])
@@ -727,9 +839,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const isFinalResult = isFinalResultModule(module)
   const isTextMergeModule = operationKey === 'system.merge_text'
   const isTextTransformModule = operationKey === 'system.regex_text_transform'
-  const summaryText = isWorkflowInputSource
-    ? `${ENGINE_TYPE_LABELS[module.engine_type] ?? module.engine_type} · 값 ${sourceValueConfigured ? 1 : 0}/${sourceValuePort ? 1 : 0} · 출력 ${connectedOutputCount}/${sourceOutputPort ? 1 : outputPorts.length}`
-    : `${ENGINE_TYPE_LABELS[module.engine_type] ?? module.engine_type} · 입력 ${connectedInputCount}/${inputPorts.length} · 출력 ${connectedOutputCount}/${outputPorts.length}`
   const comfyWorkflowId = module.engine_type === 'comfyui'
     ? parsePositiveIntegerish(module.source_workflow_id ?? module.template_defaults?.workflow_id)
     : null
@@ -785,7 +894,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
 
   return (
     <div
-      className="w-[340px] max-w-[340px] rounded-sm border bg-surface-container px-3 py-2.5 text-foreground shadow-lg"
+      className="w-[340px] max-w-[340px] rounded-sm border bg-surface-container px-2.5 py-2 text-foreground shadow-lg"
       style={{
         borderColor: selected ? accentColor : statusBorderColor,
         boxShadow: selected ? `0 0 0 2px ${accentColor}66, 0 0 0 1px ${accentColor}22` : `0 0 0 1px ${accentColor}22`,
@@ -842,11 +951,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                 {nodeDisplayLabel}
               </button>
             )}
-            {usesCustomNodeLabel ? <div className="mt-0.5 truncate text-[11px] text-muted-foreground">기본 타입 · {moduleBaseLabel}</div> : null}
-            <div className="mt-0.5 text-[11px] text-muted-foreground">
-              {summaryText}
-              {missingRequiredInputCount > 0 ? ` · 미설정 ${missingRequiredInputCount}` : ''}
-            </div>
+            {usesCustomNodeLabel ? <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{moduleBaseLabel}</div> : null}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
@@ -927,7 +1032,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         </div>
       ) : null}
 
-      {isWorkflowInputSource && sourceOutputPort ? <SourceNodeOutputPort port={sourceOutputPort} connected={connectedOutputKeys.has(sourceOutputPort.key)} accentColor={accentColor} /> : null}
+      {isWorkflowInputSource ? <SourceNodeOutputPorts nodeId={id} ports={sourceOutputPorts} connectedOutputKeys={connectedOutputKeys} accentColor={accentColor} /> : null}
       {isWorkflowInputSource ? <InlineWorkflowInputEditor id={id} data={data} /> : null}
 
       {!isWorkflowInputSource ? (
@@ -959,15 +1064,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
 
               return (
                 <div key={`port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
-                  <PortCell
+                  <InputPortCell
                     nodeId={id}
+                    data={data}
                     port={inputPort}
-                    side="input"
                     accentColor={accentColor}
                     connected={inputConnected}
                     satisfied={inputSatisfied}
                     requiredMissing={inputRequiredMissing}
-                    onDisconnectInput={data.onDisconnectNodeInput}
                   />
                   <PortCell
                     nodeId={id}
@@ -986,42 +1090,38 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
       ) : null}
 
       {hasStandaloneArtifactPreview ? (
-        <div className="mt-2.5 rounded-sm border border-border/70 bg-surface-low p-2">
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            {data.executionReuseState === 'reused' ? 'cached artifact' : data.latestArtifactLabel || 'latest artifact'}
+        <div className="mt-2 border-t border-border/20 pt-1.5">
+          <div className="flex items-center gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
+            <span>{isFinalResult ? 'result' : 'output'}</span>
           </div>
-          {data.latestArtifactPreviewUrl ? (
-            <InlineMediaPreview
-              src={data.latestArtifactPreviewUrl}
-              alt={data.latestArtifactLabel || `${module.name} output`}
-              frameClassName="p-2"
-              mediaClassName="max-h-40 w-full object-contain"
-            />
-          ) : data.latestArtifactTextPreview ? (
-            <ArtifactTextPreviewCard
-              preview={data.latestArtifactTextPreview}
-              fullText={data.latestArtifactTextValue}
-              onOpen={() =>
-                setArtifactTextModal({
-                  title: data.latestArtifactLabel || `${module.name} output`,
-                  text: data.latestArtifactTextValue ?? data.latestArtifactTextPreview ?? '',
-                })
-              }
-            />
-          ) : null}
+          <NodeArtifactPreviewBody
+            previewUrl={data.latestArtifactPreviewUrl}
+            previewAlt={data.latestArtifactLabel || `${module.name} output`}
+            textPreview={data.latestArtifactTextPreview}
+            textValue={data.latestArtifactTextValue}
+            compact={isFinalResult}
+            onOpenText={() =>
+              setArtifactTextModal({
+                title: data.latestArtifactLabel || `${module.name} output`,
+                text: data.latestArtifactTextValue ?? data.latestArtifactTextPreview ?? '',
+              })
+            }
+          />
         </div>
       ) : null}
 
       {hasOutputGroups ? (
-        <div className="mt-2.5 space-y-2">
+        <div className="mt-2 border-t border-border/20 pt-1.5">
           {outputGroups.map((group) => {
             const isExpanded = expandedOutputGroupKeys.includes(group.portKey)
+            const groupTypeColor = group.portType ? getPortTypeColor(group.portType) : null
 
             return (
-              <div key={group.portKey} className="rounded-sm border border-border/70 bg-surface-low p-2">
+              <div key={group.portKey} className="border-b border-border/20 py-0.5 last:border-b-0">
                 <button
                   type="button"
-                  className="nodrag nowheel flex w-full items-center justify-between gap-2 text-left"
+                  className="nodrag nowheel flex min-h-[28px] w-full items-center justify-between gap-2 px-1 text-left"
                   onMouseDown={stopNodeActionEvent}
                   onClick={(event) => {
                     stopNodeActionEvent(event)
@@ -1031,48 +1131,31 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                         : [...current, group.portKey]
                     ))
                   }}
-                  title={`${group.portLabel} 출력 보기`}
+                  title={`${group.portLabel} output`}
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     {isExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-                    <div className="min-w-0">
-                      <div className="truncate text-[11px] font-medium text-foreground">{group.portLabel}</div>
-                      <div className="truncate text-[10px] text-muted-foreground">{group.portKey}</div>
-                    </div>
+                    {groupTypeColor ? <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: groupTypeColor }} aria-hidden="true" /> : null}
+                    <span className="truncate text-[11px] font-medium text-foreground">{group.portLabel}</span>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    {group.portType ? (
-                      <Badge variant="outline" className="px-1.5 py-0 text-[9px] uppercase tracking-[0.08em]">
-                        {getModuleGraphPortTypeLabel(group.portType)}
-                      </Badge>
-                    ) : null}
-                    <Badge variant="secondary" className="px-1.5 py-0 text-[9px]">{group.artifactCount}</Badge>
-                  </div>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{group.artifactCount}</span>
                 </button>
 
                 {isExpanded ? (
-                  <div className="mt-2 space-y-2">
-                    {group.latestArtifactPreviewUrl ? (
-                      <div className="overflow-hidden rounded-sm border border-border/60 bg-surface-lowest">
-                        <InlineMediaPreview
-                          src={group.latestArtifactPreviewUrl}
-                          alt={group.latestArtifactLabel || `${module.name} ${group.portLabel}`}
-                          frameClassName="p-1.5"
-                          mediaClassName="max-h-28 w-full object-contain"
-                        />
-                      </div>
-                    ) : group.latestArtifactTextPreview ? (
-                      <ArtifactTextPreviewCard
-                        preview={group.latestArtifactTextPreview}
-                        fullText={group.latestArtifactTextValue}
-                        onOpen={() =>
-                          setArtifactTextModal({
-                            title: `${module.name} · ${group.portLabel}`,
-                            text: group.latestArtifactTextValue ?? group.latestArtifactTextPreview ?? '',
-                          })
-                        }
-                      />
-                    ) : null}
+                  <div className="pb-1 pl-5 pr-1">
+                    <NodeArtifactPreviewBody
+                      previewUrl={group.latestArtifactPreviewUrl}
+                      previewAlt={group.latestArtifactLabel || `${module.name} ${group.portLabel}`}
+                      textPreview={group.latestArtifactTextPreview}
+                      textValue={group.latestArtifactTextValue}
+                      compact={isFinalResult}
+                      onOpenText={() =>
+                        setArtifactTextModal({
+                          title: `${module.name} · ${group.portLabel}`,
+                          text: group.latestArtifactTextValue ?? group.latestArtifactTextPreview ?? '',
+                        })
+                      }
+                    />
                   </div>
                 ) : null}
               </div>
@@ -1084,7 +1167,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
       <SettingsModal
         open={Boolean(artifactTextModal)}
         title={artifactTextModal?.title ?? '출력 내용'}
-        description="긴 출력 전문 보기"
         widthClassName="max-w-3xl"
         onClose={() => setArtifactTextModal(null)}
       >
