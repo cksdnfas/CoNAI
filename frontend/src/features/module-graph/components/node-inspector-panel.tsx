@@ -14,6 +14,7 @@ import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOpt
 import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
+import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
@@ -498,6 +499,21 @@ export function NodeInspectorPanel({
       )
     }
 
+    const powerLoraLoaderValue = rawValue ?? port.default_value ?? uiField?.default_value
+
+    if (isPowerLoraLoaderUiField(uiField) || hasPowerLoraLoaderEntries(powerLoraLoaderValue)) {
+      return (
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
+          <PowerLoraLoaderInput
+            field={uiField}
+            value={powerLoraLoaderValue}
+            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
+          />
+        </div>
+      )
+    }
+
     const baseSelectOptions = uiField?.data_type === 'select' && Array.isArray(uiField.options) ? uiField.options : []
     const isCodexModelPort = isSystemCallCodexMessageNode && port.key === 'model'
     const selectOptions = isCodexModelPort && typeof rawValue === 'string' && rawValue.trim().length > 0 && !baseSelectOptions.includes(rawValue)
@@ -642,6 +658,18 @@ export function NodeInspectorPanel({
           <ModuleGraphSimpleValueInput
             dataType="boolean"
             value={rawValue}
+            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
+          />
+        )
+      }
+
+      const powerLoraLoaderValue = rawValue ?? field.default_value
+
+      if (isPowerLoraLoaderUiField(field) || hasPowerLoraLoaderEntries(powerLoraLoaderValue)) {
+        return (
+          <PowerLoraLoaderInput
+            field={field}
+            value={powerLoraLoaderValue}
             onChange={(value) => onNodeValueChange(node.id, field.key, value)}
           />
         )

@@ -373,6 +373,8 @@ function buildUiSchemaFromMarkedFields(markedFields: any[], exposedFieldIds?: st
       max: typeof field.max === 'number' ? field.max : undefined,
       placeholder: field.placeholder,
       ui_hint: field.dropdown_list_name,
+      node_editor: field.node_editor,
+      node_items: Array.isArray(field.node_items) ? field.node_items : undefined,
     }))
 }
 

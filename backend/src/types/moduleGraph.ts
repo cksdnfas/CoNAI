@@ -36,6 +36,12 @@ export interface ModuleUiFieldDefinition {
   max?: number
   placeholder?: string
   ui_hint?: string
+  node_editor?: 'power_lora_loader_rgthree'
+  node_items?: Array<{
+    key: string
+    label: string
+    lora?: string
+  }>
 }
 
 export interface ModuleDefinitionRecord {
