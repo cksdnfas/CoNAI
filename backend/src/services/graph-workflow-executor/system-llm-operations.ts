@@ -51,7 +51,7 @@ export async function executeCallLlmNode(
   resolvedInputs: Record<string, any>,
 ) {
   const providerName = normalizeOptionalString(resolvedInputs.provider_name)
-  const model = normalizeOptionalString(resolvedInputs.model)
+  const legacyModelOverride = normalizeOptionalString(resolvedInputs.model)
   const prompt = normalizeOptionalString(resolvedInputs.prompt) ?? ''
   const systemPrompt = normalizeOptionalString(resolvedInputs.system_prompt)
   const contextValue = normalizeOptionalString(resolvedInputs.context)
@@ -67,7 +67,7 @@ export async function executeCallLlmNode(
     details: {
       operationKey: 'system.call_llm',
       providerName,
-      model,
+      modelOverrideIgnored: legacyModelOverride,
       responseMode,
       hasStructuredOutputJson: Boolean(structuredOutputJson),
       hasImage: Boolean(imageDataUrl),
@@ -80,7 +80,7 @@ export async function executeCallLlmNode(
     systemPrompt,
     context: contextValue,
     image: imageDataUrl,
-    model,
+    model: null,
     temperature: normalizeOptionalNumber(resolvedInputs.temperature),
     maxTokens: normalizeOptionalNumber(resolvedInputs.max_tokens),
     responseMode,

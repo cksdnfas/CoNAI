@@ -934,15 +934,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
       .sort((left, right) => left.provider_name.localeCompare(right.provider_name))
 
     const currentProviderName = normalizeOptionalString(data.inputValues?.provider_name)
-    const currentModel = normalizeOptionalString(data.inputValues?.model)
-    if (currentProviderName && currentModel && !entries.some((entry) => entry.provider_name === currentProviderName)) {
+    if (currentProviderName && !entries.some((entry) => entry.provider_name === currentProviderName)) {
       return [
         ...entries,
         {
           provider_name: currentProviderName,
           display_name: currentProviderName,
           provider_type: 'llm_openai_compatible',
-          default_model: currentModel,
+          default_model: '설정 필요',
           default_temperature: null,
           default_max_tokens: null,
         },
@@ -967,7 +966,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     }
 
     data.onNodeValueChange(id, 'provider_name', selectedBinding.provider_name)
-    data.onNodeValueChange(id, 'model', selectedBinding.default_model)
+    data.onNodeValueChange(id, 'model', '')
     data.onNodeValueChange(id, 'temperature', typeof selectedBinding.default_temperature === 'number' ? selectedBinding.default_temperature : '')
     data.onNodeValueChange(id, 'max_tokens', typeof selectedBinding.default_max_tokens === 'number' ? selectedBinding.default_max_tokens : 1024)
   }

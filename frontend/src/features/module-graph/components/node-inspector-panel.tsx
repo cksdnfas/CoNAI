@@ -324,15 +324,14 @@ export function NodeInspectorPanel({
       .sort((left, right) => left.provider_name.localeCompare(right.provider_name))
 
     const currentProviderName = normalizeOptionalString(selectedNode?.data.inputValues?.provider_name)
-    const currentModel = normalizeOptionalString(selectedNode?.data.inputValues?.model)
-    if (currentProviderName && currentModel && !entries.some((entry) => entry.provider_name === currentProviderName)) {
+    if (currentProviderName && !entries.some((entry) => entry.provider_name === currentProviderName)) {
       return [
         ...entries,
         {
           provider_name: currentProviderName,
           display_name: currentProviderName,
           provider_type: 'llm_openai_compatible',
-          default_model: currentModel,
+          default_model: '설정 필요',
           default_temperature: null,
           default_max_tokens: null,
         },
@@ -352,7 +351,7 @@ export function NodeInspectorPanel({
     }
 
     onNodeValueChange(node.id, 'provider_name', selectedBinding.provider_name)
-    onNodeValueChange(node.id, 'model', selectedBinding.default_model)
+    onNodeValueChange(node.id, 'model', '')
     onNodeValueChange(node.id, 'temperature', typeof selectedBinding.default_temperature === 'number' ? selectedBinding.default_temperature : '')
     onNodeValueChange(node.id, 'max_tokens', typeof selectedBinding.default_max_tokens === 'number' ? selectedBinding.default_max_tokens : 1024)
   }
