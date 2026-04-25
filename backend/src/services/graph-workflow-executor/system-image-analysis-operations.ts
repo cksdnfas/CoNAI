@@ -245,9 +245,6 @@ export async function executeExtractTagsFromImage(
       tags_text: buildRuntimeArtifact(context.executionId, node.id, 'tags_text', 'text', tagsText, {
         kind: 'system-extract-tags',
       }),
-      tags_prompt: buildRuntimeArtifact(context.executionId, node.id, 'tags_prompt', 'prompt', tagsText, {
-        kind: 'system-extract-tags',
-      }),
       tags_json: buildRuntimeArtifact(context.executionId, node.id, 'tags_json', 'json', tagsJsonValue, {
         kind: 'system-extract-tags-json',
       }),
@@ -313,9 +310,6 @@ export async function executeExtractArtistFromImage(
 
     const nodeArtifacts = {
       artist_text: buildRuntimeArtifact(context.executionId, node.id, 'artist_text', 'text', artistText, {
-        kind: 'system-extract-artist',
-      }),
-      artist_prompt: buildRuntimeArtifact(context.executionId, node.id, 'artist_prompt', 'prompt', artistText, {
         kind: 'system-extract-artist',
       }),
       artist_json: buildRuntimeArtifact(context.executionId, node.id, 'artist_json', 'json', artistJsonValue, {

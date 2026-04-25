@@ -27,7 +27,9 @@ import {
   getModuleNodeDisplayLabelFromData,
   getModuleOperationKey,
   getPortTypeColor,
+  getVisibleModuleOutputPorts,
   hasCustomModuleNodeLabel,
+  isAdvancedOutputPortsEnabled,
   isFinalResultModule,
   normalizeModulePortDescription,
   type ModuleGraphNode,
@@ -890,9 +892,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             ? '#f59e0b'
             : `${accentColor}66`
   const hasArtifactPreview = Boolean(data.latestArtifactPreviewUrl || data.latestArtifactTextPreview)
-  const outputGroups = data.executionOutputGroups ?? []
-  const hasOutputGroups = outputGroups.length > 0
-  const hasStandaloneArtifactPreview = hasArtifactPreview && !hasOutputGroups
   const operationKey = getModuleOperationKey(module)
   const isFinalResult = isFinalResultModule(module)
   const isTextMergeModule = operationKey === 'system.merge_text'
@@ -989,9 +988,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const llmPresetNameOptions = llmPresetName && !llmPresetEntries.some((preset) => preset.name === llmPresetName)
     ? [...llmPresetEntries, { id: llmPresetName, name: llmPresetName, content: '', updatedAt: '' }]
     : llmPresetEntries
-  const visibleOutputPorts = isSystemLoadLlmPresetModule
-    ? outputPorts.filter((port) => port.key === (llmPresetType === 'structuredOutputJsonPresets' ? 'json' : 'text'))
-    : outputPorts
+  const visibleOutputPorts = getVisibleModuleOutputPorts(module, data.inputValues, {
+    includeAdvanced: isAdvancedOutputPortsEnabled(data.inputValues),
+    connectedOutputKeys,
+  })
+  const visibleOutputPortKeys = new Set(visibleOutputPorts.map((port) => port.key))
+  const outputGroups = (data.executionOutputGroups ?? []).filter((group) => visibleOutputPortKeys.has(group.portKey))
+  const hasOutputGroups = outputGroups.length > 0
+  const hasStandaloneArtifactPreview = hasArtifactPreview && !hasOutputGroups
   const visibleInputPorts = inputPorts.filter((port) => {
     if (isSystemLoadLlmPresetModule && (port.key === 'preset_type' || port.key === 'preset_name')) {
       return false

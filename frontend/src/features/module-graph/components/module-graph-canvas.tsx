@@ -5,7 +5,7 @@ import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { ModuleGraphActionMenu, type ModuleGraphActionMenuState } from './module-graph-action-menu'
 import { ModuleGraphQuickCreateMenu } from './module-graph-quick-create-menu'
 import { ModuleGraphNodeCard } from './module-graph-node-card'
-import { buildHandleId, getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModulePortCompatibility, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { ADVANCED_OUTPUT_PORTS_ENABLED_KEY, buildHandleId, getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModulePortCompatibility, getVisibleModuleOutputPorts, hasAdvancedModuleOutputPorts, isAdvancedOutputPortsEnabled, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 const MODULE_GRAPH_NODE_TYPES = { module: ModuleGraphNodeCard }
 const MOBILE_NODE_DRAG_HANDLE_SELECTOR = '.module-graph-drag-handle'
@@ -144,7 +144,10 @@ function getRecommendedModulesFromConnectionStart(
 
 /** Build one default recommendation origin from a clicked node. */
 function getDefaultConnectionStartForNode(node: ModuleGraphNode): PendingConnectionStart | null {
-  const firstOutputPort = node.data.module.output_ports[0]
+  const firstOutputPort = getVisibleModuleOutputPorts(node.data.module, node.data.inputValues, {
+    includeAdvanced: isAdvancedOutputPortsEnabled(node.data.inputValues),
+    connectedOutputKeys: node.data.connectedOutputKeys,
+  })[0]
   if (firstOutputPort) {
     return {
       nodeId: node.id,
@@ -322,6 +325,8 @@ export function ModuleGraphCanvas({
       flowPosition,
       nodeId: node.id,
       nodeName: getModuleNodeDisplayLabel(node),
+      hasAdvancedOutputPorts: hasAdvancedModuleOutputPorts(node.data.module, node.data.inputValues),
+      advancedOutputPortsEnabled: isAdvancedOutputPortsEnabled(node.data.inputValues),
     })
   }, [reactFlowInstance])
 
@@ -553,6 +558,19 @@ export function ModuleGraphCanvas({
             const connectionStart = targetNode ? getDefaultConnectionStartForNode(targetNode) : null
             closeActionMenu()
             openQuickCreateMenuAt(actionMenuState.anchor, actionMenuState.flowPosition, connectionStart ? 'connect' : 'pane', connectionStart)
+          }}
+          onToggleAdvancedOutputs={() => {
+            if (actionMenuState.kind !== 'node' || !actionMenuState.nodeId) {
+              return
+            }
+
+            const targetNode = nodes.find((node) => node.id === actionMenuState.nodeId)
+            targetNode?.data.onNodeValueChange?.(
+              actionMenuState.nodeId,
+              ADVANCED_OUTPUT_PORTS_ENABLED_KEY,
+              !isAdvancedOutputPortsEnabled(targetNode.data.inputValues),
+            )
+            closeActionMenu()
           }}
         />
       ) : null}

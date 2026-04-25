@@ -18,7 +18,7 @@ import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-charac
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import { getWorkflowInputSourcePort } from '../module-graph-workflow-inputs'
-import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, normalizeModulePortDescription, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 type NodeInspectorPanelProps = {
   nodes: ModuleGraphNode[]
@@ -218,8 +218,17 @@ function EdgeEndpointCard({
 
 /** Group one selected node's execution artifacts by output port for inspector display. */
 function groupNodeOutputArtifacts(node: ModuleGraphNode, artifacts: GraphExecutionArtifactRecord[]) {
-  const outputPortMap = new Map(node.data.module.output_ports.map((port, index) => [port.key, { port, index }]))
+  const visibleOutputPorts = getVisibleModuleOutputPorts(node.data.module, node.data.inputValues, {
+    includeAdvanced: isAdvancedOutputPortsEnabled(node.data.inputValues),
+    connectedOutputKeys: node.data.connectedOutputKeys,
+  })
+  const visibleOutputPortKeys = new Set(visibleOutputPorts.map((port) => port.key))
+  const outputPortMap = new Map(visibleOutputPorts.map((port, index) => [port.key, { port, index }]))
   const groupedArtifacts = artifacts.reduce<Map<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
+    if (!visibleOutputPortKeys.has(artifact.port_key)) {
+      return acc
+    }
+
     const current = acc.get(artifact.port_key) ?? []
     current.push(artifact)
     acc.set(artifact.port_key, current)
@@ -283,9 +292,12 @@ export function NodeInspectorPanel({
     enabled: isSystemLoadLlmPresetNode,
     staleTime: 30_000,
   })
-  const selectedNodeVisibleOutputPorts = selectedNode && isSystemLoadLlmPresetNode
-    ? selectedNode.data.module.output_ports.filter((port) => port.key === (normalizeLlmPresetType(selectedNode.data.inputValues?.preset_type) === 'structuredOutputJsonPresets' ? 'json' : 'text'))
-    : selectedNode?.data.module.output_ports ?? []
+  const selectedNodeVisibleOutputPorts = selectedNode
+    ? getVisibleModuleOutputPorts(selectedNode.data.module, selectedNode.data.inputValues, {
+        includeAdvanced: isAdvancedOutputPortsEnabled(selectedNode.data.inputValues),
+        connectedOutputKeys: selectedNode.data.connectedOutputKeys,
+      })
+    : []
   const llmModelBindings = (() => {
     if (!isSystemCallLlmNode) {
       return [] as Array<ExternalApiLlmOptionRecord & { default_model: string }>

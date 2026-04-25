@@ -83,31 +83,9 @@ export async function executeRandomPromptFromGroup(
 
   const selectedIndex = pickSeededIndex(promptItems.length, resolvedInputs.seed)
   const selectedPrompt = promptItems[selectedIndex]
-  const entryJsonValue = {
-    id: selectedPrompt.id,
-    prompt: selectedPrompt.prompt,
-    usage_count: selectedPrompt.usage_count,
-    group_id: selectedPrompt.group_id,
-    group_name: promptGroup.group_name,
-    type: promptType,
-    selected_index: selectedIndex,
-    total_candidates: promptItems.length,
-    synonyms: selectedPrompt.synonyms ?? [],
-  }
-
   const nodeArtifacts = {
     prompt: buildRuntimeArtifact(context.executionId, node.id, 'prompt', 'prompt', selectedPrompt.prompt, {
       kind: 'system-random-prompt',
-      group_name: promptGroup.group_name,
-      type: promptType,
-    }),
-    text: buildRuntimeArtifact(context.executionId, node.id, 'text', 'text', selectedPrompt.prompt, {
-      kind: 'system-random-prompt',
-      group_name: promptGroup.group_name,
-      type: promptType,
-    }),
-    entry_json: buildRuntimeArtifact(context.executionId, node.id, 'entry_json', 'json', entryJsonValue, {
-      kind: 'system-random-prompt-entry',
       group_name: promptGroup.group_name,
       type: promptType,
     }),

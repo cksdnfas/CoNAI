@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { Boxes, Copy, Sparkles, Trash2, Unplug } from 'lucide-react'
+import { Boxes, Copy, SlidersHorizontal, Sparkles, Trash2, Unplug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +12,8 @@ type NodeActionMenuState = {
   kind: 'node'
   anchor: { x: number; y: number }
   nodeName: string
+  hasAdvancedOutputPorts?: boolean
+  advancedOutputPortsEnabled?: boolean
 }
 
 export type ModuleGraphActionMenuState = PaneActionMenuState | NodeActionMenuState
@@ -24,6 +26,7 @@ export function ModuleGraphActionMenu({
   onDisconnectAllConnections,
   onRemoveNode,
   onShowRecommendedNodes,
+  onToggleAdvancedOutputs,
 }: {
   state: ModuleGraphActionMenuState
   onOpenNodePicker: () => void
@@ -31,6 +34,7 @@ export function ModuleGraphActionMenu({
   onDisconnectAllConnections: () => void
   onRemoveNode: () => void
   onShowRecommendedNodes: () => void
+  onToggleAdvancedOutputs: () => void
 }) {
   if (typeof document === 'undefined') {
     return null
@@ -100,6 +104,19 @@ export function ModuleGraphActionMenu({
               >
                 <Unplug className="h-4 w-4" />
               </Button>
+              {state.hasAdvancedOutputPorts ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn('h-8 w-8', state.advancedOutputPortsEnabled ? 'text-primary' : undefined)}
+                  onClick={onToggleAdvancedOutputs}
+                  title={state.advancedOutputPortsEnabled ? `${state.nodeName} 일반 출력 모드` : `${state.nodeName} 고급 출력 모드`}
+                  aria-label={state.advancedOutputPortsEnabled ? '일반 출력 모드로 전환' : '고급 출력 모드로 전환'}
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"

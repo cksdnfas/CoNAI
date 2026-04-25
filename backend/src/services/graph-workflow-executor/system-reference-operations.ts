@@ -92,29 +92,9 @@ export async function executeLoadPromptFromReference(
     throw new Error(`Referenced image does not have prompt text: ${compositeHash}`)
   }
 
-  const metadataValue = {
-    composite_hash: metadata.composite_hash,
-    prompt: metadata.prompt,
-    negative_prompt: metadata.negative_prompt,
-    auto_tags: metadata.auto_tags,
-    character_prompt_text: metadata.character_prompt_text,
-    model_name: metadata.model_name,
-    ai_tool: metadata.ai_tool,
-    first_seen_date: metadata.first_seen_date,
-    metadata_updated_date: metadata.metadata_updated_date,
-  }
-
   const nodeArtifacts = {
     prompt: buildRuntimeArtifact(context.executionId, node.id, 'prompt', 'prompt', promptText, {
       kind: 'system-load-prompt-from-reference',
-      composite_hash: metadata.composite_hash,
-    }),
-    text: buildRuntimeArtifact(context.executionId, node.id, 'text', 'text', promptText, {
-      kind: 'system-load-prompt-from-reference',
-      composite_hash: metadata.composite_hash,
-    }),
-    metadata: buildRuntimeArtifact(context.executionId, node.id, 'metadata', 'json', metadataValue, {
-      kind: 'system-load-prompt-metadata',
       composite_hash: metadata.composite_hash,
     }),
   }
