@@ -188,6 +188,35 @@ function localizeModuleName(name: string, authoringSource?: string | null): stri
   return trimmedName
 }
 
+function isPowerLoraLoaderEntryValue(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return typeof record.lora === 'string'
+    && typeof record.on === 'boolean'
+    && typeof record.strength === 'number'
+}
+
+function hasPowerLoraLoaderEntries(value: unknown) {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && Object.values(value).some(isPowerLoraLoaderEntryValue)
+}
+
+function isPowerLoraLoaderField(field: any) {
+  return field?.node_editor === 'power_lora_loader_rgthree' || hasPowerLoraLoaderEntries(field?.default_value)
+}
+
+function getConfigOnlyFieldKeys(uiSchema: any[], exposedInputs: any[]) {
+  return new Set([
+    ...uiSchema.filter(isPowerLoraLoaderField).map((field) => field.key),
+    ...exposedInputs.filter((port) => hasPowerLoraLoaderEntries(port.default_value)).map((port) => port.key),
+  ])
+}
+
 function parseModuleRecord(record: any) {
   const parsed = {
     ...record,
@@ -197,14 +226,17 @@ function parseModuleRecord(record: any) {
     internal_fixed_values: record.internal_fixed_values ? JSON.parse(record.internal_fixed_values) : {},
     ui_schema: record.ui_schema ? JSON.parse(record.ui_schema) : [],
   }
+  const configOnlyFieldKeys = getConfigOnlyFieldKeys(parsed.ui_schema, parsed.exposed_inputs)
 
   return {
     ...parsed,
     name: localizeModuleName(parsed.name, parsed.authoring_source),
-    exposed_inputs: parsed.exposed_inputs.map((port: any) => ({
-      ...port,
-      label: localizeDisplayLabel(port.key, port.label),
-    })),
+    exposed_inputs: parsed.exposed_inputs
+      .filter((port: any) => !configOnlyFieldKeys.has(port.key))
+      .map((port: any) => ({
+        ...port,
+        label: localizeDisplayLabel(port.key, port.label),
+      })),
     output_ports: parsed.output_ports.map((port: any) => ({
       ...port,
       label: localizeDisplayLabel(port.key, port.label),
@@ -341,7 +373,7 @@ function convertMarkedFieldsToPorts(markedFields: any[], exposedFieldIds?: strin
   const allowedIds = exposedFieldIds && exposedFieldIds.length > 0 ? new Set(exposedFieldIds) : null
 
   return markedFields
-    .filter((field) => !allowedIds || allowedIds.has(field.id))
+    .filter((field) => (!allowedIds || allowedIds.has(field.id)) && !isPowerLoraLoaderField(field))
     .map((field): ModulePortDefinition => ({
       key: field.id,
       label: field.label || inferPortLabel(field.id),

@@ -154,10 +154,21 @@ function PortHeader({
   )
 }
 
+function isConfigOnlyNodeField(node: ModuleGraphNode, fieldKey: string) {
+  const uiField = findNodeUiField(node, fieldKey)
+  const port = (node.data.module.exposed_inputs ?? []).find((inputPort) => inputPort.key === fieldKey)
+  const value = node.data.inputValues?.[fieldKey] ?? port?.default_value ?? uiField?.default_value
+  return isPowerLoraLoaderUiField(uiField) || hasPowerLoraLoaderEntries(value)
+}
+
+function getEditableNodeInputPorts(node: ModuleGraphNode) {
+  return (node.data.module.exposed_inputs ?? []).filter((port) => !isConfigOnlyNodeField(node, port.key))
+}
+
 /** Find editable UI-only fields that are not backed by module input ports. */
 function getStandaloneNodeUiFields(node: ModuleGraphNode) {
   const portKeys = new Set((node.data.module.exposed_inputs ?? []).map((port) => port.key))
-  return (node.data.module.ui_schema ?? []).filter((field) => !portKeys.has(field.key))
+  return (node.data.module.ui_schema ?? []).filter((field) => !portKeys.has(field.key) || isConfigOnlyNodeField(node, field.key))
 }
 
 /** Resolve a selected edge endpoint back into its node and module port metadata. */
@@ -723,13 +734,14 @@ export function NodeInspectorPanel({
     ? resolveEdgeEndpoint(nodes, selectedEdge.target, selectedEdge.targetHandle, 'in')
     : null
   const selectedEdgeType = sourceEndpoint?.port?.data_type ?? targetEndpoint?.port?.data_type ?? null
+  const selectedNodeInputPorts = selectedNode ? getEditableNodeInputPorts(selectedNode) : []
   const missingRequiredInputs = selectedNode
-    ? (selectedNode.data.module.exposed_inputs ?? []).filter((port) => port.required && !isNodeInputSatisfied(selectedNode, port))
+    ? selectedNodeInputPorts.filter((port) => port.required && !isNodeInputSatisfied(selectedNode, port))
     : []
   const selectedNodeWorkflowInputPort = selectedNode ? getWorkflowInputSourcePort(selectedNode) : null
   const selectedNodeStandaloneUiFields = selectedNode ? getStandaloneNodeUiFields(selectedNode) : []
   const sortedSelectedNodeInputs = selectedNode && !selectedNodeWorkflowInputPort
-    ? [...(selectedNode.data.module.exposed_inputs ?? [])].sort((left, right) => {
+    ? [...selectedNodeInputPorts].sort((left, right) => {
         const leftHighlighted = left.key === highlightedPortKey ? 1 : 0
         const rightHighlighted = right.key === highlightedPortKey ? 1 : 0
         if (leftHighlighted !== rightHighlighted) {
@@ -819,7 +831,7 @@ export function NodeInspectorPanel({
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-                    <Badge variant="outline">입력 {(selectedNode.data.module.exposed_inputs ?? []).length}</Badge>
+                    <Badge variant="outline">입력 {selectedNodeInputPorts.length}</Badge>
                     <Badge variant="outline">출력 {selectedNodeVisibleOutputPorts.length}</Badge>
                     {missingRequiredInputs.length > 0 ? <Badge variant="outline">필수 부족 {missingRequiredInputs.length}</Badge> : <Badge variant="secondary">필수 입력 충족</Badge>}
                     {highlightedPortKey ? <Badge variant="secondary">선택 포트 강조</Badge> : null}
@@ -902,7 +914,7 @@ export function NodeInspectorPanel({
               )}
             </div>
 
-            {(selectedNode.data.module.exposed_inputs ?? []).length === 0 || selectedNodeWorkflowInputPort ? (
+            {selectedNodeInputPorts.length === 0 || selectedNodeWorkflowInputPort ? (
               selectedNodeStandaloneUiFields.length > 0 ? (
                 <div className="space-y-4">{selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}</div>
               ) : (

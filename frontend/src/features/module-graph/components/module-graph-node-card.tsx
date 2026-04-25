@@ -13,6 +13,7 @@ import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib
 import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
 import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOptionRecord } from '@/lib/api-settings'
 import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
+import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import type { ComfyUIServer, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import {
@@ -837,7 +838,15 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const { module } = data
   const [expandedOutputGroupKeys, setExpandedOutputGroupKeys] = useState<string[]>([])
   const [artifactTextModal, setArtifactTextModal] = useState<{ title: string; text: string } | null>(null)
-  const inputPorts = module.exposed_inputs ?? []
+  const powerLoraUiFields = (module.ui_schema ?? []).filter((field) => (
+    isPowerLoraLoaderUiField(field) || hasPowerLoraLoaderEntries(data.inputValues?.[field.key] ?? field.default_value)
+  ))
+  const powerLoraUiFieldKeys = new Set(powerLoraUiFields.map((field) => field.key))
+  const inputPorts = (module.exposed_inputs ?? []).filter((port) => {
+    const uiField = module.ui_schema?.find((field) => field.key === port.key)
+    const value = data.inputValues?.[port.key] ?? port.default_value ?? uiField?.default_value
+    return !powerLoraUiFieldKeys.has(port.key) && !isPowerLoraLoaderUiField(uiField) && !hasPowerLoraLoaderEntries(value)
+  })
   const outputPorts = module.output_ports ?? []
   const accentColor = getModuleColor(module)
   const executionStatus = data.executionStatus || 'idle'
@@ -1216,6 +1225,23 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
               </optgroup>
             ) : null}
           </Select>
+        </div>
+      ) : null}
+
+      {powerLoraUiFields.length > 0 ? (
+        <div className="nodrag nowheel mt-2 space-y-1.5" onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction}>
+          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">LoRA</div>
+          {powerLoraUiFields.map((field) => {
+            const value = data.inputValues?.[field.key] ?? field.default_value
+            return (
+              <PowerLoraLoaderInput
+                key={field.key}
+                field={field}
+                value={value}
+                onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
+              />
+            )
+          })}
         </div>
       ) : null}
 
