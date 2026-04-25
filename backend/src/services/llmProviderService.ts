@@ -49,10 +49,6 @@ function normalizeOptionalNumber(value: unknown) {
   return null
 }
 
-function normalizeResponseMode(value: unknown): LlmResponseMode {
-  return value === 'json' ? 'json' : 'text'
-}
-
 function parseProviderDefaultModel(additionalConfig: Record<string, any> | null | undefined) {
   const directDefaultModel = normalizeOptionalString(additionalConfig?.default_model)
   if (directDefaultModel) {
@@ -83,10 +79,6 @@ function parseProviderDefaultMaxTokens(additionalConfig: Record<string, any> | n
   }
 
   return normalizeOptionalNumber(additionalConfig?.max_tokens)
-}
-
-function parseProviderDefaultResponseMode(additionalConfig: Record<string, any> | null | undefined): LlmResponseMode {
-  return normalizeResponseMode(additionalConfig?.default_response_mode ?? additionalConfig?.response_mode)
 }
 
 function normalizeStructuredOutputJson(value: unknown) {
@@ -297,11 +289,7 @@ async function executeOllamaRequest(params: {
 
 function parseRequestedJson(text: string, responseMode: LlmResponseMode) {
   if (responseMode !== 'json') {
-    try {
-      return JSON.parse(text)
-    } catch {
-      return null
-    }
+    return null
   }
 
   try {
@@ -337,11 +325,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
   }
 
   const structuredOutputJson = normalizeStructuredOutputJson(request.structuredOutputJson)
-  const responseMode = structuredOutputJson
-    ? 'json'
-    : normalizeOptionalString(request.responseMode)
-      ? normalizeResponseMode(request.responseMode)
-      : parseProviderDefaultResponseMode(provider.additional_config)
+  const responseMode: LlmResponseMode = structuredOutputJson ? 'json' : 'text'
   const model = normalizeOptionalString(request.model) ?? parseProviderDefaultModel(provider.additional_config)
   if (!model) {
     throw new Error(`LLM 모델이 필요해: ${provider.display_name}`)

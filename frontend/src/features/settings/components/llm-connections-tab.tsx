@@ -24,8 +24,6 @@ import { SettingsModal } from './settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import { SettingsResourceTable, SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
 
-type LlmResponseMode = 'text' | 'json'
-
 type LlmConnectionDraft = {
   providerName: string
   displayName: string
@@ -34,7 +32,6 @@ type LlmConnectionDraft = {
   defaultModel: string
   defaultTemperature: string
   defaultMaxTokens: string
-  defaultResponseMode: LlmResponseMode
   apiKey: string
   isEnabled: boolean
 }
@@ -58,7 +55,7 @@ type LlmPresetModalState =
   | { mode: 'edit'; presetType: LlmPresetCollectionKey; preset: LlmPresetRecord }
   | null
 
-const LLM_CONNECTIONS_TABLE_GRID = 'grid-cols-[minmax(220px,1.15fr)_minmax(180px,1fr)_minmax(180px,0.95fr)_88px_108px_96px_72px_56px] gap-3'
+const LLM_CONNECTIONS_TABLE_GRID = 'grid-cols-[minmax(220px,1.15fr)_minmax(180px,1fr)_minmax(180px,0.95fr)_88px_108px_72px_56px] gap-3'
 const LLM_PRESETS_TABLE_GRID = 'grid-cols-[minmax(200px,0.9fr)_minmax(320px,1.6fr)_148px_56px] gap-3'
 
 const STRUCTURED_OUTPUT_JSON_EXAMPLE = `{
@@ -141,10 +138,6 @@ function normalizeOptionalNumberString(value: unknown) {
   return ''
 }
 
-function normalizeResponseMode(value: unknown): LlmResponseMode {
-  return value === 'json' ? 'json' : 'text'
-}
-
 function buildEmptyDraft(): LlmConnectionDraft {
   return {
     providerName: '',
@@ -154,7 +147,6 @@ function buildEmptyDraft(): LlmConnectionDraft {
     defaultModel: '',
     defaultTemperature: '',
     defaultMaxTokens: '',
-    defaultResponseMode: 'text',
     apiKey: '',
     isEnabled: true,
   }
@@ -169,7 +161,6 @@ function buildProviderDraft(provider: ExternalApiProviderRecord): LlmConnectionD
     defaultModel: normalizeOptionalString(provider.additional_config?.default_model),
     defaultTemperature: normalizeOptionalNumberString(provider.additional_config?.default_temperature ?? provider.additional_config?.temperature),
     defaultMaxTokens: normalizeOptionalNumberString(provider.additional_config?.default_max_tokens ?? provider.additional_config?.max_tokens),
-    defaultResponseMode: normalizeResponseMode(provider.additional_config?.default_response_mode ?? provider.additional_config?.response_mode),
     apiKey: '',
     isEnabled: provider.is_enabled,
   }
@@ -196,23 +187,18 @@ function getDefaultMaxTokensSummary(provider: ExternalApiProviderRecord) {
   return normalizeOptionalNumberString(provider.additional_config?.default_max_tokens ?? provider.additional_config?.max_tokens) || '자동'
 }
 
-function getDefaultResponseModeSummary(provider: ExternalApiProviderRecord) {
-  return normalizeResponseMode(provider.additional_config?.default_response_mode ?? provider.additional_config?.response_mode) === 'json'
-    ? 'JSON'
-    : '텍스트'
-}
-
 function getBaseUrlSummary(provider: ExternalApiProviderRecord) {
   return normalizeOptionalString(provider.base_url) || '미설정'
 }
 
 function buildAdditionalConfig(draft: LlmConnectionDraft, baseConfig?: Record<string, unknown> | null) {
+  const { default_response_mode: _defaultResponseMode, response_mode: _responseMode, ...restConfig } = baseConfig ?? {}
+
   return {
-    ...(baseConfig ?? {}),
+    ...restConfig,
     default_model: draft.defaultModel || undefined,
     default_temperature: draft.defaultTemperature || undefined,
     default_max_tokens: draft.defaultMaxTokens || undefined,
-    default_response_mode: draft.defaultResponseMode,
   }
 }
 
@@ -305,7 +291,6 @@ function LlmConnectionListItem({
         <div className="min-w-0 truncate text-sm font-medium text-foreground" title={getDefaultModelSummary(provider)}>{getDefaultModelSummary(provider)}</div>,
         <div className="text-center text-sm font-medium text-foreground">{getDefaultTemperatureSummary(provider)}</div>,
         <div className="text-center text-sm font-medium text-foreground">{getDefaultMaxTokensSummary(provider)}</div>,
-        <div className="text-center text-sm font-medium text-foreground">{getDefaultResponseModeSummary(provider)}</div>,
         <SettingsStatusIcon checked={provider.is_enabled} title={provider.is_enabled ? 'active' : 'inactive'} />,
       ]}
     />
@@ -411,17 +396,6 @@ function LlmConnectionFormFields({
           onChange={(value) => onChange({ defaultMaxTokens: value })}
           placeholder="예: 1024"
         />
-      </SettingsField>
-
-      <SettingsField label="기본 응답 형식">
-        <Select
-          variant="settings"
-          value={draft.defaultResponseMode}
-          onChange={(event) => onChange({ defaultResponseMode: normalizeResponseMode(event.target.value) })}
-        >
-          <option value="text">텍스트</option>
-          <option value="json">JSON</option>
-        </Select>
       </SettingsField>
 
       <SettingsField label="API Key (선택)">
@@ -910,8 +884,8 @@ export function LlmConnectionsTab() {
         ) : (
           <SettingsResourceTable
             gridClassName={LLM_CONNECTIONS_TABLE_GRID}
-            minWidthClassName="min-w-[1320px]"
-            headers={['연결', 'Base URL', '기본 모델', '온도', '최대 토큰', '응답 형식', '활성', '']}
+            minWidthClassName="min-w-[1200px]"
+            headers={['연결', 'Base URL', '기본 모델', '온도', '최대 토큰', '활성', '']}
           >
             {llmProviders.map((provider) => (
               <LlmConnectionListItem

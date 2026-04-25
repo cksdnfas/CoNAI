@@ -8,6 +8,7 @@ import {
   buildArtifactTextValue,
   getArtifactStoredValue,
   hasGraphArtifactVisualPreview,
+  isEmptyLlmJsonArtifact,
 } from '../module-graph-shared'
 
 export type ParsedExecutionPlan = {
@@ -157,7 +158,7 @@ export function buildArtifactDetailLines(artifact: GraphExecutionArtifactRecord)
 
 /** Hide low-value technical artifacts from the compact execution summary surface. */
 export function isCompactExecutionArtifactVisible(artifact: GraphExecutionArtifactRecord) {
-  return !COMPACT_HIDDEN_ARTIFACT_PORT_KEYS.has(artifact.port_key)
+  return !COMPACT_HIDDEN_ARTIFACT_PORT_KEYS.has(artifact.port_key) && !isEmptyLlmJsonArtifact(artifact)
 }
 
 /** Resolve the short user-facing label used by compact artifact cards. */
@@ -244,16 +245,22 @@ export function groupArtifactsByNode(
     })
 }
 
-/** Prefer visual artifacts when picking the most useful compact preview set. */
+/** Prefer visual artifacts, then readable text, when picking the most useful compact preview set. */
 function pickHighlightedArtifacts(artifacts: GraphExecutionArtifactRecord[]) {
-  const sortedArtifacts = [...artifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
+  const sortedArtifacts = [...artifacts]
+    .filter((artifact) => !isEmptyLlmJsonArtifact(artifact))
+    .sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
   const visualArtifacts = sortedArtifacts.filter((artifact) => hasGraphArtifactVisualPreview(artifact))
 
   if (visualArtifacts.length > 0) {
     return visualArtifacts.slice(0, 4)
   }
 
-  return sortedArtifacts.slice(0, 4)
+  const readableArtifacts = sortedArtifacts.filter((artifact) => artifact.port_key !== 'metadata')
+  const textArtifacts = readableArtifacts.filter((artifact) => artifact.port_key === 'text' || artifact.artifact_type === 'text' || artifact.artifact_type === 'prompt')
+  const structuredArtifacts = readableArtifacts.filter((artifact) => !textArtifacts.includes(artifact))
+
+  return [...textArtifacts, ...structuredArtifacts].slice(0, 4)
 }
 
 /** Pick one representative artifact for the compact per-node execution grid. */

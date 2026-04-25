@@ -5,6 +5,7 @@ import {
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
+  type RuntimeArtifact,
 } from './shared'
 
 function normalizeOptionalString(value: unknown) {
@@ -16,6 +17,18 @@ function normalizeOptionalString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function resolveOptionalJsonText(value: unknown) {
+  if (typeof value === 'string') {
+    return value.trim().length > 0 ? value : null
+  }
+
+  if (value && typeof value === 'object') {
+    return JSON.stringify(value, null, 2)
+  }
+
+  return null
+}
+
 export async function executeCallCodexMessageNode(
   context: ExecutionContext,
   node: GraphWorkflowNode,
@@ -23,7 +36,8 @@ export async function executeCallCodexMessageNode(
   resolvedInputs: Record<string, any>,
 ) {
   const model = normalizeOptionalString(resolvedInputs.model)
-  const responseMode = resolvedInputs.response_mode === 'json' ? 'json' : 'text'
+  const structuredOutputJson = resolveOptionalJsonText(resolvedInputs.structured_output_json)
+  const responseMode = structuredOutputJson ? 'json' : 'text'
 
   writeExecutionLog({
     executionId: context.executionId,
@@ -34,6 +48,7 @@ export async function executeCallCodexMessageNode(
       operationKey: 'system.call_codex_message',
       model,
       responseMode,
+      hasStructuredOutputJson: Boolean(structuredOutputJson),
     },
   })
 
@@ -43,6 +58,7 @@ export async function executeCallCodexMessageNode(
     context: normalizeOptionalString(resolvedInputs.context),
     model,
     responseMode,
+    structuredOutputJson,
     shouldCancel: context.shouldCancel,
   })
 
@@ -53,25 +69,29 @@ export async function executeCallCodexMessageNode(
     prompt_length: typeof resolvedInputs.prompt === 'string' ? resolvedInputs.prompt.length : 0,
     system_prompt_length: typeof resolvedInputs.system_prompt === 'string' ? resolvedInputs.system_prompt.length : 0,
     context_length: typeof resolvedInputs.context === 'string' ? resolvedInputs.context.length : 0,
+    structured_output_json_length: structuredOutputJson?.length ?? 0,
   }
 
-  const nodeArtifacts = {
+  const nodeArtifacts: Record<string, RuntimeArtifact> = {
     text: buildRuntimeArtifact(context.executionId, node.id, 'text', 'text', result.text, {
       kind: 'system-codex-message-text',
       operationKey: 'system.call_codex_message',
       model: result.model,
-    }),
-    json: buildRuntimeArtifact(context.executionId, node.id, 'json', 'json', result.json, {
-      kind: 'system-codex-message-json',
-      operationKey: 'system.call_codex_message',
-      model: result.model,
-      responseMode: result.responseMode,
     }),
     metadata: buildRuntimeArtifact(context.executionId, node.id, 'metadata', 'json', metadataValue, {
       kind: 'system-codex-message-metadata',
       operationKey: 'system.call_codex_message',
       model: result.model,
     }),
+  }
+
+  if (result.json !== null) {
+    nodeArtifacts.json = buildRuntimeArtifact(context.executionId, node.id, 'json', 'json', result.json, {
+      kind: 'system-codex-message-json',
+      operationKey: 'system.call_codex_message',
+      model: result.model,
+      responseMode: result.responseMode,
+    })
   }
 
   context.artifactsByNode.set(node.id, nodeArtifacts)
@@ -85,6 +105,7 @@ export async function executeCallCodexMessageNode(
       operationKey: 'system.call_codex_message',
       model: result.model,
       responseMode: result.responseMode,
+      hasStructuredOutputJson: Boolean(structuredOutputJson),
       outputKeys: Object.keys(nodeArtifacts),
       jobDirectory: result.metadata.job_directory,
       sessionId: result.metadata.session_id,

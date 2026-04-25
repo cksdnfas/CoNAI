@@ -17,6 +17,7 @@ export type ExecuteCodexMessageRequest = {
   context?: string | null
   model?: string | null
   responseMode?: CodexResponseMode | null
+  structuredOutputJson?: string | null
   shouldCancel?: () => boolean
   timeoutMs?: number
 }
@@ -38,8 +39,21 @@ function normalizeOptionalString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function normalizeResponseMode(value: unknown): CodexResponseMode {
-  return value === 'json' ? 'json' : 'text'
+function normalizeStructuredOutputJson(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2)
+  } catch {
+    throw new Error('구조화 출력 JSON 양식이 올바른 JSON이 아니야')
+  }
 }
 
 function parseCodexSessionId(output: string) {
@@ -60,10 +74,17 @@ function buildCodexMessagePrompt(params: {
   systemPrompt: string | null
   contextValue: string | null
   responseMode: CodexResponseMode
+  structuredOutputJson: string | null
 }) {
-  const responseInstruction = params.responseMode === 'json'
-    ? 'Return valid JSON only. Do not wrap it in markdown fences or extra prose.'
-    : 'Return the final answer as plain text. Do not wrap it in markdown fences unless the content itself requires it.'
+  const responseInstruction = params.structuredOutputJson
+    ? [
+        'Return valid JSON only. Do not wrap it in markdown fences or extra prose.',
+        'Match this JSON structure as closely as possible:',
+        params.structuredOutputJson,
+      ].join('\n\n')
+    : params.responseMode === 'json'
+      ? 'Return valid JSON only. Do not wrap it in markdown fences or extra prose.'
+      : 'Return the final answer as plain text. Do not wrap it in markdown fences unless the content itself requires it.'
 
   return [
     'You are replying for a CoNAI graph node execution.',
@@ -233,11 +254,7 @@ async function runCodexExec(params: {
 
 function parseJsonResult(text: string, responseMode: CodexResponseMode) {
   if (responseMode !== 'json') {
-    try {
-      return JSON.parse(text)
-    } catch {
-      return null
-    }
+    return null
   }
 
   try {
@@ -256,7 +273,8 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
   await assertCodexAvailable('Codex 메시지')
   await fs.promises.mkdir(CODEX_MESSAGE_JOB_ROOT, { recursive: true })
   const workDir = await fs.promises.mkdtemp(path.join(CODEX_MESSAGE_JOB_ROOT, `${Date.now()}-${randomUUID()}-`))
-  const responseMode = normalizeResponseMode(request.responseMode)
+  const structuredOutputJson = normalizeStructuredOutputJson(request.structuredOutputJson)
+  const responseMode: CodexResponseMode = structuredOutputJson ? 'json' : 'text'
   const model = normalizeOptionalString(request.model)
   const timeoutMs = typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs)
     ? Math.max(1000, Math.round(request.timeoutMs))
@@ -267,6 +285,7 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
     systemPrompt: normalizeOptionalString(request.systemPrompt),
     contextValue: normalizeOptionalString(request.context),
     responseMode,
+    structuredOutputJson,
   })
 
   const result = await runCodexExec({
@@ -292,6 +311,7 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
     metadata: {
       requested_model: model,
       response_mode: responseMode,
+      structured_output_json: structuredOutputJson,
       job_directory: workDir,
       stdout_path: result.stdoutPath,
       stderr_path: result.stderrPath,

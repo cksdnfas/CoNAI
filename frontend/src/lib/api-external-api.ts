@@ -34,7 +34,6 @@ export interface ExternalApiLlmOptionRecord {
   default_model?: string | null
   default_temperature?: number | null
   default_max_tokens?: number | null
-  default_response_mode?: 'text' | 'json'
 }
 
 export interface ExternalApiSecurityStatus {

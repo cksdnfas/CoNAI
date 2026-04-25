@@ -68,7 +68,6 @@ export class ExternalApiProvider {
     default_model: string | null;
     default_temperature: number | null;
     default_max_tokens: number | null;
-    default_response_mode: 'text' | 'json';
   }> {
     const db = getUserSettingsDb();
     const rows = db.prepare(`
@@ -88,7 +87,6 @@ export class ExternalApiProvider {
       let defaultModel: string | null = null;
       let defaultTemperature: number | null = null;
       let defaultMaxTokens: number | null = null;
-      let defaultResponseMode: 'text' | 'json' = 'text';
       if (row.additional_config) {
         try {
           const parsed = JSON.parse(row.additional_config) as {
@@ -98,8 +96,6 @@ export class ExternalApiProvider {
             temperature?: unknown;
             default_max_tokens?: unknown;
             max_tokens?: unknown;
-            default_response_mode?: unknown;
-            response_mode?: unknown;
           };
           defaultModel = typeof parsed.default_model === 'string' && parsed.default_model.trim().length > 0
             ? parsed.default_model.trim()
@@ -124,12 +120,10 @@ export class ExternalApiProvider {
                 : typeof parsed.max_tokens === 'string' && parsed.max_tokens.trim().length > 0 && Number.isFinite(Number(parsed.max_tokens))
                   ? Number(parsed.max_tokens)
                   : null;
-          defaultResponseMode = parsed.default_response_mode === 'json' || parsed.response_mode === 'json' ? 'json' : 'text';
         } catch {
           defaultModel = null;
           defaultTemperature = null;
           defaultMaxTokens = null;
-          defaultResponseMode = 'text';
         }
       }
 
@@ -140,7 +134,6 @@ export class ExternalApiProvider {
         default_model: defaultModel,
         default_temperature: defaultTemperature,
         default_max_tokens: defaultMaxTokens,
-        default_response_mode: defaultResponseMode,
       };
     });
   }

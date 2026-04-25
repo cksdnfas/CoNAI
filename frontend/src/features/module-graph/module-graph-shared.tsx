@@ -551,6 +551,22 @@ export function getArtifactStoredValue(artifact: GraphExecutionArtifactRecord) {
   return 'value' in parsedMetadata ? parsedMetadata.value : parsedMetadata
 }
 
+/** Detect legacy LLM/Codex json artifacts that only carried a null placeholder in text mode. */
+export function isEmptyLlmJsonArtifact(artifact: GraphExecutionArtifactRecord) {
+  if (artifact.port_key !== 'json' || artifact.artifact_type !== 'json') {
+    return false
+  }
+
+  const parsedMetadata = parseMetadataValue(artifact.metadata)
+  if (!parsedMetadata || typeof parsedMetadata !== 'object' || Array.isArray(parsedMetadata)) {
+    return false
+  }
+
+  return (parsedMetadata.kind === 'system-llm-json' || parsedMetadata.kind === 'system-codex-message-json')
+    && ('value' in parsedMetadata)
+    && (parsedMetadata.value === null || parsedMetadata.value === undefined)
+}
+
 /** Build the full readable text payload for prompt/text/json artifacts. */
 export function buildArtifactTextValue(artifact: GraphExecutionArtifactRecord) {
   const storedValue = getArtifactStoredValue(artifact)
@@ -588,7 +604,8 @@ export function buildArtifactTextPreview(artifact: GraphExecutionArtifactRecord,
 
 /** Pick the most useful inline preview payload for one node artifact list. */
 export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord[]) {
-  const latestVisualArtifact = artifacts.find((artifact) => hasGraphArtifactVisualPreview(artifact))
+  const visibleArtifacts = artifacts.filter((artifact) => !isEmptyLlmJsonArtifact(artifact))
+  const latestVisualArtifact = visibleArtifacts.find((artifact) => hasGraphArtifactVisualPreview(artifact))
 
   if (latestVisualArtifact) {
     return {
@@ -599,8 +616,10 @@ export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord
     }
   }
 
-  const latestTextArtifact = artifacts
-    .find((artifact) => artifact.artifact_type === 'prompt' || artifact.artifact_type === 'text' || artifact.artifact_type === 'json' || artifact.artifact_type === 'number' || artifact.artifact_type === 'boolean')
+  const readableArtifacts = visibleArtifacts.filter((artifact) => artifact.port_key !== 'metadata')
+  const latestTextArtifact = readableArtifacts.find((artifact) => artifact.port_key === 'text' && artifact.artifact_type === 'text')
+    ?? readableArtifacts.find((artifact) => artifact.artifact_type === 'prompt' || artifact.artifact_type === 'text')
+    ?? readableArtifacts.find((artifact) => artifact.artifact_type === 'json' || artifact.artifact_type === 'number' || artifact.artifact_type === 'boolean')
 
   if (latestTextArtifact) {
     return {
@@ -625,12 +644,14 @@ export function buildNodeArtifactGroups(
   outputPorts: ModulePortDefinition[],
 ): NodeArtifactGroupPreview[] {
   const outputPortMap = new Map(outputPorts.map((port, index) => [port.key, { port, index }]))
-  const groupedArtifacts = artifacts.reduce<Map<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
-    const current = acc.get(artifact.port_key) ?? []
-    current.push(artifact)
-    acc.set(artifact.port_key, current)
-    return acc
-  }, new Map())
+  const groupedArtifacts = artifacts
+    .filter((artifact) => !isEmptyLlmJsonArtifact(artifact))
+    .reduce<Map<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
+      const current = acc.get(artifact.port_key) ?? []
+      current.push(artifact)
+      acc.set(artifact.port_key, current)
+      return acc
+    }, new Map())
 
   return Array.from(groupedArtifacts.entries())
     .map(([portKey, portArtifacts]) => {

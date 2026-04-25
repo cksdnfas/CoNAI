@@ -889,7 +889,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           default_model: currentModel,
           default_temperature: null,
           default_max_tokens: null,
-          default_response_mode: 'text',
         },
       ]
     }
@@ -936,6 +935,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const canConfigureCodexModel = Boolean(isSystemCallCodexMessageModule && codexModelOptions.length > 0 && data.onNodeValueChange)
   const visibleInputPorts = inputPorts.filter((port) => {
     if (isSystemCallLlmModule && port.key === 'provider_name') {
+      return false
+    }
+
+    if (isSystemCallLlmModule && ['system_prompt_preset_name', 'prompt_preset_name', 'structured_output_json_preset_name', 'response_mode'].includes(port.key)) {
+      return false
+    }
+
+    if (isSystemCallCodexMessageModule && port.key === 'response_mode') {
       return false
     }
 
