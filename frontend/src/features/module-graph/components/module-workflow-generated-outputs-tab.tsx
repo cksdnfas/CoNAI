@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Download, Square, SquareCheckBig } from 'lucide-react'
+import { Download, Square, SquareCheckBig, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,6 +13,9 @@ import type { ModuleWorkflowGeneratedOutputItem } from './module-workflow-output
 export function ModuleWorkflowGeneratedOutputsTab({
   outputItems,
   imageItems,
+  totalOutputCount,
+  page,
+  totalPages,
   selectedOutputIds,
   allVisibleSelected,
   isCopyPanelOpen,
@@ -21,6 +24,10 @@ export function ModuleWorkflowGeneratedOutputsTab({
   isDownloading,
   watchedFolders,
   watchedFoldersLoading,
+  canDeleteOutputs,
+  isDeletingOutputs,
+  onPageChange,
+  onClearAll,
   onToggleVisibleSelection,
   onSelectedOutputIdsChange,
   onCopyTargetFolderChange,
@@ -30,6 +37,9 @@ export function ModuleWorkflowGeneratedOutputsTab({
 }: {
   outputItems: ModuleWorkflowGeneratedOutputItem[]
   imageItems: ImageRecord[]
+  totalOutputCount: number
+  page: number
+  totalPages: number
   selectedOutputIds: string[]
   allVisibleSelected: boolean
   isCopyPanelOpen: boolean
@@ -38,6 +48,10 @@ export function ModuleWorkflowGeneratedOutputsTab({
   isDownloading: boolean
   watchedFolders: WatchedFolder[]
   watchedFoldersLoading: boolean
+  canDeleteOutputs: boolean
+  isDeletingOutputs: boolean
+  onPageChange: (page: number) => void
+  onClearAll: () => void
   onToggleVisibleSelection: () => void
   onSelectedOutputIdsChange: (outputIds: string[]) => void
   onCopyTargetFolderChange: (value: string) => void
@@ -56,7 +70,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="min-w-0 flex-1 text-base">생성 결과</CardTitle>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge variant="outline">{outputItems.length}</Badge>
+            <Badge variant="outline">{totalOutputCount}</Badge>
             <Button
               type="button"
               size="sm"
@@ -65,8 +79,20 @@ export function ModuleWorkflowGeneratedOutputsTab({
               disabled={outputItems.length === 0}
             >
               {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              {allVisibleSelected ? 'Clear Visible' : 'Select Visible'}
+              {allVisibleSelected ? '페이지 해제' : '페이지 선택'}
             </Button>
+            {canDeleteOutputs ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={onClearAll}
+                disabled={isDeletingOutputs || totalOutputCount === 0}
+              >
+                <Trash2 className="h-4 w-4" />
+                전체 비우기
+              </Button>
+            ) : null}
           </div>
         </div>
       </CardHeader>
@@ -112,6 +138,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
           </div>
         ) : (
           <div className="space-y-3">
+            <WorkflowOutputPagination page={page} totalPages={totalPages} totalCount={totalOutputCount} onPageChange={onPageChange} />
             <ImageList
               items={imageItems}
               layout="grid"
@@ -151,9 +178,40 @@ export function ModuleWorkflowGeneratedOutputsTab({
                 )
               }}
             />
+            <WorkflowOutputPagination page={page} totalPages={totalPages} totalCount={totalOutputCount} onPageChange={onPageChange} />
           </div>
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function WorkflowOutputPagination({
+  page,
+  totalPages,
+  totalCount,
+  onPageChange,
+}: {
+  page: number
+  totalPages: number
+  totalCount: number
+  onPageChange: (page: number) => void
+}) {
+  if (totalPages <= 1) {
+    return null
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
+      <span>page {page} / {totalPages} · total {totalCount.toLocaleString('ko-KR')} · 50 per page</span>
+      <div className="flex items-center gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
+          이전
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+          다음
+        </Button>
+      </div>
+    </div>
   )
 }

@@ -31,6 +31,8 @@ import { ModuleWorkflowArtifactRecordsTab } from './module-workflow-artifact-rec
 
 type BrowseTab = 'outputs' | 'artifacts'
 
+const WORKFLOW_OUTPUT_PAGE_SIZE = 50
+
 const BROWSE_TAB_ITEMS = [
   { value: 'outputs', label: '생성 결과' },
   { value: 'artifacts', label: '텍스트 · 중간 산출물' },
@@ -60,6 +62,8 @@ export function ModuleWorkflowOutputManagementPanel({
   const [isCopying, setIsCopying] = useState(false)
   const [isDeletingOutputs, setIsDeletingOutputs] = useState(false)
   const [isDeletingArtifacts, setIsDeletingArtifacts] = useState(false)
+  const [outputsPage, setOutputsPage] = useState(1)
+  const [artifactsPage, setArtifactsPage] = useState(1)
 
   const watchedFoldersQuery = useQuery({
     queryKey: ['watched-folders', 'output-copy-targets'],
@@ -108,6 +112,27 @@ export function ModuleWorkflowOutputManagementPanel({
     [filteredTechnicalArtifacts, selectedArtifactIds],
   )
 
+  const outputTotalPages = outputCollections.outputItems.length > 0
+    ? Math.ceil(outputCollections.outputItems.length / WORKFLOW_OUTPUT_PAGE_SIZE)
+    : 0
+  const artifactTotalPages = filteredTechnicalArtifacts.length > 0
+    ? Math.ceil(filteredTechnicalArtifacts.length / WORKFLOW_OUTPUT_PAGE_SIZE)
+    : 0
+  const safeOutputsPage = outputTotalPages > 0 ? Math.min(outputsPage, outputTotalPages) : 1
+  const safeArtifactsPage = artifactTotalPages > 0 ? Math.min(artifactsPage, artifactTotalPages) : 1
+  const pagedOutputItems = useMemo(() => {
+    const startIndex = (safeOutputsPage - 1) * WORKFLOW_OUTPUT_PAGE_SIZE
+    return outputCollections.outputItems.slice(startIndex, startIndex + WORKFLOW_OUTPUT_PAGE_SIZE)
+  }, [outputCollections.outputItems, safeOutputsPage])
+  const pagedOutputImageItems = useMemo(() => {
+    const visibleOutputIds = new Set(pagedOutputItems.map((item) => item.id))
+    return outputCollections.outputImageItems.filter((item) => visibleOutputIds.has(String(item.id)))
+  }, [outputCollections.outputImageItems, pagedOutputItems])
+  const pagedTechnicalArtifacts = useMemo(() => {
+    const startIndex = (safeArtifactsPage - 1) * WORKFLOW_OUTPUT_PAGE_SIZE
+    return filteredTechnicalArtifacts.slice(startIndex, startIndex + WORKFLOW_OUTPUT_PAGE_SIZE)
+  }, [filteredTechnicalArtifacts, safeArtifactsPage])
+
   useEffect(() => {
     setSelectedOutputIds((current) => current.filter((id) => outputCollections.outputItems.some((item) => item.id === id)))
   }, [outputCollections.outputItems])
@@ -115,6 +140,36 @@ export function ModuleWorkflowOutputManagementPanel({
   useEffect(() => {
     setSelectedArtifactIds((current) => current.filter((id) => filteredTechnicalArtifacts.some((artifact) => artifact.id === id)))
   }, [filteredTechnicalArtifacts])
+
+  useEffect(() => {
+    setOutputsPage(1)
+  }, [outputCollections.outputItems])
+
+  useEffect(() => {
+    setArtifactsPage(1)
+  }, [artifactSearchTerm, artifactTypeFilter])
+
+  useEffect(() => {
+    if (outputTotalPages === 0 && outputsPage !== 1) {
+      setOutputsPage(1)
+      return
+    }
+
+    if (outputTotalPages > 0 && outputsPage > outputTotalPages) {
+      setOutputsPage(outputTotalPages)
+    }
+  }, [outputsPage, outputTotalPages])
+
+  useEffect(() => {
+    if (artifactTotalPages === 0 && artifactsPage !== 1) {
+      setArtifactsPage(1)
+      return
+    }
+
+    if (artifactTotalPages > 0 && artifactsPage > artifactTotalPages) {
+      setArtifactsPage(artifactTotalPages)
+    }
+  }, [artifactsPage, artifactTotalPages])
 
   useEffect(() => {
     if (activeTab !== 'outputs') {
@@ -194,7 +249,7 @@ export function ModuleWorkflowOutputManagementPanel({
     }
   }
 
-  const handleDeleteSelectedOutputs = async (artifactIds?: number[]) => {
+  const handleDeleteSelectedOutputs = async (artifactIds?: number[], options?: { clearAll?: boolean }) => {
     if (!canDeleteArtifacts) {
       showSnackbar({ message: '삭제는 관리자 계정만 할 수 있어.', tone: 'error' })
       return
@@ -205,9 +260,11 @@ export function ModuleWorkflowOutputManagementPanel({
       return
     }
 
-    const confirmMessage = targetArtifactIds.length === 1
-      ? '선택한 생성 결과를 정말 삭제할까? 파일은 RecycleBin으로 보내고 workflow DB도 같이 정리해.'
-      : `선택한 ${targetArtifactIds.length.toLocaleString('ko-KR')}개 생성 결과를 정말 삭제할까? 파일은 RecycleBin으로 보내고 workflow DB도 같이 정리해.`
+    const confirmMessage = options?.clearAll
+      ? `현재 범위의 생성 결과 ${targetArtifactIds.length.toLocaleString('ko-KR')}개를 모두 삭제할까? 파일은 RecycleBin으로 보내고 workflow DB도 같이 정리해.`
+      : targetArtifactIds.length === 1
+        ? '선택한 생성 결과를 정말 삭제할까? 파일은 RecycleBin으로 보내고 workflow DB도 같이 정리해.'
+        : `선택한 ${targetArtifactIds.length.toLocaleString('ko-KR')}개 생성 결과를 정말 삭제할까? 파일은 RecycleBin으로 보내고 workflow DB도 같이 정리해.`
 
     if (!window.confirm(confirmMessage)) {
       return
@@ -235,20 +292,22 @@ export function ModuleWorkflowOutputManagementPanel({
     }
   }
 
-  const handleDeleteSelectedArtifacts = async (artifactIds?: number[]) => {
+  const handleDeleteSelectedArtifacts = async (artifactIds?: number[], options?: { clearAll?: boolean }) => {
     if (!canDeleteArtifacts) {
       showSnackbar({ message: '삭제는 관리자 계정만 할 수 있어.', tone: 'error' })
       return
     }
 
-    const targetArtifactIds = artifactIds ?? selectedArtifacts.map((artifact) => artifact.id)
+    const targetArtifactIds = Array.from(new Set(artifactIds ?? selectedArtifacts.map((artifact) => artifact.id)))
     if (targetArtifactIds.length === 0) {
       return
     }
 
-    const confirmMessage = targetArtifactIds.length === 1
-      ? '선택한 아티팩트를 정말 삭제할까? 이건 DB 정리용 삭제야.'
-      : `선택한 ${targetArtifactIds.length.toLocaleString('ko-KR')}개 아티팩트를 정말 삭제할까? 이건 DB 정리용 삭제야.`
+    const confirmMessage = options?.clearAll
+      ? `현재 목록의 텍스트 · 중간 산출물 ${targetArtifactIds.length.toLocaleString('ko-KR')}개를 모두 삭제할까? 이건 DB 정리용 삭제야.`
+      : targetArtifactIds.length === 1
+        ? '선택한 아티팩트를 정말 삭제할까? 이건 DB 정리용 삭제야.'
+        : `선택한 ${targetArtifactIds.length.toLocaleString('ko-KR')}개 아티팩트를 정말 삭제할까? 이건 DB 정리용 삭제야.`
 
     if (!window.confirm(confirmMessage)) {
       return
@@ -273,8 +332,18 @@ export function ModuleWorkflowOutputManagementPanel({
     }
   }
 
-  const allVisibleSelected = outputCollections.outputItems.length > 0 && selectedOutputIds.length === outputCollections.outputItems.length
-  const allArtifactSelected = filteredTechnicalArtifacts.length > 0 && selectedArtifactIds.length === filteredTechnicalArtifacts.length
+  const handleClearAllOutputs = () => {
+    const targetArtifactIds = outputCollections.outputItems.map((item) => item.sourceArtifactId)
+    void handleDeleteSelectedOutputs(targetArtifactIds, { clearAll: true })
+  }
+
+  const handleClearAllArtifacts = () => {
+    const targetArtifactIds = filteredTechnicalArtifacts.map((artifact) => artifact.id)
+    void handleDeleteSelectedArtifacts(targetArtifactIds, { clearAll: true })
+  }
+
+  const allVisibleSelected = pagedOutputItems.length > 0 && pagedOutputItems.every((item) => selectedOutputIds.includes(item.id))
+  const allArtifactSelected = pagedTechnicalArtifacts.length > 0 && pagedTechnicalArtifacts.every((artifact) => selectedArtifactIds.includes(artifact.id))
 
   return (
     <div className="space-y-6">
@@ -308,8 +377,11 @@ export function ModuleWorkflowOutputManagementPanel({
 
       {activeTab === 'outputs' ? (
         <ModuleWorkflowGeneratedOutputsTab
-          outputItems={outputCollections.outputItems}
-          imageItems={outputCollections.outputImageItems}
+          outputItems={pagedOutputItems}
+          imageItems={pagedOutputImageItems}
+          totalOutputCount={outputCollections.outputItems.length}
+          page={safeOutputsPage}
+          totalPages={outputTotalPages}
           selectedOutputIds={selectedOutputIds}
           allVisibleSelected={allVisibleSelected}
           isCopyPanelOpen={isCopyPanelOpen}
@@ -318,7 +390,15 @@ export function ModuleWorkflowOutputManagementPanel({
           isDownloading={isDownloading}
           watchedFolders={watchedFoldersQuery.data ?? []}
           watchedFoldersLoading={watchedFoldersQuery.isLoading}
-          onToggleVisibleSelection={() => setSelectedOutputIds(allVisibleSelected ? [] : outputCollections.outputItems.map((item) => item.id))}
+          canDeleteOutputs={canDeleteArtifacts}
+          isDeletingOutputs={isDeletingOutputs}
+          onPageChange={setOutputsPage}
+          onClearAll={handleClearAllOutputs}
+          onToggleVisibleSelection={() => setSelectedOutputIds((current) => (
+            allVisibleSelected
+              ? current.filter((id) => !pagedOutputItems.some((item) => item.id === id))
+              : Array.from(new Set([...current, ...pagedOutputItems.map((item) => item.id)]))
+          ))}
           onSelectedOutputIdsChange={setSelectedOutputIds}
           onCopyTargetFolderChange={setCopyTargetFolderId}
           onCloseCopyPanel={() => setIsCopyPanelOpen(false)}
@@ -329,7 +409,10 @@ export function ModuleWorkflowOutputManagementPanel({
 
       {activeTab === 'artifacts' ? (
         <ModuleWorkflowArtifactRecordsTab
-          artifacts={filteredTechnicalArtifacts}
+          artifacts={pagedTechnicalArtifacts}
+          totalArtifactCount={filteredTechnicalArtifacts.length}
+          page={safeArtifactsPage}
+          totalPages={artifactTotalPages}
           selectedArtifactIds={selectedArtifactIds}
           allVisibleSelected={allArtifactSelected}
           workflowNameById={workflowNameById}
@@ -339,9 +422,15 @@ export function ModuleWorkflowOutputManagementPanel({
           artifactTypeOptions={artifactTypeOptions}
           isDeletingArtifacts={isDeletingArtifacts}
           canDeleteArtifacts={canDeleteArtifacts}
+          onPageChange={setArtifactsPage}
+          onClearAll={handleClearAllArtifacts}
           onArtifactSearchTermChange={setArtifactSearchTerm}
           onArtifactTypeFilterChange={setArtifactTypeFilter}
-          onToggleVisibleSelection={() => setSelectedArtifactIds(allArtifactSelected ? [] : filteredTechnicalArtifacts.map((artifact) => artifact.id))}
+          onToggleVisibleSelection={() => setSelectedArtifactIds((current) => (
+            allArtifactSelected
+              ? current.filter((id) => !pagedTechnicalArtifacts.some((artifact) => artifact.id === id))
+              : Array.from(new Set([...current, ...pagedTechnicalArtifacts.map((artifact) => artifact.id)]))
+          ))}
           onToggleArtifactSelection={handleToggleArtifactSelection}
           onSetSelectedArtifactIds={setSelectedArtifactIds}
           onDeleteSingle={(artifactId) => {

@@ -12,6 +12,9 @@ import { buildArtifactTextPreview, formatDateTime } from '../module-graph-shared
 /** Render non-media and intermediate workflow artifacts for cleanup-oriented management. */
 export function ModuleWorkflowArtifactRecordsTab({
   artifacts,
+  totalArtifactCount,
+  page,
+  totalPages,
   selectedArtifactIds,
   allVisibleSelected,
   workflowNameById,
@@ -21,6 +24,8 @@ export function ModuleWorkflowArtifactRecordsTab({
   artifactTypeOptions,
   isDeletingArtifacts,
   canDeleteArtifacts,
+  onPageChange,
+  onClearAll,
   onArtifactSearchTermChange,
   onArtifactTypeFilterChange,
   onToggleVisibleSelection,
@@ -29,6 +34,9 @@ export function ModuleWorkflowArtifactRecordsTab({
   onDeleteSingle,
 }: {
   artifacts: GraphExecutionArtifactRecord[]
+  totalArtifactCount: number
+  page: number
+  totalPages: number
   selectedArtifactIds: number[]
   allVisibleSelected: boolean
   workflowNameById: Map<number, string>
@@ -38,6 +46,8 @@ export function ModuleWorkflowArtifactRecordsTab({
   artifactTypeOptions: string[]
   isDeletingArtifacts: boolean
   canDeleteArtifacts: boolean
+  onPageChange: (page: number) => void
+  onClearAll: () => void
   onArtifactSearchTermChange: (value: string) => void
   onArtifactTypeFilterChange: (value: string) => void
   onToggleVisibleSelection: () => void
@@ -59,7 +69,7 @@ export function ModuleWorkflowArtifactRecordsTab({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="min-w-0 flex-1 text-base">텍스트 · 중간 산출물</CardTitle>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge variant="outline">{artifacts.length}</Badge>
+            <Badge variant="outline">{totalArtifactCount}</Badge>
             <Button
               type="button"
               size="sm"
@@ -71,8 +81,21 @@ export function ModuleWorkflowArtifactRecordsTab({
               data-no-select-drag="true"
             >
               {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              {allVisibleSelected ? 'Clear Visible' : 'Select Visible'}
+              {allVisibleSelected ? '페이지 해제' : '페이지 선택'}
             </Button>
+            {canDeleteArtifacts ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={onClearAll}
+                disabled={isDeletingArtifacts || totalArtifactCount === 0}
+                data-no-select-drag="true"
+              >
+                <Trash2 className="h-4 w-4" />
+                전체 비우기
+              </Button>
+            ) : null}
           </div>
         </div>
 
@@ -97,6 +120,7 @@ export function ModuleWorkflowArtifactRecordsTab({
           </div>
         ) : (
           <div ref={setArtifactSelectionContainer} className="space-y-3">
+            <WorkflowArtifactPagination page={page} totalPages={totalPages} totalCount={totalArtifactCount} onPageChange={onPageChange} />
             {artifacts.map((artifact) => {
               const execution = executionById.get(artifact.execution_id)
               const workflowName = execution
@@ -176,9 +200,40 @@ export function ModuleWorkflowArtifactRecordsTab({
                 </div>
               )
             })}
+            <WorkflowArtifactPagination page={page} totalPages={totalPages} totalCount={totalArtifactCount} onPageChange={onPageChange} />
           </div>
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function WorkflowArtifactPagination({
+  page,
+  totalPages,
+  totalCount,
+  onPageChange,
+}: {
+  page: number
+  totalPages: number
+  totalCount: number
+  onPageChange: (page: number) => void
+}) {
+  if (totalPages <= 1) {
+    return null
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
+      <span>page {page} / {totalPages} · total {totalCount.toLocaleString('ko-KR')} · 50 per page</span>
+      <div className="flex items-center gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
+          이전
+        </Button>
+        <Button type="button" size="sm" variant="outline" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+          다음
+        </Button>
+      </div>
+    </div>
   )
 }

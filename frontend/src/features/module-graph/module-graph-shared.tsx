@@ -140,7 +140,11 @@ export function hasAdvancedModuleOutputPorts(module: ModuleDefinitionRecord, inp
 export function getVisibleModuleOutputPorts(
   module: ModuleDefinitionRecord,
   inputValues: Record<string, unknown> | undefined,
-  options: { includeAdvanced?: boolean; connectedOutputKeys?: Iterable<string> } = {},
+  options: {
+    includeAdvanced?: boolean
+    connectedInputKeys?: Iterable<string>
+    connectedOutputKeys?: Iterable<string>
+  } = {},
 ) {
   const operationKey = getModuleOperationKey(module)
   if (operationKey === 'system.load_llm_preset') {
@@ -148,9 +152,11 @@ export function getVisibleModuleOutputPorts(
     return (module.output_ports ?? []).filter((port) => port.key === activePortKey)
   }
 
+  const connectedInputKeys = new Set(options.connectedInputKeys ?? [])
   const connectedOutputKeys = new Set(options.connectedOutputKeys ?? [])
   if (operationKey === 'system.call_llm' || operationKey === 'system.call_codex_message') {
     const hasStructuredOutput = hasConfiguredGraphValue(inputValues?.structured_output_json)
+      || connectedInputKeys.has('structured_output_json')
     return (module.output_ports ?? []).filter((port) => {
       if (port.key === 'json') {
         return hasStructuredOutput || connectedOutputKeys.has(port.key)

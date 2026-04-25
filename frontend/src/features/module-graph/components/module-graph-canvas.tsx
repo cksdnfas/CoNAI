@@ -146,6 +146,7 @@ function getRecommendedModulesFromConnectionStart(
 function getDefaultConnectionStartForNode(node: ModuleGraphNode): PendingConnectionStart | null {
   const firstOutputPort = getVisibleModuleOutputPorts(node.data.module, node.data.inputValues, {
     includeAdvanced: isAdvancedOutputPortsEnabled(node.data.inputValues),
+    connectedInputKeys: node.data.connectedInputKeys,
     connectedOutputKeys: node.data.connectedOutputKeys,
   })[0]
   if (firstOutputPort) {

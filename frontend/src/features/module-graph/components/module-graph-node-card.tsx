@@ -998,6 +998,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     : llmPresetEntries
   const visibleOutputPorts = getVisibleModuleOutputPorts(module, data.inputValues, {
     includeAdvanced: isAdvancedOutputPortsEnabled(data.inputValues),
+    connectedInputKeys,
     connectedOutputKeys,
   })
   const visibleOutputPortKeys = new Set(visibleOutputPorts.map((port) => port.key))

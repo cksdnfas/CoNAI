@@ -2,7 +2,7 @@ import 'plyr/dist/plyr.css'
 import './image-detail-media.css'
 
 import type Plyr from 'plyr'
-import { useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import { useCachedVideoSource } from '@/features/images/components/video/use-cached-video-source'
 import { cn } from '@/lib/utils'
 
@@ -58,6 +58,24 @@ interface EnhancedVideoPlayerProps {
   preload?: 'none' | 'metadata' | 'auto'
 }
 
+type MediaSize = {
+  width: number
+  height: number
+}
+
+function getLargestContainedSize(bounds: MediaSize, media: MediaSize): MediaSize | null {
+  if (bounds.width <= 0 || bounds.height <= 0 || media.width <= 0 || media.height <= 0) {
+    return null
+  }
+
+  const mediaRatio = media.width / media.height
+  const boundsRatio = bounds.width / bounds.height
+
+  return boundsRatio > mediaRatio
+    ? { width: Math.floor(bounds.height * mediaRatio), height: Math.floor(bounds.height) }
+    : { width: Math.floor(bounds.width), height: Math.floor(bounds.width / mediaRatio) }
+}
+
 /** Render the shared Plyr-based video player used by detail/modal and other full playback surfaces. */
 export function EnhancedVideoPlayer({
   renderUrl,
@@ -71,10 +89,39 @@ export function EnhancedVideoPlayer({
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playerRef = useRef<Plyr | null>(null)
   const [useNativeControlsFallback, setUseNativeControlsFallback] = useState(false)
+  const [naturalSize, setNaturalSize] = useState<MediaSize | null>(null)
+  const [availableSize, setAvailableSize] = useState<MediaSize | null>(null)
+
+  const updateAvailableSize = useCallback(() => {
+    const hostElement = containerRef.current?.parentElement
+    if (!hostElement) {
+      return
+    }
+
+    const rect = hostElement.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) {
+      setAvailableSize({ width: rect.width, height: rect.height })
+    }
+  }, [])
 
   useEffect(() => {
     setUseNativeControlsFallback(false)
+    setNaturalSize(null)
   }, [resolvedSourceUrl])
+
+  useEffect(() => {
+    updateAvailableSize()
+
+    const hostElement = containerRef.current?.parentElement
+    if (!hostElement || typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    const observer = new ResizeObserver(updateAvailableSize)
+    observer.observe(hostElement)
+
+    return () => observer.disconnect()
+  }, [updateAvailableSize])
 
   useEffect(() => {
     if (!resolvedSourceUrl) {
@@ -144,11 +191,17 @@ export function EnhancedVideoPlayer({
     }
   }, [autoPlay, resolvedSourceUrl])
 
+  const fittedSize = availableSize && naturalSize ? getLargestContainedSize(availableSize, naturalSize) : null
+  const fittedStyle: CSSProperties = fittedSize
+    ? { width: fittedSize.width, height: fittedSize.height }
+    : {}
+
   return (
     <div
       ref={containerRef}
       className={cn('conai-video-player relative w-full overflow-hidden rounded-sm bg-black', className)}
       style={{
+        ...fittedStyle,
         ['--plyr-color-main' as string]: 'var(--primary)',
         ['--plyr-control-icon-size' as string]: '17px',
         ['--plyr-control-spacing' as string]: '0.56rem',
@@ -178,6 +231,13 @@ export function EnhancedVideoPlayer({
           loop={loop}
           playsInline
           preload={preload}
+          onLoadedMetadata={(event) => {
+            const target = event.currentTarget
+            if (target.videoWidth > 0 && target.videoHeight > 0) {
+              setNaturalSize({ width: target.videoWidth, height: target.videoHeight })
+              updateAvailableSize()
+            }
+          }}
         >
           <source src={resolvedSourceUrl} />
         </video>

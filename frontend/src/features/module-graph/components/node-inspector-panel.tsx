@@ -232,6 +232,7 @@ function EdgeEndpointCard({
 function groupNodeOutputArtifacts(node: ModuleGraphNode, artifacts: GraphExecutionArtifactRecord[]) {
   const visibleOutputPorts = getVisibleModuleOutputPorts(node.data.module, node.data.inputValues, {
     includeAdvanced: isAdvancedOutputPortsEnabled(node.data.inputValues),
+    connectedInputKeys: node.data.connectedInputKeys,
     connectedOutputKeys: node.data.connectedOutputKeys,
   })
   const visibleOutputPortKeys = new Set(visibleOutputPorts.map((port) => port.key))
@@ -307,6 +308,7 @@ export function NodeInspectorPanel({
   const selectedNodeVisibleOutputPorts = selectedNode
     ? getVisibleModuleOutputPorts(selectedNode.data.module, selectedNode.data.inputValues, {
         includeAdvanced: isAdvancedOutputPortsEnabled(selectedNode.data.inputValues),
+        connectedInputKeys: selectedNode.data.connectedInputKeys,
         connectedOutputKeys: selectedNode.data.connectedOutputKeys,
       })
     : []
