@@ -283,6 +283,9 @@ export function NodeInspectorPanel({
     enabled: isSystemLoadLlmPresetNode,
     staleTime: 30_000,
   })
+  const selectedNodeVisibleOutputPorts = selectedNode && isSystemLoadLlmPresetNode
+    ? selectedNode.data.module.output_ports.filter((port) => port.key === (normalizeLlmPresetType(selectedNode.data.inputValues?.preset_type) === 'structuredOutputJsonPresets' ? 'json' : 'text'))
+    : selectedNode?.data.module.output_ports ?? []
   const llmModelBindings = (() => {
     if (!isSystemCallLlmNode) {
       return [] as Array<ExternalApiLlmOptionRecord & { default_model: string }>
@@ -777,7 +780,7 @@ export function NodeInspectorPanel({
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                     <Badge variant="outline">입력 {(selectedNode.data.module.exposed_inputs ?? []).length}</Badge>
-                    <Badge variant="outline">출력 {(selectedNode.data.module.output_ports ?? []).length}</Badge>
+                    <Badge variant="outline">출력 {selectedNodeVisibleOutputPorts.length}</Badge>
                     {missingRequiredInputs.length > 0 ? <Badge variant="outline">필수 부족 {missingRequiredInputs.length}</Badge> : <Badge variant="secondary">필수 입력 충족</Badge>}
                     {highlightedPortKey ? <Badge variant="secondary">선택 포트 강조</Badge> : null}
                     {highlightedPortKey ? <TechnicalReferenceHint title={`focus port ${highlightedPortKey}`} label="강조 중인 포트 내부 키 보기" /> : null}

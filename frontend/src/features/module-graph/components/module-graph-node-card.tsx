@@ -989,6 +989,9 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const llmPresetNameOptions = llmPresetName && !llmPresetEntries.some((preset) => preset.name === llmPresetName)
     ? [...llmPresetEntries, { id: llmPresetName, name: llmPresetName, content: '', updatedAt: '' }]
     : llmPresetEntries
+  const visibleOutputPorts = isSystemLoadLlmPresetModule
+    ? outputPorts.filter((port) => port.key === (llmPresetType === 'structuredOutputJsonPresets' ? 'json' : 'text'))
+    : outputPorts
   const visibleInputPorts = inputPorts.filter((port) => {
     if (isSystemLoadLlmPresetModule && (port.key === 'preset_type' || port.key === 'preset_name')) {
       return false
@@ -1016,7 +1019,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
 
     return true
   })
-  const portRowCount = Math.max(visibleInputPorts.length, outputPorts.length, 1)
+  const portRowCount = Math.max(visibleInputPorts.length, visibleOutputPorts.length, 1)
   const comfyWorkflowId = module.engine_type === 'comfyui'
     ? parsePositiveIntegerish(module.source_workflow_id ?? module.template_defaults?.workflow_id)
     : null
@@ -1319,7 +1322,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           <div className="mt-2.5 grid gap-1">
             {Array.from({ length: portRowCount }, (_, index) => {
               const inputPort = visibleInputPorts[index]
-              const outputPort = outputPorts[index]
+              const outputPort = visibleOutputPorts[index]
               const inputConnected = Boolean(inputPort && connectedInputKeys.has(inputPort.key))
               const inputSatisfied = Boolean(inputPort && (inputConnected || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))
               const inputRequiredMissing = Boolean(inputPort && inputPort.required && !inputSatisfied)

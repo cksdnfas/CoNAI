@@ -31,11 +31,11 @@ function normalizeOptionalString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function parseJsonContent(value: string) {
+function parseStructuredOutputJsonPreset(value: string, presetName: string) {
   try {
     return JSON.parse(value)
   } catch {
-    return null
+    throw new Error(`구조화 출력 JSON 프리셋이 올바른 JSON이 아니야: ${presetName}`)
   }
 }
 
@@ -70,51 +70,30 @@ export async function executeLoadLlmPresetNode(
   }
 
   const content = preset.content
-  const jsonValue = parseJsonContent(content)
-  const metadataValue = {
-    preset_type: presetType,
-    preset_type_label: PRESET_TYPE_LABELS[presetType],
-    preset_id: preset.id,
-    preset_name: preset.name,
-    content_length: content.length,
-    has_json: jsonValue !== null,
-  }
-
-  const nodeArtifacts: Record<string, RuntimeArtifact> = {
-    content: buildRuntimeArtifact(context.executionId, node.id, 'content', 'any', content, {
-      kind: 'system-llm-preset-content',
-      operationKey: 'system.load_llm_preset',
-      presetType,
-      presetName: preset.name,
-    }),
-    text: buildRuntimeArtifact(context.executionId, node.id, 'text', 'text', content, {
-      kind: 'system-llm-preset-text',
-      operationKey: 'system.load_llm_preset',
-      presetType,
-      presetName: preset.name,
-    }),
-    prompt: buildRuntimeArtifact(context.executionId, node.id, 'prompt', 'prompt', content, {
-      kind: 'system-llm-preset-prompt',
-      operationKey: 'system.load_llm_preset',
-      presetType,
-      presetName: preset.name,
-    }),
-    metadata: buildRuntimeArtifact(context.executionId, node.id, 'metadata', 'json', metadataValue, {
-      kind: 'system-llm-preset-metadata',
-      operationKey: 'system.load_llm_preset',
-      presetType,
-      presetName: preset.name,
-    }),
-  }
-
-  if (jsonValue !== null) {
-    nodeArtifacts.json = buildRuntimeArtifact(context.executionId, node.id, 'json', 'json', jsonValue, {
-      kind: 'system-llm-preset-json',
-      operationKey: 'system.load_llm_preset',
-      presetType,
-      presetName: preset.name,
-    })
-  }
+  const nodeArtifacts: Record<string, RuntimeArtifact> = presetType === 'structuredOutputJsonPresets'
+    ? {
+        json: buildRuntimeArtifact(
+          context.executionId,
+          node.id,
+          'json',
+          'json',
+          parseStructuredOutputJsonPreset(content, preset.name),
+          {
+            kind: 'system-llm-preset-json',
+            operationKey: 'system.load_llm_preset',
+            presetType,
+            presetName: preset.name,
+          },
+        ),
+      }
+    : {
+        text: buildRuntimeArtifact(context.executionId, node.id, 'text', 'text', content, {
+          kind: 'system-llm-preset-text',
+          operationKey: 'system.load_llm_preset',
+          presetType,
+          presetName: preset.name,
+        }),
+      }
 
   context.artifactsByNode.set(node.id, nodeArtifacts)
 

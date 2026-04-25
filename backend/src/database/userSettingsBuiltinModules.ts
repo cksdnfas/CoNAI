@@ -599,14 +599,6 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
     ],
     [
       {
-        key: 'content',
-        label: '내용',
-        direction: 'output',
-        data_type: 'any',
-        required: true,
-        multiple: false,
-      },
-      {
         key: 'text',
         label: '텍스트',
         direction: 'output',
@@ -615,24 +607,8 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         multiple: false,
       },
       {
-        key: 'prompt',
-        label: '프롬프트',
-        direction: 'output',
-        data_type: 'prompt',
-        required: true,
-        multiple: false,
-      },
-      {
         key: 'json',
         label: 'JSON',
-        direction: 'output',
-        data_type: 'json',
-        required: false,
-        multiple: false,
-      },
-      {
-        key: 'metadata',
-        label: '메타데이터',
         direction: 'output',
         data_type: 'json',
         required: false,
