@@ -30,11 +30,13 @@ export function WorkflowFinalResultsSection({
   finalResults,
   artifacts,
   selectedGraph,
+  nodeLabelOverrides,
   emptyLabel = '최종 결과 노드를 추가하고 원하는 출력에 연결해줘.',
 }: {
   finalResults: GraphExecutionFinalResultRecord[]
   artifacts: GraphExecutionArtifactRecord[]
   selectedGraph?: GraphWorkflowRecord | null
+  nodeLabelOverrides?: Record<string, string> | null
   emptyLabel?: string
 }) {
   const artifactsById = new Map(artifacts.map((artifact) => [artifact.id, artifact]))
@@ -58,7 +60,7 @@ export function WorkflowFinalResultsSection({
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {resolvedEntries.map(({ finalResult, artifact }) => {
-            const finalNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.final_node_id)
+            const finalNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.final_node_id, nodeLabelOverrides)
 
             return (
               <ExecutionArtifactCard

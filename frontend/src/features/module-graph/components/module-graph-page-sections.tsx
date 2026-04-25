@@ -10,7 +10,7 @@ import { ModuleWorkflowEditorSupportPanel } from './module-workflow-editor-suppo
 import { NodeInspectorPanel } from './node-inspector-panel'
 import { WorkflowRunnerPanel } from './workflow-runner-panel'
 import { type WorkflowValidationIssue } from './workflow-validation-panel'
-import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
+import { getModuleNodeDisplayLabel, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 export { ModuleGraphWorkflowListSidebar } from './module-graph-workflow-list-sidebar'
 export { ModuleGraphWorkflowBrowseContent, ModuleGraphWorkflowEditorContent } from './module-graph-workflow-content'
@@ -193,6 +193,8 @@ export function ModuleGraphWorkflowEditorSupportPanels({
   onRetryExecution: () => void
   onCancelExecution: () => void
 }) {
+  const nodeLabelOverrides = Object.fromEntries(nodes.map((node) => [node.id, getModuleNodeDisplayLabel(node)]))
+
   return (
     <ModuleWorkflowEditorSupportPanel
       setSectionRef={setSectionRef}
@@ -218,6 +220,7 @@ export function ModuleGraphWorkflowEditorSupportPanels({
         <GraphExecutionPanel
           selectedGraphId={selectedGraphId}
           selectedGraph={selectedGraphRecord}
+          nodeLabelOverrides={nodeLabelOverrides}
           selectedExecutionId={selectedExecutionId}
           selectedExecutionStatus={selectedExecutionStatus}
           executionList={executionList}

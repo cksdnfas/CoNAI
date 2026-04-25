@@ -3,16 +3,52 @@ import { routeParam } from './routeParam';
 import { ExternalApiProvider } from '../models/ExternalApiProvider';
 import { ExternalApiService } from '../services/externalApiService';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { optionalAuth } from '../middleware/authMiddleware';
+import { optionalAuth, requirePermission } from '../middleware/authMiddleware';
+import { hasConfiguredAuth } from './auth-route-helpers';
 import type {
   CreateExternalApiProviderInput,
+  ProviderType,
   UpdateExternalApiProviderInput,
 } from '../types/externalApi';
 
 const router = Router();
 
+function isProviderType(value: unknown): value is ProviderType {
+  return value === 'general' || value === 'llm_openai_compatible' || value === 'llm_ollama';
+}
+
 // Apply optional authentication to all routes
 router.use(optionalAuth);
+
+/**
+ * Get enabled LLM provider options for graph authoring.
+ * GET /api/external-api/llm-options
+ * Returns sanitized provider metadata without secrets or base URLs.
+ */
+router.get('/llm-options', requirePermission('page.generation.view'), asyncHandler(async (_req: Request, res: Response) => {
+  const providers = ExternalApiProvider.findEnabledLlmOptions();
+
+  res.json({
+    success: true,
+    data: providers,
+  });
+}));
+
+/**
+ * Get external API credential security status.
+ * GET /api/external-api/security-status
+ */
+router.get('/security-status', requirePermission('page.settings.view'), asyncHandler(async (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: {
+      api_key_encryption_configured: ExternalApiService.hasCustomEncryptionSecret(),
+      auth_configured: hasConfiguredAuth(),
+    },
+  });
+}));
+
+router.use(requirePermission('page.settings.view'));
 
 /**
  * Get all external API providers
@@ -68,6 +104,14 @@ router.post('/providers', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
+  if (input.provider_type !== undefined && !isProviderType(input.provider_type)) {
+    res.status(400).json({
+      success: false,
+      error: 'provider_type must be general, llm_openai_compatible, or llm_ollama'
+    });
+    return;
+  }
+
   // Check if provider already exists
   if (ExternalApiProvider.exists(input.provider_name)) {
     res.status(409).json({
@@ -104,6 +148,14 @@ router.post('/providers', asyncHandler(async (req: Request, res: Response) => {
 router.put('/providers/:name', asyncHandler(async (req: Request, res: Response) => {
   const name = routeParam(req.params.name);
   const input: UpdateExternalApiProviderInput = req.body;
+
+  if (input.provider_type !== undefined && !isProviderType(input.provider_type)) {
+    res.status(400).json({
+      success: false,
+      error: 'provider_type must be general, llm_openai_compatible, or llm_ollama'
+    });
+    return;
+  }
 
   // Check if provider exists
   if (!ExternalApiProvider.exists(name)) {
@@ -173,8 +225,16 @@ router.patch('/providers/:name/toggle', asyncHandler(async (req: Request, res: R
     return;
   }
 
-  // 활성화하려는 경우, API 키가 있는지 확인
-  if (is_enabled) {
+  const provider = ExternalApiProvider.findByName(name);
+  if (!provider) {
+    res.status(404).json({
+      success: false,
+      error: 'Provider not found'
+    });
+    return;
+  }
+
+  if (is_enabled && !ExternalApiService.allowsMissingApiKey(provider.provider_type)) {
     const apiKey = ExternalApiProvider.getDecryptedKey(name);
     if (!apiKey) {
       res.status(400).json({
@@ -195,11 +255,11 @@ router.patch('/providers/:name/toggle', asyncHandler(async (req: Request, res: R
     return;
   }
 
-  const provider = ExternalApiProvider.findByName(name);
+  const updatedProvider = ExternalApiProvider.findByName(name);
 
   res.json({
     success: true,
-    data: provider,
+    data: updatedProvider,
     message: `Provider ${is_enabled ? 'enabled' : 'disabled'} successfully`
   });
 }));
@@ -222,10 +282,9 @@ router.post('/providers/:name/test', asyncHandler(async (req: Request, res: Resp
     return;
   }
 
-  // Get decrypted API key
   const apiKey = ExternalApiProvider.getDecryptedKey(name);
 
-  if (!apiKey) {
+  if (!apiKey && !ExternalApiService.allowsMissingApiKey(provider.provider_type)) {
     res.status(400).json({
       success: false,
       error: 'API key not configured or provider is disabled'
@@ -233,8 +292,12 @@ router.post('/providers/:name/test', asyncHandler(async (req: Request, res: Resp
     return;
   }
 
-  // Test connection
-  const success = await ExternalApiService.testConnection(name, apiKey, provider.provider_type);
+  const success = await ExternalApiService.testConnection({
+    providerName: name,
+    providerType: provider.provider_type,
+    apiKey,
+    baseUrl: provider.base_url,
+  });
 
   res.json({
     success,

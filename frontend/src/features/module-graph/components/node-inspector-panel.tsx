@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
@@ -8,14 +9,16 @@ import { Input } from '@/components/ui/input'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
+import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
+import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOptionRecord } from '@/lib/api-settings'
 import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { ExecutionArtifactCard } from './execution-artifact-card'
-import { ModuleGraphSimpleValueInput } from './module-graph-simple-value-input'
+import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import { getWorkflowInputSourcePort } from '../module-graph-workflow-inputs'
-import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, normalizeModulePortDescription, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, normalizeModulePortDescription, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 type NodeInspectorPanelProps = {
   nodes: ModuleGraphNode[]
@@ -52,6 +55,23 @@ type NodeOutputArtifactGroup = {
 const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-3'
 const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'space-y-3 rounded-sm border border-border/70 bg-background/35 p-4'
 const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'rounded-sm border border-border/70 bg-background/35 p-4'
+
+function normalizeOptionalString(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function resolveSelectOptionsWithCurrentValue(options: string[] | null | undefined, currentValue: string | null) {
+  const normalizedOptions = Array.isArray(options) ? options.filter((option) => option.trim().length > 0) : []
+  if (currentValue && !normalizedOptions.includes(currentValue)) {
+    return [...normalizedOptions, currentValue]
+  }
+  return normalizedOptions
+}
 
 /** Resolve whether one node input is already satisfied by a connection or value. */
 function isNodeInputSatisfied(node: ModuleGraphNode, port: ModulePortDefinition) {
@@ -222,6 +242,113 @@ export function NodeInspectorPanel({
   showHeader = true,
 }: NodeInspectorPanelProps) {
   const [collapsedOutputGroupKeys, setCollapsedOutputGroupKeys] = useState<string[]>([])
+  const selectedNodeOperationKey = selectedNode ? getModuleOperationKey(selectedNode.data.module) : null
+  const isSystemCallLlmNode = selectedNodeOperationKey === 'system.call_llm'
+  const isSystemCallCodexMessageNode = selectedNodeOperationKey === 'system.call_codex_message'
+  const llmProvidersQuery = useQuery({
+    queryKey: ['external-api-llm-options', 'node-inspector-panel'],
+    queryFn: () => getExternalApiLlmOptions(),
+    enabled: isSystemCallLlmNode,
+    staleTime: 30_000,
+  })
+  const llmPresetsQuery = useQuery({
+    queryKey: ['llm-preset-options', 'node-inspector-panel'],
+    queryFn: () => getLlmPresetOptions(),
+    enabled: isSystemCallLlmNode,
+    staleTime: 30_000,
+  })
+  const llmModelBindings = (() => {
+    if (!isSystemCallLlmNode) {
+      return [] as Array<ExternalApiLlmOptionRecord & { default_model: string }>
+    }
+
+    const entries = (llmProvidersQuery.data ?? [])
+      .map((provider) => ({
+        ...provider,
+        default_model: normalizeOptionalString(provider.default_model),
+      }))
+      .filter((provider): provider is ExternalApiLlmOptionRecord & { default_model: string } => Boolean(provider.default_model))
+      .sort((left, right) => left.provider_name.localeCompare(right.provider_name))
+
+    const currentProviderName = normalizeOptionalString(selectedNode?.data.inputValues?.provider_name)
+    const currentModel = normalizeOptionalString(selectedNode?.data.inputValues?.model)
+    if (currentProviderName && currentModel && !entries.some((entry) => entry.provider_name === currentProviderName)) {
+      return [
+        ...entries,
+        {
+          provider_name: currentProviderName,
+          display_name: currentProviderName,
+          provider_type: 'llm_openai_compatible',
+          default_model: currentModel,
+          default_temperature: null,
+          default_max_tokens: null,
+          default_response_mode: 'text',
+        },
+      ]
+    }
+
+    return entries
+  })()
+  const llmModelOptions = llmModelBindings.map((provider) => ({
+    value: provider.provider_name,
+    label: `${provider.provider_name} · ${provider.default_model}`,
+  })) satisfies ModuleGraphSelectOption[]
+  const llmPresetOptionsByKey = (() => {
+    const emptyCollections = {
+      system_prompt_preset_name: [],
+      prompt_preset_name: [],
+      structured_output_json_preset_name: [],
+    } satisfies Record<string, ModuleGraphSelectOption[]>
+
+    if (!isSystemCallLlmNode) {
+      return emptyCollections
+    }
+
+    const presetCollections: LlmPresetOptionCollections = llmPresetsQuery.data ?? {
+      systemPromptPresets: [],
+      promptPresets: [],
+      structuredOutputJsonPresets: [],
+    }
+
+    const buildOptions = (entries: LlmPresetOptionRecord[], currentValue: string | null) => {
+      const baseOptions = entries
+        .filter((preset): preset is LlmPresetOptionRecord => Boolean(preset?.name?.trim()))
+        .sort((left, right) => left.name.localeCompare(right.name, 'ko'))
+        .map((preset) => ({ value: preset.name, label: preset.name }))
+
+      if (currentValue && !baseOptions.some((option) => typeof option !== 'string' && option.value === currentValue)) {
+        return [...baseOptions, { value: currentValue, label: currentValue }] satisfies ModuleGraphSelectOption[]
+      }
+
+      return baseOptions satisfies ModuleGraphSelectOption[]
+    }
+
+    return {
+      system_prompt_preset_name: buildOptions(
+        presetCollections.systemPromptPresets,
+        normalizeOptionalString(selectedNode?.data.inputValues?.system_prompt_preset_name),
+      ),
+      prompt_preset_name: buildOptions(
+        presetCollections.promptPresets,
+        normalizeOptionalString(selectedNode?.data.inputValues?.prompt_preset_name),
+      ),
+      structured_output_json_preset_name: buildOptions(
+        presetCollections.structuredOutputJsonPresets,
+        normalizeOptionalString(selectedNode?.data.inputValues?.structured_output_json_preset_name),
+      ),
+    } satisfies Record<string, ModuleGraphSelectOption[]>
+  })()
+  const applyLlmModelBinding = (node: ModuleGraphNode, providerName: string) => {
+    const selectedBinding = llmModelBindings.find((entry) => entry.provider_name === providerName)
+    if (!selectedBinding) {
+      return
+    }
+
+    onNodeValueChange(node.id, 'provider_name', selectedBinding.provider_name)
+    onNodeValueChange(node.id, 'model', selectedBinding.default_model)
+    onNodeValueChange(node.id, 'temperature', typeof selectedBinding.default_temperature === 'number' ? selectedBinding.default_temperature : '')
+    onNodeValueChange(node.id, 'max_tokens', typeof selectedBinding.default_max_tokens === 'number' ? selectedBinding.default_max_tokens : 1024)
+  }
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -237,6 +364,21 @@ export function NodeInspectorPanel({
     const rawValue = node.data.inputValues?.[port.key]
     const uiField = findNodeUiField(node, port.key)
     const normalizedDescription = normalizeModulePortDescription(port.description)
+    const numberStep = isSystemCallLlmNode && port.key === 'temperature'
+      ? 0.1
+      : isSystemCallLlmNode && port.key === 'max_tokens'
+        ? 128
+        : undefined
+    const numberMin = isSystemCallLlmNode && port.key === 'temperature'
+      ? 0
+      : isSystemCallLlmNode && port.key === 'max_tokens'
+        ? 128
+        : uiField?.min
+    const numberPlaceholder = isSystemCallLlmNode && port.key === 'temperature'
+      ? '0.7'
+      : isSystemCallLlmNode && port.key === 'max_tokens'
+        ? '1024'
+        : (uiField?.placeholder || port.label)
     const hasExplicitValue = hasMeaningfulValue(rawValue)
     const missingRequired = Boolean(port.required && !isNodeInputSatisfied(node, port))
     const isHighlightedPort = highlightedPortKey === port.key
@@ -246,6 +388,52 @@ export function NodeInspectorPanel({
       : missingRequired
         ? ({ borderColor: '#f59e0b99', backgroundColor: 'rgba(245, 158, 11, 0.08)' } as CSSProperties)
         : undefined
+
+    if (isSystemCallLlmNode && port.key === 'provider_name') {
+      return null
+    }
+
+    if (
+      isSystemCallLlmNode
+      && ['system_prompt_preset_name', 'prompt_preset_name', 'structured_output_json_preset_name'].includes(port.key)
+    ) {
+      const presetPortKey = port.key as keyof typeof llmPresetOptionsByKey
+      const presetOptions = llmPresetOptionsByKey[presetPortKey] ?? []
+      if (presetOptions.length > 0) {
+        return (
+          <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
+            <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
+            <ModuleGraphSimpleValueInput
+              dataType="select"
+              value={rawValue}
+              onChange={(value) => onNodeValueChange(node.id, port.key, value)}
+              options={presetOptions}
+              emptyLabel="프리셋 선택"
+            />
+          </div>
+        )
+      }
+    }
+
+    if (isSystemCallLlmNode && port.key === 'model' && llmModelOptions.length > 0) {
+      const currentProviderName = normalizeOptionalString(node.data.inputValues?.provider_name)
+      const effectiveSelectValue = currentProviderName && llmModelOptions.some((option) => typeof option !== 'string' && option.value === currentProviderName)
+        ? currentProviderName
+        : ''
+
+      return (
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
+          <ModuleGraphSimpleValueInput
+            dataType="select"
+            value={effectiveSelectValue}
+            onChange={(value) => applyLlmModelBinding(node, String(value))}
+            options={llmModelOptions}
+            emptyLabel="모델 선택"
+          />
+        </div>
+      )
+    }
 
     if (isNaiCharacterPromptPort(port.key, port.data_type)) {
       return (
@@ -274,16 +462,27 @@ export function NodeInspectorPanel({
       )
     }
 
-    if (uiField?.data_type === 'select' && Array.isArray(uiField.options) && uiField.options.length > 0) {
+    const baseSelectOptions = uiField?.data_type === 'select' && Array.isArray(uiField.options) ? uiField.options : []
+    const isCodexModelPort = isSystemCallCodexMessageNode && port.key === 'model'
+    const selectOptions = isCodexModelPort && typeof rawValue === 'string' && rawValue.trim().length > 0 && !baseSelectOptions.includes(rawValue)
+      ? [...baseSelectOptions, rawValue]
+      : baseSelectOptions
+
+    if (selectOptions.length > 0) {
+      const effectiveSelectValue = isCodexModelPort
+        ? (rawValue ?? port.default_value ?? uiField?.default_value ?? selectOptions[0] ?? '')
+        : rawValue
+
       return (
         <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
           <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
           <ModuleGraphSimpleValueInput
             dataType="select"
-            value={rawValue}
+            value={effectiveSelectValue}
             onChange={(value) => onNodeValueChange(node.id, port.key, value)}
-            options={uiField.options}
-            emptyLabel={hasMeaningfulValue(port.default_value ?? uiField.default_value) ? '기본값 사용' : '선택'}
+            options={selectOptions}
+            emptyLabel={hasMeaningfulValue(port.default_value ?? uiField?.default_value) ? '기본값 사용' : '선택'}
+            allowEmptyOption={!isCodexModelPort}
           />
         </div>
       )
@@ -312,9 +511,10 @@ export function NodeInspectorPanel({
             dataType="number"
             value={rawValue}
             onChange={(value) => onNodeValueChange(node.id, port.key, value)}
-            placeholder={uiField?.placeholder || port.label}
-            min={uiField?.min}
+            placeholder={numberPlaceholder}
+            min={numberMin}
             max={uiField?.max}
+            step={numberStep}
           />
         </div>
       )

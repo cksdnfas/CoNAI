@@ -10,7 +10,8 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 3. [생성 저장 파이프라인](/systems/generation-pipeline)
 4. [워크플로우 실행 엔진](/systems/module-workflow-engine)
 5. [모듈 그래프 노드 UX 개편안](/systems/module-graph-node-ux-redesign-plan)
-6. [MCP와 자동화 인터페이스](/systems/mcp-and-automation)
+6. [LLM and Codex Graph Nodes Plan](/systems/llm-and-codex-graph-nodes-plan)
+7. [MCP와 자동화 인터페이스](/systems/mcp-and-automation)
 
 ## 왜 이 순서인가
 
@@ -34,6 +35,10 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 - 워크플로우 캔버스를 ComfyUI에 가까운 직접 편집형 경험으로 끌어올리기 위한 개편 기준입니다.
 - 노드 인라인 편집, 값 가시성, 포트 표현 축소 원칙을 정리합니다.
 
-### 6) MCP와 자동화 인터페이스
+### 6) LLM and Codex Graph Nodes Plan
+- LM Studio, Ollama, 외부 OpenAI 호환 API, Codex 메시지 노드를 그래프 엔진에 어떻게 붙일지 정리한 영어 설계 문서입니다.
+- 현재 진행 중인 node UX 개편과 provider 저장 구조를 함께 고려한 구현 기준입니다.
+
+### 7) MCP와 자동화 인터페이스
 - 화면 밖에서 CoNAI를 호출하는 자동화 진입점입니다.
 - AI 에이전트 연동과 외부 도구 호출의 연결부입니다.

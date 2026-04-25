@@ -63,6 +63,11 @@ const ImageSaveTabLazy = lazy(async () => {
   return { default: module.ImageSaveTab }
 })
 
+const LlmConnectionsTabLazy = lazy(async () => {
+  const module = await import('./components/llm-connections-tab')
+  return { default: module.LlmConnectionsTab }
+})
+
 type AppSettingsRecord = Awaited<ReturnType<typeof getAppSettings>>
 
 function SettingsSectionFallback() {
@@ -313,6 +318,8 @@ export function SettingsPage() {
                 isSavingVideoOptimization={videoOptimizationMutation.isPending}
               />
             ) : null}
+
+            {activeTab === 'llm-connections' ? <LlmConnectionsTabLazy /> : null}
           </Suspense>
         </section>
       </div>

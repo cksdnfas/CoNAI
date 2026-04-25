@@ -136,6 +136,7 @@ function ExecutionOutputGroupCard({
 function SelectedExecutionSummary({
   executionDetail,
   selectedGraph,
+  nodeLabelOverrides,
   selectedExecutionPlan,
   executionInputEntries,
   finalResults,
@@ -144,6 +145,7 @@ function SelectedExecutionSummary({
 }: {
   executionDetail: GraphExecutionDetail
   selectedGraph?: GraphWorkflowRecord | null
+  nodeLabelOverrides?: Record<string, string> | null
   selectedExecutionPlan: ParsedExecutionPlan | null
   executionInputEntries: ReturnType<typeof getExecutionInputEntries>
   finalResults: GraphExecutionFinalResultRecord[]
@@ -157,7 +159,7 @@ function SelectedExecutionSummary({
           <span className="font-medium text-foreground">#{executionDetail.execution.id}</span>
           <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
           <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan)}</Badge>
-          {selectedExecutionPlan?.targetNodeId ? <Badge variant="outline">{getNodeDisplayLabel(selectedGraph, selectedExecutionPlan.targetNodeId)}</Badge> : null}
+          {selectedExecutionPlan?.targetNodeId ? <Badge variant="outline">{getNodeDisplayLabel(selectedGraph, selectedExecutionPlan.targetNodeId, nodeLabelOverrides)}</Badge> : null}
           {selectedExecutionPlan?.forceRerun ? <Badge variant="outline">강제</Badge> : null}
           {selectedExecutionPlan?.reusedFromExecutionId ? <Badge variant="outline">재사용 #{selectedExecutionPlan.reusedFromExecutionId}</Badge> : null}
           <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
@@ -197,6 +199,7 @@ function SelectedExecutionSummary({
           finalResults={finalResults}
           artifacts={executionDetail.artifacts}
           selectedGraph={selectedGraph}
+          nodeLabelOverrides={nodeLabelOverrides}
         />
       </div>
 
@@ -225,6 +228,7 @@ function SelectedExecutionSummary({
 type GraphExecutionPanelProps = {
   selectedGraphId: number | null
   selectedGraph?: GraphWorkflowRecord | null
+  nodeLabelOverrides?: Record<string, string> | null
   selectedExecutionId: number | null
   selectedExecutionStatus?: GraphExecutionRecord['status'] | null
   executionList: GraphExecutionRecord[]
@@ -247,6 +251,7 @@ type GraphExecutionPanelProps = {
 export function GraphExecutionPanel({
   selectedGraphId,
   selectedGraph,
+  nodeLabelOverrides,
   selectedExecutionId,
   selectedExecutionStatus,
   executionList,
@@ -295,8 +300,8 @@ export function GraphExecutionPanel({
     [inputDefinitions, selectedExecutionPlan],
   )
   const groupedArtifacts = useMemo(
-    () => groupArtifactsByNode(executionDetail?.artifacts ?? [], selectedGraph),
-    [executionDetail?.artifacts, selectedGraph],
+    () => groupArtifactsByNode(executionDetail?.artifacts ?? [], selectedGraph, nodeLabelOverrides),
+    [executionDetail?.artifacts, nodeLabelOverrides, selectedGraph],
   )
   const compactArtifactGroups = useMemo(
     () => groupedArtifacts
@@ -456,6 +461,7 @@ export function GraphExecutionPanel({
                     <SelectedExecutionSummary
                       executionDetail={executionDetail}
                       selectedGraph={selectedGraph}
+                      nodeLabelOverrides={nodeLabelOverrides}
                       selectedExecutionPlan={selectedExecutionPlan}
                       executionInputEntries={executionInputEntries}
                       finalResults={finalResults}

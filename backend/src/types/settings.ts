@@ -243,6 +243,20 @@ export interface VideoOptimizationSettings {
   applyToBackupImports: boolean;
 }
 
+export interface LlmPresetRecord {
+  id: string;
+  name: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LlmSettings {
+  systemPromptPresets: LlmPresetRecord[];
+  promptPresets: LlmPresetRecord[];
+  structuredOutputJsonPresets: LlmPresetRecord[];
+}
+
 export interface AppSettings {
   general: GeneralSettings;
   tagger: TaggerSettings;
@@ -254,6 +268,7 @@ export interface AppSettings {
   imageSave: ImageSaveSettings;
   generationThrottle: GenerationThrottleSettings;
   videoOptimization: VideoOptimizationSettings;
+  llm: LlmSettings;
 }
 
 export interface TaggerModelInfo {

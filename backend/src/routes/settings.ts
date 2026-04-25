@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import {
@@ -14,11 +15,13 @@ import { kaloscopeTaggerService } from '../services/kaloscopeTaggerService';
 import {
   DEFAULT_ARTIST_LINK_URL_TEMPLATE,
   GeneralSettings,
-  TaggerSettings,
   KaloscopeSettings,
+  LlmPresetRecord,
+  LlmSettings,
+  SupportedLanguage,
   TaggerDevice,
   TaggerModel,
-  SupportedLanguage,
+  TaggerSettings,
 } from '../types/settings';
 import { autoTestMediaService } from '../services/autoTestMediaService';
 import { mediaSettingsRoutes } from './settings/media-settings.routes';
@@ -32,6 +35,95 @@ const validKaloscopeDevices = ['auto', 'cpu', 'cuda'] as const;
 const validTaggerModels = ['vit', 'swinv2', 'convnext'] as const;
 const validTaggerDevices = ['auto', 'cpu', 'cuda'] as const;
 
+function normalizeOptionalText(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
+function normalizeOptionalIsoDate(value: unknown, fallback: string) {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  const parsed = Date.parse(trimmed);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : fallback;
+}
+
+function normalizeStructuredOutputJson(value: unknown) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2);
+  } catch {
+    throw new Error('구조화 출력 JSON 양식은 올바른 JSON이어야 해.');
+  }
+}
+
+function normalizeLlmPresetCollectionPayload(
+  value: unknown,
+  options: { collectionKey: string; label: string; valueType?: 'text' | 'json' },
+): LlmPresetRecord[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${options.collectionKey} must be an array`);
+  }
+
+  const now = new Date().toISOString();
+  const normalizedPresets = value.map((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`${options.label} 항목은 객체여야 해.`);
+    }
+
+    const record = entry as Record<string, unknown>;
+    const name = normalizeOptionalText(record.name).trim();
+    if (!name) {
+      throw new Error(`${options.label}에는 이름이 필요해.`);
+    }
+
+    const content = options.valueType === 'json'
+      ? normalizeStructuredOutputJson(record.content)
+      : normalizeOptionalText(record.content);
+    if (!content.trim()) {
+      throw new Error(`${options.label} '${name}' 에 저장할 내용이 비어 있어.`);
+    }
+
+    return {
+      id: normalizeOptionalText(record.id).trim() || randomUUID(),
+      name,
+      content,
+      createdAt: normalizeOptionalIsoDate(record.createdAt, now),
+      updatedAt: now,
+    } satisfies LlmPresetRecord;
+  });
+
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  for (const preset of normalizedPresets) {
+    const normalizedName = preset.name.toLowerCase();
+    if (seenIds.has(preset.id)) {
+      throw new Error(`${options.label}에 중복된 프리셋 id가 있어: ${preset.id}`);
+    }
+    if (seenNames.has(normalizedName)) {
+      throw new Error(`${options.label} 이름이 중복됐어: ${preset.name}`);
+    }
+
+    seenIds.add(preset.id);
+    seenNames.add(normalizedName);
+  }
+
+  return normalizedPresets;
+}
+
 /**
  * GET /api/settings
  * Get current application settings
@@ -43,6 +135,59 @@ router.get(
     res.json({
       success: true,
       data: settings,
+    });
+    return;
+  })
+);
+
+router.get(
+  '/llm-presets/options',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json({
+      success: true,
+      data: settingsService.getLlmPresetOptions(),
+    });
+    return;
+  })
+);
+
+router.put(
+  '/llm',
+  asyncHandler(async (req: Request, res: Response) => {
+    const llmSettings = req.body as Partial<LlmSettings>;
+
+    try {
+      if (llmSettings.systemPromptPresets !== undefined) {
+        llmSettings.systemPromptPresets = normalizeLlmPresetCollectionPayload(llmSettings.systemPromptPresets, {
+          collectionKey: 'systemPromptPresets',
+          label: '시스템 프롬프트 프리셋',
+        });
+      }
+
+      if (llmSettings.promptPresets !== undefined) {
+        llmSettings.promptPresets = normalizeLlmPresetCollectionPayload(llmSettings.promptPresets, {
+          collectionKey: 'promptPresets',
+          label: '프롬프트 프리셋',
+        });
+      }
+
+      if (llmSettings.structuredOutputJsonPresets !== undefined) {
+        llmSettings.structuredOutputJsonPresets = normalizeLlmPresetCollectionPayload(llmSettings.structuredOutputJsonPresets, {
+          collectionKey: 'structuredOutputJsonPresets',
+          label: '구조화 출력 JSON 프리셋',
+          valueType: 'json',
+        });
+      }
+    } catch (error) {
+      sendRouteBadRequest(res, error instanceof Error ? error.message : 'LLM 프리셋을 확인해줘.');
+      return;
+    }
+
+    const updatedSettings = settingsService.updateLlmSettings(llmSettings);
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'LLM 설정을 저장했어.',
     });
     return;
   })

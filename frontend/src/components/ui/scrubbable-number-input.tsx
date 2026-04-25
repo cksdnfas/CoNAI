@@ -50,9 +50,12 @@ export function ScrubbableNumberInput({
       step={step}
       value={value}
       variant={variant}
-      className={`${className ?? 'cursor-ew-resize'} touch-none select-none`}
+      className={`${className ?? 'cursor-ew-resize'} touch-none select-none appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
       title="좌우로 드래그해서 값 조절"
       onChange={(event) => onChange(event.target.value)}
+      onWheel={(event) => {
+        event.currentTarget.blur()
+      }}
       onPointerDown={(event) => {
         if (event.button !== 0) {
           return

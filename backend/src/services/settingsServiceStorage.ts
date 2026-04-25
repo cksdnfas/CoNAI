@@ -6,6 +6,7 @@ import {
   AppearancePresetSlot,
   AppearanceThemeSettings,
   DEFAULT_ARTIST_LINK_URL_TEMPLATE,
+  LlmPresetRecord,
   TaggerModel,
   TaggerDevice,
   WallpaperLayoutPreset,
@@ -194,6 +195,164 @@ export function normalizeAppearancePresetSlots(rawSlots: unknown): AppearancePre
   });
 }
 
+function normalizeStructuredOutputJson(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2);
+  } catch {
+    return '';
+  }
+}
+
+function normalizeIsoDateString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Date.parse(trimmed);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  return new Date(parsed).toISOString();
+}
+
+type LlmPresetValueType = 'text' | 'json';
+
+function normalizeLlmPresetContent(value: unknown, valueType: LlmPresetValueType): string {
+  if (valueType === 'json') {
+    return normalizeStructuredOutputJson(value);
+  }
+
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.trim().length > 0 ? value : '';
+}
+
+function normalizeLlmPreset(rawPreset: unknown, valueType: LlmPresetValueType = 'text'): LlmPresetRecord | null {
+  if (!rawPreset || typeof rawPreset !== 'object') {
+    return null;
+  }
+
+  const record = rawPreset as Record<string, unknown>;
+  const id = typeof record.id === 'string' ? record.id.trim() : '';
+  const name = typeof record.name === 'string' ? record.name.trim() : '';
+  const content = normalizeLlmPresetContent(record.content, valueType);
+  if (!id || !name || !content) {
+    return null;
+  }
+
+  const createdAt = normalizeIsoDateString(record.createdAt) ?? new Date().toISOString();
+  const updatedAt = normalizeIsoDateString(record.updatedAt) ?? createdAt;
+
+  return {
+    id,
+    name,
+    content,
+    createdAt,
+    updatedAt,
+  };
+}
+
+function mergeLlmPresetCollections(...collections: LlmPresetRecord[][]): LlmPresetRecord[] {
+  const seenNames = new Set<string>();
+  const seenIds = new Set<string>();
+  const nextPresets: LlmPresetRecord[] = [];
+
+  for (const collection of collections) {
+    for (const preset of collection) {
+      const nameKey = preset.name.toLowerCase();
+      if (seenIds.has(preset.id) || seenNames.has(nameKey)) {
+        continue;
+      }
+
+      seenIds.add(preset.id);
+      seenNames.add(nameKey);
+      nextPresets.push(preset);
+    }
+  }
+
+  return nextPresets;
+}
+
+export function normalizeLlmPresets(rawPresets: unknown, valueType: LlmPresetValueType = 'text'): LlmPresetRecord[] {
+  if (!Array.isArray(rawPresets)) {
+    return [];
+  }
+
+  return mergeLlmPresetCollections(rawPresets.flatMap((rawPreset) => {
+    const preset = normalizeLlmPreset(rawPreset, valueType);
+    return preset ? [preset] : [];
+  }));
+}
+
+function normalizeLegacyLlmPresets(rawPresets: unknown, contentKey: 'systemPrompt' | 'prompt' | 'structuredOutputJson', valueType: LlmPresetValueType = 'text'): LlmPresetRecord[] {
+  if (!Array.isArray(rawPresets)) {
+    return [];
+  }
+
+  return mergeLlmPresetCollections(rawPresets.flatMap((rawPreset) => {
+    if (!rawPreset || typeof rawPreset !== 'object') {
+      return [];
+    }
+
+    const record = rawPreset as Record<string, unknown>;
+    const id = typeof record.id === 'string' ? record.id.trim() : '';
+    const name = typeof record.name === 'string' ? record.name.trim() : '';
+    const content = normalizeLlmPresetContent(record[contentKey], valueType);
+    if (!id || !name || !content) {
+      return [];
+    }
+
+    const createdAt = normalizeIsoDateString(record.createdAt) ?? new Date().toISOString();
+    const updatedAt = normalizeIsoDateString(record.updatedAt) ?? createdAt;
+
+    return [{
+      id,
+      name,
+      content,
+      createdAt,
+      updatedAt,
+    }];
+  }));
+}
+
+export function normalizeLlmSettings(rawLlmSettings: unknown): AppSettings['llm'] {
+  const record = rawLlmSettings && typeof rawLlmSettings === 'object'
+    ? rawLlmSettings as Record<string, unknown>
+    : {};
+
+  return {
+    systemPromptPresets: mergeLlmPresetCollections(
+      normalizeLlmPresets(record.systemPromptPresets),
+      normalizeLegacyLlmPresets(record.presets, 'systemPrompt'),
+    ),
+    promptPresets: mergeLlmPresetCollections(
+      normalizeLlmPresets(record.promptPresets),
+      normalizeLegacyLlmPresets(record.presets, 'prompt'),
+    ),
+    structuredOutputJsonPresets: mergeLlmPresetCollections(
+      normalizeLlmPresets(record.structuredOutputJsonPresets, 'json'),
+      normalizeLegacyLlmPresets(record.presets, 'structuredOutputJson', 'json'),
+    ),
+  };
+}
+
 /** Build the full default settings object, including environment-driven defaults. */
 export function getDefaultSettingsFromEnvironment(): AppSettings {
   return {
@@ -317,6 +476,11 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       applyToGeneratedOutputs: true,
       applyToBackupImports: true,
     },
+    llm: {
+      systemPromptPresets: [],
+      promptPresets: [],
+      structuredOutputJsonPresets: [],
+    },
   };
 }
 
@@ -415,6 +579,10 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       ...defaults.videoOptimization,
       ...loadedSettings.videoOptimization,
     },
+    llm: {
+      ...defaults.llm,
+      ...normalizeLlmSettings(loadedSettings.llm),
+    },
   };
 }
 
@@ -482,6 +650,12 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
 
   for (const key of Object.keys(defaults.videoOptimization)) {
     if (!(key in (loaded.videoOptimization || {}))) {
+      return true;
+    }
+  }
+
+  for (const key of Object.keys(defaults.llm)) {
+    if (!(key in (loaded.llm || {}))) {
       return true;
     }
   }

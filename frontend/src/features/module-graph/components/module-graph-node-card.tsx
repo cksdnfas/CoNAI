@@ -10,12 +10,12 @@ import { ImageAttachmentPickerButton } from '@/features/image-generation/compone
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
-import { ModuleGraphSimpleValueInput } from './module-graph-simple-value-input'
+import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
+import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import type { ComfyUIServer, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import {
   WORKFLOW_INPUT_ENABLED_KEY,
-  WORKFLOW_INPUT_REQUIRED_KEY,
   isWorkflowInputEnabledForNode,
   isWorkflowInputSourceModule,
 } from '../module-graph-workflow-inputs'
@@ -106,6 +106,14 @@ function resolveComfyTargetBadgeLabel(inputValues: Record<string, unknown> | und
   }
 
   return '자동 분산'
+}
+
+function resolveSelectOptionsWithCurrentValue(options: string[] | null | undefined, currentValue: string | null) {
+  const normalizedOptions = Array.isArray(options) ? options.filter((option) => option.trim().length > 0) : []
+  if (currentValue && !normalizedOptions.includes(currentValue)) {
+    return [...normalizedOptions, currentValue]
+  }
+  return normalizedOptions
 }
 
 /** Prevent embedded controls from triggering node drag or canvas selection. */
@@ -220,6 +228,7 @@ function InputPortCell({
   connected,
   satisfied,
   requiredMissing,
+  selectOptionsOverride,
 }: {
   nodeId: string
   data: ModuleGraphNode['data']
@@ -228,6 +237,7 @@ function InputPortCell({
   connected: boolean
   satisfied: boolean
   requiredMissing: boolean
+  selectOptionsOverride?: ModuleGraphSelectOption[]
 }) {
   if (!port) {
     return <div className="min-h-[28px] border-b border-dashed border-border/35" aria-hidden="true" />
@@ -238,7 +248,26 @@ function InputPortCell({
   const statusLabel = requiredMissing ? '입력 필요' : connected ? '연결됨' : satisfied ? '설정됨' : '대기'
   const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
   const uiField = data.module.ui_schema?.find((field) => field.key === port.key)
-  const selectOptions = uiField?.data_type === 'select' && Array.isArray(uiField.options) ? uiField.options : null
+  const operationKey = getModuleOperationKey(data.module)
+  const isSystemCallLlmPort = operationKey === 'system.call_llm'
+  const selectOptions = selectOptionsOverride && selectOptionsOverride.length > 0
+    ? selectOptionsOverride
+    : (uiField?.data_type === 'select' && Array.isArray(uiField.options) ? uiField.options : null)
+  const numberStep = isSystemCallLlmPort && port.key === 'temperature'
+    ? 0.1
+    : isSystemCallLlmPort && port.key === 'max_tokens'
+      ? 128
+      : undefined
+  const numberMin = isSystemCallLlmPort && port.key === 'temperature'
+    ? 0
+    : isSystemCallLlmPort && port.key === 'max_tokens'
+      ? 128
+      : uiField?.min
+  const numberPlaceholder = isSystemCallLlmPort && port.key === 'temperature'
+    ? '0.7'
+    : isSystemCallLlmPort && port.key === 'max_tokens'
+      ? '1024'
+      : (typeof port.default_value === 'number' ? String(port.default_value) : port.label)
   const preview = getCompactValuePreview(rawValue ?? port.default_value)
   const isPromptLikePort = port.data_type === 'text' || port.data_type === 'prompt'
 
@@ -269,7 +298,10 @@ function InputPortCell({
             dataType="number"
             value={rawValue}
             onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
-            placeholder={typeof port.default_value === 'number' ? String(port.default_value) : port.label}
+            placeholder={numberPlaceholder}
+            min={numberMin}
+            max={uiField?.max}
+            step={numberStep}
             className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>
@@ -362,7 +394,6 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
 
   const rawValue = data.inputValues?.[sourcePort.key]
   const workflowInputEnabled = isWorkflowInputEnabledForNode({ id, data } as ModuleGraphNode)
-  const workflowInputRequired = Boolean(data.inputValues?.[WORKFLOW_INPUT_REQUIRED_KEY])
   const hasExplicitValue = hasMeaningfulValue(rawValue)
 
   const handleValueChange = (value: unknown) => {
@@ -385,19 +416,6 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
           className="h-4 w-4 shrink-0 accent-primary"
         />
       </div>
-
-      {workflowInputEnabled ? (
-        <div className="flex min-h-[28px] items-center justify-between border-b border-border/30 px-1 pb-1 text-[11px] text-foreground">
-          <span>필수</span>
-          <input
-            type="checkbox"
-            checked={workflowInputRequired}
-            onChange={(event) => data.onNodeValueChange?.(id, WORKFLOW_INPUT_REQUIRED_KEY, event.target.checked)}
-            onMouseDown={stopNodeInteraction}
-            className="h-4 w-4 shrink-0 accent-primary"
-          />
-        </div>
-      ) : null}
 
       {(sourcePort.data_type === 'prompt' || sourcePort.data_type === 'text' || sourcePort.data_type === 'json') ? (
         <div onMouseDown={stopNodeInteraction}>
@@ -780,7 +798,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const outputPorts = module.output_ports ?? []
   const accentColor = getModuleColor(module)
   const executionStatus = data.executionStatus || 'idle'
-  const portRowCount = Math.max(inputPorts.length, outputPorts.length, 1)
   const connectedInputKeys = new Set(data.connectedInputKeys ?? [])
   const connectedOutputKeys = new Set(data.connectedOutputKeys ?? [])
   const isWorkflowInputSource = isWorkflowInputSourceModule(module)
@@ -839,6 +856,100 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const isFinalResult = isFinalResultModule(module)
   const isTextMergeModule = operationKey === 'system.merge_text'
   const isTextTransformModule = operationKey === 'system.regex_text_transform'
+  const isSystemCallLlmModule = operationKey === 'system.call_llm'
+  const isSystemCallCodexMessageModule = operationKey === 'system.call_codex_message'
+  const llmProvidersQuery = useQuery({
+    queryKey: ['external-api-llm-options', 'module-graph-node-card'],
+    queryFn: () => getExternalApiLlmOptions(),
+    enabled: isSystemCallLlmModule,
+    staleTime: 30_000,
+  })
+  const llmModelBindings = (() => {
+    if (!isSystemCallLlmModule) {
+      return [] as Array<ExternalApiLlmOptionRecord & { default_model: string }>
+    }
+
+    const entries = (llmProvidersQuery.data ?? [])
+      .map((provider) => ({
+        ...provider,
+        default_model: normalizeOptionalString(provider.default_model),
+      }))
+      .filter((provider): provider is ExternalApiLlmOptionRecord & { default_model: string } => Boolean(provider.default_model))
+      .sort((left, right) => left.provider_name.localeCompare(right.provider_name))
+
+    const currentProviderName = normalizeOptionalString(data.inputValues?.provider_name)
+    const currentModel = normalizeOptionalString(data.inputValues?.model)
+    if (currentProviderName && currentModel && !entries.some((entry) => entry.provider_name === currentProviderName)) {
+      return [
+        ...entries,
+        {
+          provider_name: currentProviderName,
+          display_name: currentProviderName,
+          provider_type: 'llm_openai_compatible',
+          default_model: currentModel,
+          default_temperature: null,
+          default_max_tokens: null,
+          default_response_mode: 'text',
+        },
+      ]
+    }
+
+    return entries
+  })()
+  const llmModelOptions = llmModelBindings.map((provider) => ({
+    value: provider.provider_name,
+    label: `${provider.provider_name} · ${provider.default_model}`,
+  })) satisfies ModuleGraphSelectOption[]
+  const llmSelectedProviderName = normalizeOptionalString(data.inputValues?.provider_name) ?? ''
+  const applyLlmModelBinding = (providerName: string) => {
+    if (!data.onNodeValueChange) {
+      return
+    }
+
+    const selectedBinding = llmModelBindings.find((entry) => entry.provider_name === providerName)
+    if (!selectedBinding) {
+      return
+    }
+
+    data.onNodeValueChange(id, 'provider_name', selectedBinding.provider_name)
+    data.onNodeValueChange(id, 'model', selectedBinding.default_model)
+    data.onNodeValueChange(id, 'temperature', typeof selectedBinding.default_temperature === 'number' ? selectedBinding.default_temperature : '')
+    data.onNodeValueChange(id, 'max_tokens', typeof selectedBinding.default_max_tokens === 'number' ? selectedBinding.default_max_tokens : 1024)
+  }
+  const codexModelPort = isSystemCallCodexMessageModule
+    ? inputPorts.find((port) => port.key === 'model')
+    : null
+  const codexModelUiField = isSystemCallCodexMessageModule
+    ? module.ui_schema?.find((field) => field.key === 'model')
+    : null
+  const codexModelCurrentValue = normalizeOptionalString(data.inputValues?.model)
+  const codexModelOptions = resolveSelectOptionsWithCurrentValue(
+    codexModelUiField?.data_type === 'select' ? codexModelUiField.options : null,
+    codexModelCurrentValue,
+  )
+  const codexModelValue = codexModelCurrentValue
+    ?? normalizeOptionalString(codexModelPort?.default_value)
+    ?? (typeof codexModelUiField?.default_value === 'string' ? codexModelUiField.default_value : null)
+    ?? codexModelOptions[0]
+    ?? ''
+  const canConfigureLlmModel = Boolean(isSystemCallLlmModule && llmModelOptions.length > 0 && data.onNodeValueChange)
+  const canConfigureCodexModel = Boolean(isSystemCallCodexMessageModule && codexModelOptions.length > 0 && data.onNodeValueChange)
+  const visibleInputPorts = inputPorts.filter((port) => {
+    if (isSystemCallLlmModule && port.key === 'provider_name') {
+      return false
+    }
+
+    if (canConfigureLlmModel && port.key === 'model') {
+      return false
+    }
+
+    if (canConfigureCodexModel && port.key === 'model') {
+      return false
+    }
+
+    return true
+  })
+  const portRowCount = Math.max(visibleInputPorts.length, outputPorts.length, 1)
   const comfyWorkflowId = module.engine_type === 'comfyui'
     ? parsePositiveIntegerish(module.source_workflow_id ?? module.template_defaults?.workflow_id)
     : null
@@ -967,34 +1078,36 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           {data.onExecuteNode ? (
             <Button
               type="button"
-              size="sm"
-              className="h-7 px-2 text-[11px]"
+              size="icon-sm"
+              className="h-7 w-7"
               disabled={data.executeNodeDisabled}
               onMouseDown={stopNodeActionEvent}
               onClick={(event) => {
                 stopNodeActionEvent(event)
                 data.onExecuteNode?.()
               }}
+              title="실행"
+              aria-label="실행"
             >
               <Play className="h-3.5 w-3.5" />
-              실행
             </Button>
           ) : null}
           {data.onForceExecuteNode ? (
             <Button
               type="button"
-              size="sm"
+              size="icon-sm"
               variant="outline"
-              className="h-7 px-2 text-[11px]"
+              className="h-7 w-7"
               disabled={data.executeNodeDisabled}
               onMouseDown={stopNodeActionEvent}
               onClick={(event) => {
                 stopNodeActionEvent(event)
                 data.onForceExecuteNode?.()
               }}
+              title="재실행"
+              aria-label="재실행"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              재실행
             </Button>
           ) : null}
         </div>
@@ -1032,6 +1145,47 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         </div>
       ) : null}
 
+      {canConfigureLlmModel ? (
+        <div className="nodrag nowheel mt-2 space-y-1">
+          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">모델</div>
+          <Select
+            value={llmSelectedProviderName}
+            onMouseDown={stopNodeInteraction}
+            onClick={stopNodeInteraction}
+            onChange={(event) => {
+              stopNodeInteraction(event)
+              applyLlmModelBinding(event.target.value)
+            }}
+            className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          >
+            <option value="">모델 선택</option>
+            {llmModelOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </Select>
+        </div>
+      ) : null}
+
+      {canConfigureCodexModel ? (
+        <div className="nodrag nowheel mt-2 space-y-1">
+          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">모델</div>
+          <Select
+            value={codexModelValue}
+            onMouseDown={stopNodeInteraction}
+            onClick={stopNodeInteraction}
+            onChange={(event) => {
+              stopNodeInteraction(event)
+              data.onNodeValueChange?.(id, 'model', event.target.value)
+            }}
+            className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          >
+            {codexModelOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </Select>
+        </div>
+      ) : null}
+
       {isWorkflowInputSource ? <SourceNodeOutputPorts nodeId={id} ports={sourceOutputPorts} connectedOutputKeys={connectedOutputKeys} accentColor={accentColor} /> : null}
       {isWorkflowInputSource ? <InlineWorkflowInputEditor id={id} data={data} /> : null}
 
@@ -1055,7 +1209,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         ) : (
           <div className="mt-2.5 grid gap-1">
             {Array.from({ length: portRowCount }, (_, index) => {
-              const inputPort = inputPorts[index]
+              const inputPort = visibleInputPorts[index]
               const outputPort = outputPorts[index]
               const inputConnected = Boolean(inputPort && connectedInputKeys.has(inputPort.key))
               const inputSatisfied = Boolean(inputPort && (inputConnected || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))
@@ -1072,6 +1226,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                     connected={inputConnected}
                     satisfied={inputSatisfied}
                     requiredMissing={inputRequiredMissing}
+                    selectOptionsOverride={undefined}
                   />
                   <PortCell
                     nodeId={id}
@@ -1092,7 +1247,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
       {hasStandaloneArtifactPreview ? (
         <div className="mt-2 border-t border-border/20 pt-1.5">
           <div className="flex items-center gap-2 px-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
             <span>{isFinalResult ? 'result' : 'output'}</span>
           </div>
           <NodeArtifactPreviewBody
@@ -1115,7 +1269,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         <div className="mt-2 border-t border-border/20 pt-1.5">
           {outputGroups.map((group) => {
             const isExpanded = expandedOutputGroupKeys.includes(group.portKey)
-            const groupTypeColor = group.portType ? getPortTypeColor(group.portType) : null
 
             return (
               <div key={group.portKey} className="border-b border-border/20 py-0.5 last:border-b-0">
@@ -1135,7 +1288,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     {isExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
-                    {groupTypeColor ? <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: groupTypeColor }} aria-hidden="true" /> : null}
                     <span className="truncate text-[11px] font-medium text-foreground">{group.portLabel}</span>
                   </div>
                   <span className="shrink-0 text-[10px] text-muted-foreground">{group.artifactCount}</span>

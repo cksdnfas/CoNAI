@@ -198,7 +198,16 @@ export function getExecutionInputEntries(plan: ParsedExecutionPlan | null, input
 }
 
 /** Resolve a human-readable node label from the selected workflow graph. */
-export function getNodeDisplayLabel(selectedGraph: GraphWorkflowRecord | null | undefined, nodeId: string) {
+export function getNodeDisplayLabel(
+  selectedGraph: GraphWorkflowRecord | null | undefined,
+  nodeId: string,
+  nodeLabelOverrides?: Record<string, string> | null,
+) {
+  const overrideLabel = nodeLabelOverrides?.[nodeId]?.trim()
+  if (overrideLabel) {
+    return overrideLabel
+  }
+
   const nodeRecord = selectedGraph?.graph.nodes.find((node) => node.id === nodeId)
   const explicitLabel = nodeRecord?.label?.trim()
   if (explicitLabel) {
@@ -209,7 +218,11 @@ export function getNodeDisplayLabel(selectedGraph: GraphWorkflowRecord | null | 
 }
 
 /** Group artifacts by node so the panel can render per-node outputs. */
-export function groupArtifactsByNode(artifacts: GraphExecutionArtifactRecord[], selectedGraph?: GraphWorkflowRecord | null) {
+export function groupArtifactsByNode(
+  artifacts: GraphExecutionArtifactRecord[],
+  selectedGraph?: GraphWorkflowRecord | null,
+  nodeLabelOverrides?: Record<string, string> | null,
+) {
   const groupMap = new Map<string, GraphExecutionArtifactRecord[]>()
 
   for (const artifact of artifacts) {
@@ -221,7 +234,7 @@ export function groupArtifactsByNode(artifacts: GraphExecutionArtifactRecord[], 
   return Array.from(groupMap.entries())
     .map(([nodeId, nodeArtifacts]) => ({
       nodeId,
-      nodeLabel: getNodeDisplayLabel(selectedGraph, nodeId),
+      nodeLabel: getNodeDisplayLabel(selectedGraph, nodeId, nodeLabelOverrides),
       artifacts: [...nodeArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime()),
     }))
     .sort((left, right) => {

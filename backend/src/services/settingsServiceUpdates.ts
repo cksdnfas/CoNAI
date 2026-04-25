@@ -4,6 +4,7 @@ import type {
   GenerationThrottleSettings,
   GeneralSettings,
   KaloscopeSettings,
+  LlmSettings,
   MetadataExtractionSettings,
   SimilaritySettings,
   TaggerSettings,
@@ -159,6 +160,26 @@ export function applyVideoOptimizationSettingsUpdate(currentSettings: AppSetting
     videoOptimization: {
       ...currentSettings.videoOptimization,
       ...videoOptimizationSettings,
+    },
+  };
+}
+
+/** Build the next settings state after applying an llm-settings patch. */
+export function applyLlmSettingsUpdate(currentSettings: AppSettings, llmSettings: Partial<LlmSettings>): AppSettings {
+  return {
+    ...currentSettings,
+    llm: {
+      ...currentSettings.llm,
+      ...llmSettings,
+      systemPromptPresets: Array.isArray(llmSettings.systemPromptPresets)
+        ? llmSettings.systemPromptPresets
+        : currentSettings.llm.systemPromptPresets,
+      promptPresets: Array.isArray(llmSettings.promptPresets)
+        ? llmSettings.promptPresets
+        : currentSettings.llm.promptPresets,
+      structuredOutputJsonPresets: Array.isArray(llmSettings.structuredOutputJsonPresets)
+        ? llmSettings.structuredOutputJsonPresets
+        : currentSettings.llm.structuredOutputJsonPresets,
     },
   };
 }

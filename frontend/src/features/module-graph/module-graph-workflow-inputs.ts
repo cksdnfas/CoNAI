@@ -73,7 +73,6 @@ export function buildWorkflowInputDefinitionFromNode(node: ModuleGraphNode): Gra
   }
 
   const uiField = node.data.module.ui_schema?.find((field) => field.key === sourcePort.key)
-  const required = normalizeBooleanFlag(node.data.inputValues?.[WORKFLOW_INPUT_REQUIRED_KEY])
   const nodeDisplayLabel = getModuleNodeDisplayLabel(node)
   const label = normalizeOptionalString(node.data.inputValues?.[WORKFLOW_INPUT_LABEL_KEY])
     ?? `${nodeDisplayLabel} · ${sourcePort.label}`
@@ -89,7 +88,7 @@ export function buildWorkflowInputDefinitionFromNode(node: ModuleGraphNode): Gra
     data_type: sourcePort.data_type,
     ui_data_type: uiField?.data_type,
     description,
-    required,
+    required: true,
     placeholder: uiField?.placeholder || sourcePort.label,
     default_value: node.data.inputValues?.[sourcePort.key],
     options: uiField?.options,
@@ -143,7 +142,7 @@ export function applySavedWorkflowInputMetadataToNodes(
       [WORKFLOW_INPUT_ENABLED_KEY]: true,
       [WORKFLOW_INPUT_LABEL_KEY]: inputDefinition.label,
       [WORKFLOW_INPUT_DESCRIPTION_KEY]: normalizeModulePortDescription(inputDefinition.description) ?? '',
-      [WORKFLOW_INPUT_REQUIRED_KEY]: Boolean(inputDefinition.required),
+      [WORKFLOW_INPUT_REQUIRED_KEY]: true,
     }
 
     if (nextInputValues[sourcePort.key] === undefined && inputDefinition.default_value !== undefined) {

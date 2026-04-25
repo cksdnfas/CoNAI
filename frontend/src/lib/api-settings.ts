@@ -8,6 +8,7 @@ import type {
   ImageSaveSettings,
   KaloscopeServerStatus,
   KaloscopeSettings,
+  LlmSettings,
   MetadataExtractionSettings,
   SimilaritySettings,
   TaggerDependencyCheckResult,
@@ -84,6 +85,19 @@ export interface AppearanceFontUploadResult {
 export interface WallpaperRuntimeSettings {
   wallpaperLayoutPresets: AppearanceSettings['wallpaperLayoutPresets']
   wallpaperActivePresetId: string | null
+}
+
+export interface LlmPresetOptionRecord {
+  id: string
+  name: string
+  content: string
+  updatedAt: string
+}
+
+export interface LlmPresetOptionCollections {
+  systemPromptPresets: LlmPresetOptionRecord[]
+  promptPresets: LlmPresetOptionRecord[]
+  structuredOutputJsonPresets: LlmPresetOptionRecord[]
 }
 
 export interface FileVerificationRunResult {
@@ -243,6 +257,30 @@ export async function updateVideoOptimizationSettings(settings: Partial<VideoOpt
     throw new Error(response.error || '비디오 최적화 설정을 저장하지 못했어.')
   }
 
+  return response.data
+}
+
+export async function updateLlmSettings(settings: Partial<LlmSettings>) {
+  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/llm', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || 'LLM 설정을 저장하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function getLlmPresetOptions() {
+  const response = await fetchJson<ApiResponse<LlmPresetOptionCollections>>('/api/settings/llm-presets/options')
+  if (!response.success) {
+    throw new Error(response.error || 'LLM 프리셋 목록을 불러오지 못했어.')
+  }
   return response.data
 }
 

@@ -29,8 +29,16 @@ type ModuleGroup = {
   modules: ModuleDefinitionRecord[]
 }
 
-export const SYSTEM_GROUP_ORDER = ['input', 'prompt', 'image', 'analysis', 'output', 'utility', 'other']
+export const SYSTEM_GROUP_ORDER = ['input', 'output', 'utility', 'get', 'llm', 'other']
 export const CUSTOM_GROUP_ORDER = ['nai', 'codex', 'comfyui', 'other']
+
+const GET_MODULE_OPERATION_KEYS = new Set([
+  'system.find_similar_images',
+  'system.load_prompt_from_reference',
+  'system.load_image_from_reference',
+  'system.random_image_from_library',
+  'system.random_video_from_library',
+])
 
 function toTitleCase(rawValue: string) {
   return rawValue
@@ -50,6 +58,10 @@ function getModuleOperationKey(module: ModuleDefinitionRecord) {
   }
 
   return null
+}
+
+function getNormalizedModuleName(module: ModuleDefinitionRecord) {
+  return getModuleBaseDisplayName(module).trim().toLowerCase()
 }
 
 export function shouldHideFromModuleLibrary(module: ModuleDefinitionRecord) {
@@ -88,30 +100,41 @@ function getModuleHoverTitle(module: ModuleDefinitionRecord) {
 
 /** Build a user-facing group for system modules based on practical workflow role. */
 export function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: string; label: string } {
-  const category = (module.category ?? '').toLowerCase()
-  const name = getModuleBaseDisplayName(module).toLowerCase()
+  const category = (module.category ?? '').trim().toLowerCase()
+  const name = getNormalizedModuleName(module)
+  const operationKey = getModuleOperationKey(module)
 
   if (isFinalResultModule(module) || category === 'output') {
     return { key: 'output', label: 'Output' }
   }
 
-  if (category === 'input' || name.includes('constant')) {
+  if (
+    category === 'input'
+    || category === 'prompt-source'
+    || operationKey?.startsWith('system.constant_')
+    || operationKey === 'system.random_prompt_from_group'
+    || name.includes('상수')
+  ) {
     return { key: 'input', label: 'Input' }
   }
 
-  if (category === 'analysis' || name.includes('extract')) {
-    return { key: 'analysis', label: 'Analysis' }
+  if (
+    category === 'image'
+    || category === 'video'
+    || category === 'retrieval'
+    || GET_MODULE_OPERATION_KEYS.has(operationKey ?? '')
+    || name.includes('찾기')
+    || name.includes('불러오기')
+    || name.includes('라이브러리')
+  ) {
+    return { key: 'get', label: 'Get' }
   }
 
-  if (category === 'prompt' || category === 'prompt-source' || name.includes('prompt')) {
-    return { key: 'prompt', label: 'Prompt' }
+  if (category === 'llm') {
+    return { key: 'llm', label: 'LLM' }
   }
 
-  if (category === 'image' || category === 'retrieval' || name.includes('image') || name.includes('reference') || name.includes('library')) {
-    return { key: 'image', label: 'Image / Retrieval' }
-  }
-
-  if (category === 'utility') {
+  if (category === 'analysis' || category === 'utility' || category === 'prompt' || name.includes('추출')) {
     return { key: 'utility', label: 'Utility' }
   }
 

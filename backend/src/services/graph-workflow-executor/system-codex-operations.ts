@@ -15,6 +15,7 @@ import {
   type RuntimeArtifact,
 } from './shared'
 import { GenerationQueueService } from '../generationQueueService'
+import { assertCodexAvailable } from '../codexGenerationExecutor'
 
 const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
 const QUEUE_POLL_INTERVAL_MS = 1500
@@ -397,6 +398,8 @@ export async function executeCodexImageGenerationNode(
   const operation = inputImage ? (maskImage ? 'infill' : 'edit') : 'generate'
   const requestedSize = resolveCodexRequestedSize(resolvedInputs)
   const imageSaveOptions = buildQueueImageSaveOptions()
+
+  await assertCodexAvailable('Codex 이미지 생성')
 
   writeExecutionLog({
     executionId: context.executionId,

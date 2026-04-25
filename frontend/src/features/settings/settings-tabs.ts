@@ -1,4 +1,4 @@
-export type SettingsTab = 'general' | 'folders' | 'appearance' | 'security' | 'auto' | 'metadata' | 'image-save'
+export type SettingsTab = 'general' | 'folders' | 'appearance' | 'security' | 'auto' | 'metadata' | 'image-save' | 'llm-connections'
 
 export interface SettingsTabItem {
   value: SettingsTab
@@ -13,4 +13,5 @@ export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
   { value: 'auto', label: '자동화' },
   { value: 'metadata', label: '메타데이터' },
   { value: 'image-save', label: '미디어 생성/저장' },
+  { value: 'llm-connections', label: 'LLM 설정' },
 ]

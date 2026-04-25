@@ -9,6 +9,8 @@ import {
   KaloscopeSettings,
   SimilaritySettings,
   AppearanceSettings,
+  LlmPresetRecord,
+  LlmSettings,
   MetadataExtractionSettings,
   ThumbnailSettings,
   VideoOptimizationSettings,
@@ -22,6 +24,7 @@ import {
   getDefaultSettingsFromEnvironment,
   hasMissingSettingsFields,
   mergeLoadedSettingsWithDefaults,
+  normalizeLlmSettings,
   readRawSettingsFile,
   writeSettingsFile,
 } from './settingsServiceStorage';
@@ -31,6 +34,7 @@ import {
   applyGeneralSettingsUpdate,
   applyImageSaveSettingsUpdate,
   applyKaloscopeSettingsUpdate,
+  applyLlmSettingsUpdate,
   applyMetadataSettingsUpdate,
   applySimilaritySettingsUpdate,
   applyTaggerSettingsUpdate,
@@ -222,6 +226,44 @@ export class SettingsService {
     const updatedSettings = applyVideoOptimizationSettingsUpdate(currentSettings, videoOptimizationSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
+  }
+
+  /**
+   * Update LLM settings
+   */
+  updateLlmSettings(llmSettings: Partial<LlmSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const normalizedSettings = normalizeLlmSettings({
+      ...currentSettings.llm,
+      ...llmSettings,
+    });
+    const updatedSettings = applyLlmSettingsUpdate(currentSettings, normalizedSettings);
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /**
+   * Get LLM preset options for node/editor dropdowns
+   */
+  getLlmPresetOptions(): LlmSettings {
+    const { llm } = this.loadSettings();
+    return {
+      systemPromptPresets: [...llm.systemPromptPresets],
+      promptPresets: [...llm.promptPresets],
+      structuredOutputJsonPresets: [...llm.structuredOutputJsonPresets],
+    };
+  }
+
+  /**
+   * Find one LLM preset by kind and name
+   */
+  findLlmPresetByName(kind: keyof LlmSettings, name: string): LlmPresetRecord | null {
+    const normalizedName = name.trim().toLowerCase();
+    if (!normalizedName) {
+      return null;
+    }
+
+    return this.loadSettings().llm[kind].find((preset) => preset.name.trim().toLowerCase() === normalizedName) ?? null;
   }
 
   /**

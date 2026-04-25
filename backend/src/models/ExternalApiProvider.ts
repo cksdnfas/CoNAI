@@ -59,6 +59,93 @@ export class ExternalApiProvider {
   }
 
   /**
+   * Return enabled LLM provider options safe for graph authoring selectors.
+   */
+  static findEnabledLlmOptions(): Array<{
+    provider_name: string;
+    display_name: string;
+    provider_type: ProviderType;
+    default_model: string | null;
+    default_temperature: number | null;
+    default_max_tokens: number | null;
+    default_response_mode: 'text' | 'json';
+  }> {
+    const db = getUserSettingsDb();
+    const rows = db.prepare(`
+      SELECT provider_name, display_name, provider_type, additional_config
+      FROM external_api_providers
+      WHERE is_enabled = 1
+        AND provider_type IN ('llm_openai_compatible', 'llm_ollama')
+      ORDER BY display_name COLLATE NOCASE ASC, provider_name COLLATE NOCASE ASC
+    `).all() as Array<{
+      provider_name: string;
+      display_name: string;
+      provider_type: ProviderType;
+      additional_config: string | null;
+    }>;
+
+    return rows.map((row) => {
+      let defaultModel: string | null = null;
+      let defaultTemperature: number | null = null;
+      let defaultMaxTokens: number | null = null;
+      let defaultResponseMode: 'text' | 'json' = 'text';
+      if (row.additional_config) {
+        try {
+          const parsed = JSON.parse(row.additional_config) as {
+            default_model?: unknown;
+            model?: unknown;
+            default_temperature?: unknown;
+            temperature?: unknown;
+            default_max_tokens?: unknown;
+            max_tokens?: unknown;
+            default_response_mode?: unknown;
+            response_mode?: unknown;
+          };
+          defaultModel = typeof parsed.default_model === 'string' && parsed.default_model.trim().length > 0
+            ? parsed.default_model.trim()
+            : typeof parsed.model === 'string' && parsed.model.trim().length > 0
+              ? parsed.model.trim()
+              : null;
+          defaultTemperature = typeof parsed.default_temperature === 'number' && Number.isFinite(parsed.default_temperature)
+            ? parsed.default_temperature
+            : typeof parsed.default_temperature === 'string' && parsed.default_temperature.trim().length > 0 && Number.isFinite(Number(parsed.default_temperature))
+              ? Number(parsed.default_temperature)
+              : typeof parsed.temperature === 'number' && Number.isFinite(parsed.temperature)
+                ? parsed.temperature
+                : typeof parsed.temperature === 'string' && parsed.temperature.trim().length > 0 && Number.isFinite(Number(parsed.temperature))
+                  ? Number(parsed.temperature)
+                  : null;
+          defaultMaxTokens = typeof parsed.default_max_tokens === 'number' && Number.isFinite(parsed.default_max_tokens)
+            ? parsed.default_max_tokens
+            : typeof parsed.default_max_tokens === 'string' && parsed.default_max_tokens.trim().length > 0 && Number.isFinite(Number(parsed.default_max_tokens))
+              ? Number(parsed.default_max_tokens)
+              : typeof parsed.max_tokens === 'number' && Number.isFinite(parsed.max_tokens)
+                ? parsed.max_tokens
+                : typeof parsed.max_tokens === 'string' && parsed.max_tokens.trim().length > 0 && Number.isFinite(Number(parsed.max_tokens))
+                  ? Number(parsed.max_tokens)
+                  : null;
+          defaultResponseMode = parsed.default_response_mode === 'json' || parsed.response_mode === 'json' ? 'json' : 'text';
+        } catch {
+          defaultModel = null;
+          defaultTemperature = null;
+          defaultMaxTokens = null;
+          defaultResponseMode = 'text';
+        }
+      }
+
+      return {
+        provider_name: row.provider_name,
+        display_name: row.display_name,
+        provider_type: row.provider_type,
+        default_model: defaultModel,
+        default_temperature: defaultTemperature,
+        default_max_tokens: defaultMaxTokens,
+        default_response_mode: defaultResponseMode,
+      };
+    });
+  }
+
+  /**
    * Get decrypted API key for a provider (for internal use only - NOT exposed via API)
    * @param providerName - Provider name
    * @param requireEnabled - If true, only return key if provider is enabled (default: false)

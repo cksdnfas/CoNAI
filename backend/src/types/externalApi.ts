@@ -1,7 +1,9 @@
 /**
  * Provider type classification
  */
-export type ProviderType = 'general';
+export type ProviderType = 'general' | 'llm_openai_compatible' | 'llm_ollama';
+
+export const PROVIDER_TYPES: ProviderType[] = ['general', 'llm_openai_compatible', 'llm_ollama'];
 
 /**
  * External API Provider stored in database

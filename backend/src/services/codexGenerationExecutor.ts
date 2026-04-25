@@ -46,6 +46,14 @@ export type CodexAvailabilityStatus = {
 
 const SUPPORTED_OUTPUT_FORMATS = new Set(['png', 'jpeg', 'webp'])
 const SUPPORTED_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp'])
+const CODEX_AUTHENTICATED_PATTERN = /(^|\n)\s*logged in using\s+(.+)/i
+const CODEX_UNAUTHENTICATED_PATTERNS = [
+  /(^|\n)\s*not logged in\b/i,
+  /(^|\n)\s*login required\b/i,
+  /(^|\n)\s*authentication required\b/i,
+  /(^|\n)\s*unauthenticated\b/i,
+  /(^|\n)\s*no stored credentials\b/i,
+] as const
 
 function resolveOutputFormat(value: string | undefined) {
   if (!value) {
@@ -195,6 +203,30 @@ export function resolveCodexCommand() {
   }
 }
 
+function parseCodexAvailabilityOutput(rawOutput: string, exitCode: number | null, command: string): CodexAvailabilityStatus {
+  const authenticatedMatch = rawOutput.match(CODEX_AUTHENTICATED_PATTERN)
+  const explicitlyUnauthenticated = CODEX_UNAUTHENTICATED_PATTERNS.some((pattern) => pattern.test(rawOutput))
+  const authenticated = Boolean(authenticatedMatch) && !explicitlyUnauthenticated
+  const installed = true
+  const authMode = authenticatedMatch?.[2]?.trim() ?? null
+  const message = authenticated
+    ? (authenticatedMatch?.[0]?.trim() || rawOutput || 'Logged in')
+    : explicitlyUnauthenticated
+      ? 'Codex 로그인 필요: 서버에서 `codex login`이 먼저 완료되어야 해.'
+      : (rawOutput || `Codex login status exited with code ${exitCode ?? 'unknown'}`)
+
+  return {
+    installed,
+    authenticated,
+    available: installed && authenticated,
+    authMode,
+    command,
+    rawOutput,
+    message,
+    exitCode,
+  }
+}
+
 export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilityStatus> {
   const resolvedCommand = resolveCodexCommand()
 
@@ -233,26 +265,23 @@ export async function getCodexAvailabilityStatus(): Promise<CodexAvailabilitySta
 
     child.once('close', (code) => {
       const rawOutput = `${stdout}\n${stderr}`.trim()
-      const normalized = rawOutput.toLowerCase()
-      const authenticated = normalized.includes('logged in')
-      const authModeMatch = rawOutput.match(/logged in using\s+(.+)/i)
-      const installed = code === 0 || rawOutput.length > 0
-      const message = authenticated
-        ? (authModeMatch?.[0]?.trim() || rawOutput || 'Logged in')
-        : (rawOutput || `Codex login status exited with code ${code ?? 'unknown'}`)
-
-      resolve({
-        installed,
-        authenticated,
-        available: installed && authenticated,
-        authMode: authModeMatch?.[1]?.trim() ?? null,
-        command: resolvedCommand.command,
-        rawOutput,
-        message,
-        exitCode: code,
-      })
+      resolve(parseCodexAvailabilityOutput(rawOutput, code, resolvedCommand.command))
     })
   })
+}
+
+export async function assertCodexAvailable(actionLabel = 'Codex'): Promise<CodexAvailabilityStatus> {
+  const status = await getCodexAvailabilityStatus()
+
+  if (!status.installed) {
+    throw new Error(`${actionLabel} 실행 실패: 이 서버에서 Codex CLI를 찾지 못했어.`)
+  }
+
+  if (!status.authenticated) {
+    throw new Error(`${actionLabel} 실행 실패: ${status.message}`)
+  }
+
+  return status
 }
 
 async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: string[]) {
@@ -387,6 +416,8 @@ async function discoverOutputFiles(jobDirectory: string, requestedFileNames: str
 }
 
 export async function executeCodexGeneration(payload: CodexGenerationPayload): Promise<CodexGenerationResult> {
+  await assertCodexAvailable('Codex 이미지 생성')
+
   if (typeof payload.prompt !== 'string' || payload.prompt.trim().length === 0) {
     throw new Error('Codex queue payload requires a non-empty prompt')
   }
