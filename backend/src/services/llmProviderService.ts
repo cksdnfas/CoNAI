@@ -1,3 +1,4 @@
+import sharp from 'sharp'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import type { ProviderType } from '../types/externalApi'
 
@@ -8,6 +9,7 @@ export type ExecuteLlmTextRequest = {
   prompt: string
   systemPrompt?: string | null
   context?: string | null
+  image?: string | null
   model?: string | null
   temperature?: number | null
   maxTokens?: number | null
@@ -122,6 +124,63 @@ function buildUserPrompt(prompt: string, contextValue: string | null) {
   return `Context:\n${contextValue}\n\nUser request:\n${prompt}`
 }
 
+function parseImageDataUrl(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  const match = trimmed.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/)
+  if (!match) {
+    return null
+  }
+
+  return {
+    dataUrl: trimmed,
+    mimeType: match[1].toLowerCase(),
+    base64: match[2],
+  }
+}
+
+async function normalizeVisionImageDataUrl(value: unknown) {
+  const parsed = parseImageDataUrl(value)
+  if (!parsed) {
+    return null
+  }
+
+  if (parsed.mimeType === 'image/png' || parsed.mimeType === 'image/jpeg' || parsed.mimeType === 'image/jpg') {
+    return parsed.dataUrl
+  }
+
+  try {
+    const buffer = Buffer.from(parsed.base64, 'base64')
+    const pngBuffer = await sharp(buffer, { animated: false }).png().toBuffer()
+    return `data:image/png;base64,${pngBuffer.toString('base64')}`
+  } catch {
+    return parsed.dataUrl
+  }
+}
+
+function stripImageDataUrlPrefix(value: string) {
+  return value.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, '')
+}
+
+function buildOpenAiCompatibleUserContent(prompt: string, imageDataUrl: string | null, imageFormat: 'data_url' | 'raw_base64' = 'data_url') {
+  if (!imageDataUrl) {
+    return prompt
+  }
+
+  const imageUrl = imageFormat === 'raw_base64' ? stripImageDataUrlPrefix(imageDataUrl) : imageDataUrl
+  return [
+    { type: 'text', text: prompt },
+    { type: 'image_url', image_url: { url: imageUrl } },
+  ]
+}
+
+function shouldRetryOpenAiCompatibleImageAsRawBase64(status: number, errorText: string) {
+  return status === 400 && /base64 encoded image|url.*base64|image.*base64/i.test(errorText)
+}
+
 function extractOpenAiCompatibleText(responseJson: any) {
   const firstChoice = Array.isArray(responseJson?.choices) ? responseJson.choices[0] : null
   const content = firstChoice?.message?.content
@@ -174,6 +233,7 @@ async function executeOpenAiCompatibleRequest(params: {
   prompt: string
   systemPrompt: string | null
   contextValue: string | null
+  imageDataUrl: string | null
   temperature: number | null
   maxTokens: number | null
   responseMode: LlmResponseMode
@@ -189,27 +249,48 @@ async function executeOpenAiCompatibleRequest(params: {
 
   const jsonInstruction = buildJsonInstruction(params.responseMode, params.structuredOutputJson)
   const systemMessage = [params.systemPrompt, jsonInstruction].filter((value): value is string => Boolean(value)).join('\n\n')
-  const body: Record<string, unknown> = {
-    model: params.model,
-    messages: [
-      ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
-      { role: 'user', content: buildUserPrompt(params.prompt, params.contextValue) },
-    ],
+  const userPrompt = buildUserPrompt(params.prompt, params.contextValue)
+  const buildBody = (imageFormat: 'data_url' | 'raw_base64') => {
+    const body: Record<string, unknown> = {
+      model: params.model,
+      messages: [
+        ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
+        { role: 'user', content: buildOpenAiCompatibleUserContent(userPrompt, params.imageDataUrl, imageFormat) },
+      ],
+    }
+
+    if (params.temperature !== null) {
+      body.temperature = params.temperature
+    }
+
+    if (params.maxTokens !== null) {
+      body.max_tokens = params.maxTokens
+    }
+
+    return body
   }
 
-  if (params.temperature !== null) {
-    body.temperature = params.temperature
-  }
-
-  if (params.maxTokens !== null) {
-    body.max_tokens = params.maxTokens
-  }
-
-  const response = await fetch(`${params.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+  const endpoint = `${params.baseUrl.replace(/\/+$/, '')}/chat/completions`
+  let response = await fetch(endpoint, {
     method: 'POST',
     headers,
-    body: JSON.stringify(body),
+    body: JSON.stringify(buildBody('data_url')),
   })
+
+  let retriedRawBase64Image = false
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '')
+    if (params.imageDataUrl && shouldRetryOpenAiCompatibleImageAsRawBase64(response.status, errorText)) {
+      retriedRawBase64Image = true
+      response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(buildBody('raw_base64')),
+      })
+    } else {
+      throw new Error(`OpenAI-compatible provider request failed (${response.status}): ${errorText || response.statusText}`)
+    }
+  }
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '')
@@ -223,6 +304,7 @@ async function executeOpenAiCompatibleRequest(params: {
     text,
     raw: responseJson,
     model: normalizeOptionalString(responseJson?.model) ?? params.model,
+    imagePayloadFormat: retriedRawBase64Image ? 'raw_base64' : params.imageDataUrl ? 'data_url' : null,
   }
 }
 
@@ -232,6 +314,7 @@ async function executeOllamaRequest(params: {
   prompt: string
   systemPrompt: string | null
   contextValue: string | null
+  imageDataUrl: string | null
   temperature: number | null
   maxTokens: number | null
   responseMode: LlmResponseMode
@@ -244,6 +327,10 @@ async function executeOllamaRequest(params: {
     model: params.model,
     prompt: buildUserPrompt(params.prompt, params.contextValue),
     stream: false,
+  }
+
+  if (params.imageDataUrl) {
+    body.images = [stripImageDataUrlPrefix(params.imageDataUrl)]
   }
 
   if (systemBlock) {
@@ -284,6 +371,7 @@ async function executeOllamaRequest(params: {
     text,
     raw: responseJson,
     model: normalizeOptionalString(responseJson?.model) ?? params.model,
+    imagePayloadFormat: params.imageDataUrl ? 'ollama_images_base64' : null,
   }
 }
 
@@ -334,6 +422,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
   const apiKey = ExternalApiProvider.getDecryptedKey(provider.provider_name, true)
   const systemPrompt = normalizeOptionalString(request.systemPrompt)
   const contextValue = normalizeOptionalString(request.context)
+  const imageDataUrl = await normalizeVisionImageDataUrl(request.image)
   const temperature = normalizeOptionalNumber(request.temperature) ?? parseProviderDefaultTemperature(provider.additional_config)
   const maxTokens = normalizeOptionalNumber(request.maxTokens) ?? parseProviderDefaultMaxTokens(provider.additional_config)
 
@@ -345,6 +434,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       prompt,
       systemPrompt,
       contextValue,
+      imageDataUrl,
       temperature,
       maxTokens,
       responseMode,
@@ -358,6 +448,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       prompt,
       systemPrompt,
       contextValue,
+      imageDataUrl,
       temperature,
       maxTokens,
       responseMode,
@@ -377,6 +468,8 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
     response_mode: responseMode,
     has_json: jsonValue !== null,
     structured_output_json: structuredOutputJson,
+    has_image: Boolean(imageDataUrl),
+    image_payload_format: result.imagePayloadFormat,
     raw_response: result.raw,
   }
 

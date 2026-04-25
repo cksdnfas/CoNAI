@@ -39,6 +39,16 @@ export type ExecutionContext = {
   shouldCancel?: () => boolean
 }
 
+export const GRAPH_EXECUTION_STOPPED_MESSAGE = '__GRAPH_EXECUTION_STOPPED__'
+
+/** Signal an intentional workflow stop requested by a system node. */
+export class GraphWorkflowStoppedError extends Error {
+  constructor(public readonly reason?: string) {
+    super(GRAPH_EXECUTION_STOPPED_MESSAGE)
+    this.name = 'GraphWorkflowStoppedError'
+  }
+}
+
 /** Persist a structured execution log row for graph runs. */
 export function writeExecutionLog(params: {
   executionId: number

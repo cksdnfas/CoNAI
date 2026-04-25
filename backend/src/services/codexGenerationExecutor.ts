@@ -306,7 +306,7 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
     args.push('--image', imagePath)
   }
 
-  args.push(prompt)
+  args.push('--', prompt)
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(resolvedCommand.command, args, {

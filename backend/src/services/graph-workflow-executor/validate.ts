@@ -116,11 +116,11 @@ export function validateGraphTypes(graph: GraphWorkflowDocument, modulesById: Ma
     }
 
     const exactMatch = sourcePort.data_type === targetPort.data_type
-    const anyTargetMatch = targetPort.data_type === 'any'
+    const anyPortMatch = sourcePort.data_type === 'any' || targetPort.data_type === 'any'
     const stringBridgeMatch = (sourcePort.data_type === 'text' && targetPort.data_type === 'prompt')
       || (sourcePort.data_type === 'prompt' && targetPort.data_type === 'text')
 
-    if (!exactMatch && !anyTargetMatch && !stringBridgeMatch) {
+    if (!exactMatch && !anyPortMatch && !stringBridgeMatch) {
       throw new Error(`Invalid edge ${edge.id}: port type mismatch (${sourcePort.data_type} -> ${targetPort.data_type})`)
     }
   }

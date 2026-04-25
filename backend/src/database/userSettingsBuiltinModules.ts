@@ -437,6 +437,15 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         description: '프롬프트에 함께 전달할 참고 문맥이야.',
       },
       {
+        key: 'image',
+        label: '이미지',
+        direction: 'input',
+        data_type: 'image',
+        required: false,
+        multiple: false,
+        description: '비전 모델에 함께 전달할 선택 이미지야.',
+      },
+      {
         key: 'provider_name',
         label: '연결 이름',
         direction: 'input',
@@ -539,6 +548,11 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         placeholder: '선택: 참고 문맥',
       },
       {
+        key: 'image',
+        label: '이미지',
+        data_type: 'image',
+      },
+      {
         key: 'structured_output_json',
         label: '구조화 출력 JSON',
         data_type: 'json',
@@ -556,6 +570,92 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
       },
     ],
     '#7e57c2',
+  );
+
+  upsertBuiltinModule(
+    'LLM 프리셋 불러오기',
+    '저장된 LLM 프리셋 종류와 항목을 선택해서 워크플로우 값으로 꺼내와.',
+    'llm',
+    [
+      {
+        key: 'preset_type',
+        label: '프리셋 종류',
+        direction: 'input',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+        default_value: 'promptPresets',
+        description: 'systemPromptPresets, promptPresets, structuredOutputJsonPresets 중 하나야.',
+      },
+      {
+        key: 'preset_name',
+        label: '프리셋 항목',
+        direction: 'input',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+        description: '선택한 종류 안에 저장된 프리셋 이름이야.',
+      },
+    ],
+    [
+      {
+        key: 'content',
+        label: '내용',
+        direction: 'output',
+        data_type: 'any',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'text',
+        label: '텍스트',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'prompt',
+        label: '프롬프트',
+        direction: 'output',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'json',
+        label: 'JSON',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+      {
+        key: 'metadata',
+        label: '메타데이터',
+        direction: 'output',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.load_llm_preset' },
+    [
+      {
+        key: 'preset_type',
+        label: '프리셋 종류',
+        data_type: 'select',
+        default_value: 'promptPresets',
+        options: ['systemPromptPresets', 'promptPresets', 'structuredOutputJsonPresets'],
+      },
+      {
+        key: 'preset_name',
+        label: '프리셋 항목',
+        data_type: 'select',
+        placeholder: '프리셋 선택',
+      },
+    ],
+    '#9575cd',
   );
 
   upsertBuiltinModule(
@@ -986,6 +1086,15 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         description: '추가 참고 문맥이야.',
       },
       {
+        key: 'image',
+        label: '이미지',
+        direction: 'input',
+        data_type: 'image',
+        required: false,
+        multiple: false,
+        description: '비전 모델에 함께 전달할 선택 이미지야.',
+      },
+      {
         key: 'model',
         label: '모델',
         direction: 'input',
@@ -1057,6 +1166,11 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
         label: '컨텍스트',
         data_type: 'text',
         placeholder: '선택: 참고 문맥',
+      },
+      {
+        key: 'image',
+        label: '이미지',
+        data_type: 'image',
       },
       {
         key: 'structured_output_json',
@@ -1233,6 +1347,237 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
     { operation_key: 'system.final_result' },
     [],
     '#ffa726',
+  );
+
+  upsertBuiltinModule(
+    '중단',
+    '조건이 참이면 워크플로우 실행을 의도적으로 중단해.',
+    'output',
+    [
+      {
+        key: 'condition',
+        label: '조건',
+        direction: 'input',
+        data_type: 'boolean',
+        required: true,
+        multiple: false,
+        default_value: true,
+        description: '참이면 이 노드에서 워크플로우 실행을 중단해.',
+      },
+      {
+        key: 'reason',
+        label: '사유',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        description: '실행 로그에 남길 선택 중단 사유야.',
+      },
+    ],
+    [],
+    { operation_key: 'system.workflow_stop' },
+    [],
+    '#ef5350',
+  );
+
+  upsertBuiltinModule(
+    'AND',
+    '두 불리언 입력이 모두 참일 때 참을 출력해.',
+    'logic',
+    [
+      { key: 'left', label: 'A', direction: 'input', data_type: 'boolean', required: true, multiple: false },
+      { key: 'right', label: 'B', direction: 'input', data_type: 'boolean', required: true, multiple: false },
+    ],
+    [
+      { key: 'result', label: '결과', direction: 'output', data_type: 'boolean', required: true, multiple: false },
+    ],
+    { operation_key: 'system.logic_and' },
+    [],
+    '#26a69a',
+  );
+
+  upsertBuiltinModule(
+    'OR',
+    '두 불리언 입력 중 하나라도 참이면 참을 출력해.',
+    'logic',
+    [
+      { key: 'left', label: 'A', direction: 'input', data_type: 'boolean', required: true, multiple: false },
+      { key: 'right', label: 'B', direction: 'input', data_type: 'boolean', required: true, multiple: false },
+    ],
+    [
+      { key: 'result', label: '결과', direction: 'output', data_type: 'boolean', required: true, multiple: false },
+    ],
+    { operation_key: 'system.logic_or' },
+    [],
+    '#26a69a',
+  );
+
+  upsertBuiltinModule(
+    'NOT',
+    '불리언 입력을 반전해서 출력해.',
+    'logic',
+    [
+      { key: 'value', label: '값', direction: 'input', data_type: 'boolean', required: true, multiple: false },
+    ],
+    [
+      { key: 'result', label: '결과', direction: 'output', data_type: 'boolean', required: true, multiple: false },
+    ],
+    { operation_key: 'system.logic_not' },
+    [],
+    '#26a69a',
+  );
+
+  upsertBuiltinModule(
+    '비교',
+    '두 값을 선택한 연산자로 비교해서 불리언 결과를 출력해.',
+    'logic',
+    [
+      { key: 'left', label: '왼쪽 값', direction: 'input', data_type: 'any', required: true, multiple: false },
+      { key: 'right', label: '오른쪽 값', direction: 'input', data_type: 'any', required: true, multiple: false },
+    ],
+    [
+      { key: 'result', label: '결과', direction: 'output', data_type: 'boolean', required: true, multiple: false },
+    ],
+    { operation_key: 'system.logic_compare' },
+    [
+      {
+        key: 'operator',
+        label: '연산자',
+        data_type: 'select',
+        default_value: 'equals',
+        options: ['equals', 'not_equals', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal'],
+      },
+    ],
+    '#42a5f5',
+  );
+
+  upsertBuiltinModule(
+    '텍스트 매치',
+    '텍스트가 검색어 또는 정규식 조건과 맞는지 검사해.',
+    'logic',
+    [
+      { key: 'text', label: '텍스트', direction: 'input', data_type: 'text', required: true, multiple: false },
+      { key: 'query', label: '검색어', direction: 'input', data_type: 'text', required: true, multiple: false },
+    ],
+    [
+      { key: 'result', label: '결과', direction: 'output', data_type: 'boolean', required: true, multiple: false },
+    ],
+    { operation_key: 'system.logic_text_match' },
+    [
+      {
+        key: 'mode',
+        label: '매치 방식',
+        data_type: 'select',
+        default_value: 'contains',
+        options: ['contains', 'not_contains', 'starts_with', 'ends_with', 'regex'],
+      },
+    ],
+    '#42a5f5',
+  );
+
+  upsertBuiltinModule(
+    '값 존재 여부',
+    '입력 값이 비어 있는지 또는 존재하는지 검사해.',
+    'logic',
+    [
+      { key: 'value', label: '값', direction: 'input', data_type: 'any', required: false, multiple: false },
+    ],
+    [
+      { key: 'result', label: '결과', direction: 'output', data_type: 'boolean', required: true, multiple: false },
+    ],
+    { operation_key: 'system.logic_value_presence' },
+    [
+      {
+        key: 'mode',
+        label: '검사 방식',
+        data_type: 'select',
+        default_value: 'exists',
+        options: ['exists', 'empty', 'not_empty'],
+      },
+    ],
+    '#7e57c2',
+  );
+
+  upsertBuiltinModule(
+    '조건 선택',
+    '조건에 따라 참 값 또는 거짓 값 중 하나를 다음 노드로 넘겨줘.',
+    'logic',
+    [
+      { key: 'condition', label: '조건', direction: 'input', data_type: 'boolean', required: true, multiple: false },
+      { key: 'true_value', label: '참 값', direction: 'input', data_type: 'any', required: true, multiple: false },
+      { key: 'false_value', label: '거짓 값', direction: 'input', data_type: 'any', required: true, multiple: false },
+    ],
+    [
+      { key: 'value', label: '값', direction: 'output', data_type: 'any', required: true, multiple: false },
+    ],
+    { operation_key: 'system.logic_condition_select' },
+    [],
+    '#7e57c2',
+  );
+
+  upsertBuiltinModule(
+    'JSON 추출',
+    'JSON 입력에서 tags, user.name, items[0].title 같은 경로의 값만 골라내.',
+    'utility',
+    [
+      {
+        key: 'json',
+        label: 'JSON',
+        direction: 'input',
+        data_type: 'json',
+        required: true,
+        multiple: false,
+        description: '값을 추출할 원본 JSON이야.',
+      },
+      {
+        key: 'path',
+        label: '추출 경로',
+        direction: 'input',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+        default_value: 'tags',
+        description: '꺼낼 값의 경로야. 예: tags 또는 items[0].title',
+      },
+    ],
+    [
+      {
+        key: 'value',
+        label: '값',
+        direction: 'output',
+        data_type: 'any',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'text',
+        label: '텍스트',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+      {
+        key: 'json',
+        label: 'JSON',
+        direction: 'output',
+        data_type: 'json',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.json_extract' },
+    [
+      {
+        key: 'path',
+        label: '추출 경로',
+        data_type: 'text',
+        default_value: 'tags',
+        placeholder: '예: tags 또는 items[0].title',
+        ui_hint: 'inline',
+      },
+    ],
+    '#78909c',
   );
 
   upsertBuiltinModule(

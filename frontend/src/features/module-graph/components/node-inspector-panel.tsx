@@ -10,6 +10,7 @@ import { ImageAttachmentPickerButton } from '@/features/image-generation/compone
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
+import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOptionRecord } from '@/lib/api-settings'
 import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
@@ -51,6 +52,14 @@ type NodeOutputArtifactGroup = {
   artifacts: GraphExecutionArtifactRecord[]
 }
 
+type LlmPresetCollectionKey = keyof LlmPresetOptionCollections
+
+const LLM_PRESET_TYPE_OPTIONS: Array<{ value: LlmPresetCollectionKey; label: string }> = [
+  { value: 'systemPromptPresets', label: '시스템 프롬프트' },
+  { value: 'promptPresets', label: '프롬프트' },
+  { value: 'structuredOutputJsonPresets', label: '구조화 출력 JSON' },
+]
+
 const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-3'
 const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'space-y-3 rounded-sm border border-border/70 bg-background/35 p-4'
 const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'rounded-sm border border-border/70 bg-background/35 p-4'
@@ -70,6 +79,23 @@ function resolveSelectOptionsWithCurrentValue(options: string[] | null | undefin
     return [...normalizedOptions, currentValue]
   }
   return normalizedOptions
+}
+
+function normalizeLlmPresetType(value: unknown): LlmPresetCollectionKey {
+  return value === 'systemPromptPresets' || value === 'structuredOutputJsonPresets'
+    ? value
+    : 'promptPresets'
+}
+
+function getLlmPresetEntries(collections: LlmPresetOptionCollections | undefined, presetType: LlmPresetCollectionKey) {
+  return [...(collections?.[presetType] ?? [])]
+    .filter((preset): preset is LlmPresetOptionRecord => Boolean(preset?.name?.trim()))
+    .sort((left, right) => left.name.localeCompare(right.name, 'ko'))
+}
+
+function summarizeLlmPresetContent(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return normalized.length > 220 ? `${normalized.slice(0, 219)}…` : normalized
 }
 
 /** Resolve whether one node input is already satisfied by a connection or value. */
@@ -244,10 +270,17 @@ export function NodeInspectorPanel({
   const selectedNodeOperationKey = selectedNode ? getModuleOperationKey(selectedNode.data.module) : null
   const isSystemCallLlmNode = selectedNodeOperationKey === 'system.call_llm'
   const isSystemCallCodexMessageNode = selectedNodeOperationKey === 'system.call_codex_message'
+  const isSystemLoadLlmPresetNode = selectedNodeOperationKey === 'system.load_llm_preset'
   const llmProvidersQuery = useQuery({
     queryKey: ['external-api-llm-options', 'node-inspector-panel'],
     queryFn: () => getExternalApiLlmOptions(),
     enabled: isSystemCallLlmNode,
+    staleTime: 30_000,
+  })
+  const llmPresetsQuery = useQuery({
+    queryKey: ['llm-preset-options', 'node-inspector-panel'],
+    queryFn: () => getLlmPresetOptions(),
+    enabled: isSystemLoadLlmPresetNode,
     staleTime: 30_000,
   })
   const llmModelBindings = (() => {
@@ -335,6 +368,58 @@ export function NodeInspectorPanel({
       : missingRequired
         ? ({ borderColor: '#f59e0b99', backgroundColor: 'rgba(245, 158, 11, 0.08)' } as CSSProperties)
         : undefined
+
+    if (isSystemLoadLlmPresetNode && port.key === 'preset_type') {
+      const presetType = normalizeLlmPresetType(rawValue)
+
+      return (
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
+          <ModuleGraphSimpleValueInput
+            dataType="select"
+            value={presetType}
+            onChange={(value) => {
+              onNodeValueChange(node.id, 'preset_type', value)
+              onNodeValueClear(node.id, 'preset_name')
+            }}
+            options={LLM_PRESET_TYPE_OPTIONS}
+            allowEmptyOption={false}
+          />
+        </div>
+      )
+    }
+
+    if (isSystemLoadLlmPresetNode && port.key === 'preset_name') {
+      const presetType = normalizeLlmPresetType(node.data.inputValues?.preset_type)
+      const entries = getLlmPresetEntries(llmPresetsQuery.data, presetType)
+      const currentPresetName = normalizeOptionalString(rawValue)
+      const selectedPreset = currentPresetName
+        ? entries.find((preset) => preset.name === currentPresetName) ?? null
+        : null
+      const presetOptions = entries.map((preset) => ({ value: preset.name, label: preset.name }))
+      const options = currentPresetName && !presetOptions.some((option) => option.value === currentPresetName)
+        ? [...presetOptions, { value: currentPresetName, label: currentPresetName }]
+        : presetOptions
+
+      return (
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
+          <ModuleGraphSimpleValueInput
+            dataType="select"
+            value={currentPresetName ?? ''}
+            onChange={(value) => onNodeValueChange(node.id, port.key, value)}
+            options={options}
+            emptyLabel={llmPresetsQuery.isLoading ? '불러오는 중' : '프리셋 선택'}
+          />
+          {selectedPreset ? (
+            <div className="mt-2 rounded-sm border border-border/60 bg-surface-lowest/70 px-3 py-2">
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">선택 내용</div>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-foreground">{summarizeLlmPresetContent(selectedPreset.content)}</pre>
+            </div>
+          ) : null}
+        </div>
+      )
+    }
 
     if (isSystemCallLlmNode && port.key === 'provider_name') {
       return null

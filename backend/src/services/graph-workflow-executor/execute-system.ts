@@ -14,6 +14,7 @@ import {
 } from './system-constant-operations'
 import { executeRegexTextTransformNode, executeTextMergeNode } from './system-text-operations'
 import { executeCallLlmNode } from './system-llm-operations'
+import { executeLoadLlmPresetNode } from './system-llm-preset-operations'
 import {
   executeFindSimilarImages,
   executeExtractArtistFromImage,
@@ -29,6 +30,17 @@ import {
 } from './system-reference-operations'
 import { executeCodexImageGenerationNode } from './system-codex-operations'
 import { executeCallCodexMessageNode } from './system-codex-message-operations'
+import { executeJsonExtractNode } from './system-json-operations'
+import {
+  executeLogicAndNode,
+  executeLogicCompareNode,
+  executeLogicConditionSelectNode,
+  executeLogicNotNode,
+  executeLogicOrNode,
+  executeLogicTextMatchNode,
+  executeLogicValuePresenceNode,
+  executeWorkflowStopNode,
+} from './system-logic-operations'
 
 type SystemOperationHandler = (
   context: ExecutionContext,
@@ -45,8 +57,10 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.constant_number': executeConstantNumberNode,
   'system.constant_boolean': executeConstantBooleanNode,
   'system.regex_text_transform': executeRegexTextTransformNode,
+  'system.json_extract': executeJsonExtractNode,
   'system.merge_text': executeTextMergeNode,
   'system.random_prompt_from_group': executeRandomPromptFromGroup,
+  'system.load_llm_preset': executeLoadLlmPresetNode,
   'system.call_llm': executeCallLlmNode,
   'system.call_codex_message': executeCallCodexMessageNode,
   'system.generate_image_codex': executeCodexImageGenerationNode,
@@ -59,6 +73,14 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
     executeRandomVideoFromLibrary(context, node, moduleDefinition),
   'system.extract_tags_from_image': executeExtractTagsFromImage,
   'system.extract_artist_from_image': executeExtractArtistFromImage,
+  'system.logic_and': executeLogicAndNode,
+  'system.logic_or': executeLogicOrNode,
+  'system.logic_not': executeLogicNotNode,
+  'system.logic_compare': executeLogicCompareNode,
+  'system.logic_text_match': executeLogicTextMatchNode,
+  'system.logic_value_presence': executeLogicValuePresenceNode,
+  'system.logic_condition_select': executeLogicConditionSelectNode,
+  'system.workflow_stop': executeWorkflowStopNode,
   'system.final_result': executeFinalResultNode,
 }
 

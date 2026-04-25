@@ -55,6 +55,7 @@ export async function executeCallLlmNode(
   const prompt = normalizeOptionalString(resolvedInputs.prompt) ?? ''
   const systemPrompt = normalizeOptionalString(resolvedInputs.system_prompt)
   const contextValue = normalizeOptionalString(resolvedInputs.context)
+  const imageDataUrl = normalizeOptionalString(resolvedInputs.image)
   const structuredOutputJson = resolveOptionalJsonText(resolvedInputs.structured_output_json)
   const responseMode = structuredOutputJson ? 'json' : 'text'
 
@@ -69,6 +70,7 @@ export async function executeCallLlmNode(
       model,
       responseMode,
       hasStructuredOutputJson: Boolean(structuredOutputJson),
+      hasImage: Boolean(imageDataUrl),
     },
   })
 
@@ -77,6 +79,7 @@ export async function executeCallLlmNode(
     prompt,
     systemPrompt,
     context: contextValue,
+    image: imageDataUrl,
     model,
     temperature: normalizeOptionalNumber(resolvedInputs.temperature),
     maxTokens: normalizeOptionalNumber(resolvedInputs.max_tokens),
@@ -90,6 +93,7 @@ export async function executeCallLlmNode(
     system_prompt_length: systemPrompt?.length ?? 0,
     context_length: contextValue?.length ?? 0,
     structured_output_json_length: structuredOutputJson?.length ?? 0,
+    has_image: Boolean(imageDataUrl),
   }
 
   const nodeArtifacts: Record<string, RuntimeArtifact> = {

@@ -36,6 +36,7 @@ export async function executeCallCodexMessageNode(
   resolvedInputs: Record<string, any>,
 ) {
   const model = normalizeOptionalString(resolvedInputs.model)
+  const imageDataUrl = normalizeOptionalString(resolvedInputs.image)
   const structuredOutputJson = resolveOptionalJsonText(resolvedInputs.structured_output_json)
   const responseMode = structuredOutputJson ? 'json' : 'text'
 
@@ -49,6 +50,7 @@ export async function executeCallCodexMessageNode(
       model,
       responseMode,
       hasStructuredOutputJson: Boolean(structuredOutputJson),
+      hasImage: Boolean(imageDataUrl),
     },
   })
 
@@ -56,6 +58,7 @@ export async function executeCallCodexMessageNode(
     prompt: typeof resolvedInputs.prompt === 'string' ? resolvedInputs.prompt : '',
     systemPrompt: normalizeOptionalString(resolvedInputs.system_prompt),
     context: normalizeOptionalString(resolvedInputs.context),
+    image: imageDataUrl,
     model,
     responseMode,
     structuredOutputJson,
@@ -70,6 +73,7 @@ export async function executeCallCodexMessageNode(
     system_prompt_length: typeof resolvedInputs.system_prompt === 'string' ? resolvedInputs.system_prompt.length : 0,
     context_length: typeof resolvedInputs.context === 'string' ? resolvedInputs.context.length : 0,
     structured_output_json_length: structuredOutputJson?.length ?? 0,
+    has_image: Boolean(imageDataUrl),
   }
 
   const nodeArtifacts: Record<string, RuntimeArtifact> = {
@@ -106,6 +110,7 @@ export async function executeCallCodexMessageNode(
       model: result.model,
       responseMode: result.responseMode,
       hasStructuredOutputJson: Boolean(structuredOutputJson),
+      hasImage: Boolean(imageDataUrl),
       outputKeys: Object.keys(nodeArtifacts),
       jobDirectory: result.metadata.job_directory,
       sessionId: result.metadata.session_id,

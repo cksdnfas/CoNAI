@@ -29,7 +29,7 @@ type ModuleGroup = {
   modules: ModuleDefinitionRecord[]
 }
 
-export const SYSTEM_GROUP_ORDER = ['input', 'output', 'utility', 'get', 'llm', 'other']
+export const SYSTEM_GROUP_ORDER = ['input', 'logic', 'utility', 'get', 'llm', 'output', 'other']
 export const CUSTOM_GROUP_ORDER = ['nai', 'codex', 'comfyui', 'other']
 
 const GET_MODULE_OPERATION_KEYS = new Set([
@@ -105,7 +105,11 @@ export function getSystemModuleGroup(module: ModuleDefinitionRecord): { key: str
   const operationKey = getModuleOperationKey(module)
 
   if (isFinalResultModule(module) || category === 'output') {
-    return { key: 'output', label: 'Output' }
+    return { key: 'output', label: 'END' }
+  }
+
+  if (category === 'logic') {
+    return { key: 'logic', label: 'Logic' }
   }
 
   if (

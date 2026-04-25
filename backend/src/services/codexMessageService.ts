@@ -15,6 +15,7 @@ export type ExecuteCodexMessageRequest = {
   prompt: string
   systemPrompt?: string | null
   context?: string | null
+  image?: string | null
   model?: string | null
   responseMode?: CodexResponseMode | null
   structuredOutputJson?: string | null
@@ -37,6 +38,15 @@ function normalizeOptionalString(value: unknown) {
 
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+function normalizeImageDataUrl(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  return /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(trimmed) ? trimmed : null
 }
 
 function normalizeStructuredOutputJson(value: unknown) {
@@ -73,6 +83,7 @@ function buildCodexMessagePrompt(params: {
   prompt: string
   systemPrompt: string | null
   contextValue: string | null
+  hasImage: boolean
   responseMode: CodexResponseMode
   structuredOutputJson: string | null
 }) {
@@ -91,6 +102,7 @@ function buildCodexMessagePrompt(params: {
     'This is a one-shot task running in an isolated scratch directory.',
     'Do not modify repository files or rely on git state.',
     responseInstruction,
+    params.hasImage ? 'An image is attached to this Codex run. Inspect it directly when answering the user prompt.' : null,
     buildPromptBlock('system_prompt', params.systemPrompt),
     buildPromptBlock('context', params.contextValue),
     buildPromptBlock('user_prompt', params.prompt),
@@ -101,6 +113,7 @@ async function runCodexExec(params: {
   workDir: string
   prompt: string
   model: string | null
+  imagePaths: string[]
   shouldCancel?: () => boolean
   timeoutMs: number
 }) {
@@ -125,7 +138,11 @@ async function runCodexExec(params: {
     args.push('--model', params.model)
   }
 
-  args.push(params.prompt)
+  for (const imagePath of params.imagePaths) {
+    args.push('--image', imagePath)
+  }
+
+  args.push('--', params.prompt)
 
   return await new Promise<{ stdoutPath: string; stderrPath: string; lastMessage: string | null; sessionId: string | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(resolvedCommand.command, args, {
@@ -252,6 +269,25 @@ async function runCodexExec(params: {
   })
 }
 
+async function writeAttachedImage(workDir: string, imageDataUrl: string) {
+  const match = imageDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/)
+  if (!match) {
+    throw new Error('Codex 메시지 이미지 입력이 올바른 이미지 데이터가 아니야')
+  }
+
+  const mimeType = match[1].toLowerCase()
+  const extension = mimeType === 'image/jpeg' || mimeType === 'image/jpg'
+    ? 'jpg'
+    : mimeType === 'image/webp'
+      ? 'webp'
+      : mimeType === 'image/gif'
+        ? 'gif'
+        : 'png'
+  const imagePath = path.join(workDir, `attached-image.${extension}`)
+  await fs.promises.writeFile(imagePath, Buffer.from(match[2], 'base64'))
+  return imagePath
+}
+
 function parseJsonResult(text: string, responseMode: CodexResponseMode) {
   if (responseMode !== 'json') {
     return null
@@ -275,6 +311,8 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
   const workDir = await fs.promises.mkdtemp(path.join(CODEX_MESSAGE_JOB_ROOT, `${Date.now()}-${randomUUID()}-`))
   const structuredOutputJson = normalizeStructuredOutputJson(request.structuredOutputJson)
   const responseMode: CodexResponseMode = structuredOutputJson ? 'json' : 'text'
+  const imageDataUrl = normalizeImageDataUrl(request.image)
+  const attachedImagePaths = imageDataUrl ? [await writeAttachedImage(workDir, imageDataUrl)] : []
   const model = normalizeOptionalString(request.model)
   const timeoutMs = typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs)
     ? Math.max(1000, Math.round(request.timeoutMs))
@@ -284,6 +322,7 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
     prompt,
     systemPrompt: normalizeOptionalString(request.systemPrompt),
     contextValue: normalizeOptionalString(request.context),
+    hasImage: attachedImagePaths.length > 0,
     responseMode,
     structuredOutputJson,
   })
@@ -292,6 +331,7 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
     workDir,
     prompt: codexPrompt,
     model,
+    imagePaths: attachedImagePaths,
     shouldCancel: request.shouldCancel,
     timeoutMs,
   })
@@ -312,6 +352,8 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
       requested_model: model,
       response_mode: responseMode,
       structured_output_json: structuredOutputJson,
+      has_image: attachedImagePaths.length > 0,
+      image_paths: attachedImagePaths,
       job_directory: workDir,
       stdout_path: result.stdoutPath,
       stderr_path: result.stderrPath,

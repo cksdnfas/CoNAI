@@ -11,6 +11,7 @@ import { InlineMediaPreview } from '@/features/images/components/inline-media-pr
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
 import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
+import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOptionRecord } from '@/lib/api-settings'
 import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import type { ComfyUIServer, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
 import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
@@ -36,6 +37,14 @@ const MODULE_GRAPH_INLINE_CONTROL_CLASS = 'theme-input-surface border-border/80 
 const GRAPH_COMFY_TARGET_MODE_KEY = 'execution_target_mode'
 const GRAPH_COMFY_TARGET_TAG_KEY = 'execution_target_tag'
 const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
+
+type LlmPresetCollectionKey = keyof LlmPresetOptionCollections
+
+const LLM_PRESET_TYPE_OPTIONS: Array<{ value: LlmPresetCollectionKey; label: string }> = [
+  { value: 'systemPromptPresets', label: '시스템 프롬프트' },
+  { value: 'promptPresets', label: '프롬프트' },
+  { value: 'structuredOutputJsonPresets', label: '구조화 출력 JSON' },
+]
 
 type PortCellProps = {
   nodeId: string
@@ -114,6 +123,23 @@ function resolveSelectOptionsWithCurrentValue(options: string[] | null | undefin
     return [...normalizedOptions, currentValue]
   }
   return normalizedOptions
+}
+
+function normalizeLlmPresetType(value: unknown): LlmPresetCollectionKey {
+  return value === 'systemPromptPresets' || value === 'structuredOutputJsonPresets'
+    ? value
+    : 'promptPresets'
+}
+
+function getLlmPresetEntries(collections: LlmPresetOptionCollections | undefined, presetType: LlmPresetCollectionKey) {
+  return [...(collections?.[presetType] ?? [])]
+    .filter((preset): preset is LlmPresetOptionRecord => Boolean(preset?.name?.trim()))
+    .sort((left, right) => left.name.localeCompare(right.name, 'ko'))
+}
+
+function summarizeLlmPresetContent(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return normalized.length > 140 ? `${normalized.slice(0, 139)}…` : normalized
 }
 
 /** Prevent embedded controls from triggering node drag or canvas selection. */
@@ -269,7 +295,8 @@ function InputPortCell({
       ? '1024'
       : (typeof port.default_value === 'number' ? String(port.default_value) : port.label)
   const preview = getCompactValuePreview(rawValue ?? port.default_value)
-  const isPromptLikePort = port.data_type === 'text' || port.data_type === 'prompt'
+  const isInlineTextPort = port.data_type === 'text' && uiField?.ui_hint === 'inline'
+  const isPromptLikePort = (port.data_type === 'text' || port.data_type === 'prompt') && !isInlineTextPort
 
   const renderEditor = () => {
     if (connected) {
@@ -316,6 +343,20 @@ function InputPortCell({
             value={rawValue}
             onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
             emptyLabel="default"
+            className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          />
+        </div>
+      )
+    }
+
+    if (isInlineTextPort && data.onNodeValueChange) {
+      return (
+        <div onMouseDown={stopNodeInteraction}>
+          <ModuleGraphSimpleValueInput
+            dataType="text"
+            value={rawValue}
+            onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
+            placeholder={uiField?.placeholder || port.label}
             className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>
@@ -858,10 +899,17 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const isTextTransformModule = operationKey === 'system.regex_text_transform'
   const isSystemCallLlmModule = operationKey === 'system.call_llm'
   const isSystemCallCodexMessageModule = operationKey === 'system.call_codex_message'
+  const isSystemLoadLlmPresetModule = operationKey === 'system.load_llm_preset'
   const llmProvidersQuery = useQuery({
     queryKey: ['external-api-llm-options', 'module-graph-node-card'],
     queryFn: () => getExternalApiLlmOptions(),
     enabled: isSystemCallLlmModule,
+    staleTime: 30_000,
+  })
+  const llmPresetsQuery = useQuery({
+    queryKey: ['llm-preset-options', 'module-graph-node-card'],
+    queryFn: () => getLlmPresetOptions(),
+    enabled: isSystemLoadLlmPresetModule,
     staleTime: 30_000,
   })
   const llmModelBindings = (() => {
@@ -933,7 +981,19 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     ?? ''
   const canConfigureLlmModel = Boolean(isSystemCallLlmModule && llmModelOptions.length > 0 && data.onNodeValueChange)
   const canConfigureCodexModel = Boolean(isSystemCallCodexMessageModule && codexModelOptions.length > 0 && data.onNodeValueChange)
+  const canConfigureLlmPreset = Boolean(isSystemLoadLlmPresetModule && data.onNodeValueChange)
+  const llmPresetType = normalizeLlmPresetType(data.inputValues?.preset_type)
+  const llmPresetEntries = getLlmPresetEntries(llmPresetsQuery.data, llmPresetType)
+  const llmPresetName = normalizeOptionalString(data.inputValues?.preset_name) ?? ''
+  const selectedLlmPreset = llmPresetName ? llmPresetEntries.find((preset) => preset.name === llmPresetName) ?? null : null
+  const llmPresetNameOptions = llmPresetName && !llmPresetEntries.some((preset) => preset.name === llmPresetName)
+    ? [...llmPresetEntries, { id: llmPresetName, name: llmPresetName, content: '', updatedAt: '' }]
+    : llmPresetEntries
   const visibleInputPorts = inputPorts.filter((port) => {
+    if (isSystemLoadLlmPresetModule && (port.key === 'preset_type' || port.key === 'preset_name')) {
+      return false
+    }
+
     if (isSystemCallLlmModule && port.key === 'provider_name') {
       return false
     }
@@ -1190,6 +1250,48 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
               <option key={option} value={option}>{option}</option>
             ))}
           </Select>
+        </div>
+      ) : null}
+
+      {canConfigureLlmPreset ? (
+        <div className="nodrag nowheel mt-2 space-y-1.5">
+          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">프리셋</div>
+          <Select
+            value={llmPresetType}
+            onMouseDown={stopNodeInteraction}
+            onClick={stopNodeInteraction}
+            onChange={(event) => {
+              stopNodeInteraction(event)
+              data.onNodeValueChange?.(id, 'preset_type', event.target.value)
+              data.onNodeValueChange?.(id, 'preset_name', '')
+            }}
+            className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          >
+            {LLM_PRESET_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </Select>
+          <Select
+            value={llmPresetName}
+            onMouseDown={stopNodeInteraction}
+            onClick={stopNodeInteraction}
+            onChange={(event) => {
+              stopNodeInteraction(event)
+              data.onNodeValueChange?.(id, 'preset_name', event.target.value)
+            }}
+            className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+          >
+            <option value="">{llmPresetsQuery.isLoading ? '불러오는 중' : '프리셋 선택'}</option>
+            {llmPresetNameOptions.map((preset) => (
+              <option key={preset.id || preset.name} value={preset.name}>{preset.name}</option>
+            ))}
+          </Select>
+          {selectedLlmPreset ? (
+            <div className="rounded-sm border border-border/60 bg-background/45 px-2.5 py-2">
+              <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">선택 내용</div>
+              <div className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-4 text-foreground">{summarizeLlmPresetContent(selectedLlmPreset.content)}</div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

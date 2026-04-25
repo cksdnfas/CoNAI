@@ -16,6 +16,7 @@ import {
   parseGraphWorkflowRecord,
   parseModuleDefinition,
   parseJson,
+  GraphWorkflowStoppedError,
   writeExecutionLog,
   type ExecutionContext,
   type RuntimeArtifact,
@@ -299,15 +300,19 @@ export class GraphWorkflowExecutor {
         .at(-1)?.node_id ?? null
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown execution error'
-      if (errorMessage === GRAPH_EXECUTION_CANCELLED_MESSAGE) {
+      if (errorMessage === GRAPH_EXECUTION_CANCELLED_MESSAGE || error instanceof GraphWorkflowStoppedError) {
+        const stoppedReason = error instanceof GraphWorkflowStoppedError ? error.reason ?? null : null
         writeExecutionLog({
           executionId,
           nodeId: failedNodeId,
           level: 'warn',
-          eventType: 'execution_cancelled',
-          message: 'Execution cancelled',
+          eventType: error instanceof GraphWorkflowStoppedError ? 'execution_stopped' : 'execution_cancelled',
+          message: error instanceof GraphWorkflowStoppedError
+            ? stoppedReason ? `Execution stopped: ${stoppedReason}` : 'Execution stopped'
+            : 'Execution cancelled',
+          details: error instanceof GraphWorkflowStoppedError ? { reason: stoppedReason } : undefined,
         })
-        GraphExecutionModel.updateStatus(executionId, 'cancelled', null, failedNodeId)
+        GraphExecutionModel.updateStatus(executionId, 'cancelled', stoppedReason, failedNodeId)
         return {
           executionId,
           status: 'cancelled' as const,

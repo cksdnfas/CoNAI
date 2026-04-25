@@ -739,7 +739,7 @@ export function getModulePortCompatibility(sourceType?: ModulePortDataType | nul
     return 'incompatible' as const
   }
 
-  if (sourceType === targetType || targetType === 'any') {
+  if (sourceType === targetType || targetType === 'any' || sourceType === 'any') {
     return 'exact' as const
   }
 

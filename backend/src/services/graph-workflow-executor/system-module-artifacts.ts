@@ -6,7 +6,7 @@ export function buildRuntimeArtifact(
   executionId: number,
   nodeId: string,
   portKey: string,
-  artifactType: 'prompt' | 'text' | 'json' | 'number' | 'boolean',
+  artifactType: 'prompt' | 'text' | 'json' | 'number' | 'boolean' | 'any',
   value: unknown,
   metadata?: Record<string, unknown>,
 ): RuntimeArtifact {
