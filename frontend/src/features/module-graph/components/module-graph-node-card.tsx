@@ -1228,23 +1228,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         </div>
       ) : null}
 
-      {powerLoraUiFields.length > 0 ? (
-        <div className="nodrag nowheel mt-2 space-y-1.5" onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction}>
-          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">LoRA</div>
-          {powerLoraUiFields.map((field) => {
-            const value = data.inputValues?.[field.key] ?? field.default_value
-            return (
-              <PowerLoraLoaderInput
-                key={field.key}
-                field={field}
-                value={value}
-                onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
-              />
-            )
-          })}
-        </div>
-      ) : null}
-
       {canConfigureLlmModel ? (
         <div className="nodrag nowheel mt-2 space-y-1">
           <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">모델</div>
@@ -1384,6 +1367,24 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             })}
           </div>
         )
+      ) : null}
+
+      {powerLoraUiFields.length > 0 ? (
+        <div className="nodrag nowheel mt-1.5 space-y-1 border-t border-border/20 pt-1.5" onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction}>
+          <div className="px-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">LoRA</div>
+          {powerLoraUiFields.map((field) => {
+            const value = data.inputValues?.[field.key] ?? field.default_value
+            return (
+              <PowerLoraLoaderInput
+                key={field.key}
+                field={field}
+                value={value}
+                variant="compact"
+                onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
+              />
+            )
+          })}
+        </div>
       ) : null}
 
       {hasStandaloneArtifactPreview ? (

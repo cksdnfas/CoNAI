@@ -18,6 +18,7 @@ type PowerLoraLoaderInputProps = {
   field?: Pick<ModuleUiFieldDefinition, 'node_items'> | null
   value: unknown
   onChange: (value: Record<string, unknown>) => void
+  variant?: 'default' | 'compact'
 }
 
 function isPowerLoraLoaderEntryValue(value: unknown): value is PowerLoraLoaderEntryValue {
@@ -50,7 +51,15 @@ function buildFallbackNodeItems(nodeValue: Record<string, unknown>): PowerLoraLo
 }
 
 /** Render one compact switch-style toggle for a Power Lora Loader row. */
-function PowerLoraRowToggle({ pressed, onPressedChange }: { pressed: boolean; onPressedChange: (pressed: boolean) => void }) {
+function PowerLoraRowToggle({
+  pressed,
+  onPressedChange,
+  compact = false,
+}: {
+  pressed: boolean
+  onPressedChange: (pressed: boolean) => void
+  compact?: boolean
+}) {
   return (
     <button
       type="button"
@@ -59,15 +68,20 @@ function PowerLoraRowToggle({ pressed, onPressedChange }: { pressed: boolean; on
       aria-label={pressed ? '로라 사용 끄기' : '로라 사용 켜기'}
       onClick={() => onPressedChange(!pressed)}
       className={cn(
-        'inline-flex h-6 w-10 shrink-0 items-center rounded-full border transition-colors',
+        'inline-flex shrink-0 items-center rounded-full border transition-colors',
+        compact ? 'h-4 w-7' : 'h-6 w-10',
         pressed
-          ? 'border-primary/60 bg-primary/25 justify-end pl-1 pr-[3px]'
-          : 'border-border/80 bg-background/70 justify-start pr-1 pl-[3px]',
+          ? compact
+            ? 'justify-end border-primary/55 bg-primary/25 px-[2px]'
+            : 'border-primary/60 bg-primary/25 justify-end pl-1 pr-[3px]'
+          : compact
+            ? 'justify-start border-border/70 bg-background/60 px-[2px]'
+            : 'border-border/80 bg-background/70 justify-start pr-1 pl-[3px]',
       )}
     >
       <span
         className={cn(
-          'h-[18px] w-[18px] rounded-full transition-colors',
+          compact ? 'h-3 w-3 rounded-full transition-colors' : 'h-[18px] w-[18px] rounded-full transition-colors',
           pressed ? 'bg-primary shadow-[0_0_0_1px_rgba(255,255,255,0.08)]' : 'bg-muted-foreground/65',
         )}
       />
@@ -76,33 +90,43 @@ function PowerLoraRowToggle({ pressed, onPressedChange }: { pressed: boolean; on
 }
 
 /** Render rgthree Power Lora Loader values as editable LoRA rows instead of raw JSON. */
-export function PowerLoraLoaderInput({ field, value, onChange }: PowerLoraLoaderInputProps) {
+export function PowerLoraLoaderInput({ field, value, onChange, variant = 'default' }: PowerLoraLoaderInputProps) {
   const nodeValue = isPowerLoraLoaderNodeValue(value) ? value : {}
   const configuredNodeItems = field?.node_items ?? []
   const nodeItems = configuredNodeItems.length > 0
     ? configuredNodeItems.filter((item) => isPowerLoraLoaderEntryValue(nodeValue[item.key]))
     : buildFallbackNodeItems(nodeValue)
 
+  const isCompact = variant === 'compact'
+
   if (nodeItems.length === 0) {
-    return <div className="rounded-sm border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground">노출할 lora_* 항목이 없어.</div>
+    return <div className={cn('rounded-sm border border-dashed border-border/80 text-muted-foreground', isCompact ? 'px-2 py-1.5 text-[11px]' : 'px-3 py-4 text-sm')}>노출할 lora_* 항목이 없어.</div>
   }
 
   return (
-    <div className="space-y-2">
+    <div className={cn(isCompact ? 'space-y-0.5' : 'space-y-2')}>
       {nodeItems.map((item) => {
         const entry = nodeValue[item.key] as PowerLoraLoaderEntryValue
         return (
           <div
             key={item.key}
             className={cn(
-              'grid grid-cols-[auto_minmax(0,1fr)_88px] items-center gap-3 rounded-sm border px-3 py-2.5 transition-colors',
+              'grid items-center rounded-sm border transition-colors',
+              isCompact
+                ? 'grid-cols-[auto_minmax(0,1fr)_48px] gap-2 px-2 py-1'
+                : 'grid-cols-[auto_minmax(0,1fr)_88px] gap-3 px-3 py-2.5',
               entry.on === true
-                ? 'border-primary/30 bg-surface-container/45'
-                : 'border-border/70 bg-background/30',
+                ? isCompact
+                  ? 'border-primary/20 bg-surface-container/25'
+                  : 'border-primary/30 bg-surface-container/45'
+                : isCompact
+                  ? 'border-border/45 bg-background/20'
+                  : 'border-border/70 bg-background/30',
             )}
           >
             <PowerLoraRowToggle
               pressed={entry.on === true}
+              compact={isCompact}
               onPressedChange={(pressed) => onChange({
                 ...nodeValue,
                 [item.key]: {
@@ -113,14 +137,14 @@ export function PowerLoraLoaderInput({ field, value, onChange }: PowerLoraLoader
             />
 
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-foreground">{item.label}</div>
+              <div className={cn('truncate font-medium text-foreground', isCompact ? 'text-[11px] leading-5' : 'text-sm')}>{item.label}</div>
             </div>
 
             <ScrubbableNumberInput
               step={0.05}
               value={typeof entry.strength === 'number' ? String(entry.strength) : ''}
               aria-label={`${item.label} 가중치`}
-              className="h-8 w-[72px] px-2 text-left"
+              className={cn('text-left', isCompact ? 'h-6 w-11 px-1.5 text-[11px]' : 'h-8 w-[72px] px-2')}
               onChange={(nextValue) => {
                 const parsedStrength = Number(nextValue)
                 onChange({
