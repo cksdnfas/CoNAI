@@ -1549,14 +1549,6 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
     ],
     [
       {
-        key: 'value',
-        label: '값',
-        direction: 'output',
-        data_type: 'any',
-        required: true,
-        multiple: false,
-      },
-      {
         key: 'text',
         label: '텍스트',
         direction: 'output',

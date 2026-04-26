@@ -27,6 +27,7 @@ export interface ModuleUiFieldDefinition {
   description?: string
   default_value?: unknown
   options?: ModuleSelectOption[]
+  dropdown_list_name?: string
   min?: number
   max?: number
   placeholder?: string

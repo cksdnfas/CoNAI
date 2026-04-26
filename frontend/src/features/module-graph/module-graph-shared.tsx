@@ -122,8 +122,8 @@ export function isAdvancedModuleOutputPort(module: ModuleDefinitionRecord, port:
     }
   }
 
-  if (operationKey === 'system.json_extract' && (port.key === 'text' || port.key === 'json')) {
-    return true
+  if (operationKey === 'system.json_extract') {
+    return false
   }
 
   if (port.key === 'metadata' || port.key.endsWith('_ref') || port.key.endsWith('_json')) {

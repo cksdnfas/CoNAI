@@ -112,7 +112,7 @@ function completeJsonNode(
   })
 }
 
-/** Extract one value from a JSON input by path and expose raw/text/json outputs. */
+/** Extract one value from a JSON input by path and expose practical text/json outputs. */
 export function executeJsonExtractNode(
   context: ExecutionContext,
   node: GraphWorkflowNode,
@@ -125,11 +125,6 @@ export function executeJsonExtractNode(
   const extractedText = stringifyJsonExtraction(extractedValue)
 
   const nodeArtifacts = {
-    value: buildRuntimeArtifact(context.executionId, node.id, 'value', 'any', extractedValue, {
-      kind: 'system-json-extract-value',
-      operationKey: 'system.json_extract',
-      path: pathParts.join('.'),
-    }),
     text: buildRuntimeArtifact(context.executionId, node.id, 'text', 'text', extractedText, {
       kind: 'system-json-extract-text',
       operationKey: 'system.json_extract',

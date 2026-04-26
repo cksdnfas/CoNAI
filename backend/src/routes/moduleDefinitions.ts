@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { routeParam } from './routeParam'
 import { ModuleDefinitionModel } from '../models/ModuleDefinition'
 import { WorkflowModel } from '../models/Workflow'
+import { CustomDropdownListModel } from '../models/CustomDropdownList'
 import {
   ModuleGraphResponse,
   ModuleDefinitionCreateData,
@@ -217,7 +218,48 @@ function getConfigOnlyFieldKeys(uiSchema: any[], exposedInputs: any[]) {
   ])
 }
 
-function parseModuleRecord(record: any) {
+function buildCustomDropdownListMap() {
+  return new Map(CustomDropdownListModel.findAll().map((list) => [list.name, list.items]))
+}
+
+function getCustomDropdownListName(field: any) {
+  const directName = typeof field?.dropdown_list_name === 'string' ? field.dropdown_list_name.trim() : ''
+  if (directName.length > 0) {
+    return directName
+  }
+
+  const legacyHintName = typeof field?.ui_hint === 'string' ? field.ui_hint.trim() : ''
+  return legacyHintName.length > 0 ? legacyHintName : null
+}
+
+function hydrateDynamicSelectOptions(uiSchema: any[], dropdownListMap: Map<string, string[]>) {
+  return uiSchema.map((field: any) => {
+    if (field?.data_type !== 'select') {
+      return field
+    }
+
+    const dropdownListName = getCustomDropdownListName(field)
+    if (!dropdownListName) {
+      return field
+    }
+
+    const dropdownItems = dropdownListMap.get(dropdownListName)
+    if (!dropdownItems) {
+      return {
+        ...field,
+        dropdown_list_name: dropdownListName,
+      }
+    }
+
+    return {
+      ...field,
+      dropdown_list_name: dropdownListName,
+      options: dropdownItems,
+    }
+  })
+}
+
+function parseModuleRecord(record: any, dropdownListMap = buildCustomDropdownListMap()) {
   const parsed = {
     ...record,
     template_defaults: record.template_defaults ? JSON.parse(record.template_defaults) : {},
@@ -226,6 +268,7 @@ function parseModuleRecord(record: any) {
     internal_fixed_values: record.internal_fixed_values ? JSON.parse(record.internal_fixed_values) : {},
     ui_schema: record.ui_schema ? JSON.parse(record.ui_schema) : [],
   }
+  const hydratedUiSchema = hydrateDynamicSelectOptions(parsed.ui_schema, dropdownListMap)
   const configOnlyFieldKeys = getConfigOnlyFieldKeys(parsed.ui_schema, parsed.exposed_inputs)
 
   return {
@@ -241,7 +284,7 @@ function parseModuleRecord(record: any) {
       ...port,
       label: localizeDisplayLabel(port.key, port.label),
     })),
-    ui_schema: parsed.ui_schema.map((field: any) => ({
+    ui_schema: hydratedUiSchema.map((field: any) => ({
       ...field,
       label: localizeDisplayLabel(field.key, field.label),
     })),
@@ -383,7 +426,7 @@ function convertMarkedFieldsToPorts(markedFields: any[], exposedFieldIds?: strin
       required: field.required ?? false,
       multiple: false,
       default_value: field.default_value ?? null,
-      ui_hint: field.placeholder,
+      ui_hint: field.dropdown_list_name || field.placeholder,
       source_path: field.jsonPath || field.id,
     }))
 }
@@ -401,6 +444,7 @@ function buildUiSchemaFromMarkedFields(markedFields: any[], exposedFieldIds?: st
       description: field.description,
       default_value: field.default_value ?? null,
       options: Array.isArray(field.options) ? field.options : undefined,
+      dropdown_list_name: field.dropdown_list_name,
       min: typeof field.min === 'number' ? field.min : undefined,
       max: typeof field.max === 'number' ? field.max : undefined,
       placeholder: field.placeholder,
@@ -596,7 +640,8 @@ router.post('/from-comfy-workflow/:workflowId', asyncHandler(async (req: Request
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const activeOnly = req.query.active === 'true'
-    const modules = ModuleDefinitionModel.findAll(activeOnly).map(parseModuleRecord)
+    const dropdownListMap = buildCustomDropdownListMap()
+    const modules = ModuleDefinitionModel.findAll(activeOnly).map((record) => parseModuleRecord(record, dropdownListMap))
 
     const response: ModuleGraphResponse = {
       success: true,
