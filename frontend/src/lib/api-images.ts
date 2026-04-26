@@ -411,11 +411,11 @@ export async function uploadMultipleImages(
   return uploadFormDataWithProgress<UploadBatchResult>('/api/images/upload-multiple', formData, onProgress)
 }
 
-export async function extractImageMetadataPreview(file: File) {
+async function uploadImagePreviewFile<T>(endpoint: string, file: File) {
   const formData = new FormData()
   formData.append('image', file)
 
-  const response = await fetch(buildApiUrl('/api/images/extract-metadata'), {
+  const response = await fetch(buildApiUrl(endpoint), {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -424,39 +424,19 @@ export async function extractImageMetadataPreview(file: File) {
     body: formData,
   })
 
-  return readApiPayload<ImageRecord>(response)
+  return readApiPayload<T>(response)
+}
+
+export async function extractImageMetadataPreview(file: File) {
+  return uploadImagePreviewFile<ImageRecord>('/api/images/extract-metadata', file)
 }
 
 export async function extractImageTaggerPreview(file: File) {
-  const formData = new FormData()
-  formData.append('image', file)
-
-  const response = await fetch(buildApiUrl('/api/images/extract-tagger'), {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-    },
-    body: formData,
-  })
-
-  return readApiPayload<AutoTestTaggerResult>(response)
+  return uploadImagePreviewFile<AutoTestTaggerResult>('/api/images/extract-tagger', file)
 }
 
 export async function extractImageKaloscopePreview(file: File) {
-  const formData = new FormData()
-  formData.append('image', file)
-
-  const response = await fetch(buildApiUrl('/api/images/extract-kaloscope'), {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-    },
-    body: formData,
-  })
-
-  return readApiPayload<AutoTestKaloscopeResult>(response)
+  return uploadImagePreviewFile<AutoTestKaloscopeResult>('/api/images/extract-kaloscope', file)
 }
 
 export interface ConvertWebPDownloadResult {
