@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import type { WildcardTreeEntry, WildcardWorkspaceTab } from './wildcard-generation-panel-helpers'
 import { WildcardTree } from './wildcard-browser-cards'
 
-export interface WildcardExplorerSidebarPanelProps {
+interface WildcardExplorerSidebarPanelProps {
   isWideLayout: boolean
   activeWorkspaceTab: WildcardWorkspaceTab
   browserEntries: WildcardTreeEntry[]

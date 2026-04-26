@@ -100,7 +100,7 @@ export function isAdvancedOutputPortsEnabled(inputValues: Record<string, unknown
 }
 
 /** Resolve whether one output port is secondary/debug-like enough to hide in normal node mode. */
-export function isAdvancedModuleOutputPort(module: ModuleDefinitionRecord, port: ModulePortDefinition, inputValues: Record<string, unknown> | undefined) {
+function isAdvancedModuleOutputPort(module: ModuleDefinitionRecord, port: ModulePortDefinition, inputValues: Record<string, unknown> | undefined) {
   const operationKey = getModuleOperationKey(module)
   const hasStructuredOutput = hasConfiguredGraphValue(inputValues?.structured_output_json)
 
@@ -613,7 +613,7 @@ export function parseArtifactMetadataRecord(value?: string | null) {
 }
 
 /** Infer one media MIME type from the stored artifact file extension. */
-export function inferArtifactMimeTypeFromPath(path?: string | null) {
+function inferArtifactMimeTypeFromPath(path?: string | null) {
   if (!path) {
     return null
   }

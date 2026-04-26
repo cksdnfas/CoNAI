@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { formatDateTime, getArtifactPreviewUrl, hasGraphArtifactVisualPreview, resolveGraphArtifactMimeType } from '../module-graph-shared'
 import { buildArtifactDetailLines, buildArtifactSummaryText, getCompactExecutionArtifactLabel } from './graph-execution-panel-helpers'
 
-export interface ExecutionArtifactCardProps {
+interface ExecutionArtifactCardProps {
   artifact: GraphExecutionArtifactRecord
   compact?: boolean
   title?: string

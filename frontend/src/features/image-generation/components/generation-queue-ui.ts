@@ -29,7 +29,7 @@ export function getGenerationQueueStatusLabel(record: GenerationQueueJobRecord) 
 }
 
 /** Convert raw ETA seconds into a short Korean duration label. */
-export function formatGenerationQueueEtaSeconds(value?: number | null) {
+function formatGenerationQueueEtaSeconds(value?: number | null) {
   if (value === undefined || value === null || value < 0) {
     return null
   }

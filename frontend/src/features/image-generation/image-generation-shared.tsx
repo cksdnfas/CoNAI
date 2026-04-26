@@ -3,13 +3,10 @@ import { readBlobAsDataUrl } from '@/lib/file-data-url'
 import type {
   ComfyUIServerConnectionStatus,
   GenerationHistoryRecord,
-  GenerationServiceType,
   ModulePortDataType,
   ModuleUiFieldDefinition,
   WorkflowMarkedField,
 } from '@/lib/api'
-
-export type HistoryFilter = 'all' | GenerationServiceType
 
 export type SelectedImageDraft = {
   fileName: string
@@ -466,23 +463,6 @@ export function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
-/** Format a history timestamp for the current locale. */
-export function formatHistoryDate(value?: string | null) {
-  if (!value) {
-    return '시간 정보 없음'
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
-}
-
 /** Build the initial draft object for workflow marked fields. */
 export function buildWorkflowDraft(fields: WorkflowMarkedField[]) {
   return fields.reduce<Record<string, WorkflowFieldDraftValue>>((draft, field) => {
@@ -500,15 +480,6 @@ export function readFileAsDataUrl(file: Blob) {
 function inferMimeTypeFromDataUrl(dataUrl: string) {
   const match = /^data:([^;,]+)[;,]/i.exec(dataUrl)
   return match?.[1] ?? undefined
-}
-
-/** Build one selected-image draft from a local File object. */
-export async function buildSelectedImageDraftFromFile(file: File): Promise<SelectedImageDraft> {
-  return {
-    fileName: file.name,
-    dataUrl: await readFileAsDataUrl(file),
-    mimeType: file.type || undefined,
-  }
 }
 
 /** Build one selected-image draft by fetching an existing image URL. */
@@ -669,43 +640,12 @@ export function getHistoryCancellationDetail(record: GenerationHistoryRecord) {
   return '취소 요청이 들어간 상태야.'
 }
 
-/** Resolve the most useful image detail route for a history item. */
-export function getHistoryDetailHref(record: GenerationHistoryRecord) {
-  return resolveHistoryImageSource(record).detailHref
-}
-
-/** Resolve a compact label for the history service type. */
-export function getHistoryServiceLabel(serviceType: GenerationServiceType) {
-  if (serviceType === 'novelai') {
-    return 'NAI'
-  }
-
-  if (serviceType === 'codex') {
-    return 'Codex'
-  }
-
-  return 'ComfyUI'
-}
-
 /** Resolve a compact label for the history status badge. */
 export function getHistoryStatusLabel(status: GenerationHistoryRecord['generation_status']) {
   if (status === 'completed') return '완료'
   if (status === 'failed') return '생성 실패'
   if (status === 'processing') return '작업 중'
   return '대기 중'
-}
-
-/** Resolve a concise title for each history row. */
-export function getHistoryTitle(record: GenerationHistoryRecord) {
-  if (record.service_type === 'novelai') {
-    return record.nai_model || 'NovelAI 생성'
-  }
-
-  if (record.service_type === 'codex') {
-    return record.workflow_name || 'Codex 생성'
-  }
-
-  return record.workflow_name || 'ComfyUI 워크플로우'
 }
 
 export function FormField({

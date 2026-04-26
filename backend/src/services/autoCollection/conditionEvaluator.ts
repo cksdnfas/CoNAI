@@ -115,11 +115,3 @@ export async function checkImageMatchesConditions(
 
   return false;
 }
-
-/**
- * Get all supported condition types
- * Useful for validation and documentation
- */
-export function getSupportedConditionTypes(): AutoCollectCondition['type'][] {
-  return factory.getSupportedTypes();
-}

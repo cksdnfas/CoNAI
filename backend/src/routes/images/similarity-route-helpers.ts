@@ -34,7 +34,7 @@ const legacyImageFieldQueries: Record<RequiredSimilarityField, string> = {
 };
 
 /** Parse the shared image route param into either composite hash or legacy numeric image ID. */
-export function parseImageIdentifier(id: string): SimilarityImageIdentifier {
+function parseImageIdentifier(id: string): SimilarityImageIdentifier {
   const numericId = parseInt(id, 10);
 
   if (!Number.isNaN(numericId) && id === numericId.toString()) {

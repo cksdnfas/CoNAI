@@ -9,7 +9,7 @@ import { CompactGenerationActionSurface } from './shared-generation-controller'
 import { PromptToggleField } from './prompt-toggle-field'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 
-export interface NaiConnectionHeaderProps {
+interface NaiConnectionHeaderProps {
   connected: boolean
   tierName?: string
   anlasBalance?: number
@@ -77,7 +77,7 @@ export function NaiControllerInsetBlock({ children, className }: NaiControllerIn
   return <div className={cn('border-t border-border/70 pt-4', className)}>{children}</div>
 }
 
-export interface NaiPromptSectionProps {
+interface NaiPromptSectionProps {
   prompt: string
   negativePrompt: string
   tool?: PromptWildcardTool
@@ -106,7 +106,7 @@ export function NaiPromptSection({
   )
 }
 
-export interface NaiActionSectionProps {
+interface NaiActionSectionProps {
   variant?: 'card' | 'inline' | 'compact'
   canUpscale: boolean
   isUpscaling: boolean

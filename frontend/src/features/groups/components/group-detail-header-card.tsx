@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { GroupRecord, GroupWithHierarchy } from '@/types/group'
 
-export interface GroupDetailHeaderCardProps {
+interface GroupDetailHeaderCardProps {
   group: GroupRecord
   selectedGroupHierarchy: GroupWithHierarchy | null
   isCustomSource: boolean

@@ -28,7 +28,7 @@ export interface ImageServeDiagnostics {
 const IMMUTABLE_FILE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
 /** Build a stable ETag from file mtime and size. */
-export function generateETag(stats: fs.Stats): string {
+function generateETag(stats: fs.Stats): string {
   const hash = crypto.createHash('md5');
   hash.update(`${stats.mtime.getTime()}-${stats.size}`);
   return `"${hash.digest('hex')}"`;

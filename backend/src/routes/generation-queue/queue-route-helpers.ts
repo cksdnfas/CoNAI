@@ -81,7 +81,7 @@ export function parseRequestedServerTag(value: unknown) {
   return normalized
 }
 
-export function isAdminRequest(req: Request) {
+function isAdminRequest(req: Request) {
   return req.session?.accountType === 'admin'
 }
 
@@ -89,7 +89,7 @@ export function getRequesterAccountId(req: Request) {
   return typeof req.session?.accountId === 'number' ? req.session.accountId : null
 }
 
-export function canAccessJob(req: Request, job: GenerationQueueJobRecord) {
+function canAccessJob(req: Request, job: GenerationQueueJobRecord) {
   if (isAdminRequest(req)) {
     return true
   }

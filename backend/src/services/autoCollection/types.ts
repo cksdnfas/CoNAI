@@ -31,12 +31,3 @@ export interface ConditionEvaluator {
    */
   getHandledTypes(): AutoCollectCondition['type'][];
 }
-
-/**
- * Regex cache entry for performance optimization
- */
-export interface RegexCacheEntry {
-  pattern: string;
-  flags?: string;
-  regex: RegExp;
-}

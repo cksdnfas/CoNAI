@@ -29,14 +29,14 @@ export function isImageFile(mimeType: string): boolean {
 }
 
 /** Skip image-save rewriting for animated or video-like uploads. */
-export function isAnimatedUploadBypass(file: Express.Multer.File): boolean {
+function isAnimatedUploadBypass(file: Express.Multer.File): boolean {
   const mimeType = (file.mimetype || '').toLowerCase();
   const lowerName = (file.originalname || '').toLowerCase();
   return mimeType.startsWith('video/') || mimeType === 'image/gif' || lowerName.endsWith('.gif') || lowerName.endsWith('.apng');
 }
 
 /** Parse a multipart boolean field with a fallback value. */
-export function parseMultipartBoolean(value: unknown, fallback = false) {
+function parseMultipartBoolean(value: unknown, fallback = false) {
   if (typeof value === 'boolean') {
     return value;
   }
@@ -55,7 +55,7 @@ export function parseMultipartBoolean(value: unknown, fallback = false) {
 }
 
 /** Parse a multipart integer field with rounding and fallback behavior. */
-export function parseMultipartInteger(value: unknown, fallback: number) {
+function parseMultipartInteger(value: unknown, fallback: number) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return Math.round(value);
   }
@@ -104,7 +104,7 @@ export function parseUploadImageSaveOptions(body: Request['body']): UploadImageS
 }
 
 /** Resolve the output format used for upload-side image rewriting. */
-export function resolveUploadOutputFormat(file: Express.Multer.File, requestedFormat?: 'original' | ImageOutputFormat): ImageOutputFormat | null {
+function resolveUploadOutputFormat(file: Express.Multer.File, requestedFormat?: 'original' | ImageOutputFormat): ImageOutputFormat | null {
   if (requestedFormat && requestedFormat !== 'original') {
     return requestedFormat;
   }
@@ -176,7 +176,7 @@ export async function processImageUploadWithSettings(
 }
 
 /** Parse a best-effort JSON payload from multipart form data. */
-export function parseMaybeJson(value: unknown) {
+function parseMaybeJson(value: unknown) {
   if (typeof value !== 'string') {
     return value ?? null;
   }
@@ -189,7 +189,7 @@ export function parseMaybeJson(value: unknown) {
 }
 
 /** Build a safe download filename for one converted image output. */
-export function buildDownloadFileName(originalName: string, format: ImageOutputFormat = 'webp'): string {
+function buildDownloadFileName(originalName: string, format: ImageOutputFormat = 'webp'): string {
   const baseName = path.basename(originalName, path.extname(originalName)) || 'converted-image';
   const safeBaseName = baseName.replace(/[\\/:*?"<>|]/g, '_');
   const extension = format === 'jpeg' ? 'jpg' : format;
@@ -226,7 +226,7 @@ export function resolveOutputFormat(requestedFormat: unknown, file: Express.Mult
 }
 
 /** Build a response content-type for one converted image format. */
-export function buildOutputMimeType(format: ImageOutputFormat): string {
+function buildOutputMimeType(format: ImageOutputFormat): string {
   if (format === 'png') {
     return 'image/png';
   }
@@ -291,7 +291,7 @@ export function buildExtractedImagePreview(
 }
 
 /** Resolve the single uploaded file from either image/file multipart fields. */
-export function getSingleUploadedFile(req: Request) {
+function getSingleUploadedFile(req: Request) {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
   return files?.['image']?.[0] || files?.['file']?.[0] || null;
 }
@@ -301,7 +301,7 @@ function sendUploadBadRequest(res: Response, error: string) {
 }
 
 /** Resolve one uploaded image file and preserve the existing bad-request envelope. */
-export function getValidatedUploadedImageFile(
+function getValidatedUploadedImageFile(
   req: Request,
   res: Response,
   invalidImageMessage: string,
@@ -355,7 +355,7 @@ export function setDownloadResponseHeaders(res: Response, originalName: string, 
 }
 
 /** Best-effort cleanup for one temporary uploaded file. */
-export async function cleanupTemporaryUpload(file: Express.Multer.File | null) {
+async function cleanupTemporaryUpload(file: Express.Multer.File | null) {
   if (!file?.path || !fs.existsSync(file.path)) {
     return;
   }

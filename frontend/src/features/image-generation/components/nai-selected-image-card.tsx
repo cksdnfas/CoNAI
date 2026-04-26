@@ -1,7 +1,7 @@
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { SelectedImageDraft } from '../image-generation-shared'
 
-export interface NaiSelectedImageCardProps {
+interface NaiSelectedImageCardProps {
   image: SelectedImageDraft
   alt: string
 }

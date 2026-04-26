@@ -32,7 +32,7 @@ export function computeQueuePositions(records: GenerationQueueJobRecord[], activ
   return positions
 }
 
-export function getJobDurationSeconds(record: GenerationQueueJobRecord) {
+function getJobDurationSeconds(record: GenerationQueueJobRecord) {
   if (!record.started_at || !record.completed_at) {
     return null
   }
@@ -51,7 +51,7 @@ export function getJobDurationSeconds(record: GenerationQueueJobRecord) {
   return seconds
 }
 
-export function getMedianDurationSeconds(values: number[]) {
+function getMedianDurationSeconds(values: number[]) {
   if (values.length === 0) {
     return null
   }
@@ -71,7 +71,7 @@ export function getMedianDurationSeconds(values: number[]) {
   return Math.round((left + right) / 2)
 }
 
-export function getRecentCompletedDurations(records: GenerationQueueJobRecord[], predicate: (record: GenerationQueueJobRecord) => boolean) {
+function getRecentCompletedDurations(records: GenerationQueueJobRecord[], predicate: (record: GenerationQueueJobRecord) => boolean) {
   const filtered = records
     .filter(predicate)
     .sort((left, right) => String(right.completed_at ?? '').localeCompare(String(left.completed_at ?? '')))
@@ -90,7 +90,7 @@ export function getRecentCompletedDurations(records: GenerationQueueJobRecord[],
   return durations
 }
 
-export function resolveReferenceDurationSeconds(record: GenerationQueueJobRecord, completedRecords: GenerationQueueJobRecord[], queuePosition: QueuePositionEntry | undefined) {
+function resolveReferenceDurationSeconds(record: GenerationQueueJobRecord, completedRecords: GenerationQueueJobRecord[], queuePosition: QueuePositionEntry | undefined) {
   if (record.service_type === 'novelai' || record.service_type === 'codex') {
     return getMedianDurationSeconds(getRecentCompletedDurations(completedRecords, (candidate) => candidate.service_type === record.service_type))
   }
@@ -130,7 +130,7 @@ export function resolveReferenceDurationSeconds(record: GenerationQueueJobRecord
   return getMedianDurationSeconds(getRecentCompletedDurations(completedRecords, (candidate) => candidate.service_type === 'comfyui'))
 }
 
-export function getRunningLaneRecords(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeRecords: GenerationQueueJobRecord[]) {
+function getRunningLaneRecords(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeRecords: GenerationQueueJobRecord[]) {
   if (record.service_type === 'novelai' || record.service_type === 'codex') {
     return activeRecords.filter((candidate) => candidate.service_type === record.service_type && candidate.status === 'running')
   }
@@ -157,7 +157,7 @@ export function getRunningLaneRecords(record: GenerationQueueJobRecord, queuePos
   })
 }
 
-export function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeComfyServerCount: number) {
+function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeComfyServerCount: number) {
   if (record.service_type === 'novelai' || record.service_type === 'codex') {
     const generationThrottle = settingsService.loadSettings().generationThrottle
     return record.service_type === 'novelai'
@@ -180,7 +180,7 @@ export function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition:
   return Math.max(activeComfyServerCount, 1)
 }
 
-export function getEstimatedRunningRemainingSeconds(record: GenerationQueueJobRecord, durationSeconds: number) {
+function getEstimatedRunningRemainingSeconds(record: GenerationQueueJobRecord, durationSeconds: number) {
   const startedAt = record.started_at ? new Date(record.started_at).getTime() : null
   const elapsedSeconds = startedAt && Number.isFinite(startedAt)
     ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
@@ -189,7 +189,7 @@ export function getEstimatedRunningRemainingSeconds(record: GenerationQueueJobRe
   return Math.max(durationSeconds - elapsedSeconds, 0)
 }
 
-export function getEarliestSlotIndex(slotAvailabilitySeconds: number[]) {
+function getEarliestSlotIndex(slotAvailabilitySeconds: number[]) {
   let earliestIndex = 0
   for (let index = 1; index < slotAvailabilitySeconds.length; index += 1) {
     if (slotAvailabilitySeconds[index] < slotAvailabilitySeconds[earliestIndex]) {
@@ -199,7 +199,7 @@ export function getEarliestSlotIndex(slotAvailabilitySeconds: number[]) {
   return earliestIndex
 }
 
-export function estimateQueueEta(
+function estimateQueueEta(
   record: GenerationQueueJobRecord,
   queuePosition: QueuePositionEntry | undefined,
   activeRecords: GenerationQueueJobRecord[],

@@ -13,7 +13,7 @@ export interface WildcardPreviewResult {
   results: string[]
 }
 
-export interface WildcardPreviewModalProps {
+interface WildcardPreviewModalProps {
   open: boolean
   selectedWildcardSyntax: string
   selectedWildcardSyntaxLabel: string

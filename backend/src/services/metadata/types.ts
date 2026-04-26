@@ -79,12 +79,6 @@ export interface ModelReference {
   weight?: number;
 }
 
-/**
- * Extended LoRA info with hash
- */
-export interface LoRAModelWithHash extends LoRAModel {
-  hash?: string;
-}
 
 export interface ImageMetadata {
   extractedAt: string;
@@ -100,11 +94,4 @@ export interface RawPngMetadata {
 export interface StealthPngSignature {
   type: 'alpha' | 'rgb';
   compressed: boolean;
-}
-
-export interface ExtractionResult {
-  success: boolean;
-  data: AIMetadata;
-  source: 'primary' | 'secondary' | 'failed';
-  method?: string;
 }

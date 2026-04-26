@@ -10,7 +10,7 @@ import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { NaiSavedAssetTile } from './nai-saved-asset-tile'
 import { NaiSavedImageBrowserSection } from './nai-saved-image-browser-section'
 
-export interface NaiVibesSectionProps {
+interface NaiVibesSectionProps {
   vibes: NAIVibeDraft[]
   encodingVibeIndex: number | null
   naiConnected: boolean

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 export type EditorSupportSectionKey = 'setup' | 'inspector' | 'inputs' | 'validation' | 'results'
 
-export interface ModuleWorkflowEditorSupportPanelProps {
+interface ModuleWorkflowEditorSupportPanelProps {
   setSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
   inspectorPanel?: ReactNode
   resultsPanel: ReactNode

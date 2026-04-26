@@ -5,7 +5,7 @@ import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'
 import { GroupChildCard } from './group-child-card'
 
-export interface GroupRootGridSectionProps {
+interface GroupRootGridSectionProps {
   title: string
   groups: GroupWithHierarchy[]
   cardStyle: GroupExplorerCardStyle

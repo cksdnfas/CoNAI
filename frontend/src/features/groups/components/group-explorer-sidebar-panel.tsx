@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import { GroupTree } from './group-tree'
 
-export interface GroupExplorerSidebarPanelProps {
+interface GroupExplorerSidebarPanelProps {
   isWideLayout: boolean
   groups: GroupWithHierarchy[]
   selectedGroupId?: number

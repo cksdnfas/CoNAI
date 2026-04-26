@@ -11,7 +11,7 @@ import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { NaiSavedAssetTile } from './nai-saved-asset-tile'
 import { NaiSavedImageBrowserSection } from './nai-saved-image-browser-section'
 
-export interface NaiReferencesSectionProps {
+interface NaiReferencesSectionProps {
   supportsCharacterReference: boolean
   references: NAICharacterReferenceDraft[]
   savedReferences: StoredNaiCharacterReferenceAsset[]

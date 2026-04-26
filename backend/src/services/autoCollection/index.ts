@@ -6,7 +6,7 @@
  */
 
 export { AutoCollectionOrchestrator } from './autoCollectionOrchestrator';
-export { evaluateCondition, checkImageMatchesConditions, getSupportedConditionTypes } from './conditionEvaluator';
+export { evaluateCondition, checkImageMatchesConditions } from './conditionEvaluator';
 export type { ConditionEvaluator, EvaluableImage } from './types';
 
 // Re-export evaluators for advanced usage

@@ -555,7 +555,3 @@ export function ModuleWorkflowWorkspace({ embedded = false }: ModuleWorkflowWork
   )
 }
 
-export function ModuleGraphPage() {
-  return <ModuleWorkflowWorkspace />
-}
-

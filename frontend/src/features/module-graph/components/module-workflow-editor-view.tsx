@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { SectionHeading } from '@/components/common/section-heading'
 import { cn } from '@/lib/utils'
 
-export interface ModuleWorkflowEditorViewProps {
+interface ModuleWorkflowEditorViewProps {
   isDesktopPageLayout: boolean
   workflowListSidebar: ReactNode
   nodesCount: number

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NaiControllerSection } from './nai-generation-panel-sections'
 
-export interface NaiSavedImageBrowserSectionProps {
+interface NaiSavedImageBrowserSectionProps {
   title?: string
   count: number
   searchValue: string

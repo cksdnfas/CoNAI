@@ -89,7 +89,7 @@ export function buildEnrichedImageListResponse(
 }
 
 /** Preserve requested composite-hash ordering after DB batch loads. */
-export function sortImagesByCompositeHashes(compositeHashes: string[], images: ImageListItem[]): ImageListItem[] {
+function sortImagesByCompositeHashes(compositeHashes: string[], images: ImageListItem[]): ImageListItem[] {
   const imagesByHash = new Map(images.map((image) => [image.composite_hash, image]));
 
   return compositeHashes

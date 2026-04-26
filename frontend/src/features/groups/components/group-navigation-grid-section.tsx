@@ -4,7 +4,7 @@ import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'
 import { GroupChildCard } from './group-child-card'
 
-export interface GroupNavigationGridSectionProps {
+interface GroupNavigationGridSectionProps {
   backNavigationGroup: GroupWithHierarchy
   parentGroupHierarchy: GroupWithHierarchy | null
   rootTitle: string
