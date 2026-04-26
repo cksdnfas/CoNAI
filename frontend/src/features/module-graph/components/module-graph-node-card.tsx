@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
 import { ChevronDown, ChevronRight, GripVertical, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -906,6 +906,7 @@ function NodeArtifactPreviewBody({
 /** Render a cleaner module graph node card with source-node specific layout. */
 export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGraphNode>) {
   const { module } = data
+  const updateNodeInternals = useUpdateNodeInternals()
   const [expandedOutputGroupKeys, setExpandedOutputGroupKeys] = useState<string[]>([])
   const [artifactTextModal, setArtifactTextModal] = useState<{ title: string; text: string } | null>(null)
   const powerLoraUiFields = (module.ui_schema ?? []).filter((field) => (
@@ -1104,6 +1105,21 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     return true
   })
   const portRowCount = Math.max(visibleInputPorts.length, visibleOutputPorts.length, 1)
+  const renderedInputPorts = isWorkflowInputSource
+    ? []
+    : (isTextMergeModule || isTextTransformModule || isIfBranchModule ? inputPorts : visibleInputPorts)
+  const renderedOutputPorts = isWorkflowInputSource
+    ? sourceOutputPorts
+    : (isTextMergeModule || isTextTransformModule || isIfBranchModule ? outputPorts : visibleOutputPorts)
+  const renderedHandleSignature = [
+    ...renderedInputPorts.map((port) => `in:${port.key}`),
+    ...renderedOutputPorts.map((port) => `out:${port.key}`),
+  ].join('|')
+
+  useEffect(() => {
+    updateNodeInternals(id)
+  }, [id, renderedHandleSignature, updateNodeInternals])
+
   const comfyWorkflowId = module.engine_type === 'comfyui'
     ? parsePositiveIntegerish(module.source_workflow_id ?? module.template_defaults?.workflow_id)
     : null
