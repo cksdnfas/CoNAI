@@ -134,30 +134,6 @@ export async function getTopPrompts(params?: { type?: PromptTypeFilter; limit?: 
   return response.data.map((item) => normalizePromptItem(item as PromptCollectionItem & { synonyms?: string[] | null; type?: string | null }))
 }
 
-export async function getRelatedPrompts(params: { prompt: string; type?: PromptTypeFilter; limit?: number }) {
-  const searchParams = new URLSearchParams()
-  searchParams.set('prompt', params.prompt)
-  searchParams.set('type', params.type ?? 'positive')
-  searchParams.set('limit', String(params.limit ?? 12))
-
-  const response = await fetchJson<ApiResponse<PromptRelatedPayload>>(`/api/prompt-collection/related?${searchParams.toString()}`)
-  if (!response.success) {
-    throw new Error(response.error || '연관 프롬프트를 불러오지 못했어.')
-  }
-
-  return {
-    ...response.data,
-    items: response.data.items.map((item) => ({
-      ...item,
-      prompt: String(item.prompt),
-      usage_count: Number(item.usage_count ?? 0),
-      group_id: item.group_id ?? null,
-      shared_count: Number(item.shared_count ?? 0),
-      score: Number(item.score ?? 0),
-    })),
-  }
-}
-
 export async function assignPromptToGroup(promptId: number, groupId: number | null, type: PromptTypeFilter = 'positive') {
   const response = await fetchJson<ApiResponse<{ message: string; assigned: boolean }>>('/api/prompt-collection/assign-group', {
     method: 'PUT',
@@ -371,55 +347,6 @@ export async function getPromptGraph(params?: {
       min_shared_count: Number(response.data.filters.min_shared_count ?? 0),
       min_usage_count: Number(response.data.filters.min_usage_count ?? 0),
       limit: Number(response.data.filters.limit ?? 0),
-    },
-  }
-}
-
-export async function getPromptTaxonomyRelated(params: {
-  prompt: string
-  type?: PromptTypeFilter
-  relationKind?: PromptTaxonomyRelationKind | 'all'
-  limit?: number
-}) {
-  const searchParams = new URLSearchParams()
-  searchParams.set('prompt', params.prompt)
-  searchParams.set('type', params.type ?? 'positive')
-  searchParams.set('relationKind', params.relationKind ?? 'all')
-  searchParams.set('limit', String(params.limit ?? 12))
-
-  const response = await fetchJson<ApiResponse<PromptTaxonomyRelatedPayload>>(`/api/prompt-collection/taxonomy-related?${searchParams.toString()}`)
-  if (!response.success) {
-    throw new Error(response.error || '프롬프트 taxonomy 추천을 불러오지 못했어.')
-  }
-
-  const normalizedType: PromptTypeFilter = response.data.source.type === 'negative' || response.data.source.type === 'auto'
-    ? response.data.source.type
-    : 'positive'
-
-  return {
-    ...response.data,
-    items: response.data.items.map((item) => ({
-      ...item,
-      id: Number(item.id),
-      prompt: String(item.prompt),
-      usage_count: Number(item.usage_count ?? 0),
-      group_id: item.group_id ?? null,
-      inferred_type: item.inferred_type,
-      cluster_id: item.cluster_id ?? null,
-      canonical_prompt: item.canonical_prompt ?? null,
-      relation_kind: item.relation_kind,
-      score: Number(item.score ?? 0),
-    })),
-    source: {
-      ...response.data.source,
-      type: normalizedType,
-      usage_count: Number(response.data.source.usage_count ?? 0),
-      group_id: response.data.source.group_id ?? null,
-      inferred_type: TAXONOMY_INFERRED_TYPE_VALUES.has(response.data.source.inferred_type as PromptTaxonomyInferredType)
-        ? response.data.source.inferred_type as PromptTaxonomyInferredType
-        : 'unknown',
-      cluster_id: response.data.source.cluster_id ?? null,
-      canonical_prompt: response.data.source.canonical_prompt ?? null,
     },
   }
 }

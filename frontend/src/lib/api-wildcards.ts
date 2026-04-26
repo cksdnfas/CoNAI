@@ -181,16 +181,6 @@ export async function deleteWildcard(wildcardId: number, options?: { cascade?: b
   return response
 }
 
-/** Load aggregate wildcard statistics for the browser tab header. */
-export async function getWildcardStatistics() {
-  const response = await fetchJson<ApiResponse<WildcardStatistics>>('/api/wildcards/stats/summary')
-  if (!response.success || !response.data) {
-    throw new Error(response.error || '와일드카드 통계를 불러오지 못했어.')
-  }
-
-  return response.data
-}
-
 /** Load the latest auto-generated LoRA scan summary when available. */
 export async function getWildcardLastScanLog() {
   const response = await fetchJson<ApiResponse<WildcardScanLog | null>>('/api/wildcards/last-scan-log')

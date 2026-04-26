@@ -134,22 +134,6 @@ export async function deleteGroup(groupId: number, options?: { cascade?: boolean
   return response.data
 }
 
-export async function moveGroup(groupId: number, parentId: number | null) {
-  const response = await fetchJson<ApiResponse<GroupMutationMessage>>(`/api/groups/${groupId}/move`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ parent_id: parentId }),
-  })
-
-  if (!response.success) {
-    throw new Error(response.error || '그룹을 이동하지 못했어.')
-  }
-
-  return response.data
-}
-
 export async function addImageToGroup(groupId: number, compositeHash: string) {
   const response = await fetchJson<ApiResponse<GroupMutationMessage & { converted?: boolean }>>(`/api/groups/${groupId}/images`, {
     method: 'POST',
@@ -189,18 +173,6 @@ export async function removeImagesFromGroup(groupId: number, compositeHashes: st
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ composite_hashes: compositeHashes }),
-  })
-
-  if (!response.success) {
-    throw new Error(response.error || '이미지를 그룹에서 제거하지 못했어.')
-  }
-
-  return response.data
-}
-
-export async function removeImageFromGroup(groupId: number, compositeHash: string) {
-  const response = await fetchJson<ApiResponse<GroupMutationMessage>>(`/api/groups/${groupId}/images/${encodeURIComponent(compositeHash)}`, {
-    method: 'DELETE',
   })
 
   if (!response.success) {

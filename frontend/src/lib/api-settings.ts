@@ -128,14 +128,6 @@ export async function getPublicAppearanceSettings() {
   return response.data
 }
 
-export async function getRuntimeAppearanceSettings() {
-  const response = await fetchJson<ApiResponse<AppearanceSettings>>('/api/runtime-appearance')
-  if (!response.success) {
-    throw new Error(response.error || '런타임 테마 설정을 불러오지 못했어.')
-  }
-  return response.data
-}
-
 export async function getRuntimeSimilaritySettings() {
   const response = await fetchJson<ApiResponse<SimilaritySettings>>('/api/runtime-media-settings/similarity')
   if (!response.success) {
@@ -348,30 +340,6 @@ export async function checkTaggerDependencies() {
   return response.data
 }
 
-export async function loadTaggerModel(payload?: { model?: TaggerSettings['model']; device?: TaggerSettings['device'] }) {
-  const response = await fetchJson<ApiResponse<Record<string, unknown>>>('/api/settings/tagger/load-model', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload ?? {}),
-  })
-  if (!response.success) {
-    throw new Error(response.error || '태거 모델을 로드하지 못했어.')
-  }
-  return response.data
-}
-
-export async function unloadTaggerModel() {
-  const response = await fetchJson<ApiResponse<Record<string, unknown>>>('/api/settings/tagger/unload-model', {
-    method: 'POST',
-  })
-  if (!response.success) {
-    throw new Error(response.error || '태거 모델을 언로드하지 못했어.')
-  }
-  return response.data
-}
-
 export async function updateKaloscopeSettings(settings: Partial<KaloscopeSettings>) {
   const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/kaloscope', {
     method: 'PUT',
@@ -432,26 +400,6 @@ export async function getKaloscopeStatus() {
   const response = await fetchJson<ApiResponse<KaloscopeServerStatus>>('/api/settings/kaloscope/status')
   if (!response.success) {
     throw new Error(response.error || 'Kaloscope 상태를 불러오지 못했어.')
-  }
-  return response.data
-}
-
-export async function loadKaloscopeModel() {
-  const response = await fetchJson<ApiResponse<Record<string, unknown>>>('/api/settings/kaloscope/load-model', {
-    method: 'POST',
-  })
-  if (!response.success) {
-    throw new Error(response.error || 'Kaloscope 모델을 로드하지 못했어.')
-  }
-  return response.data
-}
-
-export async function unloadKaloscopeModel() {
-  const response = await fetchJson<ApiResponse<Record<string, unknown>>>('/api/settings/kaloscope/unload-model', {
-    method: 'POST',
-  })
-  if (!response.success) {
-    throw new Error(response.error || 'Kaloscope 모델을 언로드하지 못했어.')
   }
   return response.data
 }

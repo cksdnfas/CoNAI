@@ -1,5 +1,4 @@
 import { buildApiUrl } from '@/lib/api-client'
-import type { WorkflowMarkedField } from '@/lib/api-image-generation'
 
 export type ModuleEngineType = 'nai' | 'codex' | 'comfyui' | 'system' | 'custom_js'
 export type ModuleAuthoringSource = 'nai_form_snapshot' | 'codex_form_snapshot' | 'comfyui_workflow_wrap' | 'manual' | 'custom_node_fs'
@@ -741,9 +740,4 @@ export async function getGraphExecution(executionId: number) {
     logs: GraphExecutionLogRecord[]
   }>>(`/api/graph-workflows/executions/${executionId}`)
   return response.data
-}
-
-/** Convert Comfy workflow marked fields into candidate exposed field ids. */
-export function getDefaultComfyExposedFieldIds(markedFields: WorkflowMarkedField[]) {
-  return markedFields.map((field) => field.id)
 }

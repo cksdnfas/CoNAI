@@ -186,24 +186,6 @@ export async function deleteGenerationWorkflow(workflowId: number) {
   })
 }
 
-/** Link one or more ComfyUI servers to a saved workflow. */
-export async function linkGenerationWorkflowServers(workflowId: number, serverIds: number[]) {
-  return requestJson<{ success: boolean; data: { message: string; linked_count: number } }>(`/api/workflows/${workflowId}/servers`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ server_ids: serverIds }),
-  })
-}
-
-/** Remove a linked server from a saved workflow. */
-export async function unlinkGenerationWorkflowServer(workflowId: number, serverId: number) {
-  return requestJson<MutationResponse>(`/api/workflows/${workflowId}/servers/${serverId}`, {
-    method: 'DELETE',
-  })
-}
-
 /** Load one ComfyUI server runtime status, including connectivity and current occupancy. */
 export async function testGenerationComfyUIServer(serverId: number) {
   const response = await requestJson<TestComfyUIServerResponse>(`/api/comfyui-servers/${serverId}/status`)

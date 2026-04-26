@@ -63,11 +63,6 @@ type ExternalApiLlmOptionsResponse = {
   data: ExternalApiLlmOptionRecord[]
 }
 
-type ExternalApiSecurityStatusResponse = {
-  success: boolean
-  data: ExternalApiSecurityStatus
-}
-
 export async function getExternalApiProviders() {
   const response = await fetchJson<ExternalApiProvidersResponse>('/api/external-api/providers')
   return Array.isArray(response.data) ? response.data : []
@@ -76,11 +71,6 @@ export async function getExternalApiProviders() {
 export async function getExternalApiLlmOptions() {
   const response = await fetchJson<ExternalApiLlmOptionsResponse>('/api/external-api/llm-options')
   return Array.isArray(response.data) ? response.data : []
-}
-
-export async function getExternalApiSecurityStatus() {
-  const response = await fetchJson<ExternalApiSecurityStatusResponse>('/api/external-api/security-status')
-  return response.data
 }
 
 export async function createExternalApiProvider(input: ExternalApiProviderUpsertInput) {
@@ -105,15 +95,6 @@ export async function deleteExternalApiProvider(providerName: string) {
   return await fetchJson<{ success: boolean; message?: string }>(`/api/external-api/providers/${encodeURIComponent(providerName)}`, {
     method: 'DELETE',
   })
-}
-
-export async function toggleExternalApiProvider(providerName: string, isEnabled: boolean) {
-  const response = await fetchJson<ExternalApiProviderResponse>(`/api/external-api/providers/${encodeURIComponent(providerName)}/toggle`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ is_enabled: isEnabled }),
-  })
-  return response.data
 }
 
 export async function testExternalApiProvider(providerName: string) {
