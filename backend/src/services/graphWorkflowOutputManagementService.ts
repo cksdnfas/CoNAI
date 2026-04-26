@@ -8,6 +8,8 @@ import { GraphExecutionModel } from '../models/GraphExecution'
 import { deleteFile as recycleBinDeleteFile } from '../utils/recycleBin'
 import { settingsService } from './settingsService'
 import { WatchedFolderService } from './watchedFolderService'
+import { BackgroundProcessorService } from './backgroundProcessorService'
+import { FileDiscoveryService } from './folderScan/fileDiscoveryService'
 import { decorateGraphExecutionRecord } from './graphWorkflowViewService'
 
 function isPathInsideRoot(rootPath: string, candidatePath: string) {
@@ -179,6 +181,20 @@ export async function copyGraphWorkflowArtifactsToWatchedFolder(folderId: number
 
     const targetPath = await resolveUniqueCopyTargetPath(targetFolderPath, path.basename(resolvedSourcePath))
     await fs.promises.copyFile(resolvedSourcePath, targetPath)
+
+    try {
+      await BackgroundProcessorService.processSavedMediaFile(targetPath, {
+        folderId: watchedFolder.id,
+        mimeType: FileDiscoveryService.getMimeType(targetPath),
+        quiet: true,
+      })
+    } catch (processingError) {
+      console.warn(
+        '[GraphWorkflowOutputManagement] Copied artifact but immediate media processing failed:',
+        processingError instanceof Error ? processingError.message : processingError,
+      )
+    }
+
     copied.push({ source_path: resolvedSourcePath, target_path: targetPath })
   }
 

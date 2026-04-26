@@ -4,6 +4,7 @@ import { uploadSingle, uploadMultiple } from '../../middleware/upload';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { VideoProcessor } from '../../services/videoProcessor';
+import { BackgroundProcessorService } from '../../services/backgroundProcessorService';
 import { UploadResponse } from '../../types/image';
 import { runtimePaths } from '../../config/runtimePaths';
 import {
@@ -18,6 +19,16 @@ const router = Router();
 const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
 
 registerUploadMetadataUtilityRoutes(router);
+
+async function processSavedUploadMedia(relativePath: string, mimeType: string) {
+  return BackgroundProcessorService.processSavedMediaFile(
+    path.join(UPLOAD_BASE_PATH, relativePath),
+    {
+      mimeType,
+      quiet: true,
+    },
+  );
+}
 
 /**
  * 단일 파일 업로드 (단순화: 파일 저장만)
@@ -83,16 +94,18 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
       throw new Error(`Unsupported file type: ${file.mimetype}`);
     }
 
-    // 간단한 응답 (DB 저장 없음, 파일 경로만 반환)
+    const mimeType = processedData.mimeType || file.mimetype;
+    const mediaProcessing = await processSavedUploadMedia(processedData.originalPath, mimeType);
+
     const response: UploadResponse = {
       success: true,
       data: {
-        id: 0, // DB 저장 안 함, 스캔 시 생성
+        id: mediaProcessing.fileId,
         filename: processedData.filename,
         original_name: file.originalname,
-        thumbnail_url: '', // 스캔 시 생성
+        thumbnail_url: '',
         file_size: processedData.fileSize,
-        mime_type: processedData.mimeType || file.mimetype,
+        mime_type: mimeType,
         width: processedData.width,
         height: processedData.height,
         upload_date: new Date().toISOString()
@@ -166,13 +179,16 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
           throw new Error(`Unsupported file type: ${file.mimetype}`);
         }
 
+        const mimeType = processedData.mimeType || file.mimetype;
+        const mediaProcessing = await processSavedUploadMedia(processedData.originalPath, mimeType);
+
         results.push({
-          id: 0, // DB 저장 안 함
+          id: mediaProcessing.fileId,
           filename: processedData.filename,
           original_name: file.originalname,
-          thumbnail_url: '', // 스캔 시 생성
+          thumbnail_url: '',
           file_size: processedData.fileSize,
-          mime_type: processedData.mimeType || file.mimetype,
+          mime_type: mimeType,
           width: processedData.width,
           height: processedData.height,
           upload_date: new Date().toISOString()
@@ -254,23 +270,31 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
       let processedData: {
         filename: string;
         originalPath: string;
+        mimeType?: string;
       };
 
       if (isVideoFile(file.mimetype)) {
         const processedVideo = await VideoProcessor.processVideo(file, UPLOAD_BASE_PATH);
         processedData = {
           filename: processedVideo.filename,
-          originalPath: processedVideo.originalPath
+          originalPath: processedVideo.originalPath,
+          mimeType: file.mimetype
         };
       } else if (isImageFile(file.mimetype)) {
         const processedImage = await ImageProcessor.processImage(file, UPLOAD_BASE_PATH);
         processedData = {
           filename: processedImage.filename,
-          originalPath: processedImage.originalPath
+          originalPath: processedImage.originalPath,
+          mimeType: file.mimetype
         };
       } else {
         throw new Error(`Unsupported file type: ${file.mimetype}`);
       }
+
+      const mediaProcessing = await processSavedUploadMedia(
+        processedData.originalPath,
+        processedData.mimeType || file.mimetype,
+      );
 
       // 완료 이벤트
       sendProgress({
@@ -278,8 +302,9 @@ router.post('/upload-multiple-stream', uploadMultiple, async (req: Request, res:
         currentFile,
         totalFiles: files.length,
         filename: file.originalname,
-        message: '파일 저장 완료',
+        message: '파일 저장 및 즉시 처리 완료',
         path: processedData.originalPath,
+        compositeHash: mediaProcessing.compositeHash,
         timestamp: new Date().toISOString()
       });
 

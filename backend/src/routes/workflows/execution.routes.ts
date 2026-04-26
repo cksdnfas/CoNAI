@@ -10,6 +10,7 @@ import { runtimePaths, publicUrls } from '../../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
+import { BackgroundProcessorService } from '../../services/backgroundProcessorService';
 import type { GeneratedImageSaveOptions } from '../../utils/fileSaver';
 import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
@@ -154,6 +155,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
             GenerationHistoryModel.updateImagePaths(historyId, {
               compositeHash: result.representativeImage.compositeHash,
             });
+            await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(result.representativeImage.compositeHash);
             GenerationHistoryModel.updateStatus(historyId, 'completed');
 
             console.log(`✅ ComfyUI history ${historyId} linked to representative output: ${result.representativeImage.compositeHash.substring(0, 16)}...`);

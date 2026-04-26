@@ -1,11 +1,8 @@
 import { GenerationHistoryModel, GenerationHistoryRecord, GenerationHistoryListRecord, GenerationHistoryDetailRecord, ServiceType } from '../models/GenerationHistory';
 import type { AuthAccountType } from '../models/AuthAccount';
 import { APIImageProcessor } from './APIImageProcessor';
+import { BackgroundProcessorService } from './backgroundProcessorService';
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver';
-import axios from 'axios';
-import FormData from 'form-data';
-import path from 'path';
-import { PORTS } from '@conai/shared';
 
 /**
  * GenerationHistoryService
@@ -123,8 +120,9 @@ export class GenerationHistoryService {
         compositeHash: processedPaths.compositeHash
       });
 
-      // Note: Group assignment is handled by BackgroundProcessorService after hash generation
-      // (due to foreign key constraint on image_groups table)
+      // The file is already registered by APIImageProcessor; run the generation
+      // group handoff after history linking so requested groups are not missed.
+      await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(processedPaths.compositeHash);
 
       // Step 4: Update status to completed (file save complete)
       GenerationHistoryModel.updateStatus(historyId, 'completed');
@@ -158,6 +156,8 @@ export class GenerationHistoryService {
         compositeHash: processedPaths.compositeHash
       });
 
+      await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(processedPaths.compositeHash);
+
       GenerationHistoryModel.updateStatus(historyId, 'completed');
 
       console.log(`✅ ${serviceType.toUpperCase()} file saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
@@ -168,50 +168,6 @@ export class GenerationHistoryService {
       GenerationHistoryModel.recordError(historyId, errorMessage);
       console.error(`✗ Failed to process generated file history ${historyId}:`, errorMessage);
       throw error;
-    }
-  }
-
-  /**
-   * Upload image to main images API (internal call)
-   * Uses existing /api/images/upload endpoint
-   */
-  private static async uploadToMainImageAPI(
-    imageBuffer: Buffer,
-    serviceType: ServiceType,
-    historyId: number
-  ): Promise<number> {
-    try {
-      // Get server port from environment
-      // Get server port from environment
-      const port = process.env.PORT || PORTS.BACKEND_DEFAULT;
-      const uploadUrl = `http://localhost:${port}/api/images/upload`;
-
-      // Create form data
-      const formData = new FormData();
-      formData.append('image', imageBuffer, {
-        filename: `api_${serviceType}_${historyId}.png`,
-        contentType: 'image/png'
-      });
-
-      // Upload to main API
-      const response = await axios.post(uploadUrl, formData, {
-        headers: {
-          ...formData.getHeaders()
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity
-      });
-
-      // Extract uploaded image ID
-      // Single upload endpoint returns: { success: true, data: { id, filename, ... } }
-      if (response.data && response.data.success && response.data.data && response.data.data.id) {
-        return response.data.data.id;
-      }
-
-      throw new Error('Failed to extract image ID from upload response');
-    } catch (error) {
-      console.error('Main image API upload failed:', error);
-      throw new Error(`Failed to upload to main images API: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

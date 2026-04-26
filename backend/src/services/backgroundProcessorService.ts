@@ -10,8 +10,12 @@ import { generateFileHash } from '../utils/fileHash';
 import { VideoProcessor } from './videoProcessor';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { AutoCollectionService } from './autoCollectionService';
+import { autoTagScheduler } from './autoTagScheduler';
+import { FileDiscoveryService } from './folderScan/fileDiscoveryService';
+import { WatchedFolderService } from './watchedFolderService';
 import { checkFileAccess } from '../utils/fileAccess';
 import { MetadataExtractionError } from '../types/errors';
+import type { FileType } from '../types/image';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
 
 interface UnhashedFile {
@@ -28,8 +32,94 @@ interface ProcessingResult {
   unique: number;
 }
 
+interface ExistingMediaMetadataSummary {
+  composite_hash: string;
+  ai_tool: string | null;
+  model_name: string | null;
+  lora_models: string | null;
+  model_references: string | null;
+  steps: number | null;
+  cfg_scale: number | null;
+  sampler: string | null;
+  seed: number | null;
+  scheduler: string | null;
+  prompt: string | null;
+  negative_prompt: string | null;
+  character_prompt_text: string | null;
+  raw_nai_parameters: string | null;
+}
+
 interface BackgroundProcessorOptions {
   quietIfIdle?: boolean;
+}
+
+interface SavedMediaProcessingOptions {
+  folderId?: number;
+  mimeType?: string;
+  triggerAutoTag?: boolean;
+  quiet?: boolean;
+}
+
+interface SavedMediaProcessingResult {
+  fileId: number;
+  compositeHash: string | null;
+  fileType: FileType;
+  status: 'processed' | 'already_processed';
+}
+
+interface ImageFileProcessingRecord extends UnhashedFile {
+  file_type: string;
+  composite_hash: string | null;
+}
+
+function hasMeaningfulMetadataValue(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    return normalized.length > 0 && normalized.toLowerCase() !== 'unknown';
+  }
+
+  return true;
+}
+
+/**
+ * Perceptual-hash duplicates share one media_metadata row. If that row was
+ * created before metadata extraction/backfill, a later duplicate can be the
+ * first file whose embedded AI metadata is readable. In that case, queue a
+ * backfill instead of leaving the shared row permanently empty.
+ */
+function shouldBackfillDuplicateMetadata(existing: ExistingMediaMetadataSummary): boolean {
+  return ![
+    existing.ai_tool,
+    existing.model_name,
+    existing.lora_models,
+    existing.model_references,
+    existing.steps,
+    existing.cfg_scale,
+    existing.sampler,
+    existing.seed,
+    existing.scheduler,
+    existing.prompt,
+    existing.negative_prompt,
+    existing.character_prompt_text,
+    existing.raw_nai_parameters,
+  ].some(hasMeaningfulMetadataValue);
+}
+
+function determineFileType(mimeType: string, filePath: string): FileType {
+  if (mimeType.startsWith('video/')) {
+    return 'video';
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.gif' || ext === '.apng') {
+    return 'animated';
+  }
+
+  return 'image';
 }
 
 /**
@@ -47,6 +137,129 @@ export class BackgroundProcessorService {
   private static processing = false;
   private static readonly BATCH_SIZE = 50;
   private static readonly CONCURRENCY = Math.max(2, os.cpus().length * 2);
+
+  /**
+   * Register and process a media file that this backend just saved.
+   *
+   * Watched-folder scans remain as the fallback for files dropped directly into
+   * folders, but upload/generation routes should call this so thumbnails,
+   * hashes, metadata extraction, auto-collection, and auto-tag/artist work are
+   * triggered immediately instead of waiting for the next scan tick.
+   */
+  static async processSavedMediaFile(
+    filePath: string,
+    options: SavedMediaProcessingOptions = {}
+  ): Promise<SavedMediaProcessingResult> {
+    const resolvedPath = path.resolve(filePath);
+    const stats = await fs.promises.stat(resolvedPath);
+    const mimeType = options.mimeType || FileDiscoveryService.getMimeType(resolvedPath);
+    const fileType = determineFileType(mimeType, resolvedPath);
+    const folderId = options.folderId ?? (await WatchedFolderService.reconcileDefaultUploadFolder()).id;
+    const now = new Date().toISOString();
+
+    let record = db.prepare(`
+      SELECT id, original_file_path, folder_id, mime_type, file_type, composite_hash
+      FROM image_files
+      WHERE original_file_path = ?
+    `).get(resolvedPath) as ImageFileProcessingRecord | undefined;
+
+    if (!record) {
+      db.prepare(`
+        INSERT OR IGNORE INTO image_files (
+          composite_hash, file_type, original_file_path, folder_id,
+          file_status, file_size, mime_type, file_modified_date,
+          scan_date, last_verified_date
+        ) VALUES (NULL, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
+      `).run(
+        fileType,
+        resolvedPath,
+        folderId,
+        stats.size,
+        mimeType,
+        stats.mtime.toISOString(),
+        now,
+        now
+      );
+
+      record = db.prepare(`
+        SELECT id, original_file_path, folder_id, mime_type, file_type, composite_hash
+        FROM image_files
+        WHERE original_file_path = ?
+      `).get(resolvedPath) as ImageFileProcessingRecord | undefined;
+    } else {
+      db.prepare(`
+        UPDATE image_files
+        SET file_status = 'active',
+            folder_id = ?,
+            file_size = ?,
+            mime_type = ?,
+            file_modified_date = ?,
+            last_verified_date = ?
+        WHERE id = ?
+      `).run(folderId, stats.size, mimeType, stats.mtime.toISOString(), now, record.id);
+    }
+
+    if (!record) {
+      throw new Error(`Failed to register saved media file: ${resolvedPath}`);
+    }
+
+    if (record.composite_hash) {
+      await this.processApiGenerationGroupAssignment(record.composite_hash);
+      this.triggerAutoTagProcessing(record.composite_hash, resolvedPath, options);
+      return {
+        fileId: record.id,
+        compositeHash: record.composite_hash,
+        fileType,
+        status: 'already_processed',
+      };
+    }
+
+    await this.processFile({
+      id: record.id,
+      original_file_path: resolvedPath,
+      folder_id: folderId,
+      mime_type: mimeType,
+      file_type: fileType,
+    });
+
+    const processedRecord = db.prepare(`
+      SELECT id, composite_hash
+      FROM image_files
+      WHERE id = ?
+    `).get(record.id) as { id: number; composite_hash: string | null } | undefined;
+
+    const compositeHash = processedRecord?.composite_hash ?? null;
+    if (compositeHash) {
+      await this.processApiGenerationGroupAssignment(compositeHash);
+      this.triggerAutoTagProcessing(compositeHash, resolvedPath, options);
+    }
+
+    if (!options.quiet) {
+      console.log(`  ⚡ Immediate media processing complete: ${path.basename(resolvedPath)}`);
+    }
+
+    return {
+      fileId: record.id,
+      compositeHash,
+      fileType,
+      status: 'processed',
+    };
+  }
+
+  private static triggerAutoTagProcessing(compositeHash: string, filePath: string, options: SavedMediaProcessingOptions): void {
+    if (options.triggerAutoTag === false) {
+      return;
+    }
+
+    setTimeout(() => {
+      autoTagScheduler.triggerManualProcessing().catch((error) => {
+        console.warn(
+          `  ⚠️  Immediate auto-tag trigger failed for ${path.basename(filePath)} (${compositeHash.substring(0, 16)}...):`,
+          error instanceof Error ? error.message : error
+        );
+      });
+    }, 0);
+  }
 
   /**
    * Process all images that don't have composite_hash yet
@@ -196,9 +409,16 @@ export class BackgroundProcessorService {
     // Check if this hash already exists (duplicate detection)
     const existing = db
       .prepare(
-        `SELECT composite_hash FROM media_metadata WHERE composite_hash = ?`
+        `
+        SELECT
+          composite_hash, ai_tool, model_name, lora_models, model_references,
+          steps, cfg_scale, sampler, seed, scheduler,
+          prompt, negative_prompt, character_prompt_text, raw_nai_parameters
+        FROM media_metadata
+        WHERE composite_hash = ?
+      `
       )
-      .get(hashes.compositeHash) as { composite_hash: string } | undefined;
+      .get(hashes.compositeHash) as ExistingMediaMetadataSummary | undefined;
 
     if (existing) {
       // Duplicate found - link to existing hash without creating new metadata
@@ -206,6 +426,23 @@ export class BackgroundProcessorService {
         hashes.compositeHash,
         file.id
       );
+
+      if (shouldBackfillDuplicateMetadata(existing)) {
+        try {
+          BackgroundQueueService.addMetadataExtractionTask(
+            file.original_file_path,
+            hashes.compositeHash
+          );
+          console.log(`  🧩 Queued metadata backfill from duplicate: ${fileName}`);
+        } catch (error) {
+          console.warn(
+            `  ⚠️  Failed to queue duplicate metadata backfill for ${fileName}:`,
+            error instanceof Error ? error.message : error
+          );
+        }
+      }
+
+      await this.processApiGenerationGroupAssignment(hashes.compositeHash);
 
       console.log(`  ♻️  Duplicate detected: ${fileName}`);
       return;
@@ -304,6 +541,7 @@ export class BackgroundProcessorService {
         fileHash,
         file.id
       );
+      await this.processApiGenerationGroupAssignment(fileHash);
       console.log(`  ♻️  Video/Animated already processed: ${fileName}`);
       return;
     }
@@ -435,6 +673,14 @@ export class BackgroundProcessorService {
   static forceStop(): void {
     this.processing = false;
     console.log('⏹️  Background processor stopped');
+  }
+
+  /**
+   * Process pending API generation group assignments after generated media has
+   * both a media_metadata/image_files record and a linked generation-history row.
+   */
+  static async processApiGenerationGroupAssignmentForHash(compositeHash: string): Promise<void> {
+    await this.processApiGenerationGroupAssignment(compositeHash);
   }
 
   /**

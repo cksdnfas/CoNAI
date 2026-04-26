@@ -3,6 +3,7 @@ import { WorkflowModel } from '../../models/Workflow'
 import { GenerationHistoryModel } from '../../models/GenerationHistory'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { GenerationHistoryService } from '../generationHistoryService'
+import { BackgroundProcessorService } from '../backgroundProcessorService'
 import { createComfyUIService } from '../comfyuiService'
 import { prepareComfyPromptData } from '../prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
@@ -193,6 +194,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       GenerationHistoryModel.updateImagePaths(historyId, {
         compositeHash: result.representativeImage.compositeHash,
       })
+      await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(result.representativeImage.compositeHash)
       GenerationHistoryModel.updateStatus(historyId, 'completed')
     }
 

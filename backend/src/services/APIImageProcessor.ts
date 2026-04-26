@@ -1,57 +1,44 @@
 import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
 import { ImageProcessor } from './imageProcessor';
+import { BackgroundProcessorService } from './backgroundProcessorService';
 import { FileSaver, type GeneratedImageSaveOptions } from '../utils/fileSaver';
 import { runtimePaths } from '../config/runtimePaths';
 
-export class APIImageProcessor {
-  private static readonly THUMBNAIL_SIZE = 1080;
-  private static readonly THUMBNAIL_QUALITY = 80;
-  private static readonly OPTIMIZED_QUALITY = 95;
+type ProcessedGeneratedMedia = {
+  originalPath: string;
+  fileSize: number;
+  width: number;
+  height: number;
+  compositeHash: string;
+  mimeType?: string;
+};
 
-  /**
-   * Get base upload path for API images
-   */
+export class APIImageProcessor {
   private static getBaseUploadPath(): string {
     return path.join(runtimePaths.uploadsDir, 'API');
   }
 
-  static async createUploadFolders(): Promise<{
-    dateFolder: string;
-    originFolder: string;
-  }> {
-    const baseUploadPath = this.getBaseUploadPath();
-    const dateFolder = ImageProcessor.getDateFolder();
-    const imagesPath = path.join(baseUploadPath, 'images');
-    const dateFolderPath = path.join(imagesPath, dateFolder);
-
-    const originFolder = dateFolderPath;
-
-    // Create directories
-    await fs.promises.mkdir(originFolder, { recursive: true });
-
-    return {
-      dateFolder: path.join('API', 'images', dateFolder),
-      originFolder
-    };
+  private static resolveSavedMediaPath(originalPath: string): string {
+    return path.isAbsolute(originalPath)
+      ? originalPath
+      : path.join(runtimePaths.uploadsDir, originalPath);
   }
 
-  /**
-   * Generate unique filename
-   */
-  private static generateUniqueFilename(extension: string = '.png'): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hour = String(now.getHours()).padStart(2, '0');
-    const minute = String(now.getMinutes()).padStart(2, '0');
-    const second = String(now.getSeconds()).padStart(2, '0');
-    const uuid = uuidv4().split('-')[0]; // First segment of UUID
+  private static async runImmediateMediaPipeline(saved: ProcessedGeneratedMedia): Promise<ProcessedGeneratedMedia> {
+    const processingResult = await BackgroundProcessorService.processSavedMediaFile(
+      this.resolveSavedMediaPath(saved.originalPath),
+      {
+        mimeType: saved.mimeType,
+        quiet: true,
+      },
+    );
 
-    return `${year}_${month}_${day}_${hour}${minute}${second}_${uuid}${extension}`;
+    return {
+      ...saved,
+      compositeHash: processingResult.compositeHash || saved.compositeHash,
+    };
   }
 
   /**
@@ -76,9 +63,8 @@ export class APIImageProcessor {
     mimeType?: string;
   }> {
     try {
-      // Use FileSaver to save original file only
-      // Background scan will handle thumbnail/optimization
-      return await FileSaver.saveGeneratedImage(imageBuffer, serviceType, saveOptions);
+      const saved = await FileSaver.saveGeneratedImage(imageBuffer, serviceType, saveOptions);
+      return await this.runImmediateMediaPipeline(saved);
     } catch (error) {
       console.error('API Image processing failed:', error);
       throw new Error(`Failed to process ${serviceType} generated image: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -103,7 +89,8 @@ export class APIImageProcessor {
     mimeType?: string;
   }> {
     try {
-      return await FileSaver.saveGeneratedFile(sourceFilePath, serviceType, saveOptions);
+      const saved = await FileSaver.saveGeneratedFile(sourceFilePath, serviceType, saveOptions);
+      return await this.runImmediateMediaPipeline(saved);
     } catch (error) {
       console.error('API generated file processing failed:', error);
       throw new Error(`Failed to process ${serviceType} generated output: ${error instanceof Error ? error.message : 'Unknown error'}`);

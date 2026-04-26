@@ -32,6 +32,7 @@ interface AutoTagCapabilities {
 export class AutoTagScheduler {
   private isRunning = false;
   private isProcessing = false;
+  private rerunRequested = false;
   private pollingTimer: NodeJS.Timeout | null = null;
   private readonly PROCESSING_DELAY_MS = 1000;
 
@@ -155,6 +156,7 @@ export class AutoTagScheduler {
 
   private async processPendingMedia(): Promise<void> {
     if (this.isProcessing) {
+      this.rerunRequested = true;
       return;
     }
 
@@ -197,6 +199,13 @@ export class AutoTagScheduler {
       console.error('[AutoTagScheduler] Error in processPendingMedia:', error);
     } finally {
       this.isProcessing = false;
+
+      if (this.rerunRequested) {
+        this.rerunRequested = false;
+        setTimeout(() => {
+          void this.processPendingMedia();
+        }, this.PROCESSING_DELAY_MS);
+      }
     }
   }
 

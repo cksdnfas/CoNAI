@@ -123,6 +123,14 @@ export class FileSaver {
     return mimeType.startsWith('image/') && mimeType !== 'image/gif';
   }
 
+  private static buildImageMimeType(format: ImageOutputFormat): string {
+    if (format === 'jpeg') {
+      return 'image/jpeg';
+    }
+
+    return `image/${format}`;
+  }
+
   /**
    * API 생성 이미지를 uploads/API/images/YYYY-MM-DD/ 폴더에 저장
    *
@@ -197,7 +205,7 @@ export class FileSaver {
         width,
         height,
         compositeHash,
-        mimeType: options?.sourceMimeType,
+        mimeType: this.buildImageMimeType(outputFormat),
       };
     } catch (error) {
       console.error(`[FileSaver] ${serviceType} 이미지 저장 실패:`, error);
