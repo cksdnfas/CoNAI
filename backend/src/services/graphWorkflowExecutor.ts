@@ -36,6 +36,77 @@ type GraphExecutionPlan = {
   reusedNodeIds?: string[]
 }
 
+function buildNodeOutputKey(nodeId: string, portKey: string) {
+  return `${nodeId}:${portKey}`
+}
+
+function getSystemOperationKey(moduleDefinition: { internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
+  if (typeof moduleDefinition.internal_fixed_values?.operation_key === 'string') {
+    return moduleDefinition.internal_fixed_values.operation_key
+  }
+
+  if (typeof moduleDefinition.template_defaults?.operation_key === 'string') {
+    return moduleDefinition.template_defaults.operation_key
+  }
+
+  return null
+}
+
+function isIfBranchModule(moduleDefinition: { internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
+  return getSystemOperationKey(moduleDefinition) === 'system.logic_if_branch'
+}
+
+function findInactiveBranchInputReasons(context: ExecutionContext, nodeId: string) {
+  return context.workflow.graph.edges
+    .filter((edge) => edge.target_node_id === nodeId)
+    .flatMap((edge) => {
+      if (context.skippedNodeIds?.has(edge.source_node_id)) {
+        return [{ ...edge, reason: 'source_node_skipped' }]
+      }
+
+      if (context.disabledOutputPorts?.has(buildNodeOutputKey(edge.source_node_id, edge.source_port_key))) {
+        return [{ ...edge, reason: 'source_output_disabled' }]
+      }
+
+      const sourceNode = context.workflow.graph.nodes.find((item) => item.id === edge.source_node_id)
+      const sourceModule = sourceNode ? context.modulesById.get(sourceNode.module_id) : null
+      const sourceArtifacts = context.artifactsByNode.get(edge.source_node_id)
+      if (sourceModule && isIfBranchModule(sourceModule) && sourceArtifacts && !sourceArtifacts[edge.source_port_key]) {
+        return [{ ...edge, reason: 'inactive_if_branch' }]
+      }
+
+      return []
+    })
+}
+
+function markNodeSkippedForInactiveBranch(
+  context: ExecutionContext,
+  nodeId: string,
+  moduleDefinition: { output_ports: Array<{ key: string }> },
+  reasons: ReturnType<typeof findInactiveBranchInputReasons>,
+) {
+  context.skippedNodeIds?.add(nodeId)
+  for (const port of moduleDefinition.output_ports) {
+    context.disabledOutputPorts?.add(buildNodeOutputKey(nodeId, port.key))
+  }
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId,
+    eventType: 'node_skipped_inactive_branch',
+    message: `Node skipped because an upstream IF branch path is inactive: ${nodeId}`,
+    details: {
+      disabledInputs: reasons.map((edge) => ({
+        sourceNodeId: edge.source_node_id,
+        sourcePortKey: edge.source_port_key,
+        targetPortKey: edge.target_port_key,
+        reason: edge.reason,
+      })),
+      disabledOutputKeys: moduleDefinition.output_ports.map((port) => port.key),
+    },
+  })
+}
+
 /** Find the latest completed execution whose plan matches the current partial-run reuse requirements. */
 async function findReusableExecution(params: {
   workflowId: number
@@ -186,6 +257,8 @@ export class GraphWorkflowExecutor {
       workflow,
       modulesById,
       artifactsByNode: reusedArtifacts.artifactsByNode,
+      disabledOutputPorts: new Set<string>(),
+      skippedNodeIds: new Set<string>(),
       shouldCancel: options?.shouldCancel,
     }
 
@@ -203,6 +276,12 @@ export class GraphWorkflowExecutor {
         const moduleDefinition = modulesById.get(node.module_id)
         if (!moduleDefinition) {
           throw new Error(`Module ${node.module_id} not found during execution`)
+        }
+
+        const inactiveBranchInputReasons = findInactiveBranchInputReasons(context, node.id)
+        if (inactiveBranchInputReasons.length > 0) {
+          markNodeSkippedForInactiveBranch(context, node.id, moduleDefinition, inactiveBranchInputReasons)
+          continue
         }
 
         if (reusedArtifacts.artifactsByNode.has(node.id)) {

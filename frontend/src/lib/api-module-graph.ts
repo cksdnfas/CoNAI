@@ -5,6 +5,7 @@ export type ModuleEngineType = 'nai' | 'codex' | 'comfyui' | 'system' | 'custom_
 export type ModuleAuthoringSource = 'nai_form_snapshot' | 'codex_form_snapshot' | 'comfyui_workflow_wrap' | 'manual' | 'custom_node_fs'
 export type ModulePortDirection = 'input' | 'output'
 export type ModulePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
+export type ModuleSelectOption = string | { value: string; label: string }
 
 export interface ModulePortDefinition {
   key: string
@@ -25,7 +26,7 @@ export interface ModuleUiFieldDefinition {
   data_type: ModulePortDataType | 'select'
   description?: string
   default_value?: unknown
-  options?: string[]
+  options?: ModuleSelectOption[]
   min?: number
   max?: number
   placeholder?: string

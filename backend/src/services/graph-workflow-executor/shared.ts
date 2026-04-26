@@ -36,6 +36,8 @@ export type ExecutionContext = {
   workflow: ParsedGraphWorkflow
   modulesById: Map<number, ParsedModuleDefinition>
   artifactsByNode: Map<string, Record<string, RuntimeArtifact>>
+  disabledOutputPorts?: Set<string>
+  skippedNodeIds?: Set<string>
   shouldCancel?: () => boolean
 }
 

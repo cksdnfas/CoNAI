@@ -120,9 +120,15 @@ function resolveComfyTargetBadgeLabel(inputValues: Record<string, unknown> | und
   return '자동 분산'
 }
 
-function resolveSelectOptionsWithCurrentValue(options: string[] | null | undefined, currentValue: string | null) {
-  const normalizedOptions = Array.isArray(options) ? options.filter((option) => option.trim().length > 0) : []
-  if (currentValue && !normalizedOptions.includes(currentValue)) {
+function getSelectOptionValue(option: ModuleGraphSelectOption) {
+  return typeof option === 'string' ? option : option.value
+}
+
+function resolveSelectOptionsWithCurrentValue(options: ModuleGraphSelectOption[] | null | undefined, currentValue: string | null) {
+  const normalizedOptions = Array.isArray(options)
+    ? options.filter((option) => getSelectOptionValue(option).trim().length > 0)
+    : []
+  if (currentValue && !normalizedOptions.some((option) => getSelectOptionValue(option) === currentValue)) {
     return [...normalizedOptions, currentValue]
   }
   return normalizedOptions
@@ -559,6 +565,40 @@ function getCompactUiFieldInputType(field: ModuleUiFieldDefinition): 'select' | 
   return 'text'
 }
 
+function renderCompactUiField({
+  id,
+  data,
+  field,
+  value,
+  allowEmptyOption = true,
+}: {
+  id: string
+  data: ModuleGraphNode['data']
+  field: ModuleUiFieldDefinition
+  value?: unknown
+  allowEmptyOption?: boolean
+}) {
+  const normalizedValue = value ?? data.inputValues?.[field.key] ?? field.default_value
+
+  return (
+    <label key={field.key} className="nodrag nowheel flex min-h-[28px] items-center gap-2 border-b border-border/30 px-1 pb-1" onMouseDown={stopNodeInteraction} title={field.description || field.label}>
+      <span className="shrink-0 text-[11px] font-medium text-foreground">{field.label}</span>
+      <div className="min-w-0 flex-1" onMouseDown={stopNodeInteraction}>
+        <ModuleGraphSimpleValueInput
+          dataType={getCompactUiFieldInputType(field)}
+          value={normalizedValue}
+          onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
+          options={field.options ?? []}
+          placeholder={field.placeholder || field.description || field.label}
+          emptyLabel="선택"
+          allowEmptyOption={allowEmptyOption}
+          className={`h-7 min-w-0 flex-1 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+        />
+      </div>
+    </label>
+  )
+}
+
 /** Render one compact inline separator editor that matches normal node row height. */
 function TextMergeSeparatorCell({ id, data, field }: { id: string; data: ModuleGraphNode['data']; field: ModuleUiFieldDefinition }) {
   const rawValue = data.inputValues?.[field.key]
@@ -668,25 +708,7 @@ function TextTransformInlineField({
   data: ModuleGraphNode['data']
   field: ModuleUiFieldDefinition
 }) {
-  const rawValue = data.inputValues?.[field.key]
-  const normalizedValue = rawValue ?? field.default_value
-
-  return (
-    <label className="nodrag nowheel flex min-h-[28px] items-center gap-2 border-b border-border/30 px-1 pb-1" onMouseDown={stopNodeInteraction} title={field.description || field.label}>
-      <span className="shrink-0 text-[11px] font-medium text-foreground">{field.label}</span>
-      <div className="min-w-0 flex-1" onMouseDown={stopNodeInteraction}>
-        <ModuleGraphSimpleValueInput
-          dataType={getCompactUiFieldInputType(field)}
-          value={normalizedValue}
-          onChange={(value) => data.onNodeValueChange?.(id, field.key, value)}
-          options={field.options ?? []}
-          placeholder={field.placeholder || field.description || field.label}
-          emptyLabel="선택"
-          className={`h-7 min-w-0 flex-1 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-        />
-      </div>
-    </label>
-  )
+  return renderCompactUiField({ id, data, field })
 }
 
 /** Render the regex/text transform node with one source input and inline transform settings. */
@@ -766,6 +788,74 @@ function TextTransformNodeLayout({
             <span>{showAdvancedFields ? '−' : '+'}</span>
           </button>
         ) : null}
+      </div>
+    </div>
+  )
+}
+
+/** Render the IF branch node with node-level condition controls instead of hiding them in module config. */
+function IfBranchNodeLayout({
+  id,
+  data,
+  accentColor,
+  connectedInputKeys,
+  connectedOutputKeys,
+}: {
+  id: string
+  data: ModuleGraphNode['data']
+  accentColor: string
+  connectedInputKeys: Set<string>
+  connectedOutputKeys: Set<string>
+}) {
+  const inputPorts = data.module.exposed_inputs ?? []
+  const outputPorts = data.module.output_ports ?? []
+  const uiFields = data.module.ui_schema ?? []
+  const modeField = uiFields.find((field) => field.key === 'mode')
+  const expectedTypeField = uiFields.find((field) => field.key === 'expected_type')
+  const modeValue = getInlineUiFieldValue(data.inputValues?.mode, modeField)
+  const portRowCount = Math.max(inputPorts.length, outputPorts.length, 1)
+
+  return (
+    <div className="mt-2 grid gap-1">
+      <div className="grid gap-1 px-0.5 pb-1">
+        {modeField ? renderCompactUiField({ id, data, field: modeField, value: modeValue, allowEmptyOption: false }) : null}
+        {expectedTypeField && modeValue === 'type_is'
+          ? renderCompactUiField({ id, data, field: expectedTypeField, allowEmptyOption: false })
+          : null}
+      </div>
+
+      <div className="grid gap-1">
+        {Array.from({ length: portRowCount }, (_, index) => {
+          const inputPort = inputPorts[index]
+          const outputPort = outputPorts[index]
+          const inputConnected = Boolean(inputPort && connectedInputKeys.has(inputPort.key))
+          const inputSatisfied = Boolean(inputPort && (inputConnected || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))
+          const inputRequiredMissing = Boolean(inputPort && inputPort.required && !inputSatisfied)
+          const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
+
+          return (
+            <div key={`if-port-row-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+              <InputPortCell
+                nodeId={id}
+                data={data}
+                port={inputPort}
+                accentColor={accentColor}
+                connected={inputConnected}
+                satisfied={inputSatisfied}
+                requiredMissing={inputRequiredMissing}
+              />
+              <PortCell
+                nodeId={id}
+                port={outputPort}
+                side="output"
+                accentColor={accentColor}
+                connected={outputConnected}
+                satisfied={outputConnected}
+                requiredMissing={false}
+              />
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -905,6 +995,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const isFinalResult = isFinalResultModule(module)
   const isTextMergeModule = operationKey === 'system.merge_text'
   const isTextTransformModule = operationKey === 'system.regex_text_transform'
+  const isIfBranchModule = operationKey === 'system.logic_if_branch'
   const isSystemCallLlmModule = operationKey === 'system.call_llm'
   const isSystemCallCodexMessageModule = operationKey === 'system.call_codex_message'
   const isSystemLoadLlmPresetModule = operationKey === 'system.load_llm_preset'
@@ -984,7 +1075,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const codexModelValue = codexModelCurrentValue
     ?? normalizeOptionalString(codexModelPort?.default_value)
     ?? (typeof codexModelUiField?.default_value === 'string' ? codexModelUiField.default_value : null)
-    ?? codexModelOptions[0]
+    ?? (codexModelOptions[0] ? getSelectOptionValue(codexModelOptions[0]) : null)
     ?? ''
   const canConfigureLlmModel = Boolean(isSystemCallLlmModule && llmModelOptions.length > 0 && data.onNodeValueChange)
   const canConfigureCodexModel = Boolean(isSystemCallCodexMessageModule && codexModelOptions.length > 0 && data.onNodeValueChange)
@@ -1262,9 +1353,11 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             }}
             className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           >
-            {codexModelOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
+            {codexModelOptions.map((option) => {
+              const optionValue = getSelectOptionValue(option)
+              const optionLabel = typeof option === 'string' ? option : option.label
+              return <option key={optionValue} value={optionValue}>{optionLabel}</option>
+            })}
           </Select>
         </div>
       ) : null}
@@ -1325,6 +1418,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           />
         ) : isTextTransformModule ? (
           <TextTransformNodeLayout
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
+          />
+        ) : isIfBranchModule ? (
+          <IfBranchNodeLayout
             id={id}
             data={data}
             accentColor={accentColor}

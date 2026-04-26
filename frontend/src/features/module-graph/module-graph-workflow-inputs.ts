@@ -65,6 +65,14 @@ export function isWorkflowInputEnabledForNode(node: ModuleGraphNode) {
   return normalizeBooleanFlag(node.data.inputValues?.[WORKFLOW_INPUT_ENABLED_KEY])
 }
 
+function normalizeWorkflowSelectOptions(options: unknown) {
+  return Array.isArray(options)
+    ? options
+        .map((option) => (typeof option === 'string' ? option : option && typeof option === 'object' ? String((option as { value?: unknown }).value ?? '') : ''))
+        .filter((option) => option.trim().length > 0)
+    : undefined
+}
+
 /** Build one runtime-exposed input definition from one configured node. */
 export function buildWorkflowInputDefinitionFromNode(node: ModuleGraphNode): GraphWorkflowExposedInput | null {
   const sourcePort = getWorkflowInputSourcePort(node)
@@ -91,7 +99,7 @@ export function buildWorkflowInputDefinitionFromNode(node: ModuleGraphNode): Gra
     required: true,
     placeholder: uiField?.placeholder || sourcePort.label,
     default_value: node.data.inputValues?.[sourcePort.key],
-    options: uiField?.options,
+    options: normalizeWorkflowSelectOptions(uiField?.options),
     module_id: node.data.module.id,
     module_name: getModuleBaseDisplayName(node.data.module),
   }

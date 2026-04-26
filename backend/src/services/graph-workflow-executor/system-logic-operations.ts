@@ -11,6 +11,8 @@ import {
 type CompareOperator = 'equals' | 'not_equals' | 'greater_than' | 'greater_than_or_equal' | 'less_than' | 'less_than_or_equal'
 type TextMatchMode = 'contains' | 'not_contains' | 'starts_with' | 'ends_with' | 'regex'
 type ValuePresenceMode = 'exists' | 'empty' | 'not_empty'
+type BranchConditionMode = ValuePresenceMode | CompareOperator | TextMatchMode | 'type_is'
+type BranchExpectedType = 'string' | 'number' | 'boolean' | 'array' | 'object' | 'null'
 
 /** Normalize a workflow value into a boolean for logic operations. */
 function normalizeBooleanValue(value: unknown, label: string) {
@@ -58,9 +60,14 @@ function normalizeTextValue(value: unknown) {
   return String(value)
 }
 
+/** Decide whether a workflow value exists at all. */
+function hasAnyWorkflowValue(value: unknown) {
+  return value !== undefined && value !== null
+}
+
 /** Decide whether a workflow value should count as present. */
 function hasWorkflowValue(value: unknown) {
-  if (value === undefined || value === null) {
+  if (!hasAnyWorkflowValue(value)) {
     return false
   }
 
@@ -77,6 +84,52 @@ function hasWorkflowValue(value: unknown) {
   }
 
   return true
+}
+
+/** Check one workflow value against a requested runtime type. */
+function isWorkflowValueType(value: unknown, expectedType: BranchExpectedType) {
+  if (expectedType === 'array') {
+    return Array.isArray(value)
+  }
+
+  if (expectedType === 'null') {
+    return value === null
+  }
+
+  if (expectedType === 'object') {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+  }
+
+  if (expectedType === 'number') {
+    return typeof value === 'number' && Number.isFinite(value)
+  }
+
+  return typeof value === expectedType
+}
+
+/** Evaluate the built-in IF branch condition. */
+function evaluateBranchCondition(value: unknown, compareValue: unknown, mode: BranchConditionMode, expectedType: BranchExpectedType) {
+  if (mode === 'exists') {
+    return hasAnyWorkflowValue(value)
+  }
+
+  if (mode === 'empty') {
+    return !hasWorkflowValue(value)
+  }
+
+  if (mode === 'not_empty') {
+    return hasWorkflowValue(value)
+  }
+
+  if (mode === 'type_is') {
+    return isWorkflowValueType(value, expectedType)
+  }
+
+  if (['equals', 'not_equals', 'greater_than', 'greater_than_or_equal', 'less_than', 'less_than_or_equal'].includes(mode)) {
+    return compareWorkflowValues(value, compareValue, mode as CompareOperator)
+  }
+
+  return matchTextValue(normalizeTextValue(value), normalizeTextValue(compareValue), mode as TextMatchMode)
 }
 
 /** Store system node outputs and write the shared completion log. */
@@ -293,20 +346,72 @@ export function executeLogicConditionSelectNode(
   completeSystemNode(context, node, moduleDefinition, 'system.logic_condition_select', nodeArtifacts)
 }
 
-/** Stop workflow execution when the condition evaluates to true. */
+/** Branch workflow data by testing one input value and forwarding that same value through the selected path. */
+export function executeLogicIfBranchNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const mode = typeof resolvedInputs.mode === 'string' ? resolvedInputs.mode : 'not_empty'
+  const normalizedMode: BranchConditionMode = [
+    'exists',
+    'empty',
+    'not_empty',
+    'equals',
+    'not_equals',
+    'greater_than',
+    'greater_than_or_equal',
+    'less_than',
+    'less_than_or_equal',
+    'contains',
+    'not_contains',
+    'starts_with',
+    'ends_with',
+    'regex',
+    'type_is',
+  ].includes(mode) ? mode as BranchConditionMode : 'not_empty'
+  const expectedType = typeof resolvedInputs.expected_type === 'string' ? resolvedInputs.expected_type : 'string'
+  const normalizedExpectedType: BranchExpectedType = ['string', 'number', 'boolean', 'array', 'object', 'null'].includes(expectedType)
+    ? expectedType as BranchExpectedType
+    : 'string'
+  const result = evaluateBranchCondition(
+    resolvedInputs.value,
+    resolvedInputs.compare_value,
+    normalizedMode,
+    normalizedExpectedType,
+  )
+  const selectedPort = result ? 'true_value' : 'false_value'
+  const inactivePort = result ? 'false_value' : 'true_value'
+
+  context.disabledOutputPorts?.add(`${node.id}:${inactivePort}`)
+
+  const nodeArtifacts = {
+    [selectedPort]: buildRuntimeArtifact(context.executionId, node.id, selectedPort, 'any', resolvedInputs.value, {
+      kind: 'system-logic-operation',
+      operationKey: 'system.logic_if_branch',
+      selectedBranch: result ? 'true' : 'false',
+      mode: normalizedMode,
+    }),
+    result: buildRuntimeArtifact(context.executionId, node.id, 'result', 'boolean', result, {
+      kind: 'system-logic-operation',
+      operationKey: 'system.logic_if_branch',
+      selectedBranch: result ? 'true' : 'false',
+      mode: normalizedMode,
+    }),
+  }
+
+  completeSystemNode(context, node, moduleDefinition, 'system.logic_if_branch', nodeArtifacts)
+}
+
+/** Stop workflow execution when any trigger value reaches this node. */
 export function executeWorkflowStopNode(
   context: ExecutionContext,
   node: GraphWorkflowNode,
   moduleDefinition: ParsedModuleDefinition,
   resolvedInputs: Record<string, any>,
 ) {
-  const shouldStop = normalizeBooleanValue(resolvedInputs.condition, '중단 조건')
   const reason = normalizeTextValue(resolvedInputs.reason).trim()
-
-  if (!shouldStop) {
-    completeSystemNode(context, node, moduleDefinition, 'system.workflow_stop', {})
-    return
-  }
 
   writeExecutionLog({
     executionId: context.executionId,

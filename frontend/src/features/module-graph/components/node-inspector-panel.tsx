@@ -641,13 +641,15 @@ export function NodeInspectorPanel({
 
     const renderFieldInput = () => {
       if (field.data_type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
+        const requiresConcreteSelection = selectedNodeOperationKey === 'system.logic_if_branch' && (field.key === 'mode' || field.key === 'expected_type')
         return (
           <ModuleGraphSimpleValueInput
             dataType="select"
-            value={rawValue}
+            value={requiresConcreteSelection ? (rawValue ?? field.default_value) : rawValue}
             onChange={(value) => onNodeValueChange(node.id, field.key, value)}
             options={field.options}
             emptyLabel={hasMeaningfulValue(field.default_value) ? '기본값 사용' : '선택'}
+            allowEmptyOption={!requiresConcreteSelection}
           />
         )
       }

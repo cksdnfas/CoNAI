@@ -35,6 +35,7 @@ import {
   executeLogicAndNode,
   executeLogicCompareNode,
   executeLogicConditionSelectNode,
+  executeLogicIfBranchNode,
   executeLogicNotNode,
   executeLogicOrNode,
   executeLogicTextMatchNode,
@@ -80,6 +81,7 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.logic_text_match': executeLogicTextMatchNode,
   'system.logic_value_presence': executeLogicValuePresenceNode,
   'system.logic_condition_select': executeLogicConditionSelectNode,
+  'system.logic_if_branch': executeLogicIfBranchNode,
   'system.workflow_stop': executeWorkflowStopNode,
   'system.final_result': executeFinalResultNode,
 }

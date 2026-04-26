@@ -1287,18 +1287,17 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
 
   upsertBuiltinModule(
     '중단',
-    '조건이 참이면 워크플로우 실행을 의도적으로 중단해.',
+    '입력값이 도달하면 워크플로우 실행을 의도적으로 중단해.',
     'output',
     [
       {
         key: 'condition',
-        label: '조건',
+        label: '트리거',
         direction: 'input',
-        data_type: 'boolean',
+        data_type: 'any',
         required: true,
         multiple: false,
-        default_value: true,
-        description: '참이면 이 노드에서 워크플로우 실행을 중단해.',
+        description: '이 입력에 값이 도달하면 값 내용과 관계없이 워크플로우 실행을 중단해.',
       },
       {
         key: 'reason',
@@ -1448,6 +1447,78 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
     ],
     { operation_key: 'system.logic_condition_select' },
     [],
+    '#7e57c2',
+  );
+
+  upsertBuiltinModule(
+    'IF 분기',
+    '입력값을 설정한 조건으로 검사하고 참 또는 거짓 경로로 원본 값을 그대로 넘겨줘.',
+    'logic',
+    [
+      {
+        key: 'value',
+        label: '입력값',
+        direction: 'input',
+        data_type: 'any',
+        required: false,
+        multiple: false,
+        description: '검사하고 다음 경로로 그대로 전달할 원본 값이야.',
+      },
+      {
+        key: 'compare_value',
+        label: '비교 값',
+        direction: 'input',
+        data_type: 'any',
+        required: false,
+        multiple: false,
+        description: '비교, 텍스트 매치, 타입 검사 등에 사용할 기준 값이야.',
+      },
+    ],
+    [
+      { key: 'true_value', label: '참', direction: 'output', data_type: 'any', required: false, multiple: false },
+      { key: 'false_value', label: '거짓', direction: 'output', data_type: 'any', required: false, multiple: false },
+      { key: 'result', label: '결과', direction: 'output', data_type: 'boolean', required: true, multiple: false },
+    ],
+    { operation_key: 'system.logic_if_branch' },
+    [
+      {
+        key: 'mode',
+        label: '조건 방식',
+        data_type: 'select',
+        default_value: 'not_empty',
+        options: [
+          { value: 'exists', label: '값 존재' },
+          { value: 'empty', label: '비어 있음' },
+          { value: 'not_empty', label: '비어 있지 않음' },
+          { value: 'equals', label: '같음' },
+          { value: 'not_equals', label: '같지 않음' },
+          { value: 'greater_than', label: '초과' },
+          { value: 'greater_than_or_equal', label: '이상' },
+          { value: 'less_than', label: '미만' },
+          { value: 'less_than_or_equal', label: '이하' },
+          { value: 'contains', label: '텍스트 포함' },
+          { value: 'not_contains', label: '텍스트 미포함' },
+          { value: 'starts_with', label: '텍스트 시작 일치' },
+          { value: 'ends_with', label: '텍스트 끝 일치' },
+          { value: 'regex', label: '정규식 일치' },
+          { value: 'type_is', label: '타입 일치' },
+        ],
+      },
+      {
+        key: 'expected_type',
+        label: '기대 타입',
+        data_type: 'select',
+        default_value: 'string',
+        options: [
+          { value: 'string', label: '문자열' },
+          { value: 'number', label: '숫자' },
+          { value: 'boolean', label: '불리언' },
+          { value: 'array', label: '배열' },
+          { value: 'object', label: '객체' },
+          { value: 'null', label: 'null' },
+        ],
+      },
+    ],
     '#7e57c2',
   );
 
