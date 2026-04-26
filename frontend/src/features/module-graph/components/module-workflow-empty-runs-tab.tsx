@@ -48,8 +48,8 @@ export function ModuleWorkflowEmptyRunsTab({
     interval_minutes?: number | null
     daily_time?: string | null
     max_run_count?: number | null
+    run_enqueue_count?: number | null
     input_values?: Record<string, unknown> | null
-    enqueue_count?: number
   }) => Promise<void> | void
   onUpdateSchedule: (scheduleId: number, payload: {
     name: string
@@ -59,8 +59,8 @@ export function ModuleWorkflowEmptyRunsTab({
     interval_minutes?: number | null
     daily_time?: string | null
     max_run_count?: number | null
+    run_enqueue_count?: number | null
     input_values?: Record<string, unknown> | null
-    enqueue_count?: number
   }) => Promise<void> | void
   onPauseSchedule: (scheduleId: number) => Promise<void> | void
   onResumeSchedule: (scheduleId: number) => Promise<void> | void

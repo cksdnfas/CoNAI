@@ -168,6 +168,7 @@ export interface GraphWorkflowScheduleRecord {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  run_enqueue_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: string | null
   confirmed_graph_version?: number | null
@@ -604,9 +605,9 @@ export async function createGraphWorkflowSchedule(payload: {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  run_enqueue_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
-  enqueue_count?: number
 }) {
   const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/graph-workflows/schedules', {
     method: 'POST',
@@ -629,9 +630,9 @@ export async function updateGraphWorkflowSchedule(scheduleId: number, payload: {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  run_enqueue_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
-  enqueue_count?: number
 }) {
   const response = await requestJson<ApiEnvelope<CreateEnvelope>>(`/api/graph-workflows/schedules/${scheduleId}`, {
     method: 'PUT',

@@ -90,6 +90,15 @@ function summarizeScheduleExecutions(executions: GraphExecutionRecord[]) {
   })
 }
 
+function normalizeRunEnqueueCount(value?: number | null) {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed)) {
+    return 1
+  }
+
+  return Math.min(Math.max(parsed, 1), 100)
+}
+
 /** Manage persisted workflow autorun schedules and feed due work into the existing execution queue. */
 export class GraphWorkflowScheduleService {
   private static pollTimer: NodeJS.Timeout | null = null
@@ -213,7 +222,7 @@ export class GraphWorkflowScheduleService {
     }
   }
 
-  /** Validate one due schedule and enqueue exactly one next execution when allowed. */
+  /** Validate one due schedule and enqueue the configured number of next executions when allowed. */
   private static async handleDueSchedule(schedule: GraphWorkflowScheduleRecord, now: Date) {
     const workflow = GraphWorkflowModel.findById(schedule.graph_workflow_id)
     if (!workflow) {
@@ -281,20 +290,31 @@ export class GraphWorkflowScheduleService {
     }
 
     const nextRunAt = buildNextRunAt(schedule, now)
-    const enqueueResult = GraphWorkflowExecutionQueue.enqueue(
-      schedule.graph_workflow_id,
-      parseInputValues(schedule),
-      undefined,
-      false,
-      {
-        triggerType: 'schedule',
-        scheduleId: schedule.id,
-      },
-    )
+    const requestedEnqueueCount = normalizeRunEnqueueCount(schedule.run_enqueue_count)
+    const remainingRunCount = schedule.max_run_count !== null && schedule.max_run_count !== undefined
+      ? Math.max(0, schedule.max_run_count - reservedRunCount)
+      : requestedEnqueueCount
+    const allowedEnqueueCount = Math.min(requestedEnqueueCount, remainingRunCount)
+    const inputValues = parseInputValues(schedule)
+    const executionIds: number[] = []
+
+    for (let index = 0; index < allowedEnqueueCount; index += 1) {
+      const enqueueResult = GraphWorkflowExecutionQueue.enqueue(
+        schedule.graph_workflow_id,
+        inputValues,
+        undefined,
+        false,
+        {
+          triggerType: 'schedule',
+          scheduleId: schedule.id,
+        },
+      )
+      executionIds.push(enqueueResult.executionId)
+    }
 
     const nextStatus: GraphWorkflowScheduleStatus = schedule.schedule_type === 'once'
       ? 'completed'
-      : schedule.max_run_count !== null && schedule.max_run_count !== undefined && reservedRunCount + 1 >= schedule.max_run_count
+      : schedule.max_run_count !== null && schedule.max_run_count !== undefined && reservedRunCount + executionIds.length >= schedule.max_run_count
         ? 'completed'
         : 'active'
     const completionReasonCode = schedule.schedule_type === 'once'
@@ -311,8 +331,8 @@ export class GraphWorkflowScheduleService {
     GraphWorkflowScheduleModel.update(schedule.id, {
       status: nextStatus,
       timezone: schedule.timezone ?? DEFAULT_SCHEDULE_TIMEZONE,
-      last_execution_id: enqueueResult.executionId,
-      last_enqueued_at: now.toISOString(),
+      last_execution_id: executionIds.at(-1) ?? schedule.last_execution_id ?? null,
+      last_enqueued_at: executionIds.length > 0 ? now.toISOString() : schedule.last_enqueued_at ?? null,
       next_run_at: nextStatus === 'completed' ? null : nextRunAt,
       stop_reason_code: completionReasonCode,
       stop_reason_message: completionReasonMessage,

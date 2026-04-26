@@ -38,6 +38,19 @@ function parseScheduleEnqueueCount(value: unknown) {
   return parsed >= 0 && parsed <= MAX_BULK_SCHEDULE_ENQUEUE_COUNT ? parsed : null
 }
 
+function parseScheduleRunEnqueueCount(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return 1
+  }
+
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed)) {
+    return null
+  }
+
+  return parsed >= 1 && parsed <= MAX_BULK_SCHEDULE_ENQUEUE_COUNT ? parsed : null
+}
+
 function parseStoredScheduleInputValues(value?: string | null) {
   if (!value) {
     return undefined
@@ -137,7 +150,7 @@ export function createGraphWorkflowScheduleRoutes() {
     const failurePolicy = parseScheduleFailurePolicy(req.body?.failure_policy) ?? 'stop'
     const timezone = parseOptionalTrimmedString(req.body?.timezone)
     const inputValues = parseScheduleInputValues(req.body?.input_values)
-    const enqueueCount = parseScheduleEnqueueCount(req.body?.enqueue_count)
+    const runEnqueueCount = parseScheduleRunEnqueueCount(req.body?.run_enqueue_count)
 
     if (!Number.isFinite(workflowId)) {
       return sendRouteBadRequest(res, '워크플로우 ID가 필요해.')
@@ -176,8 +189,8 @@ export function createGraphWorkflowScheduleRoutes() {
       return sendRouteBadRequest(res, '최대 예약 횟수는 양의 정수 또는 -1이어야 해.')
     }
 
-    if (enqueueCount === null) {
-      return sendRouteBadRequest(res, `즉시 큐 등록 수는 0부터 ${MAX_BULK_SCHEDULE_ENQUEUE_COUNT} 사이의 정수여야 해.`)
+    if (runEnqueueCount === null) {
+      return sendRouteBadRequest(res, `1회 큐 등록수는 1부터 ${MAX_BULK_SCHEDULE_ENQUEUE_COUNT} 사이의 정수여야 해.`)
     }
 
     try {
@@ -200,6 +213,7 @@ export function createGraphWorkflowScheduleRoutes() {
         interval_minutes: intervalMinutes,
         daily_time: dailyTime,
         max_run_count: maxRunCount,
+        run_enqueue_count: runEnqueueCount,
         failure_policy: failurePolicy,
         input_values: inputValues,
         confirmed_graph_version: workflow.version,
@@ -209,22 +223,7 @@ export function createGraphWorkflowScheduleRoutes() {
         stop_reason_message: status === 'active' ? null : '예약작업이 일시정지 상태로 생성됐어.',
       })
 
-      const enqueueResult = enqueueScheduleRuns({
-        scheduleId,
-        workflowId: workflow.id,
-        inputValues: inputValues ?? undefined,
-        requestedCount: enqueueCount,
-        maxRunCount,
-      })
-
-      if (enqueueResult.enqueued_count > 0) {
-        GraphWorkflowScheduleModel.update(scheduleId, {
-          last_execution_id: enqueueResult.execution_ids.at(-1) ?? null,
-          last_enqueued_at: new Date().toISOString(),
-        })
-      }
-
-      return res.status(201).json({ success: true, data: { id: scheduleId, message: '예약작업을 생성했어.', enqueue: enqueueResult } } as ModuleGraphResponse)
+      return res.status(201).json({ success: true, data: { id: scheduleId, message: '예약작업을 생성했어.' } } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error creating graph workflow schedule:', error)
       return res.status(500).json({ success: false, error: '예약작업 생성에 실패했어.' } as ModuleGraphResponse)
@@ -255,7 +254,7 @@ export function createGraphWorkflowScheduleRoutes() {
     const failurePolicy = req.body?.failure_policy !== undefined ? parseScheduleFailurePolicy(req.body.failure_policy) : undefined
     const timezone = req.body?.timezone !== undefined ? parseOptionalTrimmedString(req.body.timezone) : undefined
     const inputValues = req.body?.input_values !== undefined ? parseScheduleInputValues(req.body.input_values) : undefined
-    const enqueueCount = parseScheduleEnqueueCount(req.body?.enqueue_count)
+    const runEnqueueCount = req.body?.run_enqueue_count !== undefined ? parseScheduleRunEnqueueCount(req.body.run_enqueue_count) : undefined
 
     if (name !== undefined && !name) {
       return sendRouteBadRequest(res, '이름이 필요해.')
@@ -273,8 +272,8 @@ export function createGraphWorkflowScheduleRoutes() {
       return sendRouteBadRequest(res, '최대 예약 횟수는 양의 정수 또는 -1이어야 해.')
     }
 
-    if (enqueueCount === null) {
-      return sendRouteBadRequest(res, `즉시 큐 등록 수는 0부터 ${MAX_BULK_SCHEDULE_ENQUEUE_COUNT} 사이의 정수여야 해.`)
+    if (runEnqueueCount === null) {
+      return sendRouteBadRequest(res, `1회 큐 등록수는 1부터 ${MAX_BULK_SCHEDULE_ENQUEUE_COUNT} 사이의 정수여야 해.`)
     }
 
     try {
@@ -304,6 +303,7 @@ export function createGraphWorkflowScheduleRoutes() {
         interval_minutes: intervalMinutes,
         daily_time: dailyTime,
         max_run_count: maxRunCount,
+        run_enqueue_count: runEnqueueCount,
         failure_policy: failurePolicy,
         input_values: inputValues,
         confirmed_graph_version: workflow.version,
@@ -313,23 +313,7 @@ export function createGraphWorkflowScheduleRoutes() {
         stop_reason_message: finalStatus === 'active' ? null : schedule.stop_reason_message ?? '예약작업이 일시정지 상태야.',
       })
 
-      const finalMaxRunCount = maxRunCount === undefined ? schedule.max_run_count : maxRunCount
-      const enqueueResult = enqueueScheduleRuns({
-        scheduleId,
-        workflowId: workflow.id,
-        inputValues: finalInputValues ?? undefined,
-        requestedCount: enqueueCount,
-        maxRunCount: finalMaxRunCount,
-      })
-
-      if (enqueueResult.enqueued_count > 0) {
-        GraphWorkflowScheduleModel.update(scheduleId, {
-          last_execution_id: enqueueResult.execution_ids.at(-1) ?? null,
-          last_enqueued_at: new Date().toISOString(),
-        })
-      }
-
-      return res.json({ success: updated || enqueueResult.enqueued_count > 0, data: { id: scheduleId, message: updated ? '예약작업을 업데이트했어.' : '예약작업 변경사항이 없어.', enqueue: enqueueResult } } as ModuleGraphResponse)
+      return res.json({ success: updated, data: { id: scheduleId, message: updated ? '예약작업을 업데이트했어.' : '예약작업 변경사항이 없어.' } } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error updating graph workflow schedule:', error)
       return res.status(500).json({ success: false, error: '예약작업 수정에 실패했어.' } as ModuleGraphResponse)

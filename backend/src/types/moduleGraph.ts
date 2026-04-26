@@ -233,6 +233,7 @@ export interface GraphWorkflowScheduleRecord {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  run_enqueue_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: string | null
   confirmed_graph_version?: number | null
@@ -262,6 +263,7 @@ export interface GraphWorkflowScheduleCreateData {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  run_enqueue_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
   confirmed_graph_version?: number | null
@@ -282,6 +284,7 @@ export interface GraphWorkflowScheduleUpdateData {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  run_enqueue_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
   confirmed_graph_version?: number | null

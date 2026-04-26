@@ -145,14 +145,13 @@ export function WorkflowReservationsPanel() {
     interval_minutes?: number | null
     daily_time?: string | null
     max_run_count?: number | null
+    run_enqueue_count?: number | null
     input_values?: Record<string, unknown> | null
-    enqueue_count?: number
   }) => {
     try {
       setIsMutatingSchedules(true)
-      const result = await createGraphWorkflowSchedule(payload)
-      const enqueuedCount = result.enqueue?.enqueued_count ?? 0
-      showSnackbar({ message: enqueuedCount > 0 ? `예약작업을 추가하고 ${enqueuedCount}개 실행을 큐에 등록했어.` : '예약작업을 추가했어.', tone: 'info' })
+      await createGraphWorkflowSchedule(payload)
+      showSnackbar({ message: '예약작업을 추가했어.', tone: 'info' })
       await handleRefresh()
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '예약작업 생성에 실패했어.', tone: 'error' })
@@ -169,14 +168,13 @@ export function WorkflowReservationsPanel() {
     interval_minutes?: number | null
     daily_time?: string | null
     max_run_count?: number | null
+    run_enqueue_count?: number | null
     input_values?: Record<string, unknown> | null
-    enqueue_count?: number
   }) => {
     try {
       setIsMutatingSchedules(true)
-      const result = await updateGraphWorkflowSchedule(scheduleId, payload)
-      const enqueuedCount = result.enqueue?.enqueued_count ?? 0
-      showSnackbar({ message: enqueuedCount > 0 ? `예약작업을 업데이트하고 ${enqueuedCount}개 실행을 큐에 등록했어.` : '예약작업을 업데이트했어.', tone: 'info' })
+      await updateGraphWorkflowSchedule(scheduleId, payload)
+      showSnackbar({ message: '예약작업을 업데이트했어.', tone: 'info' })
       await handleRefresh()
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : '예약작업 수정에 실패했어.', tone: 'error' })

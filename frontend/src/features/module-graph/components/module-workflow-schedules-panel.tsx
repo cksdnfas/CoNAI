@@ -25,9 +25,9 @@ type ScheduleMutationPayload = {
   interval_minutes?: number | null
   daily_time?: string | null
   max_run_count?: number | null
+  run_enqueue_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
-  enqueue_count?: number
 }
 
 function parseStoredInputValues(value?: string | null) {
@@ -136,7 +136,7 @@ export function ModuleWorkflowSchedulesPanel({
   const [draftDailyTime, setDraftDailyTime] = useState('09:00')
   const [draftMaxRunCount, setDraftMaxRunCount] = useState('-1')
   const [draftFailurePolicy, setDraftFailurePolicy] = useState<GraphWorkflowScheduleFailurePolicy>('stop')
-  const [draftEnqueueCount, setDraftEnqueueCount] = useState('0')
+  const [draftEnqueueCount, setDraftEnqueueCount] = useState('1')
   const [draftInputValues, setDraftInputValues] = useState<Record<string, unknown>>({})
 
   const selectedWorkflowRecord = useMemo(
@@ -157,7 +157,7 @@ export function ModuleWorkflowSchedulesPanel({
     setDraftDailyTime('09:00')
     setDraftMaxRunCount('-1')
     setDraftFailurePolicy('stop')
-    setDraftEnqueueCount('0')
+    setDraftEnqueueCount('1')
     setDraftInputValues({})
   }
 
@@ -184,7 +184,7 @@ export function ModuleWorkflowSchedulesPanel({
     setDraftDailyTime(schedule.daily_time || '09:00')
     setDraftMaxRunCount(schedule.max_run_count ? String(schedule.max_run_count) : '-1')
     setDraftFailurePolicy(schedule.failure_policy === 'continue' ? 'continue' : 'stop')
-    setDraftEnqueueCount('0')
+    setDraftEnqueueCount(String(schedule.run_enqueue_count ?? 1))
     setDraftInputValues(parseStoredInputValues(schedule.input_values))
   }
 
@@ -203,7 +203,7 @@ export function ModuleWorkflowSchedulesPanel({
     const normalizedMaxRunCountText = draftMaxRunCount.trim()
     const maxRunCount = normalizedMaxRunCountText ? Number(normalizedMaxRunCountText) : null
     const normalizedEnqueueCountText = draftEnqueueCount.trim()
-    const enqueueCount = normalizedEnqueueCountText ? Number(normalizedEnqueueCountText) : 0
+    const enqueueCount = normalizedEnqueueCountText ? Number(normalizedEnqueueCountText) : 1
 
     return {
       name,
@@ -213,9 +213,9 @@ export function ModuleWorkflowSchedulesPanel({
       interval_minutes: intervalMinutes && intervalMinutes > 0 ? intervalMinutes : null,
       daily_time: dailyTime,
       max_run_count: maxRunCount === -1 ? -1 : maxRunCount && maxRunCount > 0 ? maxRunCount : null,
+      run_enqueue_count: Number.isFinite(enqueueCount) ? Math.floor(enqueueCount) : 1,
       failure_policy: draftFailurePolicy,
       input_values: Object.keys(draftInputValues).length > 0 ? draftInputValues : null,
-      enqueue_count: Number.isFinite(enqueueCount) && enqueueCount > 0 ? Math.floor(enqueueCount) : 0,
     }
   }
 
@@ -234,7 +234,7 @@ export function ModuleWorkflowSchedulesPanel({
     if (payload.schedule_type === 'daily' && !payload.daily_time) {
       return true
     }
-    if ((payload.enqueue_count ?? 0) < 0 || (payload.enqueue_count ?? 0) > 100) {
+    if ((payload.run_enqueue_count ?? 1) < 1 || (payload.run_enqueue_count ?? 1) > 100) {
       return true
     }
     return false
@@ -294,6 +294,7 @@ export function ModuleWorkflowSchedulesPanel({
             {schedules.map((schedule) => {
               const workflowName = workflowNameById.get(schedule.graph_workflow_id) ?? `워크플로우 #${schedule.graph_workflow_id}`
               const reservedCountLabel = `최대 ${schedule.max_run_count ?? -1}회`
+              const runEnqueueCountLabel = `1회 ${schedule.run_enqueue_count ?? 1}개`
               const runSummaryLabel = getScheduleRunSummaryLabel(schedule)
               const failurePolicyLabel = getScheduleFailurePolicyLabel(schedule.failure_policy)
               const scheduleTimingLabel = schedule.schedule_type === 'once'
@@ -312,7 +313,7 @@ export function ModuleWorkflowSchedulesPanel({
                         <Badge variant="outline">{getScheduleTypeLabel(schedule.schedule_type)}</Badge>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {workflowName} · {scheduleTimingLabel} · {reservedCountLabel} · {failurePolicyLabel}
+                        {workflowName} · {scheduleTimingLabel} · {runEnqueueCountLabel} · {reservedCountLabel} · {failurePolicyLabel}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                         <span>{runSummaryLabel}</span>
@@ -388,8 +389,8 @@ export function ModuleWorkflowSchedulesPanel({
             <SettingsField label="최대 예약 횟수">
               <Input type="number" min={-1} value={draftMaxRunCount} onChange={(event) => setDraftMaxRunCount(event.target.value)} disabled={isMutating} />
             </SettingsField>
-            <SettingsField label="저장 후 큐 등록 수">
-              <Input type="number" min={0} max={100} value={draftEnqueueCount} onChange={(event) => setDraftEnqueueCount(event.target.value)} disabled={isMutating} />
+            <SettingsField label="1회 큐 등록수">
+              <Input type="number" min={1} max={100} value={draftEnqueueCount} onChange={(event) => setDraftEnqueueCount(event.target.value)} disabled={isMutating} />
             </SettingsField>
             <SettingsField label="실패 처리">
               <Select value={draftFailurePolicy} onChange={(event) => setDraftFailurePolicy(event.target.value as GraphWorkflowScheduleFailurePolicy)} disabled={isMutating}>
