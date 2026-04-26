@@ -1,10 +1,8 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
-import { buildRuntimeArtifact } from './system-module-artifacts'
+import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
 import {
-  writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
-  type RuntimeArtifact,
 } from './shared'
 
 type TextTransformMode = 'extract' | 'replace'
@@ -129,29 +127,6 @@ function mergeTextSlots(params: {
   }
 
   return chunks.join('')
-}
-
-/** Store one completed system-node artifact bundle and write the shared log. */
-function completeSystemNode(
-  context: ExecutionContext,
-  node: GraphWorkflowNode,
-  moduleDefinition: ParsedModuleDefinition,
-  operationKey: string,
-  nodeArtifacts: Record<string, RuntimeArtifact>,
-) {
-  context.artifactsByNode.set(node.id, nodeArtifacts)
-
-  writeExecutionLog({
-    executionId: context.executionId,
-    nodeId: node.id,
-    eventType: 'node_engine_complete',
-    message: `System module completed: ${moduleDefinition.name}`,
-    details: {
-      engine: 'system',
-      operationKey,
-      outputKeys: Object.keys(nodeArtifacts),
-    },
-  })
 }
 
 /** Execute the built-in A/B/C text merge system node. */

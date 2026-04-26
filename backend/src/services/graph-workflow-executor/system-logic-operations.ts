@@ -1,11 +1,10 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
-import { buildRuntimeArtifact } from './system-module-artifacts'
+import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
 import {
   GraphWorkflowStoppedError,
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
-  type RuntimeArtifact,
 } from './shared'
 
 type CompareOperator = 'equals' | 'not_equals' | 'greater_than' | 'greater_than_or_equal' | 'less_than' | 'less_than_or_equal'
@@ -130,29 +129,6 @@ function evaluateBranchCondition(value: unknown, compareValue: unknown, mode: Br
   }
 
   return matchTextValue(normalizeTextValue(value), normalizeTextValue(compareValue), mode as TextMatchMode)
-}
-
-/** Store system node outputs and write the shared completion log. */
-function completeSystemNode(
-  context: ExecutionContext,
-  node: GraphWorkflowNode,
-  moduleDefinition: ParsedModuleDefinition,
-  operationKey: string,
-  nodeArtifacts: Record<string, RuntimeArtifact>,
-) {
-  context.artifactsByNode.set(node.id, nodeArtifacts)
-
-  writeExecutionLog({
-    executionId: context.executionId,
-    nodeId: node.id,
-    eventType: 'node_engine_complete',
-    message: `System module completed: ${moduleDefinition.name}`,
-    details: {
-      engine: 'system',
-      operationKey,
-      outputKeys: Object.keys(nodeArtifacts),
-    },
-  })
 }
 
 /** Build one boolean artifact for logic nodes. */

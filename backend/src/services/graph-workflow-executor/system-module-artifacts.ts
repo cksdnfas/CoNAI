@@ -1,5 +1,6 @@
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
-import type { RuntimeArtifact } from './shared'
+import type { GraphWorkflowNode } from '../../types/moduleGraph'
+import { writeExecutionLog, type ExecutionContext, type ParsedModuleDefinition, type RuntimeArtifact } from './shared'
 
 /** Persist one structured runtime artifact row and keep it available to downstream nodes. */
 export function buildRuntimeArtifact(
@@ -24,4 +25,27 @@ export function buildRuntimeArtifact(
     artifactRecordId,
     metadata,
   }
+}
+
+/** Store system node outputs and write the shared completion log. */
+export function completeSystemNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  operationKey: string,
+  nodeArtifacts: Record<string, RuntimeArtifact>,
+) {
+  context.artifactsByNode.set(node.id, nodeArtifacts)
+
+  writeExecutionLog({
+    executionId: context.executionId,
+    nodeId: node.id,
+    eventType: 'node_engine_complete',
+    message: `System module completed: ${moduleDefinition.name}`,
+    details: {
+      engine: 'system',
+      operationKey,
+      outputKeys: Object.keys(nodeArtifacts),
+    },
+  })
 }

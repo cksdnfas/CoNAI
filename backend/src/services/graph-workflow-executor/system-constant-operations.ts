@@ -1,9 +1,8 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { saveArtifactBuffer } from './artifacts'
-import { buildRuntimeArtifact } from './system-module-artifacts'
+import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
 import {
   normalizeBase64ImageData,
-  writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
   type RuntimeArtifact,
@@ -63,29 +62,6 @@ function normalizeRequiredBooleanInput(value: unknown, label: string) {
   }
 
   throw new Error(`${label} 노드에는 불리언 입력이 필요해`)
-}
-
-/** Store system node outputs and write the shared completion log. */
-function completeSystemNode(
-  context: ExecutionContext,
-  node: GraphWorkflowNode,
-  moduleDefinition: ParsedModuleDefinition,
-  operationKey: string,
-  nodeArtifacts: Record<string, RuntimeArtifact>,
-) {
-  context.artifactsByNode.set(node.id, nodeArtifacts)
-
-  writeExecutionLog({
-    executionId: context.executionId,
-    nodeId: node.id,
-    eventType: 'node_engine_complete',
-    message: `System module completed: ${moduleDefinition.name}`,
-    details: {
-      engine: 'system',
-      operationKey,
-      outputKeys: Object.keys(nodeArtifacts),
-    },
-  })
 }
 
 function executeConstantScalarNode(

@@ -1,10 +1,8 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
-import { buildRuntimeArtifact } from './system-module-artifacts'
+import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
 import {
-  writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
-  type RuntimeArtifact,
 } from './shared'
 
 /** Normalize a JSON-like workflow input into a traversable value. */
@@ -89,29 +87,6 @@ function stringifyJsonExtraction(value: unknown): string {
   return JSON.stringify(value, null, 2)
 }
 
-/** Store JSON extraction outputs and write the shared completion log. */
-function completeJsonNode(
-  context: ExecutionContext,
-  node: GraphWorkflowNode,
-  moduleDefinition: ParsedModuleDefinition,
-  operationKey: string,
-  nodeArtifacts: Record<string, RuntimeArtifact>,
-) {
-  context.artifactsByNode.set(node.id, nodeArtifacts)
-
-  writeExecutionLog({
-    executionId: context.executionId,
-    nodeId: node.id,
-    eventType: 'node_engine_complete',
-    message: `System module completed: ${moduleDefinition.name}`,
-    details: {
-      engine: 'system',
-      operationKey,
-      outputKeys: Object.keys(nodeArtifacts),
-    },
-  })
-}
-
 /** Extract one value from a JSON input by path and expose practical text/json outputs. */
 export function executeJsonExtractNode(
   context: ExecutionContext,
@@ -137,5 +112,5 @@ export function executeJsonExtractNode(
     }),
   }
 
-  completeJsonNode(context, node, moduleDefinition, 'system.json_extract', nodeArtifacts)
+  completeSystemNode(context, node, moduleDefinition, 'system.json_extract', nodeArtifacts)
 }
