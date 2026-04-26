@@ -20,7 +20,7 @@ const APPEARANCE_PRESET_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'] as const;
 const WALLPAPER_WIDGET_TYPES: WallpaperWidgetType[] = ['clock', 'queue-status', 'recent-results', 'activity-pulse', 'group-image-view', 'image-showcase', 'floating-collage', 'text-note'];
 
 /** Build the default appearance theme used for fresh settings files and fallback merges. */
-export function getDefaultAppearanceTheme(): AppearanceThemeSettings {
+function getDefaultAppearanceTheme(): AppearanceThemeSettings {
   return {
     themeMode: 'system',
     accentPreset: 'conai',
@@ -61,7 +61,7 @@ export function getDefaultAppearanceTheme(): AppearanceThemeSettings {
 }
 
 /** Build the default appearance preset slot list. */
-export function getDefaultAppearancePresetSlots(): AppearancePresetSlot[] {
+function getDefaultAppearancePresetSlots(): AppearancePresetSlot[] {
   return APPEARANCE_PRESET_SLOT_IDS.map((id, index) => ({
     id,
     label: `Slot ${index + 1}`,
@@ -107,7 +107,7 @@ function normalizeWallpaperWidget(rawWidget: unknown): WallpaperWidgetInstance |
 }
 
 /** Normalize raw wallpaper layout presets from persisted settings into the canonical shape. */
-export function normalizeWallpaperLayoutPresets(rawPresets: unknown): WallpaperLayoutPreset[] {
+function normalizeWallpaperLayoutPresets(rawPresets: unknown): WallpaperLayoutPreset[] {
   if (!Array.isArray(rawPresets)) {
     return [];
   }
@@ -143,7 +143,7 @@ export function normalizeWallpaperLayoutPresets(rawPresets: unknown): WallpaperL
 }
 
 /** Normalize raw appearance preset slots from persisted settings into the canonical shape. */
-export function normalizeAppearancePresetSlots(rawSlots: unknown): AppearancePresetSlot[] {
+function normalizeAppearancePresetSlots(rawSlots: unknown): AppearancePresetSlot[] {
   const defaults = getDefaultAppearancePresetSlots();
 
   if (!Array.isArray(rawSlots)) {
@@ -290,7 +290,7 @@ function mergeLlmPresetCollections(...collections: LlmPresetRecord[][]): LlmPres
   return nextPresets;
 }
 
-export function normalizeLlmPresets(rawPresets: unknown, valueType: LlmPresetValueType = 'text'): LlmPresetRecord[] {
+function normalizeLlmPresets(rawPresets: unknown, valueType: LlmPresetValueType = 'text'): LlmPresetRecord[] {
   if (!Array.isArray(rawPresets)) {
     return [];
   }
@@ -489,7 +489,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
 }
 
 /** Ensure the config directory exists before reading or writing the settings file. */
-export function ensureSettingsConfigDirectory(): void {
+function ensureSettingsConfigDirectory(): void {
   const configDir = path.dirname(SETTINGS_FILE_PATH);
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true });

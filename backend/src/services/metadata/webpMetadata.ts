@@ -102,7 +102,7 @@ function buildWebUIParametersFromAiInfo(aiInfo: AIMetadata | undefined): string 
   ].join('\n');
 }
 
-export function detectWebPMetadataParserHint(rawData: unknown, aiInfo: AIMetadata | undefined): WebPMetadataParserHint {
+function detectWebPMetadataParserHint(rawData: unknown, aiInfo: AIMetadata | undefined): WebPMetadataParserHint {
   const objectRawData = typeof rawData === 'object' && rawData !== null
     ? rawData as Record<string, any>
     : null;

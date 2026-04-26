@@ -42,7 +42,7 @@ export type ExecutionContext = {
   shouldCancel?: () => boolean
 }
 
-export const GRAPH_EXECUTION_STOPPED_MESSAGE = '__GRAPH_EXECUTION_STOPPED__'
+const GRAPH_EXECUTION_STOPPED_MESSAGE = '__GRAPH_EXECUTION_STOPPED__'
 
 /** Signal an intentional workflow stop requested by a system node. */
 export class GraphWorkflowStoppedError extends Error {
@@ -151,7 +151,7 @@ export function applyWorkflowRuntimeInputs(
 }
 
 /** Build a deterministic JSON string so execution signatures stay stable across key order. */
-export function buildStableJson(value: unknown): string {
+function buildStableJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map((item) => buildStableJson(item)).join(',')}]`
   }

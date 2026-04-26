@@ -100,7 +100,7 @@ export function parseWatcherJsonArray(value: string | null): string[] {
 }
 
 /** Detect whether a folder path should default to polling-mode watcher behavior. */
-export function isNetworkDrivePath(folderPath: string): boolean {
+function isNetworkDrivePath(folderPath: string): boolean {
   if (folderPath.startsWith('\\\\') || folderPath.startsWith('//')) return true;
   if (folderPath.includes('/mnt/') || folderPath.includes('/net/')) return true;
   return false;

@@ -32,7 +32,7 @@ function collectThemeFontFiles(theme: AppearanceThemeSettings | null | undefined
 }
 
 /** Collect the full set of uploaded font file names referenced by appearance settings and slots. */
-export function collectAppearanceFontFileNames(settings: AppearanceSettings): Set<string> {
+function collectAppearanceFontFileNames(settings: AppearanceSettings): Set<string> {
   const referenced = new Set<string>()
 
   for (const fileName of collectThemeFontFiles(settings)) {

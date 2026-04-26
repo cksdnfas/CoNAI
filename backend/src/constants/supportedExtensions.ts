@@ -8,7 +8,7 @@
 /**
  * Image extensions supported by the image processing pipeline
  */
-export const SUPPORTED_IMAGE_EXTENSIONS = [
+const SUPPORTED_IMAGE_EXTENSIONS = [
   '.jpg',
   '.jpeg',
   '.png',
@@ -23,7 +23,7 @@ export const SUPPORTED_IMAGE_EXTENSIONS = [
  * Note: GIF is included here for file extension grouping,
  * but is classified as file_type='animated' (not 'video') in business logic
  */
-export const SUPPORTED_VIDEO_EXTENSIONS = [
+const SUPPORTED_VIDEO_EXTENSIONS = [
   '.mp4',
   '.webm',
   '.mov',
@@ -56,7 +56,7 @@ export function isSupportedExtension(ext: string): boolean {
  * @param excludeList - Array of extensions to exclude
  * @returns true if the extension should be excluded
  */
-export function isExcludedExtension(ext: string, excludeList: string[]): boolean {
+function isExcludedExtension(ext: string, excludeList: string[]): boolean {
   if (!excludeList || excludeList.length === 0) {
     return false;
   }

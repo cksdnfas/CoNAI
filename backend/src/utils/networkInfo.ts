@@ -10,7 +10,7 @@ export interface NetworkInfo {
 /**
  * Get all local IP addresses
  */
-export function getLocalIPs(): string[] {
+function getLocalIPs(): string[] {
   const interfaces = networkInterfaces();
   const addresses: string[] = [];
 
@@ -33,7 +33,7 @@ export function getLocalIPs(): string[] {
 /**
  * Get external IP address using public API
  */
-export async function getExternalIP(): Promise<string | null> {
+async function getExternalIP(): Promise<string | null> {
   const services = [
     'https://api.ipify.org?format=json',
     'https://api.my-ip.io/ip.json',

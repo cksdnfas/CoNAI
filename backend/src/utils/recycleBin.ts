@@ -9,7 +9,7 @@ import { normalizeFilename } from './pathResolver';
  */
 
 // RecycleBin 폴더 경로 (runtimePaths를 통해 중앙 관리)
-export const RECYCLE_BIN_PATH = runtimePaths.recycleBinDir;
+const RECYCLE_BIN_PATH = runtimePaths.recycleBinDir;
 
 /**
  * RecycleBin용 파일명 생성
@@ -23,7 +23,7 @@ export const RECYCLE_BIN_PATH = runtimePaths.recycleBinDir;
  * generateRecycleBinFileName('uploads/2025-01-15/한글_이미지.png')
  * // Returns: '2025-01-15T12-30-45-123Z_한글_이미지.png'
  */
-export function generateRecycleBinFileName(originalPath: string): string {
+function generateRecycleBinFileName(originalPath: string): string {
   // ISO 8601 타임스탬프 생성 (콜론과 점을 하이픈으로 변경하여 파일명 호환성 확보)
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
@@ -58,7 +58,7 @@ export async function copyToRecycleBin(filePath: string): Promise<string> {
   return recycleBinFilePath;
 }
 
-export async function moveToRecycleBin(filePath: string): Promise<string> {
+async function moveToRecycleBin(filePath: string): Promise<string> {
   const recycleBinFilePath = await copyToRecycleBin(filePath);
 
   try {
@@ -88,7 +88,7 @@ export async function moveToRecycleBin(filePath: string): Promise<string> {
  *
  * @throws 파일이 존재하지 않거나 삭제 실패 시 에러
  */
-export async function deleteFilePermanently(filePath: string): Promise<void> {
+async function deleteFilePermanently(filePath: string): Promise<void> {
   // 파일 존재 확인
   if (!fs.existsSync(filePath)) {
     console.warn(`⚠️ File not found (skipping): ${filePath}`);

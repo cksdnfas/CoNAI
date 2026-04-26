@@ -16,7 +16,7 @@ export function validateRequiredInputs(node: GraphWorkflowNode, moduleDefinition
 }
 
 /** Order graph nodes for execution and reject cyclic graphs. */
-export function topologicalSort(graph: GraphWorkflowDocument) {
+function topologicalSort(graph: GraphWorkflowDocument) {
   const inDegree = new Map<string, number>()
   const adjacency = new Map<string, string[]>()
 
@@ -56,7 +56,7 @@ export function topologicalSort(graph: GraphWorkflowDocument) {
 }
 
 /** Collect one target node and every recursive upstream dependency node id. */
-export function collectUpstreamClosure(graph: GraphWorkflowDocument, targetNodeId: string) {
+function collectUpstreamClosure(graph: GraphWorkflowDocument, targetNodeId: string) {
   const targetNode = graph.nodes.find((node) => node.id === targetNodeId)
   if (!targetNode) {
     throw new Error(`Node ${targetNodeId} not found in graph workflow`)
