@@ -17,7 +17,7 @@ interface ResetResult {
   errors: string[];
 }
 
-export class DatabaseReset {
+class DatabaseReset {
   /**
    * 데이터베이스 완전 초기화
    */

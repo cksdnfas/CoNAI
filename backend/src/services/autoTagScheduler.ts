@@ -29,7 +29,7 @@ interface AutoTagCapabilities {
  * - 발견된 이미지들을 순차적으로 태깅 처리
  * - 주기적으로 반복 실행
  */
-export class AutoTagScheduler {
+class AutoTagScheduler {
   private isRunning = false;
   private isProcessing = false;
   private rerunRequested = false;

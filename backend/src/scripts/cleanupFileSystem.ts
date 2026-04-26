@@ -18,7 +18,7 @@ interface CleanupResult {
   errors: Array<{ path: string; error: string }>;
 }
 
-export class FileSystemCleanup {
+class FileSystemCleanup {
   /**
    * 전체 정리 실행
    */

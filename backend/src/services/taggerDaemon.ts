@@ -52,7 +52,7 @@ interface DaemonResponse {
   [key: string]: any;
 }
 
-export class TaggerDaemon {
+class TaggerDaemon {
   private process: ChildProcess | null = null;
   private modelLoaded = false;
   private currentModel: TaggerModel | null = null;

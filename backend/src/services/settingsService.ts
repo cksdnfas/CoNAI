@@ -63,7 +63,7 @@ const MODEL_INFO: Record<TaggerModel, { label: string; description: string }> = 
   },
 };
 
-export class SettingsService {
+class SettingsService {
   private settings: AppSettings | null = null;
 
   /**

@@ -140,7 +140,7 @@ export function migrateExistingUserSettingsTables(db: Database.Database): void {
 }
 
 /** Recreate module_definitions when an older database is missing current custom-node columns or enum values. */
-export function ensureModuleDefinitionsSupportsCurrentShape(db: Database.Database): void {
+function ensureModuleDefinitionsSupportsCurrentShape(db: Database.Database): void {
   const schemaRow = db
     .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='module_definitions'")
     .get() as { sql?: string } | undefined;
@@ -226,7 +226,7 @@ function ensureModuleDefinitionCompatibilityIndexes(db: Database.Database): void
 }
 
 /** Recreate graph_workflows when an older database still enforces unique workflow names. */
-export function ensureGraphWorkflowsAllowDuplicateNames(db: Database.Database): void {
+function ensureGraphWorkflowsAllowDuplicateNames(db: Database.Database): void {
   const schemaRow = db
     .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='graph_workflows'")
     .get() as { sql?: string } | undefined;

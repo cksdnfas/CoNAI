@@ -11,7 +11,7 @@ import { runtimePaths } from '../config/runtimePaths';
  * - workflow_servers
  * - user_preferences
  */
-export function migrateToUserSettingsDb(): void {
+function migrateToUserSettingsDb(): void {
   const imagesDbPath = runtimePaths.databaseFile;
   const userSettingsDbPath = path.join(runtimePaths.databaseDir, 'user.db');
 

@@ -56,7 +56,7 @@ interface DaemonResponse {
   [key: string]: any;
 }
 
-export class KaloscopeTaggerService {
+class KaloscopeTaggerService {
   private readonly daemonScriptPath: string;
   private process: ChildProcess | null = null;
   private modelLoaded = false;
