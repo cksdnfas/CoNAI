@@ -8,8 +8,9 @@ import type { GenerationImageSaveOptions } from '@/lib/api-image-generation'
 import {
   buildNaiCharacterPromptPayload,
   buildNaiCharacterReferencePayload,
+  buildModuleExposedFields,
+  buildModuleUiSchema,
   buildNaiModuleSnapshot,
-  buildNaiModuleUiSchema,
   buildNaiVibePayload,
   clampNaiSampleCount,
   getErrorMessage,
@@ -182,14 +183,8 @@ export function useNaiGenerationActions({
         ...naiForm,
         vibes: encodedVibes,
       })
-      const exposedFields = naiModuleFieldOptions
-        .filter((field) => naiExposedFieldKeys.includes(field.key))
-        .map((field) => ({
-          key: field.key,
-          label: field.label,
-          data_type: field.dataType,
-        }))
-      const uiSchema = buildNaiModuleUiSchema(naiModuleFieldOptions, snapshot, naiExposedFieldKeys)
+      const exposedFields = buildModuleExposedFields(naiModuleFieldOptions, naiExposedFieldKeys)
+      const uiSchema = buildModuleUiSchema(naiModuleFieldOptions, snapshot, naiExposedFieldKeys)
 
       await createNaiModuleFromSnapshot({
         name: moduleName,

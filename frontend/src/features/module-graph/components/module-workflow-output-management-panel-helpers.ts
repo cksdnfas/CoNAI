@@ -6,7 +6,7 @@ import type {
 } from '@/lib/api'
 import { buildApiUrl } from '@/lib/api-client'
 import type { ImageRecord } from '@/types/image'
-import { buildArtifactTextPreview, getArtifactPreviewUrl, parseMetadataValue } from '../module-graph-shared'
+import { buildArtifactTextPreview, getArtifactPreviewUrl, parseArtifactMetadataRecord, resolveGraphArtifactMimeType } from '../module-graph-shared'
 
 export type ModuleWorkflowGeneratedOutputItem = {
   id: string
@@ -22,33 +22,6 @@ export type ModuleWorkflowGeneratedOutputItem = {
   storagePath: string | null
   label: string
   status?: GraphExecutionRecord['status']
-}
-
-type ArtifactLike = {
-  artifact_type: string
-  storage_path?: string | null
-  metadata?: string | null
-}
-
-type FinalResultLike = {
-  artifact_type: string
-  source_storage_path?: string | null
-  source_metadata?: string | null
-}
-
-const MEDIA_EXTENSION_MIME_MAP: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.bmp': 'image/bmp',
-  '.svg': 'image/svg+xml',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mov': 'video/quicktime',
-  '.avi': 'video/x-msvideo',
-  '.mkv': 'video/x-matroska',
 }
 
 function buildSourcePreviewUrl(path?: string | null) {
@@ -81,14 +54,6 @@ function buildDownloadName(path: string | null | undefined, fallbackLabel: strin
   return `execution-${executionId}-${sanitizedLabel}`
 }
 
-function parseArtifactMetadataRecord(value?: string | null) {
-  // Normalize stored metadata into an object record when possible.
-  const metadata = parseMetadataValue(value)
-  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-    ? metadata as Record<string, unknown>
-    : null
-}
-
 function getArtifactLabel(artifact: GraphExecutionArtifactRecord | GraphExecutionFinalResultRecord) {
   // Pick the most helpful display label from metadata before falling back to the artifact type.
   const rawMetadata = 'source_metadata' in artifact
@@ -105,41 +70,9 @@ function getArtifactLabel(artifact: GraphExecutionArtifactRecord | GraphExecutio
   return artifact.artifact_type
 }
 
-function inferMimeTypeFromPath(path?: string | null) {
-  // Infer a media MIME type from the file extension when metadata is missing.
-  if (!path) {
-    return null
-  }
-
-  const normalized = path.replace(/\\/g, '/').toLowerCase()
-  const lastDotIndex = normalized.lastIndexOf('.')
-  if (lastDotIndex === -1) {
-    return null
-  }
-
-  return MEDIA_EXTENSION_MIME_MAP[normalized.slice(lastDotIndex)] ?? null
-}
-
-function resolveArtifactMimeType(artifact: ArtifactLike | FinalResultLike) {
-  // Resolve the best MIME type using metadata first, then the storage path.
-  const metadataValue = 'source_metadata' in artifact ? artifact.source_metadata : ('metadata' in artifact ? artifact.metadata : null)
-  const storagePath = 'source_storage_path' in artifact ? artifact.source_storage_path : ('storage_path' in artifact ? artifact.storage_path : null)
-  const metadata = parseArtifactMetadataRecord(metadataValue)
-  const metadataMimeType = metadata?.mimeType
-  if (typeof metadataMimeType === 'string' && metadataMimeType.trim().length > 0) {
-    return metadataMimeType
-  }
-
-  if (artifact.artifact_type === 'image') {
-    return inferMimeTypeFromPath(storagePath) ?? 'image/png'
-  }
-
-  return inferMimeTypeFromPath(storagePath)
-}
-
-function isVisualArtifact(artifact: ArtifactLike | FinalResultLike) {
+function isVisualArtifact(artifact: GraphExecutionArtifactRecord | GraphExecutionFinalResultRecord) {
   // Identify artifacts that belong in the generated outputs surface.
-  const mimeType = resolveArtifactMimeType(artifact)
+  const mimeType = resolveGraphArtifactMimeType(artifact)
   if (mimeType?.startsWith('image/') || mimeType?.startsWith('video/')) {
     return true
   }
@@ -209,7 +142,7 @@ export function buildModuleWorkflowOutputCollections({
         id: `final-${result.id}`,
         sourceArtifactId: result.source_artifact_id,
         type: result.artifact_type,
-        mimeType: resolveArtifactMimeType(result),
+        mimeType: resolveGraphArtifactMimeType(result),
         previewUrl: downloadUrl,
         downloadUrl,
         downloadName: buildDownloadName(result.source_storage_path, label, result.execution_id),
@@ -229,7 +162,7 @@ export function buildModuleWorkflowOutputCollections({
         id: `artifact-${artifact.id}`,
         sourceArtifactId: artifact.id,
         type: artifact.artifact_type,
-        mimeType: resolveArtifactMimeType(artifact),
+        mimeType: resolveGraphArtifactMimeType(artifact),
         previewUrl: downloadUrl,
         downloadUrl,
         downloadName: buildDownloadName(artifact.storage_path, label, artifact.execution_id),

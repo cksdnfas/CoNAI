@@ -858,8 +858,21 @@ export function buildNaiModuleFieldOptions(form: NAIFormDraft): ModuleFieldOptio
   return options
 }
 
-/** Build module UI schema entries so saved NAI modules keep select inputs as dropdowns. */
-export function buildNaiModuleUiSchema(fieldOptions: ModuleFieldOption[], snapshot: Record<string, unknown>, exposedFieldKeys: string[]): ModuleUiFieldDefinition[] {
+/** Build the exposed-field contract for saved generation modules. */
+export function buildModuleExposedFields(fieldOptions: ModuleFieldOption[], exposedFieldKeys: string[]) {
+  const exposedFieldKeySet = new Set(exposedFieldKeys)
+
+  return fieldOptions
+    .filter((field) => exposedFieldKeySet.has(field.key))
+    .map((field) => ({
+      key: field.key,
+      label: field.label,
+      data_type: field.dataType,
+    }))
+}
+
+/** Build module UI schema entries so saved generation modules keep select inputs as dropdowns. */
+export function buildModuleUiSchema(fieldOptions: ModuleFieldOption[], snapshot: Record<string, unknown>, exposedFieldKeys: string[]): ModuleUiFieldDefinition[] {
   const exposedFieldKeySet = new Set(exposedFieldKeys)
 
   return fieldOptions

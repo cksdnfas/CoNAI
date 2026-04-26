@@ -9,10 +9,10 @@ import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getAppSettings } from '@/lib/api'
 import { createGenerationQueueJob, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
-import { createCodexModuleFromSnapshot, type ModuleUiFieldDefinition } from '@/lib/api-module-graph'
+import { createCodexModuleFromSnapshot } from '@/lib/api-module-graph'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
-import { FormField, getErrorMessage, type ModuleFieldOption, type SelectedImageDraft } from '../image-generation-shared'
+import { buildModuleExposedFields, buildModuleUiSchema, FormField, getErrorMessage, type ModuleFieldOption, type SelectedImageDraft } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { CodexModuleSaveModal } from './codex-module-save-modal'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
@@ -86,20 +86,6 @@ function buildCodexModuleSnapshot(form: CodexFormDraft) {
     image: form.referenceImage?.dataUrl || null,
     mask: form.maskImage?.dataUrl || null,
   }
-}
-
-function buildCodexModuleUiSchema(fieldOptions: ModuleFieldOption[], snapshot: Record<string, unknown>, exposedFieldKeys: string[]): ModuleUiFieldDefinition[] {
-  const exposedFieldKeySet = new Set(exposedFieldKeys)
-
-  return fieldOptions
-    .filter((field) => exposedFieldKeySet.has(field.key))
-    .map((field): ModuleUiFieldDefinition => ({
-      key: field.key,
-      label: field.label,
-      data_type: field.options && field.options.length > 0 ? 'select' : field.dataType,
-      default_value: snapshot[field.key],
-      options: field.options,
-    }))
 }
 
 function loadPersistedCodexFormDraft(): CodexFormDraft {
@@ -326,14 +312,8 @@ export function CodexGenerationPanel({
     try {
       setIsSavingCodexModule(true)
       const snapshot = buildCodexModuleSnapshot(codexForm)
-      const exposedFields = CODEX_MODULE_FIELD_OPTIONS
-        .filter((field) => codexExposedFieldKeys.includes(field.key))
-        .map((field) => ({
-          key: field.key,
-          label: field.label,
-          data_type: field.dataType,
-        }))
-      const uiSchema = buildCodexModuleUiSchema(CODEX_MODULE_FIELD_OPTIONS, snapshot, codexExposedFieldKeys)
+      const exposedFields = buildModuleExposedFields(CODEX_MODULE_FIELD_OPTIONS, codexExposedFieldKeys)
+      const uiSchema = buildModuleUiSchema(CODEX_MODULE_FIELD_OPTIONS, snapshot, codexExposedFieldKeys)
 
       await createCodexModuleFromSnapshot({
         name: moduleName,
