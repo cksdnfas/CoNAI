@@ -320,9 +320,16 @@ export interface GraphWorkflowScheduleMaintenanceResult {
   runningCancellationRequested: number
 }
 
+interface GraphWorkflowScheduleEnqueueResult {
+  requested_count: number
+  enqueued_count: number
+  execution_ids: number[]
+}
+
 interface CreateEnvelope {
   id: number
   message: string
+  enqueue?: GraphWorkflowScheduleEnqueueResult
 }
 
 export interface GraphWorkflowUpdateResult extends CreateEnvelope {
@@ -599,6 +606,7 @@ export async function createGraphWorkflowSchedule(payload: {
   max_run_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
+  enqueue_count?: number
 }) {
   const response = await requestJson<ApiEnvelope<CreateEnvelope>>('/api/graph-workflows/schedules', {
     method: 'POST',
@@ -623,6 +631,7 @@ export async function updateGraphWorkflowSchedule(scheduleId: number, payload: {
   max_run_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
+  enqueue_count?: number
 }) {
   const response = await requestJson<ApiEnvelope<CreateEnvelope>>(`/api/graph-workflows/schedules/${scheduleId}`, {
     method: 'PUT',
@@ -651,14 +660,19 @@ export async function resumeGraphWorkflowSchedule(scheduleId: number) {
   return response.data
 }
 
-/** Enqueue one immediate run from a saved schedule definition. */
-export async function runGraphWorkflowScheduleNow(scheduleId: number) {
+/** Enqueue one or more immediate runs from a saved schedule definition. */
+export async function runGraphWorkflowScheduleNow(scheduleId: number, enqueueCount = 1) {
   const response = await requestJson<ApiEnvelope<{
-    executionId: number
+    executionId: number | null
     status: GraphExecutionStatus
     message: string
+    enqueue?: GraphWorkflowScheduleEnqueueResult
   }>>(`/api/graph-workflows/schedules/${scheduleId}/run-now`, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ enqueue_count: enqueueCount }),
   })
   return response.data
 }
