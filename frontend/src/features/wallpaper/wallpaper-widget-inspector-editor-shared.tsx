@@ -152,11 +152,6 @@ export function WallpaperInspectorSectionCard({
   )
 }
 
-/** Render one compact helper line under a settings control. */
-export function WallpaperInspectorFieldHint({ children }: { children: ReactNode }) {
-  return <div className="text-[11px] leading-5 text-muted-foreground">{children}</div>
-}
-
 /** Render one collapsible block for lower-priority settings inside a section card. */
 export function WallpaperInspectorDisclosure({
   title,

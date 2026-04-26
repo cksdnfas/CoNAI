@@ -53,24 +53,6 @@ export function findWallpaperPresetByQuery(layoutPresets: WallpaperLayoutPreset[
   )) ?? null
 }
 
-/** Build one runtime hash-route path for a saved wallpaper preset. */
-export function buildWallpaperRuntimePath(preset?: Pick<WallpaperLayoutPreset, 'id' | 'name'> | null) {
-  if (!preset) {
-    return '/wallpaper/runtime'
-  }
-
-  return `/wallpaper/runtime?preset=${encodeURIComponent(buildWallpaperPresetQueryValue(preset))}`
-}
-
-/** Build one absolute browser URL for a wallpaper runtime hash route. */
-export function buildWallpaperRuntimeAbsoluteUrl(runtimePath: string) {
-  if (typeof window === 'undefined') {
-    return runtimePath
-  }
-
-  return `${window.location.origin}${window.location.pathname}#${runtimePath}`
-}
-
 const WALLPAPER_LAYOUT_DRAFT_STORAGE_KEY = 'conai.wallpaper.layoutDraft.v1'
 const WALLPAPER_LAYOUT_PRESETS_STORAGE_KEY = 'conai.wallpaper.layoutPresets.v1'
 const WALLPAPER_LAYOUT_ACTIVE_PRESET_ID_STORAGE_KEY = 'conai.wallpaper.activePresetId.v1'

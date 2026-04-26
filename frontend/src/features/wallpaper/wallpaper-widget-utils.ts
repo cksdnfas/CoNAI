@@ -65,32 +65,6 @@ export function useWallpaperMotionTick(enabled: boolean) {
   return tick
 }
 
-/** Drive smoother motion time for widgets that need continuous animation. */
-export function useWallpaperMotionTime(enabled: boolean) {
-  const [elapsedMs, setElapsedMs] = useState(0)
-
-  useEffect(() => {
-    if (!enabled) {
-      return
-    }
-
-    const startTime = performance.now()
-    let frameId = 0
-
-    const step = (now: number) => {
-      setElapsedMs(now - startTime)
-      frameId = window.requestAnimationFrame(step)
-    }
-
-    frameId = window.requestAnimationFrame(step)
-    return () => {
-      window.cancelAnimationFrame(frameId)
-    }
-  }, [enabled])
-
-  return elapsedMs
-}
-
 export interface WallpaperBezierControlPoints {
   x1: number
   y1: number
@@ -383,22 +357,6 @@ export function normalizeWallpaperAnimationEasing(easing: string | undefined, fa
   }
 
   return fallback
-}
-
-export function getWallpaperEditableBezierControlPoints(
-  easing: WallpaperAnimationEasing | undefined,
-  fallback: WallpaperAnimationEasingPreset = 'easeOutCubic',
-): WallpaperBezierControlPoints {
-  const customBezier = parseWallpaperCubicBezierEasing(easing)
-  if (customBezier) {
-    return customBezier
-  }
-
-  if (easing && isWallpaperAnimationEasingPreset(easing)) {
-    return getWallpaperPresetBezierControlPoints(easing) ?? getWallpaperPresetBezierControlPoints(fallback) ?? WALLPAPER_CUSTOM_EASING_FALLBACK
-  }
-
-  return getWallpaperPresetBezierControlPoints(fallback) ?? WALLPAPER_CUSTOM_EASING_FALLBACK
 }
 
 export function getWallpaperEditableEasingStopPoints(

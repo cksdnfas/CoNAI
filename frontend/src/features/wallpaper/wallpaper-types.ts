@@ -184,18 +184,12 @@ export type WallpaperGroupSourceWidgetInstance =
   | Extract<WallpaperWidgetInstance, { type: 'image-showcase' }>
   | Extract<WallpaperWidgetInstance, { type: 'floating-collage' }>
 
-export type WallpaperTextNoteWidgetInstance = Extract<WallpaperWidgetInstance, { type: 'text-note' }>
-
 export function isWallpaperGroupSourceWidget(widget: WallpaperWidgetInstance): widget is WallpaperGroupSourceWidgetInstance {
   return widget.type === 'group-image-view' || widget.type === 'image-showcase' || widget.type === 'floating-collage'
 }
 
 export function isWallpaperPreviewableImageWidget(widget: WallpaperWidgetInstance): widget is Extract<WallpaperWidgetInstance, { type: 'recent-results' | 'group-image-view' | 'image-showcase' | 'floating-collage' }> {
   return widget.type === 'recent-results' || widget.type === 'group-image-view' || widget.type === 'image-showcase' || widget.type === 'floating-collage'
-}
-
-export function isWallpaperTextNoteWidget(widget: WallpaperWidgetInstance): widget is WallpaperTextNoteWidgetInstance {
-  return widget.type === 'text-note'
 }
 
 export interface WallpaperLayoutPreset {
