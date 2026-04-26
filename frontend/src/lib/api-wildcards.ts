@@ -56,16 +56,6 @@ export interface WildcardParseResponse {
   usedWildcards: string[]
 }
 
-export interface WildcardStatistics {
-  totalWildcards: number
-  itemsByTool: {
-    comfyui: number
-    nai: number
-  }
-  totalItems: number
-  averageItemsPerWildcard: number
-}
-
 export interface WildcardScanLogEntry {
   id: number
   name: string

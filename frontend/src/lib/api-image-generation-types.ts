@@ -48,46 +48,6 @@ export interface CreateGenerationQueueJobPayload {
   request_summary?: string | null
 }
 
-export interface GenerationQueueRequestDebugSnapshot {
-  service_type: 'comfyui'
-  stage: 'prepared' | 'submitted' | 'failed' | 'completed' | 'cancelled'
-  captured_at: string
-  queue_job_id?: number | null
-  history_id?: number | null
-  workflow_id?: number | null
-  workflow_name?: string | null
-  server_id?: number | null
-  server_name?: string | null
-  endpoint?: string | null
-  prompt_id?: string | null
-  error_message?: string | null
-  raw_prompt_data?: Record<string, unknown>
-  prepared_prompt_data?: Record<string, unknown>
-  resolved_prompt_data?: Record<string, unknown>
-  request_body?: Record<string, unknown>
-  cancellation_requested_at?: string | null
-  cancellation_endpoint?: string | null
-  cancellation_prompt_id?: string | null
-  cancellation_state?: 'requested' | 'not_found' | 'missing_prompt_id' | 'missing_endpoint' | 'pre_submit' | 'error' | null
-  cancellation_error?: string | null
-  cancellation_result?: {
-    promptId: string
-    matchedRunning: boolean
-    matchedPending: boolean
-    interrupted: boolean
-    deleted: boolean
-  } | null
-}
-
-export interface GenerationQueueStatusCounts {
-  queued: number
-  dispatching: number
-  running: number
-  completed: number
-  failed: number
-  cancelled: number
-}
-
 export interface CodexGenerationStatus {
   installed: boolean
   authenticated: boolean

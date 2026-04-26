@@ -1,5 +1,5 @@
 import { requestJson } from './api-image-generation-request'
-import type { CodexGenerationStatus, CreateGenerationQueueJobPayload, GenerationQueueJobRecord, GenerationQueueJobStatus, GenerationQueueRequestDebugSnapshot, GenerationQueueStatusCounts } from './api-image-generation-types'
+import type { CodexGenerationStatus, CreateGenerationQueueJobPayload, GenerationQueueJobRecord, GenerationQueueJobStatus } from './api-image-generation-types'
 
 interface GenerationQueueListResponse {
   success: boolean
@@ -11,19 +11,6 @@ interface GenerationQueueMutationResponse {
   success: boolean
   record: GenerationQueueJobRecord | null
   message: string
-}
-
-interface GenerationQueueStatsResponse {
-  success: boolean
-  global: GenerationQueueStatusCounts
-  visible: GenerationQueueStatusCounts
-  total_visible: number
-  active_visible: number
-}
-
-interface GenerationQueueRequestDebugResponse {
-  success: boolean
-  data: GenerationQueueRequestDebugSnapshot
 }
 
 interface CodexGenerationStatusResponse {
@@ -56,23 +43,6 @@ export async function getGenerationQueue(params?: {
   return requestJson<GenerationQueueListResponse>(`/api/generation-queue${suffix}`)
 }
 
-/** Load queue totals for operations or lightweight queue widgets. */
-export async function getGenerationQueueStats(params?: {
-  serviceType?: GenerationQueueJobRecord['service_type']
-  workflowId?: number | null
-}) {
-  const searchParams = new URLSearchParams()
-  if (params?.serviceType) {
-    searchParams.set('service_type', params.serviceType)
-  }
-  if (params?.workflowId != null) {
-    searchParams.set('workflow_id', String(params.workflowId))
-  }
-
-  const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
-  return requestJson<GenerationQueueStatsResponse>(`/api/generation-queue/stats${suffix}`)
-}
-
 /** Create one durable image generation queue job. */
 export async function createGenerationQueueJob(payload: CreateGenerationQueueJobPayload) {
   return requestJson<GenerationQueueMutationResponse>('/api/generation-queue', {
@@ -84,21 +54,9 @@ export async function createGenerationQueueJob(payload: CreateGenerationQueueJob
   })
 }
 
-/** Load the final upstream request snapshot captured for one queue job. */
-export async function getGenerationQueueRequestDebug(queueJobId: number) {
-  return requestJson<GenerationQueueRequestDebugResponse>(`/api/generation-queue/${queueJobId}/request-debug`)
-}
-
 /** Load current Codex CLI availability/authentication state for the image-generation workspace. */
 export async function getCodexGenerationStatus() {
   return requestJson<CodexGenerationStatusResponse>('/api/generation-queue/codex/status')
-}
-
-/** Retry one failed or cancelled queue job. */
-export async function retryGenerationQueueJob(queueJobId: number) {
-  return requestJson<GenerationQueueMutationResponse>(`/api/generation-queue/${queueJobId}/retry`, {
-    method: 'POST',
-  })
 }
 
 /** Request cancellation for a queue job. */

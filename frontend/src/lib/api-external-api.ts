@@ -36,11 +36,6 @@ export interface ExternalApiLlmOptionRecord {
   default_max_tokens?: number | null
 }
 
-export interface ExternalApiSecurityStatus {
-  api_key_encryption_configured: boolean
-  auth_configured: boolean
-}
-
 type ExternalApiProvidersResponse = {
   success: boolean
   data: ExternalApiProviderRecord[]
