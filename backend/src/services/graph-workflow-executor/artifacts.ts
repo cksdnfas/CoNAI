@@ -183,15 +183,6 @@ export function saveMetadataArtifact(executionId: number, nodeId: string, metada
   })
 }
 
-/** Parse an execution plan JSON field and return ordered node ids. */
-export function getOrderedNodeIdsFromExecutionPlan(executionPlan?: string | null) {
-  const parsedPlan = executionPlan
-    ? parseJson(executionPlan, { orderedNodeIds: [] as string[] })
-    : { orderedNodeIds: [] as string[] }
-
-  return parsedPlan.orderedNodeIds ?? []
-}
-
 /** Hydrate one stored artifact row back into a runtime artifact usable by downstream nodes. */
 async function loadRuntimeArtifactFromRecord(artifact: GraphExecutionArtifactRecord): Promise<RuntimeArtifact | null> {
   const parsedMetadata = artifact.metadata ? parseJson<Record<string, unknown> | string>(artifact.metadata, {}) : {}

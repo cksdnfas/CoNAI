@@ -103,26 +103,3 @@ export async function assertFileReadable(filePath: string): Promise<void> {
     throw error;
   }
 }
-
-/**
- * 디렉토리에 쓰기가 가능한지 체크합니다.
- * 쓸 수 없으면 에러를 throw합니다.
- *
- * @param dirPath 체크할 디렉토리 경로
- * @throws 디렉토리가 존재하지 않거나 쓸 수 없는 경우
- */
-export async function assertDirectoryWritable(dirPath: string): Promise<void> {
-  const access = await checkDirectoryAccess(dirPath);
-
-  if (!access.exists) {
-    const error: NodeJS.ErrnoException = new Error(`Directory does not exist: ${dirPath}`);
-    error.code = 'ENOENT';
-    throw error;
-  }
-
-  if (!access.writable) {
-    const error: NodeJS.ErrnoException = new Error(`Permission denied (write): ${dirPath}`);
-    error.code = 'EACCES';
-    throw error;
-  }
-}

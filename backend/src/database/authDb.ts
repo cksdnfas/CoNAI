@@ -202,16 +202,6 @@ function migrateFromLegacyUserDbs(): void {
 }
 
 /**
- * Close database connection.
- */
-export function closeAuthDb(): void {
-  if (authDb) {
-    authDb.close();
-    console.log('Authentication database connection closed');
-  }
-}
-
-/**
  * Get the live authentication database instance.
  */
 export function getAuthDb(): Database.Database {

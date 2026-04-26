@@ -123,10 +123,3 @@ export async function checkImageMatchesConditions(
 export function getSupportedConditionTypes(): AutoCollectCondition['type'][] {
   return factory.getSupportedTypes();
 }
-
-/**
- * Validate if condition type is supported
- */
-export function isConditionTypeSupported(type: AutoCollectCondition['type']): boolean {
-  return factory.isSupported(type);
-}
