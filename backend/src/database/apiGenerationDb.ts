@@ -23,10 +23,3 @@ export function initializeApiGenerationDb(): void {
 export function closeApiGenerationDb(): void {
   console.log('API generation history shares the unified user database connection');
 }
-
-/**
- * Get database instance (use with caution).
- */
-export function getApiGenDb(): Database.Database {
-  return getUserSettingsDb();
-}
