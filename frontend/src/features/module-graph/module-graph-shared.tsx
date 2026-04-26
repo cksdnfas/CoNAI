@@ -296,16 +296,6 @@ export function parseModuleGraphClipboardPayload(value: string): ModuleGraphClip
   }
 }
 
-/** Read a local file into a data URL for graph input overrides. */
-export function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file as data URL'))
-    reader.readAsDataURL(file)
-  })
-}
-
 const PORT_TYPE_COLORS: Record<ModulePortDataType, string> = {
   image: '#4fc3f7',
   mask: '#ffb74d',

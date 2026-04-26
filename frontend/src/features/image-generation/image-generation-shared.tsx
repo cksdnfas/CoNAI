@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { readBlobAsDataUrl } from '@/lib/file-data-url'
 import type {
   ComfyUIServerConnectionStatus,
   GenerationHistoryRecord,
@@ -492,12 +493,7 @@ export function buildWorkflowDraft(fields: WorkflowMarkedField[]) {
 
 /** Read a local file into a data URL for API transport. */
 export function readFileAsDataUrl(file: Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file as data URL'))
-    reader.readAsDataURL(file)
-  })
+  return readBlobAsDataUrl(file, 'Failed to read file as data URL')
 }
 
 /** Infer one mime type from a data URL so workflow previews can classify media correctly. */

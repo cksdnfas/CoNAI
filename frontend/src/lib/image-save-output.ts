@@ -1,3 +1,4 @@
+import { readBlobAsDataUrl } from './file-data-url'
 import type { ImageSaveFormat, ImageSaveSettings } from '@/types/settings'
 
 export const DEFAULT_IMAGE_SAVE_SETTINGS: ImageSaveSettings = {
@@ -56,16 +57,6 @@ export function shouldBypassImageSaveProcessing(file: Pick<File, 'type' | 'name'
   }
 
   return lowerName.endsWith('.gif') || lowerName.endsWith('.apng')
-}
-
-/** Read one Blob into a data URL for downstream image draft state. */
-function readBlobAsDataUrl(blob: Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read blob as data URL'))
-    reader.readAsDataURL(blob)
-  })
 }
 
 /** Load one browser image element from either a Blob or a data URL source. */
