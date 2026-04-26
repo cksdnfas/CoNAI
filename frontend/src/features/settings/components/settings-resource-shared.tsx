@@ -251,52 +251,6 @@ export function SettingsResourceCreateActionRow({
   )
 }
 
-interface SettingsResourceCardHeaderProps {
-  title: ReactNode
-  badges: SettingsResourceBadge[]
-  details: ReactNode[]
-  actions: SettingsResourceAction[]
-}
-
-/** Render a shared settings card header with badges, path lines, and icon actions. */
-export function SettingsResourceCardHeader({ title, badges, details, actions }: SettingsResourceCardHeaderProps) {
-  return (
-    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <CardTitle>{title}</CardTitle>
-          {badges.map((badge, index) => (
-            <Badge key={index} variant={badge.variant ?? 'outline'}>
-              {badge.label}
-            </Badge>
-          ))}
-        </div>
-        {details.map((detail, index) => (
-          <div key={index} className="break-all font-mono text-xs text-muted-foreground">
-            {detail}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {actions.map((action) => (
-          <Button
-            key={action.label}
-            size="icon-sm"
-            variant="outline"
-            disabled={action.disabled}
-            onClick={action.onClick}
-            aria-label={action.label}
-            title={action.title}
-          >
-            {action.icon}
-          </Button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 interface SettingsResourceMetaListProps {
   items: Array<{ label: ReactNode; value: ReactNode }>
 }

@@ -895,16 +895,6 @@ export function buildModuleEdgePresentation(sourcePort: ModulePortDefinition | n
   }
 }
 
-/** Clamp per-port handle offsets so small nodes stay readable. */
-export function getPortOffset(index: number, total: number) {
-  if (total <= 1) {
-    return '50%'
-  }
-
-  const step = 100 / (total + 1)
-  return `${step * (index + 1)}%`
-}
-
 /** Convert a saved graph workflow into React Flow nodes and edges. */
 export function buildFlowFromGraphRecord(graph: GraphWorkflowRecord, modules: ModuleDefinitionRecord[]) {
   const moduleMap = new Map(modules.map((module) => [module.id, module]))

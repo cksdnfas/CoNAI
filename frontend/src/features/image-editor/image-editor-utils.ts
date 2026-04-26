@@ -200,30 +200,3 @@ export function transformImageEditorCanvas(sourceCanvas: HTMLCanvasElement, rota
 
   return outputCanvas
 }
-
-/** Build one red preview overlay data URL from a black-and-white mask source. */
-export async function createImageEditorMaskPreviewDataUrl(maskDataUrl: string) {
-  const image = await loadEditorImage(maskDataUrl)
-  const canvas = document.createElement('canvas')
-  canvas.width = image.width
-  canvas.height = image.height
-  const context = canvas.getContext('2d')
-
-  if (!context) {
-    throw new Error('Failed to create mask preview context')
-  }
-
-  context.drawImage(image, 0, 0)
-  const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-
-  for (let index = 0; index < imageData.data.length; index += 4) {
-    const strength = imageData.data[index] ?? 0
-    imageData.data[index] = 255
-    imageData.data[index + 1] = 68
-    imageData.data[index + 2] = 68
-    imageData.data[index + 3] = Math.round((strength / 255) * 150)
-  }
-
-  context.putImageData(imageData, 0, 0)
-  return canvas.toDataURL('image/png')
-}

@@ -57,11 +57,6 @@ export function normalizeGroupSourceKey(value: string | null): GroupSourceKey {
   return value === 'folders' ? 'folders' : 'custom'
 }
 
-/** Read the current group's collection type from the enriched image payload. */
-export function getImageCollectionType(image: ImageRecord) {
-  return image.groups?.[0]?.collection_type ?? 'manual'
-}
-
 /** Format a backend timestamp into a compact Korean label for group metadata. */
 export function formatGroupTimestamp(value?: string | null) {
   if (!value) {

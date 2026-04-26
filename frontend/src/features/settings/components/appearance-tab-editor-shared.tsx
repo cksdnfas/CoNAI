@@ -335,28 +335,3 @@ export function AppearanceColorControl({
     </div>
   )
 }
-
-/** Render the tab switch button used by the appearance editor. */
-export function AppearanceEditorTabButton({
-  label,
-  isActive,
-  onClick,
-}: {
-  label: string
-  isActive: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors',
-        isActive ? 'bg-surface-high text-foreground' : 'text-muted-foreground hover:bg-surface-high hover:text-foreground',
-      )}
-      aria-pressed={isActive}
-    >
-      {label}
-    </button>
-  )
-}

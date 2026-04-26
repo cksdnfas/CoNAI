@@ -6,14 +6,6 @@ export function isHexColor(value: string) {
   return /^#[0-9a-fA-F]{6}$/.test(value)
 }
 
-export function areThemesEqual(left: AppearanceSettings | null, right: AppearanceSettings | null) {
-  if (!left || !right) {
-    return false
-  }
-
-  return JSON.stringify(extractAppearanceTheme(left)) === JSON.stringify(extractAppearanceTheme(right))
-}
-
 export function areThemeSettingsEqual(left: AppearanceSettings | null, right: AppearancePresetSlot['appearance']) {
   if (!left || !right) {
     return false

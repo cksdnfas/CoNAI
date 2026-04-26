@@ -162,8 +162,3 @@ export function ImageRatingSafetyBadge({
     </div>
   )
 }
-
-/** Build the preview-media class for a blurred feed card without affecting the surrounding chrome. */
-export function getImageFeedPreviewClassName(blurPreview: boolean) {
-  return cn(blurPreview && 'scale-[1.03] blur-2xl saturate-[0.55]')
-}
