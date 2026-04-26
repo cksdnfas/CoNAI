@@ -1,6 +1,7 @@
 import { Check, GripVertical, Plus } from 'lucide-react'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import type { WorkflowMarkedField } from '@/lib/api'
+import { buildPowerLoraNodeItemsFromInputs } from './power-lora-loader-input'
 
 type WorkflowJsonNodeRecord = {
   title?: string
@@ -16,12 +17,6 @@ type WorkflowJsonNodeRecord = {
 type WorkflowJsonRecord = Record<string, WorkflowJsonNodeRecord>
 
 type WorkflowNodeItem = NonNullable<WorkflowMarkedField['node_items']>[number]
-
-type PowerLoraLoaderInputValue = {
-  on?: boolean
-  lora?: string
-  strength?: number
-}
 
 export type EditableWorkflowInput = {
   key: string
@@ -82,31 +77,6 @@ function inferWorkflowNumberStep(value: number) {
   }
 
   return Number(`0.${'0'.repeat(Math.max(decimalPart.length - 1, 0))}1`)
-}
-
-function isPowerLoraLoaderInputValue(value: unknown): value is PowerLoraLoaderInputValue {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false
-  }
-
-  const record = value as Record<string, unknown>
-  return typeof record.lora === 'string'
-    && typeof record.on === 'boolean'
-    && typeof record.strength === 'number'
-}
-
-function buildPowerLoraNodeItems(inputs: Record<string, unknown>): WorkflowNodeItem[] {
-  return Object.entries(inputs)
-    .filter(([inputKey, inputValue]) => /^lora_/i.test(inputKey) && isPowerLoraLoaderInputValue(inputValue))
-    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey, undefined, { numeric: true }))
-    .map(([inputKey, inputValue]) => {
-      const loraInput = inputValue as PowerLoraLoaderInputValue & { lora: string }
-      return {
-        key: inputKey,
-        label: loraInput.lora.split(/[/\\]/).pop() || loraInput.lora,
-        lora: loraInput.lora,
-      }
-    })
 }
 
 /** Infer the most useful authoring field type from the raw workflow value. */
@@ -306,7 +276,7 @@ export function parseWorkflowGraph(params: {
     const classType = nodeData.class_type || 'Unknown'
 
     if (classType === POWER_LORA_LOADER_CLASS_TYPE) {
-      const powerLoraNodeItems = buildPowerLoraNodeItems(inputs)
+      const powerLoraNodeItems = buildPowerLoraNodeItemsFromInputs(inputs)
       if (powerLoraNodeItems.length > 0) {
         editableInputs.push({
           key: POWER_LORA_NODE_INPUT_KEY,
