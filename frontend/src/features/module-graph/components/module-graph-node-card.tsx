@@ -33,6 +33,8 @@ import {
   isAdvancedOutputPortsEnabled,
   isFinalResultModule,
   normalizeModulePortDescription,
+  normalizeOptionalString,
+  parsePositiveIntegerish,
   type ModuleGraphNode,
 } from '../module-graph-shared'
 
@@ -59,28 +61,6 @@ type PortCellProps = {
   requiredMissing: boolean
   requiredMissingLabel?: string
   onDisconnectInput?: (nodeId: string, portKey: string) => void
-}
-
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function parsePositiveIntegerish(value: unknown) {
-  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
-    return value
-  }
-
-  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
-    const parsed = Number.parseInt(value.trim(), 10)
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-  }
-
-  return null
 }
 
 function resolveComfyTargetMode(inputValues: Record<string, unknown> | undefined) {

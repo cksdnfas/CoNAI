@@ -3,6 +3,7 @@ import os from 'os'
 import path from 'path'
 import { spawn } from 'child_process'
 import { runtimePaths } from '../config/runtimePaths'
+import { normalizeOptionalString } from '../utils/valueNormalization'
 
 const CODEX_OUTPUT_FILE_NAME = 'output.png'
 const CODEX_LAST_MESSAGE_FILE_NAME = 'codex-last-message.txt'
@@ -30,15 +31,6 @@ export type CodexImageGenerationResult = {
   lastMessage: string | null
   stdout: string
   stderr: string
-}
-
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
 }
 
 function clampPositiveInteger(value: unknown) {

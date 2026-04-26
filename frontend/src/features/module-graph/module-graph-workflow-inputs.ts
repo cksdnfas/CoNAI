@@ -1,6 +1,6 @@
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api'
 import { buildWorkflowExposedInputId } from './module-graph-validation'
-import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, normalizeModulePortDescription, type ModuleGraphNode } from './module-graph-shared'
+import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, normalizeModulePortDescription, normalizeOptionalString, type ModuleGraphNode } from './module-graph-shared'
 
 export const WORKFLOW_INPUT_ENABLED_KEY = '__workflow_input_enabled'
 export const WORKFLOW_INPUT_LABEL_KEY = '__workflow_input_label'
@@ -16,18 +16,6 @@ const CONSTANT_INPUT_OPERATION_KEYS = new Set([
   'system.constant_boolean',
 ])
 
-function getModuleOperationKey(module: ModuleDefinitionRecord) {
-  if (typeof module.internal_fixed_values?.operation_key === 'string') {
-    return module.internal_fixed_values.operation_key
-  }
-
-  if (typeof module.template_defaults?.operation_key === 'string') {
-    return module.template_defaults.operation_key
-  }
-
-  return null
-}
-
 function normalizeBooleanFlag(value: unknown) {
   if (typeof value === 'boolean') {
     return value
@@ -40,10 +28,6 @@ function normalizeBooleanFlag(value: unknown) {
   }
 
   return false
-}
-
-function normalizeOptionalString(value: unknown) {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 }
 
 /** Resolve whether one module can act as a graph-defined workflow input source. */

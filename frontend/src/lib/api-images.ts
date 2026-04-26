@@ -1,4 +1,5 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
+import { getDownloadFileName } from '@/lib/download-utils'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
 import type { PromptSimilarityQueryResult, SimilarityQueryResult } from '@/types/similarity'
@@ -490,25 +491,6 @@ export interface RewriteMetadataDownloadResult {
 }
 
 export type MetadataPatchPayload = Record<string, string | number | null>
-
-/** Extract a suggested filename from Content-Disposition when available. */
-function getDownloadFileName(contentDisposition: string | null, fallbackFileName: string) {
-  if (!contentDisposition) {
-    return fallbackFileName
-  }
-
-  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
-  if (utf8Match?.[1]) {
-    return decodeURIComponent(utf8Match[1])
-  }
-
-  const basicMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
-  if (basicMatch?.[1]) {
-    return basicMatch[1]
-  }
-
-  return fallbackFileName
-}
 
 /** Convert a single image file to WebP and trigger an immediate download. */
 export async function downloadConvertedWebP(file: File, options?: { quality?: number }) {

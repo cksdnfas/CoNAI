@@ -2,20 +2,12 @@ import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { executeCodexMessageRequest } from '../codexMessageService'
 import { buildRuntimeArtifact } from './system-module-artifacts'
 import {
+  normalizeOptionalString,
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
   type RuntimeArtifact,
 } from './shared'
-
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
 
 function resolveOptionalJsonText(value: unknown) {
   if (typeof value === 'string') {

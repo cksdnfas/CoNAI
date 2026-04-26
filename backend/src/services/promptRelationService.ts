@@ -1,5 +1,6 @@
 import { cleanPromptTerm, parsePromptWithLoRAs } from '@conai/shared';
 import { db } from '../database/init';
+import { getPromptCollectionTableName as getPromptTableName } from '../utils/promptTables';
 import type {
   PromptGraphEdgeItem,
   PromptGraphNodeItem,
@@ -31,18 +32,6 @@ interface PromptGraphRelationRow {
 }
 
 const PROMPT_RELATION_KIND = 'co_occurrence';
-
-function getPromptTableName(type: PromptRelationPromptType): string {
-  switch (type) {
-    case 'negative':
-      return 'negative_prompt_collection';
-    case 'auto':
-      return 'auto_prompt_collection';
-    case 'positive':
-    default:
-      return 'prompt_collection';
-  }
-}
 
 function roundScore(value: number): number {
   return Math.round(value * 100) / 100;

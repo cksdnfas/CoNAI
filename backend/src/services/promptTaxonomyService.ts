@@ -1,5 +1,6 @@
 import { cleanPromptTerm } from '@conai/shared';
 import { db } from '../database/init';
+import { getPromptCollectionTableName as getPromptTableName } from '../utils/promptTables';
 import type {
   PromptRelationPromptType,
   PromptTaxonomyEdgeItem,
@@ -107,18 +108,6 @@ const FAMILY_ANCHOR_TOKENS = new Set([
   ...STYLE_TOKENS,
   ...SUBJECT_TOKENS,
 ]);
-
-function getPromptTableName(type: PromptRelationPromptType): string {
-  switch (type) {
-    case 'negative':
-      return 'negative_prompt_collection';
-    case 'auto':
-      return 'auto_prompt_collection';
-    case 'positive':
-    default:
-      return 'prompt_collection';
-  }
-}
 
 function roundScore(value: number): number {
   return Math.round(value * 100) / 100;

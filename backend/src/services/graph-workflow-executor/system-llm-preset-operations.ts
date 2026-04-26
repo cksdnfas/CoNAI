@@ -2,6 +2,7 @@ import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { settingsService } from '../settingsService'
 import { buildRuntimeArtifact } from './system-module-artifacts'
 import {
+  normalizeOptionalString,
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
@@ -20,15 +21,6 @@ function normalizePresetType(value: unknown): LlmPresetCollectionKey {
   return value === 'systemPromptPresets' || value === 'structuredOutputJsonPresets'
     ? value
     : 'promptPresets'
-}
-
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
 }
 
 function parseStructuredOutputJsonPreset(value: string, presetName: string) {

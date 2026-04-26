@@ -3,6 +3,7 @@ import path from 'path'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
 import { runtimePaths } from '../config/runtimePaths'
+import { normalizeOptionalString } from '../utils/valueNormalization'
 import { assertCodexAvailable, resolveCodexCommand } from './codexGenerationExecutor'
 
 const CODEX_MESSAGE_JOB_ROOT = path.join(runtimePaths.tempDir, 'codex-message-jobs')
@@ -29,15 +30,6 @@ export type ExecuteCodexMessageResponse = {
   model: string | null
   responseMode: CodexResponseMode
   metadata: Record<string, unknown>
-}
-
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
 }
 
 function normalizeImageDataUrl(value: unknown) {

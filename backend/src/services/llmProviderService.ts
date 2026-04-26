@@ -1,5 +1,6 @@
 import sharp from 'sharp'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
+import { normalizeOptionalString } from '../utils/valueNormalization'
 import type { ProviderType } from '../types/externalApi'
 
 type LlmResponseMode = 'text' | 'json'
@@ -25,15 +26,6 @@ export type ExecuteLlmTextResponse = {
   model: string | null
   responseMode: LlmResponseMode
   metadata: Record<string, unknown>
-}
-
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
 }
 
 function normalizeOptionalNumber(value: unknown) {

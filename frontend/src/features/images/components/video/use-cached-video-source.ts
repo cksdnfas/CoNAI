@@ -80,16 +80,6 @@ function touchCachedEntry(sourceUrl: string) {
   entry.lastAccessedAt = Date.now()
 }
 
-function getTotalCachedVideoBytes() {
-  let total = 0
-
-  for (const entry of cachedVideoEntries.values()) {
-    total += entry.size
-  }
-
-  return total
-}
-
 function evictInMemoryCachedVideoEntries(_excludedSourceUrl?: string | null) {
   // Runtime blob URLs proved too fragile to revoke aggressively while virtualized
   // media elements may still be mounting, unmounting, or decoding.

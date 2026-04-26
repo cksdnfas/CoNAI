@@ -7,24 +7,10 @@ import {
   GroupImportData
 } from '../types/promptGroup';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
-
-const getTableName = (type: 'positive' | 'negative' | 'auto'): string => {
-  switch (type) {
-    case 'auto': return 'auto_prompt_groups';
-    case 'negative': return 'negative_prompt_groups';
-    case 'positive':
-    default: return 'prompt_groups';
-  }
-};
-
-const getPromptTableName = (type: 'positive' | 'negative' | 'auto'): string => {
-  switch (type) {
-    case 'auto': return 'auto_prompt_collection';
-    case 'negative': return 'negative_prompt_collection';
-    case 'positive':
-    default: return 'prompt_collection';
-  }
-};
+import {
+  getPromptCollectionTableName as getPromptTableName,
+  getPromptGroupTableName as getTableName,
+} from '../utils/promptTables';
 
 export class PromptGroupModel {
   /**

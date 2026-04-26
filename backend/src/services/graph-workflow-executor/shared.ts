@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { GraphExecutionLogModel } from '../../models/GraphExecutionLog'
+export { normalizeOptionalString, parsePositiveIntegerish } from '../../utils/valueNormalization'
 import {
   type GraphWorkflowDocument,
   type GraphWorkflowExposedInput,

@@ -19,7 +19,7 @@ import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-charac
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 import { TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import { getWorkflowInputSourcePort } from '../module-graph-workflow-inputs'
-import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, normalizeOptionalString, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 type NodeInspectorPanelProps = {
   nodes: ModuleGraphNode[]
@@ -64,23 +64,6 @@ const LLM_PRESET_TYPE_OPTIONS: Array<{ value: LlmPresetCollectionKey; label: str
 const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-3'
 const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'space-y-3 rounded-sm border border-border/70 bg-background/35 p-4'
 const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'rounded-sm border border-border/70 bg-background/35 p-4'
-
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function resolveSelectOptionsWithCurrentValue(options: string[] | null | undefined, currentValue: string | null) {
-  const normalizedOptions = Array.isArray(options) ? options.filter((option) => option.trim().length > 0) : []
-  if (currentValue && !normalizedOptions.includes(currentValue)) {
-    return [...normalizedOptions, currentValue]
-  }
-  return normalizedOptions
-}
 
 function normalizeLlmPresetType(value: unknown): LlmPresetCollectionKey {
   return value === 'systemPromptPresets' || value === 'structuredOutputJsonPresets'

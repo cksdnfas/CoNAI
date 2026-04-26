@@ -1,4 +1,5 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
+import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
 import type { ApiResponse, ImageRecord } from '@/types/image'
 import type {
   GroupAutoCollectAllResult,
@@ -42,40 +43,6 @@ function normalizeGroupFileCounts(counts: GroupFileCounts): GroupFileCounts {
     original: Number(counts.original ?? 0),
     video: Number(counts.video ?? 0),
   }
-}
-
-function getDownloadFileName(contentDisposition: string | null, fallbackFileName: string) {
-  if (!contentDisposition) {
-    return fallbackFileName
-  }
-
-  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
-  if (utf8Match?.[1]) {
-    return decodeURIComponent(utf8Match[1])
-  }
-
-  const basicMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
-  if (basicMatch?.[1]) {
-    return basicMatch[1]
-  }
-
-  return fallbackFileName
-}
-
-async function readDownloadError(response: Response) {
-  const contentType = response.headers.get('Content-Type') || ''
-
-  if (contentType.includes('application/json')) {
-    try {
-      const payload = (await response.json()) as ApiResponse<unknown>
-      return payload.error || `Request failed: ${response.status}`
-    } catch {
-      return `Request failed: ${response.status}`
-    }
-  }
-
-  const text = await response.text().catch(() => '')
-  return text || `Request failed: ${response.status}`
 }
 
 export async function getGroupsHierarchyAll() {

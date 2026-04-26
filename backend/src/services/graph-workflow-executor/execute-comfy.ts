@@ -16,6 +16,8 @@ import { ImageUploadService } from '../imageUploadService'
 import { saveArtifactBuffer, saveMetadataArtifact } from './artifacts'
 import {
   bufferToDataUrl,
+  normalizeOptionalString,
+  parsePositiveIntegerish,
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
@@ -36,28 +38,6 @@ function resolveComfyOutputMimeType(output: { format?: string; filename: string;
   }
 
   return FileDiscoveryService.getMimeType(output.filename || output.tempPath)
-}
-
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function parsePositiveIntegerish(value: unknown) {
-  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
-    return value
-  }
-
-  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
-    const parsed = Number.parseInt(value.trim(), 10)
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-  }
-
-  return null
 }
 
 function sleep(ms: number) {

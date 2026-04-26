@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import type { ModuleDefinitionRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { getModuleBaseDisplayName, isFinalResultModule } from '../module-graph-shared'
+import { getModuleBaseDisplayName, getModuleOperationKey, isFinalResultModule } from '../module-graph-shared'
 
 type ModuleLibraryPanelProps = {
   modules: ModuleDefinitionRecord[]
@@ -46,18 +46,6 @@ function toTitleCase(rawValue: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
-}
-
-function getModuleOperationKey(module: ModuleDefinitionRecord) {
-  if (typeof module.internal_fixed_values?.operation_key === 'string') {
-    return module.internal_fixed_values.operation_key
-  }
-
-  if (typeof module.template_defaults?.operation_key === 'string') {
-    return module.template_defaults.operation_key
-  }
-
-  return null
 }
 
 function getNormalizedModuleName(module: ModuleDefinitionRecord) {

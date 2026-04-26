@@ -3,16 +3,7 @@ import { PromptCollectionRecord,
 NegativePromptCollectionRecord,
 PromptCollectionData,
 PromptSearchResult } from '@conai/shared';
-
-// Helper to get table name
-const getTableName = (type: 'positive' | 'negative' | 'auto'): string => {
-  switch (type) {
-    case 'auto': return 'auto_prompt_collection';
-    case 'negative': return 'negative_prompt_collection';
-    case 'positive':
-    default: return 'prompt_collection';
-  }
-};
+import { getPromptCollectionTableName as getTableName } from '../utils/promptTables';
 
 export class PromptCollectionModel {
   /**

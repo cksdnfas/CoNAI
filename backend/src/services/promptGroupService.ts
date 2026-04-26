@@ -12,25 +12,10 @@ import {
   PromptBackupItem
 } from '../types/promptGroup';
 import { db } from '../database/init';
-
-// Helper to get table name
-const getTableName = (type: 'positive' | 'negative' | 'auto'): string => {
-  switch (type) {
-    case 'auto': return 'auto_prompt_groups';
-    case 'negative': return 'negative_prompt_groups';
-    case 'positive':
-    default: return 'prompt_groups';
-  }
-};
-
-const getPromptTableName = (type: 'positive' | 'negative' | 'auto'): string => {
-  switch (type) {
-    case 'auto': return 'auto_prompt_collection';
-    case 'negative': return 'negative_prompt_collection';
-    case 'positive':
-    default: return 'prompt_collection';
-  }
-};
+import {
+  getPromptCollectionTableName as getPromptTableName,
+  getPromptGroupTableName as getTableName,
+} from '../utils/promptTables';
 
 export class PromptGroupService {
   private static isProtectedLoRAGroup(group: { group_name?: string | null } | null | undefined): boolean {
