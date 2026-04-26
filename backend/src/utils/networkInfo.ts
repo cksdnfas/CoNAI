@@ -129,11 +129,3 @@ export function formatNetworkInfo(info: NetworkInfo): string[] {
   return lines;
 }
 
-/**
- * Generate simple ASCII QR code for terminal (optional)
- */
-export function generateSimpleQR(url: string): string {
-  // For now, just return the URL
-  // In the future, could integrate a QR code library like 'qrcode-terminal'
-  return url;
-}

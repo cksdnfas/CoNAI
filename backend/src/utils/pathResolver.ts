@@ -138,22 +138,3 @@ export function resolveFolderPath(folderPath: string): string {
   return path.resolve(runtimePaths.basePath, folderPath);
 }
 
-/**
- * 절대 경로를 상대 경로로 변환 (가능한 경우)
- *
- * @param absolutePath 절대 경로
- * @returns basePath 기준 상대 경로 또는 원본 절대 경로
- */
-export function toRelativePath(absolutePath: string): string {
-  // basePath 하위 경로인지 확인
-  const normalized = path.normalize(absolutePath);
-  const baseNormalized = path.normalize(runtimePaths.basePath);
-
-  if (normalized.startsWith(baseNormalized)) {
-    // basePath 기준 상대 경로로 변환
-    return path.relative(baseNormalized, normalized);
-  }
-
-  // basePath 외부 경로는 절대 경로 유지
-  return absolutePath;
-}
