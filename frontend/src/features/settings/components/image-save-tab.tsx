@@ -25,11 +25,16 @@ const DEFAULT_GENERATION_THROTTLE_SETTINGS: GenerationThrottleSettings = {
     cooldownAfterCompletions: 3,
     cooldownSeconds: 60,
   },
+  reservations: {
+    maxConcurrentJobs: 3,
+    userQueuePolicy: 'continue_limited',
+  },
 }
 
 type GenerationThrottleDraftPatch = {
   novelai?: Partial<GenerationThrottleSettings['novelai']>
   codex?: Partial<GenerationThrottleSettings['codex']>
+  reservations?: Partial<GenerationThrottleSettings['reservations']>
 }
 
 interface ImageSaveTabProps {
@@ -81,6 +86,41 @@ export function ImageSaveTab({
         >
           {generationThrottleDraft ? (
             <div className="space-y-5">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-base font-semibold text-foreground">예약작업</div>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    onClick={() => onPatchGenerationThrottle({ reservations: DEFAULT_GENERATION_THROTTLE_SETTINGS.reservations })}
+                    aria-label="예약작업 실행 정책 초기값으로 되돌리기"
+                    title="예약작업 초기값"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <SettingsField label="예약 동시 실행 수">
+                    <Input type="number" min={1} max={12} variant="settings" value={generationThrottleDraft.reservations.maxConcurrentJobs} onChange={(event) => onPatchGenerationThrottle({ reservations: { maxConcurrentJobs: Number(event.target.value) || 1 } })} />
+                  </SettingsField>
+                  <SettingsField label="사용자 대기열이 있을 때">
+                    <Select
+                      variant="settings"
+                      value={generationThrottleDraft.reservations.userQueuePolicy}
+                      onChange={(event) => onPatchGenerationThrottle({ reservations: { userQueuePolicy: event.target.value as GenerationThrottleSettings['reservations']['userQueuePolicy'] } })}
+                    >
+                      <option value="continue_limited">예약은 1개만 계속</option>
+                      <option value="hold_until_empty">새 예약 시작 보류</option>
+                    </Select>
+                  </SettingsField>
+                </div>
+              </div>
+
+              <div className="px-3 py-1">
+                <div className="h-px bg-border/70" />
+              </div>
+
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-base font-semibold text-foreground">NovelAI</div>
@@ -140,7 +180,7 @@ export function ImageSaveTab({
               </div>
             </div>
           ) : (
-            <Skeleton className="h-52 w-full rounded-sm" />
+            <Skeleton className="h-72 w-full rounded-sm" />
           )}
         </SettingsSection>
       </section>

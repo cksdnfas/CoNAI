@@ -172,8 +172,26 @@ router.put(
       return true;
     };
 
+    const validateReservationThrottle = (reservationSettings: Partial<GenerationThrottleSettings['reservations']> | undefined) => {
+      if (reservationSettings === undefined) {
+        return true;
+      }
+
+      if (!reservationSettings || typeof reservationSettings !== 'object' || Array.isArray(reservationSettings)) {
+        res.status(400).json({ success: false, error: 'Reservation throttle settings must be an object' });
+        return false;
+      }
+
+      const validUserQueuePolicies = ['continue_limited', 'hold_until_empty'] as const;
+      if (!validateIntegerInRangeIfDefined(res, reservationSettings.maxConcurrentJobs, 1, 12, 'Reservation maxConcurrentJobs must be an integer between 1 and 12')) return false;
+      if (!validateStringEnumIfDefined(res, reservationSettings.userQueuePolicy, validUserQueuePolicies, `Reservation userQueuePolicy must be one of: ${validUserQueuePolicies.join(', ')}`)) return false;
+
+      return true;
+    };
+
     if (!validateServiceThrottle(generationThrottleSettings.novelai, 'NovelAI')) return;
     if (!validateServiceThrottle(generationThrottleSettings.codex, 'Codex')) return;
+    if (!validateReservationThrottle(generationThrottleSettings.reservations)) return;
 
     const updatedSettings = settingsService.updateGenerationThrottleSettings(generationThrottleSettings);
 

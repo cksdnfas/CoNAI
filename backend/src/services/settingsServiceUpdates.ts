@@ -149,6 +149,10 @@ export function applyGenerationThrottleSettingsUpdate(currentSettings: AppSettin
         ...currentSettings.generationThrottle.codex,
         ...generationThrottleSettings.codex,
       },
+      reservations: {
+        ...currentSettings.generationThrottle.reservations,
+        ...generationThrottleSettings.reservations,
+      },
     },
   };
 }

@@ -1,7 +1,9 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
+import { GenerationQueueModel } from '../models/GenerationQueue'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import { GraphWorkflowExecutor } from './graphWorkflowExecutor'
+import { settingsService } from './settingsService'
 import { writeExecutionLog } from './graph-workflow-executor/shared'
 
 type QueuedExecutionJob = {
@@ -10,6 +12,7 @@ type QueuedExecutionJob = {
   inputValues?: Record<string, unknown>
   targetNodeId?: string
   forceRerun?: boolean
+  triggerType: 'manual' | 'schedule'
   scheduleId?: number | null
 }
 
@@ -31,13 +34,15 @@ type InterruptedExecutionRecoverySummary = {
 
 const QUEUED_EXECUTION_RESTART_MESSAGE = 'Backend restarted before this queued graph execution could begin. Re-run is required.'
 const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
+const QUEUE_RECHECK_INTERVAL_MS = 5000
 
-/** Manage graph workflow executions through a simple in-memory background queue. */
+/** Manage graph workflow executions through an in-memory background queue. */
 export class GraphWorkflowExecutionQueue {
   private static initialized = false
   private static queue: QueuedExecutionJob[] = []
-  private static runningExecutionId: number | null = null
+  private static runningJobs = new Map<number, QueuedExecutionJob>()
   private static cancelRequestedExecutionIds = new Set<number>()
+  private static processRetryTimer: NodeJS.Timeout | null = null
 
   /** Apply one conservative startup recovery pass before new executions are queued. */
   static start() {
@@ -83,7 +88,7 @@ export class GraphWorkflowExecutionQueue {
     return recoverTransaction()
   }
 
-  /** Enqueue a workflow execution and start the worker if idle. */
+  /** Enqueue a workflow execution and start workers when capacity allows. */
   static enqueue(
     workflowId: number,
     inputValues?: Record<string, unknown>,
@@ -96,11 +101,12 @@ export class GraphWorkflowExecutionQueue {
       throw new Error('Graph workflow not found')
     }
 
+    const triggerType = executionMeta?.triggerType ?? 'manual'
     const executionId = GraphExecutionModel.create({
       graph_workflow_id: workflow.id,
       graph_version: workflow.version,
       status: 'queued',
-      trigger_type: executionMeta?.triggerType ?? 'manual',
+      trigger_type: triggerType,
       schedule_id: executionMeta?.scheduleId ?? null,
       execution_plan: null,
       started_at: null,
@@ -116,13 +122,13 @@ export class GraphWorkflowExecutionQueue {
         targetNodeId: targetNodeId ?? null,
         forceRerun,
         inputKeys: Object.keys(inputValues ?? {}),
-        triggerType: executionMeta?.triggerType ?? 'manual',
+        triggerType,
         scheduleId: executionMeta?.scheduleId ?? null,
       },
     })
 
-    this.queue.push({ executionId, workflowId, inputValues, targetNodeId, forceRerun, scheduleId: executionMeta?.scheduleId ?? null })
-    void this.processNext()
+    this.queue.push({ executionId, workflowId, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null })
+    this.processQueue()
 
     return {
       executionId,
@@ -165,7 +171,7 @@ export class GraphWorkflowExecutionQueue {
       }
     }
 
-    if (this.runningExecutionId === executionId) {
+    if (this.runningJobs.has(executionId)) {
       this.cancelRequestedExecutionIds.add(executionId)
       writeExecutionLog({
         executionId,
@@ -207,10 +213,9 @@ export class GraphWorkflowExecutionQueue {
     }
 
     let runningCancellationRequested = 0
-    if (this.runningExecutionId !== null) {
-      const runningExecution = GraphExecutionModel.findById(this.runningExecutionId)
-      if (runningExecution?.schedule_id && scheduleIdSet.has(runningExecution.schedule_id)) {
-        const result = this.cancel(this.runningExecutionId)
+    for (const runningJob of this.runningJobs.values()) {
+      if (runningJob.scheduleId !== null && runningJob.scheduleId !== undefined && scheduleIdSet.has(runningJob.scheduleId)) {
+        const result = this.cancel(runningJob.executionId)
         if (result.success) {
           runningCancellationRequested += 1
         }
@@ -234,34 +239,142 @@ export class GraphWorkflowExecutionQueue {
     return this.cancelRequestedExecutionIds.has(executionId)
   }
 
-  /** Start the next queued execution when no job is running. */
-  private static async processNext() {
-    if (this.runningExecutionId !== null) {
-      return
+  /** Start queued executions while manual and reservation policies allow it. */
+  private static processQueue() {
+    this.clearProcessRetry()
+
+    let startedAny = false
+    while (this.tryStartNextJob()) {
+      startedAny = true
     }
 
-    const nextJob = this.queue.shift()
-    if (!nextJob) {
-      return
+    if (!startedAny && this.queue.length > 0) {
+      this.scheduleProcessRetry()
+    }
+  }
+
+  /** Start one dispatchable job, prioritizing manual work over reservation work. */
+  private static tryStartNextJob() {
+    const manualRunning = this.countRunningJobs('manual')
+    if (manualRunning === 0) {
+      const manualIndex = this.queue.findIndex((job) => job.triggerType === 'manual')
+      if (manualIndex !== -1) {
+        const [manualJob] = this.queue.splice(manualIndex, 1)
+        if (manualJob) {
+          this.startJob(manualJob)
+          return true
+        }
+      }
     }
 
-    this.runningExecutionId = nextJob.executionId
+    const scheduleLimit = this.resolveScheduleConcurrencyLimit()
+    if (this.countRunningJobs('schedule') >= scheduleLimit) {
+      return false
+    }
 
-    try {
-      GraphExecutionModel.updateStatus(nextJob.executionId, 'running')
-      await GraphWorkflowExecutor.execute(nextJob.workflowId, {
-        executionId: nextJob.executionId,
-        runtimeInputValues: nextJob.inputValues,
-        targetNodeId: nextJob.targetNodeId,
-        forceRerun: nextJob.forceRerun,
-        shouldCancel: () => this.cancelRequestedExecutionIds.has(nextJob.executionId),
+    const scheduleIndex = this.queue.findIndex((job) => job.triggerType === 'schedule')
+    if (scheduleIndex === -1) {
+      return false
+    }
+
+    const [scheduleJob] = this.queue.splice(scheduleIndex, 1)
+    if (!scheduleJob) {
+      return false
+    }
+
+    this.startJob(scheduleJob)
+    return true
+  }
+
+  /** Resolve the current reservation concurrency cap without stopping already-running work. */
+  private static resolveScheduleConcurrencyLimit() {
+    const reservationSettings = settingsService.loadSettings().generationThrottle.reservations
+    const configuredLimit = Math.max(1, Math.min(12, Number(reservationSettings.maxConcurrentJobs) || 1))
+    const userWorkPresent = this.hasManualGraphWorkPendingOrRunning() || GenerationQueueModel.hasActiveUserSubmittedJobs()
+
+    if (!userWorkPresent) {
+      return configuredLimit
+    }
+
+    if (reservationSettings.userQueuePolicy === 'hold_until_empty') {
+      return 0
+    }
+
+    return 1
+  }
+
+  /** Treat manual graph executions and user-submitted generation queue jobs as foreground work. */
+  private static hasManualGraphWorkPendingOrRunning() {
+    if (this.queue.some((job) => job.triggerType === 'manual')) {
+      return true
+    }
+
+    for (const runningJob of this.runningJobs.values()) {
+      if (runningJob.triggerType === 'manual') {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  /** Count currently running graph executions by trigger type. */
+  private static countRunningJobs(triggerType: QueuedExecutionJob['triggerType']) {
+    let count = 0
+    for (const runningJob of this.runningJobs.values()) {
+      if (runningJob.triggerType === triggerType) {
+        count += 1
+      }
+    }
+    return count
+  }
+
+  /** Run one claimed execution in the background. */
+  private static startJob(job: QueuedExecutionJob) {
+    this.runningJobs.set(job.executionId, job)
+
+    void this.runJob(job)
+      .catch((error) => {
+        console.error('Background graph execution failed:', error)
       })
-    } catch (error) {
-      console.error('Background graph execution failed:', error)
-    } finally {
-      this.cancelRequestedExecutionIds.delete(nextJob.executionId)
-      this.runningExecutionId = null
-      void this.processNext()
+      .finally(() => {
+        this.cancelRequestedExecutionIds.delete(job.executionId)
+        this.runningJobs.delete(job.executionId)
+        this.processQueue()
+      })
+  }
+
+  /** Execute one claimed job after moving it to running. */
+  private static async runJob(job: QueuedExecutionJob) {
+    GraphExecutionModel.updateStatus(job.executionId, 'running')
+    await GraphWorkflowExecutor.execute(job.workflowId, {
+      executionId: job.executionId,
+      runtimeInputValues: job.inputValues,
+      targetNodeId: job.targetNodeId,
+      forceRerun: job.forceRerun,
+      shouldCancel: () => this.cancelRequestedExecutionIds.has(job.executionId),
+    })
+  }
+
+  /** Retry held queued work so reservations resume after foreground queue pressure clears. */
+  private static scheduleProcessRetry() {
+    if (this.processRetryTimer || this.queue.length === 0) {
+      return
     }
+
+    this.processRetryTimer = setTimeout(() => {
+      this.processRetryTimer = null
+      this.processQueue()
+    }, QUEUE_RECHECK_INTERVAL_MS)
+  }
+
+  /** Clear the retry timer before an immediate processing pass. */
+  private static clearProcessRetry() {
+    if (!this.processRetryTimer) {
+      return
+    }
+
+    clearTimeout(this.processRetryTimer)
+    this.processRetryTimer = null
   }
 }

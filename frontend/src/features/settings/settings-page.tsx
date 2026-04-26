@@ -243,6 +243,7 @@ export function SettingsPage() {
   const patchGenerationThrottleDraft = (patch: {
     novelai?: Partial<GenerationThrottleSettings['novelai']>
     codex?: Partial<GenerationThrottleSettings['codex']>
+    reservations?: Partial<GenerationThrottleSettings['reservations']>
   }) => {
     if (!effectiveGenerationThrottleDraft) return
     setGenerationThrottleDraft({
@@ -253,6 +254,10 @@ export function SettingsPage() {
       codex: {
         ...effectiveGenerationThrottleDraft.codex,
         ...patch.codex,
+      },
+      reservations: {
+        ...effectiveGenerationThrottleDraft.reservations,
+        ...patch.reservations,
       },
     })
   }

@@ -198,9 +198,17 @@ export interface GenerationThrottleServiceSettings {
   cooldownSeconds: number
 }
 
+export type GenerationReservationUserQueuePolicy = 'continue_limited' | 'hold_until_empty'
+
+export interface GenerationReservationSettings {
+  maxConcurrentJobs: number
+  userQueuePolicy: GenerationReservationUserQueuePolicy
+}
+
 export interface GenerationThrottleSettings {
   novelai: GenerationThrottleServiceSettings
   codex: GenerationThrottleServiceSettings
+  reservations: GenerationReservationSettings
 }
 
 export interface VideoOptimizationSettings {

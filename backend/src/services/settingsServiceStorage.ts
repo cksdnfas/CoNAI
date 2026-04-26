@@ -466,6 +466,10 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
         cooldownAfterCompletions: 3,
         cooldownSeconds: 60,
       },
+      reservations: {
+        maxConcurrentJobs: 3,
+        userQueuePolicy: 'continue_limited',
+      },
     },
     videoOptimization: {
       enabled: true,
@@ -574,6 +578,10 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
         ...defaults.generationThrottle.codex,
         ...loadedSettings.generationThrottle?.codex,
       },
+      reservations: {
+        ...defaults.generationThrottle.reservations,
+        ...loadedSettings.generationThrottle?.reservations,
+      },
     },
     videoOptimization: {
       ...defaults.videoOptimization,
@@ -644,6 +652,12 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
 
   for (const key of Object.keys(defaults.generationThrottle.codex)) {
     if (!(key in (loaded.generationThrottle?.codex || {}))) {
+      return true;
+    }
+  }
+
+  for (const key of Object.keys(defaults.generationThrottle.reservations)) {
+    if (!(key in (loaded.generationThrottle?.reservations || {}))) {
       return true;
     }
   }

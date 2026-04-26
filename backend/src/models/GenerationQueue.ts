@@ -158,6 +158,21 @@ export class GenerationQueueModel {
     return this.updateIfCurrentStatus(id, expectedStatuses, { cancel_requested: true })
   }
 
+  /** Check whether a user-submitted generation queue job is waiting or running. */
+  static hasActiveUserSubmittedJobs() {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT 1 AS present
+      FROM generation_queue_jobs
+      WHERE status IN ('queued', 'dispatching', 'running')
+        AND requested_by_account_id IS NOT NULL
+        AND cancel_requested = 0
+      LIMIT 1
+    `).get() as { present: number } | undefined
+
+    return Boolean(row)
+  }
+
   /** Summarize queue totals by status. */
   static getStatusCounts() {
     const db = getUserSettingsDb()
