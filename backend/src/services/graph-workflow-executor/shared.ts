@@ -173,14 +173,7 @@ export function buildRuntimeInputSignature(runtimeInputValues?: Record<string, u
   return crypto.createHash('sha256').update(stableJson).digest('hex')
 }
 
-/** Strip a data URL prefix so image APIs receive raw base64. */
-export function normalizeBase64ImageData(value?: string): string | undefined {
-  if (!value || typeof value !== 'string') {
-    return undefined
-  }
-
-  return value.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, '')
-}
+export { normalizeBase64ImageData } from '../../utils/base64ImageData'
 
 /** Convert an image buffer into a data URL for downstream graph nodes. */
 export function bufferToDataUrl(buffer: Buffer, mimeType = 'image/png') {

@@ -1,14 +1,8 @@
 import sharp from 'sharp'
+import { normalizeBase64ImageData } from '../base64ImageData'
 import { type NAICharacterReference, type NAICharacterPrompt, type NAIMetadataParams } from './metadata'
 
-/** Accept either raw base64 or a data URL and always return raw base64. */
-export function normalizeBase64ImageData(value?: string): string | undefined {
-  if (!value || typeof value !== 'string') {
-    return undefined
-  }
-
-  return value.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, '')
-}
+export { normalizeBase64ImageData }
 
 /** Decode a raw base64 string or data URL into a binary buffer. */
 function decodeBase64Image(value: string) {

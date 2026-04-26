@@ -1,18 +1,11 @@
 import path from 'path'
 import { type MarkedField } from '../types/workflow'
+import { normalizeBase64ImageData } from '../utils/base64ImageData'
 import { ComfyUIService } from './comfyuiService'
 
 interface WorkflowImageFieldPayload {
   fileName?: string
   dataUrl?: string
-}
-
-function normalizeBase64ImageData(value?: string) {
-  if (!value || typeof value !== 'string') {
-    return undefined
-  }
-
-  return value.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/i, '')
 }
 
 function sanitizeUploadSegment(value: string) {
