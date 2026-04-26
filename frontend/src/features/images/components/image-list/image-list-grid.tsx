@@ -21,6 +21,8 @@ interface ImageListGridProps {
   onEndReached?: () => void
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  showDefaultQuickActions?: boolean
+  interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
 }
 
@@ -42,6 +44,8 @@ export function ImageListGrid({
   onEndReached,
   renderItemOverlay,
   renderItemPersistentOverlay,
+  showDefaultQuickActions,
+  interactive,
   shouldBlurItemPreview,
 }: ImageListGridProps) {
   const usesWindowScroll = scrollMode === 'window'
@@ -96,6 +100,8 @@ export function ImageListGrid({
               onActivate={onActivate}
               renderOverlay={renderItemOverlay?.(image)}
               renderPersistentOverlay={renderItemPersistentOverlay?.(image)}
+              showDefaultQuickActions={showDefaultQuickActions}
+              interactive={interactive}
               blurPreview={shouldBlurItemPreview?.(image) ?? false}
             />
           )

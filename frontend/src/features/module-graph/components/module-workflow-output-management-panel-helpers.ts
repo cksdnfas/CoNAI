@@ -175,7 +175,7 @@ function buildOutputImageRecord(item: ModuleWorkflowGeneratedOutputItem): ImageR
 
   return {
     id: item.id,
-    composite_hash: item.id,
+    composite_hash: null,
     original_file_path: item.storagePath ?? item.downloadName,
     thumbnail_url: item.previewUrl,
     image_url: item.downloadUrl,

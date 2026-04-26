@@ -24,6 +24,8 @@ interface ImageListItemProps {
   onActivate?: (image: ImageRecord, itemId: string, href?: string) => void
   renderOverlay?: ReactNode
   renderPersistentOverlay?: ReactNode
+  showDefaultQuickActions?: boolean
+  interactive?: boolean
   blurPreview?: boolean
 }
 
@@ -44,6 +46,8 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   onActivate,
   renderOverlay,
   renderPersistentOverlay,
+  showDefaultQuickActions = true,
+  interactive = true,
   blurPreview = false,
 }: ImageListItemProps) {
   const previewUrl = getImageListPreviewUrl(image)
@@ -104,13 +108,17 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   )
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) {
+      return
+    }
+
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       onActivate?.(image, imageId, href)
     }
   }
 
-  const quickActions = !selectionMode ? (
+  const quickActions = showDefaultQuickActions && !selectionMode ? (
     <div
       className="absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
       onMouseDown={(event) => event.stopPropagation()}
@@ -123,20 +131,20 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
       className={cn(
         'theme-list-shadow image-list-selectable group relative isolate block w-full rounded-sm bg-surface-low text-left transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-primary/60 hover:z-10 focus-within:z-10',
         selected && 'is-selected',
-        selectionMode ? 'cursor-default' : 'cursor-pointer',
+        selectionMode || !interactive ? 'cursor-default' : 'cursor-pointer',
       )}
       data-image-id={imageId}
       data-selected={selected ? 'true' : 'false'}
-      aria-label={`${displayName} ${selectionMode ? 'select' : 'detail'}`}
+      aria-label={interactive ? `${displayName} ${selectionMode ? 'select' : 'detail'}` : displayName}
       aria-pressed={selected}
       draggable={false}
       onDragStart={preventNativeDrag}
-      onClick={() => onActivate?.(image, imageId, href)}
+      onClick={interactive ? (() => onActivate?.(image, imageId, href)) : undefined}
       onKeyDown={handleKeyDown}
     >
       <div className="relative overflow-hidden rounded-sm bg-surface-lowest select-none">

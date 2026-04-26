@@ -18,6 +18,8 @@ interface ImageListMasonryProps {
   viewportHeight?: number | string
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  showDefaultQuickActions?: boolean
+  interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
 }
 
@@ -30,6 +32,8 @@ interface ImageListMasonryContext {
   onActivate: (image: ImageRecord, imageId: string, href?: string) => void
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  showDefaultQuickActions?: boolean
+  interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
 }
 
@@ -51,6 +55,8 @@ const MasonryItemContent: ItemContent<ImageRecord, ImageListMasonryContext> = ({
         onActivate={context.onActivate}
         renderOverlay={context.renderItemOverlay?.(image)}
         renderPersistentOverlay={context.renderItemPersistentOverlay?.(image)}
+        showDefaultQuickActions={context.showDefaultQuickActions}
+        interactive={context.interactive}
         blurPreview={context.shouldBlurItemPreview?.(image) ?? false}
       />
     </div>
@@ -72,6 +78,8 @@ export function ImageListMasonry({
   viewportHeight,
   renderItemOverlay,
   renderItemPersistentOverlay,
+  showDefaultQuickActions,
+  interactive,
   shouldBlurItemPreview,
 }: ImageListMasonryProps) {
   const usesWindowScroll = scrollMode === 'window'
@@ -95,6 +103,8 @@ export function ImageListMasonry({
         onActivate,
         renderItemOverlay,
         renderItemPersistentOverlay,
+        showDefaultQuickActions,
+        interactive,
         shouldBlurItemPreview,
       }}
       useWindowScroll={usesWindowScroll}

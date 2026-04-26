@@ -8,7 +8,7 @@ export type ImageListScrollMode = 'window' | 'container'
 export interface ImageListProps {
   items: ImageRecord[]
   layout?: ImageListLayoutMode
-  activationMode?: 'navigate' | 'modal' | 'modal-single'
+  activationMode?: 'none' | 'navigate' | 'modal' | 'modal-single'
   getItemHref?: (image: ImageRecord) => string | undefined
   getItemId?: (image: ImageRecord) => string
   selectable?: boolean
@@ -29,6 +29,7 @@ export interface ImageListProps {
   selectionAreaClass?: string
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  showDefaultQuickActions?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
   modalAccessOptions?: ImageViewModalAccessOptions
 }

@@ -1,5 +1,13 @@
 import { Badge } from '@/components/ui/badge'
+import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphWorkflowRecord } from '@/lib/api'
+import type { ImageRecord } from '@/types/image'
+import {
+  getArtifactPreviewUrl,
+  isGraphArtifactVisualMedia,
+  parseArtifactMetadataRecord,
+  resolveGraphArtifactMimeType,
+} from '../module-graph-shared'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { getNodeDisplayLabel } from './graph-execution-panel-helpers'
 
@@ -25,6 +33,45 @@ function buildFallbackArtifact(finalResult: GraphExecutionFinalResultRecord): Gr
   }
 }
 
+type ResolvedFinalResultEntry = {
+  finalResult: GraphExecutionFinalResultRecord
+  artifact: GraphExecutionArtifactRecord
+  nodeLabel: string
+  overlayLabel?: string
+}
+
+function readMetadataNumber(metadata: Record<string, unknown> | null, key: string) {
+  const value = metadata?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function buildFinalResultImageRecord(entry: ResolvedFinalResultEntry): ImageRecord | null {
+  const previewUrl = getArtifactPreviewUrl(entry.artifact)
+  if (!previewUrl || !isGraphArtifactVisualMedia(entry.artifact)) {
+    return null
+  }
+
+  const mimeType = resolveGraphArtifactMimeType(entry.artifact)
+  const fileType = mimeType?.startsWith('video/')
+    ? 'video'
+    : mimeType === 'image/gif'
+      ? 'animated'
+      : 'image'
+  const metadata = parseArtifactMetadataRecord(entry.artifact.metadata)
+
+  return {
+    id: `final-result-${entry.finalResult.id}`,
+    composite_hash: null,
+    original_file_path: entry.artifact.storage_path,
+    thumbnail_url: previewUrl,
+    image_url: previewUrl,
+    width: readMetadataNumber(metadata, 'width'),
+    height: readMetadataNumber(metadata, 'height'),
+    mime_type: mimeType,
+    file_type: fileType,
+  }
+}
+
 /** Render one shared explicit-final-results surface for workflow runner and execution panels. */
 export function WorkflowFinalResultsSection({
   finalResults,
@@ -40,10 +87,26 @@ export function WorkflowFinalResultsSection({
   emptyLabel?: string
 }) {
   const artifactsById = new Map(artifacts.map((artifact) => [artifact.id, artifact]))
-  const resolvedEntries = finalResults.map((finalResult) => ({
-    finalResult,
-    artifact: artifactsById.get(finalResult.source_artifact_id) ?? buildFallbackArtifact(finalResult),
-  }))
+  const resolvedEntries: ResolvedFinalResultEntry[] = finalResults.map((finalResult) => {
+    const finalNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.final_node_id, nodeLabelOverrides)
+
+    return {
+      finalResult,
+      artifact: artifactsById.get(finalResult.source_artifact_id) ?? buildFallbackArtifact(finalResult),
+      nodeLabel: finalNodeLabel,
+      overlayLabel: getFinalResultOverlayLabel(finalNodeLabel),
+    }
+  })
+  const visualEntries: Array<{ entry: ResolvedFinalResultEntry; image: ImageRecord }> = []
+  for (const entry of resolvedEntries) {
+    const image = buildFinalResultImageRecord(entry)
+    if (image) {
+      visualEntries.push({ entry, image })
+    }
+  }
+  const visualEntryByImageId = new Map(visualEntries.map((item) => [String(item.image.id), item.entry]))
+  const visualArtifactIds = new Set(visualEntries.map((item) => item.entry.artifact.id))
+  const nonVisualEntries = resolvedEntries.filter((entry) => !visualArtifactIds.has(entry.artifact.id))
 
   return (
     <div className="space-y-2.5">
@@ -58,20 +121,46 @@ export function WorkflowFinalResultsSection({
           {selectedGraph ? <div className="mt-1 text-xs text-muted-foreground/90">시스템 모듈의 최종 결과를 추가한 뒤, 최종으로 확정할 출력 포트에 연결해줘.</div> : null}
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {resolvedEntries.map(({ finalResult, artifact }) => {
-            const finalNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.final_node_id, nodeLabelOverrides)
+        <div className="space-y-3">
+          {visualEntries.length > 0 ? (
+            <ImageList
+              items={visualEntries.map((item) => item.image)}
+              layout="masonry"
+              activationMode="none"
+              getItemId={(image) => String(image.id)}
+              minColumnWidth={180}
+              columnGap={12}
+              rowGap={12}
+              showDefaultQuickActions={false}
+              renderItemPersistentOverlay={(image) => {
+                const entry = visualEntryByImageId.get(String(image.id))
+                if (!entry?.overlayLabel && !entry?.artifact.artifact_type) {
+                  return null
+                }
 
-            return (
-              <ExecutionArtifactCard
-                key={finalResult.id}
-                artifact={artifact}
-                compact
-                hideTitle
-                overlayLabel={getFinalResultOverlayLabel(finalNodeLabel)}
-              />
-            )
-          })}
+                return (
+                  <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-black/62 px-2 py-1 text-[11px] text-white shadow-sm backdrop-blur-sm">
+                    {entry.overlayLabel ? <span className="truncate font-medium">{entry.overlayLabel}</span> : null}
+                    <Badge variant="secondary" className="h-5 border-white/15 bg-white/14 px-1.5 text-[10px] text-white">{entry.artifact.artifact_type}</Badge>
+                  </div>
+                )
+              }}
+            />
+          ) : null}
+
+          {nonVisualEntries.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {nonVisualEntries.map(({ finalResult, artifact, overlayLabel }) => (
+                <ExecutionArtifactCard
+                  key={finalResult.id}
+                  artifact={artifact}
+                  compact
+                  hideTitle
+                  overlayLabel={overlayLabel}
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
       )}
     </div>

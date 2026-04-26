@@ -47,6 +47,7 @@ export function ImageList({
   selectionAreaClass = 'image-list-selection-area',
   renderItemOverlay,
   renderItemPersistentOverlay,
+  showDefaultQuickActions = true,
   shouldBlurItemPreview,
   modalAccessOptions,
 }: ImageListProps) {
@@ -90,6 +91,10 @@ export function ImageList({
   const handleActivate = useCallback(
     (image: ImageRecord, imageId: string, href?: string) => {
       if (shouldSuppressClick()) {
+        return
+      }
+
+      if (activationMode === 'none') {
         return
       }
 
@@ -226,6 +231,8 @@ export function ImageList({
               onEndReached={handleEndReached}
               renderItemOverlay={renderItemOverlay}
               renderItemPersistentOverlay={renderItemPersistentOverlay}
+              showDefaultQuickActions={showDefaultQuickActions}
+              interactive={activationMode !== 'none' || selectionMode}
               shouldBlurItemPreview={shouldBlurItemPreview}
             />
           ) : (
@@ -243,6 +250,8 @@ export function ImageList({
               viewportHeight={viewportHeight}
               renderItemOverlay={renderItemOverlay}
               renderItemPersistentOverlay={renderItemPersistentOverlay}
+              showDefaultQuickActions={showDefaultQuickActions}
+              interactive={activationMode !== 'none' || selectionMode}
               shouldBlurItemPreview={shouldBlurItemPreview}
             />
           )}
