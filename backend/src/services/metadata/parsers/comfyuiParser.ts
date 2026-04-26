@@ -115,10 +115,13 @@ export class ComfyUIParser {
 
       // Extract prompts from CLIPTextEncode nodes
       if (classType === 'CLIPTextEncode' && inputs?.text) {
-        clipTextEncodeNodes.push({
-          nodeId,
-          text: inputs.text
-        });
+        const text = this.resolveTextValue(workflow, inputs.text);
+        if (text) {
+          clipTextEncodeNodes.push({
+            nodeId,
+            text
+          });
+        }
       }
 
       // Extract sampler parameters
@@ -137,17 +140,31 @@ export class ComfyUIParser {
       }
     }
 
-    // Process CLIPTextEncode nodes for prompts
-    // Convention: First node is positive, second is negative (most common pattern)
-    if (clipTextEncodeNodes.length > 0) {
+    // Prefer the conditioning inputs of the sampler that produced the image.
+    const samplerPositivePrompt = this.resolvePromptFromConditioning(workflow, samplerNode?.inputs?.positive);
+    const samplerNegativePrompt = this.resolvePromptFromConditioning(workflow, samplerNode?.inputs?.negative);
+
+    if (samplerPositivePrompt) {
+      aiInfo.positive_prompt = samplerPositivePrompt;
+      aiInfo.prompt = samplerPositivePrompt;
+    }
+
+    if (samplerNegativePrompt) {
+      aiInfo.negative_prompt = samplerNegativePrompt;
+    }
+
+    // Fallback: convention-based CLIPTextEncode order for simple workflows.
+    if (!aiInfo.positive_prompt && clipTextEncodeNodes.length > 0) {
       aiInfo.positive_prompt = clipTextEncodeNodes[0].text;
       aiInfo.prompt = aiInfo.positive_prompt;
+    }
 
-      if (clipTextEncodeNodes.length > 1) {
-        aiInfo.negative_prompt = clipTextEncodeNodes[1].text;
-      }
+    if (!aiInfo.negative_prompt && clipTextEncodeNodes.length > 1) {
+      aiInfo.negative_prompt = clipTextEncodeNodes[1].text;
+    }
 
-      logger.debug(`✅ [ComfyUIParser] Extracted ${clipTextEncodeNodes.length} prompts from CLIPTextEncode nodes`);
+    if (aiInfo.positive_prompt || aiInfo.negative_prompt) {
+      logger.debug(`✅ [ComfyUIParser] Extracted prompts from workflow`);
     }
 
     // Process sampler parameters
@@ -155,28 +172,27 @@ export class ComfyUIParser {
       const inputs = samplerNode.inputs;
 
       if (inputs.seed !== undefined) {
-        // Handle array format: ["node_id", index] or direct value
-        aiInfo.seed = Array.isArray(inputs.seed) ? inputs.seed[0] : inputs.seed;
+        aiInfo.seed = this.resolveNumericValue(workflow, inputs.seed);
       }
 
       if (inputs.steps !== undefined) {
-        aiInfo.steps = Array.isArray(inputs.steps) ? inputs.steps[0] : inputs.steps;
+        aiInfo.steps = this.resolveNumericValue(workflow, inputs.steps);
       }
 
       if (inputs.cfg !== undefined) {
-        aiInfo.cfg_scale = Array.isArray(inputs.cfg) ? inputs.cfg[0] : inputs.cfg;
+        aiInfo.cfg_scale = this.resolveNumericValue(workflow, inputs.cfg);
       }
 
       if (inputs.sampler_name !== undefined) {
-        aiInfo.sampler = Array.isArray(inputs.sampler_name) ? inputs.sampler_name[0] : inputs.sampler_name;
+        aiInfo.sampler = this.resolveStringValue(workflow, inputs.sampler_name);
       }
 
       if (inputs.scheduler !== undefined) {
-        aiInfo.scheduler = Array.isArray(inputs.scheduler) ? inputs.scheduler[0] : inputs.scheduler;
+        aiInfo.scheduler = this.resolveStringValue(workflow, inputs.scheduler);
       }
 
       if (inputs.denoise !== undefined) {
-        aiInfo.denoising_strength = Array.isArray(inputs.denoise) ? inputs.denoise[0] : inputs.denoise;
+        aiInfo.denoising_strength = this.resolveNumericValue(workflow, inputs.denoise);
       }
     }
 
@@ -191,11 +207,11 @@ export class ComfyUIParser {
       const inputs = emptyLatentNode.inputs;
 
       if (inputs.width !== undefined) {
-        aiInfo.width = Array.isArray(inputs.width) ? inputs.width[0] : inputs.width;
+        aiInfo.width = this.resolveNumericValue(workflow, inputs.width);
       }
 
       if (inputs.height !== undefined) {
-        aiInfo.height = Array.isArray(inputs.height) ? inputs.height[0] : inputs.height;
+        aiInfo.height = this.resolveNumericValue(workflow, inputs.height);
       }
     }
 
@@ -224,6 +240,119 @@ export class ComfyUIParser {
     aiInfo.model_references = this.buildModelReferences(aiInfo, workflow);
 
     return aiInfo;
+  }
+
+  private static isNodeLink(value: unknown): value is [string | number, number] {
+    return Array.isArray(value) && value.length >= 2 && (typeof value[0] === 'string' || typeof value[0] === 'number');
+  }
+
+  private static resolveLinkedNode(workflow: any, value: unknown): any | null {
+    if (!this.isNodeLink(value)) {
+      return null;
+    }
+
+    return workflow?.[String(value[0])] || null;
+  }
+
+  private static resolveScalarFromNode(workflow: any, node: any, visited: Set<string>): unknown {
+    if (!node || typeof node !== 'object') {
+      return undefined;
+    }
+
+    const inputs = node.inputs || {};
+    const resultValue = inputs.result?.__value__;
+    if (Array.isArray(resultValue) && resultValue.length > 0) {
+      return resultValue[0];
+    }
+
+    for (const key of ['populated_text', 'text', 'wildcard_text', 'string', 'value', 'seed', 'number', 'int', 'float']) {
+      if (inputs[key] !== undefined) {
+        const resolved = this.resolveValue(workflow, inputs[key], visited);
+        if (resolved !== undefined && resolved !== null && resolved !== '') {
+          return resolved;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private static resolveValue(workflow: any, value: unknown, visited = new Set<string>()): unknown {
+    if (!this.isNodeLink(value)) {
+      return value;
+    }
+
+    const nodeId = String(value[0]);
+    if (visited.has(nodeId)) {
+      return undefined;
+    }
+
+    visited.add(nodeId);
+    return this.resolveScalarFromNode(workflow, this.resolveLinkedNode(workflow, value), visited);
+  }
+
+  private static resolveTextValue(workflow: any, value: unknown): string | undefined {
+    const resolved = this.resolveValue(workflow, value);
+    if (typeof resolved === 'string') {
+      const trimmed = resolved.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    }
+
+    return undefined;
+  }
+
+  private static resolveStringValue(workflow: any, value: unknown): string | undefined {
+    const resolved = this.resolveValue(workflow, value);
+    if (typeof resolved === 'string') {
+      return resolved;
+    }
+
+    if (typeof resolved === 'number' && Number.isFinite(resolved)) {
+      return String(resolved);
+    }
+
+    return undefined;
+  }
+
+  private static resolveNumericValue(workflow: any, value: unknown): number | undefined {
+    const resolved = this.resolveValue(workflow, value);
+    if (typeof resolved === 'number' && Number.isFinite(resolved)) {
+      return resolved;
+    }
+
+    if (typeof resolved === 'string' && resolved.trim()) {
+      const parsed = Number(resolved);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+
+    return undefined;
+  }
+
+  private static resolvePromptFromConditioning(workflow: any, value: unknown): string | undefined {
+    if (typeof value === 'string') {
+      return value.trim() || undefined;
+    }
+
+    const node = this.resolveLinkedNode(workflow, value);
+    if (!node || typeof node !== 'object') {
+      return undefined;
+    }
+
+    const inputs = node.inputs || {};
+    if (node.class_type === 'CLIPTextEncode') {
+      return this.resolveTextValue(workflow, inputs.text);
+    }
+
+    for (const key of ['populated_text', 'wildcard_text', 'text', 'prompt', 'positive', 'result']) {
+      if (inputs[key] !== undefined) {
+        const resolved = this.resolveTextValue(workflow, inputs[key]);
+        if (resolved) {
+          return resolved;
+        }
+      }
+    }
+
+    return this.resolveTextValue(workflow, value);
   }
 
   /**

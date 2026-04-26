@@ -261,6 +261,27 @@ export class BackgroundProcessorService {
     }, 0);
   }
 
+  private static async extractMetadataNowOrQueue(filePath: string, compositeHash: string, logLabel: string): Promise<void> {
+    try {
+      await BackgroundQueueService.extractAndPersistMetadata(filePath, compositeHash);
+      console.log(`  🧠 Metadata extracted: ${logLabel}`);
+    } catch (error) {
+      console.warn(
+        `  ⚠️  Immediate metadata extraction failed for ${logLabel}; queued retry:`,
+        error instanceof Error ? error.message : error
+      );
+
+      try {
+        BackgroundQueueService.addMetadataExtractionTask(filePath, compositeHash);
+      } catch (queueError) {
+        console.warn(
+          `  ⚠️  Failed to queue metadata extraction retry for ${logLabel}:`,
+          queueError instanceof Error ? queueError.message : queueError
+        );
+      }
+    }
+  }
+
   /**
    * Process all images that don't have composite_hash yet
    * Runs recursively in batches until all images are processed
@@ -428,18 +449,11 @@ export class BackgroundProcessorService {
       );
 
       if (shouldBackfillDuplicateMetadata(existing)) {
-        try {
-          BackgroundQueueService.addMetadataExtractionTask(
-            file.original_file_path,
-            hashes.compositeHash
-          );
-          console.log(`  🧩 Queued metadata backfill from duplicate: ${fileName}`);
-        } catch (error) {
-          console.warn(
-            `  ⚠️  Failed to queue duplicate metadata backfill for ${fileName}:`,
-            error instanceof Error ? error.message : error
-          );
-        }
+        await this.extractMetadataNowOrQueue(
+          file.original_file_path,
+          hashes.compositeHash,
+          `duplicate backfill ${fileName}`,
+        );
       }
 
       await this.processApiGenerationGroupAssignment(hashes.compositeHash);
@@ -503,19 +517,13 @@ export class BackgroundProcessorService {
     // Process pending API generation group assignments
     await this.processApiGenerationGroupAssignment(hashes.compositeHash);
 
-    // Queue metadata extraction task (AI metadata, prompts, etc.)
-    try {
-      BackgroundQueueService.addMetadataExtractionTask(
-        file.original_file_path,
-        hashes.compositeHash
-      );
-    } catch (error) {
-      // Non-critical error - continue processing
-      console.warn(
-        `  ⚠️  Failed to queue metadata extraction for ${fileName}:`,
-        error instanceof Error ? error.message : error
-      );
-    }
+    // Extract AI metadata immediately so upload/generation/folder-scan results
+    // persist the same prompt/info quality as the upload-page preview route.
+    await this.extractMetadataNowOrQueue(
+      file.original_file_path,
+      hashes.compositeHash,
+      fileName,
+    );
 
     console.log(`  ✨ Processed image: ${fileName}`);
   }

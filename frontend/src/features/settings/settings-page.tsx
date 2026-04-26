@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   getAppSettings,
+  reextractAllImageMetadata,
   updateGeneralSettings,
   updateGenerationThrottleSettings,
   updateImageSaveSettings,
@@ -168,6 +169,17 @@ export function SettingsPage() {
     },
   })
 
+  const metadataReextractMutation = useMutation({
+    mutationFn: reextractAllImageMetadata,
+    onSuccess: (result) => {
+      const skippedText = result.skippedMissingCount > 0 ? `, 원본 누락 ${result.skippedMissingCount}개 제외` : ''
+      notifyInfo(`전체 메타데이터 재추출을 큐에 등록했어: ${result.queuedCount}/${result.totalCandidates}개${skippedText}`)
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : '전체 메타데이터 재추출을 시작하지 못했어.')
+    },
+  })
+
   const imageSaveMutation = useMutation({
     mutationFn: updateImageSaveSettings,
     onSuccess: (settings) => {
@@ -304,6 +316,8 @@ export function SettingsPage() {
                 onPatchMetadata={patchMetadataDraft}
                 onSave={() => effectiveMetadataDraft && void metadataMutation.mutateAsync(effectiveMetadataDraft)}
                 isSaving={metadataMutation.isPending}
+                onReextractAll={() => void metadataReextractMutation.mutateAsync()}
+                isReextracting={metadataReextractMutation.isPending}
               />
             ) : null}
 

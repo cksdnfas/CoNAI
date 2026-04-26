@@ -1,4 +1,4 @@
-import { Save } from 'lucide-react'
+import { RefreshCcw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -11,9 +11,18 @@ interface MetadataTabProps {
   onPatchMetadata: (patch: Partial<MetadataExtractionSettings>) => void
   onSave: () => void
   isSaving: boolean
+  onReextractAll: () => void
+  isReextracting: boolean
 }
 
-export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }: MetadataTabProps) {
+export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, onReextractAll, isReextracting }: MetadataTabProps) {
+  const handleReextractAll = () => {
+    if (!window.confirm('모든 이미지의 AI 메타데이터를 다시 추출해서 기존 값을 갱신할까? 항목 수가 많으면 백그라운드 큐가 한동안 바쁠 수 있어.')) {
+      return
+    }
+    onReextractAll()
+  }
+
   return (
     <div className="space-y-6">
       <section>
@@ -34,8 +43,18 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving }
           <div className="grid gap-4 md:grid-cols-2">
             {metadataDraft ? (
               <>
-                <SettingsInsetBlock className="text-sm text-muted-foreground md:col-span-2">
-                  표준 메타를 먼저 읽고, 아래 옵션은 stealth 스캔 범위를 조절해.
+                <SettingsInsetBlock className="flex flex-col gap-3 text-sm text-muted-foreground md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span>표준 메타를 먼저 읽고, 아래 옵션은 stealth 스캔 범위를 조절해.</span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleReextractAll}
+                    disabled={isReextracting}
+                  >
+                    <RefreshCcw className={isReextracting ? 'animate-spin' : undefined} />
+                    {isReextracting ? '등록 중...' : '모든 항목 재추출'}
+                  </Button>
                 </SettingsInsetBlock>
 
                 <SettingsToggleRow className="md:col-span-2">

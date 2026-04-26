@@ -112,6 +112,12 @@ export interface FileVerificationRunResult {
   }>
 }
 
+export interface MetadataReextractAllResult {
+  queuedCount: number
+  skippedMissingCount: number
+  totalCandidates: number
+}
+
 export async function getAppSettings() {
   const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings')
   if (!response.success) {
@@ -183,6 +189,18 @@ export async function updateMetadataSettings(settings: Partial<MetadataExtractio
 
   if (!response.success) {
     throw new Error(response.error || '메타데이터 추출 설정을 저장하지 못했어.')
+  }
+
+  return response.data
+}
+
+export async function reextractAllImageMetadata() {
+  const response = await fetchJson<ApiResponse<MetadataReextractAllResult>>('/api/settings/metadata/reextract-all', {
+    method: 'POST',
+  })
+
+  if (!response.success) {
+    throw new Error(response.error || '전체 메타데이터 재추출을 시작하지 못했어.')
   }
 
   return response.data

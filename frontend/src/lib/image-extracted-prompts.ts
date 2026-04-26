@@ -50,6 +50,27 @@ function getRawCharacterPrompts(raw?: ImageAiRawNaiParameters | null) {
     .filter((value): value is string => Boolean(value))
 }
 
+export function getImageExtractedPromptSummary(image: ImageRecord) {
+  const prompts = image.ai_metadata?.prompts
+  const rawNaiParameters = image.ai_metadata?.raw_nai_parameters
+
+  const positivePrompt = getTrimmedText(prompts?.prompt) ?? getRawPositivePrompt(rawNaiParameters) ?? null
+  const negativePrompt = getTrimmedText(prompts?.negative_prompt) ?? getRawNegativePrompt(rawNaiParameters) ?? null
+  const promptCharacters = Array.isArray(prompts?.characters)
+    ? prompts.characters.map((item) => getTrimmedText(item)).filter((value): value is string => Boolean(value))
+    : []
+  const rawCharacters = getRawCharacterPrompts(rawNaiParameters)
+  const fallbackCharacterText = getTrimmedText(prompts?.character_prompt_text)
+  const characterPrompts = promptCharacters.length > 0 ? promptCharacters : rawCharacters.length > 0 ? rawCharacters : fallbackCharacterText ? [fallbackCharacterText] : []
+
+  return {
+    positivePrompt,
+    negativePrompt,
+    characterPrompts,
+    characterPromptText: characterPrompts.join(', ') || null,
+  }
+}
+
 function isProcessedPrompt(displayText: string, rawText?: string | null) {
   const normalizedDisplay = getNormalizedComparableText(displayText)
   const normalizedRaw = getNormalizedComparableText(rawText)
@@ -266,18 +287,8 @@ export function formatGroupedPromptText(sections: ExtractedPromptGroupedSection[
 
 /** Build reusable extracted prompt card data from an image record. */
 export function getImageExtractedPromptCards(image: ImageRecord) {
-  const prompts = image.ai_metadata?.prompts
   const rawNaiParameters = image.ai_metadata?.raw_nai_parameters
-
-  const positiveText = getTrimmedText(prompts?.prompt) ?? getRawPositivePrompt(rawNaiParameters)
-  const negativeText = getTrimmedText(prompts?.negative_prompt) ?? getRawNegativePrompt(rawNaiParameters)
-
-  const promptCharacters = Array.isArray(prompts?.characters)
-    ? prompts.characters.map((item) => getTrimmedText(item)).filter((value): value is string => Boolean(value))
-    : []
-  const rawCharacters = getRawCharacterPrompts(rawNaiParameters)
-  const fallbackCharacterText = getTrimmedText(prompts?.character_prompt_text)
-  const characterTexts = promptCharacters.length > 0 ? promptCharacters : rawCharacters.length > 0 ? rawCharacters : fallbackCharacterText ? [fallbackCharacterText] : []
+  const { positivePrompt: positiveText, negativePrompt: negativeText, characterPrompts: characterTexts } = getImageExtractedPromptSummary(image)
   const loraModels = getImageLoraModels(image)
 
   const cards: ExtractedPromptCardItem[] = []

@@ -11,6 +11,7 @@ import { type ImageDetailViewHeaderControls } from '@/features/images/image-deta
 import { ImageDetailMedia } from './image-detail-media'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
 import { ImageViewModeSwitcher, type ImageViewModalMode } from './image-view-modal-actions'
+import { getImageExtractedPromptSummary } from '@/lib/image-extracted-prompts'
 import { getDownloadName, getImageDetailDownloadUrl, getImageDetailRenderUrl } from './image-detail-utils'
 
 interface ImageViewSurfaceContentProps {
@@ -58,15 +59,10 @@ function useImageViewSurfaceDetail(compositeHash: string) {
 /** Render the medium modal surface with a large preview and prompt summary cards. */
 export function ImageViewMediumContent({ compositeHash, renderHeader }: ImageViewSurfaceContentProps) {
   const { imageQuery, image, renderUrl, downloadUrl, downloadName } = useImageViewSurfaceDetail(compositeHash)
-  const positivePrompt = image?.ai_metadata?.prompts?.prompt || image?.ai_metadata?.raw_nai_parameters?.prompt || '—'
-  const negativePrompt = image?.ai_metadata?.prompts?.negative_prompt || image?.ai_metadata?.raw_nai_parameters?.uc || '—'
-  const characterPrompt = image?.ai_metadata?.prompts?.character_prompt_text
-    || image?.ai_metadata?.prompts?.characters?.filter(Boolean).join(', ')
-    || image?.ai_metadata?.raw_nai_parameters?.v4_prompt?.caption?.char_captions
-      ?.map((item) => item.char_caption)
-      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-      .join(', ')
-    || '—'
+  const promptSummary = image ? getImageExtractedPromptSummary(image) : null
+  const positivePrompt = promptSummary?.positivePrompt || '—'
+  const negativePrompt = promptSummary?.negativePrompt || '—'
+  const characterPrompt = promptSummary?.characterPromptText || '—'
 
   const controls: ImageDetailViewHeaderControls = {
     downloadName,

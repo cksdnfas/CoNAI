@@ -212,11 +212,23 @@ export class BackgroundQueueService {
   }
 
   /**
-   * 메타데이터 추출 처리
+   * Extract AI metadata and persist it to media_metadata.
+   *
+   * This is shared by the background queue and the saved-media/folder-scan
+   * pipeline so every path uses the exact same parser and persistence logic.
    */
-  private static async processMetadataExtraction(task: BackgroundTask): Promise<void> {
-    const aiMetadata = await MetadataExtractor.extractMetadata(task.filePath);
+  static async extractAndPersistMetadata(filePath: string, compositeHash: string): Promise<void> {
+    const aiMetadata = await MetadataExtractor.extractMetadata(filePath);
     const aiInfo = aiMetadata.ai_info || {};
+
+    // Persist the same normalized values that the upload preview exposes.
+    const prompt = aiInfo.prompt || aiInfo.positive_prompt || null;
+    const negativePrompt = aiInfo.negative_prompt || aiInfo.uc || null;
+    const cfgScale = aiInfo.cfg_scale ?? aiInfo.scale ?? null;
+    const denoiseStrength = aiInfo.denoise_strength ?? aiInfo.denoising_strength ?? null;
+    const loraModelsJson = Array.isArray(aiInfo.lora_models) && aiInfo.lora_models.length > 0
+      ? JSON.stringify(aiInfo.lora_models)
+      : null;
 
     // model_references를 JSON으로 직렬화
     const modelReferencesJson = aiInfo.model_references && aiInfo.model_references.length > 0
@@ -225,41 +237,42 @@ export class BackgroundQueueService {
 
     // media_metadata 업데이트
     try {
-      MediaMetadataModel.update(task.compositeHash, {
+      MediaMetadataModel.update(compositeHash, {
         ai_tool: aiInfo.ai_tool || null,
-        model_name: aiInfo.model || null,
-        steps: aiInfo.steps || null,
-        cfg_scale: aiInfo.cfg_scale || null,
+        model_name: aiInfo.model || aiInfo.model_name || null,
+        lora_models: loraModelsJson,
+        steps: aiInfo.steps ?? null,
+        cfg_scale: cfgScale,
         sampler: aiInfo.sampler || null,
-        seed: aiInfo.seed || null,
+        seed: aiInfo.seed ?? null,
         scheduler: aiInfo.scheduler || null,
-        prompt: aiInfo.prompt || null,
-        negative_prompt: aiInfo.negative_prompt || null,
-        denoise_strength: aiInfo.denoise_strength || null,
-        generation_time: aiInfo.generation_time || null,
-        batch_size: aiInfo.batch_size || null,
-        batch_index: aiInfo.batch_index || null,
+        prompt,
+        negative_prompt: negativePrompt,
+        denoise_strength: denoiseStrength,
+        generation_time: aiInfo.generation_time ?? null,
+        batch_size: aiInfo.batch_size ?? null,
+        batch_index: aiInfo.batch_index ?? null,
         model_references: modelReferencesJson,
         character_prompt_text: aiInfo.character_prompt_text || null,
         raw_nai_parameters: aiInfo.raw_nai_parameters || null,
       });
     } catch (error) {
       if (error instanceof RangeError) {
-        logger.error(`  ❌ RangeError during metadata update (skipping): ${path.basename(task.filePath)}`);
+        logger.error(`  ❌ RangeError during metadata update (skipping): ${path.basename(filePath)}`);
         // RangeError는 재시도해도 해결되지 않으므로 throw하지 않고 스킵
         return;
       }
       throw error;
     }
 
-    logger.debug(`  ✅ 메타데이터 추출 완료: ${path.basename(task.filePath)}`);
+    logger.debug(`  ✅ 메타데이터 추출 완료: ${path.basename(filePath)}`);
 
     // Run auto-collection after metadata extraction (Option B)
     // This allows conditions based on AI metadata (prompts, model, sampler, etc.)
     try {
       logger.debug(`  🔍 Running auto-collection (after metadata extraction)...`);
       const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(
-        task.compositeHash
+        compositeHash
       );
       if (autoCollectResults.length > 0) {
         logger.debug(`  ✅ Auto-assigned to ${autoCollectResults.length} additional group(s) based on AI metadata`);
@@ -267,31 +280,38 @@ export class BackgroundQueueService {
     } catch (autoCollectError) {
       // Non-critical error - continue processing
       logger.warn(
-        `  ⚠️  Auto-collection failed (non-critical) for ${path.basename(task.filePath)}:`,
+        `  ⚠️  Auto-collection failed (non-critical) for ${path.basename(filePath)}:`,
         autoCollectError instanceof Error ? autoCollectError.message : autoCollectError
       );
     }
 
     // 프롬프트가 있으면 프롬프트 수집 작업 추가
-    if (aiInfo.prompt || aiInfo.character_prompt_text) {
+    if (prompt || aiInfo.character_prompt_text) {
       try {
-        this.addPromptCollectionTask(task.filePath, task.compositeHash);
+        this.addPromptCollectionTask(filePath, compositeHash);
       } catch (error) {
-        logger.warn(`  ⚠️  프롬프트 수집 작업 추가 실패: ${path.basename(task.filePath)}`, error);
+        logger.warn(`  ⚠️  프롬프트 수집 작업 추가 실패: ${path.basename(filePath)}`, error);
       }
     }
 
     // 모델 참조가 있으면 Civitai 조회 작업 추가
     if (aiInfo.model_references && aiInfo.model_references.length > 0) {
       try {
-        this.addCivitaiModelLookupTask(task.compositeHash, aiInfo.model_references);
+        this.addCivitaiModelLookupTask(compositeHash, aiInfo.model_references);
       } catch (error) {
-        logger.warn(`  ⚠️  Civitai 조회 작업 추가 실패: ${path.basename(task.filePath)}`, error);
+        logger.warn(`  ⚠️  Civitai 조회 작업 추가 실패: ${path.basename(filePath)}`, error);
       }
     }
 
     // 새 이미지가 추가되었으므로 갤러리 캐시 무효화
     QueryCacheService.invalidateGalleryCache();
+  }
+
+  /**
+   * 메타데이터 추출 처리
+   */
+  private static async processMetadataExtraction(task: BackgroundTask): Promise<void> {
+    await this.extractAndPersistMetadata(task.filePath, task.compositeHash);
   }
 
 
