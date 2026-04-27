@@ -19,6 +19,8 @@
 - Kaloscope 자동 테스트 실행
 - metadata 추출 설정 저장
 - image save 설정 저장
+- generation throttle과 예약 실행 정책 설정
+- LLM 연결 설정 관리
 
 ## 연결된 핵심 시스템
 
