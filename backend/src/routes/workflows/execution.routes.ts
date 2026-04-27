@@ -78,7 +78,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
     const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [];
     const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, prompt_data);
     const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui');
-    const resolvedPromptData = await reconcileComfyModelSelectionValues(workflow.workflow_json, markedFields, parsedPromptData, comfyService);
+    const resolvedPromptData = await reconcileComfyModelSelectionValues(workflow.workflow_json, markedFields, parsedPromptData, comfyService, { strict: true });
     const substitutedWorkflow = comfyService.substitutePromptData(
       workflow.workflow_json,
       markedFields,

@@ -4,6 +4,7 @@ export type ComfyModelSelectionFieldLike = {
   id: string
   type?: string
   jsonPath?: string
+  label?: string
 }
 
 const COMFY_MODEL_PATH_INPUT_KEYS = new Set([
@@ -48,12 +49,17 @@ function parseComfyInputPath(jsonPath?: string | null) {
   }
 }
 
+function formatComfyFieldLabel(field: ComfyModelSelectionFieldLike, classType: string, inputKey: string) {
+  return field.label?.trim() || `${classType}.${inputKey}`
+}
+
 /** Resolve select-field model values to the exact canonical option exposed by the target ComfyUI server. */
 export async function reconcileComfyModelSelectionValues<T extends Record<string, any>>(
   workflowJson: string,
   markedFields: ComfyModelSelectionFieldLike[],
   promptData: T,
   comfyService: ComfyUIService,
+  reconcileOptions: { strict?: boolean } = {},
 ): Promise<T> {
   const workflow = JSON.parse(workflowJson) as Record<string, { class_type?: string }>
   const nextPromptData: Record<string, any> = { ...promptData }
@@ -87,6 +93,9 @@ export async function reconcileComfyModelSelectionValues<T extends Record<string
     }
 
     if (!options || options.length === 0) {
+      if (reconcileOptions.strict) {
+        throw new Error(`ComfyUI 모델 목록을 불러올 수 없어: ${formatComfyFieldLabel(field, classType, parsedPath.inputKey)}`)
+      }
       continue
     }
 
@@ -94,6 +103,11 @@ export async function reconcileComfyModelSelectionValues<T extends Record<string
     const matches = options.filter((option) => normalizeComparableModelOption(option) === normalizedRawValue)
     if (matches.length === 1) {
       nextPromptData[field.id] = matches[0]
+      continue
+    }
+
+    if (reconcileOptions.strict) {
+      throw new Error(`ComfyUI 모델을 찾을 수 없어: ${formatComfyFieldLabel(field, classType, parsedPath.inputKey)} = ${rawValue}`)
     }
   }
 

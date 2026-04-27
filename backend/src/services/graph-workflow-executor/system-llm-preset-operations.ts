@@ -18,9 +18,11 @@ const PRESET_TYPE_LABELS: Record<LlmPresetCollectionKey, string> = {
 }
 
 function normalizePresetType(value: unknown): LlmPresetCollectionKey {
-  return value === 'systemPromptPresets' || value === 'structuredOutputJsonPresets'
-    ? value
-    : 'promptPresets'
+  if (value === 'systemPromptPresets' || value === 'promptPresets' || value === 'structuredOutputJsonPresets') {
+    return value
+  }
+
+  throw new Error('LLM 프리셋 종류가 올바르지 않아')
 }
 
 function parseStructuredOutputJsonPreset(value: string, presetName: string) {

@@ -104,14 +104,10 @@ function getSelectOptionValue(option: ModuleGraphSelectOption) {
   return typeof option === 'string' ? option : option.value
 }
 
-function resolveSelectOptionsWithCurrentValue(options: ModuleGraphSelectOption[] | null | undefined, currentValue: string | null) {
-  const normalizedOptions = Array.isArray(options)
+function normalizeSelectOptions(options: ModuleGraphSelectOption[] | null | undefined) {
+  return Array.isArray(options)
     ? options.filter((option) => getSelectOptionValue(option).trim().length > 0)
     : []
-  if (currentValue && !normalizedOptions.some((option) => getSelectOptionValue(option) === currentValue)) {
-    return [...normalizedOptions, currentValue]
-  }
-  return normalizedOptions
 }
 
 function normalizeLlmPresetType(value: unknown): LlmPresetCollectionKey {
@@ -1005,21 +1001,6 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
       .filter((provider): provider is ExternalApiLlmOptionRecord & { default_model: string } => Boolean(provider.default_model))
       .sort((left, right) => left.provider_name.localeCompare(right.provider_name))
 
-    const currentProviderName = normalizeOptionalString(data.inputValues?.provider_name)
-    if (currentProviderName && !entries.some((entry) => entry.provider_name === currentProviderName)) {
-      return [
-        ...entries,
-        {
-          provider_name: currentProviderName,
-          display_name: currentProviderName,
-          provider_type: 'llm_openai_compatible',
-          default_model: '설정 필요',
-          default_temperature: null,
-          default_max_tokens: null,
-        },
-      ]
-    }
-
     return entries
   })()
   const llmModelOptions = llmModelBindings.map((provider) => ({
@@ -1049,9 +1030,8 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     ? module.ui_schema?.find((field) => field.key === 'model')
     : null
   const codexModelCurrentValue = normalizeOptionalString(data.inputValues?.model)
-  const codexModelOptions = resolveSelectOptionsWithCurrentValue(
+  const codexModelOptions = normalizeSelectOptions(
     codexModelUiField?.data_type === 'select' ? codexModelUiField.options : null,
-    codexModelCurrentValue,
   )
   const codexModelValue = codexModelCurrentValue
     ?? normalizeOptionalString(codexModelPort?.default_value)
@@ -1065,9 +1045,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const llmPresetEntries = getLlmPresetEntries(llmPresetsQuery.data, llmPresetType)
   const llmPresetName = normalizeOptionalString(data.inputValues?.preset_name) ?? ''
   const selectedLlmPreset = llmPresetName ? llmPresetEntries.find((preset) => preset.name === llmPresetName) ?? null : null
-  const llmPresetNameOptions = llmPresetName && !llmPresetEntries.some((preset) => preset.name === llmPresetName)
-    ? [...llmPresetEntries, { id: llmPresetName, name: llmPresetName, content: '', updatedAt: '' }]
-    : llmPresetEntries
+  const llmPresetNameOptions = llmPresetEntries
   const visibleOutputPorts = getVisibleModuleOutputPorts(module, data.inputValues, {
     includeAdvanced: isAdvancedOutputPortsEnabled(data.inputValues),
     connectedInputKeys,
@@ -1146,7 +1124,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     ...comfyRoutingTags.map((tag) => `tag:${tag}`),
     ...candidateComfyServers.map((server) => `server:${server.id}`),
   ])
-  const shouldShowFallbackComfyTargetOption = comfyTargetValue !== 'auto' && !knownComfyTargetValues.has(comfyTargetValue)
+  const hasKnownComfyTargetValue = knownComfyTargetValues.has(comfyTargetValue)
   const applyComfyTargetValue = (nextValue: string) => {
     if (!data.onNodeValueChange) {
       return
@@ -1295,7 +1273,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             }}
             className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           >
-            {shouldShowFallbackComfyTargetOption ? <option value={comfyTargetValue}>현재 설정 유지 ({comfyTargetBadgeLabel})</option> : null}
+            {!hasKnownComfyTargetValue ? <option value={comfyTargetValue} disabled>외부 설정을 찾을 수 없음 ({comfyTargetBadgeLabel})</option> : null}
             <option value="auto">자동 분산</option>
             {comfyRoutingTags.length > 0 ? (
               <optgroup label="태그">

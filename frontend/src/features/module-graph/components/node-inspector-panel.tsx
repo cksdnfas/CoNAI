@@ -308,21 +308,6 @@ export function NodeInspectorPanel({
       .filter((provider): provider is ExternalApiLlmOptionRecord & { default_model: string } => Boolean(provider.default_model))
       .sort((left, right) => left.provider_name.localeCompare(right.provider_name))
 
-    const currentProviderName = normalizeOptionalString(selectedNode?.data.inputValues?.provider_name)
-    if (currentProviderName && !entries.some((entry) => entry.provider_name === currentProviderName)) {
-      return [
-        ...entries,
-        {
-          provider_name: currentProviderName,
-          display_name: currentProviderName,
-          provider_type: 'llm_openai_compatible',
-          default_model: '설정 필요',
-          default_temperature: null,
-          default_max_tokens: null,
-        },
-      ]
-    }
-
     return entries
   })()
   const llmModelOptions = llmModelBindings.map((provider) => ({
@@ -408,9 +393,7 @@ export function NodeInspectorPanel({
         ? entries.find((preset) => preset.name === currentPresetName) ?? null
         : null
       const presetOptions = entries.map((preset) => ({ value: preset.name, label: preset.name }))
-      const options = currentPresetName && !presetOptions.some((option) => option.value === currentPresetName)
-        ? [...presetOptions, { value: currentPresetName, label: currentPresetName }]
-        : presetOptions
+      const options = presetOptions
 
       return (
         <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
@@ -509,11 +492,8 @@ export function NodeInspectorPanel({
       )
     }
 
-    const baseSelectOptions = uiField?.data_type === 'select' && Array.isArray(uiField.options) ? uiField.options : []
+    const selectOptions = uiField?.data_type === 'select' && Array.isArray(uiField.options) ? uiField.options : []
     const isCodexModelPort = isSystemCallCodexMessageNode && port.key === 'model'
-    const selectOptions = isCodexModelPort && typeof rawValue === 'string' && rawValue.trim().length > 0 && !baseSelectOptions.includes(rawValue)
-      ? [...baseSelectOptions, rawValue]
-      : baseSelectOptions
 
     if (selectOptions.length > 0) {
       const effectiveSelectValue = isCodexModelPort

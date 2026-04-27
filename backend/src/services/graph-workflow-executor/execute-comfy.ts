@@ -4,6 +4,7 @@ import { resolveUploadsPath } from '../../config/runtimePaths'
 import { createComfyUIService } from '../comfyuiService'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { prepareComfyPromptData } from '../prepareComfyPromptData'
+import { reconcileComfyModelSelectionValues } from '../comfyModelSelectionResolver'
 import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
 import { settingsService } from '../settingsService'
 import { WorkflowModel } from '../../models/Workflow'
@@ -127,11 +128,33 @@ function buildQueuePayload(promptData: Record<string, unknown>) {
   return payload
 }
 
-function buildQueuePromptData(resolvedInputs: Record<string, any>) {
-  const promptData = { ...resolvedInputs }
-  delete promptData[GRAPH_COMFY_TARGET_MODE_KEY]
-  delete promptData[GRAPH_COMFY_TARGET_TAG_KEY]
-  delete promptData[GRAPH_COMFY_TARGET_SERVER_ID_KEY]
+function buildQueuePromptData(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  workflow: { marked_fields?: string | null },
+  resolvedInputs: Record<string, any>,
+) {
+  const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) as Array<{ id?: unknown }> : []
+  const explicitInputs = node.input_values ?? {}
+  const connectedInputKeys = new Set(
+    context.workflow.graph.edges
+      .filter((edge) => edge.target_node_id === node.id)
+      .map((edge) => edge.target_port_key),
+  )
+  const promptData: Record<string, any> = {}
+
+  for (const field of markedFields) {
+    if (typeof field.id !== 'string') {
+      continue
+    }
+
+    const hasExplicitValue = Object.prototype.hasOwnProperty.call(explicitInputs, field.id)
+    const hasIncomingValue = connectedInputKeys.has(field.id)
+    if ((hasExplicitValue || hasIncomingValue) && resolvedInputs[field.id] !== undefined) {
+      promptData[field.id] = resolvedInputs[field.id]
+    }
+  }
+
   return promptData
 }
 
@@ -337,7 +360,7 @@ async function executeQueueBackedComfyModule(context: ExecutionContext, node: Gr
 
   const target = resolveGraphComfyExecutionTarget(node)
   const workflow = validateQueueTarget(sourceWorkflowId, target)
-  const queuePromptData = buildQueuePromptData(resolvedInputs)
+  const queuePromptData = buildQueuePromptData(context, node, workflow, resolvedInputs)
   const queuePayload = buildQueuePayload(queuePromptData)
   const primaryOutputPort = moduleDefinition.output_ports.find((port) => port.key !== 'metadata') ?? {
     key: 'image',
@@ -397,7 +420,8 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
     uploadNameBase: node.id,
   })
 
-  const resolvedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui')
+  const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui')
+  const resolvedPromptData = await reconcileComfyModelSelectionValues(JSON.stringify(workflowJson), markedFields, parsedPromptData, comfyService, { strict: true })
   const substitutedWorkflow = comfyService.substitutePromptData(
     JSON.stringify(workflowJson),
     markedFields,

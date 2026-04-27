@@ -248,6 +248,7 @@ function hydrateDynamicSelectOptions(uiSchema: any[], dropdownListMap: Map<strin
       return {
         ...field,
         dropdown_list_name: dropdownListName,
+        options: [],
       }
     }
 
