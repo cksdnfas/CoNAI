@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import type { ImageRecord } from '@/types/image'
@@ -37,31 +37,38 @@ const DOUBLE_TAP_SCALE = 2
 const ROTATION_STEP = 90
 const IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY = 'conai:image-detail-media:wheel-zoom-enabled'
 const IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY = 'conai:image-detail-media:controls-collapsed'
+const IMAGE_DETAIL_SCALE_STORAGE_KEY = 'conai:image-detail-media:scale'
 const IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-enabled'
+const IMAGE_PIXEL_PREVIEW_SETTINGS_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-settings'
 
-type PixelPreviewMode = 'off' | 'soft' | 'medium' | 'strong'
+type PixelPreviewMode = 'off' | 'soft' | 'medium' | 'strong' | 'custom'
 
-type PixelPreviewProfile = {
-  label: string
+type PixelPreviewSettings = {
   targetLongEdge: number
   colorCount: number
-  smoothing: boolean
   edgeBoost: number
+  sharpness: number
+}
+
+type PixelPreviewProfile = PixelPreviewSettings & {
+  label: string
+  smoothing: boolean
   preFilter: string
 }
 
-const PIXEL_PREVIEW_MODE_ORDER: PixelPreviewMode[] = ['off', 'soft', 'medium', 'strong']
 const PIXEL_PREVIEW_MODE_LABELS: Record<PixelPreviewMode, string> = {
   off: '꺼짐',
   soft: '약',
   medium: '중',
   strong: '강',
+  custom: '수동',
 }
-const IMAGE_PIXEL_PREVIEW_PROFILES: Record<Exclude<PixelPreviewMode, 'off'>, PixelPreviewProfile> = {
-  soft: { label: '약', targetLongEdge: 512, colorCount: 192, smoothing: true, edgeBoost: 0.08, preFilter: 'contrast(1.04) saturate(1.02)' },
-  medium: { label: '중', targetLongEdge: 384, colorCount: 128, smoothing: true, edgeBoost: 0.12, preFilter: 'contrast(1.08) saturate(1.04)' },
-  strong: { label: '강', targetLongEdge: 256, colorCount: 96, smoothing: false, edgeBoost: 0.16, preFilter: 'contrast(1.14) saturate(1.06)' },
+const IMAGE_PIXEL_PREVIEW_PRESETS: Record<Exclude<PixelPreviewMode, 'off' | 'custom'>, PixelPreviewSettings> = {
+  soft: { targetLongEdge: 512, colorCount: 192, edgeBoost: 0.08, sharpness: 0.18 },
+  medium: { targetLongEdge: 384, colorCount: 128, edgeBoost: 0.12, sharpness: 0.26 },
+  strong: { targetLongEdge: 256, colorCount: 96, edgeBoost: 0.16, sharpness: 0.34 },
 }
+const DEFAULT_PIXEL_PREVIEW_SETTINGS: PixelPreviewSettings = IMAGE_PIXEL_PREVIEW_PRESETS.soft
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -117,13 +124,30 @@ function persistImageControlsCollapsed(collapsed: boolean) {
   window.localStorage.setItem(IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY, collapsed ? 'true' : 'false')
 }
 
+function loadImageDetailScale() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_SCALE
+  }
+
+  const value = Number(window.localStorage.getItem(IMAGE_DETAIL_SCALE_STORAGE_KEY))
+  return Number.isFinite(value) ? clamp(value, MIN_SCALE, MAX_SCALE) : DEFAULT_SCALE
+}
+
+function persistImageDetailScale(scale: number) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(IMAGE_DETAIL_SCALE_STORAGE_KEY, String(clamp(scale, MIN_SCALE, MAX_SCALE)))
+}
+
 function loadImagePixelPreviewMode(): PixelPreviewMode {
   if (typeof window === 'undefined') {
     return 'off'
   }
 
   const savedValue = window.localStorage.getItem(IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY)
-  if (savedValue === 'soft' || savedValue === 'medium' || savedValue === 'strong' || savedValue === 'off') {
+  if (savedValue === 'soft' || savedValue === 'medium' || savedValue === 'strong' || savedValue === 'custom' || savedValue === 'off') {
     return savedValue
   }
 
@@ -139,13 +163,50 @@ function persistImagePixelPreviewMode(mode: PixelPreviewMode) {
   window.localStorage.setItem(IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY, mode)
 }
 
-function getNextPixelPreviewMode(mode: PixelPreviewMode): PixelPreviewMode {
-  const currentIndex = PIXEL_PREVIEW_MODE_ORDER.indexOf(mode)
-  return PIXEL_PREVIEW_MODE_ORDER[(currentIndex + 1) % PIXEL_PREVIEW_MODE_ORDER.length] ?? 'off'
+function normalizePixelPreviewSettings(settings: Partial<PixelPreviewSettings>): PixelPreviewSettings {
+  return {
+    targetLongEdge: Math.round(clamp(Number(settings.targetLongEdge) || DEFAULT_PIXEL_PREVIEW_SETTINGS.targetLongEdge, 160, 640)),
+    colorCount: Math.round(clamp(Number(settings.colorCount) || DEFAULT_PIXEL_PREVIEW_SETTINGS.colorCount, 32, 256)),
+    edgeBoost: clamp(Number(settings.edgeBoost) || 0, 0, 0.36),
+    sharpness: clamp(Number(settings.sharpness) || 0, 0, 0.8),
+  }
 }
 
-function getPixelPreviewProfile(mode: PixelPreviewMode): PixelPreviewProfile | null {
-  return mode === 'off' ? null : IMAGE_PIXEL_PREVIEW_PROFILES[mode]
+function loadImagePixelPreviewSettings(): PixelPreviewSettings {
+  if (typeof window === 'undefined') {
+    return DEFAULT_PIXEL_PREVIEW_SETTINGS
+  }
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(IMAGE_PIXEL_PREVIEW_SETTINGS_STORAGE_KEY) || 'null') as Partial<PixelPreviewSettings> | null
+    return normalizePixelPreviewSettings(parsed ?? DEFAULT_PIXEL_PREVIEW_SETTINGS)
+  } catch {
+    return DEFAULT_PIXEL_PREVIEW_SETTINGS
+  }
+}
+
+function persistImagePixelPreviewSettings(settings: PixelPreviewSettings) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(IMAGE_PIXEL_PREVIEW_SETTINGS_STORAGE_KEY, JSON.stringify(normalizePixelPreviewSettings(settings)))
+}
+
+function getPixelPreviewProfile(mode: PixelPreviewMode, customSettings: PixelPreviewSettings): PixelPreviewProfile | null {
+  if (mode === 'off') {
+    return null
+  }
+
+  const settings = mode === 'custom' ? customSettings : IMAGE_PIXEL_PREVIEW_PRESETS[mode]
+  const contrast = 1 + settings.edgeBoost * 0.55 + settings.sharpness * 0.08
+  const saturation = 1 + settings.edgeBoost * 0.18
+  return {
+    ...settings,
+    label: PIXEL_PREVIEW_MODE_LABELS[mode],
+    smoothing: settings.targetLongEdge >= 320,
+    preFilter: `contrast(${contrast.toFixed(3)}) saturate(${saturation.toFixed(3)})`,
+  }
 }
 
 function boostPixelPreviewEdges(imageData: ImageData, strength: number) {
@@ -177,6 +238,34 @@ function boostPixelPreviewEdges(imageData: ImageData, strength: number) {
       data[index] = Math.round(data[index] * factor)
       data[index + 1] = Math.round(data[index + 1] * factor)
       data[index + 2] = Math.round(data[index + 2] * factor)
+    }
+  }
+
+  return imageData
+}
+
+function sharpenPixelPreview(imageData: ImageData, amount: number) {
+  if (amount <= 0) {
+    return imageData
+  }
+
+  const { data, width, height } = imageData
+  const original = new Uint8ClampedArray(data)
+  const centerWeight = 1 + amount * 4
+  const sideWeight = amount
+
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const index = (y * width + x) * 4
+      for (let channel = 0; channel < 3; channel += 1) {
+        const value =
+          original[index + channel] * centerWeight -
+          original[index - 4 + channel] * sideWeight -
+          original[index + 4 + channel] * sideWeight -
+          original[index - width * 4 + channel] * sideWeight -
+          original[index + width * 4 + channel] * sideWeight
+        data[index + channel] = Math.round(clamp(value, 0, 255))
+      }
     }
   }
 
@@ -269,8 +358,9 @@ function InteractiveImageDetailMedia({
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const pointersRef = useRef(new Map<number, PointerPosition>())
+  const initialScaleRef = useRef(loadImageDetailScale())
   const pinchStartDistanceRef = useRef<number | null>(null)
-  const pinchStartScaleRef = useRef(DEFAULT_SCALE)
+  const pinchStartScaleRef = useRef(initialScaleRef.current)
   const panOriginRef = useRef<{
     pointerId: number
     startX: number
@@ -278,16 +368,18 @@ function InteractiveImageDetailMedia({
     offsetX: number
     offsetY: number
   } | null>(null)
-  const scaleRef = useRef(DEFAULT_SCALE)
+  const scaleRef = useRef(initialScaleRef.current)
   const rotationRef = useRef(0)
   const offsetRef = useRef({ x: 0, y: 0 })
-  const [scale, setScale] = useState(DEFAULT_SCALE)
+  const [scale, setScale] = useState(initialScaleRef.current)
   const [rotation, setRotation] = useState(0)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [isGestureActive, setIsGestureActive] = useState(false)
   const [isWheelZoomEnabled, setIsWheelZoomEnabled] = useState(() => loadImageWheelZoomEnabled())
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(() => loadImageControlsCollapsed())
   const [pixelPreviewMode, setPixelPreviewMode] = useState<PixelPreviewMode>(() => loadImagePixelPreviewMode())
+  const [pixelPreviewSettings, setPixelPreviewSettings] = useState<PixelPreviewSettings>(() => loadImagePixelPreviewSettings())
+  const [isPixelPreviewPanelOpen, setIsPixelPreviewPanelOpen] = useState(false)
 
   useEffect(() => {
     scaleRef.current = scale
@@ -305,10 +397,11 @@ function InteractiveImageDetailMedia({
     pointersRef.current.clear()
     pinchStartDistanceRef.current = null
     panOriginRef.current = null
-    scaleRef.current = DEFAULT_SCALE
+    const savedScale = loadImageDetailScale()
+    scaleRef.current = savedScale
     rotationRef.current = 0
     offsetRef.current = { x: 0, y: 0 }
-    setScale(DEFAULT_SCALE)
+    setScale(savedScale)
     setRotation(0)
     setOffset({ x: 0, y: 0 })
     setIsGestureActive(false)
@@ -322,11 +415,13 @@ function InteractiveImageDetailMedia({
   const canZoomOut = scale > MIN_SCALE + 0.001
   const canZoomIn = scale < MAX_SCALE - 0.001
   const transformSummary = `${Math.round(scale * 100)}%${rotation !== 0 ? ` · ${rotation}°` : ''}`
-  const pixelPreviewProfile = getPixelPreviewProfile(pixelPreviewMode)
+  const pixelPreviewProfile = useMemo(() => getPixelPreviewProfile(pixelPreviewMode, pixelPreviewSettings), [pixelPreviewMode, pixelPreviewSettings])
+  const activePixelPreviewSettings = pixelPreviewProfile ?? pixelPreviewSettings
   const shouldRenderPixelPreview = canUsePixelPreview && pixelPreviewProfile !== null
 
   const resetView = useCallback(() => {
     scaleRef.current = DEFAULT_SCALE
+    persistImageDetailScale(DEFAULT_SCALE)
     rotationRef.current = 0
     offsetRef.current = { x: 0, y: 0 }
     setScale(DEFAULT_SCALE)
@@ -337,6 +432,7 @@ function InteractiveImageDetailMedia({
   const applyScale = useCallback((nextScale: number) => {
     const clampedScale = clamp(nextScale, MIN_SCALE, MAX_SCALE)
     scaleRef.current = clampedScale
+    persistImageDetailScale(clampedScale)
     setScale(clampedScale)
 
     if (clampedScale <= DEFAULT_SCALE + 0.001) {
@@ -388,11 +484,23 @@ function InteractiveImageDetailMedia({
     })
   }
 
-  const cyclePixelPreviewMode = () => {
-    setPixelPreviewMode((current) => {
-      const nextMode = getNextPixelPreviewMode(current)
-      persistImagePixelPreviewMode(nextMode)
-      return nextMode
+  const setPixelPreviewModeAndPersist = (mode: PixelPreviewMode) => {
+    setPixelPreviewMode(mode)
+    persistImagePixelPreviewMode(mode)
+    if (mode === 'soft' || mode === 'medium' || mode === 'strong') {
+      setPixelPreviewSettings(IMAGE_PIXEL_PREVIEW_PRESETS[mode])
+      persistImagePixelPreviewSettings(IMAGE_PIXEL_PREVIEW_PRESETS[mode])
+    }
+  }
+
+  const updatePixelPreviewSettings = (patch: Partial<PixelPreviewSettings>) => {
+    setPixelPreviewSettings((current) => {
+      const baseSettings = pixelPreviewMode === 'soft' || pixelPreviewMode === 'medium' || pixelPreviewMode === 'strong' ? IMAGE_PIXEL_PREVIEW_PRESETS[pixelPreviewMode] : current
+      const nextSettings = normalizePixelPreviewSettings({ ...baseSettings, ...patch })
+      persistImagePixelPreviewSettings(nextSettings)
+      persistImagePixelPreviewMode('custom')
+      setPixelPreviewMode('custom')
+      return nextSettings
     })
   }
 
@@ -457,10 +565,10 @@ function InteractiveImageDetailMedia({
           imageQuantization: 'nearest',
         })
         const quantizedImageData = new ImageData(new Uint8ClampedArray(quantizedContainer.toUint8Array()), pixelWidth, pixelHeight)
-        sampleContext.putImageData(boostPixelPreviewEdges(quantizedImageData, pixelPreviewProfile.edgeBoost), 0, 0)
+        sampleContext.putImageData(sharpenPixelPreview(boostPixelPreviewEdges(quantizedImageData, pixelPreviewProfile.edgeBoost), pixelPreviewProfile.sharpness), 0, 0)
       } catch (error) {
         const fallbackImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
-        sampleContext.putImageData(boostPixelPreviewEdges(fallbackImageData, pixelPreviewProfile.edgeBoost), 0, 0)
+        sampleContext.putImageData(sharpenPixelPreview(boostPixelPreviewEdges(fallbackImageData, pixelPreviewProfile.edgeBoost), pixelPreviewProfile.sharpness), 0, 0)
         console.warn('Failed to apply image-q pixel preview; falling back to plain pixel sampling.', error)
       }
 
@@ -618,20 +726,58 @@ function InteractiveImageDetailMedia({
       {canToggleRenderMode || canUsePixelPreview ? (
         <div className="absolute bottom-3 left-3 z-30 flex flex-col items-start gap-2" onPointerDown={(event) => event.stopPropagation()}>
           {canUsePixelPreview ? (
-            <Button
-              size="icon-sm"
-              type="button"
-              variant="outline"
-              className={cn('relative bg-background text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', pixelPreviewMode !== 'off' && 'border-primary/45 text-primary')}
-              onClick={cyclePixelPreviewMode}
-              title={`도트 보기: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]} (클릭해서 강도 변경)`}
-              aria-label={`도트 보기: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}`}
-            >
-              <Grid2X2 className="h-4 w-4 stroke-[2.5]" />
-              {pixelPreviewMode !== 'off' ? (
-                <span className="absolute -right-1 -top-1 rounded-full border border-background bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">{PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}</span>
+            <div className="relative">
+              <Button
+                size="icon-sm"
+                type="button"
+                variant="outline"
+                className={cn('relative bg-background text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', pixelPreviewMode !== 'off' && 'border-primary/45 text-primary')}
+                onClick={() => setIsPixelPreviewPanelOpen((current) => !current)}
+                title={`도트 보기: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}`}
+                aria-label={`도트 보기 설정 열기: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}`}
+              >
+                <Grid2X2 className="h-4 w-4 stroke-[2.5]" />
+                {pixelPreviewMode !== 'off' ? (
+                  <span className="absolute -right-1 -top-1 rounded-full border border-background bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">{PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}</span>
+                ) : null}
+              </Button>
+
+              {isPixelPreviewPanelOpen ? (
+                <div className="absolute bottom-full left-0 mb-2 w-72 rounded-md border border-border bg-background p-3 text-xs text-foreground shadow-[0_18px_42px_rgba(0,0,0,0.45)]">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="font-semibold">도트 프리뷰</div>
+                    <Button size="sm" type="button" variant={pixelPreviewMode === 'off' ? 'default' : 'outline'} className="h-7 px-2 text-xs" onClick={() => setPixelPreviewModeAndPersist('off')}>
+                      끄기
+                    </Button>
+                  </div>
+                  <div className="mb-3 grid grid-cols-3 gap-1.5">
+                    {(['soft', 'medium', 'strong'] as const).map((mode) => (
+                      <Button key={mode} size="sm" type="button" variant={pixelPreviewMode === mode ? 'default' : 'outline'} className="h-7 text-xs" onClick={() => setPixelPreviewModeAndPersist(mode)}>
+                        {PIXEL_PREVIEW_MODE_LABELS[mode]}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="space-y-2.5">
+                    <label className="block">
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>샘플 해상도</span><span>{activePixelPreviewSettings.targetLongEdge}px</span></div>
+                      <input className="w-full accent-primary" type="range" min={160} max={640} step={16} value={activePixelPreviewSettings.targetLongEdge} onChange={(event) => updatePixelPreviewSettings({ targetLongEdge: Number(event.currentTarget.value) })} />
+                    </label>
+                    <label className="block">
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>색상 수</span><span>{activePixelPreviewSettings.colorCount}</span></div>
+                      <input className="w-full accent-primary" type="range" min={32} max={256} step={8} value={activePixelPreviewSettings.colorCount} onChange={(event) => updatePixelPreviewSettings({ colorCount: Number(event.currentTarget.value) })} />
+                    </label>
+                    <label className="block">
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>외곽선 강조</span><span>{Math.round(activePixelPreviewSettings.edgeBoost * 100)}</span></div>
+                      <input className="w-full accent-primary" type="range" min={0} max={36} step={1} value={Math.round(activePixelPreviewSettings.edgeBoost * 100)} onChange={(event) => updatePixelPreviewSettings({ edgeBoost: Number(event.currentTarget.value) / 100 })} />
+                    </label>
+                    <label className="block">
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>샤프닝</span><span>{Math.round(activePixelPreviewSettings.sharpness * 100)}</span></div>
+                      <input className="w-full accent-primary" type="range" min={0} max={80} step={2} value={Math.round(activePixelPreviewSettings.sharpness * 100)} onChange={(event) => updatePixelPreviewSettings({ sharpness: Number(event.currentTarget.value) / 100 })} />
+                    </label>
+                  </div>
+                </div>
               ) : null}
-            </Button>
+            </div>
           ) : null}
           {canToggleRenderMode ? (
             <Button
