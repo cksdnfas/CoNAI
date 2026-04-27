@@ -31,7 +31,7 @@ if (process.env.NODE_ENV === 'production' || isPackagedRuntime()) {
 }
 
 import https from 'https';
-import express, { type Response as ExpressResponse } from 'express';
+import express, { type Request, type Response as ExpressResponse } from 'express';
 import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -94,6 +94,8 @@ const trustProxySetting = resolveTrustProxySetting();
 app.set('trust proxy', trustProxySetting);
 console.log(`[Config] Express trust proxy: ${String(trustProxySetting)}`);
 
+const skipAdminRateLimit = (req: Request): boolean => req.session?.accountType === 'admin';
+
 // Rate limiting for login endpoint (prevent brute-force attacks)
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15분
@@ -111,6 +113,7 @@ const apiLimiter = rateLimit({
   message: 'Too many requests from this IP',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipAdminRateLimit,
 });
 
 // Stricter rate limiting for upload endpoints
@@ -120,6 +123,7 @@ const uploadLimiter = rateLimit({
   message: 'Too many upload requests, please slow down',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipAdminRateLimit,
 });
 
 // Lenient rate limiting for read-only endpoints (metadata, groups, etc.)
@@ -129,6 +133,7 @@ const readOnlyLimiter = rateLimit({
   message: 'Too many read requests from this IP',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipAdminRateLimit,
 });
 
 // Middleware
@@ -166,7 +171,6 @@ app.use(helmet({
   },
 
 }));
-app.use(apiLimiter);
 
 const allowedOrigins = [
   'http://localhost:5555',
@@ -257,6 +261,9 @@ async function startServer() {
 
     // 4. Initialize session middleware (User Settings DB + Session configuration)
     await initializeSessionMiddleware();
+
+    // Apply global API throttling after sessions are available so admins can bypass UI browsing limits.
+    app.use(apiLimiter);
 
     // 4-1. Sync file-based custom nodes into the module registry.
     const { CustomNodeRegistryService } = await import('./services/customNodeRegistryService');
