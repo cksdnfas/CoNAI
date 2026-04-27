@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -36,6 +36,8 @@ const DOUBLE_TAP_SCALE = 2
 const ROTATION_STEP = 90
 const IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY = 'conai:image-detail-media:wheel-zoom-enabled'
 const IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY = 'conai:image-detail-media:controls-collapsed'
+const IMAGE_PIXEL_PREVIEW_ENABLED_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-enabled'
+const IMAGE_PIXEL_PREVIEW_BLOCK_SIZE = 8
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -91,6 +93,22 @@ function persistImageControlsCollapsed(collapsed: boolean) {
   window.localStorage.setItem(IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY, collapsed ? 'true' : 'false')
 }
 
+function loadImagePixelPreviewEnabled() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return window.localStorage.getItem(IMAGE_PIXEL_PREVIEW_ENABLED_STORAGE_KEY) === 'true'
+}
+
+function persistImagePixelPreviewEnabled(enabled: boolean) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(IMAGE_PIXEL_PREVIEW_ENABLED_STORAGE_KEY, enabled ? 'true' : 'false')
+}
+
 /** Render the main detail media using the correct element for image, GIF, or video files. */
 export function ImageDetailMedia({ image, renderUrl, className }: ImageDetailMediaProps) {
   const { showSnackbar } = useSnackbar()
@@ -130,6 +148,7 @@ export function ImageDetailMedia({ image, renderUrl, className }: ImageDetailMed
       renderMode={preferredRenderMode}
       canToggleRenderMode={canToggleRenderMode}
       onToggleRenderMode={handleToggleRenderMode}
+      canUsePixelPreview={mediaKind === 'image'}
     />
   )
 }
@@ -152,6 +171,7 @@ function InteractiveImageDetailMedia({
   renderMode,
   canToggleRenderMode,
   onToggleRenderMode,
+  canUsePixelPreview,
 }: {
   image: ImageRecord
   renderUrl: string
@@ -160,8 +180,10 @@ function InteractiveImageDetailMedia({
   renderMode: ImageDetailRenderMode
   canToggleRenderMode: boolean
   onToggleRenderMode: () => void
+  canUsePixelPreview: boolean
 }) {
   const [hasRenderError, setHasRenderError] = useState(false)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
     setHasRenderError(false)
@@ -191,6 +213,7 @@ function InteractiveImageDetailMedia({
   const [isGestureActive, setIsGestureActive] = useState(false)
   const [isWheelZoomEnabled, setIsWheelZoomEnabled] = useState(() => loadImageWheelZoomEnabled())
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(() => loadImageControlsCollapsed())
+  const [isPixelPreviewEnabled, setIsPixelPreviewEnabled] = useState(() => loadImagePixelPreviewEnabled())
 
   useEffect(() => {
     scaleRef.current = scale
@@ -225,6 +248,7 @@ function InteractiveImageDetailMedia({
   const canZoomOut = scale > MIN_SCALE + 0.001
   const canZoomIn = scale < MAX_SCALE - 0.001
   const transformSummary = `${Math.round(scale * 100)}%${rotation !== 0 ? ` · ${rotation}°` : ''}`
+  const shouldRenderPixelPreview = canUsePixelPreview && isPixelPreviewEnabled
 
   const resetView = useCallback(() => {
     scaleRef.current = MIN_SCALE
@@ -288,6 +312,76 @@ function InteractiveImageDetailMedia({
       return nextValue
     })
   }
+
+  const togglePixelPreview = () => {
+    setIsPixelPreviewEnabled((current) => {
+      const nextValue = !current
+      persistImagePixelPreviewEnabled(nextValue)
+      return nextValue
+    })
+  }
+
+  useEffect(() => {
+    if (!shouldRenderPixelPreview) {
+      return
+    }
+
+    const canvas = canvasRef.current
+    if (!canvas) {
+      return
+    }
+
+    let cancelled = false
+    const sourceImage = new Image()
+
+    sourceImage.onload = () => {
+      if (cancelled) {
+        return
+      }
+
+      const sourceWidth = sourceImage.naturalWidth || sourceImage.width
+      const sourceHeight = sourceImage.naturalHeight || sourceImage.height
+      if (sourceWidth <= 0 || sourceHeight <= 0) {
+        setHasRenderError(true)
+        return
+      }
+
+      const pixelWidth = Math.max(1, Math.round(sourceWidth / IMAGE_PIXEL_PREVIEW_BLOCK_SIZE))
+      const pixelHeight = Math.max(1, Math.round(sourceHeight / IMAGE_PIXEL_PREVIEW_BLOCK_SIZE))
+      const sampleCanvas = document.createElement('canvas')
+      sampleCanvas.width = pixelWidth
+      sampleCanvas.height = pixelHeight
+
+      const sampleContext = sampleCanvas.getContext('2d')
+      const canvasContext = canvas.getContext('2d')
+      if (!sampleContext || !canvasContext) {
+        setHasRenderError(true)
+        return
+      }
+
+      sampleContext.imageSmoothingEnabled = true
+      sampleContext.imageSmoothingQuality = 'high'
+      sampleContext.clearRect(0, 0, pixelWidth, pixelHeight)
+      sampleContext.drawImage(sourceImage, 0, 0, pixelWidth, pixelHeight)
+
+      canvas.width = sourceWidth
+      canvas.height = sourceHeight
+      canvasContext.imageSmoothingEnabled = false
+      canvasContext.clearRect(0, 0, sourceWidth, sourceHeight)
+      canvasContext.drawImage(sampleCanvas, 0, 0, pixelWidth, pixelHeight, 0, 0, sourceWidth, sourceHeight)
+    }
+
+    sourceImage.onerror = () => {
+      if (!cancelled) {
+        setHasRenderError(true)
+      }
+    }
+    sourceImage.src = renderUrl
+
+    return () => {
+      cancelled = true
+    }
+  }, [renderUrl, shouldRenderPixelPreview])
 
   useEffect(() => {
     const node = viewportRef.current
@@ -421,19 +515,34 @@ function InteractiveImageDetailMedia({
 
   return (
     <div className="relative isolate flex h-full w-full items-center justify-center overflow-hidden">
-      {canToggleRenderMode ? (
+      {canToggleRenderMode || canUsePixelPreview ? (
         <div className="absolute bottom-3 left-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
-          <Button
-            size="icon-sm"
-            type="button"
-            variant="outline"
-            className="bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high"
-            onClick={onToggleRenderMode}
-            title={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
-            aria-label={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
-          >
-            {renderMode === 'original' ? <ImageIcon className="h-4 w-4" /> : <ScanSearch className="h-4 w-4" />}
-          </Button>
+          {canToggleRenderMode ? (
+            <Button
+              size="icon-sm"
+              type="button"
+              variant="outline"
+              className="bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high"
+              onClick={onToggleRenderMode}
+              title={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
+              aria-label={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
+            >
+              {renderMode === 'original' ? <ImageIcon className="h-4 w-4" /> : <ScanSearch className="h-4 w-4" />}
+            </Button>
+          ) : null}
+          {canUsePixelPreview ? (
+            <Button
+              size="icon-sm"
+              type="button"
+              variant="outline"
+              className={cn('bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', isPixelPreviewEnabled && 'border-primary/45 text-primary')}
+              onClick={togglePixelPreview}
+              title={isPixelPreviewEnabled ? '도트 보기 끄기' : '도트 보기'}
+              aria-label={isPixelPreviewEnabled ? '도트 보기 끄기' : '도트 보기'}
+            >
+              <Grid2X2 className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -524,7 +633,17 @@ function InteractiveImageDetailMedia({
             transformOrigin: 'center center',
           }}
         >
-          <img src={renderUrl} alt={altText} className={cn('block h-auto w-auto pointer-events-none select-none', className)} draggable={false} onError={() => setHasRenderError(true)} />
+          {shouldRenderPixelPreview ? (
+            <canvas
+              ref={canvasRef}
+              role="img"
+              aria-label={altText}
+              className={cn('block h-auto w-auto pointer-events-none select-none', className)}
+              style={{ imageRendering: 'pixelated' }}
+            />
+          ) : (
+            <img src={renderUrl} alt={altText} className={cn('block h-auto w-auto pointer-events-none select-none', className)} draggable={false} onError={() => setHasRenderError(true)} />
+          )}
         </div>
       </div>
     </div>
