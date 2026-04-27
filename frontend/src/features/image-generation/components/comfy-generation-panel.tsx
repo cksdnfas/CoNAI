@@ -109,6 +109,11 @@ export function ComfyGenerationPanel({
     [dropdownListsQuery.data],
   )
 
+  const buildDropdownSelectOptions = useCallback((items: string[]) => [
+    '__random__',
+    ...items.filter((item) => item.trim().length > 0 && item !== '__random__'),
+  ], [])
+
   const resolveWorkflowFields = useCallback((workflow: GenerationWorkflow | null) => {
     if (!workflow) {
       return []
@@ -121,14 +126,14 @@ export function ComfyGenerationPanel({
           return {
             ...field,
             type: 'select' as const,
-            options: dropdownList.items,
+            options: buildDropdownSelectOptions(dropdownList.items),
           }
         }
       }
 
       return field
     })
-  }, [dropdownListMap])
+  }, [buildDropdownSelectOptions, dropdownListMap])
 
   const selectedWorkflowFields = useMemo(() => resolveWorkflowFields(selectedWorkflow), [resolveWorkflowFields, selectedWorkflow])
   const moduleSaveWorkflowFields = useMemo(() => resolveWorkflowFields(moduleSaveWorkflow), [resolveWorkflowFields, moduleSaveWorkflow])

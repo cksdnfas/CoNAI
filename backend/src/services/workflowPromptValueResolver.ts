@@ -1,3 +1,4 @@
+import { CustomDropdownListModel } from '../models/CustomDropdownList'
 import { WildcardService } from './wildcardService'
 
 export type WorkflowPromptFieldLike = {
@@ -5,7 +6,11 @@ export type WorkflowPromptFieldLike = {
   type?: string
   jsonPath?: string
   default_value?: unknown
+  dropdown_list_name?: string
+  options?: unknown[]
 }
+
+export const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
 
 const COMFY_MODEL_PATH_INPUT_KEYS = new Set([
   'ckpt_name',
@@ -34,6 +39,29 @@ function normalizeComfyModelPathValue(field: WorkflowPromptFieldLike, value: str
   return value.replace(/\//g, '\\')
 }
 
+function resolveRandomDropdownValue(field: WorkflowPromptFieldLike) {
+  const dropdownListName = typeof field.dropdown_list_name === 'string' ? field.dropdown_list_name.trim() : ''
+  const options = dropdownListName
+    ? CustomDropdownListModel.findByName(dropdownListName)?.items
+    : Array.isArray(field.options) ? field.options : []
+
+  if (!options || options.length === 0) {
+    throw new Error(dropdownListName
+      ? `드롭다운 목록에 랜덤 선택할 항목이 없어: ${dropdownListName}`
+      : `드롭다운 필드에 랜덤 선택할 항목이 없어: ${field.id}`)
+  }
+
+  const candidateOptions = options.filter((option): option is string => typeof option === 'string' && option.trim().length > 0 && option !== DROPDOWN_RANDOM_OPTION_VALUE)
+  if (candidateOptions.length === 0) {
+    throw new Error(dropdownListName
+      ? `드롭다운 목록에 랜덤 선택할 항목이 없어: ${dropdownListName}`
+      : `드롭다운 필드에 랜덤 선택할 항목이 없어: ${field.id}`)
+  }
+
+  const randomIndex = Math.floor(Math.random() * candidateOptions.length)
+  return candidateOptions[randomIndex] ?? candidateOptions[0]
+}
+
 /** Resolve one prompt-data object with preprocess chains first, then wildcard parsing on text-like fields. */
 export function resolveWorkflowPromptValues<T extends Record<string, any>>(
   markedFields: WorkflowPromptFieldLike[],
@@ -55,7 +83,9 @@ export function resolveWorkflowPromptValues<T extends Record<string, any>>(
       continue
     }
 
-    const normalizedValue = normalizeComfyModelPathValue(field, rawValue, tool)
+    const normalizedValue = rawValue === DROPDOWN_RANDOM_OPTION_VALUE && field.type === 'select'
+      ? resolveRandomDropdownValue(field)
+      : normalizeComfyModelPathValue(field, rawValue, tool)
 
     if (field.type === 'select') {
       resolvedPromptData[field.id] = normalizedValue

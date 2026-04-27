@@ -15,6 +15,11 @@ import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-charac
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 
 const WORKFLOW_INPUT_FIELD_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-4'
+const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
+
+function getWorkflowSelectOptionLabel(option: string) {
+  return option === DROPDOWN_RANDOM_OPTION_VALUE ? '랜덤 선택' : option
+}
 
 function hasDefaultValue(value: unknown) {
   return value !== undefined
@@ -173,7 +178,7 @@ export function WorkflowInputFields({
           >
             <option value="">기본값 사용</option>
             {inputDefinition.options.map((option) => (
-              <option key={option} value={option}>{option}</option>
+              <option key={option} value={option}>{getWorkflowSelectOptionLabel(option)}</option>
             ))}
           </Select>
         </div>

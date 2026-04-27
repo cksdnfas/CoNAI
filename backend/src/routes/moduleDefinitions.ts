@@ -15,6 +15,8 @@ import { asyncHandler } from '../middleware/errorHandler'
 
 const router = Router()
 
+const DROPDOWN_RANDOM_OPTION = { value: '__random__', label: '랜덤 선택' } as const
+
 const LABEL_OVERRIDES_BY_KEY: Record<string, string> = {
   prompt: '프롬프트',
   negative_prompt: '네거티브 프롬프트',
@@ -232,6 +234,13 @@ function getCustomDropdownListName(field: any) {
   return legacyHintName.length > 0 ? legacyHintName : null
 }
 
+function buildDropdownSelectOptions(items: string[]) {
+  return [
+    DROPDOWN_RANDOM_OPTION,
+    ...items.filter((item) => item.trim().length > 0 && item !== DROPDOWN_RANDOM_OPTION.value),
+  ]
+}
+
 function hydrateDynamicSelectOptions(uiSchema: any[], dropdownListMap: Map<string, string[]>) {
   return uiSchema.map((field: any) => {
     if (field?.data_type !== 'select') {
@@ -255,7 +264,7 @@ function hydrateDynamicSelectOptions(uiSchema: any[], dropdownListMap: Map<strin
     return {
       ...field,
       dropdown_list_name: dropdownListName,
-      options: dropdownItems,
+      options: buildDropdownSelectOptions(dropdownItems),
     }
   })
 }

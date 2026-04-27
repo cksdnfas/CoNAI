@@ -12,6 +12,12 @@ import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { PowerLoraLoaderInput } from './power-lora-loader-input'
 
+const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
+
+function getSelectOptionLabel(option: string) {
+  return option === DROPDOWN_RANDOM_OPTION_VALUE ? '랜덤 선택' : option
+}
+
 type WorkflowFieldInputProps = {
   field: WorkflowMarkedField
   value: WorkflowFieldDraftValue
@@ -75,7 +81,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
         <option value="">선택</option>
         {(field.options ?? []).map((option) => (
           <option key={option} value={option}>
-            {option}
+            {getSelectOptionLabel(option)}
           </option>
         ))}
       </Select>,

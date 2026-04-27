@@ -12,6 +12,8 @@ import type { MarkedField, WorkflowRecord } from '../types/workflow';
 
 const router = Router();
 
+const DROPDOWN_RANDOM_OPTION_VALUE = '__random__';
+
 function getPublicWorkflowOrNull(slug: string) {
   return WorkflowModel.findPublicBySlug(slug.trim().toLowerCase());
 }
@@ -45,6 +47,13 @@ function buildCustomDropdownListMap() {
   );
 }
 
+function buildDropdownSelectOptions(items: string[]) {
+  return [
+    DROPDOWN_RANDOM_OPTION_VALUE,
+    ...items.filter((item) => item.trim().length > 0 && item !== DROPDOWN_RANDOM_OPTION_VALUE),
+  ];
+}
+
 function resolveCustomDropdownMarkedFields(
   markedFields: MarkedField[],
   dropdownListMap: Map<string, string[]>,
@@ -61,7 +70,7 @@ function resolveCustomDropdownMarkedFields(
 
     return {
       ...field,
-      options: dropdownItems,
+      options: buildDropdownSelectOptions(dropdownItems),
     };
   });
 }
