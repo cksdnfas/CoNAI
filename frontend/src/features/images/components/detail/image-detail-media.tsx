@@ -516,7 +516,20 @@ function InteractiveImageDetailMedia({
   return (
     <div className="relative isolate flex h-full w-full items-center justify-center overflow-hidden">
       {canToggleRenderMode || canUsePixelPreview ? (
-        <div className="absolute bottom-3 left-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
+        <div className="absolute bottom-3 left-3 z-30 flex flex-col items-start gap-2" onPointerDown={(event) => event.stopPropagation()}>
+          {canUsePixelPreview ? (
+            <Button
+              size="icon-sm"
+              type="button"
+              variant="outline"
+              className={cn('bg-background text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', isPixelPreviewEnabled && 'border-primary/45 text-primary')}
+              onClick={togglePixelPreview}
+              title={isPixelPreviewEnabled ? '도트 보기 끄기' : '도트 보기'}
+              aria-label={isPixelPreviewEnabled ? '도트 보기 끄기' : '도트 보기'}
+            >
+              <Grid2X2 className="h-4 w-4 stroke-[2.5]" />
+            </Button>
+          ) : null}
           {canToggleRenderMode ? (
             <Button
               size="icon-sm"
@@ -528,19 +541,6 @@ function InteractiveImageDetailMedia({
               aria-label={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
             >
               {renderMode === 'original' ? <ImageIcon className="h-4 w-4" /> : <ScanSearch className="h-4 w-4" />}
-            </Button>
-          ) : null}
-          {canUsePixelPreview ? (
-            <Button
-              size="icon-sm"
-              type="button"
-              variant="outline"
-              className={cn('bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', isPixelPreviewEnabled && 'border-primary/45 text-primary')}
-              onClick={togglePixelPreview}
-              title={isPixelPreviewEnabled ? '도트 보기 끄기' : '도트 보기'}
-              aria-label={isPixelPreviewEnabled ? '도트 보기 끄기' : '도트 보기'}
-            >
-              <Grid2X2 className="h-4 w-4" />
             </Button>
           ) : null}
         </div>
