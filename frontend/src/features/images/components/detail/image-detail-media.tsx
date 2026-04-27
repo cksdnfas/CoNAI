@@ -64,9 +64,9 @@ const PIXEL_PREVIEW_MODE_LABELS: Record<PixelPreviewMode, string> = {
   custom: '수동',
 }
 const IMAGE_PIXEL_PREVIEW_PRESETS: Record<Exclude<PixelPreviewMode, 'off' | 'custom'>, PixelPreviewSettings> = {
-  soft: { targetLongEdge: 512, colorCount: 192, edgeBoost: 0.08, sharpness: 0.18 },
-  medium: { targetLongEdge: 384, colorCount: 128, edgeBoost: 0.12, sharpness: 0.26 },
-  strong: { targetLongEdge: 256, colorCount: 96, edgeBoost: 0.16, sharpness: 0.34 },
+  soft: { targetLongEdge: 512, colorCount: 192, edgeBoost: 0.04, sharpness: 0.08 },
+  medium: { targetLongEdge: 384, colorCount: 128, edgeBoost: 0.07, sharpness: 0.14 },
+  strong: { targetLongEdge: 256, colorCount: 96, edgeBoost: 0.1, sharpness: 0.2 },
 }
 const DEFAULT_PIXEL_PREVIEW_SETTINGS: PixelPreviewSettings = IMAGE_PIXEL_PREVIEW_PRESETS.soft
 
@@ -167,8 +167,8 @@ function normalizePixelPreviewSettings(settings: Partial<PixelPreviewSettings>):
   return {
     targetLongEdge: Math.round(clamp(Number(settings.targetLongEdge) || DEFAULT_PIXEL_PREVIEW_SETTINGS.targetLongEdge, 160, 640)),
     colorCount: Math.round(clamp(Number(settings.colorCount) || DEFAULT_PIXEL_PREVIEW_SETTINGS.colorCount, 32, 256)),
-    edgeBoost: clamp(Number(settings.edgeBoost) || 0, 0, 0.36),
-    sharpness: clamp(Number(settings.sharpness) || 0, 0, 0.8),
+    edgeBoost: clamp(Number(settings.edgeBoost) || 0, 0, 0.24),
+    sharpness: clamp(Number(settings.sharpness) || 0, 0, 0.5),
   }
 }
 
@@ -199,14 +199,24 @@ function getPixelPreviewProfile(mode: PixelPreviewMode, customSettings: PixelPre
   }
 
   const settings = mode === 'custom' ? customSettings : IMAGE_PIXEL_PREVIEW_PRESETS[mode]
-  const contrast = 1 + settings.edgeBoost * 0.55 + settings.sharpness * 0.08
-  const saturation = 1 + settings.edgeBoost * 0.18
+  const contrast = 1 + settings.edgeBoost * 0.18 + settings.sharpness * 0.03
   return {
     ...settings,
     label: PIXEL_PREVIEW_MODE_LABELS[mode],
     smoothing: settings.targetLongEdge >= 320,
-    preFilter: `contrast(${contrast.toFixed(3)}) saturate(${saturation.toFixed(3)})`,
+    preFilter: `contrast(${contrast.toFixed(3)})`,
   }
+}
+
+function getPixelLuminance(data: Uint8ClampedArray, index: number) {
+  return data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114
+}
+
+function applyLuminanceScale(data: Uint8ClampedArray, index: number, currentLuminance: number, targetLuminance: number, minScale = 0.75, maxScale = 1.25) {
+  const scale = clamp(targetLuminance / Math.max(1, currentLuminance), minScale, maxScale)
+  data[index] = Math.round(clamp(data[index] * scale, 0, 255))
+  data[index + 1] = Math.round(clamp(data[index + 1] * scale, 0, 255))
+  data[index + 2] = Math.round(clamp(data[index + 2] * scale, 0, 255))
 }
 
 function boostPixelPreviewEdges(imageData: ImageData, strength: number) {
@@ -216,17 +226,16 @@ function boostPixelPreviewEdges(imageData: ImageData, strength: number) {
 
   const { data, width, height } = imageData
   const original = new Uint8ClampedArray(data)
-  const luminance = (index: number) => original[index] * 0.299 + original[index + 1] * 0.587 + original[index + 2] * 0.114
-  const threshold = 24
+  const threshold = 28
 
   for (let y = 1; y < height - 1; y += 1) {
     for (let x = 1; x < width - 1; x += 1) {
       const index = (y * width + x) * 4
-      const center = luminance(index)
-      const left = luminance(index - 4)
-      const right = luminance(index + 4)
-      const up = luminance(index - width * 4)
-      const down = luminance(index + width * 4)
+      const center = getPixelLuminance(original, index)
+      const left = getPixelLuminance(original, index - 4)
+      const right = getPixelLuminance(original, index + 4)
+      const up = getPixelLuminance(original, index - width * 4)
+      const down = getPixelLuminance(original, index + width * 4)
       const brightestNeighbor = Math.max(left, right, up, down)
       const gradient = brightestNeighbor - center
 
@@ -234,10 +243,8 @@ function boostPixelPreviewEdges(imageData: ImageData, strength: number) {
         continue
       }
 
-      const factor = Math.max(0.65, 1 - strength * Math.min(1.8, gradient / 96))
-      data[index] = Math.round(data[index] * factor)
-      data[index + 1] = Math.round(data[index + 1] * factor)
-      data[index + 2] = Math.round(data[index + 2] * factor)
+      const targetLuminance = center * Math.max(0.82, 1 - strength * Math.min(1.25, gradient / 128))
+      applyLuminanceScale(data, index, center, targetLuminance, 0.82, 1)
     }
   }
 
@@ -251,21 +258,18 @@ function sharpenPixelPreview(imageData: ImageData, amount: number) {
 
   const { data, width, height } = imageData
   const original = new Uint8ClampedArray(data)
-  const centerWeight = 1 + amount * 4
-  const sideWeight = amount
-
   for (let y = 1; y < height - 1; y += 1) {
     for (let x = 1; x < width - 1; x += 1) {
       const index = (y * width + x) * 4
-      for (let channel = 0; channel < 3; channel += 1) {
-        const value =
-          original[index + channel] * centerWeight -
-          original[index - 4 + channel] * sideWeight -
-          original[index + 4 + channel] * sideWeight -
-          original[index - width * 4 + channel] * sideWeight -
-          original[index + width * 4 + channel] * sideWeight
-        data[index + channel] = Math.round(clamp(value, 0, 255))
-      }
+      const center = getPixelLuminance(original, index)
+      const neighborAverage =
+        (getPixelLuminance(original, index - 4) +
+          getPixelLuminance(original, index + 4) +
+          getPixelLuminance(original, index - width * 4) +
+          getPixelLuminance(original, index + width * 4)) /
+        4
+      const targetLuminance = clamp(center + (center - neighborAverage) * amount, 0, 255)
+      applyLuminanceScale(data, index, center, targetLuminance, 0.86, 1.16)
     }
   }
 
@@ -768,11 +772,11 @@ function InteractiveImageDetailMedia({
                     </label>
                     <label className="block">
                       <div className="mb-1 flex justify-between text-muted-foreground"><span>외곽선 강조</span><span>{Math.round(activePixelPreviewSettings.edgeBoost * 100)}</span></div>
-                      <input className="w-full accent-primary" type="range" min={0} max={36} step={1} value={Math.round(activePixelPreviewSettings.edgeBoost * 100)} onChange={(event) => updatePixelPreviewSettings({ edgeBoost: Number(event.currentTarget.value) / 100 })} />
+                      <input className="w-full accent-primary" type="range" min={0} max={24} step={1} value={Math.round(activePixelPreviewSettings.edgeBoost * 100)} onChange={(event) => updatePixelPreviewSettings({ edgeBoost: Number(event.currentTarget.value) / 100 })} />
                     </label>
                     <label className="block">
                       <div className="mb-1 flex justify-between text-muted-foreground"><span>샤프닝</span><span>{Math.round(activePixelPreviewSettings.sharpness * 100)}</span></div>
-                      <input className="w-full accent-primary" type="range" min={0} max={80} step={2} value={Math.round(activePixelPreviewSettings.sharpness * 100)} onChange={(event) => updatePixelPreviewSettings({ sharpness: Number(event.currentTarget.value) / 100 })} />
+                      <input className="w-full accent-primary" type="range" min={0} max={50} step={2} value={Math.round(activePixelPreviewSettings.sharpness * 100)} onChange={(event) => updatePixelPreviewSettings({ sharpness: Number(event.currentTarget.value) / 100 })} />
                     </label>
                   </div>
                 </div>
