@@ -29,7 +29,8 @@ interface PointerPosition {
   y: number
 }
 
-const MIN_SCALE = 1
+const MIN_SCALE = 0.25
+const DEFAULT_SCALE = 1
 const MAX_SCALE = 6
 const ZOOM_STEP = 0.24
 const DOUBLE_TAP_SCALE = 2
@@ -37,8 +38,8 @@ const ROTATION_STEP = 90
 const IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY = 'conai:image-detail-media:wheel-zoom-enabled'
 const IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY = 'conai:image-detail-media:controls-collapsed'
 const IMAGE_PIXEL_PREVIEW_ENABLED_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-enabled'
-const IMAGE_PIXEL_PREVIEW_TARGET_LONG_EDGE = 256
-const IMAGE_PIXEL_PREVIEW_COLOR_COUNT = 48
+const IMAGE_PIXEL_PREVIEW_TARGET_LONG_EDGE = 192
+const IMAGE_PIXEL_PREVIEW_COLOR_COUNT = 64
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -197,7 +198,7 @@ function InteractiveImageDetailMedia({
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const pointersRef = useRef(new Map<number, PointerPosition>())
   const pinchStartDistanceRef = useRef<number | null>(null)
-  const pinchStartScaleRef = useRef(MIN_SCALE)
+  const pinchStartScaleRef = useRef(DEFAULT_SCALE)
   const panOriginRef = useRef<{
     pointerId: number
     startX: number
@@ -205,10 +206,10 @@ function InteractiveImageDetailMedia({
     offsetX: number
     offsetY: number
   } | null>(null)
-  const scaleRef = useRef(MIN_SCALE)
+  const scaleRef = useRef(DEFAULT_SCALE)
   const rotationRef = useRef(0)
   const offsetRef = useRef({ x: 0, y: 0 })
-  const [scale, setScale] = useState(MIN_SCALE)
+  const [scale, setScale] = useState(DEFAULT_SCALE)
   const [rotation, setRotation] = useState(0)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [isGestureActive, setIsGestureActive] = useState(false)
@@ -232,16 +233,16 @@ function InteractiveImageDetailMedia({
     pointersRef.current.clear()
     pinchStartDistanceRef.current = null
     panOriginRef.current = null
-    scaleRef.current = MIN_SCALE
+    scaleRef.current = DEFAULT_SCALE
     rotationRef.current = 0
     offsetRef.current = { x: 0, y: 0 }
-    setScale(MIN_SCALE)
+    setScale(DEFAULT_SCALE)
     setRotation(0)
     setOffset({ x: 0, y: 0 })
     setIsGestureActive(false)
   }, [renderUrl])
 
-  const isScaled = scale > MIN_SCALE + 0.001
+  const isScaled = Math.abs(scale - DEFAULT_SCALE) > 0.001
   const hasRotation = rotation !== 0
   const hasOffset = Math.abs(offset.x) > 0.5 || Math.abs(offset.y) > 0.5
   const isPannable = isScaled || hasRotation
@@ -252,10 +253,10 @@ function InteractiveImageDetailMedia({
   const shouldRenderPixelPreview = canUsePixelPreview && isPixelPreviewEnabled
 
   const resetView = useCallback(() => {
-    scaleRef.current = MIN_SCALE
+    scaleRef.current = DEFAULT_SCALE
     rotationRef.current = 0
     offsetRef.current = { x: 0, y: 0 }
-    setScale(MIN_SCALE)
+    setScale(DEFAULT_SCALE)
     setRotation(0)
     setOffset({ x: 0, y: 0 })
   }, [])
@@ -265,7 +266,7 @@ function InteractiveImageDetailMedia({
     scaleRef.current = clampedScale
     setScale(clampedScale)
 
-    if (clampedScale <= MIN_SCALE + 0.001) {
+    if (clampedScale <= DEFAULT_SCALE + 0.001) {
       offsetRef.current = { x: 0, y: 0 }
       setOffset({ x: 0, y: 0 })
     }
@@ -361,8 +362,8 @@ function InteractiveImageDetailMedia({
         return
       }
 
-      sampleContext.imageSmoothingEnabled = true
-      sampleContext.imageSmoothingQuality = 'high'
+      sampleContext.imageSmoothingEnabled = false
+      sampleContext.filter = 'contrast(1.18) saturate(1.06)'
       sampleContext.clearRect(0, 0, pixelWidth, pixelHeight)
       sampleContext.drawImage(sourceImage, 0, 0, pixelWidth, pixelHeight)
 
@@ -377,7 +378,7 @@ function InteractiveImageDetailMedia({
         })
         const quantizedContainer = iq.applyPaletteSync(sourceContainer, palette, {
           colorDistanceFormula: 'euclidean-bt709-noalpha',
-          imageQuantization: 'atkinson',
+          imageQuantization: 'nearest',
         })
         sampleContext.putImageData(new ImageData(new Uint8ClampedArray(quantizedContainer.toUint8Array()), pixelWidth, pixelHeight), 0, 0)
       } catch (error) {
@@ -527,7 +528,7 @@ function InteractiveImageDetailMedia({
     panOriginRef.current = null
     setIsGestureActive(false)
 
-    if (scaleRef.current <= MIN_SCALE + 0.001) {
+    if (scaleRef.current <= DEFAULT_SCALE + 0.001) {
       offsetRef.current = { x: 0, y: 0 }
       setOffset({ x: 0, y: 0 })
     }
@@ -634,7 +635,7 @@ function InteractiveImageDetailMedia({
             return
           }
 
-          if (scaleRef.current > MIN_SCALE + 0.001) {
+          if (scaleRef.current > DEFAULT_SCALE + 0.001) {
             resetView()
             return
           }
@@ -659,7 +660,7 @@ function InteractiveImageDetailMedia({
               role="img"
               aria-label={altText}
               className={cn('block h-auto w-auto pointer-events-none select-none', className)}
-              style={{ imageRendering: 'pixelated', filter: 'contrast(1.04) saturate(1.08)' }}
+              style={{ imageRendering: 'pixelated', filter: 'contrast(1.12) saturate(1.06)' }}
             />
           ) : (
             <img src={renderUrl} alt={altText} className={cn('block h-auto w-auto pointer-events-none select-none', className)} draggable={false} onError={() => setHasRenderError(true)} />
