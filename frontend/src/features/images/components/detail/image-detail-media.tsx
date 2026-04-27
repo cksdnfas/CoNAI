@@ -148,7 +148,7 @@ export function ImageDetailMedia({ image, renderUrl, className }: ImageDetailMed
       renderMode={preferredRenderMode}
       canToggleRenderMode={canToggleRenderMode}
       onToggleRenderMode={handleToggleRenderMode}
-      canUsePixelPreview={mediaKind === 'image'}
+      canUsePixelPreview
     />
   )
 }
