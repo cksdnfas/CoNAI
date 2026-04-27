@@ -37,7 +37,7 @@ const ROTATION_STEP = 90
 const IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY = 'conai:image-detail-media:wheel-zoom-enabled'
 const IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY = 'conai:image-detail-media:controls-collapsed'
 const IMAGE_PIXEL_PREVIEW_ENABLED_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-enabled'
-const IMAGE_PIXEL_PREVIEW_BLOCK_SIZE = 8
+const IMAGE_PIXEL_PREVIEW_BLOCK_SIZE = 4
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -359,8 +359,7 @@ function InteractiveImageDetailMedia({
         return
       }
 
-      sampleContext.imageSmoothingEnabled = true
-      sampleContext.imageSmoothingQuality = 'high'
+      sampleContext.imageSmoothingEnabled = false
       sampleContext.clearRect(0, 0, pixelWidth, pixelHeight)
       sampleContext.drawImage(sourceImage, 0, 0, pixelWidth, pixelHeight)
 
@@ -639,7 +638,7 @@ function InteractiveImageDetailMedia({
               role="img"
               aria-label={altText}
               className={cn('block h-auto w-auto pointer-events-none select-none', className)}
-              style={{ imageRendering: 'pixelated' }}
+              style={{ imageRendering: 'pixelated', filter: 'contrast(1.04) saturate(1.08)' }}
             />
           ) : (
             <img src={renderUrl} alt={altText} className={cn('block h-auto w-auto pointer-events-none select-none', className)} draggable={false} onError={() => setHasRenderError(true)} />
