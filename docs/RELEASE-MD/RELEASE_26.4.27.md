@@ -2,19 +2,7 @@
 
 ## Version 26.4.27 (2026-04-27)
 
-v26.4.27은 프롬프트 관계/분류 그래프, 생성 예약과 큐 운영, Codex 기반 생성, 모듈 그래프 노드 확장, 이미지/비디오 뷰어 안정화, 권한 기반 삭제 보호를 중심으로 묶은 알파 릴리즈입니다.
-
----
-
-### 프롬프트 관계 그래프 / 자동 분류
-
-프롬프트 페이지가 단순 목록 관리에서 관계 탐색과 자동 분류 보조까지 확장됐습니다.
-
-- 프롬프트 관계 추천과 그래프 탭을 추가해 유사·연관 프롬프트를 시각적으로 탐색 가능
-- 전체 프롬프트 관계 그래프와 taxonomy 모드를 추가해 대량 프롬프트 구조를 한눈에 확인 가능
-- 자동 프롬프트 taxonomy 기반을 추가하고, 분류 결과를 탐색/제안 패널에서 확인할 수 있도록 개선
-- 그래프 노드/엣지 표현, 줌, 엣지 anchoring을 다듬어 탐색 중 시각적 흔들림 감소
-- 프롬프트 페이지의 관련 패널과 검색 UI를 단순화해 탐색 흐름 정리
+v26.4.27은 생성 예약과 큐 운영, Codex 기반 생성, 모듈 그래프 노드 확장, 이미지/비디오 뷰어 안정화, 권한 기반 삭제 보호를 중심으로 묶은 알파 릴리즈입니다.
 
 ---
 
@@ -90,9 +78,6 @@ Codex 기반 이미지 생성 흐름이 일반 생성 파이프라인과 모듈 
 예시 주요 커밋:
 - `b24493e` perf(images): throttle initial list video preview loads
 - `e6dc3c3` feat: add first-pass video optimization flow
-- `aa57b10` Add lightweight prompt relation suggestions
-- `632f565` Add full prompt relation graph tab
-- `7cd21ed` Add automatic prompt taxonomy foundation
 - `f12b9ac` feat(generation): split reservations from job queue
 - `5509b82` Integrate wrapped Comfy graph modules with generation queue
 - `1cb34c5` Integrate Codex image generation and history failures
