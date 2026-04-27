@@ -68,7 +68,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
 
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WildcardWorkspaceTab>('wildcards')
   const [searchInput, setSearchInput] = useState('')
-  const [previewTool, setPreviewTool] = useState<WildcardTool>('nai')
+  const [previewTool, setPreviewTool] = useState<WildcardTool | 'codex'>('general')
   const [previewText, setPreviewText] = useState('')
   const [previewCount, setPreviewCount] = useState('5')
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
@@ -86,7 +86,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   })
 
   const parseMutation = useMutation({
-    mutationFn: (input: { text: string; tool: WildcardTool; count: number }) => parseWildcards(input),
+    mutationFn: (input: { text: string; tool: WildcardTool | 'codex'; count: number }) => parseWildcards(input),
   })
 
   const createMutation = useMutation({

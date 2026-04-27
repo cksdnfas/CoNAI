@@ -1,5 +1,6 @@
 import type { WildcardTool } from '@/lib/api'
 import {
+  countStoredWildcardItemsForTool,
   countWildcardItemsForTool,
   resolvePreferredWildcardItemTool,
   type FlattenedWildcardRecord,
@@ -19,6 +20,7 @@ export type PromptSyntaxToken = {
   count: number
   pathText: string | null
   toolItemCount: number | null
+  generalItemCount: number | null
   naiItemCount: number | null
   comfyuiItemCount: number | null
   loraWeight: string | null
@@ -43,7 +45,7 @@ function buildPathText(record?: FlattenedWildcardRecord | null) {
 }
 
 function countItemsForStorageTool(record: FlattenedWildcardRecord, tool: WildcardTool) {
-  return record.items.filter((item) => item.tool === tool).length
+  return countStoredWildcardItemsForTool(record.items, tool)
 }
 
 function createRecordMaps(records: FlattenedWildcardRecord[]) {
@@ -146,6 +148,7 @@ function buildToken(
     count: 1,
     pathText: buildPathText(record),
     toolItemCount: record && options?.tool ? countWildcardItemsForTool(record.items, options.tool) : null,
+    generalItemCount: record ? countItemsForStorageTool(record, 'general') : null,
     naiItemCount: record ? countItemsForStorageTool(record, 'nai') : null,
     comfyuiItemCount: record ? countItemsForStorageTool(record, 'comfyui') : null,
     loraWeight: options?.loraWeight?.trim() || null,

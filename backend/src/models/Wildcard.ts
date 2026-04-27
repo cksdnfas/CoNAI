@@ -19,10 +19,14 @@ export interface Wildcard {
 /**
  * WildcardItem 인터페이스
  */
+export type WildcardTool = 'general' | 'comfyui' | 'nai';
+
+const WILDCARD_TOOLS: WildcardTool[] = ['general', 'nai', 'comfyui'];
+
 export interface WildcardItem {
   id: number;
   wildcard_id: number;
-  tool: 'comfyui' | 'nai';
+  tool: WildcardTool;
   content: string;
   weight: number;
   order_index: number;
@@ -33,6 +37,7 @@ export interface WildcardItem {
  * 도구별 항목 데이터
  */
 export interface ToolItems {
+  general: Array<{ content: string; weight: number }>;
   comfyui: Array<{ content: string; weight: number }>;
   nai: Array<{ content: string; weight: number }>;
 }
@@ -154,27 +159,15 @@ export class WildcardModel {
         wildcardId = wildcardResult.lastInsertRowid as number;
       }
 
-      // ComfyUI 항목 생성
-      if (data.items.comfyui && data.items.comfyui.length > 0) {
-        const insertItem = db.prepare(`
-          INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
-          VALUES (?, ?, ?, ?, ?)
-        `);
+      const insertItem = db.prepare(`
+        INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
+        VALUES (?, ?, ?, ?, ?)
+      `);
 
-        data.items.comfyui.forEach((item, index) => {
-          insertItem.run(wildcardId, 'comfyui', item.content, item.weight, index);
-        });
-      }
-
-      // NAI 항목 생성
-      if (data.items.nai && data.items.nai.length > 0) {
-        const insertItem = db.prepare(`
-          INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
-          VALUES (?, ?, ?, ?, ?)
-        `);
-
-        data.items.nai.forEach((item, index) => {
-          insertItem.run(wildcardId, 'nai', item.content, item.weight, index);
+      for (const tool of WILDCARD_TOOLS) {
+        const items = data.items[tool] ?? [];
+        items.forEach((item, index) => {
+          insertItem.run(wildcardId, tool, item.content, item.weight, index);
         });
       }
 
@@ -244,27 +237,15 @@ export class WildcardModel {
         // 기존 항목 삭제
         db.prepare('DELETE FROM wildcard_items WHERE wildcard_id = ?').run(id);
 
-        // ComfyUI 항목 삽입
-        if (data.items.comfyui && data.items.comfyui.length > 0) {
-          const insertItem = db.prepare(`
-            INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
-            VALUES (?, ?, ?, ?, ?)
-          `);
+        const insertItem = db.prepare(`
+          INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
+          VALUES (?, ?, ?, ?, ?)
+        `);
 
-          data.items.comfyui.forEach((item, index) => {
-            insertItem.run(id, 'comfyui', item.content, item.weight, index);
-          });
-        }
-
-        // NAI 항목 삽입
-        if (data.items.nai && data.items.nai.length > 0) {
-          const insertItem = db.prepare(`
-            INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
-            VALUES (?, ?, ?, ?, ?)
-          `);
-
-          data.items.nai.forEach((item, index) => {
-            insertItem.run(id, 'nai', item.content, item.weight, index);
+        for (const tool of WILDCARD_TOOLS) {
+          const items = data.items[tool] ?? [];
+          items.forEach((item, index) => {
+            insertItem.run(id, tool, item.content, item.weight, index);
           });
         }
       }
@@ -527,7 +508,7 @@ export class WildcardItemModel {
   /**
    * 항목 생성
    */
-  static create(wildcardId: number, tool: 'comfyui' | 'nai', content: string, weight: number, orderIndex: number): WildcardItem {
+  static create(wildcardId: number, tool: WildcardTool, content: string, weight: number, orderIndex: number): WildcardItem {
     const db = getUserSettingsDb();
     const result = db.prepare(`
       INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
@@ -545,7 +526,7 @@ export class WildcardItemModel {
   /**
    * 특정 도구의 항목만 조회
    */
-  static findByWildcardIdAndTool(wildcardId: number, tool: 'comfyui' | 'nai'): WildcardItem[] {
+  static findByWildcardIdAndTool(wildcardId: number, tool: WildcardTool): WildcardItem[] {
     const db = getUserSettingsDb();
     return db.prepare(`
       SELECT * FROM wildcard_items

@@ -14,8 +14,8 @@ router.post('/parse', requirePermission('page.wildcards.view'), asyncHandler(asy
       return res.status(400).json({ success: false, error: 'Text is required' });
     }
 
-    if (!tool || (tool !== 'comfyui' && tool !== 'nai' && tool !== 'codex')) {
-      return res.status(400).json({ success: false, error: 'Valid tool is required (comfyui, nai, or codex)' });
+    if (!tool || (tool !== 'general' && tool !== 'comfyui' && tool !== 'nai' && tool !== 'codex')) {
+      return res.status(400).json({ success: false, error: 'Valid tool is required (general, comfyui, nai, or codex)' });
     }
 
     const parsedCount = Math.min(Math.max(parseInt(count) || 1, 1), 10);
@@ -168,6 +168,7 @@ router.post('/scan-lora-folder', requirePermission('wildcards.lora.scan'), async
         name: wildcardName,
         description: `Auto-generated from ${folder.folderName}`,
         items: {
+          general: [],
           comfyui: items.map(content => ({ content, weight: 1.0 })),
           nai: []
         },

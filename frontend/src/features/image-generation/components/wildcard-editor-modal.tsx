@@ -21,6 +21,7 @@ export interface WildcardEditorModalInput {
   only_children: number
   chain_option: 'replace' | 'append'
   items: {
+    general: Array<{ content: string; weight: number }>
     comfyui: Array<{ content: string; weight: number }>
     nai: Array<{ content: string; weight: number }>
   }
@@ -94,7 +95,7 @@ function WildcardItemDraftEditor({
   onChangeTool: (tool: WildcardTool) => void
 }) {
   const activeDrafts = drafts[activeTool]
-  const activeToolLabel = activeTool === 'nai' ? 'NAI' : 'ComfyUI'
+  const activeToolLabel = activeTool === 'general' ? 'General' : activeTool === 'nai' ? 'NAI' : 'ComfyUI'
 
   const handleAddDraft = () => {
     onChangeDrafts(activeTool, [...activeDrafts, createWildcardItemDraft()])
@@ -123,6 +124,7 @@ function WildcardItemDraftEditor({
     <SettingsSegmentedTable
       value={activeTool}
       items={[
+        { value: 'general', label: 'General' },
         { value: 'nai', label: 'NAI' },
         { value: 'comfyui', label: 'ComfyUI' },
       ]}
@@ -193,8 +195,9 @@ export function WildcardEditorModal({
   const [includeChildren, setIncludeChildren] = useState(false)
   const [onlyChildren, setOnlyChildren] = useState(false)
   const [chainOption, setChainOption] = useState<'replace' | 'append'>('replace')
-  const [activeItemTool, setActiveItemTool] = useState<WildcardTool>('nai')
+  const [activeItemTool, setActiveItemTool] = useState<WildcardTool>('general')
   const [itemDrafts, setItemDrafts] = useState<Record<WildcardTool, WildcardItemDraft[]>>({
+    general: [createWildcardItemDraft()],
     nai: [createWildcardItemDraft()],
     comfyui: [createWildcardItemDraft()],
   })
@@ -205,6 +208,7 @@ export function WildcardEditorModal({
       return
     }
 
+    const nextGeneralDrafts = buildWildcardItemDrafts(wildcard, 'general')
     const nextNaiDrafts = buildWildcardItemDrafts(wildcard, 'nai')
     const nextComfyuiDrafts = buildWildcardItemDrafts(wildcard, 'comfyui')
 
@@ -215,10 +219,17 @@ export function WildcardEditorModal({
     setOnlyChildren(wildcard?.only_children === 1)
     setChainOption(wildcard?.chain_option ?? 'replace')
     setItemDrafts({
+      general: nextGeneralDrafts,
       nai: nextNaiDrafts,
       comfyui: nextComfyuiDrafts,
     })
-    setActiveItemTool(nextNaiDrafts.some((draft) => draft.content.trim().length > 0) ? 'nai' : 'comfyui')
+    setActiveItemTool(
+      nextGeneralDrafts.some((draft) => draft.content.trim().length > 0)
+        ? 'general'
+        : nextNaiDrafts.some((draft) => draft.content.trim().length > 0)
+          ? 'nai'
+          : 'comfyui',
+    )
     setFormError(null)
   }, [defaultParentId, open, wildcard])
 
@@ -236,10 +247,11 @@ export function WildcardEditorModal({
       return
     }
 
+    const generalItems = normalizeWildcardItemDrafts(itemDrafts.general)
     const naiItems = normalizeWildcardItemDrafts(itemDrafts.nai)
     const comfyuiItems = normalizeWildcardItemDrafts(itemDrafts.comfyui)
-    if (naiItems.length === 0 && comfyuiItems.length === 0) {
-      setFormError('NAI나 ComfyUI 항목 중 하나는 있어야 해.')
+    if (generalItems.length === 0 && naiItems.length === 0 && comfyuiItems.length === 0) {
+      setFormError('General, NAI, ComfyUI 항목 중 하나는 있어야 해.')
       return
     }
 
@@ -252,6 +264,7 @@ export function WildcardEditorModal({
       only_children: onlyChildren ? 1 : 0,
       chain_option: chainOption,
       items: {
+        general: generalItems,
         comfyui: comfyuiItems,
         nai: naiItems,
       },

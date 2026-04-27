@@ -19,13 +19,14 @@ router.post('/', requirePermission('wildcards.edit'), asyncHandler(async (req: R
       return res.status(400).json({ success: false, error: 'Items object is required' });
     }
 
+    const hasGeneralItems = Array.isArray(data.items.general) && data.items.general.length > 0;
     const hasComfyuiItems = Array.isArray(data.items.comfyui) && data.items.comfyui.length > 0;
     const hasNaiItems = Array.isArray(data.items.nai) && data.items.nai.length > 0;
 
-    if (!hasComfyuiItems && !hasNaiItems) {
+    if (!hasGeneralItems && !hasComfyuiItems && !hasNaiItems) {
       return res.status(400).json({
         success: false,
-        error: 'At least one item is required for either ComfyUI or NAI'
+        error: 'At least one item is required for General, ComfyUI, or NAI'
       });
     }
 

@@ -9,7 +9,7 @@ import {
   getWildcardPromptSyntaxLabel,
   type WildcardWorkspaceTab,
 } from './wildcard-generation-panel-helpers'
-import { countWildcardItemsForTool, resolvePreferredWildcardItemTool, type PromptWildcardTool } from './wildcard-inline-picker-helpers'
+import { countStoredWildcardItemsForTool, resolvePreferredWildcardItemTool, type PromptWildcardTool } from './wildcard-inline-picker-helpers'
 
 type WildcardInlinePickerExplorerProps = {
   activeTab: WildcardWorkspaceTab
@@ -52,12 +52,11 @@ export function WildcardInlinePickerExplorer({
           const hasChildren = (node.children?.length ?? 0) > 0
           const isExpanded = expandedWildcardIds.includes(node.id)
           const isSelected = selectedWildcardId === node.id
-          const naiItemCount = countWildcardItemsForTool(node.items ?? [], 'nai')
-          const comfyuiItemCount = countWildcardItemsForTool(node.items ?? [], 'comfyui')
+          const generalItemCount = countStoredWildcardItemsForTool(node.items ?? [], 'general')
+          const naiItemCount = countStoredWildcardItemsForTool(node.items ?? [], 'nai')
+          const comfyuiItemCount = countStoredWildcardItemsForTool(node.items ?? [], 'comfyui')
 
-          const preferredBadgeTool = tool === 'codex'
-            ? (naiItemCount > 0 ? 'nai' : comfyuiItemCount > 0 ? 'comfyui' : resolvePreferredWildcardItemTool(node.items ?? [], tool))
-            : tool
+          const preferredBadgeTool = resolvePreferredWildcardItemTool(node.items ?? [], tool)
 
           const handleSelect: MouseEventHandler<HTMLButtonElement> = (event) => {
             event.preventDefault()
@@ -112,6 +111,7 @@ export function WildcardInlinePickerExplorer({
                 </button>
 
                 <div className="hidden shrink-0 items-center gap-1 md:flex">
+                  <Badge variant={preferredBadgeTool === 'general' ? 'secondary' : 'outline'}>General {generalItemCount}</Badge>
                   <Badge variant={preferredBadgeTool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
                   <Badge variant={preferredBadgeTool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
                 </div>

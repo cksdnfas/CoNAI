@@ -17,14 +17,14 @@ interface WildcardPreviewModalProps {
   open: boolean
   selectedWildcardSyntax: string
   selectedWildcardSyntaxLabel: string
-  previewTool: WildcardTool
+  previewTool: WildcardTool | 'codex'
   previewCount: string
   previewText: string
   isParsing: boolean
   parseErrorMessage?: string | null
   parseResult?: WildcardPreviewResult | null
   onClose: () => void
-  onPreviewToolChange: (value: WildcardTool) => void
+  onPreviewToolChange: (value: WildcardTool | 'codex') => void
   onPreviewCountChange: (value: string) => void
   onPreviewTextChange: (value: string) => void
   onFillSelectedSyntax: () => void
@@ -66,9 +66,11 @@ export function WildcardPreviewModal({
       <div className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
           <Input value={selectedWildcardSyntax} readOnly placeholder={`선택한 ${selectedWildcardSyntaxLabel}`} />
-          <Select value={previewTool} onChange={(event) => onPreviewToolChange(event.target.value as WildcardTool)}>
+          <Select value={previewTool} onChange={(event) => onPreviewToolChange(event.target.value as WildcardTool | 'codex')}>
+            <option value="general">General</option>
             <option value="nai">NAI</option>
             <option value="comfyui">ComfyUI</option>
+            <option value="codex">Codex</option>
           </Select>
           <Select value={previewCount} onChange={(event) => onPreviewCountChange(event.target.value)}>
             <option value="3">3개</option>

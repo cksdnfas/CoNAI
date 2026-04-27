@@ -12,6 +12,7 @@ import {
 } from './wildcard-generation-panel-helpers'
 import {
   buildWildcardInsertion,
+  countStoredWildcardItemsForTool,
   countWildcardItemsForTool,
   flattenWildcardRecords,
   MAX_RECENT_WILDCARDS,
@@ -308,8 +309,9 @@ export function WildcardInlinePickerField({
         record,
         score: scoreWildcardMatch(record, normalizedQuery),
         toolItemCount: countWildcardItemsForTool(record.items, tool),
-        naiItemCount: countWildcardItemsForTool(record.items, 'nai'),
-        comfyuiItemCount: countWildcardItemsForTool(record.items, 'comfyui'),
+        generalItemCount: countStoredWildcardItemsForTool(record.items, 'general'),
+        naiItemCount: countStoredWildcardItemsForTool(record.items, 'nai'),
+        comfyuiItemCount: countStoredWildcardItemsForTool(record.items, 'comfyui'),
         recentIndex: recentIndexMap.get(record.name) ?? Number.POSITIVE_INFINITY,
       }))
       .filter(({ score, toolItemCount }) => {
@@ -620,6 +622,7 @@ export function WildcardInlinePickerField({
   const renderSuggestionButton = ({
     record,
     toolItemCount,
+    generalItemCount,
     naiItemCount,
     comfyuiItemCount,
     recentIndex,
@@ -627,15 +630,14 @@ export function WildcardInlinePickerField({
   }: {
     record: FlattenedWildcardRecord
     toolItemCount: number
+    generalItemCount: number
     naiItemCount: number
     comfyuiItemCount: number
     recentIndex: number
     index: number
   }) => {
     const isActive = index === activeIndex
-    const preferredBadgeTool = tool === 'codex'
-      ? (naiItemCount > 0 ? 'nai' : comfyuiItemCount > 0 ? 'comfyui' : resolvePreferredWildcardItemTool(record.items, tool))
-      : tool
+    const preferredBadgeTool = resolvePreferredWildcardItemTool(record.items, tool)
 
     return (
       <button
@@ -662,6 +664,7 @@ export function WildcardInlinePickerField({
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          <Badge variant={preferredBadgeTool === 'general' ? 'secondary' : 'outline'}>General {generalItemCount}</Badge>
           <Badge variant={preferredBadgeTool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
           <Badge variant={preferredBadgeTool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
         </div>

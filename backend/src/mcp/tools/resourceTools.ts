@@ -93,13 +93,13 @@ export function registerResourceTools(server: McpServer): void {
   // 와일드카드 검색
   server.tool(
     'search_wildcards',
-    'Search wildcards by name, browse hierarchy, or list root wildcards. Wildcards are prompt building blocks with ComfyUI/NAI variants.',
+    'Search wildcards by name, browse hierarchy, or list root wildcards. Wildcards are prompt building blocks with General/ComfyUI/NAI variants.',
     {
       query: z.string().optional().describe('Search keyword for wildcard name (partial match)'),
       parent_id: z.number().int().optional().describe('Filter by parent wildcard ID (for hierarchy browsing)'),
       roots_only: z.boolean().default(false).describe('Only return root-level wildcards (no parent)'),
       include_items: z.boolean().default(false).describe('Include wildcard items (prompt content) in results'),
-      tool: z.enum(['comfyui', 'nai']).optional().describe('When include_items=true, only return items for this tool'),
+      tool: z.enum(['general', 'comfyui', 'nai']).optional().describe('When include_items=true, only return items for this tool'),
       page: z.number().int().min(1).default(1).describe('Page number'),
       limit: z.number().int().min(1).max(200).default(50).describe('Results per page'),
     },

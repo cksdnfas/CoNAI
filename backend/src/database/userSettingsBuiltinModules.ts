@@ -405,6 +405,63 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
   );
 
   upsertBuiltinModule(
+    '와일드카드 적용',
+    '입력 텍스트의 와일드카드를 General, NAI, ComfyUI 규칙으로 각각 적용해서 포트별로 내보내.',
+    'utility',
+    [
+      {
+        key: 'text',
+        label: '텍스트',
+        direction: 'input',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+        description: '++이름++ 와일드카드가 들어간 원본 텍스트야.',
+      },
+    ],
+    [
+      {
+        key: 'general',
+        label: 'General',
+        direction: 'output',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+        description: 'General 항목만 사용해서 적용한 결과야.',
+      },
+      {
+        key: 'nai',
+        label: 'NAI',
+        direction: 'output',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+        description: 'NAI 항목을 우선 쓰고 없으면 General 항목으로 적용한 결과야.',
+      },
+      {
+        key: 'comfyui',
+        label: 'ComfyUI',
+        direction: 'output',
+        data_type: 'prompt',
+        required: true,
+        multiple: false,
+        description: 'ComfyUI 항목을 우선 쓰고 없으면 General 항목으로 적용한 결과야.',
+      },
+    ],
+    { operation_key: 'system.apply_wildcards' },
+    [
+      {
+        key: 'text',
+        label: '텍스트',
+        data_type: 'prompt',
+        placeholder: '예: ++character++, ++pose++',
+        description: '그래프 입력으로 연결하지 않을 때 노드 안에서 바로 쓸 원본 텍스트야.',
+      },
+    ],
+    '#ab47bc',
+  );
+
+  upsertBuiltinModule(
     'LLM 호출',
     'LM Studio, Ollama, 또는 OpenAI 호환 LLM 연결을 호출해서 텍스트나 JSON 응답을 받아와.',
     'llm',

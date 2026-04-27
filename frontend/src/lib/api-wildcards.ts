@@ -6,7 +6,7 @@ interface ApiResponse<T> {
   error?: string
 }
 
-export type WildcardTool = 'comfyui' | 'nai'
+export type WildcardTool = 'general' | 'comfyui' | 'nai'
 
 export interface WildcardItemRecord {
   id: number
@@ -45,6 +45,7 @@ export interface WildcardMutationInput {
   type?: 'wildcard' | 'chain'
   chain_option?: 'replace' | 'append'
   items: {
+    general: Array<{ content: string; weight: number }>
     comfyui: Array<{ content: string; weight: number }>
     nai: Array<{ content: string; weight: number }>
   }
@@ -199,7 +200,7 @@ export async function scanWildcardLoraFolder(input: LoraScanRequest) {
 }
 
 /** Ask the backend wildcard parser to preview one or more resolved prompt results. */
-export async function parseWildcards(input: { text: string; tool: WildcardTool; count?: number }) {
+export async function parseWildcards(input: { text: string; tool: WildcardTool | 'codex'; count?: number }) {
   const response = await fetchJson<ApiResponse<WildcardParseResponse>>('/api/wildcards/parse', {
     method: 'POST',
     headers: {

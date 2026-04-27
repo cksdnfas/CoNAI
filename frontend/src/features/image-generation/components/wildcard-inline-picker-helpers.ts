@@ -137,17 +137,26 @@ export function resolveActiveWildcardQuery(value: string, caretPosition: number)
 }
 
 export function resolvePreferredWildcardItemTool(items: WildcardItemRecord[], tool: PromptWildcardTool): WildcardTool {
-  if (tool !== 'codex') {
-    return tool
+  if (tool === 'codex') {
+    return 'general'
   }
 
-  return items.some((item) => item.tool === 'nai') ? 'nai' : 'comfyui'
+  if (tool === 'nai' || tool === 'comfyui') {
+    return items.some((item) => item.tool === tool) ? tool : 'general'
+  }
+
+  return 'general'
 }
 
-/** Count wildcard items available for one tool. */
+/** Count wildcard items stored for one concrete storage tab. */
+export function countStoredWildcardItemsForTool(items: WildcardItemRecord[], tool: WildcardTool) {
+  return items.filter((item) => item.tool === tool).length
+}
+
+/** Count wildcard items available for one runtime tool, including General fallback. */
 export function countWildcardItemsForTool(items: WildcardItemRecord[], tool: PromptWildcardTool) {
   const preferredTool = resolvePreferredWildcardItemTool(items, tool)
-  return items.filter((item) => item.tool === preferredTool).length
+  return countStoredWildcardItemsForTool(items, preferredTool)
 }
 
 /** Build the next prompt value for inline wildcard/preprocess insertion, auto-adding comma separators when chaining entries. */

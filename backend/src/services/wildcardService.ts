@@ -1,6 +1,6 @@
-import { WildcardModel, WildcardWithItems, WildcardItem } from '../models/Wildcard';
+import { WildcardModel, WildcardWithItems, WildcardItem, type WildcardTool } from '../models/Wildcard';
 
-type WildcardStoredTool = 'comfyui' | 'nai'
+type WildcardStoredTool = WildcardTool
 type WildcardResolutionTool = WildcardStoredTool | 'codex'
 
 /**
@@ -82,7 +82,19 @@ export class WildcardService {
   }
 
   private static resolvePreferredToolOrder(tool: WildcardResolutionTool): WildcardStoredTool[] {
-    return tool === 'codex' ? ['nai', 'comfyui'] : [tool]
+    if (tool === 'codex') {
+      return ['general']
+    }
+
+    if (tool === 'nai') {
+      return ['nai', 'general']
+    }
+
+    if (tool === 'comfyui') {
+      return ['comfyui', 'general']
+    }
+
+    return ['general']
   }
 
   private static collectOwnItemsForTool(wildcard: WildcardWithItems, tool: WildcardResolutionTool): WildcardItem[] {
@@ -391,28 +403,30 @@ export class WildcardService {
    */
   static getStatistics(): {
     totalWildcards: number;
-    itemsByTool: { comfyui: number; nai: number };
+    itemsByTool: { general: number; comfyui: number; nai: number };
     totalItems: number;
     averageItemsPerWildcard: number;
   } {
     const wildcards = WildcardModel.findAllWithItems();
 
+    let generalItems = 0;
     let comfyuiItems = 0;
     let naiItems = 0;
 
     wildcards.forEach(w => {
       w.items.forEach(item => {
-        if (item.tool === 'comfyui') comfyuiItems++;
+        if (item.tool === 'general') generalItems++;
+        else if (item.tool === 'comfyui') comfyuiItems++;
         else if (item.tool === 'nai') naiItems++;
       });
     });
 
-    const totalItems = comfyuiItems + naiItems;
+    const totalItems = generalItems + comfyuiItems + naiItems;
     const averageItemsPerWildcard = wildcards.length > 0 ? totalItems / wildcards.length : 0;
 
     return {
       totalWildcards: wildcards.length,
-      itemsByTool: { comfyui: comfyuiItems, nai: naiItems },
+      itemsByTool: { general: generalItems, comfyui: comfyuiItems, nai: naiItems },
       totalItems,
       averageItemsPerWildcard
     };

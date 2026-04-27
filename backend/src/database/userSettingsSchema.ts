@@ -80,8 +80,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS wildcard_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       wildcard_id INTEGER NOT NULL,
-      tool TEXT NOT NULL CHECK(tool IN ('comfyui', 'nai')),
+      tool TEXT NOT NULL CHECK(tool IN ('general', 'comfyui', 'nai')),
       content TEXT NOT NULL,
+      weight REAL DEFAULT 1.0,
       order_index INTEGER NOT NULL DEFAULT 0,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (wildcard_id) REFERENCES wildcards(id) ON DELETE CASCADE

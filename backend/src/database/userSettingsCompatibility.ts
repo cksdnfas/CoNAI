@@ -92,6 +92,63 @@ function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
   }
 }
 
+/** Rebuild wildcard_items when an older CHECK constraint does not allow General wildcard items. */
+function ensureWildcardItemsSupportGeneralTool(db: Database.Database): void {
+  const schemaRow = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='wildcard_items'")
+    .get() as { sql?: string } | undefined;
+
+  const normalizedSql = schemaRow?.sql?.toLowerCase() ?? '';
+  if (!schemaRow?.sql || normalizedSql.includes("'general'")) {
+    return;
+  }
+
+  console.log('🔧 Updating wildcard_items schema to support General tool items...');
+
+  const hasWeight = hasColumn(db, 'wildcard_items', 'weight');
+  const weightExpr = hasWeight ? 'COALESCE(weight, 1.0)' : '1.0';
+
+  db.exec('PRAGMA foreign_keys = OFF;');
+
+  try {
+    db.exec(`
+      BEGIN TRANSACTION;
+      CREATE TABLE wildcard_items__new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        wildcard_id INTEGER NOT NULL,
+        tool TEXT NOT NULL CHECK(tool IN ('general', 'comfyui', 'nai')),
+        content TEXT NOT NULL,
+        weight REAL DEFAULT 1.0,
+        order_index INTEGER NOT NULL DEFAULT 0,
+        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (wildcard_id) REFERENCES wildcards(id) ON DELETE CASCADE
+      );
+
+      INSERT INTO wildcard_items__new (id, wildcard_id, tool, content, weight, order_index, created_date)
+      SELECT
+        id,
+        wildcard_id,
+        CASE WHEN tool IN ('general', 'comfyui', 'nai') THEN tool ELSE 'comfyui' END AS tool,
+        content,
+        ${weightExpr} AS weight,
+        order_index,
+        COALESCE(created_date, CURRENT_TIMESTAMP) AS created_date
+      FROM wildcard_items;
+
+      DROP TABLE wildcard_items;
+      ALTER TABLE wildcard_items__new RENAME TO wildcard_items;
+      CREATE INDEX IF NOT EXISTS idx_wildcard_items_wildcard_id ON wildcard_items(wildcard_id);
+      CREATE INDEX IF NOT EXISTS idx_wildcard_items_tool ON wildcard_items(tool);
+      COMMIT;
+    `);
+  } catch (error) {
+    db.exec('ROLLBACK;');
+    throw error;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
+}
+
 /** Run legacy table migrations that still require imperative schema changes. */
 export function migrateExistingUserSettingsTables(db: Database.Database): void {
   console.log('🔄 Checking for complex schema migrations...');
@@ -104,7 +161,7 @@ export function migrateExistingUserSettingsTables(db: Database.Database): void {
         CREATE TABLE IF NOT EXISTS wildcard_items_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           wildcard_id INTEGER NOT NULL,
-          tool TEXT NOT NULL CHECK(tool IN ('comfyui', 'nai')) DEFAULT 'comfyui',
+          tool TEXT NOT NULL CHECK(tool IN ('general', 'comfyui', 'nai')) DEFAULT 'comfyui',
           content TEXT NOT NULL,
           order_index INTEGER NOT NULL DEFAULT 0,
           created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -283,5 +340,6 @@ export function ensureUserSettingsCompatibility(db: Database.Database): void {
   ensureModuleDefinitionsSupportsCurrentShape(db);
   ensureModuleDefinitionCompatibilityIndexes(db);
   ensureGraphWorkflowsAllowDuplicateNames(db);
+  ensureWildcardItemsSupportGeneralTool(db);
   ensureBuiltinSystemModulesInDb(db);
 }

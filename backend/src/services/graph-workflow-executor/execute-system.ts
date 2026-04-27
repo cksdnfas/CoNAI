@@ -12,7 +12,7 @@ import {
   executeConstantPromptNode,
   executeConstantTextNode,
 } from './system-constant-operations'
-import { executeRegexTextTransformNode, executeTextMergeNode } from './system-text-operations'
+import { executeRegexTextTransformNode, executeTextMergeNode, executeWildcardTransformNode } from './system-text-operations'
 import { executeCallLlmNode } from './system-llm-operations'
 import { executeLoadLlmPresetNode } from './system-llm-preset-operations'
 import {
@@ -60,6 +60,7 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.regex_text_transform': executeRegexTextTransformNode,
   'system.json_extract': executeJsonExtractNode,
   'system.merge_text': executeTextMergeNode,
+  'system.apply_wildcards': executeWildcardTransformNode,
   'system.random_prompt_from_group': executeRandomPromptFromGroup,
   'system.load_llm_preset': executeLoadLlmPresetNode,
   'system.call_llm': executeCallLlmNode,

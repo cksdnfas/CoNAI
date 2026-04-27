@@ -1,3 +1,4 @@
+import { WildcardService } from '../wildcardService'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
 import {
@@ -34,12 +35,16 @@ function normalizeTextValue(value: unknown) {
 }
 
 /** Normalize one required upstream workflow value into text for regex processing. */
-function normalizeRequiredTransformSourceText(value: unknown) {
+function normalizeRequiredTextInput(value: unknown, nodeLabel: string) {
   const textValue = normalizeTextValue(value)
   if (value === undefined || value === null) {
-    throw new Error('텍스트 변환 노드에는 값 입력이 필요해')
+    throw new Error(`${nodeLabel} 노드에는 텍스트 입력이 필요해`)
   }
   return textValue
+}
+
+function normalizeRequiredTransformSourceText(value: unknown) {
+  return normalizeRequiredTextInput(value, '텍스트 변환')
 }
 
 /** Normalize the requested regex transform mode. */
@@ -152,6 +157,39 @@ export function executeTextMergeNode(
   }
 
   completeSystemNode(context, node, moduleDefinition, 'system.merge_text', nodeArtifacts)
+}
+
+/** Execute a prompt wildcard transform node and emit tool-specific prompt outputs. */
+export function executeWildcardTransformNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const sourceText = normalizeRequiredTextInput(resolvedInputs.text, '와일드카드 적용')
+  const generalText = WildcardService.parseWildcards(sourceText, 'general')
+  const naiText = WildcardService.parseWildcards(sourceText, 'nai')
+  const comfyuiText = WildcardService.parseWildcards(sourceText, 'comfyui')
+
+  const nodeArtifacts = {
+    general: buildRuntimeArtifact(context.executionId, node.id, 'general', 'prompt', generalText, {
+      kind: 'system-wildcard-transform',
+      operationKey: 'system.apply_wildcards',
+      tool: 'general',
+    }),
+    nai: buildRuntimeArtifact(context.executionId, node.id, 'nai', 'prompt', naiText, {
+      kind: 'system-wildcard-transform',
+      operationKey: 'system.apply_wildcards',
+      tool: 'nai',
+    }),
+    comfyui: buildRuntimeArtifact(context.executionId, node.id, 'comfyui', 'prompt', comfyuiText, {
+      kind: 'system-wildcard-transform',
+      operationKey: 'system.apply_wildcards',
+      tool: 'comfyui',
+    }),
+  }
+
+  completeSystemNode(context, node, moduleDefinition, 'system.apply_wildcards', nodeArtifacts)
 }
 
 /** Execute a regex-capable text transform node for text or JSON-like inputs. */

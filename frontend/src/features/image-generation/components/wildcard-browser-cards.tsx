@@ -58,8 +58,9 @@ function WildcardItemSection({
     <SettingsSegmentedTable
       value={activeTool}
       items={[
-        { value: 'comfyui', label: 'ComfyUI' },
+        { value: 'general', label: 'General' },
         { value: 'nai', label: 'NAI' },
+        { value: 'comfyui', label: 'ComfyUI' },
       ]}
       onChange={(value) => onChangeTool(value as WildcardTool)}
       gridClassName="grid-cols-[3rem_minmax(0,1fr)_5rem]"
@@ -91,7 +92,11 @@ export function WildcardDetailCard({
   const selectedWildcard = selectedEntry?.wildcard ?? null
   const selectedWildcardSyntax = selectedWildcard ? getWildcardPromptSyntax(selectedWildcard.name, { type: selectedWildcard.type }) : ''
   const selectedWildcardSyntaxLabel = selectedWildcard ? getWildcardPromptSyntaxLabel({ type: selectedWildcard.type }) : '항목 문법'
-  const [activeItemTool, setActiveItemTool] = useState<WildcardTool>('comfyui')
+  const [activeItemTool, setActiveItemTool] = useState<WildcardTool>('general')
+  const selectedGeneralItems = useMemo(
+    () => (selectedWildcard?.items ?? []).filter((item) => item.tool === 'general'),
+    [selectedWildcard],
+  )
   const selectedNaiItems = useMemo(
     () => (selectedWildcard?.items ?? []).filter((item) => item.tool === 'nai'),
     [selectedWildcard],
@@ -100,10 +105,10 @@ export function WildcardDetailCard({
     () => (selectedWildcard?.items ?? []).filter((item) => item.tool === 'comfyui'),
     [selectedWildcard],
   )
-  const activeItems = activeItemTool === 'comfyui' ? selectedComfyItems : selectedNaiItems
+  const activeItems = activeItemTool === 'general' ? selectedGeneralItems : activeItemTool === 'comfyui' ? selectedComfyItems : selectedNaiItems
 
   useEffect(() => {
-    setActiveItemTool('comfyui')
+    setActiveItemTool('general')
   }, [selectedWildcard?.id])
 
   return (
