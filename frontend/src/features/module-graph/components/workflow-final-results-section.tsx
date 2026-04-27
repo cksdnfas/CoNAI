@@ -125,10 +125,12 @@ export function WorkflowFinalResultsSection({
           {visualEntries.length > 0 ? (
             <ImageList
               items={visualEntries.map((item) => item.image)}
-              layout="masonry"
+              layout="grid"
               activationMode="none"
               getItemId={(image) => String(image.id)}
-              minColumnWidth={180}
+              minColumnWidth={220}
+              preferredColumnCount={Math.min(visualEntries.length, 4)}
+              gridItemHeight={320}
               columnGap={12}
               rowGap={12}
               showDefaultQuickActions={false}
