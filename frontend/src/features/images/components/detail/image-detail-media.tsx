@@ -37,9 +37,31 @@ const DOUBLE_TAP_SCALE = 2
 const ROTATION_STEP = 90
 const IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY = 'conai:image-detail-media:wheel-zoom-enabled'
 const IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY = 'conai:image-detail-media:controls-collapsed'
-const IMAGE_PIXEL_PREVIEW_ENABLED_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-enabled'
-const IMAGE_PIXEL_PREVIEW_TARGET_LONG_EDGE = 192
-const IMAGE_PIXEL_PREVIEW_COLOR_COUNT = 64
+const IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-enabled'
+
+type PixelPreviewMode = 'off' | 'soft' | 'medium' | 'strong'
+
+type PixelPreviewProfile = {
+  label: string
+  targetLongEdge: number
+  colorCount: number
+  smoothing: boolean
+  edgeBoost: number
+  preFilter: string
+}
+
+const PIXEL_PREVIEW_MODE_ORDER: PixelPreviewMode[] = ['off', 'soft', 'medium', 'strong']
+const PIXEL_PREVIEW_MODE_LABELS: Record<PixelPreviewMode, string> = {
+  off: '꺼짐',
+  soft: '약',
+  medium: '중',
+  strong: '강',
+}
+const IMAGE_PIXEL_PREVIEW_PROFILES: Record<Exclude<PixelPreviewMode, 'off'>, PixelPreviewProfile> = {
+  soft: { label: '약', targetLongEdge: 512, colorCount: 192, smoothing: true, edgeBoost: 0.08, preFilter: 'contrast(1.04) saturate(1.02)' },
+  medium: { label: '중', targetLongEdge: 384, colorCount: 128, smoothing: true, edgeBoost: 0.12, preFilter: 'contrast(1.08) saturate(1.04)' },
+  strong: { label: '강', targetLongEdge: 256, colorCount: 96, smoothing: false, edgeBoost: 0.16, preFilter: 'contrast(1.14) saturate(1.06)' },
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -95,20 +117,70 @@ function persistImageControlsCollapsed(collapsed: boolean) {
   window.localStorage.setItem(IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY, collapsed ? 'true' : 'false')
 }
 
-function loadImagePixelPreviewEnabled() {
+function loadImagePixelPreviewMode(): PixelPreviewMode {
   if (typeof window === 'undefined') {
-    return false
+    return 'off'
   }
 
-  return window.localStorage.getItem(IMAGE_PIXEL_PREVIEW_ENABLED_STORAGE_KEY) === 'true'
+  const savedValue = window.localStorage.getItem(IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY)
+  if (savedValue === 'soft' || savedValue === 'medium' || savedValue === 'strong' || savedValue === 'off') {
+    return savedValue
+  }
+
+  // Migrate the old boolean toggle into the least destructive preview mode.
+  return savedValue === 'true' ? 'soft' : 'off'
 }
 
-function persistImagePixelPreviewEnabled(enabled: boolean) {
+function persistImagePixelPreviewMode(mode: PixelPreviewMode) {
   if (typeof window === 'undefined') {
     return
   }
 
-  window.localStorage.setItem(IMAGE_PIXEL_PREVIEW_ENABLED_STORAGE_KEY, enabled ? 'true' : 'false')
+  window.localStorage.setItem(IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY, mode)
+}
+
+function getNextPixelPreviewMode(mode: PixelPreviewMode): PixelPreviewMode {
+  const currentIndex = PIXEL_PREVIEW_MODE_ORDER.indexOf(mode)
+  return PIXEL_PREVIEW_MODE_ORDER[(currentIndex + 1) % PIXEL_PREVIEW_MODE_ORDER.length] ?? 'off'
+}
+
+function getPixelPreviewProfile(mode: PixelPreviewMode): PixelPreviewProfile | null {
+  return mode === 'off' ? null : IMAGE_PIXEL_PREVIEW_PROFILES[mode]
+}
+
+function boostPixelPreviewEdges(imageData: ImageData, strength: number) {
+  if (strength <= 0) {
+    return imageData
+  }
+
+  const { data, width, height } = imageData
+  const original = new Uint8ClampedArray(data)
+  const luminance = (index: number) => original[index] * 0.299 + original[index + 1] * 0.587 + original[index + 2] * 0.114
+  const threshold = 24
+
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const index = (y * width + x) * 4
+      const center = luminance(index)
+      const left = luminance(index - 4)
+      const right = luminance(index + 4)
+      const up = luminance(index - width * 4)
+      const down = luminance(index + width * 4)
+      const brightestNeighbor = Math.max(left, right, up, down)
+      const gradient = brightestNeighbor - center
+
+      if (gradient <= threshold) {
+        continue
+      }
+
+      const factor = Math.max(0.65, 1 - strength * Math.min(1.8, gradient / 96))
+      data[index] = Math.round(data[index] * factor)
+      data[index + 1] = Math.round(data[index + 1] * factor)
+      data[index + 2] = Math.round(data[index + 2] * factor)
+    }
+  }
+
+  return imageData
 }
 
 /** Render the main detail media using the correct element for image, GIF, or video files. */
@@ -215,7 +287,7 @@ function InteractiveImageDetailMedia({
   const [isGestureActive, setIsGestureActive] = useState(false)
   const [isWheelZoomEnabled, setIsWheelZoomEnabled] = useState(() => loadImageWheelZoomEnabled())
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(() => loadImageControlsCollapsed())
-  const [isPixelPreviewEnabled, setIsPixelPreviewEnabled] = useState(() => loadImagePixelPreviewEnabled())
+  const [pixelPreviewMode, setPixelPreviewMode] = useState<PixelPreviewMode>(() => loadImagePixelPreviewMode())
 
   useEffect(() => {
     scaleRef.current = scale
@@ -250,7 +322,8 @@ function InteractiveImageDetailMedia({
   const canZoomOut = scale > MIN_SCALE + 0.001
   const canZoomIn = scale < MAX_SCALE - 0.001
   const transformSummary = `${Math.round(scale * 100)}%${rotation !== 0 ? ` · ${rotation}°` : ''}`
-  const shouldRenderPixelPreview = canUsePixelPreview && isPixelPreviewEnabled
+  const pixelPreviewProfile = getPixelPreviewProfile(pixelPreviewMode)
+  const shouldRenderPixelPreview = canUsePixelPreview && pixelPreviewProfile !== null
 
   const resetView = useCallback(() => {
     scaleRef.current = DEFAULT_SCALE
@@ -315,16 +388,16 @@ function InteractiveImageDetailMedia({
     })
   }
 
-  const togglePixelPreview = () => {
-    setIsPixelPreviewEnabled((current) => {
-      const nextValue = !current
-      persistImagePixelPreviewEnabled(nextValue)
-      return nextValue
+  const cyclePixelPreviewMode = () => {
+    setPixelPreviewMode((current) => {
+      const nextMode = getNextPixelPreviewMode(current)
+      persistImagePixelPreviewMode(nextMode)
+      return nextMode
     })
   }
 
   useEffect(() => {
-    if (!shouldRenderPixelPreview) {
+    if (!shouldRenderPixelPreview || !pixelPreviewProfile) {
       return
     }
 
@@ -348,7 +421,7 @@ function InteractiveImageDetailMedia({
         return
       }
 
-      const targetScale = Math.min(1, IMAGE_PIXEL_PREVIEW_TARGET_LONG_EDGE / Math.max(sourceWidth, sourceHeight))
+      const targetScale = Math.min(1, pixelPreviewProfile.targetLongEdge / Math.max(sourceWidth, sourceHeight))
       const pixelWidth = Math.max(1, Math.round(sourceWidth * targetScale))
       const pixelHeight = Math.max(1, Math.round(sourceHeight * targetScale))
       const sampleCanvas = document.createElement('canvas')
@@ -362,8 +435,11 @@ function InteractiveImageDetailMedia({
         return
       }
 
-      sampleContext.imageSmoothingEnabled = false
-      sampleContext.filter = 'contrast(1.18) saturate(1.06)'
+      sampleContext.imageSmoothingEnabled = pixelPreviewProfile.smoothing
+      if (pixelPreviewProfile.smoothing) {
+        sampleContext.imageSmoothingQuality = 'high'
+      }
+      sampleContext.filter = pixelPreviewProfile.preFilter
       sampleContext.clearRect(0, 0, pixelWidth, pixelHeight)
       sampleContext.drawImage(sourceImage, 0, 0, pixelWidth, pixelHeight)
 
@@ -372,7 +448,7 @@ function InteractiveImageDetailMedia({
         const sourceImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
         const sourceContainer = iq.utils.PointContainer.fromImageData(sourceImageData)
         const palette = iq.buildPaletteSync([sourceContainer], {
-          colors: IMAGE_PIXEL_PREVIEW_COLOR_COUNT,
+          colors: pixelPreviewProfile.colorCount,
           colorDistanceFormula: 'euclidean-bt709-noalpha',
           paletteQuantization: 'wuquant',
         })
@@ -380,8 +456,11 @@ function InteractiveImageDetailMedia({
           colorDistanceFormula: 'euclidean-bt709-noalpha',
           imageQuantization: 'nearest',
         })
-        sampleContext.putImageData(new ImageData(new Uint8ClampedArray(quantizedContainer.toUint8Array()), pixelWidth, pixelHeight), 0, 0)
+        const quantizedImageData = new ImageData(new Uint8ClampedArray(quantizedContainer.toUint8Array()), pixelWidth, pixelHeight)
+        sampleContext.putImageData(boostPixelPreviewEdges(quantizedImageData, pixelPreviewProfile.edgeBoost), 0, 0)
       } catch (error) {
+        const fallbackImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
+        sampleContext.putImageData(boostPixelPreviewEdges(fallbackImageData, pixelPreviewProfile.edgeBoost), 0, 0)
         console.warn('Failed to apply image-q pixel preview; falling back to plain pixel sampling.', error)
       }
 
@@ -402,7 +481,7 @@ function InteractiveImageDetailMedia({
     return () => {
       cancelled = true
     }
-  }, [renderUrl, shouldRenderPixelPreview])
+  }, [pixelPreviewProfile, renderUrl, shouldRenderPixelPreview])
 
   useEffect(() => {
     const node = viewportRef.current
@@ -543,12 +622,15 @@ function InteractiveImageDetailMedia({
               size="icon-sm"
               type="button"
               variant="outline"
-              className={cn('bg-background text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', isPixelPreviewEnabled && 'border-primary/45 text-primary')}
-              onClick={togglePixelPreview}
-              title={isPixelPreviewEnabled ? '도트 보기 끄기' : '도트 보기'}
-              aria-label={isPixelPreviewEnabled ? '도트 보기 끄기' : '도트 보기'}
+              className={cn('relative bg-background text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', pixelPreviewMode !== 'off' && 'border-primary/45 text-primary')}
+              onClick={cyclePixelPreviewMode}
+              title={`도트 보기: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]} (클릭해서 강도 변경)`}
+              aria-label={`도트 보기: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}`}
             >
               <Grid2X2 className="h-4 w-4 stroke-[2.5]" />
+              {pixelPreviewMode !== 'off' ? (
+                <span className="absolute -right-1 -top-1 rounded-full border border-background bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">{PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}</span>
+              ) : null}
             </Button>
           ) : null}
           {canToggleRenderMode ? (
@@ -660,7 +742,7 @@ function InteractiveImageDetailMedia({
               role="img"
               aria-label={altText}
               className={cn('block h-auto w-auto pointer-events-none select-none', className)}
-              style={{ imageRendering: 'pixelated', filter: 'contrast(1.12) saturate(1.06)' }}
+              style={{ imageRendering: 'pixelated' }}
             />
           ) : (
             <img src={renderUrl} alt={altText} className={cn('block h-auto w-auto pointer-events-none select-none', className)} draggable={false} onError={() => setHasRenderError(true)} />
