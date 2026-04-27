@@ -42,12 +42,15 @@ const IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY = 'conai:image-detail-media:pixel-pre
 const IMAGE_PIXEL_PREVIEW_SETTINGS_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-settings'
 
 type PixelPreviewMode = 'off' | 'soft' | 'medium' | 'strong' | 'custom'
+type PixelPreviewEngine = 'image-q' | 'image-to-pixel'
 
 type PixelPreviewSettings = {
   targetLongEdge: number
   colorCount: number
   edgeBoost: number
   sharpness: number
+  engine: PixelPreviewEngine
+  ditherStrength: number
 }
 
 type PixelPreviewProfile = PixelPreviewSettings & {
@@ -64,9 +67,13 @@ const PIXEL_PREVIEW_MODE_LABELS: Record<PixelPreviewMode, string> = {
   custom: '수동',
 }
 const IMAGE_PIXEL_PREVIEW_PRESETS: Record<Exclude<PixelPreviewMode, 'off' | 'custom'>, PixelPreviewSettings> = {
-  soft: { targetLongEdge: 512, colorCount: 192, edgeBoost: 0.04, sharpness: 0.08 },
-  medium: { targetLongEdge: 384, colorCount: 128, edgeBoost: 0.07, sharpness: 0.14 },
-  strong: { targetLongEdge: 256, colorCount: 96, edgeBoost: 0.1, sharpness: 0.2 },
+  soft: { targetLongEdge: 512, colorCount: 192, edgeBoost: 0.04, sharpness: 0.08, engine: 'image-q', ditherStrength: 0.12 },
+  medium: { targetLongEdge: 384, colorCount: 128, edgeBoost: 0.07, sharpness: 0.14, engine: 'image-q', ditherStrength: 0.18 },
+  strong: { targetLongEdge: 256, colorCount: 96, edgeBoost: 0.1, sharpness: 0.2, engine: 'image-q', ditherStrength: 0.24 },
+}
+const PIXEL_PREVIEW_ENGINE_LABELS: Record<PixelPreviewEngine, string> = {
+  'image-q': 'image-q',
+  'image-to-pixel': 'I2P 실험',
 }
 const DEFAULT_PIXEL_PREVIEW_SETTINGS: PixelPreviewSettings = IMAGE_PIXEL_PREVIEW_PRESETS.soft
 
@@ -164,11 +171,14 @@ function persistImagePixelPreviewMode(mode: PixelPreviewMode) {
 }
 
 function normalizePixelPreviewSettings(settings: Partial<PixelPreviewSettings>): PixelPreviewSettings {
+  const engine = settings.engine === 'image-to-pixel' ? 'image-to-pixel' : 'image-q'
   return {
     targetLongEdge: Math.round(clamp(Number(settings.targetLongEdge) || DEFAULT_PIXEL_PREVIEW_SETTINGS.targetLongEdge, 160, 640)),
     colorCount: Math.round(clamp(Number(settings.colorCount) || DEFAULT_PIXEL_PREVIEW_SETTINGS.colorCount, 32, 256)),
     edgeBoost: clamp(Number(settings.edgeBoost) || 0, 0, 0.24),
     sharpness: clamp(Number(settings.sharpness) || 0, 0, 0.5),
+    engine,
+    ditherStrength: clamp(Number(settings.ditherStrength) || 0, 0, 0.6),
   }
 }
 
@@ -217,6 +227,60 @@ function applyLuminanceScale(data: Uint8ClampedArray, index: number, currentLumi
   data[index] = Math.round(clamp(data[index] * scale, 0, 255))
   data[index + 1] = Math.round(clamp(data[index + 1] * scale, 0, 255))
   data[index + 2] = Math.round(clamp(data[index + 2] * scale, 0, 255))
+}
+
+type PixelPreviewPaletteColor = { r: number; g: number; b: number }
+
+function getClosestPaletteColor(red: number, green: number, blue: number, palette: PixelPreviewPaletteColor[]) {
+  let closest = palette[0] ?? { r: red, g: green, b: blue }
+  let closestDistance = Number.POSITIVE_INFINITY
+
+  for (const color of palette) {
+    const redDistance = red - color.r
+    const greenDistance = green - color.g
+    const blueDistance = blue - color.b
+    const distance = redDistance * redDistance * 0.2126 + greenDistance * greenDistance * 0.7152 + blueDistance * blueDistance * 0.0722
+    if (distance < closestDistance) {
+      closest = color
+      closestDistance = distance
+    }
+  }
+
+  return closest
+}
+
+function applyImageToPixelStylePalette(imageData: ImageData, palette: PixelPreviewPaletteColor[], strength: number) {
+  if (palette.length === 0) {
+    return imageData
+  }
+
+  const { data, width, height } = imageData
+  const source = new Uint8ClampedArray(data)
+  const bayer4 = [
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5],
+  ]
+  const thresholdScale = strength * 64
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4
+      const threshold = (((bayer4[y % 4]?.[x % 4] ?? 0) + 0.5) / 16 - 0.5) * thresholdScale
+      const closest = getClosestPaletteColor(
+        clamp(source[index] + threshold, 0, 255),
+        clamp(source[index + 1] + threshold, 0, 255),
+        clamp(source[index + 2] + threshold, 0, 255),
+        palette,
+      )
+      data[index] = closest.r
+      data[index + 1] = closest.g
+      data[index + 2] = closest.b
+    }
+  }
+
+  return imageData
 }
 
 function boostPixelPreviewEdges(imageData: ImageData, strength: number) {
@@ -564,11 +628,18 @@ function InteractiveImageDetailMedia({
           colorDistanceFormula: 'euclidean-bt709-noalpha',
           paletteQuantization: 'wuquant',
         })
-        const quantizedContainer = iq.applyPaletteSync(sourceContainer, palette, {
-          colorDistanceFormula: 'euclidean-bt709-noalpha',
-          imageQuantization: 'nearest',
-        })
-        const quantizedImageData = new ImageData(new Uint8ClampedArray(quantizedContainer.toUint8Array()), pixelWidth, pixelHeight)
+        const quantizedImageData = pixelPreviewProfile.engine === 'image-to-pixel'
+          ? applyImageToPixelStylePalette(sourceImageData, palette.getPointContainer().getPointArray().map((point) => ({ r: point.r, g: point.g, b: point.b })), pixelPreviewProfile.ditherStrength)
+          : new ImageData(
+              new Uint8ClampedArray(
+                iq.applyPaletteSync(sourceContainer, palette, {
+                  colorDistanceFormula: 'euclidean-bt709-noalpha',
+                  imageQuantization: 'nearest',
+                }).toUint8Array(),
+              ),
+              pixelWidth,
+              pixelHeight,
+            )
         sampleContext.putImageData(sharpenPixelPreview(boostPixelPreviewEdges(quantizedImageData, pixelPreviewProfile.edgeBoost), pixelPreviewProfile.sharpness), 0, 0)
       } catch (error) {
         const fallbackImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
@@ -761,6 +832,13 @@ function InteractiveImageDetailMedia({
                       </Button>
                     ))}
                   </div>
+                  <div className="mb-3 grid grid-cols-2 gap-1.5">
+                    {(['image-q', 'image-to-pixel'] as const).map((engine) => (
+                      <Button key={engine} size="sm" type="button" variant={activePixelPreviewSettings.engine === engine ? 'default' : 'outline'} className="h-7 text-xs" onClick={() => updatePixelPreviewSettings({ engine })}>
+                        {PIXEL_PREVIEW_ENGINE_LABELS[engine]}
+                      </Button>
+                    ))}
+                  </div>
                   <div className="space-y-2.5">
                     <label className="block">
                       <div className="mb-1 flex justify-between text-muted-foreground"><span>샘플 해상도</span><span>{activePixelPreviewSettings.targetLongEdge}px</span></div>
@@ -769,6 +847,10 @@ function InteractiveImageDetailMedia({
                     <label className="block">
                       <div className="mb-1 flex justify-between text-muted-foreground"><span>색상 수</span><span>{activePixelPreviewSettings.colorCount}</span></div>
                       <input className="w-full accent-primary" type="range" min={32} max={256} step={8} value={activePixelPreviewSettings.colorCount} onChange={(event) => updatePixelPreviewSettings({ colorCount: Number(event.currentTarget.value) })} />
+                    </label>
+                    <label className="block">
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>디더링</span><span>{Math.round(activePixelPreviewSettings.ditherStrength * 100)}</span></div>
+                      <input className="w-full accent-primary" type="range" min={0} max={60} step={2} value={Math.round(activePixelPreviewSettings.ditherStrength * 100)} onChange={(event) => updatePixelPreviewSettings({ ditherStrength: Number(event.currentTarget.value) / 100 })} />
                     </label>
                     <label className="block">
                       <div className="mb-1 flex justify-between text-muted-foreground"><span>외곽선 강조</span><span>{Math.round(activePixelPreviewSettings.edgeBoost * 100)}</span></div>
