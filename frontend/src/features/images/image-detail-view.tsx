@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -48,7 +48,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 export function ImageDetailView({ compositeHash, presentation = 'page', renderHeader }: ImageDetailViewProps) {
   const useSplitPaneScroll = presentation === 'modal' && useMinWidth(1280)
   const usesDesktopRelatedImageColumns = useMinWidth(768)
-  const [isModalSecondaryContentReady, setIsModalSecondaryContentReady] = useState(presentation !== 'modal')
+  const [isPrimaryMediaReady, setIsPrimaryMediaReady] = useState(false)
 
   useEffect(() => {
     if (presentation === 'page') {
@@ -57,20 +57,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
   }, [compositeHash, presentation])
 
   useEffect(() => {
-    if (presentation !== 'modal') {
-      setIsModalSecondaryContentReady(true)
-      return
-    }
-
-    setIsModalSecondaryContentReady(false)
-    const timerId = window.setTimeout(() => {
-      setIsModalSecondaryContentReady(true)
-    }, 120)
-
-    return () => {
-      window.clearTimeout(timerId)
-    }
-  }, [compositeHash, presentation])
+    setIsPrimaryMediaReady(false)
+  }, [compositeHash])
 
   const authStatusQuery = useAuthStatusQuery()
   const appearanceQuery = useGlobalAppearanceSettingsQuery()
@@ -101,11 +89,31 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
 
   const image = imageQuery.data
   const isVideoDetail = image ? getImageListMediaKind(image) === 'video' : false
+  const isSecondaryContentReady = Boolean(image) && isPrimaryMediaReady
+
+  const handlePrimaryMediaReady = useCallback(() => {
+    setIsPrimaryMediaReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!image || isPrimaryMediaReady) {
+      return
+    }
+
+    const fallbackDelayMs = presentation === 'modal' ? 1200 : 800
+    const timerId = window.setTimeout(() => {
+      setIsPrimaryMediaReady(true)
+    }, fallbackDelayMs)
+
+    return () => {
+      window.clearTimeout(timerId)
+    }
+  }, [image, isPrimaryMediaReady, presentation])
 
   const duplicatesQuery = useQuery({
     queryKey: ['image-duplicates', compositeHash],
     queryFn: () => getImageDuplicates(compositeHash, 5),
-    enabled: Boolean(compositeHash) && Boolean(image) && !isVideoDetail && (presentation !== 'modal' || isModalSecondaryContentReady),
+    enabled: Boolean(compositeHash) && Boolean(image) && !isVideoDetail && isSecondaryContentReady,
   })
 
   const similarQuery = useQuery({
@@ -145,7 +153,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
         sortBy: 'similarity',
         sortOrder: 'DESC',
       }),
-    enabled: Boolean(compositeHash) && Boolean(image) && !isVideoDetail && Boolean(effectiveSimilaritySettings) && (presentation !== 'modal' || isModalSecondaryContentReady),
+    enabled: Boolean(compositeHash) && Boolean(image) && !isVideoDetail && Boolean(effectiveSimilaritySettings) && isSecondaryContentReady,
   })
 
   const promptSimilarQuery = useQuery({
@@ -165,7 +173,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
       effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.auto ?? 50,
     ],
     queryFn: () => getPromptSimilarImages(compositeHash, promptSimilarLimit),
-    enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings) && (presentation !== 'modal' || isModalSecondaryContentReady),
+    enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings) && isSecondaryContentReady,
   })
 
   const renderUrl = getImageDetailRenderUrl(image)
@@ -276,11 +284,11 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
           >
             <div className="overflow-hidden rounded-sm bg-surface-container shadow-[0_0_40px_rgba(14,14,14,0.22)]">
               <div className="flex h-[max(540px,72vh)] items-center justify-center bg-surface-lowest">
-                <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} />
+                <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} onPrimaryLoad={handlePrimaryMediaReady} />
               </div>
             </div>
 
-            {presentation !== 'modal' || isModalSecondaryContentReady ? (
+            {isSecondaryContentReady ? (
               <>
                 {duplicateImages.length > 0 ? (
                   <RelatedImageGallerySection

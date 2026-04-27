@@ -22,6 +22,7 @@ interface ImageDetailMediaProps {
   image: ImageRecord
   renderUrl: string | null
   className?: string
+  onPrimaryLoad?: () => void
 }
 
 interface PointerPosition {
@@ -340,7 +341,7 @@ function sharpenPixelPreview(imageData: ImageData, amount: number) {
 }
 
 /** Render the main detail media using the correct element for image, GIF, or video files. */
-export function ImageDetailMedia({ image, renderUrl, className }: ImageDetailMediaProps) {
+export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad }: ImageDetailMediaProps) {
   const { showSnackbar } = useSnackbar()
   const [preferredRenderMode, setPreferredRenderMode] = useState<ImageDetailRenderMode>(() => loadImageDetailRenderMode())
   const mediaKind = getImageListMediaKind(image)
@@ -379,6 +380,7 @@ export function ImageDetailMedia({ image, renderUrl, className }: ImageDetailMed
       canToggleRenderMode={canToggleRenderMode}
       onToggleRenderMode={handleToggleRenderMode}
       canUsePixelPreview
+      onPrimaryLoad={onPrimaryLoad}
     />
   )
 }
@@ -402,6 +404,7 @@ function InteractiveImageDetailMedia({
   canToggleRenderMode,
   onToggleRenderMode,
   canUsePixelPreview,
+  onPrimaryLoad,
 }: {
   image: ImageRecord
   renderUrl: string
@@ -411,6 +414,7 @@ function InteractiveImageDetailMedia({
   canToggleRenderMode: boolean
   onToggleRenderMode: () => void
   canUsePixelPreview: boolean
+  onPrimaryLoad?: () => void
 }) {
   const [hasRenderError, setHasRenderError] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -640,6 +644,7 @@ function InteractiveImageDetailMedia({
       canvasContext.imageSmoothingEnabled = false
       canvasContext.clearRect(0, 0, sourceWidth, sourceHeight)
       canvasContext.drawImage(sampleCanvas, 0, 0, pixelWidth, pixelHeight, 0, 0, sourceWidth, sourceHeight)
+      onPrimaryLoad?.()
     }
 
     sourceImage.onerror = () => {
@@ -652,7 +657,7 @@ function InteractiveImageDetailMedia({
     return () => {
       cancelled = true
     }
-  }, [pixelPreviewProfile, renderUrl, shouldRenderPixelPreview])
+  }, [onPrimaryLoad, pixelPreviewProfile, renderUrl, shouldRenderPixelPreview])
 
   useEffect(() => {
     const node = viewportRef.current
@@ -962,7 +967,7 @@ function InteractiveImageDetailMedia({
               style={{ imageRendering: 'pixelated' }}
             />
           ) : (
-            <img src={renderUrl} alt={altText} className={cn('block h-auto w-auto pointer-events-none select-none', className)} draggable={false} onError={() => setHasRenderError(true)} />
+            <img src={renderUrl} alt={altText} className={cn('block h-auto w-auto pointer-events-none select-none', className)} draggable={false} onLoad={onPrimaryLoad} onError={() => setHasRenderError(true)} />
           )}
         </div>
       </div>
