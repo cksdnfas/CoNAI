@@ -107,7 +107,8 @@ export function buildComplexFilterAutoTagCondition(
 
   if (condition.type === 'auto_tag_any') {
     const tag = String(condition.value).toLowerCase();
-    const variants = normalizeAutoTagSearchTerm(tag);
+    // Complex filters represent selected chips; keep multi-word tags as one tag instead of OR-ing each token.
+    const variants = normalizeAutoTagSearchTerm(tag, true);
     const anyConditions: string[] = [];
 
     for (const variant of variants) {
@@ -155,7 +156,8 @@ function buildComplexFilterTagExistsCondition(
   jsonPaths: readonly string[],
 ): string | null {
   const normalizedValue = String(condition.value).toLowerCase();
-  const variants = normalizeAutoTagSearchTerm(normalizedValue);
+  // Complex filters represent selected chips; keep multi-word tags as one tag instead of OR-ing each token.
+  const variants = normalizeAutoTagSearchTerm(normalizedValue, true);
   const tagConditions: string[] = [];
 
   for (const variant of variants) {
