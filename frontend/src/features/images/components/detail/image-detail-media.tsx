@@ -42,15 +42,14 @@ const IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY = 'conai:image-detail-media:pixel-pre
 const IMAGE_PIXEL_PREVIEW_SETTINGS_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-settings'
 
 type PixelPreviewMode = 'off' | 'soft' | 'medium' | 'strong' | 'custom'
-type PixelPreviewEngine = 'image-q' | 'image-to-pixel'
 
 type PixelPreviewSettings = {
   targetLongEdge: number
   colorCount: number
+  ditherStrength: number
   edgeBoost: number
   sharpness: number
-  engine: PixelPreviewEngine
-  ditherStrength: number
+  smoothing: boolean
 }
 
 type PixelPreviewProfile = PixelPreviewSettings & {
@@ -67,13 +66,9 @@ const PIXEL_PREVIEW_MODE_LABELS: Record<PixelPreviewMode, string> = {
   custom: '수동',
 }
 const IMAGE_PIXEL_PREVIEW_PRESETS: Record<Exclude<PixelPreviewMode, 'off' | 'custom'>, PixelPreviewSettings> = {
-  soft: { targetLongEdge: 512, colorCount: 192, edgeBoost: 0.04, sharpness: 0.08, engine: 'image-q', ditherStrength: 0.12 },
-  medium: { targetLongEdge: 384, colorCount: 128, edgeBoost: 0.07, sharpness: 0.14, engine: 'image-q', ditherStrength: 0.18 },
-  strong: { targetLongEdge: 256, colorCount: 96, edgeBoost: 0.1, sharpness: 0.2, engine: 'image-q', ditherStrength: 0.24 },
-}
-const PIXEL_PREVIEW_ENGINE_LABELS: Record<PixelPreviewEngine, string> = {
-  'image-q': 'image-q',
-  'image-to-pixel': 'I2P 실험',
+  soft: { targetLongEdge: 512, colorCount: 192, ditherStrength: 0.08, edgeBoost: 0.04, sharpness: 0.08, smoothing: true },
+  medium: { targetLongEdge: 384, colorCount: 128, ditherStrength: 0.14, edgeBoost: 0.07, sharpness: 0.14, smoothing: true },
+  strong: { targetLongEdge: 256, colorCount: 96, ditherStrength: 0.22, edgeBoost: 0.1, sharpness: 0.2, smoothing: false },
 }
 const DEFAULT_PIXEL_PREVIEW_SETTINGS: PixelPreviewSettings = IMAGE_PIXEL_PREVIEW_PRESETS.soft
 
@@ -170,15 +165,19 @@ function persistImagePixelPreviewMode(mode: PixelPreviewMode) {
   window.localStorage.setItem(IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY, mode)
 }
 
+function normalizePixelPreviewResolution(value: unknown) {
+  const parsedValue = Number(value) || DEFAULT_PIXEL_PREVIEW_SETTINGS.targetLongEdge
+  return Math.round(clamp(parsedValue, 64, 1024) / 64) * 64
+}
+
 function normalizePixelPreviewSettings(settings: Partial<PixelPreviewSettings>): PixelPreviewSettings {
-  const engine = settings.engine === 'image-to-pixel' ? 'image-to-pixel' : 'image-q'
   return {
-    targetLongEdge: Math.round(clamp(Number(settings.targetLongEdge) || DEFAULT_PIXEL_PREVIEW_SETTINGS.targetLongEdge, 160, 640)),
+    targetLongEdge: normalizePixelPreviewResolution(settings.targetLongEdge),
     colorCount: Math.round(clamp(Number(settings.colorCount) || DEFAULT_PIXEL_PREVIEW_SETTINGS.colorCount, 32, 256)),
+    ditherStrength: clamp(Number(settings.ditherStrength) || 0, 0, 0.6),
     edgeBoost: clamp(Number(settings.edgeBoost) || 0, 0, 0.24),
     sharpness: clamp(Number(settings.sharpness) || 0, 0, 0.5),
-    engine,
-    ditherStrength: clamp(Number(settings.ditherStrength) || 0, 0, 0.6),
+    smoothing: typeof settings.smoothing === 'boolean' ? settings.smoothing : DEFAULT_PIXEL_PREVIEW_SETTINGS.smoothing,
   }
 }
 
@@ -213,7 +212,7 @@ function getPixelPreviewProfile(mode: PixelPreviewMode, customSettings: PixelPre
   return {
     ...settings,
     label: PIXEL_PREVIEW_MODE_LABELS[mode],
-    smoothing: settings.targetLongEdge >= 320,
+    smoothing: settings.smoothing,
     preFilter: `contrast(${contrast.toFixed(3)})`,
   }
 }
@@ -628,18 +627,7 @@ function InteractiveImageDetailMedia({
           colorDistanceFormula: 'euclidean-bt709-noalpha',
           paletteQuantization: 'wuquant',
         })
-        const quantizedImageData = pixelPreviewProfile.engine === 'image-to-pixel'
-          ? applyImageToPixelStylePalette(sourceImageData, palette.getPointContainer().getPointArray().map((point) => ({ r: point.r, g: point.g, b: point.b })), pixelPreviewProfile.ditherStrength)
-          : new ImageData(
-              new Uint8ClampedArray(
-                iq.applyPaletteSync(sourceContainer, palette, {
-                  colorDistanceFormula: 'euclidean-bt709-noalpha',
-                  imageQuantization: 'nearest',
-                }).toUint8Array(),
-              ),
-              pixelWidth,
-              pixelHeight,
-            )
+        const quantizedImageData = applyImageToPixelStylePalette(sourceImageData, palette.getPointContainer().getPointArray().map((point) => ({ r: point.r, g: point.g, b: point.b })), pixelPreviewProfile.ditherStrength)
         sampleContext.putImageData(sharpenPixelPreview(boostPixelPreviewEdges(quantizedImageData, pixelPreviewProfile.edgeBoost), pixelPreviewProfile.sharpness), 0, 0)
       } catch (error) {
         const fallbackImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
@@ -808,8 +796,8 @@ function InteractiveImageDetailMedia({
                 variant="outline"
                 className={cn('relative bg-background text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', pixelPreviewMode !== 'off' && 'border-primary/45 text-primary')}
                 onClick={() => setIsPixelPreviewPanelOpen((current) => !current)}
-                title={`도트 보기: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}`}
-                aria-label={`도트 보기 설정 열기: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}`}
+                title={`필터: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}`}
+                aria-label={`필터 설정 열기: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}`}
               >
                 <Grid2X2 className="h-4 w-4 stroke-[2.5]" />
                 {pixelPreviewMode !== 'off' ? (
@@ -820,7 +808,7 @@ function InteractiveImageDetailMedia({
               {isPixelPreviewPanelOpen ? (
                 <div className="absolute bottom-full left-0 mb-2 w-72 rounded-md border border-border bg-background p-3 text-xs text-foreground shadow-[0_18px_42px_rgba(0,0,0,0.45)]">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="font-semibold">도트 프리뷰</div>
+                    <div className="font-semibold">필터</div>
                     <Button size="sm" type="button" variant={pixelPreviewMode === 'off' ? 'default' : 'outline'} className="h-7 px-2 text-xs" onClick={() => setPixelPreviewModeAndPersist('off')}>
                       끄기
                     </Button>
@@ -832,17 +820,10 @@ function InteractiveImageDetailMedia({
                       </Button>
                     ))}
                   </div>
-                  <div className="mb-3 grid grid-cols-2 gap-1.5">
-                    {(['image-q', 'image-to-pixel'] as const).map((engine) => (
-                      <Button key={engine} size="sm" type="button" variant={activePixelPreviewSettings.engine === engine ? 'default' : 'outline'} className="h-7 text-xs" onClick={() => updatePixelPreviewSettings({ engine })}>
-                        {PIXEL_PREVIEW_ENGINE_LABELS[engine]}
-                      </Button>
-                    ))}
-                  </div>
                   <div className="space-y-2.5">
                     <label className="block">
-                      <div className="mb-1 flex justify-between text-muted-foreground"><span>샘플 해상도</span><span>{activePixelPreviewSettings.targetLongEdge}px</span></div>
-                      <input className="w-full accent-primary" type="range" min={160} max={640} step={16} value={activePixelPreviewSettings.targetLongEdge} onChange={(event) => updatePixelPreviewSettings({ targetLongEdge: Number(event.currentTarget.value) })} />
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>해상도</span><span>{activePixelPreviewSettings.targetLongEdge}px</span></div>
+                      <input className="w-full accent-primary" type="range" min={64} max={1024} step={64} value={activePixelPreviewSettings.targetLongEdge} onChange={(event) => updatePixelPreviewSettings({ targetLongEdge: Number(event.currentTarget.value) })} />
                     </label>
                     <label className="block">
                       <div className="mb-1 flex justify-between text-muted-foreground"><span>색상 수</span><span>{activePixelPreviewSettings.colorCount}</span></div>
@@ -851,6 +832,10 @@ function InteractiveImageDetailMedia({
                     <label className="block">
                       <div className="mb-1 flex justify-between text-muted-foreground"><span>디더링</span><span>{Math.round(activePixelPreviewSettings.ditherStrength * 100)}</span></div>
                       <input className="w-full accent-primary" type="range" min={0} max={60} step={2} value={Math.round(activePixelPreviewSettings.ditherStrength * 100)} onChange={(event) => updatePixelPreviewSettings({ ditherStrength: Number(event.currentTarget.value) / 100 })} />
+                    </label>
+                    <label className="flex items-center justify-between gap-3 rounded-sm border border-border/70 bg-surface-container/50 px-2.5 py-2 text-muted-foreground">
+                      <span>부드러운 축소</span>
+                      <input type="checkbox" className="size-4 accent-primary" checked={activePixelPreviewSettings.smoothing} onChange={(event) => updatePixelPreviewSettings({ smoothing: event.currentTarget.checked })} />
                     </label>
                     <label className="block">
                       <div className="mb-1 flex justify-between text-muted-foreground"><span>외곽선 강조</span><span>{Math.round(activePixelPreviewSettings.edgeBoost * 100)}</span></div>
