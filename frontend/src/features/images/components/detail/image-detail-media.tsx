@@ -37,7 +37,8 @@ const ROTATION_STEP = 90
 const IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY = 'conai:image-detail-media:wheel-zoom-enabled'
 const IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY = 'conai:image-detail-media:controls-collapsed'
 const IMAGE_PIXEL_PREVIEW_ENABLED_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-enabled'
-const IMAGE_PIXEL_PREVIEW_BLOCK_SIZE = 4
+const IMAGE_PIXEL_PREVIEW_TARGET_LONG_EDGE = 256
+const IMAGE_PIXEL_PREVIEW_COLOR_COUNT = 48
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -334,7 +335,7 @@ function InteractiveImageDetailMedia({
     let cancelled = false
     const sourceImage = new Image()
 
-    sourceImage.onload = () => {
+    sourceImage.onload = async () => {
       if (cancelled) {
         return
       }
@@ -346,8 +347,9 @@ function InteractiveImageDetailMedia({
         return
       }
 
-      const pixelWidth = Math.max(1, Math.round(sourceWidth / IMAGE_PIXEL_PREVIEW_BLOCK_SIZE))
-      const pixelHeight = Math.max(1, Math.round(sourceHeight / IMAGE_PIXEL_PREVIEW_BLOCK_SIZE))
+      const targetScale = Math.min(1, IMAGE_PIXEL_PREVIEW_TARGET_LONG_EDGE / Math.max(sourceWidth, sourceHeight))
+      const pixelWidth = Math.max(1, Math.round(sourceWidth * targetScale))
+      const pixelHeight = Math.max(1, Math.round(sourceHeight * targetScale))
       const sampleCanvas = document.createElement('canvas')
       sampleCanvas.width = pixelWidth
       sampleCanvas.height = pixelHeight
@@ -359,9 +361,28 @@ function InteractiveImageDetailMedia({
         return
       }
 
-      sampleContext.imageSmoothingEnabled = false
+      sampleContext.imageSmoothingEnabled = true
+      sampleContext.imageSmoothingQuality = 'high'
       sampleContext.clearRect(0, 0, pixelWidth, pixelHeight)
       sampleContext.drawImage(sourceImage, 0, 0, pixelWidth, pixelHeight)
+
+      try {
+        const iq = await import('image-q')
+        const sourceImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
+        const sourceContainer = iq.utils.PointContainer.fromImageData(sourceImageData)
+        const palette = iq.buildPaletteSync([sourceContainer], {
+          colors: IMAGE_PIXEL_PREVIEW_COLOR_COUNT,
+          colorDistanceFormula: 'euclidean-bt709-noalpha',
+          paletteQuantization: 'wuquant',
+        })
+        const quantizedContainer = iq.applyPaletteSync(sourceContainer, palette, {
+          colorDistanceFormula: 'euclidean-bt709-noalpha',
+          imageQuantization: 'atkinson',
+        })
+        sampleContext.putImageData(new ImageData(new Uint8ClampedArray(quantizedContainer.toUint8Array()), pixelWidth, pixelHeight), 0, 0)
+      } catch (error) {
+        console.warn('Failed to apply image-q pixel preview; falling back to plain pixel sampling.', error)
+      }
 
       canvas.width = sourceWidth
       canvas.height = sourceHeight
