@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { MetadataRewriteForm } from '@/features/metadata/components/metadata-rewrite-form'
+import type { RewriteMetadataDraft } from '@/features/metadata/use-metadata-rewrite-draft'
 import { formatBytes } from '@/features/images/components/detail/image-detail-utils'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
@@ -305,7 +306,7 @@ export function UploadPageExtractSection({
   isConvertingWebP: boolean
   isRewritingMetadata: boolean
   isRewritePanelOpen: boolean
-  rewriteDraft: any
+  rewriteDraft: RewriteMetadataDraft
   extractBusy: boolean
   isDesktopPageLayout: boolean
   extractedPromptCards: ExtractedPromptCardItem[]

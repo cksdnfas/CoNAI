@@ -35,7 +35,6 @@ export function useImageEditorLifecycle({
   saving,
   selectionClipboardRef,
   resetHistory,
-  queueHistoryCommit,
   onClose,
   onSave,
   createDrawLayer,
@@ -75,7 +74,6 @@ export function useImageEditorLifecycle({
   saving: boolean
   selectionClipboardRef: MutableRefObject<ImageEditorSelectionClipboardLike | null>
   resetHistory: (snapshot: ImageEditorHistorySnapshot) => void
-  queueHistoryCommit: () => void
   onClose: () => void
   onSave: (payload: ImageEditorSavePayload) => void | Promise<void>
   createDrawLayer: (index: number) => Extract<ImageEditorLayer, { type: 'draw' }>

@@ -67,7 +67,7 @@ export function PublicComfyWorkflowPage() {
   })
 
   const workflow = workflowQuery.data ?? null
-  const workflowFields = workflow?.marked_fields ?? []
+  const workflowFields = useMemo(() => workflow?.marked_fields ?? [], [workflow?.marked_fields])
   const generationSaveOptions = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
   const useWideSplitPaneScroll = isWideLayout && workflow !== null
 
@@ -167,6 +167,17 @@ export function PublicComfyWorkflowPage() {
     }
   }
 
+  useEffect(() => {
+    if (isWideLayout || !isControllerOpen || typeof document === 'undefined') {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      setDrawerHeaderPortalRevision((current) => current + 1)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [isControllerOpen, isWideLayout])
+
   if (authStatusQuery.isLoading) {
     return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
   }
@@ -184,17 +195,6 @@ export function PublicComfyWorkflowPage() {
     const nextPath = `${location.pathname}${location.search}` || '/'
     return <Navigate to={`/login?next=${encodeURIComponent(nextPath)}`} replace />
   }
-
-  useEffect(() => {
-    if (isWideLayout || !isControllerOpen || typeof document === 'undefined') {
-      return
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      setDrawerHeaderPortalRevision((current) => current + 1)
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [isControllerOpen, isWideLayout])
 
   const drawerHeaderContentId = 'public-comfy-workflow-drawer-header'
   const drawerHeaderPortalTarget = !isWideLayout && typeof document !== 'undefined'

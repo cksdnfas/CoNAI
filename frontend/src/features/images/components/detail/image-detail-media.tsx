@@ -423,10 +423,6 @@ function InteractiveImageDetailMedia({
     setHasRenderError(false)
   }, [renderUrl])
 
-  if (hasRenderError) {
-    return <ImageDetailMediaFallback image={image} />
-  }
-
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const pointersRef = useRef(new Map<number, PointerPosition>())
   const initialScaleRef = useRef(loadImageDetailScale())
@@ -787,6 +783,10 @@ function InteractiveImageDetailMedia({
       offsetRef.current = { x: 0, y: 0 }
       setOffset({ x: 0, y: 0 })
     }
+  }
+
+  if (hasRenderError) {
+    return <ImageDetailMediaFallback image={image} />
   }
 
   return (

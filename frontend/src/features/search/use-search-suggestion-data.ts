@@ -43,7 +43,7 @@ export function useSearchSuggestionData(searchScope: SearchScope, searchInput: s
     enabled: searchScope === 'lora',
   })
 
-  const ratingTiers = ratingTiersQuery.data ?? []
+  const ratingTiers = useMemo(() => ratingTiersQuery.data ?? [], [ratingTiersQuery.data])
   const promptSuggestions = promptSuggestionsQuery.data?.items ?? []
   const filteredRatingTiers = useMemo(() => ratingTiers, [ratingTiers])
   const modelSuggestions = modelSuggestionsQuery.data ?? []

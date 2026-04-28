@@ -9,6 +9,7 @@ import { VideoOptimizationService } from '../services/videoOptimizationService';
 import { VideoProcessor } from '../services/videoProcessor';
 import { runtimePaths } from '../config/runtimePaths';
 import { generateFileHash } from './fileHash';
+import { generateDatedRandomFilename, getDateFolder, normalizeRelativePath } from './mediaStoragePaths';
 
 export type GeneratedImageSaveOptions = {
   format?: 'original' | ImageOutputFormat;
@@ -54,41 +55,6 @@ export class FileSaver {
     }
 
     return 'png';
-  }
-
-  /**
-   * 날짜 기반 폴더 경로 생성 (YYYY-MM-DD)
-   */
-  private static getDateFolder(): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  /**
-   * 고유한 파일명 생성 (년도_월_일_시분초_랜덤문자열.png)
-   */
-  private static generateUniqueFilename(extension: string = 'png'): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hour = String(now.getHours()).padStart(2, '0');
-    const minute = String(now.getMinutes()).padStart(2, '0');
-    const second = String(now.getSeconds()).padStart(2, '0');
-    const random = Math.random().toString(36).substring(2, 8);
-
-    return `${year}_${month}_${day}_${hour}${minute}${second}_${random}.${extension}`;
-  }
-
-  /**
-   * 상대 경로 정규화 (uploads 디렉토리 기준)
-   */
-  private static normalizeRelativePath(fullPath: string): string {
-    const uploadsDir = runtimePaths.uploadsDir;
-    return path.relative(uploadsDir, fullPath).replace(/\\/g, '/');
   }
 
   private static resolveMimeTypeFromPath(filePath: string): string {
@@ -144,14 +110,14 @@ export class FileSaver {
     options?: GeneratedImageSaveOptions,
   ): Promise<SavedGeneratedMedia> {
     try {
-      const dateFolder = this.getDateFolder();
+      const dateFolder = getDateFolder();
       const dateFolderPath = path.join(runtimePaths.uploadsDir, 'API', 'images', dateFolder);
 
       await fs.promises.mkdir(dateFolderPath, { recursive: true });
 
       const outputFormat = this.resolveOutputFormat(options);
       const outputExtension = outputFormat === 'jpeg' ? 'jpg' : outputFormat;
-      const filename = this.generateUniqueFilename(outputExtension);
+      const filename = generateDatedRandomFilename(outputExtension);
       const fullPath = path.join(dateFolderPath, filename);
 
       const hasTransformOptions = Boolean(
@@ -197,7 +163,7 @@ export class FileSaver {
       const compositeHash = hashes.compositeHash;
 
       const stats = await fs.promises.stat(fullPath);
-      const relativePath = this.normalizeRelativePath(fullPath);
+      const relativePath = normalizeRelativePath(fullPath, runtimePaths.uploadsDir);
 
       return {
         originalPath: relativePath,
@@ -235,7 +201,7 @@ export class FileSaver {
     }
 
     try {
-      const dateFolder = this.getDateFolder();
+      const dateFolder = getDateFolder();
       const targetDir = path.join(runtimePaths.uploadsDir, 'videos', 'API', dateFolder);
       await fs.promises.mkdir(targetDir, { recursive: true });
 
@@ -245,7 +211,7 @@ export class FileSaver {
         && videoOptimizationSettings.applyToGeneratedOutputs;
 
       const sourceExtension = path.extname(sourceFilePath) || '.bin';
-      const filename = this.generateUniqueFilename(sourceExtension.replace(/^\./, ''));
+      const filename = generateDatedRandomFilename(sourceExtension.replace(/^\./, ''));
       const initialPath = path.join(targetDir, filename);
       const targetBasePath = path.join(targetDir, path.parse(filename).name);
 
@@ -265,7 +231,7 @@ export class FileSaver {
 
       const stats = await fs.promises.stat(finalPath);
       const compositeHash = await generateFileHash(finalPath);
-      const relativePath = this.normalizeRelativePath(finalPath);
+      const relativePath = normalizeRelativePath(finalPath, runtimePaths.uploadsDir);
 
       let width = 0;
       let height = 0;

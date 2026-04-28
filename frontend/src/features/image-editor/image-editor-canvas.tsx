@@ -1,11 +1,12 @@
 import { useEffect, useState, type RefObject, type WheelEvent } from 'react'
+import type Konva from 'konva'
 import { Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text } from 'react-konva'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import { loadEditorImage } from './image-editor-utils'
 
 interface ImageEditorCanvasProps {
   viewportRef: RefObject<HTMLDivElement | null>
-  documentGroupRef: RefObject<any>
+  documentGroupRef: RefObject<Konva.Group | null>
   baseImage: HTMLImageElement | null
   loading: boolean
   viewportSize: { width: number; height: number }

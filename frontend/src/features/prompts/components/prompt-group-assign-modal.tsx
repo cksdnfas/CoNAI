@@ -20,7 +20,6 @@ interface PromptGroupAssignModalProps {
 export function PromptGroupAssignModal({
   open,
   groups,
-  selectedCount,
   isSubmitting = false,
   onClose,
   onSubmit,

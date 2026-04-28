@@ -1,5 +1,6 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
+import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -82,11 +83,11 @@ export function NaiGenerationEditorSections({
   useCharacterPositions: boolean
   savedCharacterReferenceSearch: string
   setSavedCharacterReferenceSearch: Dispatch<SetStateAction<string>>
-  filteredSavedCharacterReferences: Array<any>
+  filteredSavedCharacterReferences: StoredNaiCharacterReferenceAsset[]
   savedCharacterReferencesLoading: boolean
   savedVibeSearch: string
   setSavedVibeSearch: Dispatch<SetStateAction<string>>
-  filteredSavedVibes: Array<any>
+  filteredSavedVibes: StoredNaiVibeAsset[]
   savedVibesLoading: boolean
   naiConnected: boolean
   encodingVibeIndex: number | null

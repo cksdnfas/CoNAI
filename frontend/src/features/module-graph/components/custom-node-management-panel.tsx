@@ -81,7 +81,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
     queryFn: listCustomNodes,
   })
 
-  const loadedNodes = customNodesQuery.data?.nodes ?? []
+  const loadedNodes = useMemo(() => customNodesQuery.data?.nodes ?? [], [customNodesQuery.data?.nodes])
   const loadErrors = customNodesQuery.data?.errors ?? []
 
   const selectedTestNode = useMemo(

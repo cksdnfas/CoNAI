@@ -3,6 +3,7 @@ import { Image as ImageIcon, Type, type LucideIcon } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { updateSimilaritySettings } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import type { PromptSimilarImage, SimilarImage } from '@/types/similarity'
@@ -147,12 +148,6 @@ function sanitizePromptSimilaritySettingsDraft(
     },
   }
 }
-
-/** Read an API error into the localized fallback message already used in the detail page. */
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback
-}
-
 
 /** Render the similarity gallery area, including tabs, flyouts, and score overlays. */
 export function ImageDetailSimilaritySection({

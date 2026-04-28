@@ -19,7 +19,6 @@ import { clearPersistedWorkflowRunnerDraft, loadPersistedWorkflowRunnerDraft } f
 
 /** Own workflow/folder browse-management actions for the module-graph page. */
 export function useModuleGraphBrowseActions({
-  isDirty,
   selectedFolderId,
   selectedFolderRecord,
   selectedGraphRecord,

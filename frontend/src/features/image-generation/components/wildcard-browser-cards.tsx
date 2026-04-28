@@ -3,15 +3,12 @@ import { Folder, FolderOpen } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import {
   type WildcardItemRecord,
-  type WildcardRecord,
   type WildcardScanLog,
   type WildcardTool,
 } from '@/lib/api'
-import { cn } from '@/lib/utils'
 import {
   formatWildcardDateTime,
   getWildcardPromptSyntax,

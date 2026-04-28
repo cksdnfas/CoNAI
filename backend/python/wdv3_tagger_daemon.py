@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from tagger_daemon_common import error_response, send_response, success_response, validate_image_path
+
 import numpy as np
 import pandas as pd
 import timm
@@ -120,11 +122,7 @@ def load_model_command(model_name: str, cache_dir: Optional[str] = None, device:
         # Validate model
         repo_id = MODEL_REPO_MAP.get(model_name)
         if not repo_id:
-            return {
-                "success": False,
-                "error": f"Unknown model: {model_name}",
-                "error_type": "ValidationError"
-            }
+            return error_response(f"Unknown model: {model_name}", "ValidationError")
 
         # Determine device
         if device == "auto":
@@ -136,18 +134,13 @@ def load_model_command(model_name: str, cache_dir: Optional[str] = None, device:
         elif device == "cuda":
             # Force CUDA, error if not available
             if not torch.cuda.is_available():
-                return {
-                    "success": False,
-                    "error": f"CUDA is not available on this system. (Torch: {torch.__version__}, CUDA: {torch.version.cuda if hasattr(torch.version, 'cuda') else 'N/A'})",
-                    "error_type": "DeviceError"
-                }
+                return error_response(
+                    f"CUDA is not available on this system. (Torch: {torch.__version__}, CUDA: {torch.version.cuda if hasattr(torch.version, 'cuda') else 'N/A'})",
+                    "DeviceError",
+                )
             torch_device = torch.device("cuda")
         else:
-            return {
-                "success": False,
-                "error": f"Unknown device: {device}. Use 'auto', 'cpu', or 'cuda'",
-                "error_type": "ValidationError"
-            }
+            return error_response(f"Unknown device: {device}. Use 'auto', 'cpu', or 'cuda'", "ValidationError")
 
         # Set cache directory if provided
         if cache_dir:
@@ -173,18 +166,13 @@ def load_model_command(model_name: str, cache_dir: Optional[str] = None, device:
         current_model_name = model_name
         current_device_name = str(torch_device)
 
-        return {
-            "success": True,
-            "model": model_name,
-            "device": current_device_name
-        }
+        return success_response(
+            model=model_name,
+            device=current_device_name,
+        )
 
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
+        return error_response(e)
 
 
 def unload_model_command():
@@ -204,14 +192,10 @@ def unload_model_command():
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        return {"success": True}
+        return success_response()
 
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
+        return error_response(e)
 
 
 def tag_image_command(image_path: str, gen_threshold: float, char_threshold: float):
@@ -221,20 +205,10 @@ def tag_image_command(image_path: str, gen_threshold: float, char_threshold: flo
     try:
         # Check if model is loaded
         if model is None or labels is None or transform is None:
-            return {
-                "success": False,
-                "error": "Model not loaded. Call load_model first.",
-                "error_type": "StateError"
-            }
+            return error_response("Model not loaded. Call load_model first.", "StateError")
 
         # Validate image path
-        image_path_obj = Path(image_path).resolve()
-        if not image_path_obj.is_file():
-            return {
-                "success": False,
-                "error": f"Image file not found: {image_path}",
-                "error_type": "FileNotFoundError"
-            }
+        image_path_obj = validate_image_path(image_path)
 
         # Load and preprocess image
         img_input: Image.Image = Image.open(image_path_obj)
@@ -266,44 +240,32 @@ def tag_image_command(image_path: str, gen_threshold: float, char_threshold: flo
         )
 
         # Format output
-        return {
-            "success": True,
-            "caption": caption,
-            "taglist": taglist,
-            "rating": {k: float(v) for k, v in ratings.items()},
-            "general": {k: float(v) for k, v in general.items()},
-            "character": {k: float(v) for k, v in character.items()},
-            "model": current_model_name,
-            "thresholds": {
+        return success_response(
+            caption=caption,
+            taglist=taglist,
+            rating={k: float(v) for k, v in ratings.items()},
+            general={k: float(v) for k, v in general.items()},
+            character={k: float(v) for k, v in character.items()},
+            model=current_model_name,
+            thresholds={
                 "general": gen_threshold,
-                "character": char_threshold
-            }
-        }
+                "character": char_threshold,
+            },
+        )
 
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
+        return error_response(e)
 
 
 def get_status_command():
     """Get current daemon status"""
     global model, current_model_name, current_device_name
 
-    return {
-        "success": True,
-        "model_loaded": model is not None,
-        "current_model": current_model_name,
-        "device": current_device_name
-    }
-
-
-def send_response(response: dict):
-    """Send JSON response to stdout"""
-    print(json.dumps(response, ensure_ascii=False))
-    sys.stdout.flush()
+    return success_response(
+        model_loaded=model is not None,
+        current_model=current_model_name,
+        device=current_device_name,
+    )
 
 
 def main():
@@ -313,7 +275,7 @@ def main():
     if torch.cuda.is_available():
         print(f"# CUDA Device: {torch.cuda.get_device_name(0)} (Count: {torch.cuda.device_count()})", file=sys.stderr)
     
-    send_response({"success": True, "status": "ready"})
+    send_response(success_response(status="ready"))
 
     # Process commands from stdin
     for line in sys.stdin:
@@ -350,28 +312,16 @@ def main():
                 send_response(response)
 
             elif action == "shutdown":
-                send_response({"success": True, "status": "shutdown"})
+                send_response(success_response(status="shutdown"))
                 break
 
             else:
-                send_response({
-                    "success": False,
-                    "error": f"Unknown action: {action}",
-                    "error_type": "InvalidAction"
-                })
+                send_response(error_response(f"Unknown action: {action}", "InvalidAction"))
 
         except json.JSONDecodeError as e:
-            send_response({
-                "success": False,
-                "error": f"Invalid JSON: {str(e)}",
-                "error_type": "JSONDecodeError"
-            })
+            send_response(error_response(f"Invalid JSON: {str(e)}", "JSONDecodeError"))
         except Exception as e:
-            send_response({
-                "success": False,
-                "error": str(e),
-                "error_type": type(e).__name__
-            })
+            send_response(error_response(e))
 
 
 if __name__ == "__main__":

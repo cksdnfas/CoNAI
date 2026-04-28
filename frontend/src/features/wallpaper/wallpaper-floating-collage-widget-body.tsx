@@ -801,7 +801,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
     return () => {
       window.cancelAnimationFrame(frameId)
     }
-  }, [aspectMode, cardStates.length, containerSize.height, containerSize.width, imageScalePercent, imageSwapMode, images, swapBounceCount, swapIntervalSec, transitionDurationMs])
+  }, [aspectMode, cardStates.length, containerSize.height, containerSize.width, imageScalePercent, imageSwapMode, images, motionStrength, swapBounceCount, swapIntervalSec, transitionDurationMs])
 
   if (groupId === null) {
     return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">설정에서 그룹을 선택해.</div>

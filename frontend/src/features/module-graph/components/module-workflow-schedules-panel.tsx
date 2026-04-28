@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Pause, Play, Plus, Rocket, Save, SquarePen, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -188,7 +188,7 @@ export function ModuleWorkflowSchedulesPanel({
     setDraftInputValues(parseStoredInputValues(schedule.input_values))
   }
 
-  const buildPayload = (): ScheduleMutationPayload | null => {
+  const buildPayload = useCallback((): ScheduleMutationPayload | null => {
     const name = draftName.trim()
     const workflowId = Number(draftWorkflowId)
     if (!name || !Number.isFinite(workflowId)) {
@@ -217,7 +217,7 @@ export function ModuleWorkflowSchedulesPanel({
       failure_policy: draftFailurePolicy,
       input_values: Object.keys(draftInputValues).length > 0 ? draftInputValues : null,
     }
-  }
+  }, [draftDailyTime, draftEnabled, draftEnqueueCount, draftFailurePolicy, draftInputValues, draftIntervalMinutes, draftMaxRunCount, draftName, draftRunAt, draftScheduleType, draftWorkflowId])
 
   const submitDisabled = useMemo(() => {
     const payload = buildPayload()
@@ -238,7 +238,7 @@ export function ModuleWorkflowSchedulesPanel({
       return true
     }
     return false
-  }, [draftDailyTime, draftEnabled, draftEnqueueCount, draftFailurePolicy, draftInputValues, draftIntervalMinutes, draftMaxRunCount, draftName, draftRunAt, draftScheduleType, draftWorkflowId])
+  }, [buildPayload, draftWorkflowId])
 
   const handleSubmit = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()

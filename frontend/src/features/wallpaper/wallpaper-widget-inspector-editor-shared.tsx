@@ -9,7 +9,6 @@ import type { WallpaperEasingPreviewKind } from './wallpaper-easing-picker-previ
 import type {
   WallpaperAnimationEasing,
   WallpaperAnimationEasingPreset,
-  WallpaperImageHoverMotion,
   WallpaperImageTransitionSpeed,
   WallpaperImageTransitionStyle,
   WallpaperWidgetInstance,
@@ -135,7 +134,6 @@ function renderWallpaperAnimationEditorCard({
 /** Render one card-like section inside the wallpaper widget inspector. */
 export function WallpaperInspectorSectionCard({
   title,
-  description,
   children,
   className,
 }: {
@@ -155,7 +153,6 @@ export function WallpaperInspectorSectionCard({
 /** Render one collapsible block for lower-priority settings inside a section card. */
 export function WallpaperInspectorDisclosure({
   title,
-  description,
   defaultOpen = false,
   children,
 }: {

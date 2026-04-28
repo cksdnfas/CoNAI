@@ -380,7 +380,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null)
 
   const previewQuery = useWallpaperGroupPreviewImagesQuery('group-image-view', groupId, includeChildren, previewPoolCount)
-  const images = previewQuery.data ?? []
+  const images = useMemo(() => previewQuery.data ?? [], [previewQuery.data])
   const rotationEnabled = images.length > visibleCount
   const rotationIndex = useWallpaperRotatingIndex(images.length, slideshowInterval, rotationEnabled)
   const targetVisibleImages = useMemo(() => {
@@ -531,7 +531,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
 
   const previewQuery = useWallpaperGroupPreviewImagesQuery('image-showcase', groupId, includeChildren, previewCount)
 
-  const images = previewQuery.data ?? []
+  const images = useMemo(() => previewQuery.data ?? [], [previewQuery.data])
   const rotationEnabled = playbackMode !== 'static' && images.length > 1
   const kenBurnsEnabled = playbackMode === 'ken-burns'
   const currentIndex = useWallpaperRotatingIndex(images.length, slideshowInterval, rotationEnabled)

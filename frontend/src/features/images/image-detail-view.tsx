@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getImage, getImageDuplicates, getPromptSimilarImages, getRuntimeSimilaritySettings, getSimilarImages } from '@/lib/api'
+import { getErrorMessage } from '@/lib/error-message'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
@@ -39,14 +40,10 @@ interface ImageDetailViewProps {
   renderHeader?: (controls: ImageDetailViewHeaderControls) => ReactNode
 }
 
-/** Read an API error into the localized fallback message already used in the detail page. */
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback
-}
-
 /** Render the shared image detail body so page and modal presentations stay aligned. */
 export function ImageDetailView({ compositeHash, presentation = 'page', renderHeader }: ImageDetailViewProps) {
-  const useSplitPaneScroll = presentation === 'modal' && useMinWidth(1280)
+  const canUseSplitPaneScroll = useMinWidth(1280)
+  const useSplitPaneScroll = presentation === 'modal' && canUseSplitPaneScroll
   const usesDesktopRelatedImageColumns = useMinWidth(768)
   const [isPrimaryMediaReady, setIsPrimaryMediaReady] = useState(false)
 
@@ -181,7 +178,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
   const downloadUrl = getImageDetailDownloadUrl(image)
   const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
 
-  const duplicateImageItems = duplicatesQuery.data?.similar ?? []
+  const duplicateImageItems = useMemo(() => duplicatesQuery.data?.similar ?? [], [duplicatesQuery.data?.similar])
 
   const duplicateImages = useMemo(
     () => getValidImageRecords(duplicateImageItems.map((item) => item.image)),

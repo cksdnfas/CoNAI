@@ -80,7 +80,7 @@ function touchCachedEntry(sourceUrl: string) {
   entry.lastAccessedAt = Date.now()
 }
 
-function evictInMemoryCachedVideoEntries(_excludedSourceUrl?: string | null) {
+function evictInMemoryCachedVideoEntries() {
   // Runtime blob URLs proved too fragile to revoke aggressively while virtualized
   // media elements may still be mounting, unmounting, or decoding.
   // Keep object URLs stable for the page lifetime and let page teardown reclaim them.
@@ -213,7 +213,7 @@ async function createObjectUrlFromResponse(sourceUrl: string, response: Response
     promise: null,
   })
 
-  evictInMemoryCachedVideoEntries(sourceUrl)
+  evictInMemoryCachedVideoEntries()
   return { objectUrl, size: blob.size }
 }
 

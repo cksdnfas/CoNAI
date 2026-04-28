@@ -29,6 +29,7 @@ import {
   resolveWatcherPollingOptions,
   validateInitialWatcherPath,
 } from './fileWatcher/fileWatcherPathUtils';
+import { sleep, waitForChokidarReady } from './watcherLifecycleUtils';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 
@@ -151,7 +152,7 @@ async function waitForWatcherFileWrite(filePath: string): Promise<void> {
       // 파일 접근 오류 → 대기
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await sleep(500);
   }
 }
 
@@ -288,36 +289,18 @@ async function waitForWatcherReady(
   entry: WatcherEntry,
   updateWatcherStatus: (folderId: number, status: string, error: string | null) => void,
 ): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const { watcher, folderId } = entry;
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('워처 초기화 타임아웃'));
-    }, 10000);
-
-    const handleReady = () => {
-      cleanup();
+  await waitForChokidarReady({
+    watcher: entry.watcher,
+    timeoutMessage: '워처 초기화 타임아웃',
+    onReady: () => {
       entry.state = 'watching';
-      updateWatcherStatus(folderId, 'watching', null);
-      resolve();
-    };
-
-    const handleError = (error: unknown) => {
-      cleanup();
+      updateWatcherStatus(entry.folderId, 'watching', null);
+    },
+    onError: (_error, errorMessage) => {
       entry.state = 'error';
-      entry.error = error instanceof Error ? error.message : 'Unknown error';
-      updateWatcherStatus(folderId, 'error', entry.error);
-      reject(error instanceof Error ? error : new Error(entry.error));
-    };
-
-    const cleanup = () => {
-      clearTimeout(timeout);
-      watcher.off('ready', handleReady);
-      watcher.off('error', handleError);
-    };
-
-    watcher.on('ready', handleReady);
-    watcher.on('error', handleError);
+      entry.error = errorMessage;
+      updateWatcherStatus(entry.folderId, 'error', errorMessage);
+    },
   });
 }
 
@@ -583,7 +566,7 @@ export class FileWatcherService {
   static async restartWatcher(folderId: number): Promise<void> {
     console.warn(`⚠️  Restarting watcher: folderId=${folderId}`);
     await this.stopWatcher(folderId);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await sleep(1000);
     await this.startWatcher(folderId);
   }
 

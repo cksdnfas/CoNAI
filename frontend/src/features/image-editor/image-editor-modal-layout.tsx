@@ -1,4 +1,5 @@
 import type { RefObject, WheelEvent } from 'react'
+import type Konva from 'konva'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
@@ -6,7 +7,7 @@ import { ImageEditorCanvas } from './image-editor-canvas'
 import { ImageEditorLayerPanel } from './image-editor-layer-panel'
 import { ImageEditorSessionActions } from './image-editor-session-actions'
 import { ImageEditorToolbar } from './image-editor-toolbar'
-import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorSavePayload, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
+import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 
 type ImageEditorModalLayoutProps = {
   open: boolean
@@ -60,7 +61,7 @@ type ImageEditorModalLayoutProps = {
   }
   canvas: {
     viewportRef: RefObject<HTMLDivElement | null>
-    documentGroupRef: RefObject<any>
+    documentGroupRef: RefObject<Konva.Group | null>
     baseImage: HTMLImageElement | null
     loading: boolean
     viewportSize: { width: number; height: number }

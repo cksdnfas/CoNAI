@@ -14,7 +14,7 @@ interface ImageDetailActionsProps {
   onRefresh: () => void
 }
 
-export function ImageDetailActions({ downloadUrl, downloadName, image, isRefreshing, onBack, onRefresh }: ImageDetailActionsProps) {
+export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, onRefresh }: ImageDetailActionsProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button size="icon-sm" variant="secondary" onClick={onBack} aria-label="피드로 돌아가기" title="피드로 돌아가기">

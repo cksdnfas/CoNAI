@@ -6,7 +6,8 @@ export function useMultiTouchSelectionStartGuard(containerElement: HTMLElement |
   const activeTouchCountRef = useRef(0)
 
   useEffect(() => {
-    activeTouchPointerIdsRef.current.clear()
+    const activeTouchPointerIds = activeTouchPointerIdsRef.current
+    activeTouchPointerIds.clear()
     activeTouchCountRef.current = 0
 
     if (!enabled || !containerElement) {
@@ -21,8 +22,8 @@ export function useMultiTouchSelectionStartGuard(containerElement: HTMLElement |
         return
       }
 
-      activeTouchPointerIdsRef.current.add(event.pointerId)
-      activeTouchCountRef.current = Math.max(activeTouchCountRef.current, activeTouchPointerIdsRef.current.size)
+      activeTouchPointerIds.add(event.pointerId)
+      activeTouchCountRef.current = Math.max(activeTouchCountRef.current, activeTouchPointerIds.size)
     }
 
     /** Remove touch pointer ids when a touch ends or gets cancelled. */
@@ -31,8 +32,8 @@ export function useMultiTouchSelectionStartGuard(containerElement: HTMLElement |
         return
       }
 
-      activeTouchPointerIdsRef.current.delete(event.pointerId)
-      if (activeTouchPointerIdsRef.current.size === 0) {
+      activeTouchPointerIds.delete(event.pointerId)
+      if (activeTouchPointerIds.size === 0) {
         activeTouchCountRef.current = 0
       }
     }
@@ -41,7 +42,7 @@ export function useMultiTouchSelectionStartGuard(containerElement: HTMLElement |
     const handleTouchUpdate = (event: TouchEvent) => {
       activeTouchCountRef.current = event.touches.length
       if (event.touches.length === 0) {
-        activeTouchPointerIdsRef.current.clear()
+        activeTouchPointerIds.clear()
       }
     }
 
@@ -59,7 +60,7 @@ export function useMultiTouchSelectionStartGuard(containerElement: HTMLElement |
       ownerDocument.removeEventListener('touchstart', handleTouchUpdate, true)
       ownerDocument.removeEventListener('touchend', handleTouchUpdate, true)
       ownerDocument.removeEventListener('touchcancel', handleTouchUpdate, true)
-      activeTouchPointerIdsRef.current.clear()
+      activeTouchPointerIds.clear()
       activeTouchCountRef.current = 0
     }
   }, [containerElement, enabled])

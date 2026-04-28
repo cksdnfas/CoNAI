@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 
+from tagger_daemon_common import error_response, send_response, success_response, validate_image_path
+
 
 def preload_windows_gpu_dlls() -> None:
     if os.name != "nt":
@@ -139,17 +141,12 @@ def load_model_command(repo_id: str, model_file: str, cache_dir: str | None = No
         current_repo_id = repo_id
         current_model_file = model_file
 
-        return {
-            "success": True,
-            "model": current_model_name,
-            "device": current_device_name,
-        }
+        return success_response(
+            model=current_model_name,
+            device=current_device_name,
+        )
     except Exception as exc:
-        return {
-            "success": False,
-            "error": str(exc),
-            "error_type": type(exc).__name__,
-        }
+        return error_response(exc)
 
 
 def unload_model_command():
@@ -164,13 +161,9 @@ def unload_model_command():
         class_mapping = {}
         gc.collect()
 
-        return {"success": True}
+        return success_response()
     except Exception as exc:
-        return {
-            "success": False,
-            "error": str(exc),
-            "error_type": type(exc).__name__,
-        }
+        return error_response(exc)
 
 
 def tag_image_command(image_path: str, topk: int = 15):
@@ -178,19 +171,9 @@ def tag_image_command(image_path: str, topk: int = 15):
 
     try:
         if session is None:
-            return {
-                "success": False,
-                "error": "Model not loaded. Call load_model first.",
-                "error_type": "StateError",
-            }
+            return error_response("Model not loaded. Call load_model first.", "StateError")
 
-        image_path_obj = Path(image_path).resolve()
-        if not image_path_obj.is_file():
-            return {
-                "success": False,
-                "error": f"Image file not found: {image_path}",
-                "error_type": "FileNotFoundError",
-            }
+        image_path_obj = validate_image_path(image_path)
 
         input_tensor = preprocess_image(image_path_obj)
         inputs = session.get_inputs()
@@ -228,41 +211,30 @@ def tag_image_command(image_path: str, topk: int = 15):
 
         taglist = ", ".join(artists.keys())
 
-        return {
-            "success": True,
-            "model": current_model_name or "kaloscope-onnx",
-            "topk": effective_topk,
-            "artists": artists,
-            "taglist": taglist,
-        }
+        return success_response(
+            model=current_model_name or "kaloscope-onnx",
+            topk=effective_topk,
+            artists=artists,
+            taglist=taglist,
+        )
     except Exception as exc:
-        return {
-            "success": False,
-            "error": str(exc),
-            "error_type": type(exc).__name__,
-        }
+        return error_response(exc)
 
 
 def get_status_command():
     global session, current_model_name, current_device_name
 
-    return {
-        "success": True,
-        "model_loaded": session is not None,
-        "current_model": current_model_name,
-        "device": current_device_name,
-    }
-
-
-def send_response(response: dict):
-    print(json.dumps(response, ensure_ascii=False))
-    sys.stdout.flush()
+    return success_response(
+        model_loaded=session is not None,
+        current_model=current_model_name,
+        device=current_device_name,
+    )
 
 
 def main():
     print(f"# Kaloscope Daemon starting (onnxruntime: {ort.__version__})", file=sys.stderr)
     print(f"# Providers: {ort.get_available_providers()}", file=sys.stderr)
-    send_response({"success": True, "status": "ready"})
+    send_response(success_response(status="ready"))
 
     for line in sys.stdin:
         try:
@@ -292,29 +264,16 @@ def main():
             elif action == "get_status":
                 send_response(get_status_command())
             elif action == "shutdown":
-                send_response({"success": True, "status": "shutdown"})
+                send_response(success_response(status="shutdown"))
                 break
             else:
-                send_response({
-                    "success": False,
-                    "error": f"Unknown action: {action}",
-                    "error_type": "InvalidAction",
-                })
+                send_response(error_response(f"Unknown action: {action}", "InvalidAction"))
         except Exception as exc:
-            send_response({
-                "success": False,
-                "error": str(exc),
-                "error_type": type(exc).__name__,
-            })
+            send_response(error_response(exc))
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        print(json.dumps({
-            "success": False,
-            "error": str(exc),
-            "error_type": type(exc).__name__,
-        }, ensure_ascii=False))
-        sys.stdout.flush()
+        send_response(error_response(exc))

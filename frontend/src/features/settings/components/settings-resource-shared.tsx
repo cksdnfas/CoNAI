@@ -3,7 +3,6 @@ import { Check, FolderPlus, LoaderCircle, Minus, Save, Settings2 } from 'lucide-
 import { SegmentedControl, type SegmentedControlItem } from '@/components/common/segmented-control'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
 type SettingsBadgeVariant = NonNullable<ComponentProps<typeof Badge>['variant']>

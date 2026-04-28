@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react'
+import type Konva from 'konva'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImageEditorHistory } from './use-image-editor-history'
 import { useImageEditorKeyboardShortcuts } from './use-image-editor-keyboard-shortcuts'
@@ -15,8 +16,6 @@ import {
   loadEditorImage,
   normalizeImageEditorRect,
   renderImageEditorMaskCanvas,
-  renderImageEditorSourceCanvas,
-  transformImageEditorCanvas,
 } from './image-editor-utils'
 
 type ImageEditorModalProps = {
@@ -73,7 +72,7 @@ export function ImageEditorModal({
 }: ImageEditorModalProps) {
   const { showSnackbar } = useSnackbar()
   const viewportRef = useRef<HTMLDivElement | null>(null)
-  const documentGroupRef = useRef<any>(null)
+  const documentGroupRef = useRef<Konva.Group | null>(null)
   const selectionClipboardRef = useRef<ImageEditorSelectionClipboard | null>(null)
 
   const [viewportSize, setViewportSize] = useState({ width: 960, height: 640 })
@@ -314,7 +313,6 @@ export function ImageEditorModal({
     saving,
     selectionClipboardRef,
     resetHistory,
-    queueHistoryCommit,
     onClose,
     onSave,
     createDrawLayer: createDefaultDrawLayer,

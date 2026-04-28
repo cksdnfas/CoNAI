@@ -300,7 +300,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [previewImage])
+  }, [previewCloseDurationMs, previewImage])
 
   const handleOpenPreviewImage = (image: WallpaperWidgetPreviewImage) => {
     if (!isRuntimeMode) {

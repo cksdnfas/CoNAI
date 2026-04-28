@@ -123,7 +123,7 @@ export function useImageListSelection({
       selection.destroy()
       selectionRef.current = null
     }
-  }, [canStartSelection, containerElement, onDragStateChange, onSelectedIdsChange, selectable])
+  }, [canStartSelection, containerElement, onDragStateChange, onSelectedIdsChange, selectable, selectionAreaClass])
 
   useEffect(() => {
     const container = containerElement

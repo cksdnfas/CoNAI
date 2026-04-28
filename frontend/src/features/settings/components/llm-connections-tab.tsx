@@ -18,6 +18,7 @@ import {
   type ExternalApiProviderType,
 } from '@/lib/api-external-api'
 import { getAppSettings, updateLlmSettings } from '@/lib/api-settings'
+import { normalizeOptionalString } from '@/lib/primitive-normalizers'
 import type { LlmPresetRecord, LlmSettings } from '@/types/settings'
 import { cn } from '@/lib/utils'
 import { SettingsModal } from './settings-modal'
@@ -117,14 +118,6 @@ const LLM_PRESET_SECTIONS: Array<{
   },
 ]
 
-function normalizeOptionalString(value: unknown) {
-  if (typeof value !== 'string') {
-    return ''
-  }
-
-  return value.trim()
-}
-
 function normalizeOptionalNumberString(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return String(value)
@@ -157,8 +150,8 @@ function buildProviderDraft(provider: ExternalApiProviderRecord): LlmConnectionD
     providerName: provider.provider_name,
     displayName: provider.display_name,
     providerType: provider.provider_type,
-    baseUrl: normalizeOptionalString(provider.base_url),
-    defaultModel: normalizeOptionalString(provider.additional_config?.default_model),
+    baseUrl: normalizeOptionalString(provider.base_url) ?? '',
+    defaultModel: normalizeOptionalString(provider.additional_config?.default_model) ?? '',
     defaultTemperature: normalizeOptionalNumberString(provider.additional_config?.default_temperature ?? provider.additional_config?.temperature),
     defaultMaxTokens: normalizeOptionalNumberString(provider.additional_config?.default_max_tokens ?? provider.additional_config?.max_tokens),
     apiKey: '',
@@ -188,11 +181,13 @@ function getDefaultMaxTokensSummary(provider: ExternalApiProviderRecord) {
 }
 
 function getBaseUrlSummary(provider: ExternalApiProviderRecord) {
-  return normalizeOptionalString(provider.base_url) || '미설정'
+  return normalizeOptionalString(provider.base_url) ?? '미설정'
 }
 
 function buildAdditionalConfig(draft: LlmConnectionDraft, baseConfig?: Record<string, unknown> | null) {
-  const { default_response_mode: _defaultResponseMode, response_mode: _responseMode, ...restConfig } = baseConfig ?? {}
+  const restConfig = { ...(baseConfig ?? {}) }
+  delete restConfig.default_response_mode
+  delete restConfig.response_mode
 
   return {
     ...restConfig,

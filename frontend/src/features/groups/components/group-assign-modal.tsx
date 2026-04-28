@@ -20,7 +20,6 @@ interface GroupAssignModalProps {
 export function GroupAssignModal({
   open,
   groups,
-  selectedCount: _selectedCount,
   isSubmitting = false,
   onClose,
   onSubmit,

@@ -49,9 +49,9 @@ export function WorkflowReservationsPanel() {
   })
 
   const reservationContent = reservationsQuery.data
-  const workflows = reservationContent?.workflows ?? []
+  const workflows = useMemo(() => reservationContent?.workflows ?? [], [reservationContent?.workflows])
   const schedules = reservationContent?.schedules ?? []
-  const reservationExecutions = reservationContent?.empty_executions ?? []
+  const reservationExecutions = useMemo(() => reservationContent?.empty_executions ?? [], [reservationContent?.empty_executions])
 
   const workflowNameById = useMemo(
     () => new Map<number, string>(workflows.map((workflow: GraphWorkflowRecord) => [workflow.id, workflow.name])),

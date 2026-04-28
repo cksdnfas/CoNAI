@@ -272,7 +272,7 @@ export function WildcardInlinePickerField({
     staleTime: 60_000,
   })
 
-  const wildcards = wildcardsQuery.data ?? []
+  const wildcards = useMemo(() => wildcardsQuery.data ?? [], [wildcardsQuery.data])
   const flattenedWildcards = useMemo(() => flattenWildcardRecords(wildcards), [wildcards])
   const activeQuery = useMemo(() => resolveActiveWildcardQuery(value, caretPosition), [value, caretPosition])
   const {

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react'
-import { Check, ChevronRight, Download, Pencil, Save, Star, Trash2, Upload, X } from 'lucide-react'
+import { Check, Download, Pencil, Save, Star, Trash2, Upload, X } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

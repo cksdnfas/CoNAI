@@ -1,23 +1,14 @@
 import { AlertTriangle, RefreshCcw } from 'lucide-react'
-import { isRouteErrorResponse, useRouteError } from 'react-router-dom'
+import { useRouteError } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { getRouteErrorMessage } from '@/lib/error-message'
 
-function getErrorMessage(error: unknown) {
-  if (isRouteErrorResponse(error)) {
-    return error.statusText || error.data || `HTTP ${error.status}`
-  }
-
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return '알 수 없는 오류가 발생했어.'
-}
+const ROUTE_ERROR_FALLBACK = '알 수 없는 오류가 발생했어.'
 
 function isChunkLoadFailure(error: unknown) {
-  const message = getErrorMessage(error)
+  const message = getRouteErrorMessage(error, ROUTE_ERROR_FALLBACK)
   return /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk/i.test(message)
 }
 
@@ -25,7 +16,7 @@ function isChunkLoadFailure(error: unknown) {
 export function RouteErrorBoundary() {
   const error = useRouteError()
   const isChunkError = isChunkLoadFailure(error)
-  const message = getErrorMessage(error)
+  const message = getRouteErrorMessage(error, ROUTE_ERROR_FALLBACK)
 
   return (
     <div className="mx-auto flex min-h-[60vh] max-w-3xl items-center justify-center px-6 py-10">

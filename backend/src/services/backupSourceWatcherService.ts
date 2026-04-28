@@ -7,6 +7,7 @@ import { settingsService } from './settingsService';
 import { VideoOptimizationService } from './videoOptimizationService';
 import { WebPConversionService } from './webpConversionService';
 import { BackupSource, BackupSourceService, ensureBackupTargetDirectory } from './backupSourceService';
+import { sleep, waitForChokidarReady } from './watcherLifecycleUtils';
 
 const isVerboseBackupWatcherLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 
@@ -59,7 +60,7 @@ async function waitForFileWrite(filePath: string): Promise<void> {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       const statsA = await fs.promises.stat(filePath);
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await sleep(300);
       const statsB = await fs.promises.stat(filePath);
 
       if (statsA.size === statsB.size && statsB.size > 0) {
@@ -231,21 +232,14 @@ export class BackupSourceWatcherService {
       BackupSourceService.updateWatcherState(sourceId, 'error', message);
     });
 
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('백업 소스 워처 초기화 타임아웃')), 10000);
-
-      watcher.once('ready', () => {
-        clearTimeout(timeout);
+    await waitForChokidarReady({
+      watcher,
+      timeoutMessage: '백업 소스 워처 초기화 타임아웃',
+      onReady: () => {
         entry.state = 'watching';
         BackupSourceService.updateWatcherState(sourceId, 'watching', null);
         void this.runInitialImport(sourceId);
-        resolve();
-      });
-
-      watcher.once('error', (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
+      },
     });
   }
 
@@ -265,7 +259,7 @@ export class BackupSourceWatcherService {
   /** Restart a watcher for one backup source. */
   static async restartWatcher(sourceId: number): Promise<void> {
     await this.stopWatcher(sourceId);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await sleep(300);
     await this.startWatcher(sourceId);
   }
 

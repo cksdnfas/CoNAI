@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState } from 'react'
 import { useEdgesState, useNodesState } from '@xyflow/react'
 import type { GraphWorkflowExposedInput, GraphWorkflowFolderRecord } from '@/lib/api'

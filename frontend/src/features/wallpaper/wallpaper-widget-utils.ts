@@ -87,21 +87,6 @@ export const WALLPAPER_ANIMATION_EASING_OPTIONS: Array<{ value: WallpaperAnimati
   { value: 'easeOutBounce', label: 'easeOutBounce' },
 ]
 
-const WALLPAPER_CUSTOM_EASING_FALLBACK: WallpaperBezierControlPoints = {
-  x1: 0.22,
-  y1: 1,
-  x2: 0.36,
-  y2: 1,
-}
-
-const WALLPAPER_CUSTOM_EASING_FALLBACK_STOPS: WallpaperEasingStopPoint[] = [
-  { x: 0, y: 0 },
-  { x: 0.18, y: 0.62 },
-  { x: 0.42, y: 0.92 },
-  { x: 0.72, y: 0.985 },
-  { x: 1, y: 1 },
-]
-
 function clampWallpaperNumericIntensity(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }

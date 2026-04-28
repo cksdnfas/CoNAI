@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -83,24 +83,24 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     },
   })
 
-  const historyEntries = historyQuery.data ?? []
+  const historyEntries = useMemo(() => historyQuery.data ?? [], [historyQuery.data])
 
-  const openDrawer = () => setIsDrawerOpen(true)
-  const closeDrawer = () => setIsDrawerOpen(false)
+  const openDrawer = useCallback(() => setIsDrawerOpen(true), [])
+  const closeDrawer = useCallback(() => setIsDrawerOpen(false), [])
 
-  const setSearchScope = (scope: SearchScope) => {
+  const setSearchScope = useCallback((scope: SearchScope) => {
     setSearchScopeState(scope)
     openDrawer()
-  }
+  }, [openDrawer])
 
-  const setSearchInput = (value: string) => {
+  const setSearchInput = useCallback((value: string) => {
     setSearchInputState(value)
     if (!isDrawerOpen) {
       openDrawer()
     }
-  }
+  }, [isDrawerOpen, openDrawer])
 
-  const appendDraftChip = (chip: SearchChip) => {
+  const appendDraftChip = useCallback((chip: SearchChip) => {
     setDraftChips((current) => {
       const nextKey = buildSearchChipKey(chip)
       if (current.some((item) => buildSearchChipKey(item) === nextKey)) {
@@ -108,9 +108,9 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       }
       return [...current, chip]
     })
-  }
+  }, [])
 
-  const addTextChip = () => {
+  const addTextChip = useCallback(() => {
     if (searchScope === 'rating' || searchScope === 'tool') {
       return false
     }
@@ -123,9 +123,9 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     appendDraftChip(chip)
     setSearchInputState('')
     return true
-  }
+  }, [appendDraftChip, searchInput, searchScope])
 
-  const addSuggestionChip = (value: string) => {
+  const addSuggestionChip = useCallback((value: string) => {
     if (searchScope === 'rating' || searchScope === 'tool') {
       return
     }
@@ -137,9 +137,9 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
 
     appendDraftChip(chip)
     setSearchInputState('')
-  }
+  }, [appendDraftChip, searchScope])
 
-  const addAIToolChip = (tool: SearchAiToolGroup) => {
+  const addAIToolChip = useCallback((tool: SearchAiToolGroup) => {
     const chip = createAIToolSearchChip(tool)
     if (!chip) {
       return
@@ -147,14 +147,14 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
 
     appendDraftChip(chip)
     setSearchInputState('')
-  }
+  }, [appendDraftChip])
 
-  const addRatingChip = (chip: SearchChip) => {
+  const addRatingChip = useCallback((chip: SearchChip) => {
     appendDraftChip(chip)
     setSearchInputState('')
-  }
+  }, [appendDraftChip])
 
-  const withPendingInputChip = (chips: SearchChip[]) => {
+  const withPendingInputChip = useCallback((chips: SearchChip[]) => {
     if (searchScope === 'rating' || searchScope === 'tool') {
       return chips
     }
@@ -170,9 +170,9 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     }
 
     return [...chips, nextChip]
-  }
+  }, [searchInput, searchScope])
 
-  const applySearch = () => {
+  const applySearch = useCallback(() => {
     const nextChips = withPendingInputChip(draftChips)
     setDraftChips(nextChips)
     setAppliedChips(nextChips)
@@ -189,26 +189,26 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       label: buildSearchHistoryLabel(nextChips),
       chips: nextChips,
     })
-  }
+  }, [draftChips, navigate, saveHistoryMutation, showSnackbar, withPendingInputChip])
 
-  const submitSearchFromInput = () => {
+  const submitSearchFromInput = useCallback(() => {
     applySearch()
-  }
+  }, [applySearch])
 
-  const clearSearch = () => {
+  const clearSearch = useCallback(() => {
     setDraftChips([])
     setAppliedChips([])
     setSearchInputState('')
-  }
+  }, [])
 
-  const selectHistoryEntry = (entry: SearchHistoryEntry) => {
+  const selectHistoryEntry = useCallback((entry: SearchHistoryEntry) => {
     setDraftChips(entry.chips)
     setAppliedChips(entry.chips)
     setSearchInputState('')
     openDrawer()
     navigate('/')
     showSnackbar({ message: '저장된 검색을 다시 적용했어.', tone: 'info' })
-  }
+  }, [navigate, openDrawer, showSnackbar])
 
   const value = useMemo<HomeSearchContextValue>(
     () => ({
@@ -244,7 +244,29 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
         await clearHistoryMutation.mutateAsync()
       },
     }),
-    [appliedChips, draftChips, historyEntries, historyQuery.isLoading, isDrawerOpen, searchInput, searchScope],
+    [
+      addAIToolChip,
+      addRatingChip,
+      addSuggestionChip,
+      addTextChip,
+      appliedChips,
+      applySearch,
+      clearHistoryMutation,
+      clearSearch,
+      closeDrawer,
+      deleteHistoryMutation,
+      draftChips,
+      historyEntries,
+      historyQuery.isLoading,
+      isDrawerOpen,
+      openDrawer,
+      searchInput,
+      searchScope,
+      selectHistoryEntry,
+      setSearchInput,
+      setSearchScope,
+      submitSearchFromInput,
+    ],
   )
 
   return <HomeSearchContext.Provider value={value}>{children}</HomeSearchContext.Provider>

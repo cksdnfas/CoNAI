@@ -1,4 +1,5 @@
 import { useCallback, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import type Konva from 'konva'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import { clampImageEditorRect, createImageEditorId, normalizeImageEditorRect } from './image-editor-utils'
 
@@ -27,7 +28,7 @@ export function useImageEditorPointerInteractions({
   createDrawLayer,
   showSnackbar,
 }: {
-  documentGroupRef: RefObject<any>
+  documentGroupRef: RefObject<Konva.Group | null>
   documentSize: { width: number; height: number }
   tool: ImageEditorTool
   zoom: number

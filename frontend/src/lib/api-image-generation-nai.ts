@@ -11,7 +11,7 @@ import type {
   StoredNaiVibeAsset,
 } from './api-image-generation-types'
 
-interface NAICostEstimateResponse extends NAICostEstimate {}
+type NAICostEstimateResponse = NAICostEstimate
 
 /** Login to NovelAI with username/password and store the returned token on the backend. */
 export async function loginNai(username: string, password: string) {

@@ -7,6 +7,7 @@ const ffprobeStatic = require('ffprobe-static');
 import { settingsService } from './settingsService';
 import { VideoOptimizationService } from './videoOptimizationService';
 import { generateFileHash } from '../utils/fileHash';
+import { getDateFolder, generateUniqueOriginalFilename, normalizeRelativePath } from '../utils/mediaStoragePaths';
 
 export interface VideoMetadata {
   duration: number;          // 초 단위
@@ -60,21 +61,10 @@ export class VideoProcessor {
   }
 
   /**
-   * 상대 경로 정규화
-   */
-  private static normalizeRelativePath(targetPath: string, basePath: string): string {
-    return path.relative(basePath, targetPath).replace(/\\/g, '/');
-  }
-
-  /**
    * 날짜 기반 폴더 경로 생성
    */
   static getDateFolder(): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return getDateFolder();
   }
 
   static async createUploadFolders(
@@ -107,38 +97,7 @@ export class VideoProcessor {
    * @returns 고유한 파일명 (예: "20250109_143025_abc123_한글 비디오.mp4")
    */
   static generateUniqueFilename(originalName: string, forcedExtension?: string): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hour = String(now.getHours()).padStart(2, '0');
-    const minute = String(now.getMinutes()).padStart(2, '0');
-    const second = String(now.getSeconds()).padStart(2, '0');
-    const random = Math.random().toString(36).substring(2, 8);
-
-    // 원본명에서 파일명만 사용 (경로 문자열 유입 방지)
-    const originalBaseName = path.basename(originalName);
-
-    // 유니코드 정규화 및 안전한 파일명 처리
-    const { normalizeFilename } = require('../utils/pathResolver');
-    const safeOriginalName = normalizeFilename(originalBaseName);
-
-    // 확장자 분리
-    const originalExtension = path.extname(safeOriginalName);
-    const normalizedForcedExtension = forcedExtension
-      ? (forcedExtension.startsWith('.') ? forcedExtension : `.${forcedExtension}`)
-      : '';
-    const ext = normalizedForcedExtension || originalExtension;
-    const nameWithoutExt = path.basename(safeOriginalName, originalExtension);
-
-    // 경로 길이 폭증 방지를 위해 파일명 길이 제한
-    const MAX_BASENAME_LENGTH = 120;
-    const truncatedName = nameWithoutExt.length > MAX_BASENAME_LENGTH
-      ? nameWithoutExt.substring(0, MAX_BASENAME_LENGTH)
-      : nameWithoutExt;
-
-    // 타임스탬프_랜덤값_원본파일명.확장자 형식
-    return `${year}${month}${day}_${hour}${minute}${second}_${random}_${truncatedName}${ext}`;
+    return generateUniqueOriginalFilename(originalName, forcedExtension);
   }
 
   /**
@@ -423,7 +382,7 @@ export class VideoProcessor {
       metadata.thumbnail_type = 'video-original';
 
       const finalFilename = path.basename(finalPath);
-      const relativeOriginal = this.normalizeRelativePath(finalPath, baseUploadPath);
+      const relativeOriginal = normalizeRelativePath(finalPath, baseUploadPath);
 
       return {
         filename: finalFilename,

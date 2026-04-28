@@ -22,11 +22,8 @@ import {
 } from '@/lib/api'
 import type {
   AuthMutationRecord,
-  AuthPermissionGroupDetailRecord,
-  AuthPermissionGroupMemberItem,
   AuthPermissionGroupSummaryItem,
   AuthStatusRecord,
-  PageAccessMatrixRecord,
 } from '@/lib/api-auth'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 
@@ -140,7 +137,7 @@ export function useSecurityTabData() {
   })
 
   const activePermissionGroup = activePermissionGroupDetailQuery.data?.group ?? null
-  const activePermissionGroupMembers = activePermissionGroupDetailQuery.data?.members ?? []
+  const activePermissionGroupMembers = useMemo(() => activePermissionGroupDetailQuery.data?.members ?? [], [activePermissionGroupDetailQuery.data?.members])
 
   useEffect(() => {
     if (permissionGroupEditorMode === 'create') {

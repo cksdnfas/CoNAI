@@ -95,5 +95,5 @@ export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverla
     return () => {
       window.removeEventListener('popstate', handlePopState)
     }
-  }, [enabled])
+  }, [enabled, overlayId])
 }

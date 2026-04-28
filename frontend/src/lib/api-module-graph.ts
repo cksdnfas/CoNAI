@@ -1,4 +1,4 @@
-import { buildApiUrl } from '@/lib/api-client'
+import { requestJson } from '@/lib/api-request'
 
 export type ModuleEngineType = 'nai' | 'codex' | 'comfyui' | 'system' | 'custom_js'
 export type ModuleAuthoringSource = 'nai_form_snapshot' | 'codex_form_snapshot' | 'comfyui_workflow_wrap' | 'manual' | 'custom_node_fs'
@@ -343,38 +343,6 @@ export interface GraphWorkflowUpdateResult extends CreateEnvelope {
 export interface GraphWorkflowDeleteResult {
   message: string
   schedule_maintenance?: GraphWorkflowScheduleMaintenanceResult | null
-}
-
-/** Execute a JSON API request and surface backend error messages. */
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(buildApiUrl(path), {
-    ...init,
-    credentials: init?.credentials ?? 'include',
-    headers: {
-      Accept: 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  })
-
-  const contentType = response.headers.get('content-type') ?? ''
-  const payload = contentType.includes('application/json') ? await response.json() : await response.text()
-
-  if (!response.ok) {
-    if (typeof payload === 'string' && payload.trim().length > 0) {
-      throw new Error(payload)
-    }
-
-    if (payload && typeof payload === 'object') {
-      const errorMessage = 'error' in payload && typeof payload.error === 'string' ? payload.error : undefined
-      if (errorMessage) {
-        throw new Error(errorMessage)
-      }
-    }
-
-    throw new Error(`Request failed: ${response.status}`)
-  }
-
-  return payload as T
 }
 
 /** List reusable module definitions for the graph editor. */

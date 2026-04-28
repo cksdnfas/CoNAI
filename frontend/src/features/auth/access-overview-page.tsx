@@ -47,21 +47,21 @@ function AccessEntryCard({ label, description, href, icon: Icon, badge }: Access
 /** Render one compact landing page for the pages the current account can use. */
 export function AccessOverviewPage() {
   const authStatusQuery = useAuthStatusQuery()
-
-  if (authStatusQuery.isLoading) {
-    return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
-  }
-
   const authStatus = authStatusQuery.data
-  const accessibleItems = listAccessiblePageAccessItems(authStatus?.permissionKeys ?? [])
-  const primaryItems = accessibleItems.filter((item) => item.category === 'primary')
-  const derivedItems = accessibleItems.filter((item) => item.category === 'derived')
   const publicWorkflowsQuery = useQuery({
     queryKey: ['public-generation-workflows', 'access-overview'],
     queryFn: getPublicGenerationWorkflows,
     enabled: authStatus?.hasCredentials === true && authStatus?.authenticated === true,
     staleTime: 30_000,
   })
+
+  if (authStatusQuery.isLoading) {
+    return <div className="min-h-[40vh] rounded-sm bg-surface-low animate-pulse" />
+  }
+
+  const accessibleItems = listAccessiblePageAccessItems(authStatus?.permissionKeys ?? [])
+  const primaryItems = accessibleItems.filter((item) => item.category === 'primary')
+  const derivedItems = accessibleItems.filter((item) => item.category === 'derived')
   const publicWorkflows = publicWorkflowsQuery.data ?? []
   const totalVisibleEntries = accessibleItems.length + publicWorkflows.length
   const accountTypeLabel = authStatus?.accountType === 'admin'

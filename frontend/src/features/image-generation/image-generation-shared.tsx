@@ -8,6 +8,8 @@ import type {
   WorkflowMarkedField,
 } from '@/lib/api'
 
+export { getErrorMessage } from '@/lib/error-message'
+
 export type SelectedImageDraft = {
   fileName: string
   dataUrl: string
@@ -456,11 +458,6 @@ export function persistComfyWorkflowDraft(workflowId: number, draft: Record<stri
 /** Remove one persisted Comfy workflow draft, usually after an explicit reset. */
 export function clearPersistedComfyWorkflowDraft(workflowId: number) {
   removeLocalStorageValue(buildComfyWorkflowDraftStorageKey(workflowId))
-}
-
-/** Read a human-friendly error message from an unknown failure. */
-export function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback
 }
 
 /** Build the initial draft object for workflow marked fields. */

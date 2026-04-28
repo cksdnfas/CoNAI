@@ -1,4 +1,4 @@
-import { Download, Film, ImageIcon, Images } from 'lucide-react'
+import { Film, ImageIcon, Images } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
