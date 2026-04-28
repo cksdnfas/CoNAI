@@ -88,8 +88,9 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
   })
 
   const image = imageQuery.data
-  const isVideoDetail = image ? getImageListMediaKind(image) === 'video' : false
-  const isSecondaryContentReady = Boolean(image) && isPrimaryMediaReady
+  const mediaKind = image ? getImageListMediaKind(image) : null
+  const canLoadRelatedImages = mediaKind === 'image'
+  const isSecondaryContentReady = Boolean(image) && canLoadRelatedImages && isPrimaryMediaReady
 
   const handlePrimaryMediaReady = useCallback(() => {
     setIsPrimaryMediaReady(true)
@@ -113,7 +114,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
   const duplicatesQuery = useQuery({
     queryKey: ['image-duplicates', compositeHash],
     queryFn: () => getImageDuplicates(compositeHash, 5),
-    enabled: Boolean(compositeHash) && Boolean(image) && !isVideoDetail && isSecondaryContentReady,
+    enabled: Boolean(compositeHash) && Boolean(image) && canLoadRelatedImages && isSecondaryContentReady,
   })
 
   const similarQuery = useQuery({
@@ -153,7 +154,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
         sortBy: 'similarity',
         sortOrder: 'DESC',
       }),
-    enabled: Boolean(compositeHash) && Boolean(image) && !isVideoDetail && Boolean(effectiveSimilaritySettings) && isSecondaryContentReady,
+    enabled: Boolean(compositeHash) && Boolean(image) && canLoadRelatedImages && Boolean(effectiveSimilaritySettings) && isSecondaryContentReady,
   })
 
   const promptSimilarQuery = useQuery({
@@ -173,7 +174,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
       effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.auto ?? 50,
     ],
     queryFn: () => getPromptSimilarImages(compositeHash, promptSimilarLimit),
-    enabled: Boolean(compositeHash) && Boolean(effectiveSimilaritySettings) && isSecondaryContentReady,
+    enabled: Boolean(compositeHash) && Boolean(image) && canLoadRelatedImages && Boolean(effectiveSimilaritySettings) && isSecondaryContentReady,
   })
 
   const renderUrl = getImageDetailRenderUrl(image)
