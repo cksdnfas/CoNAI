@@ -283,6 +283,7 @@ export interface CreateNaiModuleFromSnapshotPayload {
   output_ports?: ModulePortDefinition[]
   ui_schema?: ModuleUiFieldDefinition[]
   is_active?: boolean
+  target_module_id?: number | null
 }
 
 export interface CreateCodexModuleFromSnapshotPayload {
@@ -295,6 +296,7 @@ export interface CreateCodexModuleFromSnapshotPayload {
   output_ports?: ModulePortDefinition[]
   ui_schema?: ModuleUiFieldDefinition[]
   is_active?: boolean
+  target_module_id?: number | null
 }
 
 export interface CreateComfyModuleFromWorkflowPayload {
@@ -306,6 +308,7 @@ export interface CreateComfyModuleFromWorkflowPayload {
   output_ports?: ModulePortDefinition[]
   ui_schema?: ModuleUiFieldDefinition[]
   is_active?: boolean
+  target_module_id?: number | null
 }
 
 interface ApiEnvelope<T> {

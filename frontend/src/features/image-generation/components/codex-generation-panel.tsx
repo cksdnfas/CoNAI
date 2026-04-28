@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { getAppSettings } from '@/lib/api'
+import { getAppSettings, getModuleDefinitions } from '@/lib/api'
 import { createGenerationQueueJob, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { createCodexModuleFromSnapshot } from '@/lib/api-module-graph'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
@@ -198,6 +198,7 @@ export function CodexGenerationPanel({
   const [codexModuleName, setCodexModuleName] = useState('Codex 모듈')
   const [codexModuleDescription, setCodexModuleDescription] = useState('')
   const [codexExposedFieldKeys, setCodexExposedFieldKeys] = useState<string[]>(DEFAULT_CODEX_MODULE_FIELD_KEYS)
+  const [codexOverwriteModuleId, setCodexOverwriteModuleId] = useState<number | null>(null)
   const [isSavingCodexModule, setIsSavingCodexModule] = useState(false)
   const [, setPortalRevision] = useState(0)
 
@@ -211,6 +212,16 @@ export function CodexGenerationPanel({
     queryFn: getCodexGenerationStatus,
     retry: false,
   })
+
+  const moduleDefinitionsQuery = useQuery({
+    queryKey: ['module-definitions', 'codex-overwrite-candidates'],
+    queryFn: () => getModuleDefinitions(false),
+  })
+
+  const codexOverwriteCandidates = useMemo(
+    () => (moduleDefinitionsQuery.data ?? []).filter((module) => module.engine_type === 'codex' && module.authoring_source === 'codex_form_snapshot'),
+    [moduleDefinitionsQuery.data],
+  )
 
   const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
 
@@ -321,10 +332,13 @@ export function CodexGenerationPanel({
         snapshot,
         exposed_fields: exposedFields,
         ui_schema: uiSchema,
+        target_module_id: codexOverwriteModuleId ?? undefined,
       })
 
       setIsModuleSaveModalOpen(false)
-      showSnackbar({ message: '현재 Codex 설정을 모듈로 저장했어.', tone: 'info' })
+      setCodexOverwriteModuleId(null)
+      void moduleDefinitionsQuery.refetch()
+      showSnackbar({ message: codexOverwriteModuleId ? '현재 Codex 설정으로 기존 모듈을 덮어썼어.' : '현재 Codex 설정을 모듈로 저장했어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'Codex 모듈 저장에 실패했어.'), tone: 'error' })
     } finally {
@@ -690,10 +704,23 @@ export function CodexGenerationPanel({
         fieldOptions={CODEX_MODULE_FIELD_OPTIONS}
         exposedFieldKeys={codexExposedFieldKeys}
         isSaving={isSavingCodexModule}
-        onClose={() => setIsModuleSaveModalOpen(false)}
+        overwriteCandidates={codexOverwriteCandidates}
+        overwriteModuleId={codexOverwriteModuleId}
+        onClose={() => {
+          setIsModuleSaveModalOpen(false)
+          setCodexOverwriteModuleId(null)
+        }}
         onModuleNameChange={setCodexModuleName}
         onModuleDescriptionChange={setCodexModuleDescription}
         onExposedFieldKeysChange={setCodexExposedFieldKeys}
+        onOverwriteModuleIdChange={(moduleId) => {
+          setCodexOverwriteModuleId(moduleId)
+          const module = codexOverwriteCandidates.find((item) => item.id === moduleId)
+          if (module) {
+            setCodexModuleName(module.name)
+            setCodexModuleDescription(module.description ?? '')
+          }
+        }}
         onSave={() => void handleCreateCodexModule()}
       />
     </>

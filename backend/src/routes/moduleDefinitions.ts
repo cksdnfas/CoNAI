@@ -475,6 +475,7 @@ router.post('/from-nai-snapshot', asyncHandler(async (req: Request, res: Respons
     output_ports,
     ui_schema,
     is_active,
+    target_module_id,
   } = req.body
 
   if (!name || !snapshot || typeof snapshot !== 'object') {
@@ -485,7 +486,16 @@ router.post('/from-nai-snapshot', asyncHandler(async (req: Request, res: Respons
   }
 
   try {
-    const exists = ModuleDefinitionModel.existsByName(name)
+    const targetModuleId = target_module_id !== undefined && target_module_id !== null ? Number(target_module_id) : null
+    const targetModule = targetModuleId ? ModuleDefinitionModel.findById(targetModuleId) : null
+    if (targetModuleId && !targetModule) {
+      return res.status(404).json({ success: false, error: 'Target module definition not found' } as ModuleGraphResponse)
+    }
+    if (targetModule && (targetModule.engine_type !== 'nai' || targetModule.authoring_source !== 'nai_form_snapshot')) {
+      return res.status(400).json({ success: false, error: 'Target module is not a NAI snapshot module' } as ModuleGraphResponse)
+    }
+
+    const exists = ModuleDefinitionModel.existsByName(name, targetModuleId ?? undefined)
     if (exists) {
       return res.status(409).json({ success: false, error: 'Module definition name already exists' } as ModuleGraphResponse)
     }
@@ -505,6 +515,20 @@ router.post('/from-nai-snapshot', asyncHandler(async (req: Request, res: Respons
       ui_schema: Array.isArray(ui_schema) && ui_schema.length > 0 ? ui_schema : buildUiSchemaFromPorts(exposedInputs),
       is_active,
       color,
+    }
+
+    if (targetModule) {
+      const updated = ModuleDefinitionModel.update(targetModule.id, {
+        ...createData,
+        version: (targetModule.version ?? 1) + 1,
+      })
+      return res.json({
+        success: updated,
+        data: {
+          id: targetModule.id,
+          message: updated ? 'NAI snapshot module updated successfully' : 'No changes applied',
+        },
+      } as ModuleGraphResponse)
     }
 
     const id = ModuleDefinitionModel.create(createData)
@@ -532,6 +556,7 @@ router.post('/from-codex-snapshot', asyncHandler(async (req: Request, res: Respo
     output_ports,
     ui_schema,
     is_active,
+    target_module_id,
   } = req.body
 
   if (!name || !snapshot || typeof snapshot !== 'object') {
@@ -542,7 +567,16 @@ router.post('/from-codex-snapshot', asyncHandler(async (req: Request, res: Respo
   }
 
   try {
-    const exists = ModuleDefinitionModel.existsByName(name)
+    const targetModuleId = target_module_id !== undefined && target_module_id !== null ? Number(target_module_id) : null
+    const targetModule = targetModuleId ? ModuleDefinitionModel.findById(targetModuleId) : null
+    if (targetModuleId && !targetModule) {
+      return res.status(404).json({ success: false, error: 'Target module definition not found' } as ModuleGraphResponse)
+    }
+    if (targetModule && (targetModule.engine_type !== 'codex' || targetModule.authoring_source !== 'codex_form_snapshot')) {
+      return res.status(400).json({ success: false, error: 'Target module is not a Codex snapshot module' } as ModuleGraphResponse)
+    }
+
+    const exists = ModuleDefinitionModel.existsByName(name, targetModuleId ?? undefined)
     if (exists) {
       return res.status(409).json({ success: false, error: 'Module definition name already exists' } as ModuleGraphResponse)
     }
@@ -562,6 +596,20 @@ router.post('/from-codex-snapshot', asyncHandler(async (req: Request, res: Respo
       ui_schema: Array.isArray(ui_schema) && ui_schema.length > 0 ? ui_schema : buildUiSchemaFromPorts(exposedInputs),
       is_active,
       color,
+    }
+
+    if (targetModule) {
+      const updated = ModuleDefinitionModel.update(targetModule.id, {
+        ...createData,
+        version: (targetModule.version ?? 1) + 1,
+      })
+      return res.json({
+        success: updated,
+        data: {
+          id: targetModule.id,
+          message: updated ? 'Codex snapshot module updated successfully' : 'No changes applied',
+        },
+      } as ModuleGraphResponse)
     }
 
     const id = ModuleDefinitionModel.create(createData)
@@ -593,6 +641,7 @@ router.post('/from-comfy-workflow/:workflowId', asyncHandler(async (req: Request
     output_ports,
     ui_schema,
     is_active,
+    target_module_id,
   } = req.body
 
   try {
@@ -601,8 +650,20 @@ router.post('/from-comfy-workflow/:workflowId', asyncHandler(async (req: Request
       return res.status(404).json({ success: false, error: 'Workflow not found' } as ModuleGraphResponse)
     }
 
+    const targetModuleId = target_module_id !== undefined && target_module_id !== null ? Number(target_module_id) : null
+    const targetModule = targetModuleId ? ModuleDefinitionModel.findById(targetModuleId) : null
+    if (targetModuleId && !targetModule) {
+      return res.status(404).json({ success: false, error: 'Target module definition not found' } as ModuleGraphResponse)
+    }
+    if (targetModule && (targetModule.engine_type !== 'comfyui' || targetModule.authoring_source !== 'comfyui_workflow_wrap')) {
+      return res.status(400).json({ success: false, error: 'Target module is not a ComfyUI workflow module' } as ModuleGraphResponse)
+    }
+    if (targetModule && targetModule.source_workflow_id !== workflow.id) {
+      return res.status(400).json({ success: false, error: 'Target module belongs to a different ComfyUI workflow' } as ModuleGraphResponse)
+    }
+
     const moduleName = name || `${workflow.name} 모듈`
-    if (ModuleDefinitionModel.existsByName(moduleName)) {
+    if (ModuleDefinitionModel.existsByName(moduleName, targetModuleId ?? undefined)) {
       return res.status(409).json({ success: false, error: 'Module definition name already exists' } as ModuleGraphResponse)
     }
 
@@ -631,6 +692,20 @@ router.post('/from-comfy-workflow/:workflowId', asyncHandler(async (req: Request
       ui_schema: Array.isArray(ui_schema) && ui_schema.length > 0 ? ui_schema : buildUiSchemaFromMarkedFields(markedFields, exposed_field_ids),
       is_active,
       color: color || workflow.color,
+    }
+
+    if (targetModule) {
+      const updated = ModuleDefinitionModel.update(targetModule.id, {
+        ...createData,
+        version: (targetModule.version ?? 1) + 1,
+      })
+      return res.json({
+        success: updated,
+        data: {
+          id: targetModule.id,
+          message: updated ? 'ComfyUI workflow module updated successfully' : 'No changes applied',
+        },
+      } as ModuleGraphResponse)
     }
 
     const id = ModuleDefinitionModel.create(createData)

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import {
   getAppSettings,
+  getModuleDefinitions,
   getNaiCostEstimate,
   getNaiUserData,
 } from '@/lib/api'
@@ -48,6 +49,7 @@ export function NaiGenerationPanel({
 }: NaiGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
+  const [naiOverwriteModuleId, setNaiOverwriteModuleId] = useState<number | null>(null)
 
   const {
     selectedCharacterIndex,
@@ -92,6 +94,16 @@ export function NaiGenerationPanel({
     queryKey: ['app-settings'],
     queryFn: getAppSettings,
   })
+
+  const moduleDefinitionsQuery = useQuery({
+    queryKey: ['module-definitions', 'nai-overwrite-candidates'],
+    queryFn: () => getModuleDefinitions(false),
+  })
+
+  const naiOverwriteCandidates = useMemo(
+    () => (moduleDefinitionsQuery.data ?? []).filter((module) => module.engine_type === 'nai' && module.authoring_source === 'nai_form_snapshot'),
+    [moduleDefinitionsQuery.data],
+  )
 
   const connected = naiUserQuery.isSuccess
   const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
@@ -215,6 +227,7 @@ export function NaiGenerationPanel({
     naiModuleDescription,
     naiExposedFieldKeys,
     naiModuleFieldOptions,
+    targetModuleId: naiOverwriteModuleId,
     imageSaveOptions: {
       format: generationSaveSettings.defaultFormat,
       quality: generationSaveSettings.quality,
@@ -222,7 +235,11 @@ export function NaiGenerationPanel({
       maxWidth: generationSaveSettings.maxWidth,
       maxHeight: generationSaveSettings.maxHeight,
     },
-    closeModuleSaveModal: () => setIsModuleSaveModalOpen(false),
+    closeModuleSaveModal: () => {
+      setIsModuleSaveModalOpen(false)
+      setNaiOverwriteModuleId(null)
+      void moduleDefinitionsQuery.refetch()
+    },
     showSnackbar,
   })
 
@@ -424,10 +441,23 @@ export function NaiGenerationPanel({
         fieldOptions={naiModuleFieldOptions}
         exposedFieldKeys={naiExposedFieldKeys}
         isSaving={isSavingNaiModule}
-        onClose={() => setIsModuleSaveModalOpen(false)}
+        overwriteCandidates={naiOverwriteCandidates}
+        overwriteModuleId={naiOverwriteModuleId}
+        onClose={() => {
+          setIsModuleSaveModalOpen(false)
+          setNaiOverwriteModuleId(null)
+        }}
         onModuleNameChange={setNaiModuleName}
         onModuleDescriptionChange={setNaiModuleDescription}
         onExposedFieldKeysChange={setNaiExposedFieldKeys}
+        onOverwriteModuleIdChange={(moduleId) => {
+          setNaiOverwriteModuleId(moduleId)
+          const module = naiOverwriteCandidates.find((item) => item.id === moduleId)
+          if (module) {
+            setNaiModuleName(module.name)
+            setNaiModuleDescription(module.description ?? '')
+          }
+        }}
         onSave={() => void handleCreateNaiModule()}
       />
 

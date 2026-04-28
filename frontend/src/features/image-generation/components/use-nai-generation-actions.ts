@@ -34,6 +34,7 @@ export function useNaiGenerationActions({
   naiModuleDescription,
   naiExposedFieldKeys,
   naiModuleFieldOptions,
+  targetModuleId,
   imageSaveOptions,
   closeModuleSaveModal,
   showSnackbar,
@@ -49,6 +50,7 @@ export function useNaiGenerationActions({
   naiModuleDescription: string
   naiExposedFieldKeys: string[]
   naiModuleFieldOptions: ModuleFieldOption[]
+  targetModuleId?: number | null
   imageSaveOptions?: GenerationImageSaveOptions
   closeModuleSaveModal: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
@@ -192,10 +194,11 @@ export function useNaiGenerationActions({
         snapshot,
         exposed_fields: exposedFields,
         ui_schema: uiSchema,
+        target_module_id: targetModuleId ?? undefined,
       })
 
       closeModuleSaveModal()
-      showSnackbar({ message: '현재 NAI 설정을 모듈로 저장했어.', tone: 'info' })
+      showSnackbar({ message: targetModuleId ? '현재 NAI 설정으로 기존 모듈을 덮어썼어.' : '현재 NAI 설정을 모듈로 저장했어.', tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'NAI 모듈 저장에 실패했어.'), tone: 'error' })
     } finally {

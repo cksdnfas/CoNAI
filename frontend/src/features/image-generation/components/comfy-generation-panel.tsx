@@ -13,6 +13,7 @@ import {
   getGenerationCustomDropdownLists,
   getGenerationWorkflow,
   getGenerationWorkflows,
+  getModuleDefinitions,
   scanGenerationComfyUIModelDropdownLists,
   updateGenerationCustomDropdownList,
   type GenerationWorkflow,
@@ -73,6 +74,7 @@ export function ComfyGenerationPanel({
   const [comfyModuleName, setComfyModuleName] = useState('')
   const [comfyModuleDescription, setComfyModuleDescription] = useState('')
   const [comfyExposedFieldIds, setComfyExposedFieldIds] = useState<string[]>([])
+  const [comfyOverwriteModuleId, setComfyOverwriteModuleId] = useState<number | null>(null)
   const activeWorkflowId = selectedWorkflowId !== null ? String(selectedWorkflowId) : ''
 
   const appSettingsQuery = useQuery({
@@ -93,6 +95,11 @@ export function ComfyGenerationPanel({
   const dropdownListsQuery = useQuery({
     queryKey: ['image-generation-custom-dropdown-lists'],
     queryFn: () => getGenerationCustomDropdownLists(),
+  })
+
+  const moduleDefinitionsQuery = useQuery({
+    queryKey: ['module-definitions', 'comfy-overwrite-candidates'],
+    queryFn: () => getModuleDefinitions(false),
   })
 
   const selectedWorkflow = useMemo(
@@ -194,6 +201,18 @@ export function ComfyGenerationPanel({
     }))
   ), [moduleSaveWorkflowFields])
 
+  const comfyOverwriteCandidates = useMemo(() => {
+    if (!moduleSaveWorkflow) {
+      return []
+    }
+
+    return (moduleDefinitionsQuery.data ?? []).filter((module) => (
+      module.engine_type === 'comfyui'
+      && module.authoring_source === 'comfyui_workflow_wrap'
+      && module.source_workflow_id === moduleSaveWorkflow.id
+    ))
+  }, [moduleDefinitionsQuery.data, moduleSaveWorkflow])
+
   const refetchComfyGenerationSurface = async () => {
     await Promise.all([workflowsQuery.refetch(), serversQuery.refetch(), dropdownListsQuery.refetch()])
   }
@@ -230,6 +249,7 @@ export function ComfyGenerationPanel({
       setComfyModuleName('')
       setComfyModuleDescription('')
       setComfyExposedFieldIds([])
+      setComfyOverwriteModuleId(null)
       if (isModuleSaveModalOpen) {
         setIsModuleSaveModalOpen(false)
       }
@@ -435,10 +455,13 @@ export function ComfyGenerationPanel({
         name: moduleName,
         description: comfyModuleDescription.trim() || undefined,
         exposed_field_ids: comfyExposedFieldIds,
+        target_module_id: comfyOverwriteModuleId ?? undefined,
       })
       setIsModuleSaveModalOpen(false)
       setModuleSaveWorkflowId(null)
-      showSnackbar({ message: `${moduleSaveWorkflow.name} 워크플로우를 모듈로 저장했어.`, tone: 'info' })
+      setComfyOverwriteModuleId(null)
+      void moduleDefinitionsQuery.refetch()
+      showSnackbar({ message: comfyOverwriteModuleId ? `${moduleSaveWorkflow.name} 워크플로우로 기존 모듈을 덮어썼어.` : `${moduleSaveWorkflow.name} 워크플로우를 모듈로 저장했어.`, tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, 'ComfyUI 모듈 저장에 실패했어.'), tone: 'error' })
     } finally {
@@ -561,13 +584,24 @@ export function ComfyGenerationPanel({
         fieldOptions={comfyModuleFieldOptions}
         exposedFieldIds={comfyExposedFieldIds}
         isSaving={isSavingComfyModule}
+        overwriteCandidates={comfyOverwriteCandidates}
+        overwriteModuleId={comfyOverwriteModuleId}
         onClose={() => {
           setIsModuleSaveModalOpen(false)
           setModuleSaveWorkflowId(null)
+          setComfyOverwriteModuleId(null)
         }}
         onModuleNameChange={setComfyModuleName}
         onModuleDescriptionChange={setComfyModuleDescription}
         onExposedFieldIdsChange={setComfyExposedFieldIds}
+        onOverwriteModuleIdChange={(moduleId) => {
+          setComfyOverwriteModuleId(moduleId)
+          const module = comfyOverwriteCandidates.find((item) => item.id === moduleId)
+          if (module) {
+            setComfyModuleName(module.name)
+            setComfyModuleDescription(module.description ?? '')
+          }
+        }}
         onSave={() => void handleCreateComfyModule()}
       />
     </>
