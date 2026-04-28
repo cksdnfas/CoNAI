@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import {
   copyGraphWorkflowArtifactsToWatchedFolder,
   deleteGraphExecutionArtifacts,
+  deleteGraphWorkflowArtifactsInScope,
 } from '../../services/graphWorkflowOutputManagementService'
 import { asyncHandler } from '../../middleware/errorHandler'
 import { requireAdmin } from '../../middleware/authMiddleware'
@@ -57,6 +58,38 @@ export function createGraphWorkflowArtifactRoutes() {
     } catch (error) {
       console.error('Error deleting graph workflow artifacts:', error)
       return res.status(500).json({ success: false, error: 'Failed to delete graph workflow artifacts' } as ModuleGraphResponse)
+    }
+  }))
+
+  router.post('/artifacts/delete-scope', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+    const folderId = req.body?.folder_id === null || req.body?.folder_id === undefined
+      ? null
+      : Number(req.body.folder_id)
+    const kind = req.body?.kind
+    const artifactTypeFilter = typeof req.body?.artifact_type === 'string' ? req.body.artifact_type : null
+    const searchTerm = typeof req.body?.search === 'string' ? req.body.search : null
+
+    if (folderId !== null && !Number.isFinite(folderId)) {
+      return sendRouteBadRequest(res, 'folder_id must be a number or null')
+    }
+
+    if (kind !== 'outputs' && kind !== 'artifacts') {
+      return sendRouteBadRequest(res, 'kind must be outputs or artifacts')
+    }
+
+    try {
+      return res.json({
+        success: true,
+        data: await deleteGraphWorkflowArtifactsInScope({
+          folderId,
+          kind,
+          artifactTypeFilter,
+          searchTerm,
+        }),
+      } as ModuleGraphResponse)
+    } catch (error) {
+      console.error('Error deleting graph workflow artifacts in scope:', error)
+      return res.status(500).json({ success: false, error: 'Failed to delete graph workflow artifacts in scope' } as ModuleGraphResponse)
     }
   }))
 

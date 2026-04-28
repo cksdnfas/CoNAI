@@ -46,6 +46,21 @@ export class GraphExecutionModel {
     `).all(...workflowIds, limit) as GraphExecutionRecord[]
   }
 
+  /** List every execution for a workflow id set, newest first. */
+  static findAllByWorkflowIds(workflowIds: number[]): GraphExecutionRecord[] {
+    if (workflowIds.length === 0) {
+      return []
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = workflowIds.map(() => '?').join(', ')
+    return db.prepare(`
+      SELECT * FROM graph_executions
+      WHERE graph_workflow_id IN (${placeholders})
+      ORDER BY created_date DESC, id DESC
+    `).all(...workflowIds) as GraphExecutionRecord[]
+  }
+
   /** Create one execution row for manual or schedule-triggered workflow execution. */
   static create(data: {
     graph_workflow_id: number

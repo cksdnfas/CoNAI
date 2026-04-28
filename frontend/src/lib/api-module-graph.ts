@@ -743,6 +743,23 @@ export async function deleteGraphWorkflowArtifacts(payload: {
   return response.data
 }
 
+/** Delete all generated outputs or technical artifacts in one workflow browse scope. */
+export async function deleteGraphWorkflowArtifactsInScope(payload: {
+  folder_id: number | null
+  kind: 'outputs' | 'artifacts'
+  artifact_type?: string | null
+  search?: string | null
+}) {
+  const response = await requestJson<ApiEnvelope<GraphWorkflowArtifactDeleteResult>>('/api/graph-workflows/artifacts/delete-scope', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  return response.data
+}
+
 /** List recent executions for a saved graph workflow. */
 export async function getGraphWorkflowExecutions(workflowId: number) {
   const response = await requestJson<ApiEnvelope<GraphExecutionRecord[]>>(`/api/graph-workflows/${workflowId}/executions`)

@@ -18,6 +18,7 @@ import { triggerBrowserDownload } from '@/lib/api-client'
 import {
   copyGraphWorkflowArtifactsToFolder,
   deleteGraphWorkflowArtifacts,
+  deleteGraphWorkflowArtifactsInScope,
 } from '@/lib/api-module-graph'
 import { getWatchedFolders } from '@/lib/api-folders'
 import {
@@ -332,14 +333,86 @@ export function ModuleWorkflowOutputManagementPanel({
     }
   }
 
-  const handleClearAllOutputs = () => {
-    const targetArtifactIds = outputCollections.outputItems.map((item) => item.sourceArtifactId)
-    void handleDeleteSelectedOutputs(targetArtifactIds, { clearAll: true })
+  const handleClearAllOutputs = async () => {
+    if (!canDeleteArtifacts) {
+      showSnackbar({ message: '삭제는 관리자 계정만 할 수 있어.', tone: 'error' })
+      return
+    }
+
+    if (outputCollections.outputItems.length === 0) {
+      return
+    }
+
+    if (!window.confirm('현재 범위의 생성 결과를 모두 삭제할까? 파일은 RecycleBin으로 보내고 workflow DB도 같이 정리해.')) {
+      return
+    }
+
+    try {
+      setIsDeletingOutputs(true)
+      const result = await deleteGraphWorkflowArtifactsInScope({
+        folder_id: browseContent.scope.folder_id,
+        kind: 'outputs',
+      })
+      setSelectedOutputIds([])
+      const cleanedExecutions = result.execution_cleanup?.deleted_count ?? 0
+      showSnackbar({
+        message: cleanedExecutions > 0
+          ? `생성 결과 ${result.deleted_count}개 삭제, 빈 실행 ${cleanedExecutions}개도 정리했어.`
+          : `생성 결과 ${result.deleted_count}개를 삭제했어.`,
+        tone: result.missing.length > 0 || result.skipped_files.length > 0 ? 'error' : 'info',
+      })
+      await onRefresh?.()
+    } catch (error) {
+      showSnackbar({
+        message: error instanceof Error ? error.message : '생성 결과 삭제에 실패했어.',
+        tone: 'error',
+      })
+    } finally {
+      setIsDeletingOutputs(false)
+    }
   }
 
-  const handleClearAllArtifacts = () => {
-    const targetArtifactIds = filteredTechnicalArtifacts.map((artifact) => artifact.id)
-    void handleDeleteSelectedArtifacts(targetArtifactIds, { clearAll: true })
+  const handleClearAllArtifacts = async () => {
+    if (!canDeleteArtifacts) {
+      showSnackbar({ message: '삭제는 관리자 계정만 할 수 있어.', tone: 'error' })
+      return
+    }
+
+    if (filteredTechnicalArtifacts.length === 0) {
+      return
+    }
+
+    const hasFilter = artifactSearchTerm.trim().length > 0 || artifactTypeFilter !== 'all'
+    const confirmMessage = hasFilter
+      ? '현재 검색/필터 범위의 텍스트 · 중간 산출물을 모두 삭제할까? 이건 DB 정리용 삭제야.'
+      : '현재 범위의 텍스트 · 중간 산출물을 모두 삭제할까? 이건 DB 정리용 삭제야.'
+
+    if (!window.confirm(confirmMessage)) {
+      return
+    }
+
+    try {
+      setIsDeletingArtifacts(true)
+      const result = await deleteGraphWorkflowArtifactsInScope({
+        folder_id: browseContent.scope.folder_id,
+        kind: 'artifacts',
+        artifact_type: artifactTypeFilter,
+        search: artifactSearchTerm,
+      })
+      setSelectedArtifactIds([])
+      showSnackbar({
+        message: `아티팩트 정리 완료. ${result.deleted_count}개 삭제, ${result.missing.length}개 누락.`,
+        tone: result.missing.length > 0 || result.skipped_files.length > 0 ? 'error' : 'info',
+      })
+      await onRefresh?.()
+    } catch (error) {
+      showSnackbar({
+        message: error instanceof Error ? error.message : '아티팩트 삭제에 실패했어.',
+        tone: 'error',
+      })
+    } finally {
+      setIsDeletingArtifacts(false)
+    }
   }
 
   const allVisibleSelected = pagedOutputItems.length > 0 && pagedOutputItems.every((item) => selectedOutputIds.includes(item.id))

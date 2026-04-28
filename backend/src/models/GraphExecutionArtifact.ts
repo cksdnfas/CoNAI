@@ -32,6 +32,24 @@ export class GraphExecutionArtifactModel {
     `).all(...executionIds) as GraphExecutionArtifactRecord[]
   }
 
+  /** List artifacts for every execution belonging to one workflow id set. */
+  static findByWorkflowIds(workflowIds: number[]): GraphExecutionArtifactRecord[] {
+    if (workflowIds.length === 0) {
+      return []
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = workflowIds.map(() => '?').join(', ')
+    return db.prepare(`
+      SELECT ga.*
+      FROM graph_execution_artifacts ga
+      INNER JOIN graph_executions ge
+        ON ge.id = ga.execution_id
+      WHERE ge.graph_workflow_id IN (${placeholders})
+      ORDER BY ga.created_date DESC, ga.id DESC
+    `).all(...workflowIds) as GraphExecutionArtifactRecord[]
+  }
+
   static create(data: {
     execution_id: number
     node_id: string
