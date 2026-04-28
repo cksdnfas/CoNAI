@@ -40,6 +40,7 @@ const IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY = 'conai:image-detail-media:wheel-zoo
 const IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY = 'conai:image-detail-media:controls-collapsed'
 const IMAGE_DETAIL_SCALE_STORAGE_KEY = 'conai:image-detail-media:scale'
 const IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-enabled'
+const IMAGE_PIXEL_PREVIEW_LAST_ACTIVE_MODE_STORAGE_KEY = 'conai:image-detail-media:last-active-pixel-preview-mode'
 const IMAGE_PIXEL_PREVIEW_SETTINGS_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-settings'
 
 type PixelPreviewMode = 'off' | 'soft' | 'medium' | 'strong' | 'custom'
@@ -158,12 +159,24 @@ function loadImagePixelPreviewMode(): PixelPreviewMode {
   return savedValue === 'true' ? 'soft' : 'off'
 }
 
+function loadLastActiveImagePixelPreviewMode(): Exclude<PixelPreviewMode, 'off'> {
+  if (typeof window === 'undefined') {
+    return 'soft'
+  }
+
+  const savedValue = window.localStorage.getItem(IMAGE_PIXEL_PREVIEW_LAST_ACTIVE_MODE_STORAGE_KEY)
+  return savedValue === 'soft' || savedValue === 'medium' || savedValue === 'strong' || savedValue === 'custom' ? savedValue : 'soft'
+}
+
 function persistImagePixelPreviewMode(mode: PixelPreviewMode) {
   if (typeof window === 'undefined') {
     return
   }
 
   window.localStorage.setItem(IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY, mode)
+  if (mode !== 'off') {
+    window.localStorage.setItem(IMAGE_PIXEL_PREVIEW_LAST_ACTIVE_MODE_STORAGE_KEY, mode)
+  }
 }
 
 function normalizePixelPreviewResolution(value: unknown) {
@@ -447,6 +460,7 @@ function InteractiveImageDetailMedia({
   const [pixelPreviewMode, setPixelPreviewMode] = useState<PixelPreviewMode>(() => loadImagePixelPreviewMode())
   const [pixelPreviewSettings, setPixelPreviewSettings] = useState<PixelPreviewSettings>(() => loadImagePixelPreviewSettings())
   const [isPixelPreviewPanelOpen, setIsPixelPreviewPanelOpen] = useState(false)
+  const isPixelPreviewEnabled = pixelPreviewMode !== 'off'
 
   useEffect(() => {
     scaleRef.current = scale
@@ -558,6 +572,15 @@ function InteractiveImageDetailMedia({
       setPixelPreviewSettings(IMAGE_PIXEL_PREVIEW_PRESETS[mode])
       persistImagePixelPreviewSettings(IMAGE_PIXEL_PREVIEW_PRESETS[mode])
     }
+  }
+
+  const togglePixelPreviewEnabled = () => {
+    if (pixelPreviewMode === 'off') {
+      setPixelPreviewModeAndPersist(loadLastActiveImagePixelPreviewMode())
+      return
+    }
+
+    setPixelPreviewModeAndPersist('off')
   }
 
   const updatePixelPreviewSettings = (patch: Partial<PixelPreviewSettings>) => {
@@ -812,11 +835,23 @@ function InteractiveImageDetailMedia({
 
               {isPixelPreviewPanelOpen ? (
                 <div className="absolute bottom-full left-0 mb-2 w-72 rounded-md border border-border bg-background p-3 text-xs text-foreground shadow-[0_18px_42px_rgba(0,0,0,0.45)]">
-                  <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="mb-2 flex items-center justify-between gap-3">
                     <div className="font-semibold">필터</div>
-                    <Button size="sm" type="button" variant={pixelPreviewMode === 'off' ? 'default' : 'outline'} className="h-7 px-2 text-xs" onClick={() => setPixelPreviewModeAndPersist('off')}>
-                      끄기
-                    </Button>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isPixelPreviewEnabled}
+                      className={cn(
+                        'flex h-7 items-center gap-2 rounded-full border px-1.5 text-[11px] font-medium transition-colors',
+                        isPixelPreviewEnabled ? 'border-primary/60 bg-primary/18 text-primary' : 'border-border bg-surface-container text-muted-foreground',
+                      )}
+                      onClick={togglePixelPreviewEnabled}
+                    >
+                      <span className="min-w-8 text-center">{isPixelPreviewEnabled ? 'ON' : 'OFF'}</span>
+                      <span className={cn('h-4 w-7 rounded-full p-0.5 transition-colors', isPixelPreviewEnabled ? 'bg-primary' : 'bg-muted-foreground/35')}>
+                        <span className={cn('block size-3 rounded-full bg-background transition-transform', isPixelPreviewEnabled && 'translate-x-3')} />
+                      </span>
+                    </button>
                   </div>
                   <div className="mb-3 grid grid-cols-3 gap-1.5">
                     {(['soft', 'medium', 'strong'] as const).map((mode) => (
