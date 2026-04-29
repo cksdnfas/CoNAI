@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import { cancelGenerationQueueJob, getGenerationQueue } from '@/lib/api-image-generation-queue'
@@ -171,6 +172,8 @@ export function GenerationQueueHeaderWidget() {
   const [lastSeenQueueJobId, setLastSeenQueueJobId] = useState<number | null>(() => readLastSeenQueueJobId())
   const [isNotificationBaselineReady, setIsNotificationBaselineReady] = useState(() => readLastSeenQueueJobId() !== null)
   const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useOverlayBackClose({ open: isOpen, onClose: () => setIsOpen(false) })
 
   const hasGenerationPermission = (authStatusQuery.data?.permissionKeys ?? []).includes('page.generation.view')
 

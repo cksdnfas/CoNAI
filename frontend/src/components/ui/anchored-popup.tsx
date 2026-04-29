@@ -42,7 +42,7 @@ export function AnchoredPopup({
   sideOffset = 8,
   viewportPadding = 12,
   className,
-  closeOnBack = false,
+  closeOnBack = true,
   surfaceProps,
   children,
 }: AnchoredPopupProps) {

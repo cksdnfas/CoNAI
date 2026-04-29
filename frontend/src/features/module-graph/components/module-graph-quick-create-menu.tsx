@@ -4,6 +4,7 @@ import { Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import type { ModuleDefinitionRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { getModuleBaseDisplayName } from '../module-graph-shared'
@@ -52,6 +53,8 @@ export function ModuleGraphQuickCreateMenu({
   const [activeTab, setActiveTab] = useState<QuickCreateTab>(mode === 'connect' ? 'recommended' : 'system')
   const [searchQuery, setSearchQuery] = useState('')
   const [activeModuleIdState, setActiveModuleId] = useState<number | null>(null)
+
+  useOverlayBackClose({ open: true, onClose })
 
   const visibleModules = useMemo<ModuleListItem[]>(() => {
     if (activeTab === 'recommended') {

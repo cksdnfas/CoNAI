@@ -573,6 +573,7 @@ export function ModuleGraphCanvas({
             )
             closeActionMenu()
           }}
+          onClose={closeActionMenu}
         />
       ) : null}
 

@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { Boxes, Copy, SlidersHorizontal, Sparkles, Trash2, Unplug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { cn } from '@/lib/utils'
 
 type PaneActionMenuState = {
@@ -27,6 +28,7 @@ export function ModuleGraphActionMenu({
   onRemoveNode,
   onShowRecommendedNodes,
   onToggleAdvancedOutputs,
+  onClose,
 }: {
   state: ModuleGraphActionMenuState
   onOpenNodePicker: () => void
@@ -35,7 +37,10 @@ export function ModuleGraphActionMenu({
   onRemoveNode: () => void
   onShowRecommendedNodes: () => void
   onToggleAdvancedOutputs: () => void
+  onClose: () => void
 }) {
+  useOverlayBackClose({ open: true, onClose })
+
   if (typeof document === 'undefined') {
     return null
   }

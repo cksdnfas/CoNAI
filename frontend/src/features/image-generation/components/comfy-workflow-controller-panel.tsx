@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronDown, Play, RotateCcw, Save } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
@@ -36,6 +37,8 @@ function WorkflowTargetSelect({
   const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null)
   const triggerRef = useRef<HTMLDivElement | null>(null)
   const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? null
+
+  useOverlayBackClose({ open: isOpen, onClose: () => setIsOpen(false) })
 
   useEffect(() => {
     if (!isOpen) {

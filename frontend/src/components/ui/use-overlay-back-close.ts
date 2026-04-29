@@ -94,6 +94,17 @@ export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverla
     window.addEventListener('popstate', handlePopState)
     return () => {
       window.removeEventListener('popstate', handlePopState)
+      if (!pushedRef.current) {
+        return
+      }
+
+      const currentOverlayId = window.history.state?.__conaiOverlayBackClose
+      pushedRef.current = false
+      programmaticBackRef.current = false
+      if (currentOverlayId === overlayId) {
+        markOverlayHistoryBackBypassWindow()
+        window.history.back()
+      }
     }
   }, [enabled, overlayId])
 }
