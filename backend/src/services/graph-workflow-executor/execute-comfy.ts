@@ -24,6 +24,7 @@ import {
   type ParsedModuleDefinition,
   type RuntimeArtifact,
 } from './shared'
+import { type GenerationQueueJobRecord } from '../../types/generationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 
 const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
@@ -31,6 +32,7 @@ const GRAPH_COMFY_TARGET_MODE_KEY = 'execution_target_mode'
 const GRAPH_COMFY_TARGET_TAG_KEY = 'execution_target_tag'
 const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
 const QUEUE_POLL_INTERVAL_MS = 1500
+const QUEUE_TERMINAL_WAIT_TIMEOUT_MS = 15000
 
 function resolveComfyOutputMimeType(output: { format?: string; filename: string; tempPath: string }) {
   const normalizedFormat = typeof output.format === 'string' ? output.format.trim().toLowerCase() : ''
@@ -208,6 +210,8 @@ async function requestQueueCancellation(jobId: number) {
 }
 
 async function waitForQueueCompletion(context: ExecutionContext, nodeId: string, jobId: number) {
+  let terminalWait: Promise<GenerationQueueJobRecord | null> | null = null
+
   while (true) {
     if (context.shouldCancel?.()) {
       await requestQueueCancellation(jobId)
@@ -221,9 +225,20 @@ async function waitForQueueCompletion(context: ExecutionContext, nodeId: string,
       throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
     }
 
-    const job = GenerationQueueModel.findById(jobId)
+    terminalWait ??= GenerationQueueService.waitForTerminalJob(jobId, { timeoutMs: QUEUE_TERMINAL_WAIT_TIMEOUT_MS })
+    const job = await Promise.race([
+      terminalWait,
+      sleep(QUEUE_POLL_INTERVAL_MS).then(() => undefined),
+    ])
+
+    if (job === undefined) {
+      continue
+    }
+
+    terminalWait = null
     if (!job) {
-      throw new Error(`Queue job ${jobId} disappeared before graph node completion`) }
+      continue
+    }
 
     if (job.status === 'completed') {
       return job
@@ -236,8 +251,6 @@ async function waitForQueueCompletion(context: ExecutionContext, nodeId: string,
     if (job.status === 'cancelled') {
       throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
     }
-
-    await sleep(QUEUE_POLL_INTERVAL_MS)
   }
 }
 

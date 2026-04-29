@@ -35,7 +35,7 @@ export function WorkflowReservationsPanel() {
 
   const reservationsQuery = useQuery({
     queryKey: ['module-graph-browse-content', 'generation-reservations', 'root'],
-    queryFn: () => getGraphWorkflowBrowseContent(null),
+    queryFn: () => getGraphWorkflowBrowseContent(null, { includeOutputs: false }),
     refetchInterval: (query) => {
       const data = query.state.data
       if (!data) {

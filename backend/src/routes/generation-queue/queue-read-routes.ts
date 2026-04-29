@@ -162,7 +162,7 @@ export function createGenerationQueueReadRoutes() {
 
     })
 
-    const completedRelevantRecords = filterQueueRecords(GenerationQueueModel.findAll(['completed']), {
+    const completedRelevantRecords = filterQueueRecords(GenerationQueueModel.findRecentCompleted(), {
 
       serviceType,
 

@@ -31,8 +31,11 @@ type ServiceThrottleState = {
   cooldownUntil: number | null
 }
 
-function hasQueuedComfyJobs() {
-  return GenerationQueueModel.findAll(['queued']).some((record) => record.service_type === 'comfyui' && record.cancel_requested === 0)
+const TERMINAL_QUEUE_STATUSES = new Set<GenerationQueueJobStatus>(['completed', 'failed', 'cancelled'])
+
+type TerminalJobWaiter = {
+  resolve: (record: GenerationQueueJobRecord | null) => void
+  timeoutHandle: ReturnType<typeof setTimeout> | null
 }
 
 export class GenerationQueueService {
@@ -42,6 +45,7 @@ export class GenerationQueueService {
   private static dispatchTickRunning = false
   private static dispatchTickPending = false
   private static activeWorkerKeys = new Set<string>()
+  private static terminalJobWaiters = new Map<number, Set<TerminalJobWaiter>>()
   private static serviceThrottleState: Record<ThrottledServiceType, ServiceThrottleState> = {
     novelai: { completedSinceCooldown: 0, cooldownUntil: null },
     codex: { completedSinceCooldown: 0, cooldownUntil: null },
@@ -81,6 +85,7 @@ export class GenerationQueueService {
       this.dispatcherHandle = null
     }
     this.activeWorkerKeys.clear()
+    this.resolveTerminalJobWaiters(null)
     this.serviceThrottleState = {
       novelai: { completedSinceCooldown: 0, cooldownUntil: null },
       codex: { completedSinceCooldown: 0, cooldownUntil: null },
@@ -241,6 +246,69 @@ export class GenerationQueueService {
     return updated
   }
 
+  /** Wait for a queue job to reach a terminal state without per-consumer DB polling. */
+  static waitForTerminalJob(id: number, options?: { timeoutMs?: number }) {
+    const current = GenerationQueueModel.findById(id)
+    if (!current || TERMINAL_QUEUE_STATUSES.has(current.status)) {
+      return Promise.resolve(current)
+    }
+
+    return new Promise<GenerationQueueJobRecord | null>((resolve) => {
+      const waiter: TerminalJobWaiter = {
+        resolve,
+        timeoutHandle: null,
+      }
+      const waiters = this.terminalJobWaiters.get(id) ?? new Set<TerminalJobWaiter>()
+      waiters.add(waiter)
+      this.terminalJobWaiters.set(id, waiters)
+
+      const timeoutMs = options?.timeoutMs
+      if (timeoutMs && timeoutMs > 0) {
+        waiter.timeoutHandle = setTimeout(() => {
+          waiters.delete(waiter)
+          if (waiters.size === 0) {
+            this.terminalJobWaiters.delete(id)
+          }
+
+          const latest = GenerationQueueModel.findById(id)
+          resolve(latest && TERMINAL_QUEUE_STATUSES.has(latest.status) ? latest : null)
+        }, timeoutMs)
+      }
+    })
+  }
+
+  private static resolveTerminalJobWaiters(record: GenerationQueueJobRecord | null) {
+    if (record === null) {
+      for (const waiters of this.terminalJobWaiters.values()) {
+        for (const waiter of waiters) {
+          if (waiter.timeoutHandle) {
+            clearTimeout(waiter.timeoutHandle)
+          }
+          waiter.resolve(null)
+        }
+      }
+      this.terminalJobWaiters.clear()
+      return
+    }
+
+    if (!TERMINAL_QUEUE_STATUSES.has(record.status)) {
+      return
+    }
+
+    const waiters = this.terminalJobWaiters.get(record.id)
+    if (!waiters) {
+      return
+    }
+
+    this.terminalJobWaiters.delete(record.id)
+    for (const waiter of waiters) {
+      if (waiter.timeoutHandle) {
+        clearTimeout(waiter.timeoutHandle)
+      }
+      waiter.resolve(record)
+    }
+  }
+
   /** Validate and apply one queue job state transition. */
   static transitionJob(
     id: number,
@@ -325,7 +393,9 @@ export class GenerationQueueService {
       throw new Error(`Queue job ${id} changed state before transition could be applied`)
     }
 
-    return GenerationQueueModel.findById(id)
+    const latest = GenerationQueueModel.findById(id)
+    this.resolveTerminalJobWaiters(latest)
+    return latest
   }
 
   /** Claim the next queued job and move it to dispatching atomically. */
@@ -584,15 +654,12 @@ export class GenerationQueueService {
       return
     }
 
-    if (!hasQueuedComfyJobs()) {
-      return
-    }
-
-    const queuedJobs = GenerationQueueModel.findAll(['queued']).filter((record) => record.service_type === 'comfyui' && record.cancel_requested === 0)
+    const queuedJobs = GenerationQueueModel.findQueuedComfyJobs()
     if (queuedJobs.length === 0) {
       return
     }
 
+    const failedJobIds = new Set<number>()
     for (const job of queuedJobs) {
       const hasCompatibleServer = activeServers.some((server) => isGenerationQueueComfyJobCompatibleWithServer(job, server, activeServers))
       if (hasCompatibleServer) {
@@ -600,9 +667,10 @@ export class GenerationQueueService {
       }
 
       await this.failJobIfActive(job.id, new Error(`No active linked ComfyUI server matches this job target for workflow ${job.workflow_id ?? 'unknown'}`))
+      failedJobIds.add(job.id)
     }
 
-    const runnableQueuedJobs = GenerationQueueModel.findAll(['queued']).filter((record) => record.service_type === 'comfyui' && record.cancel_requested === 0)
+    const runnableQueuedJobs = queuedJobs.filter((job) => !failedJobIds.has(job.id))
     if (runnableQueuedJobs.length === 0) {
       return
     }

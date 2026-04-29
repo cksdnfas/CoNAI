@@ -79,8 +79,12 @@ export function decorateGraphWorkflowScheduleRecords(schedules: GraphWorkflowSch
   })
 }
 
+type GraphWorkflowBrowseContentOptions = {
+  includeOutputs?: boolean
+}
+
 /** Build folder- or root-scoped browse content for workflow outputs. */
-export function buildGraphWorkflowBrowseContent(folderId: number | null) {
+export function buildGraphWorkflowBrowseContent(folderId: number | null, options: GraphWorkflowBrowseContentOptions = {}) {
   const folderScopeIds = folderId !== null ? GraphWorkflowFolderModel.getSubtreeFolderIds(folderId) : []
   const workflows = folderId !== null
     ? GraphWorkflowModel.findByFolderIds(folderScopeIds, true).map(parseStoredGraphWorkflow)
@@ -89,16 +93,27 @@ export function buildGraphWorkflowBrowseContent(folderId: number | null) {
   const schedules = decorateGraphWorkflowScheduleRecords(GraphWorkflowScheduleModel.findByWorkflowIds(workflowIds))
   const executions = GraphExecutionModel.findByWorkflowIds(workflowIds, 300).map(decorateGraphExecutionRecord)
   const executionIds = executions.map((execution) => execution.id)
-  const artifacts = GraphExecutionArtifactModel.findByExecutionIds(executionIds)
-  const finalResults = GraphExecutionFinalResultModel.findByExecutionIds(executionIds)
-  const artifactCountByExecution = artifacts.reduce<Record<number, number>>((acc, artifact) => {
-    acc[artifact.execution_id] = (acc[artifact.execution_id] ?? 0) + 1
-    return acc
-  }, {})
-  const finalResultCountByExecution = finalResults.reduce<Record<number, number>>((acc, result) => {
-    acc[result.execution_id] = (acc[result.execution_id] ?? 0) + 1
-    return acc
-  }, {})
+  const includeOutputs = options.includeOutputs !== false
+  const artifacts = includeOutputs ? GraphExecutionArtifactModel.findByExecutionIds(executionIds) : []
+  const finalResults = includeOutputs ? GraphExecutionFinalResultModel.findByExecutionIds(executionIds) : []
+  const artifactCountMap = includeOutputs
+    ? null
+    : GraphExecutionArtifactModel.countByExecutionIds(executionIds)
+  const finalResultCountMap = includeOutputs
+    ? null
+    : GraphExecutionFinalResultModel.countByExecutionIds(executionIds)
+  const artifactCountByExecution = includeOutputs
+    ? artifacts.reduce<Record<number, number>>((acc, artifact) => {
+      acc[artifact.execution_id] = (acc[artifact.execution_id] ?? 0) + 1
+      return acc
+    }, {})
+    : Object.fromEntries(artifactCountMap ?? [])
+  const finalResultCountByExecution = includeOutputs
+    ? finalResults.reduce<Record<number, number>>((acc, result) => {
+      acc[result.execution_id] = (acc[result.execution_id] ?? 0) + 1
+      return acc
+    }, {})
+    : Object.fromEntries(finalResultCountMap ?? [])
   const emptyExecutions = executions.filter((execution) => (
     (artifactCountByExecution[execution.id] ?? 0) === 0
     && (finalResultCountByExecution[execution.id] ?? 0) === 0

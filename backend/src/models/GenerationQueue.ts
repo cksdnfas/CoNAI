@@ -101,6 +101,42 @@ export class GenerationQueueModel {
     `).all(...statuses) as GenerationQueueJobRecord[]
   }
 
+  /** Check whether a queued ComfyUI job exists without hydrating queue rows. */
+  static hasQueuedComfyJob() {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT 1 FROM generation_queue_jobs
+      WHERE status = 'queued'
+        AND service_type = 'comfyui'
+        AND cancel_requested = 0
+      LIMIT 1
+    `).get() as { 1: number } | undefined
+    return Boolean(row)
+  }
+
+  /** List queued ComfyUI jobs ordered by dispatch priority. */
+  static findQueuedComfyJobs() {
+    const db = getUserSettingsDb()
+    return db.prepare(`
+      SELECT * FROM generation_queue_jobs
+      WHERE status = 'queued'
+        AND service_type = 'comfyui'
+        AND cancel_requested = 0
+      ORDER BY priority ASC, queued_at ASC, id ASC
+    `).all() as GenerationQueueJobRecord[]
+  }
+
+  /** List recent completed queue jobs for ETA sampling without scanning the whole history. */
+  static findRecentCompleted(limit = 240) {
+    const db = getUserSettingsDb()
+    return db.prepare(`
+      SELECT * FROM generation_queue_jobs
+      WHERE status = 'completed'
+      ORDER BY completed_at DESC, id DESC
+      LIMIT ?
+    `).all(Math.max(1, Math.floor(limit))) as GenerationQueueJobRecord[]
+  }
+
   /** Update one queue job row. */
   static update(id: number, data: GenerationQueueJobUpdateData) {
     const db = getUserSettingsDb()

@@ -40,7 +40,8 @@ export function createGraphWorkflowCrudRoutes() {
     }
 
     try {
-      return res.json({ success: true, data: buildGraphWorkflowBrowseContent(folderId) } as ModuleGraphResponse)
+      const includeOutputs = req.query.include_outputs !== 'false'
+      return res.json({ success: true, data: buildGraphWorkflowBrowseContent(folderId, { includeOutputs }) } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error getting graph workflow browse content:', error)
       return res.status(500).json({ success: false, error: 'Failed to get graph workflow browse content' } as ModuleGraphResponse)

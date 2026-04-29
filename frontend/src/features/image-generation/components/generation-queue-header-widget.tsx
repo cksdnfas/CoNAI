@@ -183,6 +183,7 @@ export function GenerationQueueHeaderWidget() {
 
   const workflows = useMemo(() => workflowsQuery.data ?? [], [workflowsQuery.data])
   const filterParams = useMemo(() => parseQueueFilter(selectedFilter), [selectedFilter])
+  const isFilteredQueueView = selectedFilter !== 'all'
 
   const globalQueueQuery = useQuery({
     queryKey: ['image-generation-queue', 'header-widget', 'global-active'],
@@ -200,6 +201,7 @@ export function GenerationQueueHeaderWidget() {
       serviceType: filterParams.serviceType,
       workflowId: filterParams.workflowId,
     }),
+    enabled: isFilteredQueueView,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
       return activeCount > 0 || isOpen ? 1500 : 4000
@@ -225,7 +227,7 @@ export function GenerationQueueHeaderWidget() {
   })
 
   const globalRecords = useMemo(() => globalQueueQuery.data?.records ?? [], [globalQueueQuery.data?.records])
-  const records = useMemo(() => filteredQueueQuery.data?.records ?? [], [filteredQueueQuery.data?.records])
+  const records = useMemo(() => (isFilteredQueueView ? filteredQueueQuery.data?.records : globalQueueQuery.data?.records) ?? [], [globalQueueQuery.data?.records, filteredQueueQuery.data?.records, isFilteredQueueView])
   const globalActiveCount = globalRecords.length
   const filteredActiveCount = records.length
   const latestQueueJobId = useMemo(() => globalRecords.reduce((maxId, record) => Math.max(maxId, record.id), 0), [globalRecords])

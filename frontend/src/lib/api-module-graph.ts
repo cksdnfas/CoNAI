@@ -658,10 +658,13 @@ export async function deleteGraphWorkflowSchedule(scheduleId: number) {
 }
 
 /** Load folder-scoped browse content for generated workflow outputs and empty runs. */
-export async function getGraphWorkflowBrowseContent(folderId?: number | null) {
+export async function getGraphWorkflowBrowseContent(folderId?: number | null, options?: { includeOutputs?: boolean }) {
   const searchParams = new URLSearchParams()
   if (typeof folderId === 'number') {
     searchParams.set('folder_id', String(folderId))
+  }
+  if (options?.includeOutputs === false) {
+    searchParams.set('include_outputs', 'false')
   }
 
   const response = await requestJson<ApiEnvelope<GraphWorkflowBrowseContentRecord>>(`/api/graph-workflows/browse-content${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)

@@ -31,6 +31,24 @@ export class GraphExecutionFinalResultModel {
     `).all(...executionIds) as GraphExecutionFinalResultRecord[]
   }
 
+  /** Count final-result rows by execution id without joining heavy artifact metadata. */
+  static countByExecutionIds(executionIds: number[]) {
+    if (executionIds.length === 0) {
+      return new Map<number, number>()
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = executionIds.map(() => '?').join(', ')
+    const rows = db.prepare(`
+      SELECT execution_id, COUNT(*) as count
+      FROM graph_execution_final_results
+      WHERE execution_id IN (${placeholders})
+      GROUP BY execution_id
+    `).all(...executionIds) as Array<{ execution_id: number; count: number }>
+
+    return new Map(rows.map((row) => [row.execution_id, row.count]))
+  }
+
   /** List final results for every execution belonging to one workflow id set. */
   static findByWorkflowIds(workflowIds: number[]): GraphExecutionFinalResultRecord[] {
     if (workflowIds.length === 0) {
