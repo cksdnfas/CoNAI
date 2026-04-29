@@ -18,6 +18,15 @@ import {
   resolveAccessibleQueueJob,
 } from './queue-route-helpers'
 import { computeQueueEtas, computeQueuePositions } from './queue-eta'
+import { logger } from '../../utils/logger'
+
+const QUEUE_READ_STAGE_LOG_THRESHOLD_MS = 100
+
+function markStage(stages: Array<{ name: string; elapsedMs: number }>, startedAt: number, name: string) {
+  const now = Date.now()
+  const lastElapsed = stages.length > 0 ? stages[stages.length - 1].elapsedMs : 0
+  stages.push({ name, elapsedMs: now - startedAt - lastElapsed })
+}
 
 export function createGenerationQueueReadRoutes() {
   const router = express.Router()
@@ -110,6 +119,12 @@ export function createGenerationQueueReadRoutes() {
 
   router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
+    const startedAt = Date.now()
+    const stages: Array<{ name: string; elapsedMs: number }> = []
+    let recordsCount = 0
+    let activeRelevantCount = 0
+    let completedRelevantCount = 0
+
     let statuses: GenerationQueueJobStatus[] | undefined
 
     let serviceType: GenerationQueueJobRecord['service_type'] | undefined
@@ -132,6 +147,8 @@ export function createGenerationQueueReadRoutes() {
 
     }
 
+    markStage(stages, startedAt, 'parse')
+
     const mineOnly = req.query.mine === 'true'
 
     const requesterAccountId = getRequesterAccountId(req)
@@ -144,6 +161,9 @@ export function createGenerationQueueReadRoutes() {
 
     })
 
+    recordsCount = records.length
+    markStage(stages, startedAt, 'records')
+
     if (mineOnly) {
 
       records = requesterAccountId === null
@@ -154,6 +174,9 @@ export function createGenerationQueueReadRoutes() {
 
     }
 
+    recordsCount = records.length
+    markStage(stages, startedAt, 'mine-filter')
+
     const activeRelevantRecords = filterQueueRecords(GenerationQueueModel.findAll(ACTIVE_QUEUE_STATUSES), {
 
       serviceType,
@@ -161,6 +184,9 @@ export function createGenerationQueueReadRoutes() {
       workflowId,
 
     })
+
+    activeRelevantCount = activeRelevantRecords.length
+    markStage(stages, startedAt, 'active-records')
 
     const completedRelevantRecords = filterQueueRecords(GenerationQueueModel.findRecentCompleted(), {
 
@@ -170,21 +196,24 @@ export function createGenerationQueueReadRoutes() {
 
     })
 
+    completedRelevantCount = completedRelevantRecords.length
+    markStage(stages, startedAt, 'completed-sample')
+
     const activeComfyServers = ComfyUIServerModel.findActiveServers()
 
     const activeComfyServerCount = activeComfyServers.length
+    markStage(stages, startedAt, 'active-servers')
 
     const queuePositions = computeQueuePositions(activeRelevantRecords, activeComfyServers)
+    markStage(stages, startedAt, 'positions')
 
     const queueEtas = computeQueueEtas(activeRelevantRecords, queuePositions, completedRelevantRecords, activeComfyServerCount)
+    markStage(stages, startedAt, 'etas')
 
     const requesterUsernames = buildQueueRequesterUsernameMap(records)
+    markStage(stages, startedAt, 'requesters')
 
-    res.json({
-
-      success: true,
-
-      records: records.map((record) => {
+    const responseRecords = records.map((record) => {
 
         const queuePosition = queuePositions.get(record.id)
 
@@ -214,7 +243,31 @@ export function createGenerationQueueReadRoutes() {
 
         }
 
-      }),
+      })
+    markStage(stages, startedAt, 'map-response')
+
+    const elapsedBeforeJsonMs = Date.now() - startedAt
+    if (elapsedBeforeJsonMs >= QUEUE_READ_STAGE_LOG_THRESHOLD_MS) {
+      logger.debug('[GenerationQueuePerf][read-route-stages]', {
+        url: req.originalUrl,
+        statuses,
+        serviceType,
+        workflowId,
+        mineOnly,
+        recordsCount,
+        activeRelevantCount,
+        completedRelevantCount,
+        activeComfyServerCount,
+        elapsedBeforeJsonMs,
+        stages,
+      })
+    }
+
+    res.json({
+
+      success: true,
+
+      records: responseRecords,
 
       total: records.length,
 
