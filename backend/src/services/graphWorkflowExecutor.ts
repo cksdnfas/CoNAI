@@ -27,7 +27,75 @@ import { buildExecutionOrder, validateGraphTypes, validateRequiredInputs } from 
 
 /** Execute a saved module graph workflow from validation through node engines. */
 const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
-const MAX_PARALLEL_READY_NODES = 8
+const DEFAULT_MAX_PARALLEL_READY_NODES = 8
+const DEFAULT_EXTERNAL_GENERATION_NODE_CONCURRENCY = 4
+
+type GraphNodeThrottleLane = 'external_generation'
+
+const graphNodeThrottleState: Record<GraphNodeThrottleLane, { activeCount: number; waiters: Set<() => void> }> = {
+  external_generation: {
+    activeCount: 0,
+    waiters: new Set<() => void>(),
+  },
+}
+
+function parsePositiveIntegerEnv(name: string, fallback: number) {
+  const rawValue = process.env[name]
+  const numericValue = Number(rawValue)
+  if (Number.isFinite(numericValue) && numericValue > 0) {
+    return Math.floor(numericValue)
+  }
+
+  return fallback
+}
+
+function getMaxParallelReadyNodes() {
+  return parsePositiveIntegerEnv('CONAI_GRAPH_READY_NODE_CONCURRENCY', DEFAULT_MAX_PARALLEL_READY_NODES)
+}
+
+function getGraphNodeThrottleLimit(lane: GraphNodeThrottleLane) {
+  if (lane === 'external_generation') {
+    return parsePositiveIntegerEnv('CONAI_GRAPH_EXTERNAL_GENERATION_NODE_CONCURRENCY', DEFAULT_EXTERNAL_GENERATION_NODE_CONCURRENCY)
+  }
+
+  return 1
+}
+
+function tryAcquireGraphNodeThrottleSlot(lane: GraphNodeThrottleLane) {
+  const state = graphNodeThrottleState[lane]
+  if (state.activeCount >= getGraphNodeThrottleLimit(lane)) {
+    return false
+  }
+
+  state.activeCount += 1
+  return true
+}
+
+function releaseGraphNodeThrottleSlot(lane: GraphNodeThrottleLane) {
+  const state = graphNodeThrottleState[lane]
+  state.activeCount = Math.max(0, state.activeCount - 1)
+  const waiters = Array.from(state.waiters)
+  state.waiters.clear()
+  for (const waiter of waiters) {
+    waiter()
+  }
+}
+
+function waitForGraphNodeThrottleAvailability(lane: GraphNodeThrottleLane) {
+  const state = graphNodeThrottleState[lane]
+  return new Promise<void>((resolve) => {
+    let timeout: ReturnType<typeof setTimeout>
+    const waiter = () => {
+      clearTimeout(timeout)
+      resolve()
+    }
+    timeout = setTimeout(() => {
+      state.waiters.delete(waiter)
+      resolve()
+    }, 250)
+    state.waiters.add(waiter)
+  })
+}
 
 type GraphExecutionPlan = {
   orderedNodeIds: string[]
@@ -66,6 +134,7 @@ async function runReadyGraphNodes(params: {
   orderedNodeIds: string[]
   dependenciesByNode: Map<string, Set<string>>
   shouldCancel?: () => boolean
+  getNodeThrottleLane?: (nodeId: string) => GraphNodeThrottleLane | null
   executeNode: (nodeId: string) => Promise<void>
 }) {
   const pendingNodeIds = new Set(params.orderedNodeIds)
@@ -92,23 +161,42 @@ async function runReadyGraphNodes(params: {
       return true
     })
 
+    let startedNode = false
+    let throttleBlockedLane: GraphNodeThrottleLane | null = null
+    const maxParallelReadyNodes = getMaxParallelReadyNodes()
+
     for (const nodeId of readyNodeIds) {
-      if (runningNodes.size >= MAX_PARALLEL_READY_NODES) {
+      if (runningNodes.size >= maxParallelReadyNodes) {
         break
       }
 
+      const throttleLane = params.getNodeThrottleLane?.(nodeId) ?? null
+      if (throttleLane && !tryAcquireGraphNodeThrottleSlot(throttleLane)) {
+        throttleBlockedLane = throttleLane
+        continue
+      }
+
       pendingNodeIds.delete(nodeId)
+      startedNode = true
       const runPromise = params.executeNode(nodeId)
         .then(() => {
           completedNodeIds.add(nodeId)
         })
         .finally(() => {
+          if (throttleLane) {
+            releaseGraphNodeThrottleSlot(throttleLane)
+          }
           runningNodes.delete(nodeId)
         })
       runningNodes.set(nodeId, runPromise)
     }
 
     if (runningNodes.size === 0) {
+      if (!startedNode && throttleBlockedLane && readyNodeIds.length > 0) {
+        await waitForGraphNodeThrottleAvailability(throttleBlockedLane)
+        continue
+      }
+
       throw new Error('Graph execution could not make progress because no runnable nodes were available')
     }
 
@@ -126,6 +214,18 @@ function getSystemOperationKey(moduleDefinition: { internal_fixed_values?: Recor
   }
 
   return null
+}
+
+function isExternalGenerationModule(moduleDefinition: { engine_type: string; internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
+  if (moduleDefinition.engine_type === 'comfyui' || moduleDefinition.engine_type === 'codex' || moduleDefinition.engine_type === 'nai') {
+    return true
+  }
+
+  return moduleDefinition.engine_type === 'system' && getSystemOperationKey(moduleDefinition) === 'system.generate_image_codex'
+}
+
+function getNodeThrottleLane(moduleDefinition: { engine_type: string; internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }): GraphNodeThrottleLane | null {
+  return isExternalGenerationModule(moduleDefinition) ? 'external_generation' : null
 }
 
 function isIfBranchModule(moduleDefinition: { internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
@@ -350,6 +450,11 @@ export class GraphWorkflowExecutor {
         orderedNodeIds,
         dependenciesByNode,
         shouldCancel: options?.shouldCancel,
+        getNodeThrottleLane: (nodeId) => {
+          const node = workflow.graph.nodes.find((item) => item.id === nodeId)
+          const moduleDefinition = node ? modulesById.get(node.module_id) : null
+          return moduleDefinition ? getNodeThrottleLane(moduleDefinition) : null
+        },
         executeNode: async (nodeId) => {
           try {
             const node = workflow.graph.nodes.find((item) => item.id === nodeId)
@@ -394,7 +499,7 @@ export class GraphWorkflowExecutor {
             },
           })
 
-          const incomingArtifacts = getIncomingArtifacts(context, node.id)
+          const incomingArtifacts = await getIncomingArtifacts(context, node.id)
           const resolvedInputs = resolveNodeInputs(node, moduleDefinition, incomingArtifacts)
 
           writeExecutionLog({

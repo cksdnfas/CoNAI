@@ -161,17 +161,18 @@ export function getSourceArtifact(context: ExecutionContext, edge: GraphWorkflow
   return nodeArtifacts?.[edge.source_port_key]
 }
 
-/** Collect all incoming artifacts for a target node. */
-export function getIncomingArtifacts(context: ExecutionContext, nodeId: string) {
-  return context.workflow.graph.edges
-    .filter((edge) => edge.target_node_id === nodeId)
-    .reduce<Record<string, RuntimeArtifact>>((acc, edge) => {
-      const artifact = getSourceArtifact(context, edge)
-      if (artifact) {
-        acc[edge.target_port_key] = artifact
-      }
-      return acc
-    }, {})
+/** Collect all incoming artifacts for a target node, materializing binary values only when the target needs inline data. */
+export async function getIncomingArtifacts(context: ExecutionContext, nodeId: string) {
+  const incomingArtifacts: Record<string, RuntimeArtifact> = {}
+
+  for (const edge of context.workflow.graph.edges.filter((candidate) => candidate.target_node_id === nodeId)) {
+    const artifact = getSourceArtifact(context, edge)
+    if (artifact) {
+      incomingArtifacts[edge.target_port_key] = await resolveArtifactForTarget(context, edge, artifact)
+    }
+  }
+
+  return incomingArtifacts
 }
 
 function getTargetModuleForEdge(context: ExecutionContext, edge: GraphWorkflowEdge) {
@@ -200,6 +201,66 @@ function canTargetConsumeFileReference(context: ExecutionContext, edge: GraphWor
 
   const targetInput = targetModule.exposed_inputs.find((input) => input.key === edge.target_port_key)
   return targetInput?.data_type === 'image' || targetInput?.data_type === 'mask' || targetInput?.data_type === 'any'
+}
+
+function isBinaryArtifactType(artifactType: ModulePortDataType | 'file') {
+  return artifactType === 'image' || artifactType === 'mask' || artifactType === 'file'
+}
+
+function normalizeArtifactMetadata(metadata: Record<string, unknown> | string) {
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {}
+}
+
+function inferMimeTypeFromPath(storagePath: string, fallback: string) {
+  const extension = path.extname(storagePath).toLowerCase()
+  if (extension === '.png') return 'image/png'
+  if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg'
+  if (extension === '.webp') return 'image/webp'
+  if (extension === '.gif') return 'image/gif'
+  if (extension === '.bmp') return 'image/bmp'
+  if (extension === '.avif') return 'image/avif'
+  if (extension === '.mp4') return 'video/mp4'
+  if (extension === '.webm') return 'video/webm'
+  if (extension === '.mov') return 'video/quicktime'
+  return fallback
+}
+
+function resolveArtifactMimeType(storagePath: string, metadata: Record<string, unknown>, artifactType: ModulePortDataType | 'file') {
+  const explicitMimeType = metadata.mimeType ?? metadata.mime_type ?? metadata.output_mime_type
+  if (typeof explicitMimeType === 'string' && explicitMimeType.trim().length > 0) {
+    return explicitMimeType
+  }
+
+  return inferMimeTypeFromPath(storagePath, artifactType === 'file' ? 'application/octet-stream' : 'image/png')
+}
+
+function buildFileReferenceValue(storagePath: string, metadata: Record<string, unknown>, artifactType: ModulePortDataType | 'file') {
+  const mimeType = resolveArtifactMimeType(storagePath, metadata, artifactType)
+  return {
+    storagePath,
+    fileName: path.basename(storagePath),
+    mimeType,
+    originalFileName: typeof metadata.originalFileName === 'string' ? metadata.originalFileName : undefined,
+    compositeHash: typeof metadata.compositeHash === 'string' ? metadata.compositeHash : typeof metadata.composite_hash === 'string' ? metadata.composite_hash : undefined,
+  }
+}
+
+async function resolveArtifactForTarget(context: ExecutionContext, edge: GraphWorkflowEdge, artifact: RuntimeArtifact): Promise<RuntimeArtifact> {
+  if (!isBinaryArtifactType(artifact.type) || !artifact.storagePath || typeof artifact.value === 'string') {
+    return artifact
+  }
+
+  if (canTargetConsumeFileReference(context, edge, artifact.type)) {
+    return artifact
+  }
+
+  const metadata = normalizeArtifactMetadata(artifact.metadata ?? {})
+  const buffer = await fs.promises.readFile(artifact.storagePath)
+  return {
+    ...artifact,
+    value: bufferToDataUrl(buffer, resolveArtifactMimeType(artifact.storagePath, metadata, artifact.type)),
+    metadata,
+  }
 }
 
 /** Decide whether a runtime artifact value must include inline data for downstream consumers. */
@@ -274,18 +335,14 @@ async function loadRuntimeArtifactFromRecord(artifact: GraphExecutionArtifactRec
     }
 
     try {
-      const buffer = await fs.promises.readFile(artifact.storage_path)
+      await fs.promises.access(artifact.storage_path, fs.constants.R_OK)
+      const metadata = normalizeArtifactMetadata(parsedMetadata)
       return {
         type: artifact.artifact_type,
-        value: bufferToDataUrl(
-          buffer,
-          parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) && typeof parsedMetadata.mimeType === 'string'
-            ? parsedMetadata.mimeType
-            : 'image/png',
-        ),
+        value: buildFileReferenceValue(artifact.storage_path, metadata, artifact.artifact_type),
         storagePath: artifact.storage_path,
         artifactRecordId: artifact.id,
-        metadata: parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) ? parsedMetadata : undefined,
+        metadata,
       }
     } catch {
       return null
