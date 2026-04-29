@@ -12,6 +12,10 @@ import {
   type ParsedModuleDefinition,
 } from './shared'
 
+function hasConnectedOutput(context: ExecutionContext, node: GraphWorkflowNode, outputPortKey: string) {
+  return context.workflow.graph.edges.some((edge) => edge.source_node_id === node.id && edge.source_port_key === outputPortKey)
+}
+
 /** Resolve one composite hash from direct input or a structured reference payload. */
 function resolveCompositeHashFromReference(referenceValue: unknown, compositeHashValue: unknown, indexValue: unknown) {
   if (typeof compositeHashValue === 'string' && compositeHashValue.trim()) {
@@ -137,14 +141,23 @@ export async function executeLoadImageFromReference(
     throw new Error(`Referenced image file not found: ${compositeHash}`)
   }
 
-  const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
+  const shouldMaterializeImage = hasConnectedOutput(context, node, 'image')
   const mimeType = activeFile.mime_type || 'image/png'
-  const imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
-  const { storagePath, artifactRecordId } = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
-    mimeType,
-    sourcePathForMetadata: activeFile.original_file_path,
-    originalFileName: path.basename(activeFile.original_file_path),
-  })
+  let storagePath: string | null = null
+  let artifactRecordId: number | null = null
+  let imageDataUrl: string | null = null
+
+  if (shouldMaterializeImage) {
+    const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
+    imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
+    const savedArtifact = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+      mimeType,
+      sourcePathForMetadata: activeFile.original_file_path,
+      originalFileName: path.basename(activeFile.original_file_path),
+    })
+    storagePath = savedArtifact.storagePath
+    artifactRecordId = savedArtifact.artifactRecordId
+  }
 
   const referenceValue = {
     composite_hash: metadata.composite_hash,
@@ -158,16 +171,18 @@ export async function executeLoadImageFromReference(
   }
 
   const nodeArtifacts = {
-    image: {
-      type: 'image' as const,
-      value: imageDataUrl,
-      storagePath,
-      artifactRecordId,
-      metadata: {
-        kind: 'system-load-image-from-reference',
-        composite_hash: metadata.composite_hash,
+    ...(imageDataUrl && storagePath && artifactRecordId ? {
+      image: {
+        type: 'image' as const,
+        value: imageDataUrl,
+        storagePath,
+        artifactRecordId,
+        metadata: {
+          kind: 'system-load-image-from-reference',
+          composite_hash: metadata.composite_hash,
+        },
       },
-    },
+    } : {}),
     image_ref: buildRuntimeArtifact(context.executionId, node.id, 'image_ref', 'json', referenceValue, {
       kind: 'system-image-reference',
       composite_hash: metadata.composite_hash,
@@ -207,14 +222,23 @@ export async function executeRandomImageFromLibrary(
     throw new Error(`Random library image file not found: ${metadata.composite_hash}`)
   }
 
-  const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
+  const shouldMaterializeImage = hasConnectedOutput(context, node, 'image')
   const mimeType = activeFile.mime_type || 'image/png'
-  const imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
-  const { storagePath, artifactRecordId } = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
-    mimeType,
-    sourcePathForMetadata: activeFile.original_file_path,
-    originalFileName: path.basename(activeFile.original_file_path),
-  })
+  let storagePath: string | null = null
+  let artifactRecordId: number | null = null
+  let imageDataUrl: string | null = null
+
+  if (shouldMaterializeImage) {
+    const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
+    imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
+    const savedArtifact = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+      mimeType,
+      sourcePathForMetadata: activeFile.original_file_path,
+      originalFileName: path.basename(activeFile.original_file_path),
+    })
+    storagePath = savedArtifact.storagePath
+    artifactRecordId = savedArtifact.artifactRecordId
+  }
 
   const referenceValue = {
     composite_hash: metadata.composite_hash,
@@ -243,16 +267,18 @@ export async function executeRandomImageFromLibrary(
   }
 
   const nodeArtifacts = {
-    image: {
-      type: 'image' as const,
-      value: imageDataUrl,
-      storagePath,
-      artifactRecordId,
-      metadata: {
-        kind: 'system-random-image-from-library',
-        composite_hash: metadata.composite_hash,
+    ...(imageDataUrl && storagePath && artifactRecordId ? {
+      image: {
+        type: 'image' as const,
+        value: imageDataUrl,
+        storagePath,
+        artifactRecordId,
+        metadata: {
+          kind: 'system-random-image-from-library',
+          composite_hash: metadata.composite_hash,
+        },
       },
-    },
+    } : {}),
     image_ref: buildRuntimeArtifact(context.executionId, node.id, 'image_ref', 'json', referenceValue, {
       kind: 'system-random-image-reference',
       composite_hash: metadata.composite_hash,
