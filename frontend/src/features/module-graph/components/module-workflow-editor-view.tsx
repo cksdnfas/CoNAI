@@ -17,6 +17,7 @@ interface ModuleWorkflowEditorViewProps {
   graphCanvas: ReactNode
   workflowEditorSupportPanels: ReactNode
   workflowSaveModal?: ReactNode
+  workflowDebugMode: boolean
   isEditorSupportOpen: boolean
   editorSupportTitle: string
   editorSupportSubtitle?: ReactNode
@@ -24,6 +25,7 @@ interface ModuleWorkflowEditorViewProps {
   onValidationIssueSelect: (issue: WorkflowValidationIssue) => void
   onOpenModuleLibrary: () => void
   onOpenSaveModal: () => void
+  onWorkflowDebugModeToggle: () => void
   onAutoLayout: () => void
   onDuplicateSelectedNode: () => void
   onRemoveSelectedNode: () => void
@@ -133,6 +135,7 @@ export function ModuleWorkflowEditorView({
   graphCanvas,
   workflowEditorSupportPanels,
   workflowSaveModal,
+  workflowDebugMode,
   isEditorSupportOpen,
   editorSupportTitle,
   editorSupportSubtitle,
@@ -140,6 +143,7 @@ export function ModuleWorkflowEditorView({
   onValidationIssueSelect,
   onOpenModuleLibrary,
   onOpenSaveModal,
+  onWorkflowDebugModeToggle,
   onAutoLayout,
   onDuplicateSelectedNode,
   onRemoveSelectedNode,
@@ -173,13 +177,25 @@ export function ModuleWorkflowEditorView({
                 <>
                   <Button
                     type="button"
-                    size="icon-sm"
+                    size="sm"
                     variant="outline"
                     onClick={onOpenSaveModal}
                     aria-label="워크플로우 저장"
                     title="워크플로우 저장"
                   >
                     <Save className="h-4 w-4" />
+                    저장
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={workflowDebugMode ? 'default' : 'outline'}
+                    onClick={onWorkflowDebugModeToggle}
+                    aria-pressed={workflowDebugMode}
+                    aria-label={workflowDebugMode ? '워크플로우 디버그 모드 끄기' : '워크플로우 디버그 모드 켜기'}
+                    title="워크플로우 디버그 모드"
+                  >
+                    디버그 {workflowDebugMode ? 'ON' : 'OFF'}
                   </Button>
                   <div ref={validationPopupRef} className="relative">
                     <Button

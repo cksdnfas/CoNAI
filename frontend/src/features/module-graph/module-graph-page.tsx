@@ -496,11 +496,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             editorSupportSubtitle={editorSupportSubtitle}
             workflowEditorSupportPanels={workflowEditorSupportPanels}
             workflowSaveModal={workflowSaveModal}
+            workflowDebugMode={workflowDebugMode}
             graphCanvas={graphCanvas}
             validationIssues={editorValidationIssues}
             onValidationIssueSelect={focusValidationIssue}
             onOpenModuleLibrary={() => setIsModuleLibraryOpen(true)}
             onOpenSaveModal={() => setIsWorkflowSaveModalOpen(true)}
+            onWorkflowDebugModeToggle={() => setWorkflowDebugMode((enabled) => !enabled)}
             onAutoLayout={handleAutoLayout}
             onDuplicateSelectedNode={handleDuplicateSelectedNode}
             onRemoveSelectedNode={handleRemoveSelectedNode}

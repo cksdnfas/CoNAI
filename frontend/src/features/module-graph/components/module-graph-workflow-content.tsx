@@ -132,11 +132,13 @@ export function ModuleGraphWorkflowEditorContent({
   editorSupportSubtitle,
   workflowEditorSupportPanels,
   workflowSaveModal,
+  workflowDebugMode,
   graphCanvas,
   validationIssues,
   onValidationIssueSelect,
   onOpenModuleLibrary,
   onOpenSaveModal,
+  onWorkflowDebugModeToggle,
   onAutoLayout,
   onDuplicateSelectedNode,
   onRemoveSelectedNode,
@@ -154,11 +156,13 @@ export function ModuleGraphWorkflowEditorContent({
   editorSupportSubtitle: ReactNode
   workflowEditorSupportPanels: ReactNode
   workflowSaveModal?: ReactNode
+  workflowDebugMode: boolean
   graphCanvas: ReactNode
   validationIssues: WorkflowValidationIssue[]
   onValidationIssueSelect: (issue: WorkflowValidationIssue) => void
   onOpenModuleLibrary: () => void
   onOpenSaveModal: () => void
+  onWorkflowDebugModeToggle: () => void
   onAutoLayout: () => void
   onDuplicateSelectedNode: () => void
   onRemoveSelectedNode: () => void
@@ -179,11 +183,13 @@ export function ModuleGraphWorkflowEditorContent({
       editorSupportSubtitle={editorSupportSubtitle}
       workflowEditorSupportPanels={workflowEditorSupportPanels}
       workflowSaveModal={workflowSaveModal}
+      workflowDebugMode={workflowDebugMode}
       graphCanvas={graphCanvas}
       validationIssues={validationIssues}
       onValidationIssueSelect={onValidationIssueSelect}
       onOpenModuleLibrary={onOpenModuleLibrary}
       onOpenSaveModal={onOpenSaveModal}
+      onWorkflowDebugModeToggle={onWorkflowDebugModeToggle}
       onAutoLayout={onAutoLayout}
       onDuplicateSelectedNode={onDuplicateSelectedNode}
       onRemoveSelectedNode={onRemoveSelectedNode}
