@@ -157,6 +157,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       comfyService,
       workflow: substitutedWorkflow,
       imageSaveOptions: payload.imageSaveOptions,
+      artifactWorkflow: workflow.result_view_mode === 'artifact_explorer' ? workflow : null,
       shouldCancel: () => (GenerationQueueModel.findById(job.id)?.cancel_requested ?? 0) > 0,
       onCancelRequested: async (promptId) => {
         await context.attemptUpstreamCancellation(job.id, {
@@ -188,28 +189,46 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       },
     })
 
-    if (!result.representativeImage) {
-      throw new Error(`Queue job ${job.id} finished ComfyUI execution but no representative output was saved`)
-    }
+    if (workflow.result_view_mode === 'artifact_explorer') {
+      if (result.savedArtifactCount === 0) {
+        throw new Error(`Queue job ${job.id} finished ComfyUI artifact execution but no artifact output was saved`)
+      }
 
-    if (historyId) {
-      GenerationHistoryModel.updateImagePaths(historyId, {
-        compositeHash: result.representativeImage.compositeHash,
+      if (historyId) {
+        GenerationHistoryModel.updateStatus(historyId, 'completed')
+      }
+
+      updateQueueRequestDebugMeta(job, {
+        history_id: historyId ?? null,
+        result_prompt_id: result.promptId,
+        attempted_artifact_count: result.attemptedArtifactCount,
+        saved_artifact_count: result.savedArtifactCount,
+        artifact_directory: result.savedArtifacts[0]?.directoryRelativePath ?? '',
       })
-      await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(result.representativeImage.compositeHash)
-      GenerationHistoryModel.updateStatus(historyId, 'completed')
-    }
+    } else {
+      if (!result.representativeImage) {
+        throw new Error(`Queue job ${job.id} finished ComfyUI execution but no representative output was saved`)
+      }
 
-    updateQueueRequestDebugMeta(job, {
-      history_id: historyId ?? null,
-      result_prompt_id: result.promptId,
-      result_composite_hash: result.representativeImage.compositeHash,
-      result_original_path: result.representativeImage.originalPath,
-      result_file_size: result.representativeImage.fileSize,
-      result_mime_type: FileDiscoveryService.getMimeType(result.representativeImage.originalPath),
-      attempted_image_count: result.attemptedImageCount,
-      saved_image_count: result.savedImageCount,
-    })
+      if (historyId) {
+        GenerationHistoryModel.updateImagePaths(historyId, {
+          compositeHash: result.representativeImage.compositeHash,
+        })
+        await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(result.representativeImage.compositeHash)
+        GenerationHistoryModel.updateStatus(historyId, 'completed')
+      }
+
+      updateQueueRequestDebugMeta(job, {
+        history_id: historyId ?? null,
+        result_prompt_id: result.promptId,
+        result_composite_hash: result.representativeImage.compositeHash,
+        result_original_path: result.representativeImage.originalPath,
+        result_file_size: result.representativeImage.fileSize,
+        result_mime_type: FileDiscoveryService.getMimeType(result.representativeImage.originalPath),
+        attempted_image_count: result.attemptedImageCount,
+        saved_image_count: result.savedImageCount,
+      })
+    }
 
     await writeQueueComfyDebugSnapshot(job, {
       ...debugSnapshotBase,
@@ -222,7 +241,11 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       expectedCurrentStatuses: ['running'],
     })
 
-    console.log(`✅ Queue job ${job.id} completed via ComfyUI (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`)
+    if (workflow.result_view_mode === 'artifact_explorer') {
+      console.log(`✅ Queue job ${job.id} completed via ComfyUI artifacts (${result.savedArtifactCount}/${result.attemptedArtifactCount} artifacts saved)`)
+    } else {
+      console.log(`✅ Queue job ${job.id} completed via ComfyUI (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`)
+    }
   } catch (error) {
     const cancellationRequested = isComfyGenerationCancelledError(error) || (GenerationQueueModel.findById(job.id)?.cancel_requested ?? 0) > 0
     if (cancellationRequested) {

@@ -1,5 +1,6 @@
 import { Suspense, lazy, useState } from 'react'
 import { useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
@@ -8,6 +9,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
+import { getGenerationWorkflow } from '@/lib/api'
 import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
 import { loadPersistedSelectedComfyWorkflowId, persistSelectedComfyWorkflowId } from './image-generation-shared'
 
@@ -34,6 +36,11 @@ const WildcardGenerationPanelLazy = lazy(async () => {
 const GenerationHistoryPanelLazy = lazy(async () => {
   const module = await import('./components/generation-history-panel')
   return { default: module.GenerationHistoryPanel }
+})
+
+const WorkflowArtifactExplorerPanelLazy = lazy(async () => {
+  const module = await import('./components/workflow-artifact-explorer-panel')
+  return { default: module.WorkflowArtifactExplorerPanel }
 })
 
 const ModuleWorkflowWorkspaceLazy = lazy(async () => {
@@ -76,18 +83,28 @@ export function ImageGenerationPage() {
   const [isControllerOpen, setIsControllerOpen] = useState(false)
   const authStatusQuery = useAuthStatusQuery()
   const isWideLayout = useDesktopPageLayout()
+  const selectedComfyWorkflowQuery = useQuery({
+    queryKey: ['image-generation-selected-comfy-workflow', selectedComfyWorkflowId, historyRefreshNonce],
+    queryFn: () => getGenerationWorkflow(selectedComfyWorkflowId as number),
+    enabled: selectedComfyWorkflowId !== null,
+  })
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const visibleTabs = IMAGE_GENERATION_TABS.filter((tab) => tab.value !== 'wildcards' || hasAuthPermission(permissionKeys, 'page.wildcards.view'))
   const activeTab = visibleTabs.some((tab) => tab.value === parseImageGenerationTab(searchParams.get('tab')))
     ? parseImageGenerationTab(searchParams.get('tab'))
     : (visibleTabs[0]?.value ?? 'nai')
-  const shouldShowHistory = activeTab === 'nai' || activeTab === 'codex' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null)
+  const selectedComfyWorkflowResultMode = activeTab === 'comfyui'
+    ? selectedComfyWorkflowQuery.data?.result_view_mode ?? 'history'
+    : 'history'
+  const shouldShowArtifactExplorer = activeTab === 'comfyui' && selectedComfyWorkflowId !== null && selectedComfyWorkflowResultMode === 'artifact_explorer'
+  const shouldShowHistory = activeTab === 'nai' || activeTab === 'codex' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null && !shouldShowArtifactExplorer)
+  const shouldShowResultPanel = shouldShowHistory || shouldShowArtifactExplorer
   const historyServiceType = activeTab === 'nai'
     ? 'novelai'
     : activeTab === 'codex'
       ? 'codex'
       : 'comfyui'
-  const useWideSplitPaneScroll = isWideLayout && shouldShowHistory
+  const useWideSplitPaneScroll = isWideLayout && shouldShowResultPanel
 
   const handleHistoryRefresh = () => {
     setHistoryRefreshNonce((current) => current + 1)
@@ -214,7 +231,7 @@ export function ImageGenerationPage() {
           <div
             className={cn(
               'grid items-start gap-8',
-              shouldShowHistory ? 'grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1',
+              shouldShowResultPanel ? 'grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]' : 'grid-cols-1',
               useWideSplitPaneScroll && 'min-h-0 flex-1 items-stretch',
             )}
           >
@@ -223,29 +240,45 @@ export function ImageGenerationPage() {
                 {controllerPanel}
               </Suspense>
             </div>
-            {shouldShowHistory ? (
+            {shouldShowResultPanel ? (
               <div className={cn('min-w-0', useWideSplitPaneScroll && 'min-h-0 flex flex-col overflow-hidden')}>
                 <Suspense fallback={<PanelFallback />}>
-                  <GenerationHistoryPanelLazy
-                    refreshNonce={historyRefreshNonce}
-                    serviceType={historyServiceType}
-                    workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
-                    splitPaneScroll={useWideSplitPaneScroll}
-                  />
+                  {shouldShowArtifactExplorer && selectedComfyWorkflowId !== null ? (
+                    <WorkflowArtifactExplorerPanelLazy
+                      refreshNonce={historyRefreshNonce}
+                      workflowId={selectedComfyWorkflowId}
+                      splitPaneScroll={useWideSplitPaneScroll}
+                    />
+                  ) : (
+                    <GenerationHistoryPanelLazy
+                      refreshNonce={historyRefreshNonce}
+                      serviceType={historyServiceType}
+                      workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
+                      splitPaneScroll={useWideSplitPaneScroll}
+                    />
+                  )}
                 </Suspense>
               </div>
             ) : null}
           </div>
-        ) : shouldUseControllerDrawer && shouldShowHistory ? (
+        ) : shouldUseControllerDrawer && shouldShowResultPanel ? (
           <>
             <div className="space-y-6">
               <Suspense fallback={<PanelFallback />}>
-                <GenerationHistoryPanelLazy
-                  refreshNonce={historyRefreshNonce}
-                  serviceType={historyServiceType}
-                  workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
-                  onBack={activeTab === 'comfyui' ? () => setSelectedComfyWorkflowId(null) : undefined}
-                />
+                {shouldShowArtifactExplorer && selectedComfyWorkflowId !== null ? (
+                  <WorkflowArtifactExplorerPanelLazy
+                    refreshNonce={historyRefreshNonce}
+                    workflowId={selectedComfyWorkflowId}
+                    onBack={() => setSelectedComfyWorkflowId(null)}
+                  />
+                ) : (
+                  <GenerationHistoryPanelLazy
+                    refreshNonce={historyRefreshNonce}
+                    serviceType={historyServiceType}
+                    workflowId={activeTab === 'comfyui' ? selectedComfyWorkflowId : null}
+                    onBack={activeTab === 'comfyui' ? () => setSelectedComfyWorkflowId(null) : undefined}
+                  />
+                )}
               </Suspense>
             </div>
 
@@ -281,13 +314,20 @@ export function ImageGenerationPage() {
                 {controllerPanel}
               </Suspense>
             </div>
-            {shouldShowHistory ? (
+            {shouldShowResultPanel ? (
               <Suspense fallback={<PanelFallback />}>
-                <GenerationHistoryPanelLazy
-                  refreshNonce={historyRefreshNonce}
-                  serviceType="comfyui"
-                  workflowId={selectedComfyWorkflowId}
-                />
+                {shouldShowArtifactExplorer && selectedComfyWorkflowId !== null ? (
+                  <WorkflowArtifactExplorerPanelLazy
+                    refreshNonce={historyRefreshNonce}
+                    workflowId={selectedComfyWorkflowId}
+                  />
+                ) : (
+                  <GenerationHistoryPanelLazy
+                    refreshNonce={historyRefreshNonce}
+                    serviceType="comfyui"
+                    workflowId={selectedComfyWorkflowId}
+                  />
+                )}
               </Suspense>
             ) : null}
           </div>

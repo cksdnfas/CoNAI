@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crudRoutes from './crud.routes';
 import executionRoutes from './execution.routes';
+import artifactsRoutes from './artifacts.routes';
 import serversRoutes from './servers.routes';
 
 const router = Router();
@@ -35,6 +36,9 @@ router.use('/', crudRoutes);
 
 // Mount execution routes
 router.use('/', executionRoutes);
+
+// Mount artifact browsing routes
+router.use('/', artifactsRoutes);
 
 // Mount server management routes
 router.use('/', serversRoutes);

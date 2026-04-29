@@ -32,11 +32,19 @@ import {
 } from './image-generation-shared'
 
 const PUBLIC_QUEUE_REGISTRATION_MIN = 1
-const PUBLIC_QUEUE_REGISTRATION_MAX = 32
+const PUBLIC_QUEUE_REGISTRATION_MAX_FALLBACK = 32
 
-function clampQueueRegistrationCount(value: string) {
+function resolvePublicQueueMaxCount(value?: number | null) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return PUBLIC_QUEUE_REGISTRATION_MAX_FALLBACK
+  }
+
+  return Math.min(PUBLIC_QUEUE_REGISTRATION_MAX_FALLBACK, Math.max(PUBLIC_QUEUE_REGISTRATION_MIN, Math.trunc(value)))
+}
+
+function clampQueueRegistrationCount(value: string, maxCount: number) {
   const parsed = Math.trunc(parseNumberInput(value, PUBLIC_QUEUE_REGISTRATION_MIN))
-  return Math.min(PUBLIC_QUEUE_REGISTRATION_MAX, Math.max(PUBLIC_QUEUE_REGISTRATION_MIN, parsed))
+  return Math.min(maxCount, Math.max(PUBLIC_QUEUE_REGISTRATION_MIN, parsed))
 }
 
 export function PublicComfyWorkflowPage() {
@@ -68,6 +76,7 @@ export function PublicComfyWorkflowPage() {
 
   const workflow = workflowQuery.data ?? null
   const workflowFields = useMemo(() => workflow?.marked_fields ?? [], [workflow?.marked_fields])
+  const publicQueueMaxCount = resolvePublicQueueMaxCount(workflow?.public_queue_max_count)
   const generationSaveOptions = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
   const useWideSplitPaneScroll = isWideLayout && workflow !== null
 
@@ -88,6 +97,10 @@ export function PublicComfyWorkflowPage() {
 
     persistComfyWorkflowDraft(workflow.id, workflowDraft)
   }, [workflow, workflowDraft])
+
+  useEffect(() => {
+    setQueueRegistrationCount((current) => String(clampQueueRegistrationCount(current, publicQueueMaxCount)))
+  }, [publicQueueMaxCount])
 
   const missingRequiredField = useMemo(
     () => workflowFields.find((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id])),
@@ -128,38 +141,29 @@ export function PublicComfyWorkflowPage() {
     }
 
     const promptData = buildWorkflowPromptData(workflowFields as WorkflowMarkedField[], workflowDraft)
-    const registrationCount = clampQueueRegistrationCount(queueRegistrationCount)
+    const registrationCount = clampQueueRegistrationCount(queueRegistrationCount, publicQueueMaxCount)
 
     try {
       setIsQueueSubmitting(true)
-      const results = await Promise.allSettled(
-        Array.from({ length: registrationCount }, () => queuePublicGenerationWorkflowJob(slug, {
-          request_summary: `${workflow.name} public queue job`,
-          request_payload: {
-            prompt_data: promptData,
-            imageSaveOptions: {
-              format: generationSaveOptions.defaultFormat,
-              quality: generationSaveOptions.quality,
-              resizeEnabled: generationSaveOptions.resizeEnabled,
-              maxWidth: generationSaveOptions.maxWidth,
-              maxHeight: generationSaveOptions.maxHeight,
-            },
+      const result = await queuePublicGenerationWorkflowJob(slug, {
+        enqueue_count: registrationCount,
+        request_summary: `${workflow.name} public queue job`,
+        request_payload: {
+          prompt_data: promptData,
+          imageSaveOptions: {
+            format: generationSaveOptions.defaultFormat,
+            quality: generationSaveOptions.quality,
+            resizeEnabled: generationSaveOptions.resizeEnabled,
+            maxWidth: generationSaveOptions.maxWidth,
+            maxHeight: generationSaveOptions.maxHeight,
           },
-        })),
-      )
+        },
+      })
 
-      const successCount = results.filter((result) => result.status === 'fulfilled').length
-      const failedCount = results.length - successCount
+      const successCount = result.enqueued_count ?? result.records?.filter(Boolean).length ?? (result.record ? 1 : 0)
 
       void refreshGenerationQueueViews(queryClient, () => setHistoryRefreshNonce((current) => current + 1))
-
-      if (failedCount === 0) {
-        showSnackbar({ message: `${workflow.name} 큐에 ${successCount}건 등록했어.`, tone: 'info' })
-      } else if (successCount === 0) {
-        showSnackbar({ message: `${workflow.name} 큐 등록이 전부 실패했어.`, tone: 'error' })
-      } else {
-        showSnackbar({ message: `${workflow.name} 큐 등록 ${successCount}건 성공, ${failedCount}건 실패.`, tone: 'error' })
-      }
+      showSnackbar({ message: `${workflow.name} 큐에 ${successCount}건 등록했어.`, tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, '공용 워크플로우 큐 등록에 실패했어.'), tone: 'error' })
     } finally {
@@ -217,7 +221,7 @@ export function PublicComfyWorkflowPage() {
       </Button>
       <ScrubbableNumberInput
         min={1}
-        max={32}
+        max={publicQueueMaxCount}
         step={1}
         scrubRatio={1}
         variant="detail"
@@ -335,7 +339,7 @@ export function PublicComfyWorkflowPage() {
         <CompactGenerationActionSurface>
           <ScrubbableNumberInput
             min={1}
-            max={32}
+            max={publicQueueMaxCount}
             step={1}
             scrubRatio={1}
             variant="detail"

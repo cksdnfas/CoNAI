@@ -12,6 +12,7 @@ import { ChevronDown, ChevronUp, Search, Upload } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
@@ -76,6 +77,15 @@ function slugifyPublicWorkflow(value: string) {
     .replace(/^-|-$/g, '')
 }
 
+function clampPublicQueueMaxCount(value: string) {
+  const parsed = Math.trunc(Number(value))
+  if (!Number.isFinite(parsed)) {
+    return 32
+  }
+
+  return Math.min(32, Math.max(1, parsed))
+}
+
 export function ComfyWorkflowAuthoringModal({
   open,
   mode = 'create',
@@ -92,6 +102,10 @@ export function ComfyWorkflowAuthoringModal({
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [isPublicPage, setIsPublicPage] = useState(false)
   const [publicSlug, setPublicSlug] = useState('')
+  const [publicQueueMaxCount, setPublicQueueMaxCount] = useState('32')
+  const [resultViewMode, setResultViewMode] = useState<'history' | 'artifact_explorer'>('history')
+  const [artifactDirectoryMode, setArtifactDirectoryMode] = useState<'shared' | 'per_run'>('shared')
+  const [artifactRootPath, setArtifactRootPath] = useState('')
   const [markedFields, setMarkedFields] = useState<WorkflowMarkedField[]>([])
   const [expandedFieldIds, setExpandedFieldIds] = useState<string[]>([])
   const [workflowEditorTab, setWorkflowEditorTab] = useState<'json' | 'graph'>('graph')
@@ -114,6 +128,10 @@ export function ComfyWorkflowAuthoringModal({
       setJsonError(null)
       setIsPublicPage(Boolean(initialData.workflow.is_public_page))
       setPublicSlug(initialData.workflow.public_slug ?? '')
+      setPublicQueueMaxCount(String(initialData.workflow.public_queue_max_count ?? 32))
+      setResultViewMode(initialData.workflow.result_view_mode ?? 'history')
+      setArtifactDirectoryMode(initialData.workflow.artifact_directory_mode ?? 'shared')
+      setArtifactRootPath(initialData.workflow.artifact_root_path ?? '')
       setMarkedFields(initialData.workflow.marked_fields ?? [])
       setExpandedFieldIds([])
       setWorkflowEditorTab('graph')
@@ -129,6 +147,10 @@ export function ComfyWorkflowAuthoringModal({
     setJsonError(null)
     setIsPublicPage(false)
     setPublicSlug('')
+    setPublicQueueMaxCount('32')
+    setResultViewMode('history')
+    setArtifactDirectoryMode('shared')
+    setArtifactRootPath('')
     setMarkedFields([])
     setExpandedFieldIds([])
     setWorkflowEditorTab('graph')
@@ -405,6 +427,10 @@ export function ComfyWorkflowAuthoringModal({
         is_active: initialData?.workflow.is_active ?? true,
         is_public_page: isPublicPage,
         public_slug: isPublicPage ? normalizedPublicSlug : null,
+        public_queue_max_count: isPublicPage ? clampPublicQueueMaxCount(publicQueueMaxCount) : null,
+        result_view_mode: resultViewMode,
+        artifact_directory_mode: artifactDirectoryMode,
+        artifact_root_path: artifactRootPath.trim() || null,
         color: initialData?.workflow.color ?? '#2196f3',
       }
 
@@ -471,14 +497,63 @@ export function ComfyWorkflowAuthoringModal({
             </SettingsToggleRow>
 
             {isPublicPage ? (
-              <SettingsField label="Public slug">
-                <Input
-                  variant="settings"
-                  value={publicSlug}
-                  onChange={(event) => setPublicSlug(slugifyPublicWorkflow(event.target.value))}
-                  placeholder="character-poster-generator"
-                />
-              </SettingsField>
+              <>
+                <SettingsField label="Public slug">
+                  <Input
+                    variant="settings"
+                    value={publicSlug}
+                    onChange={(event) => setPublicSlug(slugifyPublicWorkflow(event.target.value))}
+                    placeholder="character-poster-generator"
+                  />
+                </SettingsField>
+
+                <SettingsField label="공용 1회 요청 상한">
+                  <Input
+                    variant="settings"
+                    type="number"
+                    min={1}
+                    max={32}
+                    value={publicQueueMaxCount}
+                    onChange={(event) => setPublicQueueMaxCount(event.target.value)}
+                    onBlur={() => setPublicQueueMaxCount(String(clampPublicQueueMaxCount(publicQueueMaxCount)))}
+                  />
+                </SettingsField>
+              </>
+            ) : null}
+
+            <SettingsField label="Result view">
+              <Select
+                variant="settings"
+                value={resultViewMode}
+                onChange={(event) => setResultViewMode(event.target.value as 'history' | 'artifact_explorer')}
+              >
+                <option value="history">History viewer</option>
+                <option value="artifact_explorer">Artifact explorer</option>
+              </Select>
+            </SettingsField>
+
+            {resultViewMode === 'artifact_explorer' ? (
+              <>
+                <SettingsField label="Artifact layout">
+                  <Select
+                    variant="settings"
+                    value={artifactDirectoryMode}
+                    onChange={(event) => setArtifactDirectoryMode(event.target.value as 'shared' | 'per_run')}
+                  >
+                    <option value="shared">General shared folder</option>
+                    <option value="per_run">Per-execution folders</option>
+                  </Select>
+                </SettingsField>
+
+                <SettingsField label="Artifact root path">
+                  <Input
+                    variant="settings"
+                    value={artifactRootPath}
+                    onChange={(event) => setArtifactRootPath(event.target.value)}
+                    placeholder="Default: runtime/artifacts/comfy-workflows/<workflow>"
+                  />
+                </SettingsField>
+              </>
             ) : null}
           </div>
         </SettingsSection>

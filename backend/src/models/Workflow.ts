@@ -7,6 +7,22 @@ import {
 } from '../types/workflow';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
+const PUBLIC_QUEUE_MAX_COUNT_DEFAULT = 32;
+
+function normalizePublicQueueMaxCount(value: unknown) {
+  const numericValue = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim().length > 0
+      ? Number(value)
+      : null;
+
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  return Math.min(PUBLIC_QUEUE_MAX_COUNT_DEFAULT, Math.max(1, Math.trunc(numericValue as number)));
+}
+
 export class WorkflowModel {
   private static normalizeWorkflowRecord(workflow: WorkflowRecord | undefined | null): WorkflowRecord | null {
     if (!workflow) {
@@ -20,6 +36,10 @@ export class WorkflowModel {
       ...workflow,
       is_active: rawIsActive === true || rawIsActive === 1,
       is_public_page: rawIsPublicPage === true || rawIsPublicPage === 1,
+      public_queue_max_count: normalizePublicQueueMaxCount(workflow.public_queue_max_count),
+      result_view_mode: workflow.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
+      artifact_root_path: workflow.artifact_root_path ?? null,
+      artifact_directory_mode: workflow.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
     }
   }
 
@@ -32,8 +52,8 @@ export class WorkflowModel {
 
     const info = userSettingsDb.prepare(`
       INSERT INTO workflows (
-        name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, color
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, result_view_mode, artifact_root_path, artifact_directory_mode, color
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       workflowData.name,
       workflowData.description || null,
@@ -43,6 +63,10 @@ export class WorkflowModel {
       workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : 1,
       workflowData.is_public_page ? 1 : 0,
       workflowData.public_slug || null,
+      workflowData.is_public_page ? normalizePublicQueueMaxCount(workflowData.public_queue_max_count) : null,
+      workflowData.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
+      workflowData.artifact_root_path?.trim() || null,
+      workflowData.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
       workflowData.color || '#2196f3'
     );
 
@@ -82,7 +106,19 @@ export class WorkflowModel {
         ? (workflowData.marked_fields ? JSON.stringify(workflowData.marked_fields) : null)
         : undefined,
       is_active: workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : undefined,
-      is_public_page: workflowData.is_public_page !== undefined ? (workflowData.is_public_page ? 1 : 0) : undefined
+      is_public_page: workflowData.is_public_page !== undefined ? (workflowData.is_public_page ? 1 : 0) : undefined,
+      public_queue_max_count: workflowData.public_queue_max_count !== undefined
+        ? normalizePublicQueueMaxCount(workflowData.public_queue_max_count)
+        : undefined,
+      result_view_mode: workflowData.result_view_mode !== undefined
+        ? (workflowData.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history')
+        : undefined,
+      artifact_root_path: workflowData.artifact_root_path !== undefined
+        ? (workflowData.artifact_root_path?.trim() || null)
+        : undefined,
+      artifact_directory_mode: workflowData.artifact_directory_mode !== undefined
+        ? (workflowData.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared')
+        : undefined
     };
 
     const updates = filterDefined(cleanData);

@@ -1,6 +1,9 @@
 /**
  * 워크플로우 데이터베이스 레코드
  */
+export type WorkflowResultViewMode = 'history' | 'artifact_explorer';
+export type WorkflowArtifactDirectoryMode = 'shared' | 'per_run';
+
 export interface WorkflowRecord {
   id: number;
   name: string;
@@ -11,6 +14,10 @@ export interface WorkflowRecord {
   is_active: boolean;
   is_public_page: boolean;
   public_slug?: string | null;
+  public_queue_max_count?: number | null;
+  result_view_mode: WorkflowResultViewMode;
+  artifact_root_path?: string | null;
+  artifact_directory_mode: WorkflowArtifactDirectoryMode;
   color: string;
   created_date: string;
   updated_date: string;
@@ -56,6 +63,10 @@ export interface WorkflowCreateData {
   is_active?: boolean;
   is_public_page?: boolean;
   public_slug?: string | null;
+  public_queue_max_count?: number | null;
+  result_view_mode?: WorkflowResultViewMode;
+  artifact_root_path?: string | null;
+  artifact_directory_mode?: WorkflowArtifactDirectoryMode;
   color?: string;
 }
 
@@ -71,6 +82,10 @@ export interface WorkflowUpdateData {
   is_active?: boolean;
   is_public_page?: boolean;
   public_slug?: string | null;
+  public_queue_max_count?: number | null;
+  result_view_mode?: WorkflowResultViewMode;
+  artifact_root_path?: string | null;
+  artifact_directory_mode?: WorkflowArtifactDirectoryMode;
   color?: string;
 }
 

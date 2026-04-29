@@ -315,6 +315,7 @@ export function ComfyGenerationPanel({
     await Promise.all([workflowsQuery.refetch(), dropdownListsQuery.refetch()])
     setWorkflowEditorState(null)
     onSelectedWorkflowChange(workflowId)
+    onHistoryRefresh()
   }
 
   const handleEditWorkflow = async (workflowId: number) => {
@@ -349,6 +350,9 @@ export function ComfyGenerationPanel({
         workflow_json: workflow.workflow_json,
         marked_fields: workflow.marked_fields,
         is_active: workflow.is_active,
+        result_view_mode: workflow.result_view_mode,
+        artifact_directory_mode: workflow.artifact_directory_mode,
+        artifact_root_path: workflow.artifact_root_path ?? null,
         color: workflow.color,
       })
 

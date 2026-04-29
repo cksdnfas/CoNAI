@@ -22,7 +22,11 @@ interface PublicWorkflowQueueResponse {
   message: string
   record?: {
     id: number
-  }
+  } | null
+  records?: Array<{
+    id: number
+  } | null>
+  enqueued_count?: number
 }
 
 interface PublicWorkflowCleanupResponse {
@@ -57,6 +61,7 @@ export async function getPublicGenerationWorkflowHistory(publicSlug: string, par
 export async function queuePublicGenerationWorkflowJob(publicSlug: string, payload: {
   request_payload: Record<string, unknown>
   request_summary?: string | null
+  enqueue_count?: number
 }) {
   return requestJson<PublicWorkflowQueueResponse>(`/api/public-workflows/${encodeURIComponent(publicSlug)}/queue`, {
     method: 'POST',

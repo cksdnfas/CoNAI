@@ -6,6 +6,23 @@ import { asyncHandler } from '../../middleware/errorHandler';
 
 const router = Router();
 
+function normalizeResultViewMode(value: unknown) {
+  return value === 'artifact_explorer' ? 'artifact_explorer' : 'history';
+}
+
+function normalizeArtifactDirectoryMode(value: unknown) {
+  return value === 'per_run' ? 'per_run' : 'shared';
+}
+
+function normalizeArtifactRootPath(value: unknown) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function normalizePublicSlug(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -20,6 +37,20 @@ function normalizePublicSlug(value: unknown): string | null {
     .replace(/^-|-$/g, '');
 
   return normalized.length > 0 ? normalized : null;
+}
+
+function normalizePublicQueueMaxCount(value: unknown): number | null {
+  const numericValue = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim().length > 0
+      ? Number(value)
+      : null;
+
+  if (!Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  return Math.min(32, Math.max(1, Math.trunc(numericValue as number)));
 }
 
 /**
@@ -104,7 +135,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/workflows
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, color } = req.body;
+  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
 
   if (!name || !workflow_json) {
     return res.status(400).json({
@@ -159,6 +190,10 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       is_active,
       is_public_page: isPublicPage,
       public_slug: isPublicPage ? normalizedPublicSlug : null,
+      public_queue_max_count: isPublicPage ? normalizePublicQueueMaxCount(public_queue_max_count) : null,
+      result_view_mode: normalizeResultViewMode(result_view_mode),
+      artifact_root_path: normalizeArtifactRootPath(artifact_root_path),
+      artifact_directory_mode: normalizeArtifactDirectoryMode(artifact_directory_mode),
       color
     };
 
@@ -189,7 +224,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
-  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, color } = req.body;
+  const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -248,6 +283,14 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       is_active,
       is_public_page: isPublicPage,
       public_slug: isPublicPage === undefined ? normalizedPublicSlug : (isPublicPage ? normalizedPublicSlug : null),
+      public_queue_max_count: isPublicPage === false
+        ? null
+        : public_queue_max_count === undefined
+          ? undefined
+          : normalizePublicQueueMaxCount(public_queue_max_count),
+      result_view_mode: result_view_mode === undefined ? undefined : normalizeResultViewMode(result_view_mode),
+      artifact_root_path: artifact_root_path === undefined ? undefined : normalizeArtifactRootPath(artifact_root_path),
+      artifact_directory_mode: artifact_directory_mode === undefined ? undefined : normalizeArtifactDirectoryMode(artifact_directory_mode),
       color
     };
 

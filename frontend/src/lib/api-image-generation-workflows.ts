@@ -9,6 +9,7 @@ import type {
   GenerationWorkflow,
   GenerationWorkflowDetail,
   UpdateComfyUIServerPayload,
+  WorkflowArtifactListing,
 } from './api-image-generation-types'
 
 interface WorkflowListResponse {
@@ -19,6 +20,11 @@ interface WorkflowListResponse {
 interface WorkflowDetailResponse {
   success: boolean
   data: GenerationWorkflowDetail
+}
+
+interface WorkflowArtifactListingResponse {
+  success: boolean
+  data: WorkflowArtifactListing
 }
 
 interface ComfyUIServerListResponse {
@@ -114,6 +120,17 @@ export async function getGenerationWorkflows(activeOnly = true) {
 /** Load the full detail for a single saved workflow. */
 export async function getGenerationWorkflow(workflowId: number) {
   const response = await requestJson<WorkflowDetailResponse>(`/api/workflows/${workflowId}`)
+  return response.data
+}
+
+/** List filesystem artifacts for one artifact-explorer ComfyUI workflow. */
+export async function getGenerationWorkflowArtifacts(workflowId: number, relativePath = '') {
+  const searchParams = new URLSearchParams()
+  if (relativePath.trim().length > 0) {
+    searchParams.set('path', relativePath)
+  }
+
+  const response = await requestJson<WorkflowArtifactListingResponse>(`/api/workflows/${workflowId}/artifacts${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
   return response.data
 }
 

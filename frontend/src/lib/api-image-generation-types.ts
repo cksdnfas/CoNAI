@@ -131,6 +131,9 @@ export interface WorkflowMarkedField {
   }>
 }
 
+export type WorkflowResultViewMode = 'history' | 'artifact_explorer'
+export type WorkflowArtifactDirectoryMode = 'shared' | 'per_run'
+
 export interface GenerationWorkflow {
   id: number
   name: string
@@ -139,6 +142,10 @@ export interface GenerationWorkflow {
   is_active: boolean
   is_public_page?: boolean
   public_slug?: string | null
+  public_queue_max_count?: number | null
+  result_view_mode: WorkflowResultViewMode
+  artifact_root_path?: string | null
+  artifact_directory_mode: WorkflowArtifactDirectoryMode
   color: string
   marked_fields: WorkflowMarkedField[]
 }
@@ -378,6 +385,7 @@ export interface PublicGenerationWorkflow {
   is_active: boolean
   is_public_page: boolean
   public_slug?: string | null
+  public_queue_max_count?: number | null
   marked_fields: WorkflowMarkedField[]
 }
 
@@ -390,5 +398,29 @@ export interface CreateGenerationWorkflowPayload {
   is_active?: boolean
   is_public_page?: boolean
   public_slug?: string | null
+  public_queue_max_count?: number | null
+  result_view_mode?: WorkflowResultViewMode
+  artifact_root_path?: string | null
+  artifact_directory_mode?: WorkflowArtifactDirectoryMode
   color?: string
+}
+
+export interface WorkflowArtifactEntry {
+  name: string
+  relativePath: string
+  kind: 'directory' | 'file'
+  size: number
+  modifiedAt: string
+  mimeType: string | null
+  fileUrl?: string
+  downloadUrl?: string
+  thumbnailUrl?: string
+}
+
+export interface WorkflowArtifactListing {
+  workflowId: number
+  resultViewMode: WorkflowResultViewMode
+  artifactDirectoryMode: WorkflowArtifactDirectoryMode
+  relativePath: string
+  entries: WorkflowArtifactEntry[]
 }

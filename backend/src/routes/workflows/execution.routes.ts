@@ -134,6 +134,7 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
           comfyService,
           workflow: substitutedWorkflow,
           imageSaveOptions,
+          artifactWorkflow: workflow.result_view_mode === 'artifact_explorer' ? workflow : null,
           onPromptSubmitted: async (promptId) => {
             if (!historyId) {
               return;
@@ -151,7 +152,15 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
         });
 
         if (historyId) {
-          if (result.representativeImage) {
+          if (workflow.result_view_mode === 'artifact_explorer') {
+            if (result.savedArtifactCount > 0) {
+              GenerationHistoryModel.updateStatus(historyId, 'completed');
+              console.log(`✅ ComfyUI artifact workflow completed for history ID ${historyId} (${result.savedArtifactCount}/${result.attemptedArtifactCount} artifacts saved)`);
+            } else {
+              GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no artifact file could be saved');
+              console.error(`❌ ComfyUI artifact workflow ${historyId} has no saved artifacts after generation`);
+            }
+          } else if (result.representativeImage) {
             GenerationHistoryModel.updateImagePaths(historyId, {
               compositeHash: result.representativeImage.compositeHash,
             });
@@ -164,6 +173,8 @@ router.post('/:id/generate', asyncHandler(async (req: Request, res: Response) =>
             GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no output file could be saved');
             console.error(`❌ ComfyUI history ${historyId} has no saved representative output after generation`);
           }
+        } else if (workflow.result_view_mode === 'artifact_explorer') {
+          console.log(`✅ Artifact workflow completed without history tracking (${result.savedArtifactCount}/${result.attemptedArtifactCount} artifacts saved)`);
         } else {
           console.log(`✅ Image generation completed without history tracking (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`);
         }

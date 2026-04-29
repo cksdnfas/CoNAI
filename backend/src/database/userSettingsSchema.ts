@@ -16,6 +16,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
       is_active BOOLEAN DEFAULT 1,
       is_public_page BOOLEAN DEFAULT 0,
       public_slug VARCHAR(255),
+      public_queue_max_count INTEGER,
+      result_view_mode TEXT NOT NULL DEFAULT 'history',
+      artifact_root_path TEXT,
+      artifact_directory_mode TEXT NOT NULL DEFAULT 'shared',
       color VARCHAR(10) DEFAULT '#2196f3',
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -334,6 +338,22 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (!hasColumn('workflows', 'public_slug')) {
     console.log('  Migrating workflows: adding public_slug column');
     db.exec('ALTER TABLE workflows ADD COLUMN public_slug VARCHAR(255)');
+  }
+  if (!hasColumn('workflows', 'public_queue_max_count')) {
+    console.log('  Migrating workflows: adding public_queue_max_count column');
+    db.exec('ALTER TABLE workflows ADD COLUMN public_queue_max_count INTEGER');
+  }
+  if (!hasColumn('workflows', 'result_view_mode')) {
+    console.log('  Migrating workflows: adding result_view_mode column');
+    db.exec("ALTER TABLE workflows ADD COLUMN result_view_mode TEXT NOT NULL DEFAULT 'history'");
+  }
+  if (!hasColumn('workflows', 'artifact_root_path')) {
+    console.log('  Migrating workflows: adding artifact_root_path column');
+    db.exec('ALTER TABLE workflows ADD COLUMN artifact_root_path TEXT');
+  }
+  if (!hasColumn('workflows', 'artifact_directory_mode')) {
+    console.log('  Migrating workflows: adding artifact_directory_mode column');
+    db.exec("ALTER TABLE workflows ADD COLUMN artifact_directory_mode TEXT NOT NULL DEFAULT 'shared'");
   }
 
   // Migrate comfyui_servers table
