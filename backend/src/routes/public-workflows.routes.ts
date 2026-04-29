@@ -1,4 +1,7 @@
 import { Router, type Request, type Response } from 'express';
+import AdmZip from 'adm-zip';
+import fs from 'fs';
+import path from 'path';
 import { asyncHandler } from '../middleware/errorHandler';
 import { WorkflowModel } from '../models/Workflow';
 import { WorkflowServerModel } from '../models/ComfyUIServer';
@@ -8,6 +11,7 @@ import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
 import { GenerationQueueService } from '../services/generationQueueService';
 import { settingsService } from '../services/settingsService';
+import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
 import type { MarkedField, WorkflowRecord } from '../types/workflow';
 
 const router = Router();
@@ -92,8 +96,29 @@ function serializePublicWorkflow(workflow: WorkflowRecord, dropdownListMap: Map<
     is_public_page: workflow.is_public_page,
     public_slug: workflow.public_slug ?? null,
     public_queue_max_count: resolvePublicQueueMaxCount(workflow),
+    result_view_mode: workflow.result_view_mode,
+    artifact_directory_mode: workflow.artifact_directory_mode,
     marked_fields: resolveCustomDropdownMarkedFields(parseMarkedFields(workflow.marked_fields), dropdownListMap),
   };
+}
+
+function loadPublicArtifactWorkflow(req: Request, res: Response) {
+  const workflow = getPublicWorkflowOrNull(String(req.params.slug || ''));
+  if (!workflow) {
+    res.status(404).json({ success: false, error: 'Public workflow not found' });
+    return null;
+  }
+
+  if (workflow.result_view_mode !== 'artifact_explorer') {
+    res.status(400).json({ success: false, error: 'Public workflow is not configured for artifact explorer results' });
+    return null;
+  }
+
+  return workflow;
+}
+
+function contentDispositionValue(disposition: 'inline' | 'attachment', fileName: string) {
+  return `${disposition}; filename="${fileName.replace(/"/g, '_')}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }
 
 function parsePublicQueueEnqueueCount(value: unknown, workflow: WorkflowRecord) {
@@ -140,6 +165,101 @@ router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
     success: true,
     data: serializePublicWorkflow(workflow, dropdownListMap),
   });
+}));
+
+/** GET /api/public-workflows/:slug/artifacts */
+router.get('/:slug/artifacts', asyncHandler(async (req: Request, res: Response) => {
+  const workflow = loadPublicArtifactWorkflow(req, res);
+  if (!workflow) {
+    return;
+  }
+
+  try {
+    const publicSlug = workflow.public_slug ?? String(req.params.slug || '');
+    const listing = await listWorkflowArtifacts(
+      workflow,
+      typeof req.query.path === 'string' ? req.query.path : '',
+      { kind: 'public', publicSlug },
+    );
+    return res.json({
+      success: true,
+      data: {
+        workflowId: workflow.id,
+        resultViewMode: workflow.result_view_mode,
+        artifactDirectoryMode: workflow.artifact_directory_mode,
+        relativePath: listing.relativePath,
+        entries: listing.entries,
+      },
+    });
+  } catch (error) {
+    console.error('Error listing public workflow artifacts:', error);
+    return res.status(400).json({ success: false, error: 'Failed to list workflow artifacts' });
+  }
+}));
+
+/** GET /api/public-workflows/:slug/artifacts/archive */
+router.get('/:slug/artifacts/archive', asyncHandler(async (req: Request, res: Response) => {
+  const workflow = loadPublicArtifactWorkflow(req, res);
+  if (!workflow) {
+    return;
+  }
+
+  if (typeof req.query.path !== 'string' || req.query.path.trim().length === 0) {
+    return res.status(400).json({ success: false, error: 'Artifact directory path is required' });
+  }
+
+  try {
+    const resolved = resolveWorkflowArtifactPath(workflow, req.query.path);
+    const stat = await fs.promises.stat(resolved.target);
+    if (!stat.isDirectory()) {
+      return res.status(404).json({ success: false, error: 'Artifact directory not found' });
+    }
+
+    const archiveName = `${path.basename(resolved.target) || 'artifacts'}.zip`;
+    const zip = new AdmZip();
+    zip.addLocalFolder(resolved.target, path.basename(resolved.target) || 'artifacts');
+    const archiveBuffer = zip.toBuffer();
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', contentDispositionValue('attachment', archiveName));
+    res.setHeader('Content-Length', archiveBuffer.length);
+    return res.send(archiveBuffer);
+  } catch (error) {
+    console.error('Error archiving public workflow artifacts:', error);
+    return res.status(404).json({ success: false, error: 'Artifact directory not found' });
+  }
+}));
+
+/** GET /api/public-workflows/:slug/artifacts/file */
+router.get('/:slug/artifacts/file', asyncHandler(async (req: Request, res: Response) => {
+  const workflow = loadPublicArtifactWorkflow(req, res);
+  if (!workflow) {
+    return;
+  }
+
+  if (typeof req.query.path !== 'string' || req.query.path.trim().length === 0) {
+    return res.status(400).json({ success: false, error: 'Artifact file path is required' });
+  }
+
+  try {
+    const resolved = resolveWorkflowArtifactPath(workflow, req.query.path);
+    const stat = await fs.promises.stat(resolved.target);
+    if (!stat.isFile()) {
+      return res.status(404).json({ success: false, error: 'Artifact file not found' });
+    }
+
+    const fileName = path.basename(resolved.target);
+    if (req.query.download === '1') {
+      res.setHeader('Content-Disposition', contentDispositionValue('attachment', fileName));
+      return res.sendFile(resolved.target);
+    }
+
+    res.setHeader('Content-Disposition', contentDispositionValue('inline', fileName));
+    return res.sendFile(resolved.target);
+  } catch (error) {
+    console.error('Error serving public workflow artifact:', error);
+    return res.status(404).json({ success: false, error: 'Artifact file not found' });
+  }
 }));
 
 /** GET /api/public-workflows/:slug/history */

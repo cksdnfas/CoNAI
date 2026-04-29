@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { refreshGenerationQueueViews } from './components/generation-queue-actions'
 import { GenerationHistoryPanel } from './components/generation-history-panel'
 import { CompactGenerationActionSurface, CompactGenerationControllerActionBar, GenerationControllerFieldStack } from './components/shared-generation-controller'
+import { WorkflowArtifactExplorerPanel } from './components/workflow-artifact-explorer-panel'
 import { WorkflowFieldDisclosureCard } from './components/workflow-field-disclosure-card'
 import {
   buildWorkflowDraft,
@@ -76,6 +77,7 @@ export function PublicComfyWorkflowPage() {
 
   const workflow = workflowQuery.data ?? null
   const workflowFields = useMemo(() => workflow?.marked_fields ?? [], [workflow?.marked_fields])
+  const shouldShowArtifactExplorer = workflow?.result_view_mode === 'artifact_explorer'
   const publicQueueMaxCount = resolvePublicQueueMaxCount(workflow?.public_queue_max_count)
   const generationSaveOptions = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
   const useWideSplitPaneScroll = isWideLayout && workflow !== null
@@ -394,24 +396,42 @@ export function PublicComfyWorkflowPage() {
               {controllerPanel}
             </div>
             <div className={cn(useWideSplitPaneScroll && 'min-h-0 flex flex-col overflow-hidden')}>
+              {shouldShowArtifactExplorer ? (
+                <WorkflowArtifactExplorerPanel
+                  workflowId={workflow.id}
+                  publicWorkflowSlug={slug}
+                  refreshNonce={historyRefreshNonce}
+                  splitPaneScroll={useWideSplitPaneScroll}
+                />
+              ) : (
+                <GenerationHistoryPanel
+                  refreshNonce={historyRefreshNonce}
+                  serviceType="comfyui"
+                  workflowId={workflow.id}
+                  publicWorkflowSlug={slug}
+                  splitPaneScroll={useWideSplitPaneScroll}
+                />
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            {shouldShowArtifactExplorer ? (
+              <WorkflowArtifactExplorerPanel
+                workflowId={workflow.id}
+                publicWorkflowSlug={slug}
+                refreshNonce={historyRefreshNonce}
+                onBack={() => navigate('/access')}
+              />
+            ) : (
               <GenerationHistoryPanel
                 refreshNonce={historyRefreshNonce}
                 serviceType="comfyui"
                 workflowId={workflow.id}
                 publicWorkflowSlug={slug}
-                splitPaneScroll={useWideSplitPaneScroll}
+                onBack={() => navigate('/access')}
               />
-            </div>
-          </div>
-        ) : (
-          <>
-            <GenerationHistoryPanel
-              refreshNonce={historyRefreshNonce}
-              serviceType="comfyui"
-              workflowId={workflow.id}
-              publicWorkflowSlug={slug}
-              onBack={() => navigate('/access')}
-            />
+            )}
 
             {compactControllerActionBar}
 

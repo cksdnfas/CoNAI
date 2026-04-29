@@ -154,20 +154,30 @@ export function resolveWorkflowArtifactPath(workflow: Pick<WorkflowRecord, 'id' 
   return { root, target, relativePath: normalizedRelativePath }
 }
 
-function buildArtifactUrl(workflowId: number, relativePath: string, download = false) {
+type WorkflowArtifactUrlScope =
+  | { kind: 'workflow'; workflowId: number }
+  | { kind: 'public'; publicSlug: string }
+
+function artifactUrlBase(scope: WorkflowArtifactUrlScope) {
+  return scope.kind === 'public'
+    ? `/api/public-workflows/${encodeURIComponent(scope.publicSlug)}/artifacts`
+    : `/api/workflows/${scope.workflowId}/artifacts`
+}
+
+function buildArtifactUrl(scope: WorkflowArtifactUrlScope, relativePath: string, download = false) {
   const params = new URLSearchParams({ path: relativePath })
   if (download) {
     params.set('download', '1')
   }
-  return `/api/workflows/${workflowId}/artifacts/file?${params.toString()}`
+  return `${artifactUrlBase(scope)}/file?${params.toString()}`
 }
 
-function buildArtifactArchiveUrl(workflowId: number, relativePath: string) {
+function buildArtifactArchiveUrl(scope: WorkflowArtifactUrlScope, relativePath: string) {
   const params = new URLSearchParams({ path: relativePath })
-  return `/api/workflows/${workflowId}/artifacts/archive?${params.toString()}`
+  return `${artifactUrlBase(scope)}/archive?${params.toString()}`
 }
 
-export async function listWorkflowArtifacts(workflow: WorkflowRecord, relativePath?: string | null) {
+export async function listWorkflowArtifacts(workflow: WorkflowRecord, relativePath?: string | null, urlScope: WorkflowArtifactUrlScope = { kind: 'workflow', workflowId: workflow.id }) {
   const resolved = resolveWorkflowArtifactPath(workflow, relativePath)
   await fs.promises.mkdir(resolved.root, { recursive: true })
 
@@ -200,14 +210,14 @@ export async function listWorkflowArtifacts(workflow: WorkflowRecord, relativePa
     }
 
     if (isDirectory) {
-      entry.downloadUrl = buildArtifactArchiveUrl(workflow.id, itemRelativePath)
+      entry.downloadUrl = buildArtifactArchiveUrl(urlScope, itemRelativePath)
       const thumbnailRelativePath = await findDirectoryThumbnail(resolved.root, absolutePath)
       if (thumbnailRelativePath) {
-        entry.thumbnailUrl = buildArtifactUrl(workflow.id, thumbnailRelativePath)
+        entry.thumbnailUrl = buildArtifactUrl(urlScope, thumbnailRelativePath)
       }
     } else {
-      entry.fileUrl = buildArtifactUrl(workflow.id, itemRelativePath)
-      entry.downloadUrl = buildArtifactUrl(workflow.id, itemRelativePath, true)
+      entry.fileUrl = buildArtifactUrl(urlScope, itemRelativePath)
+      entry.downloadUrl = buildArtifactUrl(urlScope, itemRelativePath, true)
       if (isImageMimeType(entry.mimeType)) {
         entry.thumbnailUrl = entry.fileUrl
       }

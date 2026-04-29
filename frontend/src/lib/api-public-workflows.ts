@@ -1,5 +1,5 @@
 import { requestJson } from './api-image-generation-request'
-import type { GenerationHistoryRecord, PublicGenerationWorkflow } from './api-image-generation-types'
+import type { GenerationHistoryRecord, PublicGenerationWorkflow, WorkflowArtifactListing } from './api-image-generation-types'
 
 interface PublicWorkflowListResponse {
   success: boolean
@@ -15,6 +15,11 @@ interface PublicWorkflowHistoryResponse {
   success: boolean
   records: GenerationHistoryRecord[]
   total: number
+}
+
+interface PublicWorkflowArtifactsResponse {
+  success: boolean
+  data: WorkflowArtifactListing
 }
 
 interface PublicWorkflowQueueResponse {
@@ -42,6 +47,17 @@ export async function getPublicGenerationWorkflows() {
 
 export async function getPublicGenerationWorkflow(publicSlug: string) {
   const response = await requestJson<PublicWorkflowDetailResponse>(`/api/public-workflows/${encodeURIComponent(publicSlug)}`)
+  return response.data
+}
+
+export async function getPublicGenerationWorkflowArtifacts(publicSlug: string, path?: string) {
+  const searchParams = new URLSearchParams()
+  if (path) {
+    searchParams.set('path', path)
+  }
+
+  const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
+  const response = await requestJson<PublicWorkflowArtifactsResponse>(`/api/public-workflows/${encodeURIComponent(publicSlug)}/artifacts${suffix}`)
   return response.data
 }
 

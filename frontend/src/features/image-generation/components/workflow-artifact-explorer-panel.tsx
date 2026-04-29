@@ -4,12 +4,13 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Download, File, FileAudio, FileText, FileVideo, Folder, ImageIcon, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { getGenerationWorkflowArtifacts, type WorkflowArtifactEntry } from '@/lib/api'
+import { getGenerationWorkflowArtifacts, getPublicGenerationWorkflowArtifacts, type WorkflowArtifactEntry } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '../image-generation-shared'
 
 type WorkflowArtifactExplorerPanelProps = {
   workflowId: number
+  publicWorkflowSlug?: string | null
   refreshNonce?: number
   splitPaneScroll?: boolean
   onBack?: () => void
@@ -168,13 +169,15 @@ function ArtifactCard({
   )
 }
 
-export function WorkflowArtifactExplorerPanel({ workflowId, refreshNonce = 0, splitPaneScroll = false, onBack }: WorkflowArtifactExplorerPanelProps) {
+export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug = null, refreshNonce = 0, splitPaneScroll = false, onBack }: WorkflowArtifactExplorerPanelProps) {
   const [currentPath, setCurrentPath] = useState('')
   const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null)
   const [artifactModal, setArtifactModal] = useState<ArtifactModalState | null>(null)
   const artifactsQuery = useQuery({
-    queryKey: ['workflow-artifacts', workflowId, currentPath, refreshNonce],
-    queryFn: () => getGenerationWorkflowArtifacts(workflowId, currentPath),
+    queryKey: ['workflow-artifacts', publicWorkflowSlug ?? 'private', workflowId, currentPath, refreshNonce],
+    queryFn: () => publicWorkflowSlug
+      ? getPublicGenerationWorkflowArtifacts(publicWorkflowSlug, currentPath)
+      : getGenerationWorkflowArtifacts(workflowId, currentPath),
   })
 
   const breadcrumbs = useMemo(() => {

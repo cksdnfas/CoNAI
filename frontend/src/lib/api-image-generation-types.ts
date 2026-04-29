@@ -386,6 +386,8 @@ export interface PublicGenerationWorkflow {
   is_public_page: boolean
   public_slug?: string | null
   public_queue_max_count?: number | null
+  result_view_mode: WorkflowResultViewMode
+  artifact_directory_mode: WorkflowArtifactDirectoryMode
   marked_fields: WorkflowMarkedField[]
 }
 
