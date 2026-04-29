@@ -98,6 +98,47 @@ function serializeFrontendBootstrap(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
+function parsePositiveEnvNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const API_PERF_LOG_THRESHOLD_MS = parsePositiveEnvNumber(process.env.CONAI_API_PERF_LOG_THRESHOLD_MS, 250);
+
+/** Register file-only latency probes for API routes so event-loop stalls have route evidence. */
+function registerApiLatencyProbe(app: Express): void {
+  if (process.env.CONAI_API_PERF_LOGS === 'false') {
+    return;
+  }
+
+  app.use('/api', (req, res, next) => {
+    const startedAt = Date.now();
+
+    res.once('finish', () => {
+      const elapsedMs = Date.now() - startedAt;
+      if (elapsedMs < API_PERF_LOG_THRESHOLD_MS) {
+        return;
+      }
+
+      const contentLengthHeader = res.getHeader('content-length');
+      const contentLength = typeof contentLengthHeader === 'number' || typeof contentLengthHeader === 'string'
+        ? Number(contentLengthHeader)
+        : null;
+
+      logger.debug('[ApiPerf][slow-request]', {
+        method: req.method,
+        url: req.originalUrl,
+        statusCode: res.statusCode,
+        elapsedMs,
+        contentLength: Number.isFinite(contentLength) ? contentLength : null,
+        rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+      });
+    });
+
+    next();
+  });
+}
+
 /** Render the integrated frontend index with auth and appearance bootstrap payloads. */
 function renderIntegratedFrontendIndex(req: Request, res: Response, htmlTemplate: string): string {
   const authStatus = buildAuthStatusPayload(req);
@@ -127,6 +168,8 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
       uptime: process.uptime(),
     });
   });
+
+  registerApiLatencyProbe(app);
 
   app.use('/api/auth', authRoutes);
   app.use('/api/external-api', optionalAuth, externalApiRoutes);

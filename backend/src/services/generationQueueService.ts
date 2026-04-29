@@ -11,6 +11,7 @@ import { parseStoredRequestPayload, resolveFailureMessage } from './generation-q
 import type { ServiceType } from '../models/GenerationHistory'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus, GenerationQueueJobUpdateData } from '../types/generationQueue'
+import { logger } from '../utils/logger'
 
 const ALLOWED_TRANSITIONS: Record<GenerationQueueJobStatus, GenerationQueueJobStatus[]> = {
   queued: ['dispatching', 'cancelled', 'failed'],
@@ -22,6 +23,8 @@ const ALLOWED_TRANSITIONS: Record<GenerationQueueJobStatus, GenerationQueueJobSt
 }
 
 const DISPATCH_INTERVAL_MS = 3000
+const DISPATCH_PERF_LOG_THRESHOLD_MS = 100
+const DISPATCH_QUEUE_SIZE_LOG_THRESHOLD = 10
 const NAI_WORKER_KEY = 'novelai'
 const CODEX_WORKER_KEY = 'codex'
 
@@ -562,9 +565,22 @@ export class GenerationQueueService {
       return
     }
 
+    const startedAt = Date.now()
     this.tryStartNovelAiWorker()
     this.tryStartCodexWorker()
-    await this.tryStartComfyWorkers()
+    const comfySummary = await this.tryStartComfyWorkers()
+    const elapsedMs = Date.now() - startedAt
+
+    if (comfySummary.queuedCount >= DISPATCH_QUEUE_SIZE_LOG_THRESHOLD || elapsedMs >= DISPATCH_PERF_LOG_THRESHOLD_MS) {
+      logger.debug('[GenerationQueuePerf][dispatch-tick]', {
+        queuedComfyJobs: comfySummary.queuedCount,
+        failedIncompatibleJobs: comfySummary.failedIncompatibleCount,
+        startedComfyJobs: comfySummary.startedCount,
+        activeWorkers: this.activeWorkerKeys.size,
+        pendingDispatch: this.dispatchTickPending,
+        elapsedMs,
+      })
+    }
   }
 
   private static getServiceThrottleConfig(serviceType: ThrottledServiceType) {
@@ -647,18 +663,19 @@ export class GenerationQueueService {
     this.tryStartThrottledServiceWorkers('codex', CODEX_WORKER_KEY, 'Codex')
   }
 
-  private static async tryStartComfyWorkers() {
+  private static async tryStartComfyWorkers(): Promise<{ queuedCount: number; failedIncompatibleCount: number; startedCount: number }> {
     const activeServers = ComfyUIServerModel.findActiveServers()
 
     if (activeServers.length === 0) {
-      return
+      return { queuedCount: 0, failedIncompatibleCount: 0, startedCount: 0 }
     }
 
     const queuedJobs = GenerationQueueModel.findQueuedComfyJobs()
     if (queuedJobs.length === 0) {
-      return
+      return { queuedCount: 0, failedIncompatibleCount: 0, startedCount: 0 }
     }
 
+    let startedCount = 0
     const failedJobIds = new Set<number>()
     for (const job of queuedJobs) {
       const hasCompatibleServer = activeServers.some((server) => isGenerationQueueComfyJobCompatibleWithServer(job, server, activeServers))
@@ -672,7 +689,7 @@ export class GenerationQueueService {
 
     const runnableQueuedJobs = queuedJobs.filter((job) => !failedJobIds.has(job.id))
     if (runnableQueuedJobs.length === 0) {
-      return
+      return { queuedCount: queuedJobs.length, failedIncompatibleCount: failedJobIds.size, startedCount }
     }
 
     const runtimeStatuses = await getComfyUIServerRuntimeStatuses(activeServers)
@@ -710,6 +727,7 @@ export class GenerationQueueService {
 
       reservedJobIds.add(job.id)
       this.activeWorkerKeys.add(workerKey)
+      startedCount += 1
       void this.runClaimedJob(job, server)
         .catch((error) => {
           console.error(`❌ ComfyUI queue worker failed for job ${job.id} on server ${server.id}:`, error)
@@ -719,6 +737,8 @@ export class GenerationQueueService {
           this.requestDispatch()
         })
     }
+
+    return { queuedCount: queuedJobs.length, failedIncompatibleCount: failedJobIds.size, startedCount }
   }
 
   private static async runClaimedJob(job: GenerationQueueJobRecord, assignedServer?: ComfyUIServerRecord | null) {

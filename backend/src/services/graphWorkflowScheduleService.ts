@@ -7,9 +7,11 @@ import type {
 } from '../types/moduleGraph'
 import { GraphWorkflowExecutionQueue } from './graphWorkflowExecutionQueue'
 import { buildRuntimeInputSignature } from './graph-workflow-executor/shared'
+import { logger } from '../utils/logger'
 
 const DEFAULT_POLL_INTERVAL_MS = 15_000
 const DEFAULT_SCHEDULE_TIMEZONE = 'Asia/Seoul'
+const SCHEDULE_PERF_LOG_THRESHOLD_MS = 50
 
 function parseInputValues(schedule: GraphWorkflowScheduleRecord) {
   if (!schedule.input_values) {
@@ -199,6 +201,7 @@ export class GraphWorkflowScheduleService {
 
   /** Validate one due schedule and enqueue the configured number of next executions when allowed. */
   private static async handleDueSchedule(schedule: GraphWorkflowScheduleRecord, now: Date) {
+    const startedAt = Date.now()
     const workflow = GraphWorkflowModel.findById(schedule.graph_workflow_id)
     if (!workflow) {
       GraphWorkflowScheduleModel.update(schedule.id, {
@@ -313,5 +316,20 @@ export class GraphWorkflowScheduleService {
       stop_reason_code: completionReasonCode,
       stop_reason_message: completionReasonMessage,
     })
+
+    const elapsedMs = Date.now() - startedAt
+    if (allowedEnqueueCount > 1 || elapsedMs >= SCHEDULE_PERF_LOG_THRESHOLD_MS) {
+      logger.debug('[GraphSchedulePerf][due-schedule]', {
+        scheduleId: schedule.id,
+        workflowId: schedule.graph_workflow_id,
+        requestedEnqueueCount,
+        allowedEnqueueCount,
+        enqueuedCount: executionIds.length,
+        activeOverlapCount,
+        reservedRunCount,
+        nextStatus,
+        elapsedMs,
+      })
+    }
   }
 }
