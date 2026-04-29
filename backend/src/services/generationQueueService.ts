@@ -576,6 +576,7 @@ export class GenerationQueueService {
         queuedComfyJobs: comfySummary.queuedCount,
         failedIncompatibleJobs: comfySummary.failedIncompatibleCount,
         startedComfyJobs: comfySummary.startedCount,
+        skippedBusyWorkers: comfySummary.skippedBusyWorkers,
         activeWorkers: this.activeWorkerKeys.size,
         pendingDispatch: this.dispatchTickPending,
         elapsedMs,
@@ -663,16 +664,16 @@ export class GenerationQueueService {
     this.tryStartThrottledServiceWorkers('codex', CODEX_WORKER_KEY, 'Codex')
   }
 
-  private static async tryStartComfyWorkers(): Promise<{ queuedCount: number; failedIncompatibleCount: number; startedCount: number }> {
+  private static async tryStartComfyWorkers(): Promise<{ queuedCount: number; failedIncompatibleCount: number; startedCount: number; skippedBusyWorkers: number }> {
     const activeServers = ComfyUIServerModel.findActiveServers()
 
     if (activeServers.length === 0) {
-      return { queuedCount: 0, failedIncompatibleCount: 0, startedCount: 0 }
+      return { queuedCount: 0, failedIncompatibleCount: 0, startedCount: 0, skippedBusyWorkers: 0 }
     }
 
     const queuedJobs = GenerationQueueModel.findQueuedComfyJobs()
     if (queuedJobs.length === 0) {
-      return { queuedCount: 0, failedIncompatibleCount: 0, startedCount: 0 }
+      return { queuedCount: 0, failedIncompatibleCount: 0, startedCount: 0, skippedBusyWorkers: 0 }
     }
 
     let startedCount = 0
@@ -689,14 +690,20 @@ export class GenerationQueueService {
 
     const runnableQueuedJobs = queuedJobs.filter((job) => !failedJobIds.has(job.id))
     if (runnableQueuedJobs.length === 0) {
-      return { queuedCount: queuedJobs.length, failedIncompatibleCount: failedJobIds.size, startedCount }
+      return { queuedCount: queuedJobs.length, failedIncompatibleCount: failedJobIds.size, startedCount, skippedBusyWorkers: 0 }
     }
 
-    const runtimeStatuses = await getComfyUIServerRuntimeStatuses(activeServers)
+    const availableServers = activeServers.filter((server) => !this.activeWorkerKeys.has(`comfyui:${server.id}`))
+    const skippedBusyWorkers = activeServers.length - availableServers.length
+    if (availableServers.length === 0) {
+      return { queuedCount: queuedJobs.length, failedIncompatibleCount: failedJobIds.size, startedCount, skippedBusyWorkers }
+    }
+
+    const runtimeStatuses = await getComfyUIServerRuntimeStatuses(availableServers)
     const statusByServerId = new Map(runtimeStatuses.map((status) => [status.server_id, status]))
     const reservedJobIds = new Set<number>()
 
-    for (const server of activeServers) {
+    for (const server of availableServers) {
       const workerKey = `comfyui:${server.id}`
       if (this.activeWorkerKeys.has(workerKey)) {
         continue
@@ -738,7 +745,7 @@ export class GenerationQueueService {
         })
     }
 
-    return { queuedCount: queuedJobs.length, failedIncompatibleCount: failedJobIds.size, startedCount }
+    return { queuedCount: queuedJobs.length, failedIncompatibleCount: failedJobIds.size, startedCount, skippedBusyWorkers }
   }
 
   private static async runClaimedJob(job: GenerationQueueJobRecord, assignedServer?: ComfyUIServerRecord | null) {
