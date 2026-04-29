@@ -14,7 +14,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../generationQueueRouting'
 import { GenerationQueueService } from '../generationQueueService'
 import { ImageUploadService } from '../imageUploadService'
-import { saveArtifactBuffer, saveMetadataArtifact } from './artifacts'
+import { saveArtifactBuffer, saveArtifactFileReference, saveMetadataArtifact } from './artifacts'
 import {
   bufferToDataUrl,
   normalizeOptionalString,
@@ -241,6 +241,25 @@ async function waitForQueueCompletion(context: ExecutionContext, nodeId: string,
   }
 }
 
+function isFinalResultTarget(context: ExecutionContext, targetNodeId: string) {
+  const targetNode = context.workflow.graph.nodes.find((candidate) => candidate.id === targetNodeId)
+  if (!targetNode) {
+    return false
+  }
+
+  const targetModule = context.modulesById.get(targetNode.module_id)
+  return targetModule?.internal_fixed_values?.operation_key === 'system.final_result'
+}
+
+function shouldMaterializeQueueBackedOutputValue(context: ExecutionContext, nodeId: string, outputPortKey: string) {
+  const outgoingEdges = context.workflow.graph.edges.filter((edge) => edge.source_node_id === nodeId && edge.source_port_key === outputPortKey)
+  if (outgoingEdges.length === 0) {
+    return false
+  }
+
+  return outgoingEdges.some((edge) => !isFinalResultTarget(context, edge.target_node_id))
+}
+
 async function resolveQueueBackedOutput(params: {
   context: ExecutionContext
   node: GraphWorkflowNode
@@ -271,24 +290,60 @@ async function resolveQueueBackedOutput(params: {
   }
 
   const absoluteOriginalPath = path.isAbsolute(originalPath) ? originalPath : resolveUploadsPath(originalPath)
-  const outputBuffer = await fs.promises.readFile(absoluteOriginalPath)
   const resolvedMimeType = normalizeOptionalString(debug.result_mime_type)
     ?? FileDiscoveryService.getMimeType(absoluteOriginalPath)
   const artifactType: 'file' | 'image' = resolvedMimeType.startsWith('video/') ? 'file' : 'image'
-  const outputDataUrl = bufferToDataUrl(outputBuffer, resolvedMimeType)
   const originalFileName = path.basename(absoluteOriginalPath)
-  const { storagePath, artifactRecordId } = await saveArtifactBuffer(
-    params.context.executionId,
-    params.node.id,
-    params.outputPortKey,
-    artifactType,
-    outputBuffer,
-    {
-      mimeType: resolvedMimeType,
-      sourcePathForMetadata: absoluteOriginalPath,
-      originalFileName,
-    },
-  )
+  const shouldMaterializeValue = shouldMaterializeQueueBackedOutputValue(params.context, params.node.id, params.outputPortKey)
+
+  let outputValue: unknown = {
+    storagePath: absoluteOriginalPath,
+    mimeType: resolvedMimeType,
+    fileName: originalFileName,
+    compositeHash,
+  }
+  let storagePath: string
+  let artifactRecordId: number
+
+  if (shouldMaterializeValue) {
+    const outputBuffer = await fs.promises.readFile(absoluteOriginalPath)
+    outputValue = bufferToDataUrl(outputBuffer, resolvedMimeType)
+    const savedArtifact = await saveArtifactBuffer(
+      params.context.executionId,
+      params.node.id,
+      params.outputPortKey,
+      artifactType,
+      outputBuffer,
+      {
+        mimeType: resolvedMimeType,
+        sourcePathForMetadata: absoluteOriginalPath,
+        originalFileName,
+      },
+    )
+    storagePath = savedArtifact.storagePath
+    artifactRecordId = savedArtifact.artifactRecordId
+  } else {
+    const referencedArtifact = await saveArtifactFileReference(
+      params.context.executionId,
+      params.node.id,
+      params.outputPortKey,
+      artifactType,
+      absoluteOriginalPath,
+      {
+        mimeType: resolvedMimeType,
+        metadata: {
+          module: params.moduleDefinition.name,
+          outputKind: artifactType === 'file' ? 'video' : 'image',
+          originalFileName,
+          queueJobId: completedJob.id,
+          historyId,
+          compositeHash,
+        },
+      },
+    )
+    storagePath = referencedArtifact.storagePath
+    artifactRecordId = referencedArtifact.artifactRecordId
+  }
 
   const metadataValue = {
     workflow_id: params.moduleDefinition.template_defaults?.workflow_id ?? params.moduleDefinition.source_workflow_id ?? null,
@@ -309,7 +364,7 @@ async function resolveQueueBackedOutput(params: {
   const nodeArtifacts: Record<string, RuntimeArtifact> = {
     [params.outputPortKey]: {
       type: artifactType,
-      value: outputDataUrl,
+      value: outputValue,
       storagePath,
       artifactRecordId,
       metadata: {

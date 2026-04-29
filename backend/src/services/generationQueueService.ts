@@ -39,6 +39,8 @@ export class GenerationQueueService {
   private static started = false
   private static dispatcherHandle: ReturnType<typeof setInterval> | null = null
   private static dispatchTickScheduled = false
+  private static dispatchTickRunning = false
+  private static dispatchTickPending = false
   private static activeWorkerKeys = new Set<string>()
   private static serviceThrottleState: Record<ThrottledServiceType, ServiceThrottleState> = {
     novelai: { completedSinceCooldown: 0, cooldownUntil: null },
@@ -72,6 +74,8 @@ export class GenerationQueueService {
 
     this.started = false
     this.dispatchTickScheduled = false
+    this.dispatchTickRunning = false
+    this.dispatchTickPending = false
     if (this.dispatcherHandle) {
       clearInterval(this.dispatcherHandle)
       this.dispatcherHandle = null
@@ -86,21 +90,39 @@ export class GenerationQueueService {
 
   /** Schedule one dispatcher pass without waiting for the next poll interval. */
   static requestDispatch() {
-    if (!this.started || this.dispatchTickScheduled) {
+    if (!this.started) {
+      return false
+    }
+
+    if (this.dispatchTickScheduled || this.dispatchTickRunning) {
+      this.dispatchTickPending = true
       return false
     }
 
     this.dispatchTickScheduled = true
     queueMicrotask(() => {
       this.dispatchTickScheduled = false
-      if (!this.started) {
-        return
-      }
-
-      void this.dispatchTick()
+      void this.runDispatchTick()
     })
 
     return true
+  }
+
+  private static async runDispatchTick() {
+    if (!this.started || this.dispatchTickRunning) {
+      return
+    }
+
+    this.dispatchTickRunning = true
+    try {
+      await this.dispatchTick()
+    } finally {
+      this.dispatchTickRunning = false
+      if (this.started && this.dispatchTickPending) {
+        this.dispatchTickPending = false
+        this.requestDispatch()
+      }
+    }
   }
 
   private static resolveComfyCancellationEndpoint(job: GenerationQueueJobRecord, assignedServer?: ComfyUIServerRecord | null) {

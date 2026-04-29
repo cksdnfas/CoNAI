@@ -121,6 +121,39 @@ export async function saveArtifactBuffer(
   }
 }
 
+/** Persist a graph artifact row that references an already-saved file without copying or re-encoding it. */
+export async function saveArtifactFileReference(
+  executionId: number,
+  nodeId: string,
+  portKey: string,
+  artifactType: ModulePortDataType | 'file',
+  storagePath: string,
+  options?: {
+    mimeType?: string
+    metadata?: Record<string, unknown>
+  },
+) {
+  const stats = await fs.promises.stat(storagePath)
+  const artifactRecordId = GraphExecutionArtifactModel.create({
+    execution_id: executionId,
+    node_id: nodeId,
+    port_key: portKey,
+    artifact_type: artifactType,
+    storage_path: storagePath,
+    metadata: JSON.stringify({
+      size: stats.size,
+      mimeType: options?.mimeType || 'application/octet-stream',
+      referencedExistingFile: true,
+      ...(options?.metadata ?? {}),
+    }),
+  })
+
+  return {
+    storagePath,
+    artifactRecordId,
+  }
+}
+
 /** Look up the source artifact feeding a graph edge. */
 export function getSourceArtifact(context: ExecutionContext, edge: GraphWorkflowEdge) {
   const nodeArtifacts = context.artifactsByNode.get(edge.source_node_id)
