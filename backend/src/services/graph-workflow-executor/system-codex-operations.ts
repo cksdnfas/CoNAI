@@ -4,6 +4,7 @@ import { resolveUploadsPath } from '../../config/runtimePaths'
 import { GenerationHistoryModel } from '../../models/GenerationHistory'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
+import { recordCadenceEvent } from '../../utils/cadenceLogger'
 import { ImageUploadService } from '../imageUploadService'
 import { settingsService } from '../settingsService'
 import { saveArtifactBuffer, saveMetadataArtifact } from './artifacts'
@@ -187,6 +188,11 @@ async function requestQueueCancellation(jobId: number) {
 
 async function waitForQueueCompletion(context: ExecutionContext, nodeId: string, jobId: number) {
   while (true) {
+    recordCadenceEvent('graph-wait codex-queue-db-poll', {
+      executionId: context.executionId,
+      nodeId,
+      jobId,
+    })
     if (context.shouldCancel?.()) {
       await requestQueueCancellation(jobId)
       writeExecutionLog({

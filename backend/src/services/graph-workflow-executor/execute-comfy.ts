@@ -25,6 +25,7 @@ import {
   type RuntimeArtifact,
 } from './shared'
 import { type GenerationQueueJobRecord } from '../../types/generationQueue'
+import { recordCadenceEvent } from '../../utils/cadenceLogger'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 
 const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
@@ -213,6 +214,11 @@ async function waitForQueueCompletion(context: ExecutionContext, nodeId: string,
   let terminalWait: Promise<GenerationQueueJobRecord | null> | null = null
 
   while (true) {
+    recordCadenceEvent('graph-wait comfy-queue-wait-loop', {
+      executionId: context.executionId,
+      nodeId,
+      jobId,
+    })
     if (context.shouldCancel?.()) {
       await requestQueueCancellation(jobId)
       writeExecutionLog({

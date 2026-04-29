@@ -42,6 +42,7 @@ import { allowAnonymousPermission, optionalAuth, requireAuth, requirePermission 
 import { buildAuthStatusPayload } from '../routes/auth-route-helpers';
 import { settingsService } from '../services/settingsService';
 import { logger } from '../utils/logger';
+import { recordCadenceEvent } from '../utils/cadenceLogger';
 
 export interface RegisterAppRoutesOptions {
   uploadsDir: string;
@@ -105,6 +106,15 @@ function parsePositiveEnvNumber(value: string | undefined, fallback: number): nu
 
 const API_PERF_LOG_THRESHOLD_MS = parsePositiveEnvNumber(process.env.CONAI_API_PERF_LOG_THRESHOLD_MS, 250);
 
+function normalizeApiCadencePath(originalUrl: string) {
+  const pathname = originalUrl.split('?')[0] || originalUrl;
+  return pathname
+    .replace(/\/executions\/\d+/g, '/executions/:id')
+    .replace(/\/schedules\/\d+/g, '/schedules/:id')
+    .replace(/\/nodes\/[^/]+/g, '/nodes/:nodeId')
+    .replace(/\/\d+(?=\/|$)/g, '/:id');
+}
+
 /** Register file-only latency probes for API routes so event-loop stalls have route evidence. */
 function registerApiLatencyProbe(app: Express): void {
   if (process.env.CONAI_API_PERF_LOGS === 'false') {
@@ -113,6 +123,9 @@ function registerApiLatencyProbe(app: Express): void {
 
   app.use('/api', (req, res, next) => {
     const startedAt = Date.now();
+    recordCadenceEvent(`api ${req.method} ${normalizeApiCadencePath(req.originalUrl)}`, {
+      query: req.originalUrl.includes('?') ? req.originalUrl.split('?')[1] : null,
+    });
 
     res.once('finish', () => {
       const elapsedMs = Date.now() - startedAt;

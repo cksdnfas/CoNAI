@@ -8,6 +8,7 @@ import type {
 import { GraphWorkflowExecutionQueue } from './graphWorkflowExecutionQueue'
 import { buildRuntimeInputSignature } from './graph-workflow-executor/shared'
 import { logger } from '../utils/logger'
+import { recordCadenceEvent } from '../utils/cadenceLogger'
 
 const DEFAULT_POLL_INTERVAL_MS = 15_000
 const DEFAULT_SCHEDULE_TIMEZONE = 'Asia/Seoul'
@@ -181,6 +182,7 @@ export class GraphWorkflowScheduleService {
 
   /** Poll due schedules and enqueue the work that is now safe to reserve. */
   private static async pollDueSchedules() {
+    recordCadenceEvent('graph-schedule poll-due-schedules', { isPolling: this.isPolling })
     if (this.isPolling) {
       return
     }

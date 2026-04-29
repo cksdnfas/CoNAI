@@ -45,6 +45,7 @@ import { prepareHttpsOptions } from './utils/httpsOptions';
 import { getNetworkInfo, formatNetworkInfo } from './utils/networkInfo';
 import { StartupCheck } from './utils/startupCheck';
 import { startEventLoopLagMonitor } from './utils/eventLoopLagMonitor';
+import { startCadenceLogger } from './utils/cadenceLogger';
 
 import { initializeDatabase } from './database/init';
 import { initializeUserSettingsDb } from './database/userSettingsDb';
@@ -95,6 +96,7 @@ const trustProxySetting = resolveTrustProxySetting();
 app.set('trust proxy', trustProxySetting);
 console.log(`[Config] Express trust proxy: ${String(trustProxySetting)}`);
 startEventLoopLagMonitor();
+startCadenceLogger();
 
 const skipAdminRateLimit = (req: Request): boolean => req.session?.accountType === 'admin';
 

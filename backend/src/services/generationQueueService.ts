@@ -12,6 +12,7 @@ import type { ServiceType } from '../models/GenerationHistory'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus, GenerationQueueJobUpdateData } from '../types/generationQueue'
 import { logger } from '../utils/logger'
+import { recordCadenceEvent } from '../utils/cadenceLogger'
 
 const ALLOWED_TRANSITIONS: Record<GenerationQueueJobStatus, GenerationQueueJobStatus[]> = {
   queued: ['dispatching', 'cancelled', 'failed'],
@@ -98,6 +99,12 @@ export class GenerationQueueService {
 
   /** Schedule one dispatcher pass without waiting for the next poll interval. */
   static requestDispatch() {
+    recordCadenceEvent('generation-queue request-dispatch', {
+      scheduled: this.dispatchTickScheduled,
+      running: this.dispatchTickRunning,
+      pending: this.dispatchTickPending,
+      activeWorkers: this.activeWorkerKeys.size,
+    })
     if (!this.started) {
       return false
     }
@@ -561,6 +568,10 @@ export class GenerationQueueService {
   }
 
   private static async dispatchTick() {
+    recordCadenceEvent('generation-queue dispatch-tick', {
+      activeWorkers: this.activeWorkerKeys.size,
+      pending: this.dispatchTickPending,
+    })
     if (!this.started) {
       return
     }
