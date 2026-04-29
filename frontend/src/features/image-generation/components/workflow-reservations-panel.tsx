@@ -36,16 +36,6 @@ export function WorkflowReservationsPanel() {
   const reservationsQuery = useQuery({
     queryKey: ['module-graph-browse-content', 'generation-reservations', 'root'],
     queryFn: () => getGraphWorkflowBrowseContent(null, { includeOutputs: false }),
-    refetchInterval: (query) => {
-      const data = query.state.data
-      if (!data) {
-        return false
-      }
-
-      const hasActiveExecutions = data.empty_executions.some((execution) => isActiveReservationExecution(execution.status))
-      const hasActiveSchedules = data.schedules.some((schedule) => schedule.status === 'active')
-      return hasActiveExecutions || hasActiveSchedules ? 4000 : false
-    },
   })
 
   const reservationContent = reservationsQuery.data

@@ -31,6 +31,38 @@ export function createGraphWorkflowExecutionRoutes() {
     }
   }))
 
+  router.get('/executions/:executionId/status', asyncHandler(async (req: Request, res: Response) => {
+    const executionId = parseGraphRouteInteger(req.params.executionId)
+    if (isNaN(executionId)) {
+      return sendRouteBadRequest(res, 'Invalid execution ID')
+    }
+
+    try {
+      const execution = GraphExecutionModel.findById(executionId)
+      if (!execution) {
+        return res.status(404).json({ success: false, error: 'Execution not found' } as ModuleGraphResponse)
+      }
+
+      const runtimeState = GraphWorkflowExecutionQueue.getExecutionRuntimeState(executionId)
+      return res.json({
+        success: true,
+        data: {
+          id: execution.id,
+          status: execution.status,
+          updated_date: execution.updated_date,
+          completed_at: execution.completed_at,
+          error_message: execution.error_message,
+          failed_node_id: execution.failed_node_id,
+          queue_position: runtimeState.queue_position,
+          cancel_requested: runtimeState.cancel_requested,
+        },
+      } as ModuleGraphResponse)
+    } catch (error) {
+      console.error('Error getting graph execution status:', error)
+      return res.status(500).json({ success: false, error: 'Failed to get graph execution status' } as ModuleGraphResponse)
+    }
+  }))
+
   router.get('/executions/:executionId', asyncHandler(async (req: Request, res: Response) => {
     const executionId = parseGraphRouteInteger(req.params.executionId)
     if (isNaN(executionId)) {

@@ -1,9 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getAppSettings,
   getGraphExecution,
   getGraphWorkflowBrowseContent,
   getGraphWorkflowExecutions,
+  getGraphExecutionStatus,
   getGraphWorkflowFolders,
   getGraphWorkflows,
   getModuleDefinitions,
@@ -13,6 +15,10 @@ import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 
 /** Own the data queries and lightweight derived query state used by the module-graph page. */
+function isActiveExecutionStatus(status: GraphExecutionRecord['status'] | undefined) {
+  return status === 'queued' || status === 'running'
+}
+
 export function useModuleGraphPageQueries({
   selectedGraphId,
   selectedExecutionId,
@@ -24,6 +30,8 @@ export function useModuleGraphPageQueries({
   selectedFolderId: number | null
   workflowView: 'browse' | 'edit'
 }) {
+  const queryClient = useQueryClient()
+
   const modulesQuery = useQuery({
     queryKey: ['module-graph-modules'],
     queryFn: () => getModuleDefinitions(true),
@@ -49,21 +57,33 @@ export function useModuleGraphPageQueries({
     queryKey: ['module-graph-executions', selectedGraphId],
     queryFn: () => getGraphWorkflowExecutions(selectedGraphId as number),
     enabled: selectedGraphId !== null,
-    refetchInterval: (query) => {
-      const records = (query.state.data as GraphExecutionRecord[] | undefined) ?? []
-      return records.some((record) => record.status === 'queued' || record.status === 'running') ? 1500 : false
-    },
   })
 
   const executionDetailQuery = useQuery({
     queryKey: ['module-graph-execution-detail', selectedExecutionId],
     queryFn: () => getGraphExecution(selectedExecutionId as number),
     enabled: selectedExecutionId !== null,
-    refetchInterval: (query) => {
-      const status = query.state.data?.execution.status
-      return status === 'queued' || status === 'running' ? 1500 : false
-    },
   })
+
+  const selectedExecutionStatus = executionDetailQuery.data?.execution.status
+  const executionStatusQuery = useQuery({
+    queryKey: ['module-graph-execution-status', selectedExecutionId],
+    queryFn: () => getGraphExecutionStatus(selectedExecutionId as number),
+    enabled: selectedExecutionId !== null && isActiveExecutionStatus(selectedExecutionStatus),
+    refetchInterval: 10_000,
+  })
+
+  useEffect(() => {
+    const status = executionStatusQuery.data?.status
+    if (!selectedExecutionId || isActiveExecutionStatus(status)) {
+      return
+    }
+
+    void queryClient.invalidateQueries({ queryKey: ['module-graph-execution-detail', selectedExecutionId] })
+    if (selectedGraphId !== null) {
+      void queryClient.invalidateQueries({ queryKey: ['module-graph-executions', selectedGraphId] })
+    }
+  }, [executionStatusQuery.data?.status, queryClient, selectedExecutionId, selectedGraphId])
 
   const browseContentQuery = useQuery({
     queryKey: ['module-graph-browse-content', selectedFolderId ?? 'root'],

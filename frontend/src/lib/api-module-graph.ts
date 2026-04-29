@@ -737,6 +737,23 @@ export async function getGraphWorkflowExecutions(workflowId: number) {
   return response.data
 }
 
+export interface GraphExecutionStatusRecord {
+  id: number
+  status: GraphExecutionRecord['status']
+  updated_date: string
+  completed_at?: string | null
+  error_message?: string | null
+  failed_node_id?: string | null
+  queue_position?: number | null
+  cancel_requested?: boolean
+}
+
+/** Load one graph execution's lightweight status only. */
+export async function getGraphExecutionStatus(executionId: number) {
+  const response = await requestJson<ApiEnvelope<GraphExecutionStatusRecord>>(`/api/graph-workflows/executions/${executionId}/status`)
+  return response.data
+}
+
 /** Load a graph execution with its stored artifacts. */
 export async function getGraphExecution(executionId: number) {
   const response = await requestJson<ApiEnvelope<{
