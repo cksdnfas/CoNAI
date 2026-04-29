@@ -263,16 +263,9 @@ export class AutoCollectionOrchestrator {
 
           // ComplexFilter format
           if (this.isComplexFilter(parsedConditions)) {
-            const searchResult = await ComplexFilterService.executeComplexSearch(
-              parsedConditions,
-              undefined,
-              { page: 1, limit: 1 }
-            );
-
-            // Check if current image is in results
-            matches = searchResult.images.some(
-              (img: any) => img.composite_hash === compositeHash
-            );
+            // New-image auto-collection must only evaluate the current image.
+            // Whole-group rebuilds are reserved for explicit user rebuild actions.
+            matches = ComplexFilterService.matchesImage(parsedConditions, image);
           } else {
             // Legacy format
             const conditions: AutoCollectCondition[] = parsedConditions;

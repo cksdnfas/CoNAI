@@ -1,7 +1,9 @@
 import { getToken } from '../../utils/nai/auth'
+import path from 'path'
 import { type NAIMetadataInputParams } from '../../utils/nai/metadata'
 import { executeNaiGeneration } from '../naiGenerationExecutor'
-import { saveArtifactBuffer, saveMetadataArtifact } from './artifacts'
+import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
+import { saveArtifactBuffer, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
 import {
   bufferToDataUrl,
   writeExecutionLog,
@@ -37,11 +39,18 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
   }
 
   const imageBuffer = firstEntry
-  const imageDataUrl = bufferToDataUrl(imageBuffer)
   const { storagePath, artifactRecordId } = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
     mimeType: 'image/png',
     originalFileName: `nai-${node.id}.png`,
   })
+  const shouldMaterializeValue = shouldMaterializeRuntimeArtifactValue(context, node.id, 'image', 'image')
+  const imageValue = shouldMaterializeValue
+    ? bufferToDataUrl(imageBuffer)
+    : {
+      storagePath,
+      mimeType: FileDiscoveryService.getMimeType(storagePath),
+      fileName: path.basename(storagePath),
+    }
 
   const metadataValue = {
     prompt: metadata.prompt,
@@ -60,7 +69,7 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
   const nodeArtifacts = {
     image: {
       type: 'image' as const,
-      value: imageDataUrl,
+      value: imageValue,
       storagePath,
       artifactRecordId,
       metadata: {

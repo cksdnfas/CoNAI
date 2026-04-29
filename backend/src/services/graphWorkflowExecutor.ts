@@ -25,6 +25,7 @@ import { buildExecutionOrder, validateGraphTypes, validateRequiredInputs } from 
 
 /** Execute a saved module graph workflow from validation through node engines. */
 const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
+const MAX_PARALLEL_READY_NODES = 8
 
 type GraphExecutionPlan = {
   orderedNodeIds: string[]
@@ -38,6 +39,79 @@ type GraphExecutionPlan = {
 
 function buildNodeOutputKey(nodeId: string, portKey: string) {
   return `${nodeId}:${portKey}`
+}
+
+function buildNodeDependencies(graph: { edges: Array<{ source_node_id: string; target_node_id: string }> }, orderedNodeIds: string[]) {
+  const executableNodeIds = new Set(orderedNodeIds)
+  const dependenciesByNode = new Map<string, Set<string>>()
+
+  for (const nodeId of orderedNodeIds) {
+    dependenciesByNode.set(nodeId, new Set<string>())
+  }
+
+  for (const edge of graph.edges) {
+    if (!executableNodeIds.has(edge.source_node_id) || !executableNodeIds.has(edge.target_node_id)) {
+      continue
+    }
+
+    dependenciesByNode.get(edge.target_node_id)?.add(edge.source_node_id)
+  }
+
+  return dependenciesByNode
+}
+
+async function runReadyGraphNodes(params: {
+  orderedNodeIds: string[]
+  dependenciesByNode: Map<string, Set<string>>
+  shouldCancel?: () => boolean
+  executeNode: (nodeId: string) => Promise<void>
+}) {
+  const pendingNodeIds = new Set(params.orderedNodeIds)
+  const completedNodeIds = new Set<string>()
+  const runningNodes = new Map<string, Promise<void>>()
+
+  while (pendingNodeIds.size > 0 || runningNodes.size > 0) {
+    if (params.shouldCancel?.()) {
+      throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
+    }
+
+    const readyNodeIds = params.orderedNodeIds.filter((nodeId) => {
+      if (!pendingNodeIds.has(nodeId) || runningNodes.has(nodeId)) {
+        return false
+      }
+
+      const dependencies = params.dependenciesByNode.get(nodeId) ?? new Set<string>()
+      for (const dependencyNodeId of dependencies) {
+        if (!completedNodeIds.has(dependencyNodeId)) {
+          return false
+        }
+      }
+
+      return true
+    })
+
+    for (const nodeId of readyNodeIds) {
+      if (runningNodes.size >= MAX_PARALLEL_READY_NODES) {
+        break
+      }
+
+      pendingNodeIds.delete(nodeId)
+      const runPromise = params.executeNode(nodeId)
+        .then(() => {
+          completedNodeIds.add(nodeId)
+        })
+        .finally(() => {
+          runningNodes.delete(nodeId)
+        })
+      runningNodes.set(nodeId, runPromise)
+    }
+
+    if (runningNodes.size === 0) {
+      throw new Error('Graph execution could not make progress because no runnable nodes were available')
+    }
+
+    await Promise.race(runningNodes.values())
+  }
 }
 
 function getSystemOperationKey(moduleDefinition: { internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
@@ -263,93 +337,95 @@ export class GraphWorkflowExecutor {
     }
 
     try {
-      for (const nodeId of orderedNodeIds) {
-        if (options?.shouldCancel?.()) {
-          throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
-        }
+      const dependenciesByNode = buildNodeDependencies(workflow.graph, orderedNodeIds)
+      await runReadyGraphNodes({
+        orderedNodeIds,
+        dependenciesByNode,
+        shouldCancel: options?.shouldCancel,
+        executeNode: async (nodeId) => {
+          const node = workflow.graph.nodes.find((item) => item.id === nodeId)
+          if (!node) {
+            throw new Error(`Node ${nodeId} not found during execution`)
+          }
 
-        const node = workflow.graph.nodes.find((item) => item.id === nodeId)
-        if (!node) {
-          throw new Error(`Node ${nodeId} not found during execution`)
-        }
+          const moduleDefinition = modulesById.get(node.module_id)
+          if (!moduleDefinition) {
+            throw new Error(`Module ${node.module_id} not found during execution`)
+          }
 
-        const moduleDefinition = modulesById.get(node.module_id)
-        if (!moduleDefinition) {
-          throw new Error(`Module ${node.module_id} not found during execution`)
-        }
+          const inactiveBranchInputReasons = findInactiveBranchInputReasons(context, node.id)
+          if (inactiveBranchInputReasons.length > 0) {
+            markNodeSkippedForInactiveBranch(context, node.id, moduleDefinition, inactiveBranchInputReasons)
+            return
+          }
 
-        const inactiveBranchInputReasons = findInactiveBranchInputReasons(context, node.id)
-        if (inactiveBranchInputReasons.length > 0) {
-          markNodeSkippedForInactiveBranch(context, node.id, moduleDefinition, inactiveBranchInputReasons)
-          continue
-        }
+          if (reusedArtifacts.artifactsByNode.has(node.id)) {
+            writeExecutionLog({
+              executionId,
+              nodeId: node.id,
+              eventType: 'node_reused',
+              message: `Node reused cached artifacts: ${node.id}`,
+              details: {
+                reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
+                artifactPorts: Object.keys(reusedArtifacts.artifactsByNode.get(node.id) || {}),
+              },
+            })
+            return
+          }
 
-        if (reusedArtifacts.artifactsByNode.has(node.id)) {
           writeExecutionLog({
             executionId,
             nodeId: node.id,
-            eventType: 'node_reused',
-            message: `Node reused cached artifacts: ${node.id}`,
+            eventType: 'node_start',
+            message: `Node start: ${node.id}`,
             details: {
-              reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
-              artifactPorts: Object.keys(reusedArtifacts.artifactsByNode.get(node.id) || {}),
+              moduleId: moduleDefinition.id,
+              moduleName: moduleDefinition.name,
+              engineType: moduleDefinition.engine_type,
             },
           })
-          continue
-        }
 
-        writeExecutionLog({
-          executionId,
-          nodeId: node.id,
-          eventType: 'node_start',
-          message: `Node start: ${node.id}`,
-          details: {
-            moduleId: moduleDefinition.id,
-            moduleName: moduleDefinition.name,
-            engineType: moduleDefinition.engine_type,
-          },
-        })
+          const incomingArtifacts = getIncomingArtifacts(context, node.id)
+          const resolvedInputs = resolveNodeInputs(node, moduleDefinition, incomingArtifacts)
 
-        const incomingArtifacts = getIncomingArtifacts(context, node.id)
-        const resolvedInputs = resolveNodeInputs(node, moduleDefinition, incomingArtifacts)
+          writeExecutionLog({
+            executionId,
+            nodeId: node.id,
+            eventType: 'node_inputs_resolved',
+            message: `Resolved inputs for ${node.id}`,
+            details: {
+              inputKeys: Object.keys(resolvedInputs),
+              upstreamKeys: Object.keys(incomingArtifacts),
+            },
+          })
 
-        writeExecutionLog({
-          executionId,
-          nodeId: node.id,
-          eventType: 'node_inputs_resolved',
-          message: `Resolved inputs for ${node.id}`,
-          details: {
-            inputKeys: Object.keys(resolvedInputs),
-            upstreamKeys: Object.keys(incomingArtifacts),
-          },
-        })
+          validateRequiredInputs(node, moduleDefinition, resolvedInputs)
 
-        validateRequiredInputs(node, moduleDefinition, resolvedInputs)
+          if (moduleDefinition.engine_type === 'nai') {
+            await executeNaiModule(context, node, moduleDefinition, resolvedInputs)
+          } else if (moduleDefinition.engine_type === 'codex') {
+            await executeCodexImageGenerationNode(context, node, moduleDefinition, resolvedInputs)
+          } else if (moduleDefinition.engine_type === 'comfyui') {
+            await executeComfyModule(context, node, moduleDefinition, resolvedInputs)
+          } else if (moduleDefinition.engine_type === 'system') {
+            await executeSystemModule(context, node, moduleDefinition, resolvedInputs)
+          } else if (moduleDefinition.engine_type === 'custom_js') {
+            await executeCustomJsModule(context, node, moduleDefinition, resolvedInputs)
+          } else {
+            throw new Error(`Unsupported module engine type: ${moduleDefinition.engine_type}`)
+          }
 
-        if (moduleDefinition.engine_type === 'nai') {
-          await executeNaiModule(context, node, moduleDefinition, resolvedInputs)
-        } else if (moduleDefinition.engine_type === 'codex') {
-          await executeCodexImageGenerationNode(context, node, moduleDefinition, resolvedInputs)
-        } else if (moduleDefinition.engine_type === 'comfyui') {
-          await executeComfyModule(context, node, moduleDefinition, resolvedInputs)
-        } else if (moduleDefinition.engine_type === 'system') {
-          await executeSystemModule(context, node, moduleDefinition, resolvedInputs)
-        } else if (moduleDefinition.engine_type === 'custom_js') {
-          await executeCustomJsModule(context, node, moduleDefinition, resolvedInputs)
-        } else {
-          throw new Error(`Unsupported module engine type: ${moduleDefinition.engine_type}`)
-        }
-
-        writeExecutionLog({
-          executionId,
-          nodeId: node.id,
-          eventType: 'node_complete',
-          message: `Node complete: ${node.id}`,
-          details: {
-            artifactPorts: Object.keys(context.artifactsByNode.get(node.id) || {}),
-          },
-        })
-      }
+          writeExecutionLog({
+            executionId,
+            nodeId: node.id,
+            eventType: 'node_complete',
+            message: `Node complete: ${node.id}`,
+            details: {
+              artifactPorts: Object.keys(context.artifactsByNode.get(node.id) || {}),
+            },
+          })
+        },
+      })
 
       GraphExecutionModel.updateStatus(executionId, 'completed')
       writeExecutionLog({

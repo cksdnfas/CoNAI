@@ -3,11 +3,11 @@ import path from 'path'
 import { resolveUploadsPath } from '../../config/runtimePaths'
 import { GenerationHistoryModel } from '../../models/GenerationHistory'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
+import { type GenerationQueueJobRecord } from '../../types/generationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
-import { recordCadenceEvent } from '../../utils/cadenceLogger'
 import { ImageUploadService } from '../imageUploadService'
 import { settingsService } from '../settingsService'
-import { saveArtifactBuffer, saveMetadataArtifact } from './artifacts'
+import { saveArtifactBuffer, saveArtifactFileReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
 import {
   bufferToDataUrl,
   normalizeOptionalString,
@@ -22,6 +22,7 @@ import { assertCodexAvailable } from '../codexGenerationExecutor'
 
 const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
 const QUEUE_POLL_INTERVAL_MS = 1500
+const QUEUE_TERMINAL_WAIT_TIMEOUT_MS = 15000
 const CODEX_RANDOM_ASPECT_CHOICES = [
   { value: '1:1', width: 1, height: 1 },
   { value: '4:3', width: 4, height: 3 },
@@ -187,12 +188,9 @@ async function requestQueueCancellation(jobId: number) {
 }
 
 async function waitForQueueCompletion(context: ExecutionContext, nodeId: string, jobId: number) {
+  let terminalWait: Promise<GenerationQueueJobRecord | null> | null = null
+
   while (true) {
-    recordCadenceEvent('graph-wait codex-queue-db-poll', {
-      executionId: context.executionId,
-      nodeId,
-      jobId,
-    })
     if (context.shouldCancel?.()) {
       await requestQueueCancellation(jobId)
       writeExecutionLog({
@@ -205,9 +203,19 @@ async function waitForQueueCompletion(context: ExecutionContext, nodeId: string,
       throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
     }
 
-    const job = GenerationQueueModel.findById(jobId)
+    terminalWait ??= GenerationQueueService.waitForTerminalJob(jobId, { timeoutMs: QUEUE_TERMINAL_WAIT_TIMEOUT_MS })
+    const job = await Promise.race([
+      terminalWait,
+      sleep(QUEUE_POLL_INTERVAL_MS).then(() => undefined),
+    ])
+
+    if (job === undefined) {
+      continue
+    }
+
+    terminalWait = null
     if (!job) {
-      throw new Error(`Queue job ${jobId} disappeared before graph node completion`)
+      continue
     }
 
     if (job.status === 'completed') {
@@ -221,8 +229,6 @@ async function waitForQueueCompletion(context: ExecutionContext, nodeId: string,
     if (job.status === 'cancelled') {
       throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
     }
-
-    await sleep(QUEUE_POLL_INTERVAL_MS)
   }
 }
 
@@ -255,7 +261,6 @@ async function resolveQueueBackedCodexOutput(params: {
     ...(preferredHistoryRecord ? [preferredHistoryRecord] : []),
     ...queueHistoryRecords.filter((record) => record.id !== preferredHistoryRecord?.id),
   ]
-  const historyRecord = historyRecords[0] ?? null
   const compositeHash = normalizeOptionalString(debug.result_composite_hash)
     ?? historyRecords.map((record) => normalizeOptionalString(record.composite_hash)).find((value) => Boolean(value))
     ?? null
@@ -267,28 +272,15 @@ async function resolveQueueBackedCodexOutput(params: {
   }
 
   const absoluteOriginalPath = path.isAbsolute(originalPath) ? originalPath : resolveUploadsPath(originalPath)
-  const outputBuffer = await fs.promises.readFile(absoluteOriginalPath)
   const resolvedMimeType = normalizeOptionalString(debug.result_mime_type) ?? resolveMimeTypeFromPath(absoluteOriginalPath)
   const artifactType: 'file' | 'image' = resolvedMimeType.startsWith('video/') ? 'file' : 'image'
-  const outputDataUrl = bufferToDataUrl(outputBuffer, resolvedMimeType)
   const originalFileName = path.basename(absoluteOriginalPath)
   const primaryOutputPort = params.moduleDefinition.output_ports.find((port) => port.key === 'image')
     ?? params.moduleDefinition.output_ports.find((port) => port.key !== 'metadata')
     ?? { key: 'image', data_type: 'image' as const }
-  const { storagePath, artifactRecordId } = await saveArtifactBuffer(
-    params.context.executionId,
-    params.node.id,
-    primaryOutputPort.key,
-    artifactType,
-    outputBuffer,
-    {
-      mimeType: resolvedMimeType,
-      sourcePathForMetadata: absoluteOriginalPath,
-      originalFileName,
-    },
-  )
 
   const referenceValue = {
+    storagePath: absoluteOriginalPath,
     composite_hash: compositeHash,
     original_path: originalPath,
     original_file_path: absoluteOriginalPath,
@@ -302,6 +294,50 @@ async function resolveQueueBackedCodexOutput(params: {
     requested_resolution: params.requestedSize.resolution,
     codex_last_message: normalizeOptionalString(debug.codex_last_message),
   }
+  const shouldMaterializeValue = shouldMaterializeRuntimeArtifactValue(params.context, params.node.id, primaryOutputPort.key, artifactType)
+
+  let outputValue: unknown = referenceValue
+  let storagePath: string
+  let artifactRecordId: number
+
+  if (shouldMaterializeValue) {
+    const outputBuffer = await fs.promises.readFile(absoluteOriginalPath)
+    outputValue = bufferToDataUrl(outputBuffer, resolvedMimeType)
+    const savedArtifact = await saveArtifactBuffer(
+      params.context.executionId,
+      params.node.id,
+      primaryOutputPort.key,
+      artifactType,
+      outputBuffer,
+      {
+        mimeType: resolvedMimeType,
+        sourcePathForMetadata: absoluteOriginalPath,
+        originalFileName,
+      },
+    )
+    storagePath = savedArtifact.storagePath
+    artifactRecordId = savedArtifact.artifactRecordId
+  } else {
+    const referencedArtifact = await saveArtifactFileReference(
+      params.context.executionId,
+      params.node.id,
+      primaryOutputPort.key,
+      artifactType,
+      absoluteOriginalPath,
+      {
+        mimeType: resolvedMimeType,
+        metadata: {
+          kind: 'codex-queue-image',
+          originalFileName,
+          queueJobId: completedJob.id,
+          historyId,
+          compositeHash,
+        },
+      },
+    )
+    storagePath = referencedArtifact.storagePath
+    artifactRecordId = referencedArtifact.artifactRecordId
+  }
 
   const metadataValue = {
     ...referenceValue,
@@ -313,7 +349,7 @@ async function resolveQueueBackedCodexOutput(params: {
   const nodeArtifacts: Record<string, RuntimeArtifact> = {
     [primaryOutputPort.key]: {
       type: artifactType,
-      value: outputDataUrl,
+      value: outputValue,
       storagePath,
       artifactRecordId,
       metadata: {

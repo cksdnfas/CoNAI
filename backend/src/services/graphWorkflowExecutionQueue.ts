@@ -5,8 +5,6 @@ import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import { GraphWorkflowExecutor } from './graphWorkflowExecutor'
 import { settingsService } from './settingsService'
 import { writeExecutionLog } from './graph-workflow-executor/shared'
-import { logger } from '../utils/logger'
-import { recordCadenceEvent } from '../utils/cadenceLogger'
 
 type QueuedExecutionJob = {
   executionId: number
@@ -37,8 +35,6 @@ type InterruptedExecutionRecoverySummary = {
 const QUEUED_EXECUTION_RESTART_MESSAGE = 'Backend restarted before this queued graph execution could begin. Re-run is required.'
 const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
 const QUEUE_RECHECK_INTERVAL_MS = 5000
-const QUEUE_PERF_LOG_THRESHOLD_MS = 25
-const QUEUE_SIZE_LOG_THRESHOLD = 10
 
 /** Manage graph workflow executions through an in-memory background queue. */
 export class GraphWorkflowExecutionQueue {
@@ -162,7 +158,6 @@ export class GraphWorkflowExecutionQueue {
     forceRerun = false,
     executionMeta?: EnqueueExecutionMetadata,
   ) {
-    const startedAt = Date.now()
     const workflow = GraphWorkflowModel.findById(workflowId)
     if (!workflow) {
       throw new Error('Graph workflow not found')
@@ -177,20 +172,6 @@ export class GraphWorkflowExecutionQueue {
 
     if (executionIds.length > 0) {
       this.processQueue()
-    }
-
-    const elapsedMs = Date.now() - startedAt
-    if (safeCount >= QUEUE_SIZE_LOG_THRESHOLD || elapsedMs >= QUEUE_PERF_LOG_THRESHOLD_MS) {
-      logger.debug('[GraphQueuePerf][enqueue-many]', {
-        workflowId,
-        requestedCount: count,
-        enqueuedCount: executionIds.length,
-        triggerType: executionMeta?.triggerType ?? 'manual',
-        scheduleId: executionMeta?.scheduleId ?? null,
-        queueSize: this.queue.length,
-        runningJobs: this.runningJobs.size,
-        elapsedMs,
-      })
     }
 
     return executionIds.map((executionId) => ({ executionId, status: 'queued' as const }))
@@ -295,12 +276,6 @@ export class GraphWorkflowExecutionQueue {
 
   /** Read runtime queue metadata for an execution set in one queue pass. */
   static getExecutionRuntimeStateMap(executionIds: number[]) {
-    recordCadenceEvent('graph-queue runtime-state-map', {
-      requestedCount: executionIds.length,
-      queueSize: this.queue.length,
-      runningJobs: this.runningJobs.size,
-    })
-    const startedAt = Date.now()
     const targetIds = new Set(executionIds)
     const runtimeStateById = new Map<number, { queue_position: number | null; cancel_requested: boolean }>()
 
@@ -325,17 +300,6 @@ export class GraphWorkflowExecutionQueue {
       }
     }
 
-    const elapsedMs = Date.now() - startedAt
-    if (this.queue.length >= QUEUE_SIZE_LOG_THRESHOLD || executionIds.length >= 50 || elapsedMs >= QUEUE_PERF_LOG_THRESHOLD_MS) {
-      logger.debug('[GraphQueuePerf][runtime-state-map]', {
-        requestedCount: executionIds.length,
-        uniqueCount: targetIds.size,
-        queueSize: this.queue.length,
-        runningJobs: this.runningJobs.size,
-        elapsedMs,
-      })
-    }
-
     return runtimeStateById
   }
 
@@ -346,35 +310,15 @@ export class GraphWorkflowExecutionQueue {
 
   /** Start queued executions while manual and reservation policies allow it. */
   private static processQueue() {
-    recordCadenceEvent('graph-queue process-queue', {
-      queueSize: this.queue.length,
-      runningJobs: this.runningJobs.size,
-    })
-    const startedAt = Date.now()
-    const initialQueueSize = this.queue.length
-    const initialRunningJobs = this.runningJobs.size
     this.clearProcessRetry()
 
-    let startedCount = 0
+    let startedAny = false
     while (this.tryStartNextJob()) {
-      startedCount += 1
+      startedAny = true
     }
 
-    if (startedCount === 0 && this.queue.length > 0) {
+    if (!startedAny && this.queue.length > 0) {
       this.scheduleProcessRetry()
-    }
-
-    const elapsedMs = Date.now() - startedAt
-    if (initialQueueSize >= QUEUE_SIZE_LOG_THRESHOLD || this.queue.length >= QUEUE_SIZE_LOG_THRESHOLD || startedCount > 0 || elapsedMs >= QUEUE_PERF_LOG_THRESHOLD_MS) {
-      logger.debug('[GraphQueuePerf][process-queue]', {
-        initialQueueSize,
-        finalQueueSize: this.queue.length,
-        initialRunningJobs,
-        finalRunningJobs: this.runningJobs.size,
-        startedCount,
-        retryScheduled: Boolean(this.processRetryTimer),
-        elapsedMs,
-      })
     }
   }
 

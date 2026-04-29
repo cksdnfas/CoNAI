@@ -41,8 +41,6 @@ import { errorHandler } from '../middleware/errorHandler';
 import { allowAnonymousPermission, optionalAuth, requireAuth, requirePermission } from '../middleware/authMiddleware';
 import { buildAuthStatusPayload } from '../routes/auth-route-helpers';
 import { settingsService } from '../services/settingsService';
-import { logger } from '../utils/logger';
-import { recordCadenceEvent } from '../utils/cadenceLogger';
 
 export interface RegisterAppRoutesOptions {
   uploadsDir: string;
@@ -59,25 +57,7 @@ export interface RegisterAppRoutesResult {
 
 /** Register one static runtime directory with shared CORS and cache headers. */
 function registerRuntimeStaticDirectory(app: Express, mountPath: string, directoryPath: string): void {
-  app.use(mountPath, (req, res, next) => {
-    const startedAt = Date.now();
-    const isMediaRequest = /\.(jpg|jpeg|png|gif|webp|svg|mp4|webm|mov|avi|mkv)$/i.test(req.path || '');
-
-    res.once('finish', () => {
-      const elapsedMs = Date.now() - startedAt;
-      if (isMediaRequest && elapsedMs >= 300) {
-        logger.debug('[ImagePerf][static]', {
-          mountPath,
-          method: req.method,
-          url: req.originalUrl,
-          statusCode: res.statusCode,
-          elapsedMs,
-        });
-      }
-    });
-
-    next();
-  }, optionalAuth, express.static(directoryPath, {
+  app.use(mountPath, optionalAuth, express.static(directoryPath, {
     setHeaders: (res, filePath) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -97,59 +77,6 @@ function registerRuntimeStaticDirectory(app: Express, mountPath: string, directo
 /** Serialize one frontend bootstrap payload so it can be embedded into HTML safely. */
 function serializeFrontendBootstrap(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c');
-}
-
-function parsePositiveEnvNumber(value: string | undefined, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-const API_PERF_LOG_THRESHOLD_MS = parsePositiveEnvNumber(process.env.CONAI_API_PERF_LOG_THRESHOLD_MS, 250);
-
-function normalizeApiCadencePath(originalUrl: string) {
-  const pathname = originalUrl.split('?')[0] || originalUrl;
-  return pathname
-    .replace(/\/executions\/\d+/g, '/executions/:id')
-    .replace(/\/schedules\/\d+/g, '/schedules/:id')
-    .replace(/\/nodes\/[^/]+/g, '/nodes/:nodeId')
-    .replace(/\/\d+(?=\/|$)/g, '/:id');
-}
-
-/** Register file-only latency probes for API routes so event-loop stalls have route evidence. */
-function registerApiLatencyProbe(app: Express): void {
-  if (process.env.CONAI_API_PERF_LOGS === 'false') {
-    return;
-  }
-
-  app.use('/api', (req, res, next) => {
-    const startedAt = Date.now();
-    recordCadenceEvent(`api ${req.method} ${normalizeApiCadencePath(req.originalUrl)}`, {
-      query: req.originalUrl.includes('?') ? req.originalUrl.split('?')[1] : null,
-    });
-
-    res.once('finish', () => {
-      const elapsedMs = Date.now() - startedAt;
-      if (elapsedMs < API_PERF_LOG_THRESHOLD_MS) {
-        return;
-      }
-
-      const contentLengthHeader = res.getHeader('content-length');
-      const contentLength = typeof contentLengthHeader === 'number' || typeof contentLengthHeader === 'string'
-        ? Number(contentLengthHeader)
-        : null;
-
-      logger.debug('[ApiPerf][slow-request]', {
-        method: req.method,
-        url: req.originalUrl,
-        statusCode: res.statusCode,
-        elapsedMs,
-        contentLength: Number.isFinite(contentLength) ? contentLength : null,
-        rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
-      });
-    });
-
-    next();
-  });
 }
 
 /** Render the integrated frontend index with auth and appearance bootstrap payloads. */
@@ -181,8 +108,6 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
       uptime: process.uptime(),
     });
   });
-
-  registerApiLatencyProbe(app);
 
   app.use('/api/auth', authRoutes);
   app.use('/api/external-api', optionalAuth, externalApiRoutes);

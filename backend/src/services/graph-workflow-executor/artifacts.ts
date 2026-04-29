@@ -173,6 +173,49 @@ export function getIncomingArtifacts(context: ExecutionContext, nodeId: string) 
     }, {})
 }
 
+function getTargetModuleForEdge(context: ExecutionContext, edge: GraphWorkflowEdge) {
+  const targetNode = context.workflow.graph.nodes.find((candidate) => candidate.id === edge.target_node_id)
+  return targetNode ? context.modulesById.get(targetNode.module_id) ?? null : null
+}
+
+function isFinalResultTarget(context: ExecutionContext, edge: GraphWorkflowEdge) {
+  const targetModule = getTargetModuleForEdge(context, edge)
+  return targetModule?.internal_fixed_values?.operation_key === 'system.final_result'
+}
+
+function canTargetConsumeFileReference(context: ExecutionContext, edge: GraphWorkflowEdge, artifactType: ModulePortDataType | 'file') {
+  if (isFinalResultTarget(context, edge)) {
+    return true
+  }
+
+  if (artifactType !== 'image' && artifactType !== 'mask') {
+    return false
+  }
+
+  const targetModule = getTargetModuleForEdge(context, edge)
+  if (targetModule?.engine_type !== 'comfyui') {
+    return false
+  }
+
+  const targetInput = targetModule.exposed_inputs.find((input) => input.key === edge.target_port_key)
+  return targetInput?.data_type === 'image' || targetInput?.data_type === 'mask' || targetInput?.data_type === 'any'
+}
+
+/** Decide whether a runtime artifact value must include inline data for downstream consumers. */
+export function shouldMaterializeRuntimeArtifactValue(
+  context: ExecutionContext,
+  nodeId: string,
+  outputPortKey: string,
+  artifactType: ModulePortDataType | 'file',
+) {
+  const outgoingEdges = context.workflow.graph.edges.filter((edge) => edge.source_node_id === nodeId && edge.source_port_key === outputPortKey)
+  if (outgoingEdges.length === 0) {
+    return false
+  }
+
+  return outgoingEdges.some((edge) => !canTargetConsumeFileReference(context, edge, artifactType))
+}
+
 /** Merge template defaults, fixed values, explicit inputs, and upstream artifacts. */
 export function resolveNodeInputs(node: GraphWorkflowNode, moduleDefinition: ParsedModuleDefinition, incomingArtifacts: Record<string, RuntimeArtifact>) {
   const templateDefaults = { ...(moduleDefinition.template_defaults || {}) }

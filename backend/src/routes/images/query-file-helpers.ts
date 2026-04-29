@@ -9,21 +9,9 @@ import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
 import type { ImageFileRecord, ImageMetadataRecord } from '../../types/image';
-import { logger } from '../../utils/logger';
 import { routeParam } from '../routeParam';
 
 export type ImageDownloadType = 'original' | 'thumbnail';
-
-export interface ImageServeDiagnostics {
-  mode?: 'thumbnail' | 'original' | 'video';
-  hadThumbnailPath?: boolean;
-  thumbnailExistsAtStart?: boolean;
-  thumbnailRegenerated?: boolean;
-  thumbnailRegenMs?: number;
-  servedOriginalFallback?: boolean;
-  cacheStatMs?: number;
-  etagHit?: boolean;
-}
 
 const IMMUTABLE_FILE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
@@ -282,21 +270,11 @@ export async function streamCacheableFile(
   res: Response,
   filePath: string,
   contentType: string,
-  diagnostics?: ImageServeDiagnostics,
 ) {
-  const statStartedAt = Date.now();
   const stats = await fs.promises.stat(filePath);
-  if (diagnostics) {
-    diagnostics.cacheStatMs = Date.now() - statStartedAt;
-  }
-
   const validators = getFileCacheValidators(stats);
   const { etag } = validators;
   const isNotModified = shouldReturnNotModified(req, stats, etag);
-
-  if (diagnostics) {
-    diagnostics.etagHit = isNotModified;
-  }
 
   setImmutableCacheHeaders(res, validators);
 
@@ -317,16 +295,11 @@ export async function serveThumbnailOrOriginal(
   compositeHash: string,
   metadata: ImageMetadataRecord,
   file: ImageFileRecord,
-  diagnostics?: ImageServeDiagnostics,
 ) {
   const mimeType = file.mime_type;
   const fileType = file.file_type;
 
   if ((mimeType && mimeType.startsWith('video/')) || fileType === 'animated') {
-    if (diagnostics) {
-      diagnostics.mode = 'video';
-    }
-
     const originalPath = getExistingActiveFilePathOrBlock(res, file, {
       missingError: 'Video file not found',
       warnMessage: `[ImageServe] Video file missing on disk: ${resolveUploadsPath(file.original_file_path)}`,
@@ -344,12 +317,6 @@ export async function serveThumbnailOrOriginal(
     ? path.join(runtimePaths.tempDir, metadata.thumbnail_path)
     : null;
 
-  if (diagnostics) {
-    diagnostics.mode = 'thumbnail';
-    diagnostics.hadThumbnailPath = Boolean(metadata.thumbnail_path);
-    diagnostics.thumbnailExistsAtStart = Boolean(thumbnailPath && fs.existsSync(thumbnailPath));
-  }
-
   let serveOriginal = false;
 
   if (!thumbnailPath || !fs.existsSync(thumbnailPath)) {
@@ -363,16 +330,10 @@ export async function serveThumbnailOrOriginal(
     }
 
     try {
-      logger.debug('[ImageServe] Regenerating missing thumbnail', { compositeHash, originalPath });
-      const regenStartedAt = Date.now();
+      console.log(`[ImageServe] Regenerating missing thumbnail for ${compositeHash}`);
       const relativeThumbPath = await ThumbnailGenerator.generateThumbnail(originalPath, compositeHash);
       MediaMetadataModel.update(compositeHash, { thumbnail_path: relativeThumbPath });
       thumbnailPath = path.join(runtimePaths.tempDir, relativeThumbPath);
-
-      if (diagnostics) {
-        diagnostics.thumbnailRegenerated = true;
-        diagnostics.thumbnailRegenMs = Date.now() - regenStartedAt;
-      }
 
       if (!fs.existsSync(thumbnailPath)) {
         serveOriginal = true;
@@ -384,11 +345,6 @@ export async function serveThumbnailOrOriginal(
   }
 
   if (serveOriginal) {
-    if (diagnostics) {
-      diagnostics.mode = 'original';
-      diagnostics.servedOriginalFallback = true;
-    }
-
     const originalPath = getExistingActiveFilePathOrBlock(res, file, {
       missingError: 'Original file not found',
     });
@@ -397,7 +353,7 @@ export async function serveThumbnailOrOriginal(
       return;
     }
 
-    await streamCacheableFile(req, res, originalPath, mimeType, diagnostics);
+    await streamCacheableFile(req, res, originalPath, mimeType);
     return;
   }
 
@@ -406,7 +362,7 @@ export async function serveThumbnailOrOriginal(
     return;
   }
 
-  await streamCacheableFile(req, res, thumbnailPath, 'image/webp', diagnostics);
+  await streamCacheableFile(req, res, thumbnailPath, 'image/webp');
 }
 
 async function resolveThumbnailDownloadFile(compositeHash: string, metadata: ImageMetadataRecord, file: ImageFileRecord) {

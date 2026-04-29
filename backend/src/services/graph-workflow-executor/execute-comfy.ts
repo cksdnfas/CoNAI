@@ -14,7 +14,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../generationQueueRouting'
 import { GenerationQueueService } from '../generationQueueService'
 import { ImageUploadService } from '../imageUploadService'
-import { saveArtifactBuffer, saveArtifactFileReference, saveMetadataArtifact } from './artifacts'
+import { saveArtifactBuffer, saveArtifactFileReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
 import {
   bufferToDataUrl,
   normalizeOptionalString,
@@ -25,8 +25,7 @@ import {
   type RuntimeArtifact,
 } from './shared'
 import { type GenerationQueueJobRecord } from '../../types/generationQueue'
-import { recordCadenceEvent } from '../../utils/cadenceLogger'
-import { type GraphWorkflowEdge, type GraphWorkflowNode } from '../../types/moduleGraph'
+import { type GraphWorkflowNode } from '../../types/moduleGraph'
 
 const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
 const GRAPH_COMFY_TARGET_MODE_KEY = 'execution_target_mode'
@@ -214,11 +213,6 @@ async function waitForQueueCompletion(context: ExecutionContext, nodeId: string,
   let terminalWait: Promise<GenerationQueueJobRecord | null> | null = null
 
   while (true) {
-    recordCadenceEvent('graph-wait comfy-queue-wait-loop', {
-      executionId: context.executionId,
-      nodeId,
-      jobId,
-    })
     if (context.shouldCancel?.()) {
       await requestQueueCancellation(jobId)
       writeExecutionLog({
@@ -260,43 +254,6 @@ async function waitForQueueCompletion(context: ExecutionContext, nodeId: string,
   }
 }
 
-function getTargetModuleForEdge(context: ExecutionContext, edge: GraphWorkflowEdge) {
-  const targetNode = context.workflow.graph.nodes.find((candidate) => candidate.id === edge.target_node_id)
-  return targetNode ? context.modulesById.get(targetNode.module_id) ?? null : null
-}
-
-function isFinalResultTarget(context: ExecutionContext, edge: GraphWorkflowEdge) {
-  const targetModule = getTargetModuleForEdge(context, edge)
-  return targetModule?.internal_fixed_values?.operation_key === 'system.final_result'
-}
-
-function canTargetConsumeQueueBackedFileReference(context: ExecutionContext, edge: GraphWorkflowEdge, artifactType: 'file' | 'image') {
-  if (isFinalResultTarget(context, edge)) {
-    return true
-  }
-
-  if (artifactType !== 'image') {
-    return false
-  }
-
-  const targetModule = getTargetModuleForEdge(context, edge)
-  if (targetModule?.engine_type !== 'comfyui') {
-    return false
-  }
-
-  const targetInput = targetModule.exposed_inputs.find((input) => input.key === edge.target_port_key)
-  return targetInput?.data_type === 'image' || targetInput?.data_type === 'mask' || targetInput?.data_type === 'any'
-}
-
-function shouldMaterializeQueueBackedOutputValue(context: ExecutionContext, nodeId: string, outputPortKey: string, artifactType: 'file' | 'image') {
-  const outgoingEdges = context.workflow.graph.edges.filter((edge) => edge.source_node_id === nodeId && edge.source_port_key === outputPortKey)
-  if (outgoingEdges.length === 0) {
-    return false
-  }
-
-  return outgoingEdges.some((edge) => !canTargetConsumeQueueBackedFileReference(context, edge, artifactType))
-}
-
 async function resolveQueueBackedOutput(params: {
   context: ExecutionContext
   node: GraphWorkflowNode
@@ -331,7 +288,7 @@ async function resolveQueueBackedOutput(params: {
     ?? FileDiscoveryService.getMimeType(absoluteOriginalPath)
   const artifactType: 'file' | 'image' = resolvedMimeType.startsWith('video/') ? 'file' : 'image'
   const originalFileName = path.basename(absoluteOriginalPath)
-  const shouldMaterializeValue = shouldMaterializeQueueBackedOutputValue(params.context, params.node.id, params.outputPortKey, artifactType)
+  const shouldMaterializeValue = shouldMaterializeRuntimeArtifactValue(params.context, params.node.id, params.outputPortKey, artifactType)
 
   let outputValue: unknown = {
     storagePath: absoluteOriginalPath,
@@ -440,7 +397,6 @@ async function resolveQueueBackedOutput(params: {
       requestedServerTag: completedJob.requested_server_tag ?? null,
       compositeHash,
       storagePath,
-      materializedValue: shouldMaterializeValue,
     },
   })
 }
@@ -535,7 +491,6 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
   const artifactType: 'file' | 'image' = primaryOutput.kind === 'video' ? 'file' : 'image'
   const mimeType = resolveComfyOutputMimeType(primaryOutput)
   const outputBuffer = await fs.promises.readFile(primaryOutput.tempPath)
-  const outputDataUrl = bufferToDataUrl(outputBuffer, mimeType)
   const originalFileName = path.basename(primaryOutput.filename || primaryOutput.tempPath)
   const { storagePath, artifactRecordId } = await saveArtifactBuffer(
     context.executionId,
@@ -549,6 +504,15 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
       originalFileName,
     },
   )
+  const shouldMaterializeValue = shouldMaterializeRuntimeArtifactValue(context, node.id, primaryOutputPort.key, artifactType)
+  const outputValue = shouldMaterializeValue
+    ? bufferToDataUrl(outputBuffer, mimeType)
+    : {
+      storagePath,
+      mimeType: FileDiscoveryService.getMimeType(storagePath),
+      fileName: path.basename(storagePath),
+      originalFileName,
+    }
 
   for (const output of collectedOutputs) {
     try {
@@ -571,7 +535,7 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
   const nodeArtifacts: Record<string, RuntimeArtifact> = {
     [primaryOutputPort.key]: {
       type: artifactType,
-      value: outputDataUrl,
+      value: outputValue,
       storagePath,
       artifactRecordId,
       metadata: {
