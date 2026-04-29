@@ -26,6 +26,7 @@ export function useModuleGraphPageActions({
   selectedEdgeId,
   workflowName,
   workflowDescription,
+  workflowDebugMode,
   draftWorkflowFolderId,
   selectedGraphId,
   selectedExecution,
@@ -41,6 +42,7 @@ export function useModuleGraphPageActions({
   setSelectedEdgeId,
   setWorkflowName,
   setWorkflowDescription,
+  setWorkflowDebugMode,
   setWorkflowExposedInputs,
   setWorkflowRunInputValues,
   setLastSavedSnapshot,
@@ -77,6 +79,7 @@ export function useModuleGraphPageActions({
   selectedEdgeId: string | null
   workflowName: string
   workflowDescription: string
+  workflowDebugMode: boolean
   draftWorkflowFolderId: number | null
   selectedGraphId: number | null
   selectedExecution: GraphExecutionRecord | null
@@ -92,6 +95,7 @@ export function useModuleGraphPageActions({
   setSelectedEdgeId: Dispatch<SetStateAction<string | null>>
   setWorkflowName: Dispatch<SetStateAction<string>>
   setWorkflowDescription: Dispatch<SetStateAction<string>>
+  setWorkflowDebugMode: Dispatch<SetStateAction<boolean>>
   setWorkflowExposedInputs: Dispatch<SetStateAction<GraphWorkflowExposedInput[]>>
   setWorkflowRunInputValues: Dispatch<SetStateAction<Record<string, unknown>>>
   setLastSavedSnapshot: Dispatch<SetStateAction<string>>
@@ -158,6 +162,7 @@ export function useModuleGraphPageActions({
     setSelectedEdgeId,
     setWorkflowName,
     setWorkflowDescription,
+    setWorkflowDebugMode,
     setWorkflowExposedInputs,
     setWorkflowRunInputValues,
     setLastSavedSnapshot,
@@ -202,6 +207,7 @@ export function useModuleGraphPageActions({
     setSelectedEdgeId,
     setWorkflowName,
     setWorkflowDescription,
+    setWorkflowDebugMode,
     setWorkflowExposedInputs,
     setWorkflowRunInputValues,
     setLastSavedSnapshot,
@@ -234,6 +240,7 @@ export function useModuleGraphPageActions({
     edges,
     workflowName,
     workflowDescription,
+    workflowDebugMode,
     draftWorkflowFolderId,
     selectedGraphId,
     selectedGraphRecord,

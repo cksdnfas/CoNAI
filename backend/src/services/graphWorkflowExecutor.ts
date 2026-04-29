@@ -17,6 +17,8 @@ import {
   parseModuleDefinition,
   parseJson,
   GraphWorkflowStoppedError,
+  isWorkflowDebugModeEnabled,
+  setExecutionDebugMode,
   writeExecutionLog,
   type ExecutionContext,
   type RuntimeArtifact,
@@ -309,6 +311,9 @@ export class GraphWorkflowExecutor {
       })
     }
 
+    const debugMode = isWorkflowDebugModeEnabled(workflow)
+    setExecutionDebugMode(executionId, debugMode)
+
     writeExecutionLog({
       executionId,
       eventType: 'execution_start',
@@ -331,10 +336,13 @@ export class GraphWorkflowExecutor {
       workflow,
       modulesById,
       artifactsByNode: reusedArtifacts.artifactsByNode,
+      debugMode,
       disabledOutputPorts: new Set<string>(),
       skippedNodeIds: new Set<string>(),
       shouldCancel: options?.shouldCancel,
     }
+
+    let failedNodeIdHint: string | null = null
 
     try {
       const dependenciesByNode = buildNodeDependencies(workflow.graph, orderedNodeIds)
@@ -343,15 +351,16 @@ export class GraphWorkflowExecutor {
         dependenciesByNode,
         shouldCancel: options?.shouldCancel,
         executeNode: async (nodeId) => {
-          const node = workflow.graph.nodes.find((item) => item.id === nodeId)
-          if (!node) {
-            throw new Error(`Node ${nodeId} not found during execution`)
-          }
+          try {
+            const node = workflow.graph.nodes.find((item) => item.id === nodeId)
+            if (!node) {
+              throw new Error(`Node ${nodeId} not found during execution`)
+            }
 
-          const moduleDefinition = modulesById.get(node.module_id)
-          if (!moduleDefinition) {
-            throw new Error(`Module ${node.module_id} not found during execution`)
-          }
+            const moduleDefinition = modulesById.get(node.module_id)
+            if (!moduleDefinition) {
+              throw new Error(`Module ${node.module_id} not found during execution`)
+            }
 
           const inactiveBranchInputReasons = findInactiveBranchInputReasons(context, node.id)
           if (inactiveBranchInputReasons.length > 0) {
@@ -415,15 +424,19 @@ export class GraphWorkflowExecutor {
             throw new Error(`Unsupported module engine type: ${moduleDefinition.engine_type}`)
           }
 
-          writeExecutionLog({
-            executionId,
-            nodeId: node.id,
-            eventType: 'node_complete',
-            message: `Node complete: ${node.id}`,
-            details: {
-              artifactPorts: Object.keys(context.artifactsByNode.get(node.id) || {}),
-            },
-          })
+            writeExecutionLog({
+              executionId,
+              nodeId: node.id,
+              eventType: 'node_complete',
+              message: `Node complete: ${node.id}`,
+              details: {
+                artifactPorts: Object.keys(context.artifactsByNode.get(node.id) || {}),
+              },
+            })
+          } catch (error) {
+            failedNodeIdHint = nodeId
+            throw error
+          }
         },
       })
 
@@ -450,7 +463,7 @@ export class GraphWorkflowExecutor {
         logs: GraphExecutionLogModel.findByExecution(executionId),
       }
     } catch (error) {
-      const failedNodeId = GraphExecutionLogModel.findByExecution(executionId)
+      const failedNodeId = failedNodeIdHint ?? GraphExecutionLogModel.findByExecution(executionId)
         .filter((log) => log.node_id)
         .at(-1)?.node_id ?? null
 

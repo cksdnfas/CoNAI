@@ -17,6 +17,7 @@ export function useModuleGraphExecutionActions({
   edges,
   workflowName,
   workflowDescription,
+  workflowDebugMode,
   draftWorkflowFolderId,
   selectedGraphId,
   selectedGraphRecord,
@@ -41,6 +42,7 @@ export function useModuleGraphExecutionActions({
   edges: ModuleGraphEdge[]
   workflowName: string
   workflowDescription: string
+  workflowDebugMode: boolean
   draftWorkflowFolderId: number | null
   selectedGraphId: number | null
   selectedGraphRecord: GraphWorkflowRecord | null
@@ -80,6 +82,7 @@ export function useModuleGraphExecutionActions({
     const nodeDerivedWorkflowExposedInputs = deriveWorkflowExposedInputsFromNodes(nodes)
     const graph = buildGraphPayload(nodes, edges, {
       exposed_inputs: nodeDerivedWorkflowExposedInputs,
+      debug_mode: workflowDebugMode,
     })
     const description = workflowDescription.trim() || undefined
     const payload = {
@@ -117,6 +120,7 @@ export function useModuleGraphExecutionActions({
       edges,
       workflowMetadata: {
         exposed_inputs: nodeDerivedWorkflowExposedInputs,
+        debug_mode: workflowDebugMode,
       },
     })
 
@@ -135,7 +139,7 @@ export function useModuleGraphExecutionActions({
       created,
       name: resolvedName,
     }
-  }, [draftWorkflowFolderId, edges, nodes, onExecutionSelected, onGraphSelected, onSnapshotSaved, onWorkflowNameResolved, refetchGraphWorkflows, selectedGraphId, selectedGraphRecord?.name, showSnackbar, workflowDescription, workflowName])
+  }, [draftWorkflowFolderId, edges, nodes, onExecutionSelected, onGraphSelected, onSnapshotSaved, onWorkflowNameResolved, refetchGraphWorkflows, selectedGraphId, selectedGraphRecord?.name, showSnackbar, workflowDebugMode, workflowDescription, workflowName])
 
   /** Save the current graph workflow draft and show one user-facing result message. */
   const handleSaveGraph = useCallback(async () => {

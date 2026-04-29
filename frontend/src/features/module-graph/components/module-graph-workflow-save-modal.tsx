@@ -8,6 +8,7 @@ interface ModuleGraphWorkflowSaveModalProps {
   open: boolean
   workflowName: string
   workflowDescription: string
+  workflowDebugMode: boolean
   selectedGraphName: string | null
   selectedGraphVersion: number | null
   isDirty: boolean
@@ -20,6 +21,7 @@ interface ModuleGraphWorkflowSaveModalProps {
   onClose: () => void
   onWorkflowNameChange: (value: string) => void
   onWorkflowDescriptionChange: (value: string) => void
+  onWorkflowDebugModeChange: (value: boolean) => void
   onSave: () => Promise<boolean>
 }
 
@@ -28,6 +30,7 @@ export function ModuleGraphWorkflowSaveModal({
   open,
   workflowName,
   workflowDescription,
+  workflowDebugMode,
   selectedGraphName,
   selectedGraphVersion,
   isDirty,
@@ -40,6 +43,7 @@ export function ModuleGraphWorkflowSaveModal({
   onClose,
   onWorkflowNameChange,
   onWorkflowDescriptionChange,
+  onWorkflowDebugModeChange,
   onSave,
 }: ModuleGraphWorkflowSaveModalProps) {
   const handleSave = async () => {
@@ -78,6 +82,19 @@ export function ModuleGraphWorkflowSaveModal({
             <Input value={workflowDescription} onChange={(event) => onWorkflowDescriptionChange(event.target.value)} placeholder="설명 (선택)" />
           </label>
         </div>
+
+        <label className="flex items-start gap-3 rounded-sm border border-border bg-surface-low px-3 py-2 text-sm">
+          <input
+            type="checkbox"
+            checked={workflowDebugMode}
+            onChange={(event) => onWorkflowDebugModeChange(event.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+          />
+          <span className="space-y-0.5">
+            <span className="block font-medium text-foreground">디버그 모드</span>
+            <span className="block text-xs text-muted-foreground">실행 로그, 텍스트 출력, 중간 아티팩트, Comfy 요청 스냅샷을 저장해.</span>
+          </span>
+        </label>
 
         {folderPanel}
 

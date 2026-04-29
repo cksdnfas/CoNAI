@@ -26,7 +26,21 @@ export async function executeFinalResultNode(
   const sourceEdge = incomingEdges[0]
   const sourceArtifact = context.artifactsByNode.get(sourceEdge.source_node_id)?.[sourceEdge.source_port_key]
   if (!sourceArtifact?.artifactRecordId) {
-    throw new Error('최종 결과 노드에는 저장된 업스트림 결과물 참조 1개가 필요해')
+    context.artifactsByNode.set(node.id, {})
+    writeExecutionLog({
+      executionId: context.executionId,
+      nodeId: node.id,
+      eventType: 'node_engine_complete',
+      message: `System module completed without persisted final result: ${moduleDefinition.name}`,
+      details: {
+        engine: 'system',
+        operationKey: 'system.final_result',
+        sourceNodeId: sourceEdge.source_node_id,
+        sourcePortKey: sourceEdge.source_port_key,
+        skippedReason: 'source_artifact_not_persisted',
+      },
+    })
+    return
   }
 
   GraphExecutionFinalResultModel.create({

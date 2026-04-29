@@ -143,6 +143,7 @@ export interface GraphWorkflowExposedInput {
 
 export interface GraphWorkflowMetadata {
   exposed_inputs?: GraphWorkflowExposedInput[]
+  debug_mode?: boolean
 }
 
 export interface GraphWorkflowDocument {

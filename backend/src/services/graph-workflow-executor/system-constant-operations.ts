@@ -156,21 +156,23 @@ export async function executeConstantImageNode(
   }
 
   const mimeType = imageValue.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/)?.[1] ?? 'image/png'
-  const { storagePath, artifactRecordId } = await saveArtifactBuffer(
-    context.executionId,
-    node.id,
-    'image',
-    'image',
-    Buffer.from(base64, 'base64'),
-    { mimeType },
-  )
+  const savedArtifact = context.debugMode
+    ? await saveArtifactBuffer(
+      context.executionId,
+      node.id,
+      'image',
+      'image',
+      Buffer.from(base64, 'base64'),
+      { mimeType },
+    )
+    : null
 
   const nodeArtifacts = {
     image: {
       type: 'image' as const,
       value: imageValue,
-      storagePath,
-      artifactRecordId,
+      storagePath: savedArtifact?.storagePath,
+      artifactRecordId: savedArtifact?.artifactRecordId,
       metadata: {
         kind: 'system-constant-input',
         operationKey: 'system.constant_image',

@@ -148,7 +148,9 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     captured_at: new Date().toISOString(),
   })
 
-  console.log(`🧾 Queue job ${job.id} ComfyUI request snapshot: ${preparedDebugLog.relativePath}`)
+  if (preparedDebugLog.relativePath) {
+    console.log(`🧾 Queue job ${job.id} ComfyUI request snapshot: ${preparedDebugLog.relativePath}`)
+  }
 
   try {
     const result = await executeComfyGeneration({

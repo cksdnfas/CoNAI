@@ -37,10 +37,13 @@ export type ExecutionContext = {
   workflow: ParsedGraphWorkflow
   modulesById: Map<number, ParsedModuleDefinition>
   artifactsByNode: Map<string, Record<string, RuntimeArtifact>>
+  debugMode: boolean
   disabledOutputPorts?: Set<string>
   skippedNodeIds?: Set<string>
   shouldCancel?: () => boolean
 }
+
+const debugEnabledExecutionIds = new Set<number>()
 
 const GRAPH_EXECUTION_STOPPED_MESSAGE = '__GRAPH_EXECUTION_STOPPED__'
 
@@ -61,6 +64,10 @@ export function writeExecutionLog(params: {
   message: string
   details?: Record<string, unknown> | string | null
 }) {
+  if (!debugEnabledExecutionIds.has(params.executionId)) {
+    return
+  }
+
   GraphExecutionLogModel.create({
     execution_id: params.executionId,
     node_id: params.nodeId ?? null,
@@ -74,6 +81,26 @@ export function writeExecutionLog(params: {
           ? params.details
           : JSON.stringify(params.details),
   })
+}
+
+/** Enable or disable detailed debug persistence for one workflow execution. */
+export function setExecutionDebugMode(executionId: number, enabled: boolean) {
+  if (enabled) {
+    debugEnabledExecutionIds.add(executionId)
+    return
+  }
+
+  debugEnabledExecutionIds.delete(executionId)
+}
+
+/** Check whether detailed workflow logs and debug artifacts should be stored. */
+export function isExecutionDebugModeEnabled(executionId: number) {
+  return debugEnabledExecutionIds.has(executionId)
+}
+
+/** Resolve the workflow-level debug flag from saved graph metadata. */
+export function isWorkflowDebugModeEnabled(workflow: ParsedGraphWorkflow) {
+  return workflow.graph.metadata?.debug_mode === true
 }
 
 /** Parse a stored JSON string with a safe fallback value. */

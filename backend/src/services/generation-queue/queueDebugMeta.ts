@@ -3,6 +3,15 @@ import { getComfyRequestDebugRelativePath, writeComfyRequestDebugSnapshot, type 
 import type { GenerationQueueJobRecord } from '../../types/generationQueue'
 import { parseStoredRequestPayload } from './queuePayloads'
 
+export function isQueueDetailedDebugEnabled(record: GenerationQueueJobRecord) {
+  const payload = parseStoredRequestPayload(record)
+  const currentDebug = payload._debug && typeof payload._debug === 'object' && !Array.isArray(payload._debug)
+    ? payload._debug as Record<string, unknown>
+    : {}
+
+  return currentDebug.workflow_debug_mode === true || currentDebug.detailed_snapshots === true
+}
+
 export function updateQueueRequestDebugMeta(record: GenerationQueueJobRecord, meta: Record<string, unknown>) {
   try {
     const latestRecord = GenerationQueueModel.findById(record.id) ?? record
@@ -26,6 +35,13 @@ export function updateQueueRequestDebugMeta(record: GenerationQueueJobRecord, me
 }
 
 export async function writeQueueComfyDebugSnapshot(record: GenerationQueueJobRecord, snapshot: ComfyRequestDebugSnapshot) {
+  if (!isQueueDetailedDebugEnabled(record)) {
+    return {
+      absolutePath: null,
+      relativePath: null,
+    }
+  }
+
   try {
     const saved = await writeComfyRequestDebugSnapshot(record.id, snapshot)
     updateQueueRequestDebugMeta(record, {

@@ -46,6 +46,7 @@ export function useModuleGraphPageEditorPanels({
   highlightedPortKey = null,
   workflowName,
   workflowDescription,
+  workflowDebugMode,
   isDirty,
   selectedExecutionId,
   isSavingGraph,
@@ -80,6 +81,7 @@ export function useModuleGraphPageEditorPanels({
   onValidationIssueSelect,
   onWorkflowNameChange,
   onWorkflowDescriptionChange,
+  onWorkflowDebugModeChange,
   onSaveGraph,
   setEditorSupportSectionRef,
   onNodeLabelChange,
@@ -126,6 +128,7 @@ export function useModuleGraphPageEditorPanels({
   highlightedPortKey?: string | null
   workflowName: string
   workflowDescription: string
+  workflowDebugMode: boolean
   isDirty: boolean
   selectedExecutionId: number | null
   isSavingGraph: boolean
@@ -160,6 +163,7 @@ export function useModuleGraphPageEditorPanels({
   onValidationIssueSelect: (issue: WorkflowValidationIssue) => void
   onWorkflowNameChange: (value: string) => void
   onWorkflowDescriptionChange: (value: string) => void
+  onWorkflowDebugModeChange: (value: boolean) => void
   onSaveGraph: () => Promise<boolean>
   setEditorSupportSectionRef: (section: EditorSupportSectionKey, node: HTMLDivElement | null) => void
   onNodeLabelChange: (nodeId: string, label: string) => void
@@ -233,6 +237,7 @@ export function useModuleGraphPageEditorPanels({
       open={isWorkflowSaveModalOpen}
       workflowName={workflowName}
       workflowDescription={workflowDescription}
+      workflowDebugMode={workflowDebugMode}
       selectedGraphName={selectedGraphRecord?.name ?? null}
       selectedGraphVersion={selectedGraphRecord?.version ?? null}
       isDirty={isDirty}
@@ -245,6 +250,7 @@ export function useModuleGraphPageEditorPanels({
       onClose={onCloseWorkflowSaveModal}
       onWorkflowNameChange={onWorkflowNameChange}
       onWorkflowDescriptionChange={onWorkflowDescriptionChange}
+      onWorkflowDebugModeChange={onWorkflowDebugModeChange}
       onSave={onSaveGraph}
     />
   ) : null

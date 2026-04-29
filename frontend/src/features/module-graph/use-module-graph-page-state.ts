@@ -9,6 +9,7 @@ import { persistWorkflowRunnerDraft } from './workflow-runner-draft-storage'
 export function useModuleGraphPageState() {
   const [workflowName, setWorkflowName] = useState('Workflow Draft')
   const [workflowDescription, setWorkflowDescription] = useState('')
+  const [workflowDebugMode, setWorkflowDebugMode] = useState(false)
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
   const [draftWorkflowFolderId, setDraftWorkflowFolderId] = useState<number | null>(null)
   const [draftChildFolderName, setDraftChildFolderName] = useState('')
@@ -26,6 +27,7 @@ export function useModuleGraphPageState() {
       edges: [],
       workflowMetadata: {
         exposed_inputs: [],
+        debug_mode: false,
       },
     }),
   )
@@ -71,6 +73,8 @@ export function useModuleGraphPageState() {
     setWorkflowName,
     workflowDescription,
     setWorkflowDescription,
+    workflowDebugMode,
+    setWorkflowDebugMode,
     selectedFolderId,
     setSelectedFolderId,
     draftWorkflowFolderId,

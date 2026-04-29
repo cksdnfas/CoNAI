@@ -40,6 +40,7 @@ export function useModuleGraphEditorInteractions({
   setSelectedEdgeId,
   setWorkflowName,
   setWorkflowDescription,
+  setWorkflowDebugMode,
   setWorkflowExposedInputs,
   setWorkflowRunInputValues,
   setLastSavedSnapshot,
@@ -64,6 +65,7 @@ export function useModuleGraphEditorInteractions({
   setSelectedEdgeId: Dispatch<SetStateAction<string | null>>
   setWorkflowName: Dispatch<SetStateAction<string>>
   setWorkflowDescription: Dispatch<SetStateAction<string>>
+  setWorkflowDebugMode: Dispatch<SetStateAction<boolean>>
   setWorkflowExposedInputs: Dispatch<SetStateAction<GraphWorkflowExposedInput[]>>
   setWorkflowRunInputValues: Dispatch<SetStateAction<Record<string, unknown>>>
   setLastSavedSnapshot: Dispatch<SetStateAction<string>>
@@ -605,6 +607,7 @@ export function useModuleGraphEditorInteractions({
     setSelectedEdgeId(null)
     setWorkflowName('Workflow Draft')
     setWorkflowDescription('')
+    setWorkflowDebugMode(false)
     setWorkflowExposedInputs([])
     setWorkflowRunInputValues({})
     setLastSavedSnapshot(
@@ -615,10 +618,11 @@ export function useModuleGraphEditorInteractions({
         edges: [],
         workflowMetadata: {
           exposed_inputs: [],
+          debug_mode: false,
         },
       }),
     )
-  }, [selectedFolderId, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedGraphId, setSelectedNodeId, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
+  }, [selectedFolderId, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
 
   /** Reset the full editor canvas after confirmation when needed. */
   const handleResetCanvas = useCallback(() => {

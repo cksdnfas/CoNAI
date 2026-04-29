@@ -150,13 +150,16 @@ export async function executeLoadImageFromReference(
   if (shouldMaterializeImage) {
     const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
     imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
-    const savedArtifact = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
-      mimeType,
-      sourcePathForMetadata: activeFile.original_file_path,
-      originalFileName: path.basename(activeFile.original_file_path),
-    })
-    storagePath = savedArtifact.storagePath
-    artifactRecordId = savedArtifact.artifactRecordId
+
+    if (context.debugMode) {
+      const savedArtifact = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+        mimeType,
+        sourcePathForMetadata: activeFile.original_file_path,
+        originalFileName: path.basename(activeFile.original_file_path),
+      })
+      storagePath = savedArtifact.storagePath
+      artifactRecordId = savedArtifact.artifactRecordId
+    }
   }
 
   const referenceValue = {
@@ -171,15 +174,16 @@ export async function executeLoadImageFromReference(
   }
 
   const nodeArtifacts = {
-    ...(imageDataUrl && storagePath && artifactRecordId ? {
+    ...(imageDataUrl ? {
       image: {
         type: 'image' as const,
         value: imageDataUrl,
-        storagePath,
-        artifactRecordId,
+        storagePath: storagePath ?? undefined,
+        artifactRecordId: artifactRecordId ?? undefined,
         metadata: {
           kind: 'system-load-image-from-reference',
           composite_hash: metadata.composite_hash,
+          original_file_path: activeFile.original_file_path,
         },
       },
     } : {}),
@@ -231,13 +235,16 @@ export async function executeRandomImageFromLibrary(
   if (shouldMaterializeImage) {
     const imageBuffer = await fs.promises.readFile(activeFile.original_file_path)
     imageDataUrl = bufferToDataUrl(imageBuffer, mimeType)
-    const savedArtifact = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
-      mimeType,
-      sourcePathForMetadata: activeFile.original_file_path,
-      originalFileName: path.basename(activeFile.original_file_path),
-    })
-    storagePath = savedArtifact.storagePath
-    artifactRecordId = savedArtifact.artifactRecordId
+
+    if (context.debugMode) {
+      const savedArtifact = await saveArtifactBuffer(context.executionId, node.id, 'image', 'image', imageBuffer, {
+        mimeType,
+        sourcePathForMetadata: activeFile.original_file_path,
+        originalFileName: path.basename(activeFile.original_file_path),
+      })
+      storagePath = savedArtifact.storagePath
+      artifactRecordId = savedArtifact.artifactRecordId
+    }
   }
 
   const referenceValue = {
@@ -267,15 +274,16 @@ export async function executeRandomImageFromLibrary(
   }
 
   const nodeArtifacts = {
-    ...(imageDataUrl && storagePath && artifactRecordId ? {
+    ...(imageDataUrl ? {
       image: {
         type: 'image' as const,
         value: imageDataUrl,
-        storagePath,
-        artifactRecordId,
+        storagePath: storagePath ?? undefined,
+        artifactRecordId: artifactRecordId ?? undefined,
         metadata: {
           kind: 'system-random-image-from-library',
           composite_hash: metadata.composite_hash,
+          original_file_path: activeFile.original_file_path,
         },
       },
     } : {}),

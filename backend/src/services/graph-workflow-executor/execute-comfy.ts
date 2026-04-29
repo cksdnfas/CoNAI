@@ -111,10 +111,15 @@ function resolveSourceWorkflowId(moduleDefinition: ParsedModuleDefinition) {
   return parsePositiveIntegerish(moduleDefinition.template_defaults?.workflow_id)
 }
 
-function buildQueuePayload(promptData: Record<string, unknown>) {
+function buildQueuePayload(promptData: Record<string, unknown>, context: ExecutionContext) {
   const imageSaveSettings = settingsService.loadSettings().imageSave
   const payload: Record<string, unknown> = {
     prompt_data: promptData,
+    _debug: {
+      graph_execution_id: context.executionId,
+      workflow_debug_mode: context.debugMode,
+      detailed_snapshots: context.debugMode,
+    },
   }
 
   if (imageSaveSettings.applyToWorkflowOutputs) {
@@ -410,7 +415,7 @@ async function executeQueueBackedComfyModule(context: ExecutionContext, node: Gr
   const target = resolveGraphComfyExecutionTarget(node)
   const workflow = validateQueueTarget(sourceWorkflowId, target)
   const queuePromptData = buildQueuePromptData(context, node, workflow, resolvedInputs)
-  const queuePayload = buildQueuePayload(queuePromptData)
+  const queuePayload = buildQueuePayload(queuePromptData, context)
   const primaryOutputPort = moduleDefinition.output_ports.find((port) => port.key !== 'metadata') ?? {
     key: 'image',
     data_type: 'image' as const,

@@ -12,6 +12,7 @@ type GraphExecutionDetailRecord = Awaited<ReturnType<typeof getGraphExecution>>
 export function useModuleGraphPageViewModel({
   workflowName,
   workflowDescription,
+  workflowDebugMode,
   nodes,
   edges,
   workflowView,
@@ -32,6 +33,7 @@ export function useModuleGraphPageViewModel({
 }: {
   workflowName: string
   workflowDescription: string
+  workflowDebugMode: boolean
   nodes: ModuleGraphNode[]
   edges: ModuleGraphEdge[]
   workflowView: 'browse' | 'edit'
@@ -64,9 +66,10 @@ export function useModuleGraphPageViewModel({
         edges,
         workflowMetadata: {
           exposed_inputs: nodeDerivedWorkflowExposedInputs,
+          debug_mode: workflowDebugMode,
         },
       }),
-    [edges, nodeDerivedWorkflowExposedInputs, nodes, workflowDescription, workflowName],
+    [edges, nodeDerivedWorkflowExposedInputs, nodes, workflowDebugMode, workflowDescription, workflowName],
   )
 
   const isDirty = currentSnapshot !== lastSavedSnapshot

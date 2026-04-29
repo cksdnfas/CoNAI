@@ -12,6 +12,7 @@ import {
 } from '../../types/moduleGraph'
 import {
   bufferToDataUrl,
+  isExecutionDebugModeEnabled,
   parseJson,
   sanitizeFileSegment,
   type ExecutionContext,
@@ -250,6 +251,10 @@ export function resolveNodeInputs(node: GraphWorkflowNode, moduleDefinition: Par
 
 /** Create the standard metadata artifact row for a node execution. */
 export function saveMetadataArtifact(executionId: number, nodeId: string, metadataValue: Record<string, unknown>) {
+  if (!isExecutionDebugModeEnabled(executionId)) {
+    return
+  }
+
   GraphExecutionArtifactModel.create({
     execution_id: executionId,
     node_id: nodeId,

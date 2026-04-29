@@ -455,6 +455,10 @@ export async function executeCodexImageGenerationNode(
         image: inputImage ?? undefined,
         mask: maskImage ?? undefined,
         imageSaveOptions,
+        _debug: {
+          graph_execution_id: context.executionId,
+          workflow_debug_mode: context.debugMode,
+        },
       },
       request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
     })

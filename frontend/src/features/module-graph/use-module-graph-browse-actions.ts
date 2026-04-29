@@ -36,6 +36,7 @@ export function useModuleGraphBrowseActions({
   setSelectedEdgeId,
   setWorkflowName,
   setWorkflowDescription,
+  setWorkflowDebugMode,
   setWorkflowExposedInputs,
   setWorkflowRunInputValues,
   setLastSavedSnapshot,
@@ -69,6 +70,7 @@ export function useModuleGraphBrowseActions({
   setSelectedEdgeId: Dispatch<SetStateAction<string | null>>
   setWorkflowName: Dispatch<SetStateAction<string>>
   setWorkflowDescription: Dispatch<SetStateAction<string>>
+  setWorkflowDebugMode: Dispatch<SetStateAction<boolean>>
   setWorkflowExposedInputs: Dispatch<SetStateAction<GraphWorkflowExposedInput[]>>
   setWorkflowRunInputValues: Dispatch<SetStateAction<Record<string, unknown>>>
   setLastSavedSnapshot: Dispatch<SetStateAction<string>>
@@ -99,6 +101,7 @@ export function useModuleGraphBrowseActions({
     setSelectedNodeId(nextNodes[0]?.id ?? null)
     setWorkflowName(graph.name)
     setWorkflowDescription(graph.description || '')
+    setWorkflowDebugMode(graph.graph.metadata?.debug_mode === true)
     setSelectedFolderId(graph.folder_id ?? null)
     setDraftWorkflowFolderId(graph.folder_id ?? null)
     setWorkflowExposedInputs(exposedInputs)
@@ -114,10 +117,11 @@ export function useModuleGraphBrowseActions({
         edges: nextEdges,
         workflowMetadata: {
           exposed_inputs: exposedInputs,
+          debug_mode: graph.graph.metadata?.debug_mode === true,
         },
       }),
     )
-  }, [modules, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedFolderId, setSelectedGraphId, setSelectedNodeId, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
+  }, [modules, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedFolderId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
 
   /** Load one saved workflow into the editor, optionally opening editor mode immediately. */
   const handleLoadGraph = useCallback((graph: GraphWorkflowRecord, options?: { openEditor?: boolean; silent?: boolean }) => {

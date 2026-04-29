@@ -1,6 +1,6 @@
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
 import type { GraphWorkflowNode } from '../../types/moduleGraph'
-import { writeExecutionLog, type ExecutionContext, type ParsedModuleDefinition, type RuntimeArtifact } from './shared'
+import { isExecutionDebugModeEnabled, writeExecutionLog, type ExecutionContext, type ParsedModuleDefinition, type RuntimeArtifact } from './shared'
 
 /** Persist one structured runtime artifact row and keep it available to downstream nodes. */
 export function buildRuntimeArtifact(
@@ -11,13 +11,15 @@ export function buildRuntimeArtifact(
   value: unknown,
   metadata?: Record<string, unknown>,
 ): RuntimeArtifact {
-  const artifactRecordId = GraphExecutionArtifactModel.create({
-    execution_id: executionId,
-    node_id: nodeId,
-    port_key: portKey,
-    artifact_type: artifactType,
-    metadata: JSON.stringify({ value, ...(metadata ?? {}) }),
-  })
+  const artifactRecordId = isExecutionDebugModeEnabled(executionId)
+    ? GraphExecutionArtifactModel.create({
+      execution_id: executionId,
+      node_id: nodeId,
+      port_key: portKey,
+      artifact_type: artifactType,
+      metadata: JSON.stringify({ value, ...(metadata ?? {}) }),
+    })
+    : undefined
 
   return {
     type: artifactType,
