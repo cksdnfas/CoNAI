@@ -1,3 +1,4 @@
+import fs from 'fs'
 import path from 'path'
 import { type MarkedField } from '../types/workflow'
 import { normalizeBase64ImageData } from '../utils/base64ImageData'
@@ -6,6 +7,19 @@ import { ComfyUIService } from './comfyuiService'
 interface WorkflowImageFieldPayload {
   fileName?: string
   dataUrl?: string
+  storagePath?: string
+  originalPath?: string
+  original_file_path?: string
+  filePath?: string
+  path?: string
+  mimeType?: string
+}
+
+type ComfyImageUploadInput = {
+  fileName?: string
+  buffer?: Buffer
+  filePath?: string
+  mimeType?: string
 }
 
 function sanitizeUploadSegment(value: string) {
@@ -19,13 +33,36 @@ function buildComfyImageUploadName(fileName: string | undefined, fallbackBase: s
   return `${baseName}_${Date.now()}${ext}`
 }
 
-function getComfyImageUploadInput(value: unknown) {
+function normalizeImagePayloadPath(payload: WorkflowImageFieldPayload) {
+  const candidate = payload.storagePath
+    ?? payload.originalPath
+    ?? payload.original_file_path
+    ?? payload.filePath
+    ?? payload.path
+
+  if (typeof candidate !== 'string' || candidate.trim().length === 0) {
+    return null
+  }
+
+  return candidate
+}
+
+function getComfyImageUploadInput(value: unknown): ComfyImageUploadInput | null {
   if (!value) {
     return null
   }
 
   if (typeof value === 'object') {
     const payload = value as WorkflowImageFieldPayload
+    const filePath = normalizeImagePayloadPath(payload)
+    if (filePath) {
+      return {
+        fileName: payload.fileName || path.basename(filePath),
+        filePath,
+        mimeType: payload.mimeType,
+      }
+    }
+
     if (typeof payload.dataUrl !== 'string' || payload.dataUrl.trim().length === 0) {
       return null
     }
@@ -38,6 +75,7 @@ function getComfyImageUploadInput(value: unknown) {
     return {
       fileName: payload.fileName,
       buffer: Buffer.from(base64, 'base64'),
+      mimeType: payload.mimeType,
     }
   }
 
@@ -80,7 +118,15 @@ export async function prepareComfyPromptData(
       : sanitizeUploadSegment(field.id)
 
     const uploadName = buildComfyImageUploadName(uploadInput.fileName, fallbackBase)
-    const uploadedName = await comfyService.uploadInputImage(uploadName, uploadInput.buffer)
+    const imageInput = uploadInput.filePath
+      ? fs.createReadStream(uploadInput.filePath)
+      : uploadInput.buffer
+
+    if (!imageInput) {
+      continue
+    }
+
+    const uploadedName = await comfyService.uploadInputImage(uploadName, imageInput, { contentType: uploadInput.mimeType })
     preparedPromptData[field.id] = uploadedName
   }
 

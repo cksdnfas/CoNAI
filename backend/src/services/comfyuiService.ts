@@ -503,12 +503,12 @@ export class ComfyUIService {
   /**
    * Upload an input image to the target ComfyUI server and return the stored filename.
    */
-  async uploadInputImage(fileName: string, imageBuffer: Buffer): Promise<string> {
+  async uploadInputImage(fileName: string, imageInput: Buffer | fs.ReadStream, options?: { contentType?: string }): Promise<string> {
     try {
       const formData = new FormData();
-      formData.append('image', imageBuffer, {
+      formData.append('image', imageInput, {
         filename: fileName,
-        contentType: 'image/png'
+        contentType: options?.contentType || 'image/png'
       });
       formData.append('type', 'input');
       formData.append('overwrite', 'false');
