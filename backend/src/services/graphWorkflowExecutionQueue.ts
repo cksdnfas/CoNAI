@@ -88,19 +88,14 @@ export class GraphWorkflowExecutionQueue {
     return recoverTransaction()
   }
 
-  /** Enqueue a workflow execution and start workers when capacity allows. */
-  static enqueue(
-    workflowId: number,
+  /** Create one queued workflow execution row and in-memory queue job. */
+  private static createQueuedJob(
+    workflow: ReturnType<typeof GraphWorkflowModel.findById> extends infer Workflow ? NonNullable<Workflow> : never,
     inputValues?: Record<string, unknown>,
     targetNodeId?: string,
     forceRerun = false,
     executionMeta?: EnqueueExecutionMetadata,
   ) {
-    const workflow = GraphWorkflowModel.findById(workflowId)
-    if (!workflow) {
-      throw new Error('Graph workflow not found')
-    }
-
     const triggerType = executionMeta?.triggerType ?? 'manual'
     const executionId = GraphExecutionModel.create({
       graph_workflow_id: workflow.id,
@@ -127,13 +122,59 @@ export class GraphWorkflowExecutionQueue {
       },
     })
 
-    this.queue.push({ executionId, workflowId, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null })
+    const job = { executionId, workflowId: workflow.id, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null }
+    this.queue.push(job)
+    return job
+  }
+
+  /** Enqueue a workflow execution and start workers when capacity allows. */
+  static enqueue(
+    workflowId: number,
+    inputValues?: Record<string, unknown>,
+    targetNodeId?: string,
+    forceRerun = false,
+    executionMeta?: EnqueueExecutionMetadata,
+  ) {
+    const workflow = GraphWorkflowModel.findById(workflowId)
+    if (!workflow) {
+      throw new Error('Graph workflow not found')
+    }
+
+    const job = this.createQueuedJob(workflow, inputValues, targetNodeId, forceRerun, executionMeta)
     this.processQueue()
 
     return {
-      executionId,
+      executionId: job.executionId,
       status: 'queued' as const,
     }
+  }
+
+  /** Enqueue multiple identical workflow executions and process the queue once. */
+  static enqueueMany(
+    workflowId: number,
+    count: number,
+    inputValues?: Record<string, unknown>,
+    targetNodeId?: string,
+    forceRerun = false,
+    executionMeta?: EnqueueExecutionMetadata,
+  ) {
+    const workflow = GraphWorkflowModel.findById(workflowId)
+    if (!workflow) {
+      throw new Error('Graph workflow not found')
+    }
+
+    const executionIds: number[] = []
+    const safeCount = Math.max(0, Math.floor(count))
+    for (let index = 0; index < safeCount; index += 1) {
+      const job = this.createQueuedJob(workflow, inputValues, targetNodeId, forceRerun, executionMeta)
+      executionIds.push(job.executionId)
+    }
+
+    if (executionIds.length > 0) {
+      this.processQueue()
+    }
+
+    return executionIds.map((executionId) => ({ executionId, status: 'queued' as const }))
   }
 
   /** Request cancellation for a queued or running execution. */
@@ -227,11 +268,39 @@ export class GraphWorkflowExecutionQueue {
 
   /** Read runtime queue metadata for an execution row. */
   static getExecutionRuntimeState(executionId: number) {
-    const queuedIndex = this.queue.findIndex((job) => job.executionId === executionId)
-    return {
-      queue_position: queuedIndex !== -1 ? queuedIndex + 1 : null,
+    return this.getExecutionRuntimeStateMap([executionId]).get(executionId) ?? {
+      queue_position: null,
       cancel_requested: this.cancelRequestedExecutionIds.has(executionId),
     }
+  }
+
+  /** Read runtime queue metadata for an execution set in one queue pass. */
+  static getExecutionRuntimeStateMap(executionIds: number[]) {
+    const targetIds = new Set(executionIds)
+    const runtimeStateById = new Map<number, { queue_position: number | null; cancel_requested: boolean }>()
+
+    for (const executionId of targetIds) {
+      runtimeStateById.set(executionId, {
+        queue_position: null,
+        cancel_requested: this.cancelRequestedExecutionIds.has(executionId),
+      })
+    }
+
+    if (targetIds.size === 0) {
+      return runtimeStateById
+    }
+
+    for (let index = 0; index < this.queue.length; index += 1) {
+      const job = this.queue[index]
+      if (job && targetIds.has(job.executionId)) {
+        runtimeStateById.set(job.executionId, {
+          queue_position: index + 1,
+          cancel_requested: this.cancelRequestedExecutionIds.has(job.executionId),
+        })
+      }
+    }
+
+    return runtimeStateById
   }
 
   /** Check whether an execution has a pending cancellation request. */

@@ -13,7 +13,7 @@ import { settingsService } from './settingsService'
 import { WatchedFolderService } from './watchedFolderService'
 import { BackgroundProcessorService } from './backgroundProcessorService'
 import { FileDiscoveryService } from './folderScan/fileDiscoveryService'
-import { decorateGraphExecutionRecord } from './graphWorkflowViewService'
+import { decorateGraphExecutionRecords } from './graphWorkflowViewService'
 
 function isPathInsideRoot(rootPath: string, candidatePath: string) {
   const relative = path.relative(rootPath, candidatePath)
@@ -168,7 +168,7 @@ async function resolveUniqueCopyTargetPath(targetFolderPath: string, fileName: s
 
 /** Delete finished output-less executions and keep non-empty or active ones. */
 export function cleanupEmptyGraphExecutions(executionIds: number[]) {
-  const executions = GraphExecutionModel.findByIds(executionIds).map(decorateGraphExecutionRecord)
+  const executions = decorateGraphExecutionRecords(GraphExecutionModel.findByIds(executionIds))
   const foundExecutionIds = new Set(executions.map((execution) => execution.id))
   const missing = executionIds.filter((executionId) => !foundExecutionIds.has(executionId))
   const existingExecutionIds = executions.map((execution) => execution.id)

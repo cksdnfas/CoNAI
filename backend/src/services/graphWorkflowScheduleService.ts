@@ -2,7 +2,6 @@ import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowScheduleModel } from '../models/GraphWorkflowSchedule'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import type {
-  GraphExecutionRecord,
   GraphWorkflowScheduleRecord,
   GraphWorkflowScheduleStatus,
 } from '../types/moduleGraph'
@@ -64,30 +63,6 @@ function buildNextRunAt(schedule: GraphWorkflowScheduleRecord, now: Date) {
   }
 
   return next.toISOString()
-}
-
-/** Count completed, queued, and running executions reserved by one schedule. */
-function summarizeScheduleExecutions(executions: GraphExecutionRecord[]) {
-  return executions.reduce((acc, execution) => {
-    if (execution.status === 'completed') {
-      acc.completed += 1
-    }
-    if (execution.status === 'queued') {
-      acc.queued += 1
-    }
-    if (execution.status === 'running') {
-      acc.running += 1
-    }
-    if (execution.status === 'failed') {
-      acc.failed += 1
-    }
-    return acc
-  }, {
-    completed: 0,
-    queued: 0,
-    running: 0,
-    failed: 0,
-  })
 }
 
 function normalizeRunEnqueueCount(value?: number | null) {
@@ -245,8 +220,13 @@ export class GraphWorkflowScheduleService {
       return
     }
 
-    const existingExecutions = GraphExecutionModel.findByScheduleIds([schedule.id], 500)
-    const executionSummary = summarizeScheduleExecutions(existingExecutions)
+    const executionSummary = GraphExecutionModel.countStatusesByScheduleIds([schedule.id]).get(schedule.id) ?? {
+      completed: 0,
+      queued: 0,
+      running: 0,
+      failed: 0,
+      cancelled: 0,
+    }
     const activeOverlapCount = executionSummary.queued + executionSummary.running
     const reservedRunCount = executionSummary.completed + executionSummary.queued + executionSummary.running
     const lastExecution = schedule.last_execution_id ? GraphExecutionModel.findById(schedule.last_execution_id) : null
@@ -296,21 +276,17 @@ export class GraphWorkflowScheduleService {
       : requestedEnqueueCount
     const allowedEnqueueCount = Math.min(requestedEnqueueCount, remainingRunCount)
     const inputValues = parseInputValues(schedule)
-    const executionIds: number[] = []
-
-    for (let index = 0; index < allowedEnqueueCount; index += 1) {
-      const enqueueResult = GraphWorkflowExecutionQueue.enqueue(
-        schedule.graph_workflow_id,
-        inputValues,
-        undefined,
-        false,
-        {
-          triggerType: 'schedule',
-          scheduleId: schedule.id,
-        },
-      )
-      executionIds.push(enqueueResult.executionId)
-    }
+    const executionIds = GraphWorkflowExecutionQueue.enqueueMany(
+      schedule.graph_workflow_id,
+      allowedEnqueueCount,
+      inputValues,
+      undefined,
+      false,
+      {
+        triggerType: 'schedule',
+        scheduleId: schedule.id,
+      },
+    ).map((enqueueResult) => enqueueResult.executionId)
 
     const nextStatus: GraphWorkflowScheduleStatus = schedule.schedule_type === 'once'
       ? 'completed'

@@ -15,53 +15,33 @@ export function parseStoredGraphWorkflow(record: any) {
   }
 }
 
-/** Decorate one execution row with runtime queue state. */
-export function decorateGraphExecutionRecord(record: any) {
-  return {
+/** Decorate execution rows with runtime queue state in one queue pass. */
+export function decorateGraphExecutionRecords(records: any[]) {
+  const runtimeStateById = GraphWorkflowExecutionQueue.getExecutionRuntimeStateMap(records.map((record) => record.id))
+  return records.map((record) => ({
     ...record,
-    ...GraphWorkflowExecutionQueue.getExecutionRuntimeState(record.id),
-  }
+    ...(runtimeStateById.get(record.id) ?? { queue_position: null, cancel_requested: false }),
+  }))
 }
 
-function summarizeScheduleExecutions(executions: GraphExecutionRecord[]) {
-  return executions.reduce((acc, execution) => {
-    if (execution.status === 'completed') {
-      acc.completed += 1
-    }
-    if (execution.status === 'queued') {
-      acc.queued += 1
-    }
-    if (execution.status === 'running') {
-      acc.running += 1
-    }
-    if (execution.status === 'failed') {
-      acc.failed += 1
-    }
-    return acc
-  }, {
-    completed: 0,
-    queued: 0,
-    running: 0,
-    failed: 0,
-  })
+/** Decorate one execution row with runtime queue state. */
+export function decorateGraphExecutionRecord(record: any) {
+  return decorateGraphExecutionRecords([record])[0]
 }
 
 /** Decorate schedule rows with execution progress counters for reservation UI. */
 export function decorateGraphWorkflowScheduleRecords(schedules: GraphWorkflowScheduleRecord[]) {
   const scheduleIds = schedules.map((schedule) => schedule.id)
-  const executionsByScheduleId = new Map<number, GraphExecutionRecord[]>()
-
-  for (const execution of GraphExecutionModel.findByScheduleIds(scheduleIds, 2000)) {
-    if (execution.schedule_id === null || execution.schedule_id === undefined) {
-      continue
-    }
-    const bucket = executionsByScheduleId.get(execution.schedule_id) ?? []
-    bucket.push(execution)
-    executionsByScheduleId.set(execution.schedule_id, bucket)
-  }
+  const countsByScheduleId = GraphExecutionModel.countStatusesByScheduleIds(scheduleIds)
 
   return schedules.map((schedule) => {
-    const summary = summarizeScheduleExecutions(executionsByScheduleId.get(schedule.id) ?? [])
+    const summary = countsByScheduleId.get(schedule.id) ?? {
+      completed: 0,
+      queued: 0,
+      running: 0,
+      failed: 0,
+      cancelled: 0,
+    }
     const reservedRunCount = summary.completed + summary.queued + summary.running
     const remainingRunCount = schedule.max_run_count === null || schedule.max_run_count === undefined
       ? null
@@ -91,7 +71,7 @@ export function buildGraphWorkflowBrowseContent(folderId: number | null, options
     : GraphWorkflowModel.findAll(true).map(parseStoredGraphWorkflow)
   const workflowIds = workflows.map((workflow) => workflow.id)
   const schedules = decorateGraphWorkflowScheduleRecords(GraphWorkflowScheduleModel.findByWorkflowIds(workflowIds))
-  const executions = GraphExecutionModel.findByWorkflowIds(workflowIds, 300).map(decorateGraphExecutionRecord)
+  const executions = decorateGraphExecutionRecords(GraphExecutionModel.findByWorkflowIds(workflowIds, 300))
   const executionIds = executions.map((execution) => execution.id)
   const includeOutputs = options.includeOutputs !== false
   const artifacts = includeOutputs ? GraphExecutionArtifactModel.findByExecutionIds(executionIds) : []

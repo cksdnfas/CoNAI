@@ -60,11 +60,7 @@ function parseStoredScheduleInputValues(value?: string | null) {
 }
 
 function countReservedScheduleRuns(scheduleId: number) {
-  return GraphExecutionModel.findByScheduleIds([scheduleId], 5000).reduce((count, execution) => (
-    execution.status === 'completed' || execution.status === 'queued' || execution.status === 'running'
-      ? count + 1
-      : count
-  ), 0)
+  return GraphExecutionModel.countReservedByScheduleId(scheduleId)
 }
 
 function resolveAllowedScheduleEnqueueCount(scheduleId: number, requestedCount: number, maxRunCount?: number | null) {
@@ -88,18 +84,14 @@ function enqueueScheduleRuns(params: {
   maxRunCount?: number | null
 }) {
   const allowedCount = resolveAllowedScheduleEnqueueCount(params.scheduleId, params.requestedCount, params.maxRunCount)
-  const executionIds: number[] = []
-
-  for (let index = 0; index < allowedCount; index += 1) {
-    const result = GraphWorkflowExecutionQueue.enqueue(
-      params.workflowId,
-      params.inputValues,
-      undefined,
-      false,
-      { triggerType: 'schedule', scheduleId: params.scheduleId },
-    )
-    executionIds.push(result.executionId)
-  }
+  const executionIds = GraphWorkflowExecutionQueue.enqueueMany(
+    params.workflowId,
+    allowedCount,
+    params.inputValues,
+    undefined,
+    false,
+    { triggerType: 'schedule', scheduleId: params.scheduleId },
+  ).map((result) => result.executionId)
 
   return {
     requested_count: params.requestedCount,

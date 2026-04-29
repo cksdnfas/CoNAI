@@ -5,7 +5,7 @@ import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact
 import { GraphExecutionFinalResultModel } from '../../models/GraphExecutionFinalResult'
 import { GraphExecutionLogModel } from '../../models/GraphExecutionLog'
 import { GraphWorkflowExecutionQueue } from '../../services/graphWorkflowExecutionQueue'
-import { decorateGraphExecutionRecord } from '../../services/graphWorkflowViewService'
+import { decorateGraphExecutionRecord, decorateGraphExecutionRecords } from '../../services/graphWorkflowViewService'
 import { cleanupEmptyGraphExecutions } from '../../services/graphWorkflowOutputManagementService'
 import { asyncHandler } from '../../middleware/errorHandler'
 import { routeParam } from '../routeParam'
@@ -23,7 +23,7 @@ export function createGraphWorkflowExecutionRoutes() {
     }
 
     try {
-      const executions = GraphExecutionModel.findByWorkflow(id).map(decorateGraphExecutionRecord)
+      const executions = decorateGraphExecutionRecords(GraphExecutionModel.findByWorkflow(id))
       return res.json({ success: true, data: executions } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error getting graph executions:', error)

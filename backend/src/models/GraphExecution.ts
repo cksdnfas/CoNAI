@@ -2,6 +2,24 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionRecord, GraphExecutionStatus, GraphExecutionTriggerType } from '../types/moduleGraph'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
 
+export type GraphExecutionStatusCounts = {
+  completed: number
+  queued: number
+  running: number
+  failed: number
+  cancelled: number
+}
+
+function createEmptyStatusCounts(): GraphExecutionStatusCounts {
+  return {
+    completed: 0,
+    queued: 0,
+    running: 0,
+    failed: 0,
+    cancelled: 0,
+  }
+}
+
 export class GraphExecutionModel {
   /** Delete a specific execution id set. */
   static deleteByIds(executionIds: number[]) {
@@ -59,6 +77,50 @@ export class GraphExecutionModel {
       WHERE graph_workflow_id IN (${placeholders})
       ORDER BY created_date DESC, id DESC
     `).all(...workflowIds) as GraphExecutionRecord[]
+  }
+
+  /** Count executions by status for schedule id sets without hydrating execution rows. */
+  static countStatusesByScheduleIds(scheduleIds: number[]) {
+    const countsByScheduleId = new Map<number, GraphExecutionStatusCounts>()
+    for (const scheduleId of scheduleIds) {
+      countsByScheduleId.set(scheduleId, createEmptyStatusCounts())
+    }
+
+    if (scheduleIds.length === 0) {
+      return countsByScheduleId
+    }
+
+    const db = getUserSettingsDb()
+    const placeholders = scheduleIds.map(() => '?').join(', ')
+    const rows = db.prepare(`
+      SELECT schedule_id, status, COUNT(*) as total
+      FROM graph_executions
+      WHERE schedule_id IN (${placeholders})
+      GROUP BY schedule_id, status
+    `).all(...scheduleIds) as Array<{ schedule_id: number; status: GraphExecutionStatus; total: number }>
+
+    for (const row of rows) {
+      const counts = countsByScheduleId.get(row.schedule_id) ?? createEmptyStatusCounts()
+      if (row.status in counts) {
+        counts[row.status as keyof GraphExecutionStatusCounts] = row.total
+      }
+      countsByScheduleId.set(row.schedule_id, counts)
+    }
+
+    return countsByScheduleId
+  }
+
+  /** Count reserved schedule runs without loading execution rows. */
+  static countReservedByScheduleId(scheduleId: number) {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM graph_executions
+      WHERE schedule_id = ?
+        AND status IN ('completed', 'queued', 'running')
+    `).get(scheduleId) as { total: number } | undefined
+
+    return row?.total ?? 0
   }
 
   /** Create one execution row for manual or schedule-triggered workflow execution. */
