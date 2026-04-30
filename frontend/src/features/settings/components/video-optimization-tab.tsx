@@ -3,13 +3,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useI18n, type TranslationDictionary } from '@/i18n'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import type { VideoOptimizationSettings } from '@/types/settings'
 
-const VIDEO_PRESETS: Array<{ value: VideoOptimizationSettings['preset']; label: string; crf: number; audioBitrateKbps: number }> = [
-  { value: 'high-quality', label: '고화질', crf: 22, audioBitrateKbps: 192 },
-  { value: 'balanced', label: '균형', crf: 26, audioBitrateKbps: 128 },
-  { value: 'economy', label: '절약', crf: 30, audioBitrateKbps: 96 },
+const VIDEO_PRESETS: Array<{ value: VideoOptimizationSettings['preset']; label: TranslationDictionary; crf: number; audioBitrateKbps: number }> = [
+  { value: 'high-quality', label: { ko: '고화질', en: 'High quality' }, crf: 22, audioBitrateKbps: 192 },
+  { value: 'balanced', label: { ko: '균형', en: 'Balanced' }, crf: 26, audioBitrateKbps: 128 },
+  { value: 'economy', label: { ko: '절약', en: 'Economy' }, crf: 30, audioBitrateKbps: 96 },
 ]
 
 interface VideoOptimizationTabProps {
@@ -26,18 +27,20 @@ export function VideoOptimizationTab({
   onSave,
   isSaving,
 }: VideoOptimizationTabProps) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-6">
       <section>
         <SettingsSection
-          heading="비디오 최적화"
+          heading={t({ ko: '비디오 최적화', en: 'Video optimization' })}
           actions={
             <Button
               size="icon-sm"
               onClick={onSave}
               disabled={!videoOptimizationDraft || isSaving}
-              aria-label="비디오 최적화 설정 저장"
-              title="비디오 최적화 설정 저장"
+              aria-label={t({ ko: '비디오 최적화 설정 저장', en: 'Save video optimization settings' })}
+              title={t({ ko: '비디오 최적화 설정 저장', en: 'Save video optimization settings' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -46,7 +49,7 @@ export function VideoOptimizationTab({
           {videoOptimizationDraft ? (
             <div className="space-y-4">
               <SettingsInsetBlock className="text-sm text-muted-foreground">
-                H.264 MP4로 저장하고, 원본 크기는 유지해. 원본은 따로 남기지 않아.
+                {t({ ko: 'H.264 MP4로 저장하고, 원본 크기는 유지해. 원본은 따로 남기지 않아.', en: 'Save as H.264 MP4, keep the original dimensions, and do not keep a separate original copy.' })}
               </SettingsInsetBlock>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -56,10 +59,10 @@ export function VideoOptimizationTab({
                     checked={videoOptimizationDraft.enabled}
                     onChange={(event) => onPatchVideoOptimization({ enabled: event.target.checked })}
                   />
-                  비디오 최적화 사용
+                  {t({ ko: '비디오 최적화 사용', en: 'Enable video optimization' })}
                 </SettingsToggleRow>
 
-                <SettingsField label="프리셋">
+                <SettingsField label={t({ ko: '프리셋', en: 'Preset' })}>
                   <Select
                     variant="settings"
                     value={videoOptimizationDraft.preset}
@@ -74,12 +77,12 @@ export function VideoOptimizationTab({
                     }}
                   >
                     {VIDEO_PRESETS.map((preset) => (
-                      <option key={preset.value} value={preset.value}>{preset.label}</option>
+                      <option key={preset.value} value={preset.value}>{t(preset.label)}</option>
                     ))}
                   </Select>
                 </SettingsField>
 
-                <SettingsField label="오디오 bitrate (kbps)">
+                <SettingsField label={t({ ko: '오디오 bitrate (kbps)', en: 'Audio bitrate (kbps)' })}>
                   <Input
                     type="number"
                     min={32}
@@ -108,7 +111,7 @@ export function VideoOptimizationTab({
                       checked={videoOptimizationDraft.applyToUpload}
                       onChange={(event) => onPatchVideoOptimization({ applyToUpload: event.target.checked })}
                     />
-                    업로드 비디오에 적용
+                    {t({ ko: '업로드 비디오에 적용', en: 'Apply to uploaded videos' })}
                   </SettingsToggleRow>
 
                   <SettingsToggleRow>
@@ -117,7 +120,7 @@ export function VideoOptimizationTab({
                       checked={videoOptimizationDraft.applyToGeneratedOutputs}
                       onChange={(event) => onPatchVideoOptimization({ applyToGeneratedOutputs: event.target.checked })}
                     />
-                    생성 결과 비디오에 적용
+                    {t({ ko: '생성 결과 비디오에 적용', en: 'Apply to generated output videos' })}
                   </SettingsToggleRow>
 
                   <SettingsToggleRow>
@@ -126,7 +129,7 @@ export function VideoOptimizationTab({
                       checked={videoOptimizationDraft.applyToBackupImports}
                       onChange={(event) => onPatchVideoOptimization({ applyToBackupImports: event.target.checked })}
                     />
-                    백업 유입 비디오에 적용
+                    {t({ ko: '백업 유입 비디오에 적용', en: 'Apply to backup-imported videos' })}
                   </SettingsToggleRow>
                 </div>
               </div>
