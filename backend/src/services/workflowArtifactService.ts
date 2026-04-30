@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import sharp from 'sharp'
 import { runtimePaths } from '../config/runtimePaths'
 import type { WorkflowArtifactDirectoryMode, WorkflowRecord } from '../types/workflow'
 
@@ -35,6 +36,10 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   '.mkv': 'video/x-matroska',
   '.txt': 'text/plain; charset=utf-8',
   '.log': 'text/plain; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
+  '.yaml': 'text/yaml; charset=utf-8',
+  '.yml': 'text/yaml; charset=utf-8',
+  '.toml': 'text/toml; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.csv': 'text/csv; charset=utf-8',
   '.zip': 'application/zip',
@@ -43,6 +48,10 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   '.pt': 'application/octet-stream',
   '.pth': 'application/octet-stream',
 }
+
+const ARTIFACT_INTERNAL_DIRNAME = '.conai'
+const ARTIFACT_DIRECTORY_THUMBNAIL_NAME = 'thumbnail.webp'
+const ARTIFACT_TEXT_FILES_DIRNAME = 'text-files'
 
 function slugify(value: string) {
   const slug = value
@@ -75,12 +84,39 @@ function isImageMimeType(mimeType: string | null) {
   return Boolean(mimeType?.startsWith('image/'))
 }
 
+function isTextArtifactMimeType(mimeType: string | null) {
+  return Boolean(mimeType?.startsWith('text/') || mimeType?.includes('json'))
+}
+
+function isInternalArtifactEntry(name: string) {
+  return name === ARTIFACT_INTERNAL_DIRNAME
+}
+
+async function getDirectoryGeneratedThumbnail(root: string, directory: string) {
+  const thumbnailPath = path.join(directory, ARTIFACT_INTERNAL_DIRNAME, ARTIFACT_DIRECTORY_THUMBNAIL_NAME)
+  const stat = await fs.promises.stat(thumbnailPath).catch(() => null)
+  if (!stat?.isFile()) {
+    return null
+  }
+
+  return path.relative(root, thumbnailPath).replace(/\\/g, '/')
+}
+
 async function findDirectoryThumbnail(root: string, directory: string, depth = 3): Promise<string | null> {
+  const generatedThumbnail = await getDirectoryGeneratedThumbnail(root, directory)
+  if (generatedThumbnail) {
+    return generatedThumbnail
+  }
+
   const candidates: Array<{ absolutePath: string; mtimeMs: number }> = []
 
   const scan = async (currentDirectory: string, currentDepth: number) => {
     const entries = await fs.promises.readdir(currentDirectory, { withFileTypes: true }).catch(() => [])
     await Promise.all(entries.map(async (entry) => {
+      if (isInternalArtifactEntry(entry.name)) {
+        return
+      }
+
       const absolutePath = path.join(currentDirectory, entry.name)
       if (entry.isDirectory() && currentDepth > 0) {
         await scan(absolutePath, currentDepth - 1)
@@ -194,7 +230,8 @@ export async function listWorkflowArtifacts(workflow: WorkflowRecord, relativePa
     throw new Error('Artifact path is not a directory')
   }
 
-  const dirents = await fs.promises.readdir(resolved.target, { withFileTypes: true })
+  const dirents = (await fs.promises.readdir(resolved.target, { withFileTypes: true }))
+    .filter((dirent) => !isInternalArtifactEntry(dirent.name))
   const entries = await Promise.all(dirents.map(async (dirent) => {
     const absolutePath = path.join(resolved.target, dirent.name)
     const itemStat = await fs.promises.stat(absolutePath)
@@ -300,13 +337,21 @@ export async function moveFileIntoWorkflowArtifacts(input: {
   }
 
   const sanitizedRelativePath = sanitizeArtifactRelativePath(input.originalRelativePath)
-  const targetSubdirectory = sanitizedRelativePath ? path.join(targetDirectory, path.dirname(sanitizedRelativePath)) : targetDirectory
+  const targetFileName = sanitizedRelativePath ? path.basename(sanitizedRelativePath) : input.originalFileName || input.sourcePath
+  const targetRelativeDirname = sanitizedRelativePath ? path.dirname(sanitizedRelativePath) : ''
+  const normalizedTargetRelativeDirname = targetRelativeDirname === '.' ? '' : targetRelativeDirname
+  const shouldGroupAsTextFile = isTextArtifactMimeType(getMimeType(targetFileName))
+  const targetSubdirectory = path.join(
+    targetDirectory,
+    shouldGroupAsTextFile ? ARTIFACT_TEXT_FILES_DIRNAME : '',
+    normalizedTargetRelativeDirname,
+  )
   if (!isSubPath(targetSubdirectory, root)) {
     throw new Error('Artifact target subdirectory escapes workflow root')
   }
   await fs.promises.mkdir(targetSubdirectory, { recursive: true })
 
-  const targetPath = await resolveAvailableFilePath(targetSubdirectory, sanitizedRelativePath ? path.basename(sanitizedRelativePath) : input.originalFileName || input.sourcePath)
+  const targetPath = await resolveAvailableFilePath(targetSubdirectory, targetFileName)
   await fs.promises.rename(input.sourcePath, targetPath).catch(async (error: NodeJS.ErrnoException) => {
     if (error.code !== 'EXDEV') {
       throw error
@@ -321,5 +366,33 @@ export async function moveFileIntoWorkflowArtifacts(input: {
     relativePath: path.relative(root, targetPath).replace(/\\/g, '/'),
     directoryRelativePath: path.relative(root, targetDirectory).replace(/\\/g, '/'),
     size: (await fs.promises.stat(targetPath)).size,
+  }
+}
+
+export async function writeWorkflowArtifactDirectoryThumbnail(input: {
+  workflow: WorkflowRecord
+  directoryRelativePath?: string | null
+  sourcePath: string
+}) {
+  const root = resolveWorkflowArtifactRoot(input.workflow)
+  const targetDirectory = path.resolve(root, normalizeRelativePath(input.directoryRelativePath))
+
+  if (!isSubPath(targetDirectory, root)) {
+    throw new Error('Artifact thumbnail target escapes workflow root')
+  }
+
+  const thumbnailDirectory = path.join(targetDirectory, ARTIFACT_INTERNAL_DIRNAME)
+  await fs.promises.mkdir(thumbnailDirectory, { recursive: true })
+
+  const thumbnailPath = path.join(thumbnailDirectory, ARTIFACT_DIRECTORY_THUMBNAIL_NAME)
+  await sharp(input.sourcePath, { animated: false })
+    .rotate()
+    .resize({ width: 512, height: 512, fit: 'cover', withoutEnlargement: true })
+    .webp({ quality: 82 })
+    .toFile(thumbnailPath)
+
+  return {
+    absolutePath: thumbnailPath,
+    relativePath: path.relative(root, thumbnailPath).replace(/\\/g, '/'),
   }
 }

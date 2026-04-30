@@ -2,7 +2,8 @@ import fs from 'fs'
 import path from 'path'
 import { APIImageProcessor } from './APIImageProcessor'
 import { COMFYUI_EXECUTION_CANCELLED_MESSAGE, ComfyUIService } from './comfyuiService'
-import { moveFileIntoWorkflowArtifacts } from './workflowArtifactService'
+import { FileDiscoveryService } from './folderScan/fileDiscoveryService'
+import { moveFileIntoWorkflowArtifacts, writeWorkflowArtifactDirectoryThumbnail } from './workflowArtifactService'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
 import type { WorkflowRecord } from '../types/workflow'
 
@@ -41,6 +42,18 @@ export interface ExecuteComfyGenerationResult {
 
 export function isComfyGenerationCancelledError(error: unknown) {
   return error instanceof Error && error.message === COMFYUI_EXECUTION_CANCELLED_MESSAGE
+}
+
+function parseComfyNodeOrder(nodeId: string) {
+  const match = nodeId.match(/^\d+/)
+  return match ? Number(match[0]) : -1
+}
+
+function isArtifactThumbnailCandidate(output: { format?: string; kind?: string }, savedArtifact: ComfyGenerationSavedArtifact) {
+  const normalizedFormat = typeof output.format === 'string' ? output.format.toLowerCase() : ''
+  const explicitMimeType = normalizedFormat.includes('/') ? normalizedFormat : ''
+  const resolvedMimeType = explicitMimeType || FileDiscoveryService.getMimeType(savedArtifact.absolutePath)
+  return output.kind !== 'video' && resolvedMimeType.startsWith('image/')
 }
 
 /** Backfill renamed CoNAI artifact-node inputs so older saved workflows keep running. */
@@ -95,9 +108,10 @@ export async function executeComfyGeneration(
   const artifactRunStartedAt = new Date()
   let representativeImage: ComfyGenerationRepresentativeImage | null = null
   const pendingTempPaths = new Set(collectedOutputs.map((output) => output.tempPath))
+  const savedArtifactOutputs: Array<{ artifact: ComfyGenerationSavedArtifact; isImageLike: boolean; nodeOrder: number; index: number }> = []
 
   try {
-    for (const output of collectedOutputs) {
+    for (const [index, output] of collectedOutputs.entries()) {
       if (await shouldCancel?.()) {
         throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
       }
@@ -112,6 +126,12 @@ export async function executeComfyGeneration(
             runStartedAt: artifactRunStartedAt,
           })
           savedArtifacts.push(savedArtifact)
+          savedArtifactOutputs.push({
+            artifact: savedArtifact,
+            isImageLike: isArtifactThumbnailCandidate(output, savedArtifact),
+            nodeOrder: parseComfyNodeOrder(output.nodeId),
+            index,
+          })
           console.log(`✅ ComfyUI artifact saved: ${savedArtifact.relativePath}`)
         } else {
           const processedPaths = await APIImageProcessor.processGeneratedFile(output.tempPath, 'comfyui', {
@@ -151,6 +171,27 @@ export async function executeComfyGeneration(
         await fs.promises.unlink(tempPath)
       } catch {
         // Ignore best-effort cleanup for already-removed temp files.
+      }
+    }
+  }
+
+  if (isArtifactWorkflow && savedArtifactOutputs.length > 0) {
+    const finalNodeOrder = Math.max(...savedArtifactOutputs.map((output) => output.nodeOrder))
+    const thumbnailTarget = savedArtifactOutputs.find((output) => output.nodeOrder === finalNodeOrder && output.isImageLike)
+      ?? [...savedArtifactOutputs]
+        .filter((output) => output.isImageLike)
+        .sort((left, right) => (right.nodeOrder - left.nodeOrder) || (left.index - right.index))[0]
+
+    if (thumbnailTarget) {
+      try {
+        const thumbnail = await writeWorkflowArtifactDirectoryThumbnail({
+          workflow: artifactWorkflow,
+          directoryRelativePath: thumbnailTarget.artifact.directoryRelativePath,
+          sourcePath: thumbnailTarget.artifact.absolutePath,
+        })
+        console.log(`✅ ComfyUI artifact thumbnail saved: ${thumbnail.relativePath}`)
+      } catch (thumbnailError) {
+        console.warn('⚠️ Failed to create ComfyUI artifact directory thumbnail:', thumbnailError)
       }
     }
   }
