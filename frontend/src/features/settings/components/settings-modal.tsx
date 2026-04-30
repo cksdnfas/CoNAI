@@ -2,6 +2,7 @@ import { useEffect, useRef, type PropsWithChildren, type ReactNode } from 'react
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 
 interface SettingsModalProps extends PropsWithChildren {
@@ -15,6 +16,7 @@ interface SettingsModalProps extends PropsWithChildren {
 }
 
 export function SettingsModal({ open, title, description, headerContent, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, children }: SettingsModalProps) {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   useOverlayBackClose({ open, onClose, enabled: closeOnBack })
@@ -57,7 +59,7 @@ export function SettingsModal({ open, title, description, headerContent, onClose
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        aria-label={typeof title === 'string' ? title : '설정 모달'}
+        aria-label={typeof title === 'string' ? title : t({ ko: '설정 모달', en: 'Settings modal' })}
         className={`mx-auto flex max-h-full w-full flex-col overflow-y-auto rounded-sm border border-border/85 bg-background shadow-[0_24px_80px_rgba(0,0,0,0.48)] ${widthClassName}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -68,7 +70,7 @@ export function SettingsModal({ open, title, description, headerContent, onClose
               {description ? <div className="text-sm text-muted-foreground">{description}</div> : null}
             </div>
 
-            <Button type="button" size="icon-sm" variant="secondary" className="shrink-0" onClick={onClose} aria-label="닫기" title="닫기">
+            <Button type="button" size="icon-sm" variant="secondary" className="shrink-0" onClick={onClose} aria-label={t({ ko: '닫기', en: 'Close' })} title={t({ ko: '닫기', en: 'Close' })}>
               <X className="h-4 w-4" />
             </Button>
           </div>

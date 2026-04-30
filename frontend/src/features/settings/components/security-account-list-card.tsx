@@ -1,5 +1,6 @@
 import { Palette } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { SecurityAccountManagementList } from './security-account-management-list'
 import { SettingsSection } from './settings-primitives'
@@ -35,17 +36,19 @@ export function SecurityAccountListCard({
   onAccountPasswordChange,
   onAccountDelete,
 }: SecurityAccountListCardProps) {
+  const { t } = useI18n()
+
   return (
     <SettingsSection
-        heading="계정"
+        heading={t({ ko: '계정', en: 'Accounts' })}
         actions={(
           <Button
             type="button"
             size="icon-sm"
             variant="outline"
             onClick={onOpenGroupColors}
-            aria-label="그룹 색상"
-            title="그룹 색상"
+            aria-label={t('securityGroupColorEditorModal.permissionGroupColors')}
+            title={t('securityGroupColorEditorModal.permissionGroupColors')}
           >
             <Palette className="h-4 w-4" />
           </Button>
@@ -60,9 +63,9 @@ export function SecurityAccountListCard({
             groupColors={groupColors}
             groupLabels={groupLabels}
             pageSize={20}
-            searchPlaceholder="계정 검색"
-            searchAriaLabel="계정 검색"
-            emptyMessage="맞는 계정이 없어. 검색어를 조금 바꿔봐."
+            searchPlaceholder={t({ ko: '계정 검색', en: 'Search accounts' })}
+            searchAriaLabel={t({ ko: '계정 검색', en: 'Search accounts' })}
+            emptyMessage={t({ ko: '맞는 계정이 없어. 검색어를 조금 바꿔봐.', en: 'No matching accounts. Try a different search.' })}
             isUpdatingAccountGroup={isUpdatingAccountGroup}
             isUpdatingAccountPassword={isUpdatingAccountPassword}
             isDeletingAccount={isDeletingAccount}

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
 import type {
   AuthAccountListItem,
   AuthPermissionGroupMemberItem,
@@ -104,6 +105,7 @@ export function SecurityPermissionGroupEditorModal({
   onAccountPasswordChange,
   onAccountDelete,
 }: SecurityPermissionGroupEditorModalProps) {
+  const { language, t } = useI18n()
   const isCreateMode = mode === 'create'
   const memberAccounts = useMemo(() => {
     const accountMap = new Map(allAccounts.map((account) => [account.id, account]))
@@ -113,10 +115,10 @@ export function SecurityPermissionGroupEditorModal({
   }, [allAccounts, members])
 
   const title = isCreateMode
-    ? '새 권한 그룹'
+    ? t({ ko: '새 권한 그룹', en: 'New permission group' })
     : group
-      ? getPermissionGroupDisplayName(group.groupKey, group.name)
-      : '권한 그룹'
+      ? getPermissionGroupDisplayName(language, group.groupKey, group.name)
+      : t({ ko: '권한 그룹', en: 'Permission group' })
   const isBusy = isSaving || isDeleting
 
   return (
@@ -128,9 +130,9 @@ export function SecurityPermissionGroupEditorModal({
       headerContent={
         !isCreateMode && group ? (
           <div className="flex flex-wrap gap-2">
-            <Badge variant={group.systemGroup ? 'secondary' : 'outline'}>{getPermissionGroupKindLabel(group.systemGroup)}</Badge>
-            <Badge variant="outline">권한 {draft.permissionKeys.length}</Badge>
-            <Badge variant="outline">멤버 {members.length}</Badge>
+            <Badge variant={group.systemGroup ? 'secondary' : 'outline'}>{getPermissionGroupKindLabel(language, group.systemGroup)}</Badge>
+            <Badge variant="outline">{t({ ko: '권한 {count}', en: 'Permissions {count}' }, { count: draft.permissionKeys.length })}</Badge>
+            <Badge variant="outline">{t({ ko: '멤버 {count}', en: 'Members {count}' }, { count: members.length })}</Badge>
           </div>
         ) : null
       }
@@ -141,24 +143,24 @@ export function SecurityPermissionGroupEditorModal({
         <div className="space-y-6">
           {canEditFields ? (
             <>
-              <SettingsField label="그룹 이름">
+              <SettingsField label={t({ ko: '그룹 이름', en: 'Group name' })}>
                 <Input
                   variant="settings"
                   value={draft.name}
                   disabled={isBusy}
                   onChange={(event) => onDraftChange({ name: event.target.value })}
-                  placeholder="예: 편집팀"
+                  placeholder={t({ ko: '예: 편집팀', en: 'Example: Editors' })}
                 />
               </SettingsField>
 
-              <SettingsField label="설명">
+              <SettingsField label={t({ ko: '설명', en: 'Description' })}>
                 <Textarea
                   variant="settings"
                   rows={3}
                   value={draft.description}
                   disabled={isBusy}
                   onChange={(event) => onDraftChange({ description: event.target.value })}
-                  placeholder="필요하면만 적어"
+                  placeholder={t({ ko: '필요하면만 적어', en: 'Add this only if needed' })}
                 />
               </SettingsField>
             </>
@@ -166,13 +168,13 @@ export function SecurityPermissionGroupEditorModal({
 
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-foreground">페이지 권한</h3>
-              {!canEditPermissions ? <Badge variant="secondary">읽기 전용</Badge> : null}
+              <h3 className="text-sm font-semibold text-foreground">{t({ ko: '페이지 권한', en: 'Page permissions' })}</h3>
+              {!canEditPermissions ? <Badge variant="secondary">{t({ ko: '읽기 전용', en: 'Read only' })}</Badge> : null}
             </div>
 
             <div className="space-y-2 rounded-sm border border-border bg-surface-container p-3">
               {permissionCatalog.length === 0 ? (
-                <div className="text-sm text-muted-foreground">표시할 페이지 권한이 아직 없어.</div>
+                <div className="text-sm text-muted-foreground">{t({ ko: '표시할 페이지 권한이 아직 없어.', en: 'There are no page permissions to show yet.' })}</div>
               ) : (
                 permissionCatalog.map((permission) => {
                   const checked = draft.permissionKeys.includes(permission.permissionKey)
@@ -183,7 +185,7 @@ export function SecurityPermissionGroupEditorModal({
                     >
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-foreground">
-                          {getPagePermissionLabel(permission.permissionKey, permission.label)}
+                          {getPagePermissionLabel(language, permission.permissionKey, permission.label)}
                         </div>
                       </div>
                       <input
@@ -203,23 +205,23 @@ export function SecurityPermissionGroupEditorModal({
           {!isCreateMode ? (
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-foreground">그룹 멤버</h3>
-                {!canManageMembers ? <Badge variant="secondary">읽기 전용</Badge> : null}
+                <h3 className="text-sm font-semibold text-foreground">{t({ ko: '그룹 멤버', en: 'Group members' })}</h3>
+                {!canManageMembers ? <Badge variant="secondary">{t({ ko: '읽기 전용', en: 'Read only' })}</Badge> : null}
               </div>
 
               {canManageMembers ? (
                 <div className="grid gap-3 rounded-sm border border-border bg-surface-container p-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                  <SettingsField label="계정">
+                  <SettingsField label={t({ ko: '계정', en: 'Account' })}>
                     <Select
                       variant="settings"
                       value={selectedAddMemberAccountId === null ? '' : String(selectedAddMemberAccountId)}
                       disabled={isAddingMember || isBusy}
                       onChange={(event) => onSelectedAddMemberAccountIdChange(event.target.value ? Number(event.target.value) : null)}
                     >
-                      <option value="">계정 선택</option>
+                      <option value="">{t({ ko: '계정 선택', en: 'Select account' })}</option>
                       {addableAccounts.map((account) => (
                         <option key={account.id} value={account.id}>
-                          {account.username} ({getAccountTypeLabel(account.accountType)})
+                          {account.username} ({getAccountTypeLabel(language, account.accountType)})
                         </option>
                       ))}
                     </Select>
@@ -232,7 +234,7 @@ export function SecurityPermissionGroupEditorModal({
                       onClick={onAddMember}
                       disabled={selectedAddMemberAccountId === null || isAddingMember || isBusy}
                     >
-                      추가
+                      {t({ ko: '추가', en: 'Add' })}
                     </Button>
                   </div>
                 </div>
@@ -245,9 +247,9 @@ export function SecurityPermissionGroupEditorModal({
                   groupColors={groupColors}
                   groupLabels={groupLabels}
                   pageSize={10}
-                  searchPlaceholder="멤버 검색"
-                  searchAriaLabel="그룹 멤버 검색"
-                  emptyMessage={members.length === 0 ? '멤버가 없어.' : '멤버 계정 정보를 불러오는 중이야.'}
+                  searchPlaceholder={t({ ko: '멤버 검색', en: 'Search members' })}
+                  searchAriaLabel={t({ ko: '그룹 멤버 검색', en: 'Search group members' })}
+                  emptyMessage={members.length === 0 ? t({ ko: '멤버가 없어.', en: 'There are no members.' }) : t({ ko: '멤버 계정 정보를 불러오는 중이야.', en: 'Loading member account details.' })}
                   paginationClassName="pt-4"
                   isUpdatingAccountGroup={isUpdatingAccountGroup}
                   isUpdatingAccountPassword={isUpdatingAccountPassword}
@@ -260,7 +262,7 @@ export function SecurityPermissionGroupEditorModal({
                       disabled={isRemovingMember || isBusy}
                       onClick={() => onRemoveMember(account.id)}
                     >
-                      멤버 제거
+                      {t({ ko: '멤버 제거', en: 'Remove member' })}
                     </Button>
                   ) : null}
                   onAccountGroupChange={onAccountGroupChange}
@@ -275,17 +277,17 @@ export function SecurityPermissionGroupEditorModal({
             <div>
               {canDelete && group ? (
                 <Button type="button" variant="destructive" onClick={() => onDelete(group.id)} disabled={isBusy}>
-                  삭제
+                  {t({ ko: '삭제', en: 'Delete' })}
                 </Button>
               ) : null}
             </div>
 
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="secondary" onClick={onClose} disabled={isBusy}>
-                닫기
+                {t({ ko: '닫기', en: 'Close' })}
               </Button>
               <Button type="button" onClick={onSave} disabled={!canEditPermissions || isBusy}>
-                {isSaving ? '저장 중…' : '저장'}
+                {isSaving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
               </Button>
             </div>
           </div>

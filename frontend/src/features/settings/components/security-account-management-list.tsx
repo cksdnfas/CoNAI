@@ -2,9 +2,9 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Clock3, KeyRound, Shield, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { cn } from '@/lib/utils'
-import { formatDateTime } from '../settings-utils'
 import { SecurityAccountEditorModal, type SecurityAccountEditorSection } from './security-account-editor-modal'
 import { SettingsSearchablePagedList } from './settings-searchable-paged-list'
 import { getAccountStatusLabel, getPermissionGroupDisplayName } from './security-ui-text'
@@ -48,6 +48,7 @@ export function SecurityAccountManagementList({
   onAccountPasswordChange,
   onAccountDelete,
 }: SecurityAccountManagementListProps) {
+  const { formatDateTime, language, t } = useI18n()
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
   const [modalSection, setModalSection] = useState<SecurityAccountEditorSection>('group')
 
@@ -78,7 +79,7 @@ export function SecurityAccountManagementList({
         getItemKey={(account) => account.id}
         matchesQuery={(account, normalizedQuery) => {
           const searchableGroups = account.groupKeys
-            .map((groupKey) => getPermissionGroupDisplayName(groupKey, groupLabels[groupKey] ?? groupKey).toLowerCase())
+            .map((groupKey) => getPermissionGroupDisplayName(language, groupKey, groupLabels[groupKey] ?? groupKey).toLowerCase())
             .join(' ')
 
           return account.username.toLowerCase().includes(normalizedQuery)
@@ -95,18 +96,18 @@ export function SecurityAccountManagementList({
                     className="border-0 normal-case tracking-normal"
                     style={getSecurityGroupBadgeStyle(getSecurityGroupColor(groupKey, groupColors))}
                   >
-                    {getPermissionGroupDisplayName(groupKey, groupLabels[groupKey] ?? groupKey)}
+                    {getPermissionGroupDisplayName(language, groupKey, groupLabels[groupKey] ?? groupKey)}
                   </Badge>
                 ))}
-                {account.status !== 'active' ? <Badge variant="outline">{getAccountStatusLabel(account.status)}</Badge> : null}
-                {account.syncedLegacyAdmin ? <Badge variant="secondary">레거시</Badge> : null}
+                {account.status !== 'active' ? <Badge variant="outline">{getAccountStatusLabel(language, account.status)}</Badge> : null}
+                {account.syncedLegacyAdmin ? <Badge variant="secondary">{t({ ko: '레거시', en: 'Legacy' })}</Badge> : null}
                 <span
                   className={cn(
                     'inline-flex items-center text-muted-foreground',
                     account.lastLoginAt ? 'cursor-help' : 'opacity-50',
                   )}
-                  title={account.lastLoginAt ? `최근 로그인 ${formatDateTime(account.lastLoginAt)}` : '로그인 기록 없음'}
-                  aria-label={account.lastLoginAt ? '최근 로그인 있음' : '로그인 기록 없음'}
+                  title={account.lastLoginAt ? t({ ko: '최근 로그인 {value}', en: 'Last login {value}' }, { value: formatDateTime(account.lastLoginAt) }) : t({ ko: '로그인 기록 없음', en: 'No login history' })}
+                  aria-label={account.lastLoginAt ? t({ ko: '최근 로그인 있음', en: 'Has recent login' }) : t({ ko: '로그인 기록 없음', en: 'No login history' })}
                 >
                   <Clock3 className="h-4 w-4" />
                 </span>
@@ -119,8 +120,8 @@ export function SecurityAccountManagementList({
                 size="icon-sm"
                 variant="ghost"
                 onClick={() => openAccountEditor(account.id, 'group')}
-                title="그룹 설정"
-                aria-label="그룹 설정"
+                title={t({ ko: '그룹 설정', en: 'Group settings' })}
+                aria-label={t({ ko: '그룹 설정', en: 'Group settings' })}
               >
                 <Shield className="h-4 w-4" />
               </Button>
@@ -129,8 +130,8 @@ export function SecurityAccountManagementList({
                 size="icon-sm"
                 variant="ghost"
                 onClick={() => openAccountEditor(account.id, 'password')}
-                title="비밀번호 변경"
-                aria-label="비밀번호 변경"
+                title={t({ ko: '비밀번호 변경', en: 'Change password' })}
+                aria-label={t({ ko: '비밀번호 변경', en: 'Change password' })}
               >
                 <KeyRound className="h-4 w-4" />
               </Button>
@@ -139,8 +140,8 @@ export function SecurityAccountManagementList({
                 size="icon-sm"
                 variant="ghost"
                 onClick={() => openAccountEditor(account.id, 'danger')}
-                title="계정 삭제"
-                aria-label="계정 삭제"
+                title={t({ ko: '계정 삭제', en: 'Delete account' })}
+                aria-label={t({ ko: '계정 삭제', en: 'Delete account' })}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>

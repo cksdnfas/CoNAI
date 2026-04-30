@@ -1,6 +1,7 @@
 import { Palette, Pencil, Shield, Users, UserPlus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import type { AuthPermissionGroupSummaryItem } from '@/lib/api-auth'
 import { SettingsSection } from './settings-primitives'
 import { getPermissionGroupDisplayName, getPermissionGroupKindLabel } from './security-ui-text'
@@ -24,17 +25,19 @@ export function SecurityPermissionGroupListCard({
   onEdit,
   onOpenGroupColors,
 }: SecurityPermissionGroupListCardProps) {
+  const { language, t } = useI18n()
+
   return (
     <SettingsSection
-      heading="권한 그룹"
+      heading={t({ ko: '권한 그룹', en: 'Permission groups' })}
       actions={(
         <div className="flex items-center gap-2">
-          <Button type="button" size="icon-sm" variant="outline" onClick={onOpenGroupColors} aria-label="그룹 색상" title="그룹 색상">
+          <Button type="button" size="icon-sm" variant="outline" onClick={onOpenGroupColors} aria-label={t('securityGroupColorEditorModal.permissionGroupColors')} title={t('securityGroupColorEditorModal.permissionGroupColors')}>
             <Palette className="h-4 w-4" />
           </Button>
           <Button type="button" size="sm" onClick={onCreate}>
             <UserPlus className="h-4 w-4" />
-            그룹 추가
+            {t({ ko: '그룹 추가', en: 'Add group' })}
           </Button>
         </div>
       )}
@@ -53,10 +56,10 @@ export function SecurityPermissionGroupListCard({
                   className="border-0 normal-case tracking-normal"
                   style={getSecurityGroupBadgeStyle(getSecurityGroupColor(group.groupKey, groupColors))}
                 >
-                  {getPermissionGroupDisplayName(group.groupKey, group.name)}
+                  {getPermissionGroupDisplayName(language, group.groupKey, group.name)}
                 </Badge>
                 <Badge variant={group.systemGroup ? 'secondary' : 'outline'}>
-                  {getPermissionGroupKindLabel(group.systemGroup)}
+                  {getPermissionGroupKindLabel(language, group.systemGroup)}
                 </Badge>
                 <Badge variant="outline" className="gap-1 px-2 tracking-normal">
                   <Shield className="h-3.5 w-3.5" />
@@ -69,7 +72,7 @@ export function SecurityPermissionGroupListCard({
               </div>
 
               <div className="flex shrink-0 justify-end">
-                <Button type="button" size="icon-sm" variant="ghost" onClick={() => onEdit(group)} aria-label="권한 그룹 열기" title="권한 그룹 열기">
+                <Button type="button" size="icon-sm" variant="ghost" onClick={() => onEdit(group)} aria-label={t({ ko: '권한 그룹 열기', en: 'Open permission group' })} title={t({ ko: '권한 그룹 열기', en: 'Open permission group' })}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               </div>

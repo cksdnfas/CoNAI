@@ -1,6 +1,7 @@
 import { KeyRound, Save, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useI18n } from '@/i18n'
 import { SettingsField, SettingsSection } from './settings-primitives'
 
 interface SecurityAccountFormCardProps {
@@ -41,6 +42,7 @@ export function SecurityAccountFormCard({
   isSubmittingSetup,
   isSubmittingUpdate,
 }: SecurityAccountFormCardProps) {
+  const { t } = useI18n()
   const isSetupDisabled = isSubmittingSetup || setupUsername.trim().length === 0 || setupPassword.length === 0
   const isUpdateDisabled =
     isSubmittingUpdate ||
@@ -50,7 +52,7 @@ export function SecurityAccountFormCard({
 
   return (
     <SettingsSection
-      heading={!hasCredentials ? '관리자 계정' : '관리자 계정 변경'}
+      heading={!hasCredentials ? t({ ko: '관리자 계정', en: 'Admin account' }) : t({ ko: '관리자 계정 변경', en: 'Change admin account' })}
       actions={
         <div className="rounded-sm border border-border/70 bg-surface-low/45 p-2 text-primary">
           {hasCredentials ? <KeyRound className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
@@ -60,7 +62,7 @@ export function SecurityAccountFormCard({
       {!hasCredentials ? (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingsField label="아이디">
+            <SettingsField label={t({ ko: '아이디', en: 'Username' })}>
               <Input
                 variant="settings"
                 value={setupUsername}
@@ -68,7 +70,7 @@ export function SecurityAccountFormCard({
                 autoComplete="username"
               />
             </SettingsField>
-            <SettingsField label="비밀번호">
+            <SettingsField label={t({ ko: '비밀번호', en: 'Password' })}>
               <Input
                 type="password"
                 variant="settings"
@@ -80,14 +82,14 @@ export function SecurityAccountFormCard({
           </div>
           <div className="flex justify-end">
             <Button type="button" onClick={onSubmitSetup} disabled={isSetupDisabled}>
-              {isSubmittingSetup ? '생성 중…' : '생성'}
+              {isSubmittingSetup ? t({ ko: '생성 중…', en: 'Creating…' }) : t({ ko: '생성', en: 'Create' })}
             </Button>
           </div>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
-            <SettingsField label="현재 비밀번호">
+            <SettingsField label={t({ ko: '현재 비밀번호', en: 'Current password' })}>
               <Input
                 type="password"
                 variant="settings"
@@ -96,16 +98,16 @@ export function SecurityAccountFormCard({
                 autoComplete="current-password"
               />
             </SettingsField>
-            <SettingsField label="새 아이디">
+            <SettingsField label={t({ ko: '새 아이디', en: 'New username' })}>
               <Input
                 variant="settings"
                 value={nextUsername}
                 onChange={(event) => onNextUsernameChange(event.target.value)}
                 autoComplete="username"
-                placeholder={currentUsername ?? '새 아이디'}
+                placeholder={currentUsername ?? t({ ko: '새 아이디', en: 'New username' })}
               />
             </SettingsField>
-            <SettingsField label="새 비밀번호">
+            <SettingsField label={t({ ko: '새 비밀번호', en: 'New password' })}>
               <Input
                 type="password"
                 variant="settings"
@@ -121,8 +123,8 @@ export function SecurityAccountFormCard({
               size="icon-sm"
               onClick={onSubmitUpdate}
               disabled={isUpdateDisabled}
-              aria-label={isSubmittingUpdate ? '관리자 계정 변경 중' : '관리자 계정 저장'}
-              title={isSubmittingUpdate ? '관리자 계정 변경 중' : '관리자 계정 저장'}
+              aria-label={isSubmittingUpdate ? t({ ko: '관리자 계정 변경 중', en: 'Updating admin account' }) : t({ ko: '관리자 계정 저장', en: 'Save admin account' })}
+              title={isSubmittingUpdate ? t({ ko: '관리자 계정 변경 중', en: 'Updating admin account' }) : t({ ko: '관리자 계정 저장', en: 'Save admin account' })}
             >
               <Save className="h-4 w-4" />
             </Button>

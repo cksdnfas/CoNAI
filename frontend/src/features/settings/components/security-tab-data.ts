@@ -26,6 +26,7 @@ import type {
   AuthStatusRecord,
 } from '@/lib/api-auth'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { useI18n } from '@/i18n'
 
 const AUTH_ACCOUNTS_QUERY_KEY = ['auth-accounts'] as const
 const AUTH_PERMISSION_GROUPS_QUERY_KEY = ['auth-permission-groups', 'all'] as const
@@ -77,6 +78,7 @@ function createEmptyPermissionGroupDraft(): PermissionGroupEditorDraft {
 export function useSecurityTabData() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const databaseInfoQuery = useQuery({
     queryKey: ['auth-database-info'],
@@ -168,10 +170,10 @@ export function useSecurityTabData() {
       )
       setSetupDraft((draft) => ({ ...draft, password: '' }))
       setUpdateDraft({ currentPassword: '', nextUsername, nextPassword: '' })
-      showSnackbar({ message: '관리자 계정을 만들었어.', tone: 'info' })
+      showSnackbar({ message: t('securityTabData.adminAccountCreated'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '계정 생성에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('securityTabData.failedToCreateAccount'), tone: 'error' })
     },
   })
 
@@ -186,10 +188,10 @@ export function useSecurityTabData() {
       )
       setUpdateDraft({ currentPassword: '', nextUsername, nextPassword: '' })
       void queryClient.invalidateQueries({ queryKey: AUTH_ACCOUNTS_QUERY_KEY })
-      showSnackbar({ message: '관리자 계정을 갱신했어.', tone: 'info' })
+      showSnackbar({ message: t('securityTabData.adminAccountUpdated'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '계정 갱신에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('securityTabData.failedToUpdateAccount'), tone: 'error' })
     },
   })
 
@@ -203,10 +205,10 @@ export function useSecurityTabData() {
         queryClient.invalidateQueries({ queryKey: AUTH_STATUS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['auth-permission-group-detail'] }),
       ])
-      showSnackbar({ message: '기본 권한 그룹을 바꿨어.', tone: 'info' })
+      showSnackbar({ message: t('securityTabData.defaultPermissionGroupUpdated'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '권한 그룹 변경에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('securityTabData.failedToChangeThePermission'), tone: 'error' })
     },
   })
 
@@ -217,10 +219,10 @@ export function useSecurityTabData() {
         queryClient.invalidateQueries({ queryKey: AUTH_ACCOUNTS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: AUTH_STATUS_QUERY_KEY }),
       ])
-      showSnackbar({ message: '계정 비밀번호를 바꿨어.', tone: 'info' })
+      showSnackbar({ message: t('securityTabData.accountPasswordChanged'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '계정 비밀번호 변경에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('securityTabData.failedToChangeTheAccount'), tone: 'error' })
     },
   })
 
@@ -233,10 +235,10 @@ export function useSecurityTabData() {
         queryClient.invalidateQueries({ queryKey: AUTH_STATUS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['auth-permission-group-detail'] }),
       ])
-      showSnackbar({ message: '계정을 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t('securityTabData.accountDeleted'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '계정 삭제에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('securityTabData.failedToDeleteAccount'), tone: 'error' })
     },
   })
 
@@ -253,14 +255,14 @@ export function useSecurityTabData() {
       }
 
       if (!activePermissionGroup) {
-        throw new Error('편집할 권한 그룹을 불러오지 못했어.')
+        throw new Error(t('securityTabData.couldNotLoadThePermission'))
       }
 
       if (activePermissionGroup.systemGroup) {
         if (activePermissionGroup.groupKey === 'anonymous' || activePermissionGroup.groupKey === 'guest') {
           return updateBuiltInPageAccess(activePermissionGroup.groupKey, payload.permissionKeys)
         }
-        throw new Error('이 시스템 그룹은 여기서 수정할 수 없어.')
+        throw new Error(t('securityTabData.thisSystemGroupCannotBe'))
       }
 
       return updateAuthPermissionGroup(activePermissionGroup.id, payload)
@@ -276,10 +278,13 @@ export function useSecurityTabData() {
       setActivePermissionGroupId(null)
       setPermissionGroupDraft(createEmptyPermissionGroupDraft())
       setSelectedAddMemberAccountId(null)
-      showSnackbar({ message: permissionGroupEditorMode === 'create' ? '권한 그룹을 만들었어.' : '권한 그룹을 저장했어.', tone: 'info' })
+      showSnackbar({
+        message: permissionGroupEditorMode === 'create' ? t('securityTabData.permissionGroupCreated') : t('securityTabData.permissionGroupSaved'),
+        tone: 'info',
+      })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '권한 그룹 저장에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('securityTabData.failedToSavePermissionGroup'), tone: 'error' })
     },
   })
 
@@ -294,10 +299,10 @@ export function useSecurityTabData() {
       setActivePermissionGroupId(null)
       setPermissionGroupDraft(createEmptyPermissionGroupDraft())
       setSelectedAddMemberAccountId(null)
-      showSnackbar({ message: '권한 그룹을 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t('securityTabData.permissionGroupDeleted'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '권한 그룹 삭제에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('securityTabData.failedToDeletePermissionGroup'), tone: 'error' })
     },
   })
 
@@ -311,10 +316,10 @@ export function useSecurityTabData() {
         queryClient.invalidateQueries({ queryKey: ['auth-permission-group-detail', activePermissionGroupId] }),
       ])
       setSelectedAddMemberAccountId(null)
-      showSnackbar({ message: '그룹에 계정을 추가했어.', tone: 'info' })
+      showSnackbar({ message: t('securityTabData.accountAddedToTheGroup'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '그룹 멤버 추가에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('securityTabData.failedToAddGroupMember'), tone: 'error' })
     },
   })
 
@@ -327,10 +332,10 @@ export function useSecurityTabData() {
         queryClient.invalidateQueries({ queryKey: AUTH_STATUS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['auth-permission-group-detail', activePermissionGroupId] }),
       ])
-      showSnackbar({ message: '그룹에서 계정을 뺐어.', tone: 'info' })
+      showSnackbar({ message: t('securityTabData.accountRemovedFromTheGroup'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '그룹 멤버 제거에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('securityTabData.failedToRemoveGroupMember'), tone: 'error' })
     },
   })
 
@@ -436,12 +441,12 @@ export function useSecurityTabData() {
 
   const submitPermissionGroupEditor = () => {
     if (!permissionGroupDraft.name.trim() && permissionGroupEditorMode === 'create') {
-      showSnackbar({ message: '그룹 이름은 필요해.', tone: 'error' })
+      showSnackbar({ message: t('securityTabData.groupNameIsRequired'), tone: 'error' })
       return
     }
 
     if (activePermissionGroup?.systemGroup && activePermissionGroup.groupKey === 'admin') {
-      showSnackbar({ message: 'admin 시스템 그룹은 여기서 수정하지 않는 게 맞아.', tone: 'error' })
+      showSnackbar({ message: t('securityTabData.theAdminSystemGroupShould'), tone: 'error' })
       return
     }
 
