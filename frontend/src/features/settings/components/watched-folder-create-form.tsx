@@ -33,14 +33,14 @@ export function WatchedFolderCreateForm({
         </SettingsField>
 
         <SettingsField label={t({ ko: '표시 이름', en: 'Display name' })}>
-          <Input variant="settings" value={newFolder.folder_name} onChange={(event) => onNewFolderChange({ folder_name: event.target.value })} placeholder="Incoming" />
+          <Input variant="settings" value={newFolder.folder_name} onChange={(event) => onNewFolderChange({ folder_name: event.target.value })} placeholder={t({ ko: 'Incoming', en: 'Incoming' })} />
         </SettingsField>
 
         <SettingsField label={t({ ko: '스캔 주기(분)', en: 'Scan interval (minutes)' })}>
           <Input type="number" min={1} variant="settings" value={newFolder.scan_interval} onChange={(event) => onNewFolderChange({ scan_interval: Number(event.target.value) || 1 })} />
         </SettingsField>
 
-        <SettingsField label="watcher polling(ms)">
+        <SettingsField label={t({ ko: 'watcher polling(ms)', en: 'Watcher polling (ms)' })}>
           <Input type="number" min={100} variant="settings" value={newFolder.watcher_polling_interval} onChange={(event) => onNewFolderChange({ watcher_polling_interval: Number(event.target.value) || 100 })} />
         </SettingsField>
 

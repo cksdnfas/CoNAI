@@ -93,9 +93,9 @@ export function WatchedFolderCard({
       }
     >
       <div className="flex flex-wrap gap-2">
-        {folder.is_default === 1 ? <Badge variant="secondary">default</Badge> : null}
-        <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? 'active' : 'inactive'}</Badge>
-        <Badge variant={getWatcherBadgeVariant(watcherState)}>{`watcher ${watcherState || 'stopped'}`}</Badge>
+        {folder.is_default === 1 ? <Badge variant="secondary">{t({ ko: '기본', en: 'Default' })}</Badge> : null}
+        <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
+        <Badge variant={getWatcherBadgeVariant(watcherState)}>{t({ ko: 'watcher {status}', en: 'Watcher {status}' }, { status: watcherState || 'stopped' })}</Badge>
       </div>
 
       <div className="break-all font-mono text-xs text-muted-foreground">{folder.folder_path}</div>
@@ -110,11 +110,11 @@ export function WatchedFolderCard({
         </SettingsField>
 
         <SettingsField label={t({ ko: '제외 확장자', en: 'Excluded extensions' })}>
-          <Input variant="settings" value={draft.exclude_extensions} onChange={(event) => setDraft((current) => ({ ...current, exclude_extensions: event.target.value }))} placeholder="tmp, db, txt" />
+          <Input variant="settings" value={draft.exclude_extensions} onChange={(event) => setDraft((current) => ({ ...current, exclude_extensions: event.target.value }))} placeholder={t({ ko: 'tmp, db, txt', en: 'tmp, db, txt' })} />
         </SettingsField>
 
         <SettingsField label={t({ ko: '제외 패턴', en: 'Excluded patterns' })}>
-          <Input variant="settings" value={draft.exclude_patterns} onChange={(event) => setDraft((current) => ({ ...current, exclude_patterns: event.target.value }))} placeholder="@eaDir, thumbs, cache" />
+          <Input variant="settings" value={draft.exclude_patterns} onChange={(event) => setDraft((current) => ({ ...current, exclude_patterns: event.target.value }))} placeholder={t({ ko: '@eaDir, thumbs, cache', en: '@eaDir, thumbs, cache' })} />
         </SettingsField>
 
         <SettingsToggleRow>

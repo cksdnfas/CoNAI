@@ -35,7 +35,7 @@ export function BackupSourceCreateForm({
         </SettingsField>
 
         <SettingsField label={t({ ko: '표시 이름', en: 'Display name' })}>
-          <Input variant="settings" value={newBackupSource.display_name} onChange={(event) => onNewBackupSourceChange({ display_name: event.target.value })} placeholder="Backup source A" />
+          <Input variant="settings" value={newBackupSource.display_name} onChange={(event) => onNewBackupSourceChange({ display_name: event.target.value })} placeholder={t({ ko: 'Backup source A', en: 'Backup source A' })} />
         </SettingsField>
 
         <SettingsField
@@ -73,7 +73,7 @@ export function BackupSourceCreateForm({
           </Select>
         </SettingsField>
 
-        <SettingsField label="watcher polling(ms)">
+        <SettingsField label={t({ ko: 'watcher polling(ms)', en: 'Watcher polling (ms)' })}>
           <Input type="number" min={100} variant="settings" value={newBackupSource.watcher_polling_interval} onChange={(event) => onNewBackupSourceChange({ watcher_polling_interval: Number(event.target.value) || 100 })} />
         </SettingsField>
 

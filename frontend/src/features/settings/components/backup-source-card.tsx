@@ -87,14 +87,14 @@ export function BackupSourceCard({
       }
     >
       <div className="flex flex-wrap gap-2">
-        <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? 'active' : 'inactive'}</Badge>
-        <Badge variant="outline">{`mode ${source.import_mode}`}</Badge>
-        <Badge variant={getWatcherBadgeVariant(source.watcher_status)}>{`watcher ${source.watcher_status || 'stopped'}`}</Badge>
+        <Badge variant={draft.is_active ? 'outline' : 'secondary'}>{draft.is_active ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
+        <Badge variant="outline">{t({ ko: '모드 {mode}', en: 'Mode {mode}' }, { mode: source.import_mode })}</Badge>
+        <Badge variant={getWatcherBadgeVariant(source.watcher_status)}>{t({ ko: 'watcher {status}', en: 'Watcher {status}' }, { status: source.watcher_status || 'stopped' })}</Badge>
       </div>
 
       <div className="space-y-1 font-mono text-xs text-muted-foreground">
-        <div className="break-all">source {source.source_path}</div>
-        <div className="break-all">target {buildBackupTargetPreviewPath(source.target_folder_name)}</div>
+        <div className="break-all">{t({ ko: 'source {path}', en: 'Source {path}' }, { path: source.source_path })}</div>
+        <div className="break-all">{t({ ko: 'target {path}', en: 'Target {path}' }, { path: buildBackupTargetPreviewPath(source.target_folder_name) })}</div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -141,7 +141,7 @@ export function BackupSourceCard({
             </Select>
           </SettingsField>
 
-          <SettingsField label="watcher polling(ms)">
+          <SettingsField label={t({ ko: 'watcher polling(ms)', en: 'Watcher polling (ms)' })}>
             <Input type="number" min={100} variant="settings" value={draft.watcher_polling_interval} onChange={(event) => setDraft((current) => ({ ...current, watcher_polling_interval: Number(event.target.value) || 100 }))} />
           </SettingsField>
 
@@ -165,7 +165,7 @@ export function BackupSourceCard({
 
           <SettingsToggleRow>
             <input type="checkbox" checked={draft.is_active} onChange={(event) => setDraft((current) => ({ ...current, is_active: event.target.checked }))} />
-            {t({ ko: 'source 활성화', en: 'Source active' })}
+            {t({ ko: '백업 소스 활성화', en: 'Backup source active' })}
           </SettingsToggleRow>
         </div>
 
