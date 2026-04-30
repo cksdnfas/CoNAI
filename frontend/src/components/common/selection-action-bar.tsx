@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 interface SelectionActionBarProps {
@@ -21,10 +22,13 @@ export function SelectionActionBar({
   description,
   actions,
   onClear,
-  clearLabel = '선택 해제',
+  clearLabel,
   compactActions = false,
   className,
 }: SelectionActionBarProps) {
+  const { t, formatNumber } = useI18n()
+  const resolvedClearLabel = clearLabel ?? t('selectionActionBar.clearSelection')
+
   if (selectedCount <= 0) {
     return null
   }
@@ -38,7 +42,7 @@ export function SelectionActionBar({
         )}
       >
         <div className={cn('min-w-0', description ? 'flex min-w-[10rem] flex-1 flex-col leading-tight' : 'font-semibold')}>
-          <span className="font-semibold">{summary ?? `${selectedCount.toLocaleString('ko-KR')}개 선택됨`}</span>
+          <span className="font-semibold">{summary ?? t({ ko: '{count}개 선택됨', en: '{count} selected' }, { count: formatNumber(selectedCount) })}</span>
           {description ? <span className="text-xs text-muted-foreground">{description}</span> : null}
         </div>
 
@@ -48,8 +52,8 @@ export function SelectionActionBar({
               size="icon-sm"
               variant="secondary"
               onClick={onClear}
-              title={clearLabel}
-              aria-label={clearLabel}
+              title={resolvedClearLabel}
+              aria-label={resolvedClearLabel}
               data-no-select-drag="true"
             >
               <X className="h-4 w-4" />
@@ -57,7 +61,7 @@ export function SelectionActionBar({
           ) : (
             <Button size="sm" variant="secondary" onClick={onClear} data-no-select-drag="true">
               <X className="h-4 w-4" />
-              {clearLabel}
+              {resolvedClearLabel}
             </Button>
           )
         ) : null}

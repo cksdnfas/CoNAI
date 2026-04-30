@@ -3,6 +3,7 @@ import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { RatingWeightsRecord } from '@/lib/api'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsValueTile } from './settings-primitives'
+import { useI18n } from '@/i18n'
 
 interface RatingWeightSettingsCardProps {
   heading: ReactNode
@@ -37,6 +38,7 @@ export function RatingWeightSettingsCard({
   validationMessages,
   onPatchRatingWeights,
 }: RatingWeightSettingsCardProps) {
+  const { t, formatNumber } = useI18n()
   const [previewState, setPreviewState] = useState<RatingPreviewState>(DEFAULT_PREVIEW_STATE)
 
   const previewResult = useMemo(() => {
@@ -69,7 +71,7 @@ export function RatingWeightSettingsCard({
     <SettingsSection heading={heading} actions={actions}>
       {validationMessages.length > 0 ? (
         <div className="rounded-sm border border-[#ffb4ab]/40 bg-[#93000a]/10 px-3 py-2 text-sm text-[#ffb4ab]">
-          <div className="font-medium">저장 전에 확인해줘</div>
+          <div className="font-medium">{t({ ko: '저장 전에 확인해줘', en: 'Check before saving' })}</div>
           <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
             {validationMessages.map((message) => (
               <li key={message}>{message}</li>
@@ -123,7 +125,7 @@ export function RatingWeightSettingsCard({
           </div>
 
           <SettingsInsetBlock className="space-y-3">
-            <div className="text-sm font-semibold text-foreground">score 미리보기</div>
+            <div className="text-sm font-semibold text-foreground">{t({ ko: 'score 미리보기', en: 'Score preview' })}</div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SettingsField label="General score">
@@ -141,9 +143,9 @@ export function RatingWeightSettingsCard({
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <SettingsValueTile label="예상 총점" value={previewResult ? previewResult.score.toFixed(3) : '—'} valueClassName="text-lg" />
+              <SettingsValueTile label={t({ ko: '예상 총점', en: 'Estimated total' })} value={previewResult ? formatNumber(previewResult.score, { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '—'} valueClassName="text-lg" />
               <SettingsInsetBlock className="space-y-2 px-3 py-3">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">예상 등급</div>
+                <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '예상 등급', en: 'Estimated tier' })}</div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span
                     className="inline-flex items-center rounded-full border px-2.5 py-1 text-sm font-semibold"
@@ -155,7 +157,7 @@ export function RatingWeightSettingsCard({
                         }
                       : undefined}
                   >
-                    {previewResult?.tier?.tier_name ?? '매칭 없음'}
+                    {previewResult?.tier?.tier_name ?? t({ ko: '매칭 없음', en: 'No match' })}
                   </span>
                   {previewResult?.tier ? (
                     <span className="text-xs text-muted-foreground">
@@ -169,7 +171,7 @@ export function RatingWeightSettingsCard({
         </>
       ) : (
         <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">
-          평가 가중치를 불러오는 중…
+          {t({ ko: '평가 가중치를 불러오는 중…', en: 'Loading rating weights…' })}
         </div>
       )}
     </SettingsSection>

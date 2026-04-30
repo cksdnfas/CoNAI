@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import { buildSelectedImageDraftFromUrl, type SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
+import { useI18n } from '@/i18n'
 import {
   getNaiVibeAsset,
   listNaiCharacterReferenceAssets,
@@ -214,7 +215,13 @@ function togglePinnedAssetIds(storageKey: string, assetId: string, currentIds: s
 }
 
 /** Sort saved asset cards so users can switch between pinned, recent use, recency, and name ordering. */
-function sortSavedAssets<T extends { id: string; label: string; created_date: string }>(items: T[], sort: SavedAssetSortOption, recentIds: string[], pinnedIds: string[]) {
+function sortSavedAssets<T extends { id: string; label: string; created_date: string }>(
+  items: T[],
+  sort: SavedAssetSortOption,
+  recentIds: string[],
+  pinnedIds: string[],
+  locale: string,
+) {
   const nextItems = [...items]
 
   if (sort === 'pinned') {
@@ -256,7 +263,7 @@ function sortSavedAssets<T extends { id: string; label: string; created_date: st
   }
 
   if (sort === 'name') {
-    return nextItems.sort((left, right) => left.label.localeCompare(right.label, 'ko-KR'))
+    return nextItems.sort((left, right) => left.label.localeCompare(right.label, locale, { numeric: true, sensitivity: 'base' }))
   }
 
   return nextItems.sort((left, right) => {
@@ -268,6 +275,7 @@ function sortSavedAssets<T extends { id: string; label: string; created_date: st
 
 /** Render the reusable editor and saved-asset picker for NAI vibe and reference JSON inputs. */
 export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAssetInputProps) {
+  const { formatDateTime, locale } = useI18n()
   const [savedVibeSearch, setSavedVibeSearch] = useState('')
   const [savedVibeSort, setSavedVibeSort] = useState<SavedAssetSortOption>('recent')
   const [recentVibeIds, setRecentVibeIds] = useState<string[]>(() => loadRecentAssetIds('conai.nai.vibes.recent'))
@@ -298,7 +306,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       ? items.filter((item) => `${item.label} ${item.model}`.toLowerCase().includes(keyword))
       : items
 
-    return sortSavedAssets(filteredItems, savedVibeSort, recentVibeIds, pinnedVibeIds)
+    return sortSavedAssets(filteredItems, savedVibeSort, recentVibeIds, pinnedVibeIds, locale)
   }, [pinnedVibeIds, recentVibeIds, savedVibeSearch, savedVibeSort, savedVibesQuery.data])
 
   const filteredSavedCharacterReferences = useMemo(() => {
@@ -308,7 +316,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       ? items.filter((item) => `${item.label} ${item.type}`.toLowerCase().includes(keyword))
       : items
 
-    return sortSavedAssets(filteredItems, savedCharacterReferenceSort, recentCharacterReferenceIds, pinnedCharacterReferenceIds)
+    return sortSavedAssets(filteredItems, savedCharacterReferenceSort, recentCharacterReferenceIds, pinnedCharacterReferenceIds, locale)
   }, [pinnedCharacterReferenceIds, recentCharacterReferenceIds, savedCharacterReferenceSearch, savedCharacterReferenceSort, savedCharacterReferencesQuery.data])
 
   const updateVibes = (nextDrafts: NaiVibeDraft[]) => {
@@ -493,7 +501,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                         <Badge variant="outline">strength {asset.strength}</Badge>
                         <Badge variant="outline">IE {asset.information_extracted}</Badge>
                       </div>
-                      <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
+                      <div className="text-[11px] text-muted-foreground">{formatDateTime(asset.created_date)}</div>
                     </div>
                   </div>
                   <div className="flex justify-end gap-2">
@@ -610,7 +618,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                       <Badge variant="outline">strength {asset.strength}</Badge>
                       <Badge variant="outline">fidelity {asset.fidelity}</Badge>
                     </div>
-                    <div className="text-[11px] text-muted-foreground">{new Date(asset.created_date).toLocaleString('ko-KR')}</div>
+                    <div className="text-[11px] text-muted-foreground">{formatDateTime(asset.created_date)}</div>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">

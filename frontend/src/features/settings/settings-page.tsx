@@ -16,6 +16,7 @@ import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { useI18n } from '@/i18n'
 import type {
   GenerationThrottleSettings,
   GeneralSettings,
@@ -79,6 +80,7 @@ function SettingsSectionFallback() {
 export function SettingsPage() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [generalDraft, setGeneralDraft] = useState<GeneralSettings | null>(null)
@@ -150,10 +152,10 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setGeneralDraft(settings.general)
-      notifyInfo('일반 설정을 저장했어.')
+      notifyInfo(t({ ko: '일반 설정을 저장했어.', en: 'General settings saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '일반 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '일반 설정 저장에 실패했어.', en: 'Failed to save general settings.' }))
     },
   })
 
@@ -162,21 +164,26 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setMetadataDraft(settings.metadataExtraction)
-      notifyInfo('메타데이터 추출 설정을 저장했어.')
+      notifyInfo(t({ ko: '메타데이터 추출 설정을 저장했어.', en: 'Metadata extraction settings saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '메타데이터 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '메타데이터 설정 저장에 실패했어.', en: 'Failed to save metadata settings.' }))
     },
   })
 
   const metadataReextractMutation = useMutation({
     mutationFn: reextractAllImageMetadata,
     onSuccess: (result) => {
-      const skippedText = result.skippedMissingCount > 0 ? `, 원본 누락 ${result.skippedMissingCount}개 제외` : ''
-      notifyInfo(`전체 메타데이터 재추출을 큐에 등록했어: ${result.queuedCount}/${result.totalCandidates}개${skippedText}`)
+      const skippedText = result.skippedMissingCount > 0
+        ? t({ ko: ', 원본 누락 {count}개 제외', en: ', skipped {count} missing originals' }, { count: result.skippedMissingCount })
+        : ''
+      notifyInfo(t(
+        { ko: '전체 메타데이터 재추출을 큐에 등록했어: {queued}/{total}개{skipped}', en: 'Queued metadata re-extraction: {queued}/{total}{skipped}' },
+        { queued: result.queuedCount, total: result.totalCandidates, skipped: skippedText },
+      ))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '전체 메타데이터 재추출을 시작하지 못했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '전체 메타데이터 재추출을 시작하지 못했어.', en: 'Failed to start metadata re-extraction.' }))
     },
   })
 
@@ -185,10 +192,10 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setImageSaveDraft(settings.imageSave)
-      notifyInfo('이미지 저장 설정을 저장했어.')
+      notifyInfo(t({ ko: '이미지 저장 설정을 저장했어.', en: 'Image save settings saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '이미지 저장 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '이미지 저장 설정 저장에 실패했어.', en: 'Failed to save image save settings.' }))
     },
   })
 
@@ -197,10 +204,10 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setGenerationThrottleDraft(settings.generationThrottle)
-      notifyInfo('생성 텀 설정을 저장했어.')
+      notifyInfo(t({ ko: '생성 텀 설정을 저장했어.', en: 'Generation throttle settings saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '생성 텀 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '생성 텀 설정 저장에 실패했어.', en: 'Failed to save generation throttle settings.' }))
     },
   })
 
@@ -209,10 +216,10 @@ export function SettingsPage() {
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setVideoOptimizationDraft(settings.videoOptimization)
-      notifyInfo('비디오 최적화 설정을 저장했어.')
+      notifyInfo(t({ ko: '비디오 최적화 설정을 저장했어.', en: 'Video optimization settings saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '비디오 최적화 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '비디오 최적화 설정 저장에 실패했어.', en: 'Failed to save video optimization settings.' }))
     },
   })
 
@@ -281,7 +288,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="설정" />
+      <PageHeader title={t({ ko: '설정', en: 'Settings' })} />
 
       <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[248px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />

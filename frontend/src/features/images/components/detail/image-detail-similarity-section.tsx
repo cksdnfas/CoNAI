@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Image as ImageIcon, Type, type LucideIcon } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { updateSimilaritySettings } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
@@ -39,11 +40,6 @@ type SimilarImageTab = 'image' | 'text'
 
 
 const SIMILAR_IMAGE_TABS: SimilarImageTab[] = ['image', 'text']
-
-const SIMILAR_IMAGE_SECTION_TITLE_LABELS: Record<SimilarImageTab, string> = {
-  image: '유사 이미지 [이미지]',
-  text: '유사 이미지 [텍스트]',
-}
 
 const SIMILAR_IMAGE_TAB_ICONS: Record<SimilarImageTab, LucideIcon> = {
   image: ImageIcon,
@@ -166,6 +162,7 @@ export function ImageDetailSimilaritySection({
   cardAspectRatio = 'square',
 }: ImageDetailSimilaritySectionProps) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   const [activeSimilarImageTab, setActiveSimilarImageTab] = useState<SimilarImageTab>('image')
   const [isSimilaritySettingsOpen, setIsSimilaritySettingsOpen] = useState(false)
   const [isPromptSimilaritySettingsOpen, setIsPromptSimilaritySettingsOpen] = useState(false)
@@ -213,17 +210,21 @@ export function ImageDetailSimilaritySection({
     [promptSimilarImageItems],
   )
 
-  const similarSectionTitle = SIMILAR_IMAGE_SECTION_TITLE_LABELS[activeSimilarImageTab]
+  const similarImageSectionTitleLabels: Record<SimilarImageTab, string> = {
+    image: t('images.components.detail.image.detail.similarity.section.similarity.images.images'),
+    text: t('images.components.detail.image.detail.similarity.section.similarity.images.text'),
+  }
+  const similarSectionTitle = similarImageSectionTitleLabels[activeSimilarImageTab]
   const similarSectionItems = activeSimilarImageTab === 'image' ? similarImages : promptSimilarImages
   const similarSectionIsLoading = activeSimilarImageTab === 'image'
     ? similarImagesLoading
     : promptSimilarImagesLoading
   const similarSectionErrorMessage = activeSimilarImageTab === 'image'
-    ? (similarImagesError ? getErrorMessage(similarImagesError, '알 수 없는 오류가 발생했어.') : null)
-    : (promptSimilarImagesError ? getErrorMessage(promptSimilarImagesError, '알 수 없는 오류가 발생했어.') : null)
+    ? (similarImagesError ? getErrorMessage(similarImagesError, t('images.components.detail.image.detail.similarity.section.an.unknown.error.occurred')) : null)
+    : (promptSimilarImagesError ? getErrorMessage(promptSimilarImagesError, t('images.components.detail.image.detail.similarity.section.an.unknown.error.occurred')) : null)
   const similarSectionEmptyMessage = activeSimilarImageTab === 'image'
-    ? '현재 설정에서는 표시할 유사 이미지가 없어.'
-    : '현재 텍스트 기준에서는 표시할 유사 이미지가 없어.'
+    ? t('images.components.detail.image.detail.similarity.section.no.similar.images.to.show.with.the')
+    : t('images.components.detail.image.detail.similarity.section.no.similar.images.to.show.for.the')
 
   /** Keep tab changes responsible for closing the other flyout so only one popup stays active. */
   const handleSelectSimilarImageTab = (tab: SimilarImageTab) => {
@@ -337,8 +338,8 @@ export function ImageDetailSimilaritySection({
               className={cn(
                 activeSimilarImageTab === tab ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
               )}
-              aria-label={SIMILAR_IMAGE_SECTION_TITLE_LABELS[tab]}
-              title={SIMILAR_IMAGE_SECTION_TITLE_LABELS[tab]}
+              aria-label={similarImageSectionTitleLabels[tab]}
+              title={similarImageSectionTitleLabels[tab]}
             >
               <Icon className="h-4 w-4" />
             </Button>
@@ -354,7 +355,7 @@ export function ImageDetailSimilaritySection({
             isSaving={saveSimilaritySettingsMutation.isPending}
             errorMessage={
               saveSimilaritySettingsMutation.isError
-                ? getErrorMessage(saveSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
+                ? getErrorMessage(saveSimilaritySettingsMutation.error, t('images.components.detail.image.detail.similarity.section.an.error.occurred.while.saving.settings'))
                 : null
             }
             onToggle={handleToggleSimilaritySettings}
@@ -372,7 +373,7 @@ export function ImageDetailSimilaritySection({
             isSaving={savePromptSimilaritySettingsMutation.isPending}
             errorMessage={
               savePromptSimilaritySettingsMutation.isError
-                ? getErrorMessage(savePromptSimilaritySettingsMutation.error, '설정 저장 중 오류가 발생했어.')
+                ? getErrorMessage(savePromptSimilaritySettingsMutation.error, t('images.components.detail.image.detail.similarity.section.an.error.occurred.while.saving.settings'))
                 : null
             }
             onToggle={handleTogglePromptSimilaritySettings}

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { useI18n } from '@/i18n'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { ImageList } from '@/features/images/components/image-list/image-list'
@@ -82,6 +83,7 @@ function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['record
 /** Render generation history using the shared image-list surface instead of per-record cards. */
 export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
+  const { t, formatNumber } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const {
     columnCount: historyColumnCount,
@@ -232,7 +234,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
   const handleDeleteSelected = async () => {
     if (!isAdmin) {
-      showSnackbar({ message: '삭제는 관리자 계정만 할 수 있어.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.generation.history.panel.only.admin.accounts.can.delete'), tone: 'error' })
       return
     }
 
@@ -240,7 +242,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       return
     }
 
-    const confirmed = window.confirm(`선택한 ${selectedHistoryRecords.length.toLocaleString('ko-KR')}개 결과를 휴지통으로 보내고 히스토리도 정리할까?`)
+    const confirmed = window.confirm(t('image-generation.components.generation.history.panel.selected.valueresults.to.the.recycle.bin.and', { count: formatNumber(selectedHistoryRecords.length) }))
     if (!confirmed) {
       return
     }
@@ -250,9 +252,9 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       await Promise.all(selectedHistoryRecords.map((record) => deleteGenerationHistoryRecord(record.id, true)))
       setSelectedHistoryIds([])
       await refetchHistory()
-      showSnackbar({ message: `${selectedHistoryRecords.length.toLocaleString('ko-KR')}개 결과를 RecycleBin으로 보냈어.`, tone: 'info' })
+      showSnackbar({ message: t('image-generation.components.generation.history.panel.valueresults.moved.to.recyclebin', { count: formatNumber(selectedHistoryRecords.length) }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '히스토리 삭제에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.delete.history')), tone: 'error' })
     } finally {
       setIsDeletingSelection(false)
     }
@@ -270,9 +272,9 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         : await cleanupFailedGenerationHistory()
       setSelectedHistoryIds([])
       await refetchHistory()
-      showSnackbar({ message: result.message || '실패한 히스토리를 정리했어.', tone: 'info' })
+      showSnackbar({ message: result.message || t('image-generation.components.generation.history.panel.failed.history.cleaned.up'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '실패 히스토리 정리에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.clean.up.failed.history')), tone: 'error' })
     } finally {
       setIsCleaningFailed(false)
     }
@@ -287,7 +289,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       setIsDownloadingSelection(true)
       await downloadImageSelection(downloadableCompositeHashes, type)
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '선택한 이미지 다운로드에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.download.the.selected.images')), tone: 'error' })
     } finally {
       setIsDownloadingSelection(false)
     }
@@ -304,23 +306,23 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
                 size="icon-sm"
                 variant="ghost"
                 onClick={onBack}
-                aria-label="워크플로우 목록으로 돌아가기"
-                title="처음으로"
+                aria-label={t('image-generation.components.generation.history.panel.back.to.workflow.list')}
+                title={t('image-generation.components.generation.history.panel.home')}
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             ) : null}
-            <div className="text-xl font-semibold tracking-tight text-foreground">생성 히스토리</div>
+            <div className="text-xl font-semibold tracking-tight text-foreground">{t('image-generation.components.generation.history.panel.generation.history')}</div>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">{historyLabel}</Badge>
-          <Badge variant="outline">기록 {historyRecords.length}</Badge>
-          {!isPublicView ? <Badge variant="outline">{isAdmin ? '전체 사용자' : '내 기록'}</Badge> : null}
-          {completedHistoryCount > 0 ? <Badge variant="outline">완료 {completedHistoryCount}</Badge> : null}
-          {inFlightHistoryCount > 0 ? <Badge variant="secondary">작업 중 {inFlightHistoryCount}</Badge> : null}
-          {cancellationHistoryCount > 0 ? <Badge variant="outline">취소 관련 {cancellationHistoryCount}</Badge> : null}
+          <Badge variant="outline">{t('image-generation.components.generation.history.panel.records.historyrecords.length', { historyRecords: formatNumber(historyRecords.length) })}</Badge>
+          {!isPublicView ? <Badge variant="outline">{isAdmin ? t('image-generation.components.generation.history.panel.all.users') : t('image-generation.components.generation.history.panel.my.records')}</Badge> : null}
+          {completedHistoryCount > 0 ? <Badge variant="outline">{t('image-generation.components.generation.history.panel.completed.value', { completedHistoryCount: formatNumber(completedHistoryCount) })}</Badge> : null}
+          {inFlightHistoryCount > 0 ? <Badge variant="secondary">{t('image-generation.components.generation.history.panel.processing.value', { inFlightHistoryCount: formatNumber(inFlightHistoryCount) })}</Badge> : null}
+          {cancellationHistoryCount > 0 ? <Badge variant="outline">{t('image-generation.components.generation.history.panel.cancellation.related.value', { cancellationHistoryCount: formatNumber(cancellationHistoryCount) })}</Badge> : null}
           <Button
             type="button"
             size="sm"
@@ -329,9 +331,9 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             disabled={isCleaningFailed || failedHistoryCount === 0}
           >
             <Trash2 className="h-4 w-4" />
-            {isCleaningFailed ? '실패 정리 중…' : '실패 항목 정리'}
+            {isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" onClick={() => void refetchHistory()} title="히스토리 새로고침" aria-label="히스토리 새로고침">
+          <Button type="button" size="icon-sm" variant="outline" onClick={() => void refetchHistory()} title={t('image-generation.components.generation.history.panel.refresh.history')} aria-label={t('image-generation.components.generation.history.panel.refresh.history')}>
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
@@ -339,16 +341,16 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
       {historyQuery.isError ? (
         <Alert variant="destructive">
-          <AlertTitle>히스토리를 불러오지 못했어</AlertTitle>
-          <AlertDescription>{getErrorMessage(historyQuery.error, '생성 히스토리 조회 실패')}</AlertDescription>
+          <AlertTitle>{t('image-generation.components.generation.history.panel.could.not.load.history')}</AlertTitle>
+          <AlertDescription>{getErrorMessage(historyQuery.error, t('image-generation.components.generation.history.panel.failed.to.fetch.generation.history'))}</AlertDescription>
         </Alert>
       ) : null}
 
-      {isHistoryLoading ? <div className="text-sm text-muted-foreground">히스토리 불러오는 중…</div> : null}
+      {isHistoryLoading ? <div className="text-sm text-muted-foreground">{t('image-generation.components.generation.history.panel.loading.history')}</div> : null}
 
       <div className={cn(splitPaneScroll && 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
         {!isHistoryLoading && historyImages.length === 0 ? (
-          <div className="py-4 text-sm text-muted-foreground">아직 표시할 생성 결과가 없어.</div>
+          <div className="py-4 text-sm text-muted-foreground">{t('image-generation.components.generation.history.panel.no.generation.results.to.display.yet')}</div>
         ) : null}
 
         {!isHistoryLoading && historyImages.length > 0 ? (
@@ -416,7 +418,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           defaultValue={defaultHistoryColumnCount}
           min={minHistoryColumnCount}
           max={maxHistoryColumnCount}
-          title="히스토리 한 줄 카드 수"
+          title={t('image-generation.components.generation.history.panel.history.cards.per.row')}
           onChange={setHistoryColumnCount}
           onReset={resetHistoryColumnCount}
         />
@@ -427,15 +429,15 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         downloadableCount={downloadableCompositeHashes.length}
         isDownloading={isDownloadingSelection}
         statusText={downloadableCompositeHashes.length > 0
-          ? `${downloadableCompositeHashes.length.toLocaleString('ko-KR')}개 다운로드 가능`
-          : '다운로드 가능한 결과가 없어'}
+          ? t('image-generation.components.generation.history.panel.valuedownloadable', { count: formatNumber(downloadableCompositeHashes.length) })
+          : t('image-generation.components.generation.history.panel.no.downloadable.results')}
         trailingActions={!isPublicView && isAdmin ? (
           <Button
             size="icon-sm"
             onClick={() => void handleDeleteSelected()}
             disabled={selectedHistoryRecords.length === 0 || isDeletingSelection}
-            title={isDeletingSelection ? '삭제 중' : '선택 삭제'}
-            aria-label={isDeletingSelection ? '삭제 중' : '선택 삭제'}
+            title={isDeletingSelection ? t('image-generation.components.generation.history.panel.deleting') : t('image-generation.components.generation.history.panel.delete.selection')}
+            aria-label={isDeletingSelection ? t('image-generation.components.generation.history.panel.deleting') : t('image-generation.components.generation.history.panel.delete.selection')}
             data-no-select-drag="true"
           >
             <Trash2 className="h-4 w-4" />

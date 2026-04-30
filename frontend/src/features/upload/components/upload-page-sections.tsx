@@ -12,6 +12,7 @@ import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { MetadataRewriteForm } from '@/features/metadata/components/metadata-rewrite-form'
 import type { RewriteMetadataDraft } from '@/features/metadata/use-metadata-rewrite-draft'
+import { useI18n } from '@/i18n'
 import { formatBytes } from '@/features/images/components/detail/image-detail-utils'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
@@ -41,6 +42,7 @@ function SummaryTile({
   copyValue?: string | null
 }) {
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
 
   const handleCopy = async () => {
     if (!copyValue) {
@@ -49,9 +51,9 @@ function SummaryTile({
 
     try {
       await copyTextToClipboard(copyValue)
-      showSnackbar({ message: `${label} 값을 복사했어.`, tone: 'info' })
+      showSnackbar({ message: t({ ko: '{label} 값을 복사했어.', en: '{label} value copied.' }, { label }), tone: 'info' })
     } catch {
-      showSnackbar({ message: `${label} 복사에 실패했어.`, tone: 'error' })
+      showSnackbar({ message: t({ ko: '{label} 복사에 실패했어.', en: '{label} copy failed.' }, { label }), tone: 'error' })
     }
   }
 
@@ -64,8 +66,8 @@ function SummaryTile({
             type="button"
             className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-primary"
             onClick={() => void handleCopy()}
-            aria-label={`${label} 복사`}
-            title={`${label} 복사`}
+            aria-label={t({ ko: '{label} 복사', en: '{label} copy' }, { label })}
+            title={t({ ko: '{label} 복사', en: '{label} copy' }, { label })}
           >
             <Copy className="h-3.5 w-3.5" />
           </button>
@@ -158,9 +160,11 @@ export function UploadPageUploadSection({
   onResetUpload: () => void
   onUpload: () => void
 }) {
+  const { t, formatNumber } = useI18n()
+
   return (
     <PageSection
-      title="파일 업로드"
+      title={t('uploadPageSections.fileUpload')}
       actions={
         <>
           <Button
@@ -169,10 +173,10 @@ export function UploadPageUploadSection({
             onClick={onResetUpload}
             disabled={uploadFiles.length === 0 && !uploadResult && !uploadError}
           >
-            초기화
+            {t({ ko: '초기화', en: 'Reset' })}
           </Button>
           <Button type="button" onClick={onUpload} disabled={uploadFiles.length === 0 || isUploading}>
-            {isUploading ? '업로드 중…' : `업로드${uploadFiles.length > 0 ? ` (${uploadFiles.length})` : ''}`}
+            {isUploading ? t('uploadPageSections.uploading') : t({ ko: '업로드{count}', en: 'Upload{count}' }, { count: uploadFiles.length > 0 ? ` (${formatNumber(uploadFiles.length)})` : '' })}
           </Button>
         </>
       }
@@ -180,7 +184,7 @@ export function UploadPageUploadSection({
       <input ref={uploadInputRef} type="file" multiple accept={uploadAccept} className="hidden" onChange={onUploadFileChange} />
 
       <DropSurface
-        ariaLabel="업로드할 파일 선택"
+        ariaLabel={t('uploadPageSections.chooseFilesToUpload')}
         active={uploadDropZone.isDragActive}
         onClick={() => uploadInputRef.current?.click()}
         onDrop={uploadDropZone.handleDrop}
@@ -192,7 +196,7 @@ export function UploadPageUploadSection({
       {uploadFiles.length > 0 ? (
         <PageInset className="space-y-3">
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <Badge variant="secondary">{uploadFiles.length}개</Badge>
+            <Badge variant="secondary">{t({ ko: '{count}개', en: '{count} files' }, { count: formatNumber(uploadFiles.length) })}</Badge>
             <Badge variant="outline">{formatBytes(uploadTotalSize)}</Badge>
           </div>
           <div className="space-y-2 text-sm text-muted-foreground">
@@ -202,7 +206,7 @@ export function UploadPageUploadSection({
                 <span className="shrink-0 text-xs">{formatBytes(file.size)}</span>
               </div>
             ))}
-            {uploadFiles.length > MAX_VISIBLE_FILES ? <div className="text-xs">…{uploadFiles.length - MAX_VISIBLE_FILES}개 더 있음</div> : null}
+            {uploadFiles.length > MAX_VISIBLE_FILES ? <div className="text-xs">{t({ ko: '…{count}개 더 있음', en: '…{count} more' }, { count: formatNumber(uploadFiles.length - MAX_VISIBLE_FILES) })}</div> : null}
           </div>
         </PageInset>
       ) : null}
@@ -210,7 +214,7 @@ export function UploadPageUploadSection({
       {(isUploading || uploadProgress || uploadResult) ? (
         <PageInset className="space-y-3">
           <div className="flex items-center justify-between gap-3 text-sm">
-            <div className="font-medium text-foreground">진행률</div>
+            <div className="font-medium text-foreground">{t({ ko: '진행률', en: 'Progress' })}</div>
             <div className="text-muted-foreground">{uploadPercent}%</div>
           </div>
           <ProgressBar percent={uploadPercent} />
@@ -224,7 +228,7 @@ export function UploadPageUploadSection({
 
       {uploadError ? (
         <Alert variant="destructive">
-          <AlertTitle>업로드 실패</AlertTitle>
+          <AlertTitle>{t('uploadPageSections.uploadFailed')}</AlertTitle>
           <AlertDescription>{uploadError}</AlertDescription>
         </Alert>
       ) : null}
@@ -232,8 +236,8 @@ export function UploadPageUploadSection({
       {uploadResult ? (
         <PageInset className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">성공 {uploadResult.successful}</Badge>
-            <Badge variant={uploadResult.failed_count > 0 ? 'outline' : 'secondary'}>실패 {uploadResult.failed_count}</Badge>
+            <Badge variant="secondary">{t({ ko: '성공 {count}', en: '{count} succeeded' }, { count: formatNumber(uploadResult.successful) })}</Badge>
+            <Badge variant={uploadResult.failed_count > 0 ? 'outline' : 'secondary'}>{t({ ko: '실패 {count}', en: '{count} failed' }, { count: formatNumber(uploadResult.failed_count) })}</Badge>
           </div>
 
           {uploadResult.uploaded.length > 0 ? (
@@ -327,21 +331,23 @@ export function UploadPageExtractSection({
   onToggleRewritePanel: () => void
   onRewriteDraftChange: (patch: Record<string, unknown>) => void
 }) {
+  const { t } = useI18n()
+
   return (
     <PageSection
-      title="미리보기 / 추출"
+      title={t('uploadPageSections.previewExtract')}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="ghost" onClick={onResetExtract} disabled={!extractFile && !extractResult && !taggerResult && !kaloscopeResult && !extractError}>
-            초기화
+            {t({ ko: '초기화', en: 'Reset' })}
           </Button>
           <Button type="button" variant="outline" onClick={onConvertWebP} disabled={!extractFile || extractBusy}>
             <Download className="h-4 w-4" />
-            {isConvertingWebP ? 'WebP 변환 중…' : 'WebP 변환'}
+            {isConvertingWebP ? t('uploadPageSections.convertingWebp') : t('uploadPageSections.convertWebp')}
           </Button>
           <Button type="button" variant="outline" onClick={onRewriteMetadata} disabled={!extractFile || extractBusy}>
             <Download className="h-4 w-4" />
-            {isRewritingMetadata ? '메타 수정 중…' : '메타 수정'}
+            {isRewritingMetadata ? t('uploadPageSections.editingMetadata') : t('uploadPageSections.editMetadata')}
           </Button>
           <div className="flex min-w-[220px] flex-1 flex-wrap items-center gap-2 sm:flex-none">
             <Select
@@ -350,12 +356,12 @@ export function UploadPageExtractSection({
               onChange={(event) => onSelectedExtractActionChange(event.target.value as 'all' | 'tagger' | 'kaloscope')}
               disabled={!extractFile || extractBusy}
             >
-              <option value="all">전체 추출</option>
-              <option value="tagger">자동 추출</option>
-              <option value="kaloscope">작가 추출</option>
+              <option value="all">{t('uploadPageSections.extractAll')}</option>
+              <option value="tagger">{t('uploadPageSections.autoExtract')}</option>
+              <option value="kaloscope">{t('uploadPageSections.artistExtract')}</option>
             </Select>
             <Button type="button" onClick={onRunSelectedExtract} disabled={!extractFile || extractBusy}>
-              {activeExtractAction === selectedExtractAction ? '추출 중…' : '추출 실행'}
+              {activeExtractAction === selectedExtractAction ? t('uploadPageSections.extracting') : t('uploadPageSections.runExtract')}
             </Button>
           </div>
         </div>
@@ -365,7 +371,7 @@ export function UploadPageExtractSection({
 
       <PageInset className="px-0 py-0">
         <DropSurface
-          ariaLabel="미리보기할 이미지 선택"
+          ariaLabel={t('uploadPageSections.chooseAnImageToPreview')}
           active={extractDropZone.isDragActive}
           onClick={() => extractInputRef.current?.click()}
           onDrop={extractDropZone.handleDrop}
@@ -396,9 +402,9 @@ export function UploadPageExtractSection({
           <div className="space-y-4">
             <PageInset className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm font-medium text-foreground">메타 수정</div>
+                <div className="text-sm font-medium text-foreground">{t('uploadPageSections.editMetadata')}</div>
                 <Button type="button" variant="ghost" size="sm" onClick={onToggleRewritePanel}>
-                  {isRewritePanelOpen ? '접기' : '펼치기'}
+                  {isRewritePanelOpen ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}
                 </Button>
               </div>
 
@@ -438,20 +444,20 @@ export function UploadPageExtractSection({
                     <ExtractedPromptSections items={extractedPromptCards} />
                   </div>
                 ) : (
-                  <PageInset className="text-sm text-muted-foreground">표시할 프롬프트가 없어.</PageInset>
+                  <PageInset className="text-sm text-muted-foreground">{t({ ko: '표시할 프롬프트가 없어.', en: 'No prompts to show.' })}</PageInset>
                 )}
               </PageInset>
             ) : null}
 
-            {taggerResult ? <WDTaggerResultBlock result={taggerResult} title="자동" /> : null}
-            {kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title="작가" /> : null}
+            {taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '자동', en: 'Auto' })} /> : null}
+            {kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title={t({ ko: '작가', en: 'Artist' })} /> : null}
           </div>
         </div>
       ) : null}
 
       {extractError ? (
         <Alert variant="destructive">
-          <AlertTitle>추출 실패</AlertTitle>
+          <AlertTitle>{t('uploadPageSections.extractionFailed')}</AlertTitle>
           <AlertDescription>{extractError}</AlertDescription>
         </Alert>
       ) : null}
@@ -477,10 +483,12 @@ export function UploadPageSaveOptionsModal({
   onOptionsChange: (patch: Partial<ImageSaveSettings>) => void
   onConfirm: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <ImageSaveOptionsModal
       open={open}
-      title="이미지 저장"
+      title={t('uploadPageSections.saveImage')}
       options={options}
       sourceInfo={sourceInfo}
       isSaving={isSaving}

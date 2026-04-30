@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
+import { useI18n } from '@/i18n'
 import { getAppSettings, resolvePromptGroups, updateKaloscopeSettings } from '@/lib/api'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -51,6 +52,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const queryClient = useQueryClient()
   const imageViewModal = useImageViewModal()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const [promptDisplayMode, setPromptDisplayMode] = useState<PromptDisplayMode>(() => loadPromptDisplayMode())
   const [isArtistPromptSettingsOpen, setIsArtistPromptSettingsOpen] = useState(false)
   const extractedPromptCards = useMemo(() => getImageExtractedPromptCards(image), [image])
@@ -79,11 +81,11 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     mutationFn: updateKaloscopeSettings,
     onSuccess: (settings) => {
       queryClient.setQueryData(['app-settings'], settings)
-      showSnackbar({ message: 'Artist prompt 링크 설정을 저장했어.', tone: 'info' })
+      showSnackbar({ message: t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings.saved'), tone: 'info' })
       setIsArtistPromptSettingsOpen(false)
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : 'Artist prompt 링크 설정 저장에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings.save.failed'), tone: 'error' })
     },
   })
 
@@ -111,7 +113,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     return extractedPromptCards.map((item) => {
       if (item.id === 'positive-prompt' && positivePromptTerms.length > 0) {
         if (positivePromptGroupQuery.isPending) {
-          return { ...item, text: '그룹 정리 중…' }
+          return { ...item, text: t('images.components.detail.image.detail.meta.card.organizing.groups') }
         }
 
         if (positivePromptGroupQuery.data) {
@@ -123,7 +125,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
 
       if (item.id === 'negative-prompt' && negativePromptTerms.length > 0) {
         if (negativePromptGroupQuery.isPending) {
-          return { ...item, text: '그룹 정리 중…' }
+          return { ...item, text: t('images.components.detail.image.detail.meta.card.organizing.groups') }
         }
 
         if (negativePromptGroupQuery.data) {
@@ -144,6 +146,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     positivePromptGroupQuery.isPending,
     positivePromptTerms,
     promptDisplayMode,
+    t,
   ])
 
   const handleCopyAutoPrompt = async () => {
@@ -153,9 +156,9 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
 
     try {
       await copyTextToClipboard(autoPromptCopyText)
-      showSnackbar({ message: 'Auto prompt를 복사했어.', tone: 'info' })
+      showSnackbar({ message: t('images.components.detail.image.detail.meta.card.auto.prompt.copied'), tone: 'info' })
     } catch {
-      showSnackbar({ message: 'Auto prompt 복사에 실패했어.', tone: 'error' })
+      showSnackbar({ message: t('images.components.detail.image.detail.meta.card.auto.prompt.copy.failed'), tone: 'error' })
     }
   }
 
@@ -166,7 +169,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   return (
     <div className="space-y-3 text-sm text-muted-foreground">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-base font-semibold tracking-tight text-foreground">메타 정보</div>
+        <div className="text-base font-semibold tracking-tight text-foreground">{t('images.components.detail.image.detail.meta.card.metadata')}</div>
         <div className="flex items-center gap-2">
           {image.is_processing ? <Badge variant="secondary">Processing</Badge> : null}
           {canEditMetadata ? (
@@ -179,7 +182,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
               }}
             >
               <FilePenLine className="h-4 w-4" />
-              메타 수정
+              {t('metadata.image.metadata.edit.page.edit.metadata')}
             </Button>
           ) : null}
         </div>
@@ -225,8 +228,8 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
                 <SegmentedControl
                   value={promptDisplayMode}
                   items={[
-                    { value: 'plain', label: '일반' },
-                    { value: 'grouped', label: '그룹' },
+                    { value: 'plain', label: t('images.components.detail.image.detail.meta.card.plain') },
+                    { value: 'grouped', label: t('images.components.detail.image.detail.meta.card.group') },
                   ]}
                   onChange={(nextMode) => handlePromptDisplayModeChange(nextMode as PromptDisplayMode)}
                   size="xs"
@@ -257,11 +260,11 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
                     variant="ghost"
                     onClick={() => void handleCopyAutoPrompt()}
                     disabled={!autoPromptCopyText}
-                    aria-label="Auto prompt 복사"
-                    title="Auto prompt 복사"
+                    aria-label={t('images.components.detail.image.detail.meta.card.auto.prompt.copy')}
+                    title={t('images.components.detail.image.detail.meta.card.auto.prompt.copy')}
                   >
                     <Copy className="h-3.5 w-3.5" />
-                    복사
+                    {t({ ko: '복사', en: 'Copy' })}
                   </Button>
                 )}
               />
@@ -277,8 +280,8 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
                 size="icon-sm"
                 variant="outline"
                 onClick={() => setIsArtistPromptSettingsOpen(true)}
-                aria-label="Artist prompt 링크 설정"
-                title="Artist prompt 링크 설정"
+                aria-label={t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings')}
+                title={t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings')}
               >
                 <Settings2 className="h-4 w-4" />
               </Button>

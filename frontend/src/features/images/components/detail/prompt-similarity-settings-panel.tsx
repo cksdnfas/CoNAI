@@ -2,6 +2,7 @@ import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type PromptSimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
 import { NumberInputWithSuffix, SectionTitleWithTooltip } from './similarity-settings-panel-shared'
@@ -25,13 +26,15 @@ export function PromptSimilaritySettingsPanel({
   onPatchDraft,
   onApply,
 }: PromptSimilaritySettingsPanelProps) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-4">
       <DetailSettingsFlyout
         isOpen={isOpen && Boolean(draft)}
         onToggle={onToggle}
-        triggerLabel={isOpen ? '텍스트 유사도 설정 닫기' : '텍스트 유사도 설정 열기'}
-        triggerTitle="텍스트 유사도 설정"
+        triggerLabel={isOpen ? t('images.components.detail.prompt.similarity.settings.panel.text.similarity.settings.close') : t('images.components.detail.prompt.similarity.settings.panel.open.text.similarity.settings')}
+        triggerTitle={t('images.components.detail.prompt.similarity.settings.panel.text.similarity.settings')}
         panelWidthClassName="w-[min(30rem,calc(100vw-2rem))]"
         icon={<Settings2 className="h-4 w-4" />}
       >
@@ -39,19 +42,19 @@ export function PromptSimilaritySettingsPanel({
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label className={detailSettingsLabelClassName}>표시 줄 수</label>
+                <label className={detailSettingsLabelClassName}>{t('images.components.detail.prompt.similarity.settings.panel.rows.to.show')}</label>
                 <ScrubbableNumberInput min={SIMILARITY_RESULT_ROW_MIN} max={SIMILARITY_RESULT_ROW_MAX} step={1} variant="detail" value={draft.resultLimit} onChange={(value) => onPatchDraft({ resultLimit: Number(value) })} />
               </div>
 
               <div className="space-y-2">
-                <label className={detailSettingsLabelClassName}>종합 점수 기준</label>
+                <label className={detailSettingsLabelClassName}>{t('images.components.detail.prompt.similarity.settings.panel.combined.score.threshold')}</label>
                 <NumberInputWithSuffix suffix="%" min={0} max={100} step={1} variant="detail" value={draft.combinedThreshold} onChange={(value) => onPatchDraft({ combinedThreshold: Number(value) })} />
               </div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
-                <SectionTitleWithTooltip title="점수 가중치" tooltip="종합 점수 계산 때 곱해지는 비중" />
+                <SectionTitleWithTooltip title={t('images.components.detail.prompt.similarity.settings.panel.score.weights')} tooltip={t('images.components.detail.prompt.similarity.settings.panel.weight.applied.when.calculating.the.combined.score')} />
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Positive</label>
@@ -70,7 +73,7 @@ export function PromptSimilaritySettingsPanel({
               </div>
 
               <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
-                <SectionTitleWithTooltip title="최소 필드 임계값" tooltip="각 필드가 이 점수 이상이어야 통과" />
+                <SectionTitleWithTooltip title={t('images.components.detail.prompt.similarity.settings.panel.minimum.field.thresholds')} tooltip={t('images.components.detail.prompt.similarity.settings.panel.each.field.must.meet.or.exceed.this')} />
 
                 <div className="space-y-2">
                   <label className={detailSettingsLabelClassName}>Positive</label>
@@ -91,10 +94,10 @@ export function PromptSimilaritySettingsPanel({
 
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="secondary" onClick={onToggle}>
-                닫기
+                {t({ ko: '닫기', en: 'Close' })}
               </Button>
               <Button size="sm" onClick={onApply} disabled={isSaving}>
-                {isSaving ? '저장 중…' : '적용'}
+                {isSaving ? t('images.components.detail.prompt.similarity.settings.panel.saving') : t('images.components.detail.prompt.similarity.settings.panel.apply')}
               </Button>
             </div>
           </div>
@@ -103,7 +106,7 @@ export function PromptSimilaritySettingsPanel({
 
       {errorMessage ? (
         <Alert variant="destructive">
-          <AlertTitle>텍스트 유사도 설정을 저장하지 못했어</AlertTitle>
+          <AlertTitle>{t('images.components.detail.prompt.similarity.settings.panel.failed.to.save.text.similarity.settings')}</AlertTitle>
           <AlertDescription>{errorMessage}</AlertDescription>
         </Alert>
       ) : null}

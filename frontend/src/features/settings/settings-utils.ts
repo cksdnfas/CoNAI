@@ -46,11 +46,11 @@ export function normalizeUtcLikeTimestamp(value?: string | null) {
     : value
 }
 
-export function formatDateTime(value?: string | null) {
+export function formatDateTime(value?: string | null, locale?: string) {
   if (!value) return '—'
   const date = new Date(normalizeUtcLikeTimestamp(value) ?? value)
   if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('ko-KR')
+  return date.toLocaleString(locale)
 }
 
 export function formatFileSize(value?: number | null) {

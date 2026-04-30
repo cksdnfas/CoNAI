@@ -16,8 +16,10 @@ export function getWildcardPromptSyntax(
 }
 
 /** Return the human label for the syntax/token currently shown in the wildcard workspace. */
-export function getWildcardPromptSyntaxLabel(options?: { type?: 'wildcard' | 'chain' | null; tab?: WildcardWorkspaceTab | null }) {
-  return options?.type === 'chain' || options?.tab === 'preprocess' ? '전처리 키워드' : '와일드카드 문법'
+export function getWildcardPromptSyntaxLabel(options?: { type?: 'wildcard' | 'chain' | null; tab?: WildcardWorkspaceTab | null }, labels?: { preprocess: string; wildcard: string }) {
+  return options?.type === 'chain' || options?.tab === 'preprocess'
+    ? (labels?.preprocess ?? '전처리 키워드')
+    : (labels?.wildcard ?? '와일드카드 문법')
 }
 
 export type WildcardTreeEntry = {
@@ -86,7 +88,7 @@ export function isReadonlyWorkspaceTab(tab: WildcardWorkspaceTab) {
 }
 
 /** Format one timestamp for the wildcard workspace cards and logs. */
-export function formatWildcardDateTime(value?: string | null) {
+export function formatWildcardDateTime(value: string | null | undefined, formatDateTime: (value: string | Date) => string) {
   if (!value) {
     return '—'
   }
@@ -96,10 +98,7 @@ export function formatWildcardDateTime(value?: string | null) {
     return value
   }
 
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
+  return formatDateTime(date)
 }
 
 /** Copy text into the clipboard for wildcard syntax and preview samples. */

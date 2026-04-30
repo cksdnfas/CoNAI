@@ -14,6 +14,7 @@ export interface RewriteMetadataDraft {
 
 interface MetadataRewritePatchOptions {
   clearEmptyFields?: boolean
+  invalidStepsMessage?: string
 }
 
 /** Infer the most natural rewrite output format from one file path. */
@@ -100,7 +101,7 @@ export function buildMetadataRewritePatch(
   if (steps) {
     const numericSteps = Number(steps)
     if (!Number.isFinite(numericSteps) || numericSteps <= 0) {
-      throw new Error('steps는 1 이상의 숫자여야 해.')
+      throw new Error(options.invalidStepsMessage ?? 'steps는 1 이상의 숫자여야 해.')
     }
 
     metadataPatch.steps = Math.round(numericSteps)

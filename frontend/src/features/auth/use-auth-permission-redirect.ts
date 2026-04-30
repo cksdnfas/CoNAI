@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
 import { PAGE_ACCESS_CATALOG } from './page-access-catalog'
 
 interface UseAuthPermissionRedirectOptions {
@@ -13,6 +14,7 @@ export function useAuthPermissionRedirect({ enabled, permissionKey }: UseAuthPer
   const location = useLocation()
   const navigate = useNavigate()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const hasRedirectedRef = useRef(false)
 
   useEffect(() => {
@@ -22,10 +24,10 @@ export function useAuthPermissionRedirect({ enabled, permissionKey }: UseAuthPer
 
     hasRedirectedRef.current = true
     const matchedPage = PAGE_ACCESS_CATALOG.find((item) => item.permissionKey === permissionKey)
-    const pageLabel = matchedPage?.label ?? '이 페이지'
+    const pageLabel = matchedPage ? t(matchedPage.labelKey) : t('useAuthPermissionRedirect.thisPage')
 
     showSnackbar({
-      message: `${pageLabel} 페이지를 열 권한이 없어. 이용 가능 페이지로 안내할게.`,
+      message: t('useAuthPermissionRedirect.valueCannotBeOpenedWith', { pageLabel }),
       tone: 'error',
     })
 
@@ -34,5 +36,5 @@ export function useAuthPermissionRedirect({ enabled, permissionKey }: UseAuthPer
       replace: true,
       state: nextPath ? { blockedPath: nextPath, blockedPermissionKey: permissionKey } : undefined,
     })
-  }, [enabled, location.pathname, location.search, navigate, permissionKey, showSnackbar])
+  }, [enabled, location.pathname, location.search, navigate, permissionKey, showSnackbar, t])
 }

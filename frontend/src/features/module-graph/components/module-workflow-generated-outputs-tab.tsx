@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select } from '@/components/ui/select'
+import { useI18n } from '@/i18n'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { WatchedFolder } from '@/types/folder'
 import type { ImageRecord } from '@/types/image'
@@ -59,6 +60,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
   onCopySelected: () => void
   onDownloadItems: (items: ModuleWorkflowGeneratedOutputItem[]) => void
 }) {
+  const { t } = useI18n()
   const outputItemById = useMemo(
     () => new Map(outputItems.map((item) => [item.id, item])),
     [outputItems],
@@ -68,7 +70,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
     <Card>
       <CardHeader className="space-y-0 border-b border-border/70 pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="min-w-0 flex-1 text-base">생성 결과</CardTitle>
+          <CardTitle className="min-w-0 flex-1 text-base">{t('module-graph.components.module.workflow.generated.outputs.tab.generated.outputs')}</CardTitle>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Badge variant="outline">{totalOutputCount}</Badge>
             <Button
@@ -79,7 +81,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
               disabled={outputItems.length === 0}
             >
               {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              {allVisibleSelected ? '페이지 해제' : '페이지 선택'}
+              {allVisibleSelected ? t('module-graph.components.module.workflow.generated.outputs.tab.clear.page') : t('module-graph.components.module.workflow.generated.outputs.tab.select.page')}
             </Button>
             {canDeleteOutputs ? (
               <Button
@@ -90,7 +92,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
                 disabled={isDeletingOutputs || totalOutputCount === 0}
               >
                 <Trash2 className="h-4 w-4" />
-                전체 비우기
+                {t({ ko: '전체 비우기', en: 'Clear all' })}
               </Button>
             ) : null}
           </div>
@@ -100,15 +102,15 @@ export function ModuleWorkflowGeneratedOutputsTab({
         {isCopyPanelOpen ? (
           <div className="rounded-sm border border-border bg-surface-low px-4 py-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm font-medium text-foreground">Copy selected outputs to watched folder</div>
+              <div className="text-sm font-medium text-foreground">{t({ ko: '선택한 생성 결과를 감시 폴더로 복사', en: 'Copy selected outputs to watched folder' })}</div>
               <Badge variant="outline">{selectedOutputIds.length}</Badge>
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
               <div className="space-y-2">
-                <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Target folder</div>
+                <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '대상 폴더', en: 'Target folder' })}</div>
                 <Select value={copyTargetFolderId} onChange={(event) => onCopyTargetFolderChange(event.target.value)}>
-                  <option value="">폴더 선택</option>
+                  <option value="">{t('module-graph.components.module.workflow.generated.outputs.tab.select.folder')}</option>
                   {watchedFolders.map((folder) => (
                     <option key={folder.id} value={String(folder.id)}>
                       {folder.folder_name}
@@ -123,10 +125,10 @@ export function ModuleWorkflowGeneratedOutputsTab({
               </div>
 
               <Button type="button" variant="ghost" onClick={onCloseCopyPanel} disabled={isCopying}>
-                Cancel
+                {t({ ko: '취소', en: 'Cancel' })}
               </Button>
               <Button type="button" onClick={onCopySelected} disabled={isCopying || watchedFoldersLoading || !copyTargetFolderId}>
-                {isCopying ? 'Copying…' : 'Copy Selected'}
+                {isCopying ? t({ ko: '복사 중…', en: 'Copying…' }) : t({ ko: '선택 항목 복사', en: 'Copy Selected' })}
               </Button>
             </div>
           </div>
@@ -134,7 +136,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
 
         {outputItems.length === 0 ? (
           <div className="rounded-sm border border-dashed border-border px-4 py-10 text-sm text-muted-foreground">
-            이 범위에는 정리할 이미지/영상 생성물이 아직 없어.
+            {t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어.', en: 'No image/video outputs to manage in this scope yet.' })}
           </div>
         ) : (
           <div className="space-y-3">
@@ -163,8 +165,8 @@ export function ModuleWorkflowGeneratedOutputsTab({
                     size="icon"
                     variant="secondary"
                     className="h-8 w-8"
-                    title={`${item.label} 다운로드`}
-                    aria-label={`${item.label} 다운로드`}
+                    title={t('module-graph.components.module.workflow.generated.outputs.tab.download.value', { label: item.label })}
+                    aria-label={t('module-graph.components.module.workflow.generated.outputs.tab.download.value', { label: item.label })}
                     onMouseDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.preventDefault()
@@ -197,19 +199,21 @@ function WorkflowOutputPagination({
   totalCount: number
   onPageChange: (page: number) => void
 }) {
+  const { t, formatNumber } = useI18n()
+
   if (totalPages <= 1) {
     return null
   }
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
-      <span>page {page} / {totalPages} · total {totalCount.toLocaleString('ko-KR')} · 50 per page</span>
+      <span>{t({ ko: '페이지 {page} / {totalPages} · 전체 {totalCount} · 페이지당 50개', en: 'page {page} / {totalPages} · total {totalCount} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), totalCount: formatNumber(totalCount) })}</span>
       <div className="flex items-center gap-2">
         <Button type="button" size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
-          이전
+          {t({ ko: '이전', en: 'Previous' })}
         </Button>
         <Button type="button" size="sm" variant="outline" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
-          다음
+          {t({ ko: '다음', en: 'Next' })}
         </Button>
       </div>
     </div>

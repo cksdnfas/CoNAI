@@ -15,6 +15,7 @@ import {
 } from '@/lib/api'
 import type { GroupDownloadType, GroupMutationInput, GroupRecord } from '@/types/group'
 import type { GroupEditorState, GroupSourceDefinition } from './group-page-shared'
+import { useI18n } from '@/i18n'
 
 /** Own mutation wiring and user-triggered action handlers for the group page. */
 export function useGroupPageActions({
@@ -58,18 +59,19 @@ export function useGroupPageActions({
   refreshFolderGroupQueries: () => Promise<unknown>
 }) {
   const authStatusQuery = useAuthStatusQuery()
+  const { t, formatNumber } = useI18n()
   const canDeleteImages = authStatusQuery.data?.isAdmin === true
 
   const createGroupMutation = useMutation({
     mutationFn: createGroup,
     onSuccess: async (result) => {
       setEditorState(null)
-      showSnackbar({ message: '커스텀 그룹을 만들었어.', tone: 'info' })
+      showSnackbar({ message: t('groups.use.group.page.actions.custom.group.created'), tone: 'info' })
       await refreshCustomGroupQueries()
       navigate(`/groups/${result.id}?tab=custom`)
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '커스텀 그룹 생성에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.create.the.custom.group'), tone: 'error' })
     },
   })
 
@@ -77,23 +79,23 @@ export function useGroupPageActions({
     mutationFn: ({ groupId: targetGroupId, input }: { groupId: number; input: GroupMutationInput }) => updateGroup(targetGroupId, input),
     onSuccess: async () => {
       setEditorState(null)
-      showSnackbar({ message: '커스텀 그룹 설정을 저장했어.', tone: 'info' })
+      showSnackbar({ message: t('groups.use.group.page.actions.custom.group.settings.saved'), tone: 'info' })
       await refreshCustomGroupQueries()
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '커스텀 그룹 저장에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.custom.groups.save.failed'), tone: 'error' })
     },
   })
 
   const deleteGroupMutation = useMutation({
     mutationFn: ({ groupId: targetGroupId, cascade }: { groupId: number; cascade: boolean }) => deleteGroup(targetGroupId, { cascade }),
     onSuccess: async () => {
-      showSnackbar({ message: '커스텀 그룹을 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t('groups.use.group.page.actions.custom.group.deleted'), tone: 'info' })
       await refreshCustomGroupQueries()
       navigate('/groups?tab=custom')
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '커스텀 그룹 삭제에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.delete.the.custom.group'), tone: 'error' })
     },
   })
 
@@ -101,13 +103,13 @@ export function useGroupPageActions({
     mutationFn: runGroupAutoCollect,
     onSuccess: async (result) => {
       showSnackbar({
-        message: `자동수집 실행 완료: ${result.images_added.toLocaleString('ko-KR')}개 추가, ${result.images_removed.toLocaleString('ko-KR')}개 정리`,
+        message: t({ ko: '자동수집 실행 완료: {added}개 추가, {removed}개 정리', en: 'Auto-collect complete: {added} added, {removed} removed' }, { added: formatNumber(result.images_added), removed: formatNumber(result.images_removed) }),
         tone: 'info',
       })
       await refreshCustomGroupQueries()
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '자동수집 실행에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.auto.collect.failed'), tone: 'error' })
     },
   })
 
@@ -115,35 +117,35 @@ export function useGroupPageActions({
     mutationFn: runAllGroupsAutoCollect,
     onSuccess: async (result) => {
       showSnackbar({
-        message: `전체 자동수집 완료: ${result.total_groups.toLocaleString('ko-KR')}개 그룹, ${result.total_images_added.toLocaleString('ko-KR')}개 추가, ${result.total_images_removed.toLocaleString('ko-KR')}개 정리`,
+        message: t({ ko: '전체 자동수집 완료: {groups}개 그룹, {added}개 추가, {removed}개 정리', en: 'All auto-collect jobs complete: {groups} groups, {added} added, {removed} removed' }, { groups: formatNumber(result.total_groups), added: formatNumber(result.total_images_added), removed: formatNumber(result.total_images_removed) }),
         tone: 'info',
       })
       await refreshCustomGroupQueries()
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '전체 자동수집 실행에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.run.auto.collect.for.all'), tone: 'error' })
     },
   })
 
   const rebuildAutoFolderGroupsMutation = useMutation({
     mutationFn: rebuildAutoFolderGroups,
     onSuccess: async () => {
-      showSnackbar({ message: '감시폴더 그룹을 다시 읽어왔어.', tone: 'info' })
+      showSnackbar({ message: t('groups.use.group.page.actions.watched.folder.groups.were.rebuilt'), tone: 'info' })
       await refreshFolderGroupQueries()
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '감시폴더 그룹 재구축에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.rebuild.watched.folder.groups'), tone: 'error' })
     },
   })
 
   const downloadGroupArchiveMutation = useMutation({
     mutationFn: async ({ type, scope }: { type: GroupDownloadType; scope: 'group' | 'selection' }) => {
       if (!selectedGroupId) {
-        throw new Error('다운로드할 그룹이 선택되지 않았어.')
+        throw new Error(t('groups.use.group.page.actions.no.group.selected.for.download'))
       }
 
       if (scope === 'selection' && selectedGroupCompositeHashes.length === 0) {
-        throw new Error('다운로드할 이미지를 먼저 선택해줘.')
+        throw new Error(t('groups.use.group.page.actions.select.images.to.download.first'))
       }
 
       const compositeHashes = scope === 'selection' ? selectedGroupCompositeHashes : undefined
@@ -157,12 +159,12 @@ export function useGroupPageActions({
     onSuccess: (_, variables) => {
       setDownloadScope(null)
       showSnackbar({
-        message: variables.scope === 'selection' ? '선택한 이미지 다운로드를 준비했어.' : '현재 그룹 다운로드를 준비했어.',
+        message: variables.scope === 'selection' ? t('groups.use.group.page.actions.preparing.selected.image.download') : t('groups.use.group.page.actions.preparing.current.group.download'),
         tone: 'info',
       })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '그룹 다운로드에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.group.download.failed'), tone: 'error' })
     },
   })
 
@@ -172,8 +174,8 @@ export function useGroupPageActions({
       setSelectedGroupImageIds([])
       showSnackbar({
         message: result.details.failed > 0
-          ? `${result.details.deleted.toLocaleString('ko-KR')}개 삭제, ${result.details.failed.toLocaleString('ko-KR')}개 실패했어.`
-          : `${result.details.deleted.toLocaleString('ko-KR')}개를 RecycleBin으로 보냈어.`,
+          ? t({ ko: '{deleted}개 삭제, {failed}개 실패했어.', en: '{deleted} deleted, {failed} failed.' }, { deleted: formatNumber(result.details.deleted), failed: formatNumber(result.details.failed) })
+          : t({ ko: '{deleted}개를 RecycleBin으로 보냈어.', en: '{deleted} sent to the Recycle Bin.' }, { deleted: formatNumber(result.details.deleted) }),
         tone: result.details.failed > 0 ? 'error' : 'info',
       })
       await Promise.all([
@@ -182,7 +184,7 @@ export function useGroupPageActions({
       ])
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '선택 항목 삭제에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.delete.selected.items'), tone: 'error' })
     },
   })
 
@@ -195,7 +197,7 @@ export function useGroupPageActions({
       await refreshCustomGroupQueries()
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '그룹 추가에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.add.to.group'), tone: 'error' })
     },
   })
 
@@ -207,7 +209,7 @@ export function useGroupPageActions({
       await refreshCustomGroupQueries()
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '그룹 이미지 제거에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.remove.group.images'), tone: 'error' })
     },
   })
 
@@ -266,15 +268,15 @@ export function useGroupPageActions({
     const hasChildren = Boolean(selectedGroupHierarchy?.has_children)
     const confirmed = window.confirm(
       hasChildren
-        ? `정말 ${selectedGroup.name} 그룹을 삭제할까? 하위 그룹은 기본적으로 루트로 올라가.`
-        : `정말 ${selectedGroup.name} 그룹을 삭제할까?`,
+        ? t({ ko: '정말 {groupName} 그룹을 삭제할까? 하위 그룹은 기본적으로 루트로 올라가.', en: 'Delete the {groupName} group? Child groups will move to the root by default.' }, { groupName: selectedGroup.name })
+        : t({ ko: '정말 {groupName} 그룹을 삭제할까?', en: 'Delete the {groupName} group?' }, { groupName: selectedGroup.name }),
     )
     if (!confirmed) {
       return
     }
 
     const cascade = hasChildren
-      ? window.confirm('하위 그룹까지 전부 같이 삭제할까?\n확인 = 하위 그룹도 함께 삭제\n취소 = 현재 그룹만 삭제하고 하위 그룹은 유지')
+      ? window.confirm(t('groups.use.group.page.actions.delete.all.child.groups.too.nok.delete'))
       : false
 
     await deleteGroupMutation.mutateAsync({
@@ -292,7 +294,7 @@ export function useGroupPageActions({
   }
 
   const handleRunAutoCollectAll = async () => {
-    const confirmed = window.confirm('현재 커스텀 그룹 전체에 자동수집을 한 번 돌릴까?')
+    const confirmed = window.confirm(t('groups.use.group.page.actions.run.auto.collect.once.for.all.custom'))
     if (!confirmed) {
       return
     }
@@ -301,7 +303,7 @@ export function useGroupPageActions({
   }
 
   const handleRebuildAutoFolderGroups = async () => {
-    const confirmed = window.confirm('감시폴더 그룹 구조를 다시 읽어와서 재구축할까?')
+    const confirmed = window.confirm(t('groups.use.group.page.actions.reload.and.rebuild.the.watched.folder.group'))
     if (!confirmed) {
       return
     }
@@ -335,7 +337,7 @@ export function useGroupPageActions({
 
   const handleDeleteSelectedImages = async () => {
     if (!canDeleteImages) {
-      showSnackbar({ message: '삭제는 관리자 계정만 할 수 있어.', tone: 'error' })
+      showSnackbar({ message: t('groups.use.group.page.actions.only.administrators.can.delete.items'), tone: 'error' })
       return
     }
 
@@ -343,7 +345,7 @@ export function useGroupPageActions({
       return
     }
 
-    const confirmed = window.confirm(`선택한 ${selectedGroupCompositeHashes.length.toLocaleString('ko-KR')}개 항목을 휴지통으로 보낼까?`)
+    const confirmed = window.confirm(t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Send {count} selected items to the Recycle Bin?' }, { count: formatNumber(selectedGroupCompositeHashes.length) }))
     if (!confirmed) {
       return
     }
@@ -357,17 +359,17 @@ export function useGroupPageActions({
     }
 
     if (assignableCustomGroupsState.isPending) {
-      showSnackbar({ message: '커스텀 그룹 목록을 불러오는 중이야.', tone: 'info' })
+      showSnackbar({ message: t('groups.use.group.page.actions.loading.custom.groups'), tone: 'info' })
       return
     }
 
     if (assignableCustomGroupsState.isError) {
-      showSnackbar({ message: assignableCustomGroupsState.error instanceof Error ? assignableCustomGroupsState.error.message : '그룹 목록을 불러오지 못했어.', tone: 'error' })
+      showSnackbar({ message: assignableCustomGroupsState.error instanceof Error ? assignableCustomGroupsState.error.message : t('groups.use.group.page.actions.failed.to.load.groups'), tone: 'error' })
       return
     }
 
     if (assignableCustomGroupsState.count === 0) {
-      showSnackbar({ message: '먼저 커스텀 그룹을 하나 만들어줘.', tone: 'error' })
+      showSnackbar({ message: t('groups.use.group.page.actions.create.a.custom.group.first'), tone: 'error' })
       return
     }
 
@@ -386,7 +388,7 @@ export function useGroupPageActions({
       return
     }
 
-    const confirmed = window.confirm(`선택한 ${selectedGroupCompositeHashes.length.toLocaleString('ko-KR')}개 이미지를 현재 그룹에서 제거할까?`)
+    const confirmed = window.confirm(t({ ko: '선택한 {count}개 이미지를 현재 그룹에서 제거할까?', en: 'Remove {count} selected images from the current group?' }, { count: formatNumber(selectedGroupCompositeHashes.length) }))
     if (!confirmed) {
       return
     }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from 'react'
 import type Konva from 'konva'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
 import { useImageEditorHistory } from './use-image-editor-history'
 import { useImageEditorKeyboardShortcuts } from './use-image-editor-keyboard-shortcuts'
 import { useImageEditorLayerSessionActions } from './use-image-editor-layer-session-actions'
@@ -62,7 +63,7 @@ function readClipboardFileAsDataUrl(file: Blob) {
 
 export function ImageEditorModal({
   open,
-  title = 'Image Editor',
+  title,
   sourceImageDataUrl,
   sourceFileName,
   maskImageDataUrl,
@@ -71,6 +72,8 @@ export function ImageEditorModal({
   onSave,
 }: ImageEditorModalProps) {
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
+  const resolvedTitle = title ?? t({ ko: '이미지 편집기', en: 'Image Editor' })
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const documentGroupRef = useRef<Konva.Group | null>(null)
   const selectionClipboardRef = useRef<ImageEditorSelectionClipboard | null>(null)
@@ -294,8 +297,8 @@ export function ImageEditorModal({
     setMaskPreviewSurface(null)
     setMaskStrokes([])
     queueHistoryCommit()
-    showSnackbar({ message: '마스크를 비웠어.', tone: 'info' })
-  }, [queueHistoryCommit, showSnackbar])
+    showSnackbar({ message: t('image-editor.image.editor.modal.mask.cleared'), tone: 'info' })
+  }, [queueHistoryCommit, showSnackbar, t])
 
   const { handleSave } = useImageEditorLifecycle({
     open,
@@ -463,7 +466,7 @@ export function ImageEditorModal({
     <ImageEditorModalLayout
       open={open}
       saving={saving}
-      title={title}
+      title={resolvedTitle}
       sourceFileName={sourceFileName}
       onClose={onClose}
       onSave={() => void handleSave()}

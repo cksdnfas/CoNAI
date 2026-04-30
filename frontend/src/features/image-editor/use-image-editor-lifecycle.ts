@@ -1,4 +1,5 @@
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import { useI18n } from '@/i18n'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorSavePayload, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import type { ImageEditorHistorySnapshot } from './use-image-editor-history'
 import {
@@ -98,6 +99,8 @@ export function useImageEditorLifecycle({
   setMaskPreviewSurface: Dispatch<SetStateAction<HTMLCanvasElement | null>>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
+
   /** Reset the editor session from the provided source and optional mask inputs. */
   useEffect(() => {
     if (!open || !sourceImageDataUrl) {
@@ -161,7 +164,7 @@ export function useImageEditorLifecycle({
         })
       } catch (error) {
         if (!cancelled) {
-          showSnackbar({ message: error instanceof Error ? error.message : '에디터 이미지를 불러오지 못했어.', tone: 'error' })
+          showSnackbar({ message: error instanceof Error ? error.message : t('image-editor.use.image.editor.lifecycle.failed.to.load.the.editor.image'), tone: 'error' })
         }
       } finally {
         if (!cancelled) {
@@ -204,6 +207,7 @@ export function useImageEditorLifecycle({
     sourceImageDataUrl,
     viewportSize.height,
     viewportSize.width,
+    t,
   ])
 
   /** Save the current source and optional mask back into the caller draft state. */
@@ -240,7 +244,7 @@ export function useImageEditorLifecycle({
       })
       onClose()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '편집 결과를 저장하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('image-editor.use.image.editor.lifecycle.failed.to.save.the.edit.result'), tone: 'error' })
     } finally {
       setSaving(false)
     }
@@ -259,6 +263,7 @@ export function useImageEditorLifecycle({
     saving,
     setSaving,
     showSnackbar,
+    t,
   ])
 
   return {

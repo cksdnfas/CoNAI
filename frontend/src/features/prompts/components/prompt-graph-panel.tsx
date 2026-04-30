@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { PromptGraphEdgeItem, PromptGraphNodeItem, PromptGraphPayload, PromptTypeFilter } from '@/types/prompt'
+import { useI18n } from '@/i18n'
 
 type PromptGraphFilters = {
   type: PromptTypeFilter
@@ -259,6 +260,7 @@ export function PromptGraphPanel({
   onApplyFilters,
   onRebuild,
 }: PromptGraphPanelProps) {
+  const { t, formatNumber } = useI18n()
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<PromptGraphCanvasNode, PromptGraphCanvasEdge> | null>(null)
   const [zoom, setZoom] = useState(0.42)
   const graphElements = useMemo(() => buildPromptGraphElements(data?.nodes ?? [], data?.edges ?? [], zoom), [data?.nodes, data?.edges, zoom])
@@ -279,8 +281,8 @@ export function PromptGraphPanel({
       title="Graph"
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {data ? <Badge variant="outline">N {data.nodes.length.toLocaleString('ko-KR')}</Badge> : null}
-          {data ? <Badge variant="outline">E {data.edges.length.toLocaleString('ko-KR')}</Badge> : null}
+          {data ? <Badge variant="outline">N {formatNumber(data.nodes.length)}</Badge> : null}
+          {data ? <Badge variant="outline">E {formatNumber(data.edges.length)}</Badge> : null}
           <Button type="button" variant="outline" size="sm" onClick={onApplyFilters} disabled={isLoading || isFetching}>
             Apply
           </Button>
@@ -290,8 +292,8 @@ export function PromptGraphPanel({
             size="icon-xs"
             onClick={() => onRebuild?.()}
             disabled={!onRebuild || isRebuilding}
-            aria-label="프롬프트 관계 재구축"
-            title="관계 재구축"
+            aria-label={t('prompts.components.prompt.graph.panel.rebuild.prompt.relationships')}
+            title={t('prompts.components.prompt.graph.panel.rebuild.relationships')}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isRebuilding ? 'animate-spin' : null)} />
           </Button>
@@ -341,9 +343,9 @@ export function PromptGraphPanel({
         />
       </div>
 
-      {isError ? <div className="text-sm text-destructive">{errorMessage ?? '그래프를 불러오지 못했어.'}</div> : null}
+      {isError ? <div className="text-sm text-destructive">{errorMessage ?? t('prompts.components.prompt.graph.panel.failed.to.load.the.graph')}</div> : null}
       {(isLoading || isFetching) && !data ? <div className="h-[720px] rounded-sm border border-border/70 bg-surface-low/40" /> : null}
-      {!isLoading && !isFetching && !isError && (data?.nodes.length ?? 0) === 0 ? <div className="text-sm text-muted-foreground">항목 없음</div> : null}
+      {!isLoading && !isFetching && !isError && (data?.nodes.length ?? 0) === 0 ? <div className="text-sm text-muted-foreground">{t('prompts.components.prompt.graph.panel.no.items')}</div> : null}
 
       {(data?.nodes.length ?? 0) > 0 ? (
         <div className="h-[720px] overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_center,hsl(var(--surface-high))_0%,hsl(var(--surface-container))_58%,hsl(var(--background))_100%)]">

@@ -10,6 +10,7 @@ import { createRatingSearchChip, getSearchScopeStyle } from '@/features/search/s
 import type { RatingTierRecord } from '@/features/search/search-types'
 import { useSearchSuggestionData } from '@/features/search/use-search-suggestion-data'
 import { useHomeSearch } from '@/features/home/home-search-context'
+import { useI18n } from '@/i18n'
 import type { PromptCollectionItem } from '@/types/prompt'
 import { cn } from '@/lib/utils'
 
@@ -85,6 +86,7 @@ function HomeSearchSuggestionPanel({
     modelSuggestionsLoading,
     loraSuggestionsLoading,
   } = useSearchSuggestionData(searchScope, searchInput)
+  const { t } = useI18n()
 
   return (
     <div className={cn('theme-floating-panel overflow-hidden rounded-sm border border-border/80 bg-background/95 shadow-[0_18px_40px_rgba(0,0,0,0.24)]', className)} style={style}>
@@ -98,8 +100,8 @@ function HomeSearchSuggestionPanel({
             type="button"
             onClick={onClose}
             className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
-            aria-label="입력 필터 닫기"
-            title="입력 필터 닫기"
+            aria-label={t('homeSearchDrawerContent.closeInputFilter')}
+            title={t('homeSearchDrawerContent.closeInputFilter')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -123,8 +125,8 @@ function HomeSearchSuggestionPanel({
           onSelectMetadataSuggestion={(value: string) => addSuggestionChip(value)}
           onSelectRatingTier={(tier: RatingTierRecord) => addRatingChip(createRatingSearchChip(tier))}
           onSelectAIToolSuggestion={addAIToolChip}
-          emptyRatingText="일치하는 평가 티어가 없어."
-          idlePromptText="검색어 입력"
+          emptyRatingText={t('homeSearchDrawerContent.noMatchingRatingTiers')}
+          idlePromptText={t('homeSearchDrawerContent.enterSearchTerms')}
         />
       </div>
     </div>
@@ -158,6 +160,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
   } = useHomeSearch()
   const [isSuggestionPanelOpen, setIsSuggestionPanelOpen] = useState(false)
   const searchSectionRef = useRef<HTMLElement | null>(null)
+  const { t, formatNumber } = useI18n()
 
   useEffect(() => {
     if (!isDrawerOpen) {
@@ -179,7 +182,9 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
     return null
   }
 
-  const activeCountLabel = appliedChips.length > 0 ? `${appliedChips.length} filters` : 'Search gallery…'
+  const activeCountLabel = appliedChips.length > 0
+    ? t({ ko: '{count}개 필터', en: '{count} filters' }, { count: formatNumber(appliedChips.length) })
+    : t({ ko: '갤러리 검색…', en: 'Search gallery…' })
 
   const handleOpenSuggestionPanel = () => {
     setIsSuggestionPanelOpen(true)
@@ -241,7 +246,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
       >
         <div className="theme-drawer-header flex items-center justify-between border-b border-border/80 bg-background/40">
           <div className="text-2xl font-semibold tracking-tight text-foreground">search</div>
-          <button type="button" onClick={closeDrawer} className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground" aria-label="검색 드로어 닫기">
+          <button type="button" onClick={closeDrawer} className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground" aria-label={t('homeSearchDrawerContent.closeSearchDrawer')}>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -253,7 +258,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
               setSearchInput={setSearchInput}
               submitSearchFromInput={handleSubmitSearchFromInput}
               placeholder={activeCountLabel}
-              ariaLabel="드로어 검색 입력"
+              ariaLabel={t('homeSearchDrawerContent.drawerSearchInput')}
               onFocus={handleOpenSuggestionPanel}
             />
 
@@ -273,33 +278,33 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
 
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Current filters</div>
+              <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '현재 필터', en: 'Current filters' })}</div>
             </div>
 
-            <SearchChipList chips={draftChips} title={null} emptyMessage="No filters" onCycleOperator={cycleChipOperator} onRemove={removeChip} />
+            <SearchChipList chips={draftChips} title={null} emptyMessage={t({ ko: '필터 없음', en: 'No filters' })} onCycleOperator={cycleChipOperator} onRemove={removeChip} />
 
             <div className="flex gap-2">
               <Button type="button" className="flex-1" onClick={handleApplySearch}>
-                검색
+                {t({ ko: '검색', en: 'Search' })}
               </Button>
               <Button type="button" variant="outline" className="flex-1" onClick={handleClearSearch}>
-                초기화
+                {t({ ko: '초기화', en: 'Reset' })}
               </Button>
             </div>
           </section>
 
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Recent searches</div>
+              <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '최근 검색', en: 'Recent searches' })}</div>
               <div className="flex shrink-0 items-center gap-2">
                 <button type="button" onClick={() => void clearHistoryEntries()} className="text-xs text-muted-foreground transition hover:text-foreground">
-                  Clear History
+                  {t({ ko: '히스토리 비우기', en: 'Clear history' })}
                 </button>
               </div>
             </div>
 
-            {historyLoading ? <BottomDrawerNotice>Loading…</BottomDrawerNotice> : null}
-            {!historyLoading && historyEntries.length === 0 ? <BottomDrawerNotice>No history</BottomDrawerNotice> : null}
+            {historyLoading ? <BottomDrawerNotice>{t({ ko: '불러오는 중…', en: 'Loading…' })}</BottomDrawerNotice> : null}
+            {!historyLoading && historyEntries.length === 0 ? <BottomDrawerNotice>{t({ ko: '히스토리 없음', en: 'No history' })}</BottomDrawerNotice> : null}
             {!historyLoading && historyEntries.length > 0 ? (
               <div className="space-y-2">
                 {historyEntries.map((entry) => (
@@ -329,7 +334,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                         ))}
                       </div>
                     </button>
-                    <button type="button" onClick={() => void deleteHistoryEntry(entry.id)} className="mt-1 text-muted-foreground transition hover:text-foreground" aria-label="검색 히스토리 삭제">
+                    <button type="button" onClick={() => void deleteHistoryEntry(entry.id)} className="mt-1 text-muted-foreground transition hover:text-foreground" aria-label={t('homeSearchDrawerContent.deleteSearchHistory')}>
                       <X className="h-4 w-4" />
                     </button>
                   </div>

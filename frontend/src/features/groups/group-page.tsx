@@ -24,10 +24,12 @@ import { useImageListColumnPreference } from '@/features/images/components/image
 import { formatGroupTimestamp, getGroupCardGridClassName, groupSources, normalizeGroupSourceKey, type GroupEditorState, type GroupSourceKey } from './group-page-shared'
 import { useGroupPageQueries } from './use-group-page-queries'
 import { useGroupPageActions } from './use-group-page-actions'
+import { useI18n } from '@/i18n'
 
 export function GroupPage() {
   const navigate = useNavigate()
   const { showSnackbar } = useSnackbar()
+  const { t, formatNumber, formatDateTime } = useI18n()
   const {
     columnCount: groupColumnCount,
     setColumnCount: setGroupColumnCount,
@@ -48,6 +50,21 @@ export function GroupPage() {
   const selectedSource = groupSources[selectedSourceKey]
   const selectedGroupId = groupId ? Number(groupId) : undefined
   const isCustomSource = selectedSource.key === 'custom'
+  const getSourceLabel = (source: typeof selectedSource, part: 'tab' | 'root' | 'rootSection') => {
+    if (source.key === 'folders') {
+      return part === 'tab'
+        ? t({ ko: '감시폴더 그룹', en: 'Watched-folder groups' })
+        : part === 'root'
+          ? t({ ko: '감시폴더 그룹', en: 'Watched-folder groups' })
+          : t({ ko: '감시폴더 루트', en: 'Watched-folder root' })
+    }
+
+    return part === 'tab'
+      ? t({ ko: '커스텀 그룹', en: 'Custom groups' })
+      : part === 'root'
+        ? t({ ko: '사용자 커스텀 그룹', en: 'User custom groups' })
+        : t({ ko: '루트 그룹', en: 'Root groups' })
+  }
 
   const {
     groupsQuery,
@@ -143,18 +160,18 @@ export function GroupPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow={isWideLayout ? 'Image' : undefined}
-        title="Groups"
+        title={t({ ko: '그룹', en: 'Groups' })}
         actions={!selectedGroupId && !isCustomSource ? (
           <Button type="button" size="sm" variant="secondary" onClick={() => void handleRebuildAutoFolderGroups()} disabled={rebuildAutoFolderGroupsMutation.isPending}>
             <RotateCcw className="h-4 w-4" />
-            {rebuildAutoFolderGroupsMutation.isPending ? '감시폴더 재구축 중…' : '감시폴더 재구축'}
+            {rebuildAutoFolderGroupsMutation.isPending ? t('groups.group.page.rebuilding.watched.folders') : t('groups.group.page.rebuild.watched.folders')}
           </Button>
         ) : undefined}
       />
 
       <SegmentedTabBar
         value={selectedSource.key}
-        items={Object.values(groupSources).map((source) => ({ value: source.key, label: source.tabLabel }))}
+        items={Object.values(groupSources).map((source) => ({ value: source.key, label: getSourceLabel(source, 'tab') }))}
         onChange={(nextSourceKey) => handleSelectSource(nextSourceKey as GroupSourceKey)}
       />
 
@@ -177,8 +194,8 @@ export function GroupPage() {
                     className="bg-surface-low"
                     onClick={handleOpenGroupDownloadModal}
                     disabled={groupFileCountsQuery.isLoading || (downloadGroupArchiveMutation.isPending && downloadScope === 'group')}
-                    aria-label="현재 그룹 다운로드"
-                    title={downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? '다운로드 준비 중…' : '현재 그룹 다운로드'}
+                    aria-label={t('groups.group.page.download.current.group')}
+                    title={downloadGroupArchiveMutation.isPending && downloadScope === 'group' ? t('groups.group.page.preparing.download') : t('groups.group.page.download.current.group')}
                   >
                     <Download className="h-4 w-4" />
                   </Button>
@@ -188,8 +205,8 @@ export function GroupPage() {
                     variant="outline"
                     className="bg-surface-low"
                     onClick={handleOpenEditModal}
-                    aria-label="현재 그룹 편집"
-                    title="현재 그룹 편집"
+                    aria-label={t('groups.group.page.edit.current.group')}
+                    title={t('groups.group.page.edit.current.group')}
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
@@ -202,8 +219,8 @@ export function GroupPage() {
                 className="bg-surface-low"
                 onClick={() => void handleRunAutoCollectAll()}
                 disabled={autoCollectAllMutation.isPending}
-                aria-label="전체 자동수집"
-                title={autoCollectAllMutation.isPending ? '전체 자동수집 실행 중…' : '전체 자동수집'}
+                aria-label={t('groups.group.page.auto.collect.all')}
+                title={autoCollectAllMutation.isPending ? t('groups.group.page.running.all.auto.collect.jobs') : t('groups.group.page.auto.collect.all')}
               >
                 <Play className="h-4 w-4" />
               </Button>
@@ -213,8 +230,8 @@ export function GroupPage() {
                 variant="outline"
                 className="bg-surface-low"
                 onClick={handleOpenCreateModal}
-                aria-label="새 그룹"
-                title="새 그룹"
+                aria-label={t('groups.group.page.new.group')}
+                title={t('groups.group.page.new.group')}
               >
                 <FolderPlus className="h-4 w-4" />
               </Button>
@@ -235,7 +252,7 @@ export function GroupPage() {
 
           {!selectedGroupId ? (
             <GroupRootGridSection
-              title={selectedSource.rootSectionTitle}
+              title={getSourceLabel(selectedSource, 'rootSection')}
               groups={rootGroups}
               cardStyle={groupExplorerCardStyle}
               gridClassName={getGroupCardGridClassName(groupExplorerCardStyle)}
@@ -249,9 +266,9 @@ export function GroupPage() {
 
           {selectedGroupId && selectedGroupQuery.isError ? (
             <Alert variant="destructive">
-              <AlertTitle>그룹 정보를 불러오지 못했어</AlertTitle>
+              <AlertTitle>{t('groups.group.page.failed.to.load.group.information')}</AlertTitle>
               <AlertDescription>
-                {selectedGroupQuery.error instanceof Error ? selectedGroupQuery.error.message : '알 수 없는 오류가 발생했어.'}
+                {selectedGroupQuery.error instanceof Error ? selectedGroupQuery.error.message : t('groups.group.page.an.unknown.error.occurred')}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -268,8 +285,8 @@ export function GroupPage() {
                   isDownloadingGroup={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
                   isAutoCollectPending={autoCollectMutation.isPending}
                   isDeletePending={deleteGroupMutation.isPending}
-                  lastAutoCollectLabel={formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run)}
-                  parentGroupLabel={selectedGroupHierarchy?.parent_id == null ? '루트 그룹' : '하위 그룹으로 연결됨'}
+                  lastAutoCollectLabel={formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run, { emptyLabel: t({ ko: '아직 없음', en: 'Not yet' }), formatDateTime })}
+                  parentGroupLabel={selectedGroupHierarchy?.parent_id == null ? t('groups.group.page.root.group') : t('groups.group.page.linked.as.a.child.group')}
                   onOpenDownload={handleOpenGroupDownloadModal}
                   onOpenCreateModal={handleOpenCreateModal}
                   onOpenEditModal={handleOpenEditModal}
@@ -282,7 +299,7 @@ export function GroupPage() {
                 <GroupNavigationGridSection
                   backNavigationGroup={backNavigationGroup}
                   parentGroupHierarchy={parentGroupHierarchy}
-                  rootTitle={selectedSource.rootTitle}
+                  rootTitle={getSourceLabel(selectedSource, 'root')}
                   childGroups={childGroups}
                   cardStyle={groupExplorerCardStyle}
                   gridClassName={getGroupCardGridClassName(groupExplorerCardStyle)}
@@ -317,7 +334,7 @@ export function GroupPage() {
                   defaultValue={defaultGroupColumnCount}
                   min={minGroupColumnCount}
                   max={maxGroupColumnCount}
-                  title="그룹 한 줄 카드 수"
+                  title={t('groups.group.page.group.cards.per.row')}
                   onChange={setGroupColumnCount}
                   onReset={resetGroupColumnCount}
                 />
@@ -342,7 +359,7 @@ export function GroupPage() {
               data-no-select-drag="true"
             >
               <FolderPlus className="h-4 w-4" />
-              {assignToGroupMutation.isPending ? '그룹 추가 중…' : '커스텀 그룹에 추가'}
+              {assignToGroupMutation.isPending ? t('groups.group.page.adding.to.group') : t('groups.group.page.add.to.custom.group')}
             </Button>
             {isCustomSource ? (
               <Button
@@ -353,7 +370,7 @@ export function GroupPage() {
                 data-no-select-drag="true"
               >
                 <FolderMinus className="h-4 w-4" />
-                {removeGroupImagesMutation.isPending ? '제거 중…' : '현재 그룹에서 제거'}
+                {removeGroupImagesMutation.isPending ? t('groups.group.page.removing') : t('groups.group.page.remove.from.current.group')}
               </Button>
             ) : null}
           </>
@@ -364,8 +381,8 @@ export function GroupPage() {
             variant="destructive"
             onClick={() => void handleDeleteSelectedImages()}
             disabled={deleteSelectedImagesMutation.isPending || selectedGroupCompositeHashes.length === 0}
-            title={deleteSelectedImagesMutation.isPending ? '삭제 중' : '선택 삭제'}
-            aria-label={deleteSelectedImagesMutation.isPending ? '삭제 중' : '선택 삭제'}
+            title={deleteSelectedImagesMutation.isPending ? t('groups.group.page.deleting') : t('groups.group.page.delete.selected')}
+            aria-label={deleteSelectedImagesMutation.isPending ? t('groups.group.page.deleting') : t('groups.group.page.delete.selected')}
             data-no-select-drag="true"
           >
             <Trash2 className="h-4 w-4" />
@@ -377,8 +394,8 @@ export function GroupPage() {
 
       <GroupDownloadModal
         open={downloadScope !== null}
-        title={downloadScope === 'selection' ? '선택한 이미지 다운로드' : '현재 그룹 다운로드'}
-        description={downloadScope === 'selection' ? `선택한 ${selectedGroupCompositeHashes.length.toLocaleString('ko-KR')}개 기준으로 내려받을 파일 종류를 골라줘.` : '현재 그룹 전체에서 내려받을 파일 종류를 골라줘.'}
+        title={downloadScope === 'selection' ? t('groups.group.page.download.selected.images') : t('groups.group.page.download.current.group')}
+        description={downloadScope === 'selection' ? t({ ko: '선택한 {count}개 기준으로 내려받을 파일 종류를 골라줘.', en: 'Selected {count} items. Choose which file type to download.' }, { count: formatNumber(selectedGroupCompositeHashes.length) }) : t('groups.group.page.choose.which.file.type.to.download.from')}
         counts={activeDownloadCounts}
         isLoading={downloadScope === 'group' ? groupFileCountsQuery.isLoading : false}
         isDownloading={downloadGroupArchiveMutation.isPending}

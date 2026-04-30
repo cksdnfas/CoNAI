@@ -8,16 +8,17 @@ import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { GenerationQueueHeaderWidget } from '@/features/image-generation/components/generation-queue-header-widget'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
 
 const PRIMARY_NAV_ORDER = ['/groups', '/prompts', '/generation', '/wildcards', '/upload', '/wallpaper', '/wallpaper/runtime', '/settings'] as const
 
-const navItems: Array<{ to: string; label: string; icon: LucideIcon; permissionKey: string | null }> = [
-  { to: '/access', label: '이용 가능 페이지', icon: ShieldCheck, permissionKey: null },
+const navItems: Array<{ to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }> = [
+  { to: '/access', labelKey: 'appShell.availablePages', icon: ShieldCheck, permissionKey: null },
   ...PRIMARY_NAV_ORDER.flatMap((path) => {
     const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
-    return item ? [{ to: item.path, label: item.label, icon: item.icon, permissionKey: item.permissionKey }] : []
+    return item ? [{ to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
   }),
 ]
 
@@ -34,6 +35,7 @@ export function AppShell() {
 /** Render the shell layout, leaving nav-scroll mechanics to a focused hook. */
 function AppShellLayout() {
   const location = useLocation()
+  const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
@@ -75,8 +77,8 @@ function AppShellLayout() {
               to="/"
               end
               className="flex shrink-0 items-center gap-3 rounded-sm transition-opacity hover:opacity-90"
-              aria-label="홈으로 이동"
-              title="홈"
+              aria-label={t({ ko: '홈으로 이동', en: 'Go to Home' })}
+              title={t('pageAccessCatalog.home')}
             >
               <div className="rounded-sm bg-surface-high p-2 text-secondary">
                 <Image className="h-4 w-4" />
@@ -95,8 +97,11 @@ function AppShellLayout() {
                 onPointerLeave={handlePointerLeave}
                 style={{ touchAction: 'pan-y pinch-zoom' }}
               >
-                <nav className="flex min-w-max items-center gap-2 pr-10 sm:pr-2" aria-label="주요 페이지 이동">
-                  {visibleNavItems.map(({ to, label, icon: Icon }) => (
+                <nav className="flex min-w-max items-center gap-2 pr-10 sm:pr-2" aria-label={t('appShell.mainPageNavigation')}>
+                  {visibleNavItems.map(({ to, labelKey, icon: Icon }) => {
+                    const label = t(labelKey)
+
+                    return (
                     <NavLink
                       key={to}
                       to={to}
@@ -117,7 +122,8 @@ function AppShellLayout() {
                       <Icon className="h-4 w-4" />
                       <span className="sr-only">{label}</span>
                     </NavLink>
-                  ))}
+                    )
+                  })}
                 </nav>
               </div>
 

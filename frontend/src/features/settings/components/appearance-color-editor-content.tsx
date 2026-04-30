@@ -9,6 +9,7 @@ import {
   getSurfacePresetLabel,
 } from './appearance-tab-editor-shared'
 import { SettingsField } from './settings-primitives'
+import { useI18n } from '@/i18n'
 
 /** Render the color-focused appearance controls for presets and custom palettes. */
 export function AppearanceColorEditorContent({
@@ -16,12 +17,13 @@ export function AppearanceColorEditorContent({
   colorValues,
   onPatchAppearance,
 }: AppearanceTabEditorSectionProps) {
+  const { t } = useI18n()
   const defaultSurfaceToneColors = resolveCustomSurfaceToneColors(DEFAULT_APPEARANCE_SETTINGS)
 
   return (
     <div className="space-y-8">
       <section className="space-y-4">
-        <EditorSectionLead title="강조색" />
+        <EditorSectionLead title={t({ ko: '강조색', en: 'Accent colors' })} />
         <div className="grid gap-3 md:grid-cols-2">
           {Object.entries(APPEARANCE_PRESETS).map(([presetKey, preset]) => {
             const isActive = appearanceDraft.accentPreset === presetKey
@@ -39,7 +41,7 @@ export function AppearanceColorEditorContent({
                 )}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-foreground">{getAccentPresetLabel(presetKey as AppearanceSettings['accentPreset'])}</div>
+                  <div className="text-sm font-semibold text-foreground">{getAccentPresetLabel(presetKey as AppearanceSettings['accentPreset'], t)}</div>
                   <div className="flex items-center gap-2">
                     <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: preset.primary }} />
                     <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: preset.secondary }} />
@@ -60,7 +62,7 @@ export function AppearanceColorEditorContent({
             )}
           >
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-foreground">{getAccentPresetLabel('custom')}</div>
+              <div className="text-sm font-semibold text-foreground">{getAccentPresetLabel('custom', t)}</div>
               <div className="flex items-center gap-2">
                 <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customPrimaryColor }} />
                 <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customSecondaryColor }} />
@@ -71,7 +73,7 @@ export function AppearanceColorEditorContent({
 
         {appearanceDraft.accentPreset === 'custom' ? (
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingsField label="기본 강조색">
+            <SettingsField label={t({ ko: '기본 강조색', en: 'Primary accent' })}>
               <AppearanceColorControl
                 colorValue={colorValues.customPrimaryColorValue}
                 textValue={appearanceDraft.customPrimaryColor}
@@ -81,7 +83,7 @@ export function AppearanceColorEditorContent({
               />
             </SettingsField>
 
-            <SettingsField label="보조 강조색">
+            <SettingsField label={t({ ko: '보조 강조색', en: 'Secondary accent' })}>
               <AppearanceColorControl
                 colorValue={colorValues.customSecondaryColorValue}
                 textValue={appearanceDraft.customSecondaryColor}
@@ -95,7 +97,7 @@ export function AppearanceColorEditorContent({
       </section>
 
       <section className="space-y-4">
-        <EditorSectionLead title="표면 / 마감" />
+        <EditorSectionLead title={t({ ko: '표면 / 마감', en: 'Surfaces / finish' })} />
         <div className="grid gap-3 md:grid-cols-2">
           {Object.entries(SURFACE_PRESETS).map(([presetKey, preset]) => {
             const palette = preset.modes[appearanceDraft.themeMode === 'system' ? 'dark' : appearanceDraft.themeMode]
@@ -114,7 +116,7 @@ export function AppearanceColorEditorContent({
                 )}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-foreground">{getSurfacePresetLabel(presetKey as AppearanceSettings['surfacePreset'])}</div>
+                  <div className="text-sm font-semibold text-foreground">{getSurfacePresetLabel(presetKey as AppearanceSettings['surfacePreset'], t)}</div>
                   <div className="flex items-center gap-2">
                     <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: palette.background }} />
                     <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: palette.surfaceContainer }} />
@@ -136,7 +138,7 @@ export function AppearanceColorEditorContent({
             )}
           >
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-foreground">{getSurfacePresetLabel('custom')}</div>
+              <div className="text-sm font-semibold text-foreground">{getSurfacePresetLabel('custom', t)}</div>
               <div className="flex items-center gap-2">
                 <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customSurfaceBackgroundColor }} />
                 <span className="h-5 w-5 rounded-full border border-border" style={{ backgroundColor: appearanceDraft.customSurfaceContainerColor }} />
@@ -148,7 +150,7 @@ export function AppearanceColorEditorContent({
 
         {appearanceDraft.surfacePreset === 'custom' ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <SettingsField label="배경">
+            <SettingsField label={t({ ko: '배경', en: 'Background' })}>
               <AppearanceColorControl
                 colorValue={colorValues.customSurfaceBackgroundColorValue}
                 textValue={appearanceDraft.customSurfaceBackgroundColor}
@@ -158,7 +160,7 @@ export function AppearanceColorEditorContent({
               />
             </SettingsField>
 
-            <SettingsField label="사이드바 바탕">
+            <SettingsField label={t({ ko: '사이드바 바탕', en: 'Sidebar background' })}>
               <AppearanceColorControl
                 colorValue={colorValues.customSurfaceLowestColorValue}
                 textValue={appearanceDraft.customSurfaceLowestColor ?? ''}
@@ -168,7 +170,7 @@ export function AppearanceColorEditorContent({
               />
             </SettingsField>
 
-            <SettingsField label="컨테이너 1">
+            <SettingsField label={t({ ko: '컨테이너 1', en: 'Container 1' })}>
               <AppearanceColorControl
                 colorValue={colorValues.customSurfaceContainerColorValue}
                 textValue={appearanceDraft.customSurfaceContainerColor}
@@ -178,7 +180,7 @@ export function AppearanceColorEditorContent({
               />
             </SettingsField>
 
-            <SettingsField label="컨테이너 2">
+            <SettingsField label={t({ ko: '컨테이너 2', en: 'Container 2' })}>
               <AppearanceColorControl
                 colorValue={colorValues.customSurfaceLowColorValue}
                 textValue={appearanceDraft.customSurfaceLowColor ?? ''}
@@ -188,7 +190,7 @@ export function AppearanceColorEditorContent({
               />
             </SettingsField>
 
-            <SettingsField label="호버 / 활성">
+            <SettingsField label={t({ ko: '호버 / 활성', en: 'Hover / active' })}>
               <AppearanceColorControl
                 colorValue={colorValues.customSurfaceHighColorValue}
                 textValue={appearanceDraft.customSurfaceHighColor}
@@ -202,9 +204,9 @@ export function AppearanceColorEditorContent({
       </section>
 
       <section className="space-y-4">
-        <EditorSectionLead title="배지 색상" />
+        <EditorSectionLead title={t({ ko: '배지 색상', en: 'Badge colors' })} />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <SettingsField label="긍정 배지">
+          <SettingsField label={t({ ko: '긍정 배지', en: 'Positive badge' })}>
             <AppearanceColorControl
               colorValue={colorValues.positiveBadgeColorValue}
               textValue={appearanceDraft.positiveBadgeColor}
@@ -214,7 +216,7 @@ export function AppearanceColorEditorContent({
             />
           </SettingsField>
 
-          <SettingsField label="부정 배지">
+          <SettingsField label={t({ ko: '부정 배지', en: 'Negative badge' })}>
             <AppearanceColorControl
               colorValue={colorValues.negativeBadgeColorValue}
               textValue={appearanceDraft.negativeBadgeColor}
@@ -224,7 +226,7 @@ export function AppearanceColorEditorContent({
             />
           </SettingsField>
 
-          <SettingsField label="오토 배지">
+          <SettingsField label={t({ ko: '오토 배지', en: 'Auto badge' })}>
             <AppearanceColorControl
               colorValue={colorValues.autoBadgeColorValue}
               textValue={appearanceDraft.autoBadgeColor}
@@ -234,7 +236,7 @@ export function AppearanceColorEditorContent({
             />
           </SettingsField>
 
-          <SettingsField label="평가 배지">
+          <SettingsField label={t({ ko: '평가 배지', en: 'Rating badge' })}>
             <AppearanceColorControl
               colorValue={colorValues.ratingBadgeColorValue}
               textValue={appearanceDraft.ratingBadgeColor}

@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { listWallpaperWidgetDefinitions } from './wallpaper-widget-registry'
 import type { WallpaperWidgetDefinition, WallpaperWidgetType } from './wallpaper-types'
@@ -90,8 +91,8 @@ function getWallpaperWidgetIcon(widgetType: WallpaperWidgetType) {
   return Type
 }
 
-function sortWallpaperWidgetDefinitions(left: WallpaperWidgetDefinition, right: WallpaperWidgetDefinition) {
-  return left.title.localeCompare(right.title, 'ko-KR', { numeric: true, sensitivity: 'base' })
+function sortWallpaperWidgetDefinitions(left: WallpaperWidgetDefinition, right: WallpaperWidgetDefinition, locale: string) {
+  return left.title.localeCompare(right.title, locale, { numeric: true, sensitivity: 'base' })
 }
 
 function matchesWallpaperWidgetQuery(widget: WallpaperWidgetDefinition, query: string) {
@@ -108,13 +109,14 @@ function matchesWallpaperWidgetQuery(widget: WallpaperWidgetDefinition, query: s
 
 /** Render one explorer-style wallpaper widget library with folder-style grouping. */
 export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget }: WallpaperWidgetLibrarySidebarProps) {
+  const { locale } = useI18n()
   const [searchQuery, setSearchQuery] = useState('')
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<WallpaperWidgetLibraryFolderId[]>([])
   const normalizedQuery = searchQuery.trim().toLowerCase()
 
   const widgetDefinitions = useMemo(
-    () => [...listWallpaperWidgetDefinitions()].sort(sortWallpaperWidgetDefinitions),
-    [],
+    () => [...listWallpaperWidgetDefinitions()].sort((left, right) => sortWallpaperWidgetDefinitions(left, right, locale)),
+    [locale],
   )
 
   const widgetDefinitionByType = useMemo(

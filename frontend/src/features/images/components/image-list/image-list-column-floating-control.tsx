@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { LayoutGrid, RotateCcw } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 interface ImageListColumnFloatingControlProps {
@@ -20,13 +21,15 @@ export function ImageListColumnFloatingControl({
   defaultValue,
   min = 1,
   max = 8,
-  title = '한 줄 카드 수',
+  title,
   className,
   onChange,
   onReset,
 }: ImageListColumnFloatingControlProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const { t, formatNumber } = useI18n()
+  const resolvedTitle = title ?? t({ ko: '한 줄 카드 수', en: 'Cards per row' })
   const options = Array.from({ length: Math.max(0, max - min + 1) }, (_, index) => min + index)
 
   return (
@@ -35,8 +38,8 @@ export function ImageListColumnFloatingControl({
         <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`}>
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
-              <div className={anchoredPopupLabelClassName}>{title}</div>
-              <div className="text-sm font-semibold text-foreground">현재 {value}개</div>
+              <div className={anchoredPopupLabelClassName}>{resolvedTitle}</div>
+              <div className="text-sm font-semibold text-foreground">{t({ ko: '현재 {count}개', en: 'Current: {count}' }, { count: formatNumber(value) })}</div>
             </div>
             {onReset ? (
               <Button
@@ -47,8 +50,8 @@ export function ImageListColumnFloatingControl({
                   onReset()
                   setIsOpen(false)
                 }}
-                aria-label="기본값으로 되돌리기"
-                title={`기본값 ${defaultValue}개로 되돌리기`}
+                aria-label={t({ ko: '기본값으로 되돌리기', en: 'Reset to default' })}
+                title={t({ ko: '기본값 {count}개로 되돌리기', en: 'Reset to default {count}' }, { count: formatNumber(defaultValue) })}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </Button>
@@ -82,10 +85,10 @@ export function ImageListColumnFloatingControl({
         type="button"
         onClick={() => setIsOpen((current) => !current)}
         className="theme-floating-panel pointer-events-auto inline-flex items-center gap-2 rounded-full border border-border/80 bg-background/92 px-3 py-2 text-sm text-foreground shadow-[0_18px_48px_rgba(0,0,0,0.35)] backdrop-blur-sm transition hover:bg-surface-high"
-        aria-label="목록 한 줄 개수 설정"
+        aria-label={t({ ko: '목록 한 줄 개수 설정', en: 'Set list columns' })}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
-        title="목록 한 줄 개수 설정"
+        title={t({ ko: '목록 한 줄 개수 설정', en: 'Set list columns' })}
       >
         <LayoutGrid className="h-4 w-4" />
         <span className="text-xs font-semibold leading-none">{value}</span>

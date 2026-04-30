@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { ImagePreviewStatus, ImageRecord } from '@/types/image'
 
@@ -78,13 +79,21 @@ export function InlineMediaPreview({
   alt,
   frameClassName,
   mediaClassName,
-  emptyLabel = '미리보기 없음',
+  emptyLabel,
   loading = 'lazy',
   fitToMedia = false,
   isProcessing,
   fileStatus,
   previewStatus,
 }: InlineMediaPreviewProps) {
+  const { t } = useI18n()
+  const resolvedEmptyLabel = emptyLabel ?? t('images.components.inline.media.preview.no.preview')
+  const previewStateLabels = {
+    empty: resolvedEmptyLabel,
+    processing: t('images.components.image.preview.state.active'),
+    failed: t('images.components.image.preview.state.failed'),
+    unavailable: t('images.components.image.preview.state.unavailable'),
+  }
   const previewImage = buildPreviewImageRecord({ src, mimeType, fileName, alt, isProcessing, fileStatus, previewStatus })
   const [hasPreviewError, setHasPreviewError] = useState(false)
 
@@ -115,7 +124,7 @@ export function InlineMediaPreview({
         />
       ) : (
         <ImagePreviewPlaceholder
-          label={getImagePreviewStateLabel(resolvedPreviewState, emptyLabel)}
+          label={getImagePreviewStateLabel(resolvedPreviewState, resolvedEmptyLabel, previewStateLabels)}
           compact
           className="min-h-24 text-xs"
           iconClassName="h-5 w-5"

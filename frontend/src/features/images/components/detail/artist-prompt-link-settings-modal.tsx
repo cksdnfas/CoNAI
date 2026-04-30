@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/types/settings'
 
 interface ArtistPromptLinkSettingsModalProps {
@@ -15,6 +16,7 @@ interface ArtistPromptLinkSettingsModalProps {
 }
 
 export function ArtistPromptLinkSettingsModal({ open, initialTemplate, isSaving = false, onClose, onSave }: ArtistPromptLinkSettingsModalProps) {
+  const { t } = useI18n()
   const [draft, setDraft] = useState(initialTemplate || DEFAULT_ARTIST_LINK_URL_TEMPLATE)
 
   useEffect(() => {
@@ -29,8 +31,8 @@ export function ArtistPromptLinkSettingsModal({ open, initialTemplate, isSaving 
     <SettingsModal
       open={open}
       onClose={onClose}
-      title="Artist prompt 링크 설정"
-      description="{key} 자리에 배지 텍스트가 들어가. 프로토콜이 없으면 https://로 열어줄게."
+      title={t('images.components.detail.artist.prompt.link.settings.modal.artist.prompt.link.settings')}
+      description={t('images.components.detail.artist.prompt.link.settings.modal.value.will.be.replaced.with.the.badge', { key: '{key}' })}
       widthClassName="max-w-2xl"
     >
       <SettingsModalBody>
@@ -44,21 +46,21 @@ export function ArtistPromptLinkSettingsModal({ open, initialTemplate, isSaving 
         </SettingsField>
 
         <SettingsInsetBlock className="text-xs text-muted-foreground">
-          예시: {DEFAULT_ARTIST_LINK_URL_TEMPLATE}
+          {t({ ko: '예시', en: 'Example' })}: {DEFAULT_ARTIST_LINK_URL_TEMPLATE}
         </SettingsInsetBlock>
 
         <SettingsModalFooter className="justify-between">
           <Button type="button" variant="outline" onClick={() => setDraft(DEFAULT_ARTIST_LINK_URL_TEMPLATE)}>
             <RotateCcw className="h-4 w-4" />
-            기본값으로 되돌리기
+            {t('images.components.image.list.image.list.column.floating.control.reset.to.default')}
           </Button>
 
           <div className="flex items-center gap-2">
             <Button type="button" variant="secondary" onClick={onClose}>
-              취소
+              {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="button" onClick={() => onSave(draft.trim() || DEFAULT_ARTIST_LINK_URL_TEMPLATE)} disabled={isSaving}>
-              저장
+              {t({ ko: '저장', en: 'Save' })}
             </Button>
           </div>
         </SettingsModalFooter>

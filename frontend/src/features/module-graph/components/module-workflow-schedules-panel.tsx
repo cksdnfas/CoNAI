@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/select'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { SettingsField, SettingsInsetBlock, SettingsSection } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { useI18n, type TranslationInput } from '@/i18n'
 import type {
   GraphWorkflowRecord,
   GraphWorkflowScheduleFailurePolicy,
@@ -14,7 +15,7 @@ import type {
   GraphWorkflowScheduleStatus,
   GraphWorkflowScheduleType,
 } from '@/lib/api'
-import { formatDateTime, getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '../module-graph-shared'
+import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '../module-graph-shared'
 import { WorkflowInputFields } from './workflow-input-fields'
 
 type ScheduleMutationPayload = {
@@ -82,23 +83,24 @@ function getScheduleStatusVariant(status: GraphWorkflowScheduleStatus) {
   return 'outline' as const
 }
 
-function getScheduleTypeLabel(scheduleType: GraphWorkflowScheduleType) {
+function getScheduleTypeLabel(scheduleType: GraphWorkflowScheduleType, t: (input: TranslationInput) => string) {
   if (scheduleType === 'once') {
-    return '1회 실행'
+    return t({ ko: '1회 실행', en: 'Run once' })
   }
   if (scheduleType === 'interval') {
-    return 'N분마다'
+    return t({ ko: 'N분마다', en: 'Every N minutes' })
   }
-  return '매일'
+  return t({ ko: '매일', en: 'Daily' })
 }
 
-function getScheduleRunSummaryLabel(schedule: GraphWorkflowScheduleRecord) {
+function getScheduleRunSummaryLabel(schedule: GraphWorkflowScheduleRecord, formatNumber: (value: number) => string) {
   const completedCount = schedule.completed_run_count ?? 0
-  return `${completedCount}/${schedule.max_run_count ?? '-'}`
+  const maxRunCount = schedule.max_run_count
+  return `${formatNumber(completedCount)}/${maxRunCount === null || maxRunCount === undefined ? '-' : formatNumber(maxRunCount)}`
 }
 
-function getScheduleFailurePolicyLabel(failurePolicy?: GraphWorkflowScheduleFailurePolicy | null) {
-  return failurePolicy === 'continue' ? '실패 시 계속' : '실패 시 중지'
+function getScheduleFailurePolicyLabel(failurePolicy: GraphWorkflowScheduleFailurePolicy | null | undefined, t: (input: TranslationInput) => string) {
+  return failurePolicy === 'continue' ? t({ ko: '실패 시 계속', en: 'Continue on failure' }) : t({ ko: '실패 시 중지', en: 'Stop on failure' })
 }
 
 /** Render workflow autorun list and inline create/edit controls inside the queue tab. */
@@ -125,6 +127,7 @@ export function ModuleWorkflowSchedulesPanel({
   onDeleteSchedule: (scheduleId: number) => Promise<void> | void
   onRunNow: (scheduleId: number) => Promise<void> | void
 }) {
+  const { t, formatNumber, formatDateTime } = useI18n()
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null)
   const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null)
   const [draftWorkflowId, setDraftWorkflowId] = useState('')
@@ -274,34 +277,34 @@ export function ModuleWorkflowSchedulesPanel({
   return (
     <>
       <SettingsSection
-        heading="자동 실행"
+        heading={t({ ko: '자동 실행', en: 'Autorun' })}
         actions={(
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Badge variant="outline">{schedules.length}</Badge>
             <Button type="button" size="sm" variant="outline" onClick={openCreateEditor} disabled={workflows.length === 0 || isMutating}>
               <Plus className="h-4 w-4" />
-              자동 실행 추가
+              {t({ ko: '자동 실행 추가', en: 'Add autorun' })}
             </Button>
           </div>
         )}
       >
         {schedules.length === 0 ? (
           <SettingsInsetBlock className="border-dashed py-8 text-sm text-muted-foreground">
-            자동 실행 없음
+            {t({ ko: '자동 실행 없음', en: 'No autoruns' })}
           </SettingsInsetBlock>
         ) : (
           <div className="space-y-3">
             {schedules.map((schedule) => {
-              const workflowName = workflowNameById.get(schedule.graph_workflow_id) ?? `워크플로우 #${schedule.graph_workflow_id}`
-              const reservedCountLabel = `최대 ${schedule.max_run_count ?? -1}회`
-              const runEnqueueCountLabel = `1회 ${schedule.run_enqueue_count ?? 1}개`
-              const runSummaryLabel = getScheduleRunSummaryLabel(schedule)
-              const failurePolicyLabel = getScheduleFailurePolicyLabel(schedule.failure_policy)
+              const workflowName = workflowNameById.get(schedule.graph_workflow_id) ?? t({ ko: '워크플로우 #{id}', en: 'Workflow #{id}' }, { id: schedule.graph_workflow_id })
+              const reservedCountLabel = t({ ko: '최대 {count}회', en: 'Max {count}' }, { count: formatNumber(schedule.max_run_count ?? -1) })
+              const runEnqueueCountLabel = t({ ko: '1회 {count}개', en: '{count} per run' }, { count: formatNumber(schedule.run_enqueue_count ?? 1) })
+              const runSummaryLabel = getScheduleRunSummaryLabel(schedule, formatNumber)
+              const failurePolicyLabel = getScheduleFailurePolicyLabel(schedule.failure_policy, t)
               const scheduleTimingLabel = schedule.schedule_type === 'once'
-                ? (schedule.run_at ? formatDateTime(schedule.run_at) : '시각 미설정')
+                ? (schedule.run_at ? formatDateTime(schedule.run_at) : t({ ko: '시각 미설정', en: 'Time not set' }))
                 : schedule.schedule_type === 'interval'
-                  ? `${schedule.interval_minutes ?? '?'}분마다`
-                  : `${schedule.daily_time ?? '--:--'} 매일`
+                  ? t({ ko: '{minutes}분마다', en: 'Every {minutes} min' }, { minutes: schedule.interval_minutes === null || schedule.interval_minutes === undefined ? '?' : formatNumber(schedule.interval_minutes) })
+                  : t({ ko: '{time} 매일', en: 'Daily at {time}' }, { time: schedule.daily_time ?? '--:--' })
 
               return (
                 <SettingsInsetBlock key={schedule.id}>
@@ -310,41 +313,41 @@ export function ModuleWorkflowSchedulesPanel({
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="truncate text-sm font-medium text-foreground">{schedule.name}</div>
                         <Badge variant={getScheduleStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status)}</Badge>
-                        <Badge variant="outline">{getScheduleTypeLabel(schedule.schedule_type)}</Badge>
+                        <Badge variant="outline">{getScheduleTypeLabel(schedule.schedule_type, t)}</Badge>
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {workflowName} · {scheduleTimingLabel} · {runEnqueueCountLabel} · {reservedCountLabel} · {failurePolicyLabel}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                         <span>{runSummaryLabel}</span>
-                        {schedule.next_run_at ? <span>· 다음 등록 시도 {formatDateTime(schedule.next_run_at)}</span> : null}
-                        {schedule.last_enqueued_at ? <span>· 최근 큐 등록 {formatDateTime(schedule.last_enqueued_at)}</span> : null}
+                        {schedule.next_run_at ? <span>{t({ ko: '· 다음 등록 시도 {time}', en: '· Next enqueue attempt {time}' }, { time: formatDateTime(schedule.next_run_at) })}</span> : null}
+                        {schedule.last_enqueued_at ? <span>{t({ ko: '· 최근 큐 등록 {time}', en: '· Last queued {time}' }, { time: formatDateTime(schedule.last_enqueued_at) })}</span> : null}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Button type="button" size="icon-sm" variant="outline" onClick={() => openEditEditor(schedule)} disabled={isMutating} aria-label="자동 실행 수정" title="자동 실행 수정">
+                      <Button type="button" size="icon-sm" variant="outline" onClick={() => openEditEditor(schedule)} disabled={isMutating} aria-label={t({ ko: '자동 실행 수정', en: 'Edit autorun' })} title={t({ ko: '자동 실행 수정', en: 'Edit autorun' })}>
                         <SquarePen className="h-4 w-4" />
                       </Button>
                       {schedule.status === 'active' ? (
-                        <Button type="button" size="icon-sm" variant="outline" onClick={() => void onPauseSchedule(schedule.id)} disabled={isMutating} aria-label="자동 실행 일시정지" title="자동 실행 일시정지">
+                        <Button type="button" size="icon-sm" variant="outline" onClick={() => void onPauseSchedule(schedule.id)} disabled={isMutating} aria-label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })} title={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
                           <Pause className="h-4 w-4" />
                         </Button>
                       ) : (
-                        <Button type="button" size="icon-sm" variant="outline" onClick={() => void onResumeSchedule(schedule.id)} disabled={isMutating} aria-label="자동 실행 재개" title="자동 실행 재개">
+                        <Button type="button" size="icon-sm" variant="outline" onClick={() => void onResumeSchedule(schedule.id)} disabled={isMutating} aria-label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })} title={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
                           <Play className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button type="button" size="icon-sm" variant="outline" onClick={() => void onRunNow(schedule.id)} disabled={isMutating} aria-label="지금 1회 실행" title="지금 1회 실행">
+                      <Button type="button" size="icon-sm" variant="outline" onClick={() => void onRunNow(schedule.id)} disabled={isMutating} aria-label={t({ ko: '지금 1회 실행', en: 'Run once now' })} title={t({ ko: '지금 1회 실행', en: 'Run once now' })}>
                         <Rocket className="h-4 w-4" />
                       </Button>
-                      <Button type="button" size="icon-sm" variant="outline" onClick={() => void onDeleteSchedule(schedule.id)} disabled={isMutating} aria-label="자동 실행 삭제" title="자동 실행 삭제">
+                      <Button type="button" size="icon-sm" variant="outline" onClick={() => void onDeleteSchedule(schedule.id)} disabled={isMutating} aria-label={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })} title={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
                   {getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message) ? (
                     <SettingsInsetBlock className="mt-3 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">중지/정지 사유</span>
+                      <span className="font-medium text-foreground">{t({ ko: '중지/정지 사유', en: 'Stop reason' })}</span>
                       <span className="ml-2">{getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message)}</span>
                     </SettingsInsetBlock>
                   ) : null}
@@ -358,58 +361,58 @@ export function ModuleWorkflowSchedulesPanel({
       <SettingsModal
         open={editorMode !== null}
         onClose={resetDraft}
-        title={editorMode === 'edit' ? '자동 실행 수정' : '자동 실행 추가'}
+        title={editorMode === 'edit' ? t({ ko: '자동 실행 수정', en: 'Edit autorun' }) : t({ ko: '자동 실행 추가', en: 'Add autorun' })}
         widthClassName="max-w-5xl"
       >
         <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SettingsField label="대상 워크플로우" className="xl:col-span-2">
+            <SettingsField label={t({ ko: '대상 워크플로우', en: 'Target workflow' })} className="xl:col-span-2">
               <Select value={draftWorkflowId} onChange={(event) => setDraftWorkflowId(event.target.value)} disabled={editorMode === 'edit' || isMutating}>
                 {workflows.map((workflow) => (
                   <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
                 ))}
               </Select>
             </SettingsField>
-            <SettingsField label="일정 방식">
+            <SettingsField label={t({ ko: '일정 방식', en: 'Schedule type' })}>
               <Select value={draftScheduleType} onChange={(event) => setDraftScheduleType(event.target.value as GraphWorkflowScheduleType)} disabled={isMutating}>
-                <option value="once">1회 실행</option>
-                <option value="interval">N분마다</option>
-                <option value="daily">매일</option>
+                <option value="once">{t({ ko: '1회 실행', en: 'Run once' })}</option>
+                <option value="interval">{t({ ko: 'N분마다', en: 'Every N minutes' })}</option>
+                <option value="daily">{t({ ko: '매일', en: 'Daily' })}</option>
               </Select>
             </SettingsField>
-            <SettingsField label="시작 상태">
+            <SettingsField label={t({ ko: '시작 상태', en: 'Initial status' })}>
               <Select value={draftEnabled} onChange={(event) => setDraftEnabled(event.target.value as 'active' | 'paused')} disabled={isMutating}>
-                <option value="active">활성</option>
-                <option value="paused">일시정지</option>
+                <option value="active">{t({ ko: '활성', en: 'Active' })}</option>
+                <option value="paused">{t({ ko: '일시정지', en: 'Paused' })}</option>
               </Select>
             </SettingsField>
-            <SettingsField label="이름" className="xl:col-span-2">
+            <SettingsField label={t({ ko: '이름', en: 'Name' })} className="xl:col-span-2">
               <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} disabled={isMutating} />
             </SettingsField>
-            <SettingsField label="최대 예약 횟수">
+            <SettingsField label={t({ ko: '최대 예약 횟수', en: 'Max runs' })}>
               <Input type="number" min={-1} value={draftMaxRunCount} onChange={(event) => setDraftMaxRunCount(event.target.value)} disabled={isMutating} />
             </SettingsField>
-            <SettingsField label="1회 큐 등록수">
+            <SettingsField label={t({ ko: '1회 큐 등록수', en: 'Queue count per run' })}>
               <Input type="number" min={1} max={100} value={draftEnqueueCount} onChange={(event) => setDraftEnqueueCount(event.target.value)} disabled={isMutating} />
             </SettingsField>
-            <SettingsField label="실패 처리">
+            <SettingsField label={t({ ko: '실패 처리', en: 'Failure handling' })}>
               <Select value={draftFailurePolicy} onChange={(event) => setDraftFailurePolicy(event.target.value as GraphWorkflowScheduleFailurePolicy)} disabled={isMutating}>
-                <option value="stop">실패 시 중지</option>
-                <option value="continue">실패해도 계속</option>
+                <option value="stop">{t({ ko: '실패 시 중지', en: 'Stop on failure' })}</option>
+                <option value="continue">{t({ ko: '실패해도 계속', en: 'Continue on failure' })}</option>
               </Select>
             </SettingsField>
             {draftScheduleType === 'once' ? (
-              <SettingsField label="실행 시각">
+              <SettingsField label={t({ ko: '실행 시각', en: 'Run time' })}>
                 <Input type="datetime-local" value={draftRunAt} onChange={(event) => setDraftRunAt(event.target.value)} disabled={isMutating} />
               </SettingsField>
             ) : null}
             {draftScheduleType === 'interval' ? (
-              <SettingsField label="반복 간격(분)">
+              <SettingsField label={t({ ko: '반복 간격(분)', en: 'Repeat interval (min)' })}>
                 <Input type="number" min={1} value={draftIntervalMinutes} onChange={(event) => setDraftIntervalMinutes(event.target.value)} disabled={isMutating} />
               </SettingsField>
             ) : null}
             {draftScheduleType === 'daily' ? (
-              <SettingsField label="실행 시각">
+              <SettingsField label={t({ ko: '실행 시각', en: 'Run time' })}>
                 <Input type="time" value={draftDailyTime} onChange={(event) => setDraftDailyTime(event.target.value)} disabled={isMutating} />
               </SettingsField>
             ) : null}
@@ -417,7 +420,7 @@ export function ModuleWorkflowSchedulesPanel({
 
           {selectedInputDefinitions.length > 0 ? (
             <div className="space-y-3">
-              <div className="text-sm font-medium text-foreground">저장 입력값</div>
+              <div className="text-sm font-medium text-foreground">{t({ ko: '저장 입력값', en: 'Saved inputs' })}</div>
               <WorkflowInputFields
                 inputDefinitions={selectedInputDefinitions}
                 inputValues={draftInputValues}
@@ -444,11 +447,11 @@ export function ModuleWorkflowSchedulesPanel({
 
           <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
             <Button type="button" variant="secondary" onClick={resetDraft} disabled={isMutating}>
-              취소
+              {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="submit" disabled={isMutating || submitDisabled}>
               {editorMode === 'edit' ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {editorMode === 'edit' ? '저장' : '추가'}
+              {editorMode === 'edit' ? t({ ko: '저장', en: 'Save' }) : t({ ko: '추가', en: 'Add' })}
             </Button>
           </div>
         </form>

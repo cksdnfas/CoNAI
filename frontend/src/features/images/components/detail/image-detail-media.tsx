@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, Lock, RotateCcw, RotateC
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
@@ -9,7 +10,6 @@ import { getImageListMediaKind } from '@/features/images/components/image-list/i
 import { cn } from '@/lib/utils'
 import {
   canToggleImageDetailRenderMode,
-  getImageDetailRenderModeLabel,
   getImageDetailRenderUrl,
   getNextImageDetailRenderMode,
   loadImageDetailRenderMode,
@@ -356,6 +356,7 @@ function sharpenPixelPreview(imageData: ImageData, amount: number) {
 /** Render the main detail media using the correct element for image, GIF, or video files. */
 export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad }: ImageDetailMediaProps) {
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const [preferredRenderMode, setPreferredRenderMode] = useState<ImageDetailRenderMode>(() => loadImageDetailRenderMode())
   const mediaKind = getImageListMediaKind(image)
   const canToggleRenderMode = canToggleImageDetailRenderMode(image)
@@ -366,7 +367,17 @@ export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad }:
   })
 
   if (!effectiveRenderUrl) {
-    return <ImagePreviewPlaceholder label={getImagePreviewStateLabel(previewState)} className="min-h-[20rem] rounded-sm border border-dashed border-border/70 bg-surface-low text-sm text-muted-foreground" />
+    return (
+      <ImagePreviewPlaceholder
+        label={getImagePreviewStateLabel(previewState, t('images.components.image.preview.state.no.preview'), {
+          empty: t('images.components.image.preview.state.no.preview'),
+          processing: t('images.components.image.preview.state.active'),
+          failed: t('images.components.image.preview.state.failed'),
+          unavailable: t('images.components.image.preview.state.unavailable'),
+        })}
+        className="min-h-[20rem] rounded-sm border border-dashed border-border/70 bg-surface-low text-sm text-muted-foreground"
+      />
+    )
   }
 
   const altText = image.composite_hash || String(image.id)
@@ -376,7 +387,13 @@ export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad }:
     const nextMode = getNextImageDetailRenderMode(preferredRenderMode)
     setPreferredRenderMode(nextMode)
     persistImageDetailRenderMode(nextMode)
-    showSnackbar({ message: `${getImageDetailRenderModeLabel(nextMode)} 보기로 바꿨어.`, tone: 'info' })
+    showSnackbar({
+      message: t(
+        { ko: '{mode} 보기로 바꿨어.', en: 'Switched to {mode} view.' },
+        { mode: nextMode === 'original' ? t('images.components.detail.image.detail.utils.original') : t('images.components.detail.image.detail.utils.thumbnails') },
+      ),
+      tone: 'info',
+    })
   }
 
   if (mediaKind === 'video') {
@@ -429,6 +446,14 @@ function InteractiveImageDetailMedia({
   canUsePixelPreview: boolean
   onPrimaryLoad?: () => void
 }) {
+  const { t } = useI18n()
+  const pixelPreviewModeLabels: Record<PixelPreviewMode, string> = {
+    off: t({ ko: '꺼짐', en: 'Off' }),
+    soft: t({ ko: '약', en: 'Soft' }),
+    medium: t('images.components.detail.image.detail.media.medium'),
+    strong: t('images.components.detail.image.detail.media.high'),
+    custom: t('images.components.detail.image.detail.media.custom'),
+  }
   const [hasRenderError, setHasRenderError] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
@@ -824,19 +849,19 @@ function InteractiveImageDetailMedia({
                 variant="outline"
                 className={cn('relative bg-background text-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high', pixelPreviewMode !== 'off' && 'border-primary/45 text-primary')}
                 onClick={() => setIsPixelPreviewPanelOpen((current) => !current)}
-                title={`필터: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}`}
-                aria-label={`필터 설정 열기: ${PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}`}
+                title={t({ ko: '필터: {mode}', en: 'Filter: {mode}' }, { mode: pixelPreviewModeLabels[pixelPreviewMode] })}
+                aria-label={t({ ko: '필터 설정 열기: {mode}', en: 'Open filter settings: {mode}' }, { mode: pixelPreviewModeLabels[pixelPreviewMode] })}
               >
                 <Grid2X2 className="h-4 w-4 stroke-[2.5]" />
                 {pixelPreviewMode !== 'off' ? (
-                  <span className="absolute -right-1 -top-1 rounded-full border border-background bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">{PIXEL_PREVIEW_MODE_LABELS[pixelPreviewMode]}</span>
+                  <span className="absolute -right-1 -top-1 rounded-full border border-background bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">{pixelPreviewModeLabels[pixelPreviewMode]}</span>
                 ) : null}
               </Button>
 
               {isPixelPreviewPanelOpen ? (
                 <div className="absolute bottom-full left-0 mb-2 w-72 rounded-md border border-border bg-background p-3 text-xs text-foreground shadow-[0_18px_42px_rgba(0,0,0,0.45)]">
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="font-semibold">필터</div>
+                    <div className="font-semibold">{t('images.components.detail.image.detail.media.filter')}</div>
                     <button
                       type="button"
                       role="switch"
@@ -856,33 +881,33 @@ function InteractiveImageDetailMedia({
                   <div className="mb-3 grid grid-cols-3 gap-1.5">
                     {(['soft', 'medium', 'strong'] as const).map((mode) => (
                       <Button key={mode} size="sm" type="button" variant={pixelPreviewMode === mode ? 'default' : 'outline'} className="h-7 text-xs" onClick={() => setPixelPreviewModeAndPersist(mode)}>
-                        {PIXEL_PREVIEW_MODE_LABELS[mode]}
+                        {pixelPreviewModeLabels[mode]}
                       </Button>
                     ))}
                   </div>
                   <div className="space-y-2.5">
                     <label className="block">
-                      <div className="mb-1 flex justify-between text-muted-foreground"><span>해상도</span><span>{activePixelPreviewSettings.targetLongEdge}px</span></div>
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>{t('images.components.detail.image.detail.media.resolution')}</span><span>{activePixelPreviewSettings.targetLongEdge}px</span></div>
                       <input className="w-full accent-primary" type="range" min={64} max={1024} step={64} value={activePixelPreviewSettings.targetLongEdge} onChange={(event) => updatePixelPreviewSettings({ targetLongEdge: Number(event.currentTarget.value) })} />
                     </label>
                     <label className="block">
-                      <div className="mb-1 flex justify-between text-muted-foreground"><span>색상 수</span><span>{activePixelPreviewSettings.colorCount}</span></div>
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>{t('images.components.detail.image.detail.media.colors')}</span><span>{activePixelPreviewSettings.colorCount}</span></div>
                       <input className="w-full accent-primary" type="range" min={32} max={256} step={8} value={activePixelPreviewSettings.colorCount} onChange={(event) => updatePixelPreviewSettings({ colorCount: Number(event.currentTarget.value) })} />
                     </label>
                     <label className="block">
-                      <div className="mb-1 flex justify-between text-muted-foreground"><span>디더링</span><span>{Math.round(activePixelPreviewSettings.ditherStrength * 100)}</span></div>
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>{t('images.components.detail.image.detail.media.dithering')}</span><span>{Math.round(activePixelPreviewSettings.ditherStrength * 100)}</span></div>
                       <input className="w-full accent-primary" type="range" min={0} max={60} step={2} value={Math.round(activePixelPreviewSettings.ditherStrength * 100)} onChange={(event) => updatePixelPreviewSettings({ ditherStrength: Number(event.currentTarget.value) / 100 })} />
                     </label>
                     <label className="flex items-center justify-between gap-3 rounded-sm border border-border/70 bg-surface-container/50 px-2.5 py-2 text-muted-foreground">
-                      <span>부드러운 축소</span>
+                      <span>{t('images.components.detail.image.detail.media.smooth.downscale')}</span>
                       <input type="checkbox" className="size-4 accent-primary" checked={activePixelPreviewSettings.smoothing} onChange={(event) => updatePixelPreviewSettings({ smoothing: event.currentTarget.checked })} />
                     </label>
                     <label className="block">
-                      <div className="mb-1 flex justify-between text-muted-foreground"><span>외곽선 강조</span><span>{Math.round(activePixelPreviewSettings.edgeBoost * 100)}</span></div>
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>{t('images.components.detail.image.detail.media.edge.boost')}</span><span>{Math.round(activePixelPreviewSettings.edgeBoost * 100)}</span></div>
                       <input className="w-full accent-primary" type="range" min={0} max={24} step={1} value={Math.round(activePixelPreviewSettings.edgeBoost * 100)} onChange={(event) => updatePixelPreviewSettings({ edgeBoost: Number(event.currentTarget.value) / 100 })} />
                     </label>
                     <label className="block">
-                      <div className="mb-1 flex justify-between text-muted-foreground"><span>샤프닝</span><span>{Math.round(activePixelPreviewSettings.sharpness * 100)}</span></div>
+                      <div className="mb-1 flex justify-between text-muted-foreground"><span>{t('images.components.detail.image.detail.media.sharpening')}</span><span>{Math.round(activePixelPreviewSettings.sharpness * 100)}</span></div>
                       <input className="w-full accent-primary" type="range" min={0} max={50} step={2} value={Math.round(activePixelPreviewSettings.sharpness * 100)} onChange={(event) => updatePixelPreviewSettings({ sharpness: Number(event.currentTarget.value) / 100 })} />
                     </label>
                   </div>
@@ -897,8 +922,8 @@ function InteractiveImageDetailMedia({
               variant="outline"
               className="bg-background shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-surface-high"
               onClick={onToggleRenderMode}
-              title={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
-              aria-label={renderMode === 'original' ? '썸네일 보기' : '원본 보기'}
+              title={renderMode === 'original' ? t('images.components.detail.image.detail.media.view.thumbnails') : t('images.components.detail.image.detail.media.view.original')}
+              aria-label={renderMode === 'original' ? t('images.components.detail.image.detail.media.view.thumbnails') : t('images.components.detail.image.detail.media.view.original')}
             >
               {renderMode === 'original' ? <ImageIcon className="h-4 w-4" /> : <ScanSearch className="h-4 w-4" />}
             </Button>
@@ -920,29 +945,29 @@ function InteractiveImageDetailMedia({
             variant="outline"
             className={cn('bg-surface-container hover:bg-surface-high', isWheelZoomEnabled && 'border-primary/40 text-primary')}
             onClick={toggleWheelZoomEnabled}
-            title={isWheelZoomEnabled ? '확대/축소 잠금' : '확대/축소 허용'}
-            aria-label={isWheelZoomEnabled ? '확대 및 축소 잠금' : '확대 및 축소 허용'}
+            title={isWheelZoomEnabled ? t('images.components.detail.image.detail.media.lock.zoom') : t('images.components.detail.image.detail.media.enable.zoom')}
+            aria-label={isWheelZoomEnabled ? t('images.components.detail.image.detail.media.lock.zoom.in.out') : t('images.components.detail.image.detail.media.enable.zoom.in.out')}
           >
             {isWheelZoomEnabled ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
           </Button>
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(-ZOOM_STEP)} title="축소" aria-label="축소" disabled={!canZoomOut}>
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(-ZOOM_STEP)} title={t('images.components.detail.image.detail.media.zoom.out')} aria-label={t('images.components.detail.image.detail.media.zoom.out')} disabled={!canZoomOut}>
             <ZoomOut className="h-4 w-4" />
           </Button>
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(ZOOM_STEP)} title="확대" aria-label="확대" disabled={!canZoomIn}>
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => zoomBy(ZOOM_STEP)} title={t('images.components.detail.image.detail.media.zoom.in')} aria-label={t('images.components.detail.image.detail.media.zoom.in')} disabled={!canZoomIn}>
             <ZoomIn className="h-4 w-4" />
           </Button>
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => rotateBy(-ROTATION_STEP)} title="왼쪽 회전" aria-label="왼쪽 회전">
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => rotateBy(-ROTATION_STEP)} title={t('images.components.detail.image.detail.media.rotate.left')} aria-label={t('images.components.detail.image.detail.media.rotate.left')}>
             <RotateCcw className="h-4 w-4" />
           </Button>
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => rotateBy(ROTATION_STEP)} title="오른쪽 회전" aria-label="오른쪽 회전">
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={() => rotateBy(ROTATION_STEP)} title={t('images.components.detail.image.detail.media.rotate.right')} aria-label={t('images.components.detail.image.detail.media.rotate.right')}>
             <RotateCw className="h-4 w-4" />
           </Button>
           {!isDefaultView ? (
-            <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={resetView} title="초기화" aria-label="초기화">
+            <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={resetView} title={t('images.components.detail.image.detail.media.reset')} aria-label={t('images.components.detail.image.detail.media.reset')}>
               <Undo2 className="h-4 w-4" />
             </Button>
           ) : null}
-          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={toggleControlsCollapsed} title="컨트롤 수납" aria-label="컨트롤 수납">
+          <Button size="icon-sm" type="button" variant="outline" className="bg-surface-container hover:bg-surface-high" onClick={toggleControlsCollapsed} title={t('images.components.detail.image.detail.media.collapse.controls')} aria-label={t('images.components.detail.image.detail.media.collapse.controls')}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -954,8 +979,8 @@ function InteractiveImageDetailMedia({
             variant="outline"
             className="border-primary/55 bg-primary text-primary-foreground shadow-[0_16px_36px_rgba(0,0,0,0.38)] hover:bg-primary/92 hover:text-primary-foreground"
             onClick={toggleControlsCollapsed}
-            title="컨트롤 펼치기"
-            aria-label="컨트롤 펼치기"
+            title={t('images.components.detail.image.detail.media.expand.controls')}
+            aria-label={t('images.components.detail.image.detail.media.expand.controls')}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>

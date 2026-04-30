@@ -679,7 +679,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
 
   // Insert default language setting
   db.prepare(`INSERT OR IGNORE INTO user_preferences (key, value) VALUES (?, ?)`)
-    .run('language', 'en');
+    .run('language', 'ko');
 
   // Insert default Civitai provider
   db.prepare(`

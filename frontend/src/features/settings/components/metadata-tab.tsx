@@ -5,6 +5,7 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { MetadataExtractionSettings } from '@/types/settings'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { useI18n } from '@/i18n'
 
 interface MetadataTabProps {
   metadataDraft: MetadataExtractionSettings | null
@@ -16,8 +17,9 @@ interface MetadataTabProps {
 }
 
 export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, onReextractAll, isReextracting }: MetadataTabProps) {
+  const { t } = useI18n()
   const handleReextractAll = () => {
-    if (!window.confirm('모든 이미지의 AI 메타데이터를 다시 추출해서 기존 값을 갱신할까? 항목 수가 많으면 백그라운드 큐가 한동안 바쁠 수 있어.')) {
+    if (!window.confirm(t('settings.metadataTab.reExtractAiMetadataFor'))) {
       return
     }
     onReextractAll()
@@ -27,14 +29,14 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
     <div className="space-y-6">
       <section>
         <SettingsSection
-          heading="메타데이터"
+          heading={t({ ko: '메타데이터', en: 'Metadata' })}
           actions={
             <Button
               size="icon-sm"
               onClick={onSave}
               disabled={!metadataDraft || isSaving}
-              aria-label="메타데이터 저장"
-              title="메타데이터 저장"
+              aria-label={t('settings.metadataTab.metadataSave')}
+              title={t('settings.metadataTab.metadataSave')}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -44,7 +46,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
             {metadataDraft ? (
               <>
                 <SettingsInsetBlock className="flex flex-col gap-3 text-sm text-muted-foreground md:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-                  <span>표준 메타를 먼저 읽고, 아래 옵션은 stealth 스캔 범위를 조절해.</span>
+                  <span>{t('settings.metadataTab.standardMetadataIsReadFirst')}</span>
                   <Button
                     type="button"
                     variant="secondary"
@@ -53,7 +55,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
                     disabled={isReextracting}
                   >
                     <RefreshCcw className={isReextracting ? 'animate-spin' : undefined} />
-                    {isReextracting ? '등록 중...' : '모든 항목 재추출'}
+                    {isReextracting ? t({ ko: '등록 중...', en: 'Queuing...' }) : t({ ko: '모든 항목 재추출', en: 'Re-extract all items' })}
                   </Button>
                 </SettingsInsetBlock>
 
@@ -63,7 +65,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
                     checked={metadataDraft.enableSecondaryExtraction}
                     onChange={(event) => onPatchMetadata({ enableSecondaryExtraction: event.target.checked })}
                   />
-                  PNG secondary extraction 활성화
+                  {t({ ko: 'PNG secondary extraction 활성화', en: 'Enable PNG secondary extraction' })}
                 </SettingsToggleRow>
 
                 <SettingsField label="Stealth scan mode">
@@ -72,14 +74,14 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
                     <option value="full">full</option>
                     <option value="skip">skip</option>
                   </Select>
-                  <span className="mt-2 text-xs text-muted-foreground">stealth 스캔 범위를 조절해.</span>
+                  <span className="mt-2 text-xs text-muted-foreground">{t({ ko: 'stealth 스캔 범위를 조절해.', en: 'Adjust the stealth scan range.' })}</span>
                 </SettingsField>
 
-                <SettingsField label="최대 파일 크기(MB)">
+                <SettingsField label={t('settings.metadataTab.maximumFileSizeMb')}>
                   <Input type="number" min={1} variant="settings" value={metadataDraft.stealthMaxFileSizeMB} onChange={(event) => onPatchMetadata({ stealthMaxFileSizeMB: Number(event.target.value) || 1 })} />
                 </SettingsField>
 
-                <SettingsField label="최대 해상도(MP)">
+                <SettingsField label={t('settings.metadataTab.maximumResolutionMp')}>
                   <Input type="number" min={1} variant="settings" value={metadataDraft.stealthMaxResolutionMP} onChange={(event) => onPatchMetadata({ stealthMaxResolutionMP: Number(event.target.value) || 1 })} />
                 </SettingsField>
 
@@ -89,7 +91,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
                     checked={metadataDraft.skipStealthForComfyUI}
                     onChange={(event) => onPatchMetadata({ skipStealthForComfyUI: event.target.checked })}
                   />
-                  ComfyUI로 이미 판단되면 PNG stealth fallback 스킵
+                  {t({ ko: 'ComfyUI로 이미 판단되면 PNG stealth fallback 스킵', en: 'Skip PNG stealth fallback if already identified as ComfyUI' })}
                 </SettingsToggleRow>
 
                 <SettingsToggleRow>
@@ -98,7 +100,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
                     checked={metadataDraft.skipStealthForWebUI}
                     onChange={(event) => onPatchMetadata({ skipStealthForWebUI: event.target.checked })}
                   />
-                  WebUI로 이미 판단되면 PNG stealth fallback 스킵
+                  {t({ ko: 'WebUI로 이미 판단되면 PNG stealth fallback 스킵', en: 'Skip PNG stealth fallback if already identified as WebUI' })}
                 </SettingsToggleRow>
               </>
             ) : (

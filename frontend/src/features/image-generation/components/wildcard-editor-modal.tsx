@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
+import { useI18n } from '@/i18n'
 import type { WildcardRecord, WildcardTool } from '@/lib/api'
 
 export interface WildcardEditorModalInput {
@@ -184,11 +185,11 @@ function appendImportedWildcardDrafts(
   return nextDrafts
 }
 
-function summarizeWildcardItemCounts(items: Record<WildcardTool, WildcardJsonItem[]>) {
+function summarizeWildcardItemCounts(items: Record<WildcardTool, WildcardJsonItem[]>, formatNumber: (value: number) => string) {
   return wildcardTools
     .map((tool) => ({ label: wildcardToolLabels[tool], count: items[tool].length }))
     .filter((item) => item.count > 0)
-    .map((item) => `${item.label} ${item.count.toLocaleString('ko-KR')}개`)
+    .map((item) => `${item.label} ${formatNumber(item.count)}개`)
     .join(', ')
 }
 
@@ -431,6 +432,7 @@ export function WildcardEditorModal({
   onClose,
   onSubmit,
 }: WildcardEditorModalProps) {
+  const { formatNumber } = useI18n()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [parentValue, setParentValue] = useState('root')
@@ -536,7 +538,7 @@ export function WildcardEditorModal({
 
     try {
       const importedItems = parseWildcardJsonPayload(JSON.parse(await file.text()) as unknown, activeItemTool)
-      const importedCountSummary = summarizeWildcardItemCounts(importedItems)
+      const importedCountSummary = summarizeWildcardItemCounts(importedItems, formatNumber)
       if (!importedCountSummary) {
         setFormNotice(null)
         setFormError('가져올 수 있는 항목이 없어.')

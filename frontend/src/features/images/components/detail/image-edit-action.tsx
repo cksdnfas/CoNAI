@@ -4,6 +4,7 @@ import { FilePenLine } from 'lucide-react'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
 import { getAppSettings, getExistingImageEditorSourceUrl, saveEditedImageToCanvas } from '@/lib/api'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
@@ -24,6 +25,7 @@ interface ImageEditActionProps {
 export function ImageEditAction({ image }: ImageEditActionProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [imageSaveOptions, setImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [pendingCanvasSaveDataUrl, setPendingCanvasSaveDataUrl] = useState<string | null>(null)
@@ -57,11 +59,11 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
     },
     onSuccess: async (result) => {
       setIsEditorOpen(false)
-      showSnackbar({ message: `편집본을 save/canvas에 저장했어: ${result.fileName}`, tone: 'info' })
+      showSnackbar({ message: t({ ko: '편집본을 save/canvas에 저장했어: {fileName}', en: 'Saved the edit to save/canvas: {fileName}' }, { fileName: result.fileName }), tone: 'info' })
       await queryClient.invalidateQueries({ queryKey: ['image-attachment-save-images'] })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '편집 이미지를 저장하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('images.components.detail.image.edit.action.failed.to.save.the.edited.image'), tone: 'error' })
     },
   })
 
@@ -72,7 +74,7 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
         quality: 90,
       })
       setIsEditorOpen(false)
-      showSnackbar({ message: '편집본을 save/canvas에 저장했어.', tone: 'info' })
+      showSnackbar({ message: t('images.components.detail.image.edit.action.saved.the.edit.to.save.canvas'), tone: 'info' })
       await queryClient.invalidateQueries({ queryKey: ['image-attachment-save-images'] })
       return
     }
@@ -106,7 +108,7 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
 
   return (
     <>
-      <Button size="icon-sm" variant="outline" onClick={() => setIsEditorOpen(true)} disabled={saveMutation.isPending} aria-label="이미지 편집" title="이미지 편집">
+      <Button size="icon-sm" variant="outline" onClick={() => setIsEditorOpen(true)} disabled={saveMutation.isPending} aria-label={t('images.components.detail.image.edit.action.images.edit')} title={t('images.components.detail.image.edit.action.images.edit')}>
         <FilePenLine className="h-4 w-4" />
       </Button>
 
@@ -132,7 +134,7 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
 
       <ImageSaveOptionsModal
         open={pendingCanvasSaveDataUrl !== null}
-        title="이미지 저장"
+        title={t('images.components.detail.image.edit.action.images.save')}
         options={imageSaveOptions}
         sourceInfo={pendingCanvasSaveInfo}
         isSaving={saveMutation.isPending}

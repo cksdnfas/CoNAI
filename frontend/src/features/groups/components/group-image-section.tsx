@@ -10,6 +10,7 @@ import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import type { GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
+import { useI18n } from '@/i18n'
 
 interface GroupImageSectionProps {
   group: GroupRecord
@@ -56,6 +57,7 @@ export function GroupImageSection({
   collectionFilter,
   onCollectionFilterChange,
 }: GroupImageSectionProps) {
+  const { t, formatNumber } = useI18n()
   const shouldShowCollectionCounts = group.manual_added_count !== undefined || group.auto_collected_count !== undefined
   const {
     visibleItems: visibleGroupImages,
@@ -76,30 +78,33 @@ export function GroupImageSection({
       {!hideHeader ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">이미지</h2>
-            <div className="mt-1 text-sm text-muted-foreground">{visibleGroupImages.length.toLocaleString('ko-KR')}개 항목</div>
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">{t('groups.components.group.image.section.images')}</h2>
+            <div className="mt-1 text-sm text-muted-foreground">{t({ ko: '{count}개 항목', en: '{count} items' }, { count: formatNumber(visibleGroupImages.length) })}</div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {typeof onCollectionFilterChange === 'function' ? (
               <div className="flex flex-wrap items-center gap-2">
-                {COLLECTION_FILTER_OPTIONS.map(({ value, icon: Icon, label }) => (
+                {COLLECTION_FILTER_OPTIONS.map(({ value, icon: Icon, label }) => {
+                  const translatedLabel = t({ ko: label, en: value === 'all' ? 'All images' : value === 'manual' ? 'Manual only' : 'Auto-collected only' })
+                  return (
                   <Button
                     key={value}
                     type="button"
                     size="icon-sm"
                     variant={collectionFilter === value ? 'default' : 'secondary'}
                     onClick={() => onCollectionFilterChange(value)}
-                    aria-label={label}
-                    title={label}
+                    aria-label={translatedLabel}
+                    title={translatedLabel}
                   >
                     <Icon className="h-4 w-4" />
                   </Button>
-                ))}
+                  )
+                })}
               </div>
             ) : shouldShowCollectionCounts ? (
               <>
-                <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-                <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
+                <Badge variant="outline">manual {formatNumber(group.manual_added_count ?? 0)}</Badge>
+                <Badge variant="outline">auto {formatNumber(group.auto_collected_count ?? 0)}</Badge>
               </>
             ) : null}
           </div>
@@ -116,8 +121,8 @@ export function GroupImageSection({
 
       {isError ? (
         <Alert variant="destructive">
-          <AlertTitle>그룹 이미지를 불러오지 못했어</AlertTitle>
-          <AlertDescription>{errorMessage ?? '알 수 없는 오류가 발생했어.'}</AlertDescription>
+          <AlertTitle>{t('groups.components.group.image.section.group.images.failed.to.load')}</AlertTitle>
+          <AlertDescription>{errorMessage ?? t('groups.components.group.image.section.an.unknown.error.occurred')}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -151,11 +156,11 @@ export function GroupImageSection({
       {!isLoading && !isError && visibleGroupImages.length === 0 ? (
         presentation === 'drawer' ? (
           <BottomDrawerNotice>
-            {hasOnlyHiddenItems ? '현재 등급 표시 정책 때문에 이 목록에서는 숨겨진 상태야.' : '표시할 이미지가 없어.'}
+            {hasOnlyHiddenItems ? t('groups.components.group.image.section.hidden.here.by.the.current.rating.visibility') : t('groups.components.group.image.section.no.images.to.show')}
           </BottomDrawerNotice>
         ) : (
           <PageInset className="text-sm text-muted-foreground">
-            {hasOnlyHiddenItems ? '현재 등급 표시 정책 때문에 이 목록에서는 숨겨진 상태야.' : '표시할 이미지가 없어.'}
+            {hasOnlyHiddenItems ? t('groups.components.group.image.section.hidden.here.by.the.current.rating.visibility') : t('groups.components.group.image.section.no.images.to.show')}
           </PageInset>
         )
       ) : null}

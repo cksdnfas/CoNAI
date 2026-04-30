@@ -3,6 +3,7 @@ import { Download } from 'lucide-react'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
 import { downloadImageSelection } from '@/lib/api'
 import type { ImageRecord } from '@/types/image'
 import { getErrorMessage } from '@/features/image-generation/image-generation-shared'
@@ -24,11 +25,12 @@ export function ImageDownloadTriggerButton({
   size = 'icon-sm',
   variant = 'default',
   className,
-  ariaLabel = '다운로드',
-  title = '다운로드',
+  ariaLabel,
+  title,
   children,
 }: ImageDownloadTriggerButtonProps) {
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const containerRef = useRef<HTMLSpanElement | null>(null)
@@ -44,7 +46,7 @@ export function ImageDownloadTriggerButton({
       await downloadImageSelection([compositeHash], type)
       setIsOpen(false)
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '이미지 다운로드에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('images.components.image.download.trigger.button.image.download.failed')), tone: 'error' })
     } finally {
       setIsDownloading(false)
     }
@@ -62,8 +64,8 @@ export function ImageDownloadTriggerButton({
         variant={variant}
         className={className}
         onClick={() => setIsOpen((current) => !current)}
-        aria-label={ariaLabel}
-        title={title}
+        aria-label={ariaLabel ?? t('images.components.image.download.trigger.button.download')}
+        title={title ?? t('images.components.image.download.trigger.button.download')}
         data-no-select-drag="true"
       >
         {children ?? <Download className="h-4 w-4" />}

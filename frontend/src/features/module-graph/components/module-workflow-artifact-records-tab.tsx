@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useImageListSelection } from '@/features/images/components/image-list/use-image-list-selection'
+import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord, GraphExecutionRecord } from '@/lib/api'
-import { buildArtifactTextPreview, formatDateTime } from '../module-graph-shared'
+import { buildArtifactTextPreview } from '../module-graph-shared'
 
 /** Render non-media and intermediate workflow artifacts for cleanup-oriented management. */
 export function ModuleWorkflowArtifactRecordsTab({
@@ -55,6 +56,7 @@ export function ModuleWorkflowArtifactRecordsTab({
   onSetSelectedArtifactIds: (artifactIds: number[]) => void
   onDeleteSingle: (artifactId: number) => void
 }) {
+  const { t, formatDateTime } = useI18n()
   const [artifactSelectionContainer, setArtifactSelectionContainer] = useState<HTMLDivElement | null>(null)
   const { shouldSuppressClick } = useImageListSelection({
     containerElement: artifactSelectionContainer,
@@ -67,7 +69,7 @@ export function ModuleWorkflowArtifactRecordsTab({
     <Card>
       <CardHeader className="space-y-4 border-b border-border/70 pb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="min-w-0 flex-1 text-base">텍스트 · 중간 산출물</CardTitle>
+          <CardTitle className="min-w-0 flex-1 text-base">{t('module-graph.components.module.workflow.artifact.records.tab.text.and.intermediate.artifacts')}</CardTitle>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Badge variant="outline">{totalArtifactCount}</Badge>
             <Button
@@ -81,7 +83,7 @@ export function ModuleWorkflowArtifactRecordsTab({
               data-no-select-drag="true"
             >
               {allVisibleSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              {allVisibleSelected ? '페이지 해제' : '페이지 선택'}
+              {allVisibleSelected ? t('module-graph.components.module.workflow.artifact.records.tab.clear.page') : t('module-graph.components.module.workflow.artifact.records.tab.select.page')}
             </Button>
             {canDeleteArtifacts ? (
               <Button
@@ -93,7 +95,7 @@ export function ModuleWorkflowArtifactRecordsTab({
                 data-no-select-drag="true"
               >
                 <Trash2 className="h-4 w-4" />
-                전체 비우기
+                {t({ ko: '전체 비우기', en: 'Clear all' })}
               </Button>
             ) : null}
           </div>
@@ -103,10 +105,10 @@ export function ModuleWorkflowArtifactRecordsTab({
           <Input
             value={artifactSearchTerm}
             onChange={(event) => onArtifactSearchTermChange(event.target.value)}
-            placeholder="워크플로우, 포트, 경로, 내용으로 검색"
+            placeholder={t('module-graph.components.module.workflow.artifact.records.tab.search.by.workflow.port.path.or.content')}
           />
           <Select value={artifactTypeFilter} onChange={(event) => onArtifactTypeFilterChange(event.target.value)}>
-            <option value="all">모든 타입</option>
+            <option value="all">{t('module-graph.components.module.workflow.artifact.records.tab.all.types')}</option>
             {artifactTypeOptions.map((artifactType) => (
               <option key={artifactType} value={artifactType}>{artifactType}</option>
             ))}
@@ -116,7 +118,7 @@ export function ModuleWorkflowArtifactRecordsTab({
       <CardContent>
         {artifacts.length === 0 ? (
           <div className="rounded-sm border border-dashed border-border px-4 py-10 text-sm text-muted-foreground">
-            검색/필터 조건에 맞는 텍스트 또는 중간 산출물이 없어.
+            {t({ ko: '검색/필터 조건에 맞는 텍스트 또는 중간 산출물이 없어.', en: 'No text or intermediate artifacts match the search/filter.' })}
           </div>
         ) : (
           <div ref={setArtifactSelectionContainer} className="space-y-3">
@@ -219,19 +221,21 @@ function WorkflowArtifactPagination({
   totalCount: number
   onPageChange: (page: number) => void
 }) {
+  const { t, formatNumber } = useI18n()
+
   if (totalPages <= 1) {
     return null
   }
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
-      <span>page {page} / {totalPages} · total {totalCount.toLocaleString('ko-KR')} · 50 per page</span>
+      <span>{t({ ko: '페이지 {page} / {totalPages} · 전체 {totalCount} · 페이지당 50개', en: 'page {page} / {totalPages} · total {totalCount} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), totalCount: formatNumber(totalCount) })}</span>
       <div className="flex items-center gap-2">
         <Button type="button" size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
-          이전
+          {t({ ko: '이전', en: 'Previous' })}
         </Button>
         <Button type="button" size="sm" variant="outline" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
-          다음
+          {t({ ko: '다음', en: 'Next' })}
         </Button>
       </div>
     </div>

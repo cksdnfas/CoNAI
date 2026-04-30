@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 import { TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
@@ -49,9 +50,16 @@ function PromptSpreadsheetDisclosure({
   onToggle: () => void
   onChange: (value: string) => void
 }) {
+  const { t, formatNumber } = useI18n()
   const segmentCount = countPromptSegments(value)
   const rowCount = getTextSegmentSpreadsheetRows(value).length
-  const hasValue = value.trim().length > 0
+  const characterCount = value.trim().length
+  const hasValue = characterCount > 0
+  const summary = t({ ko: '{characters}자 · {segments}개 · {rows}행', en: '{characters} chars · {segments} segments · {rows} rows' }, {
+    characters: formatNumber(characterCount),
+    segments: formatNumber(segmentCount),
+    rows: formatNumber(rowCount),
+  })
 
   return (
     <div className={cn(WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS, hasValue && WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS)}>
@@ -68,7 +76,7 @@ function PromptSpreadsheetDisclosure({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium text-foreground">{label}</span>
               <div className="shrink-0 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                {value.trim().length.toLocaleString('ko-KR')}자 · {segmentCount.toLocaleString('ko-KR')}개 · {rowCount.toLocaleString('ko-KR')}행
+                {summary}
               </div>
             </div>
           </div>
@@ -96,11 +104,12 @@ export function PromptToggleField({
   negativeValue,
   onPositiveChange,
   onNegativeChange,
-  positiveLabel = '포지티브',
-  negativeLabel = '네거티브',
+  positiveLabel,
+  negativeLabel,
   positivePlaceholder = '',
   negativePlaceholder = '',
 }: PromptToggleFieldProps) {
+  const { t } = useI18n()
   const [isPositiveExpanded, setIsPositiveExpanded] = useState(true)
   const [isNegativeExpanded, setIsNegativeExpanded] = useState(true)
 
@@ -108,7 +117,7 @@ export function PromptToggleField({
     <div className="space-y-3">
       <PromptSpreadsheetDisclosure
         tool={tool}
-        label={positiveLabel}
+        label={positiveLabel ?? t('image-generation.components.prompt.toggle.field.positive')}
         value={positiveValue}
         placeholder={positivePlaceholder}
         isExpanded={isPositiveExpanded}
@@ -118,7 +127,7 @@ export function PromptToggleField({
 
       <PromptSpreadsheetDisclosure
         tool={tool}
-        label={negativeLabel}
+        label={negativeLabel ?? t('image-generation.components.prompt.toggle.field.negative')}
         value={negativeValue}
         placeholder={negativePlaceholder}
         isExpanded={isNegativeExpanded}

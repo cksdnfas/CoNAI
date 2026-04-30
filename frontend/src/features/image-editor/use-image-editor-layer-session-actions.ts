@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
+import { useI18n } from '@/i18n'
 import type { ImageEditorLayer, ImageEditorTool } from './image-editor-types'
 import { createImageEditorId, loadEditorImage, renderImageEditorLayerCanvas, renderImageEditorSourceCanvas } from './image-editor-utils'
 
@@ -39,6 +40,7 @@ export function useImageEditorLayerSessionActions({
   createDrawLayer: (index: number) => Extract<ImageEditorLayer, { type: 'draw' }>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
   const visibleLayerCount = layers.filter((layer) => layer.visible).length
   const activeLayerIndex = activeLayerId ? layers.findIndex((layer) => layer.id === activeLayerId) : -1
   const activeDrawLayer = activeLayer?.type === 'draw' ? activeLayer : null
@@ -127,8 +129,8 @@ export function useImageEditorLayerSessionActions({
     })
     setActiveLayerId(duplicatedLayer.id)
     queueHistoryCommit()
-    showSnackbar({ message: `${sourceLayer.name} 레이어를 복제했어.`, tone: 'info' })
-  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, setActiveLayerId, setLayers, showSnackbar])
+    showSnackbar({ message: t({ ko: '{name} 레이어를 복제했어.', en: '{name} layer duplicated.' }, { name: sourceLayer.name }), tone: 'info' })
+  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, setActiveLayerId, setLayers, showSnackbar, t])
 
   /** Delete one layer from the current stack and commit that document change. */
   const handleDeleteLayer = useCallback((layerId: string) => {
@@ -144,7 +146,7 @@ export function useImageEditorLayerSessionActions({
     }
 
     if (visibleLayers.some((layer) => layer.locked)) {
-      showSnackbar({ message: '잠긴 보이는 레이어는 전체 병합할 수 없어.', tone: 'error' })
+      showSnackbar({ message: t('image-editor.use.image.editor.layer.session.actions.locked.visible.layers.cannot.be.merged.into'), tone: 'error' })
       return
     }
 
@@ -179,13 +181,13 @@ export function useImageEditorLayerSessionActions({
       }))
       setActiveLayerId(mergedLayer.id)
       queueHistoryCommit()
-      showSnackbar({ message: '보이는 레이어를 하나로 병합했어.', tone: 'info' })
+      showSnackbar({ message: t('image-editor.use.image.editor.layer.session.actions.merged.visible.layers.into.one'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '보이는 레이어를 병합하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('image-editor.use.image.editor.layer.session.actions.failed.to.merge.visible.layers'), tone: 'error' })
     } finally {
       setLoading(false)
     }
-  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, setActiveLayerId, setLayers, setLoading, showSnackbar])
+  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, setActiveLayerId, setLayers, setLoading, showSnackbar, t])
 
   /** Flatten the currently visible source composition into a new base image. */
   const handleFlattenVisible = useCallback(async () => {
@@ -211,13 +213,13 @@ export function useImageEditorLayerSessionActions({
       setSelectionRect(null)
       setCropRect(null)
       queueHistoryCommit()
-      showSnackbar({ message: '보이는 결과를 새 베이스로 평탄화했어.', tone: 'info' })
+      showSnackbar({ message: t('image-editor.use.image.editor.layer.session.actions.flattened.the.visible.result.as.the.new'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '보이는 레이어를 평탄화하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('image-editor.use.image.editor.layer.session.actions.failed.to.flatten.visible.layers'), tone: 'error' })
     } finally {
       setLoading(false)
     }
-  }, [baseImage, createDrawLayer, documentSize.height, documentSize.width, layers, queueHistoryCommit, setActiveLayerId, setBaseImage, setBaseImageDataUrl, setCropRect, setLayers, setLoading, setSelectionRect, showSnackbar])
+  }, [baseImage, createDrawLayer, documentSize.height, documentSize.width, layers, queueHistoryCommit, setActiveLayerId, setBaseImage, setBaseImageDataUrl, setCropRect, setLayers, setLoading, setSelectionRect, showSnackbar, t])
 
   /** Merge the active layer into the layer immediately below it. */
   const handleMergeActiveLayerDown = useCallback(async () => {
@@ -237,7 +239,7 @@ export function useImageEditorLayerSessionActions({
     }
 
     if (lowerLayer.locked || currentLayer.locked) {
-      showSnackbar({ message: '잠긴 레이어는 병합할 수 없어.', tone: 'error' })
+      showSnackbar({ message: t('image-editor.use.image.editor.layer.session.actions.locked.layers.cannot.be.merged'), tone: 'error' })
       return
     }
 
@@ -269,13 +271,13 @@ export function useImageEditorLayerSessionActions({
       })
       setActiveLayerId(mergedLayer.id)
       queueHistoryCommit()
-      showSnackbar({ message: '활성 레이어를 아래 레이어와 병합했어.', tone: 'info' })
+      showSnackbar({ message: t('image-editor.use.image.editor.layer.session.actions.merged.the.active.layer.with.the.layer'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '레이어를 병합하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('image-editor.use.image.editor.layer.session.actions.failed.to.merge.layers'), tone: 'error' })
     } finally {
       setLoading(false)
     }
-  }, [activeLayerId, documentSize.height, documentSize.width, layers, queueHistoryCommit, setActiveLayerId, setLayers, setLoading, showSnackbar])
+  }, [activeLayerId, documentSize.height, documentSize.width, layers, queueHistoryCommit, setActiveLayerId, setLayers, setLoading, showSnackbar, t])
 
   /** Clear only the current active draw layer. */
   const handleClearActiveDrawLayer = useCallback(() => {

@@ -6,6 +6,7 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE, type KaloscopeServerStatus, type KaloscopeSettings } from '@/types/settings'
 import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { useI18n, type TranslationInput } from '@/i18n'
 
 interface KaloscopeSettingsCardProps {
   heading: ReactNode
@@ -15,9 +16,9 @@ interface KaloscopeSettingsCardProps {
   onPatchKaloscope: (patch: Partial<KaloscopeSettings>) => void
 }
 
-function formatKaloscopeDependencyLabel(status: KaloscopeServerStatus | undefined) {
-  if (!status) return '확인 중…'
-  return status.scriptExists && status.dependenciesAvailable ? '준비 OK' : '확인 필요'
+function formatKaloscopeDependencyLabel(status: KaloscopeServerStatus | undefined, t: (input: TranslationInput) => string) {
+  if (!status) return t({ ko: '확인 중…', en: 'Checking…' })
+  return status.scriptExists && status.dependenciesAvailable ? t({ ko: '준비 OK', en: 'Ready' }) : t({ ko: '확인 필요', en: 'Needs attention' })
 }
 
 export function KaloscopeSettingsCard({
@@ -27,6 +28,8 @@ export function KaloscopeSettingsCard({
   kaloscopeStatus,
   onPatchKaloscope,
 }: KaloscopeSettingsCardProps) {
+  const { t } = useI18n()
+
   return (
     <SettingsSection heading={heading} actions={actions}>
       <div className="grid gap-4 md:grid-cols-2">
@@ -34,7 +37,7 @@ export function KaloscopeSettingsCard({
           <>
             <SettingsToggleRow className="md:col-span-2">
               <input type="checkbox" checked={kaloscopeDraft.enabled} onChange={(event) => onPatchKaloscope({ enabled: event.target.checked })} />
-              Kaloscope 활성화
+              {t({ ko: 'Kaloscope 활성화', en: 'Enable Kaloscope' })}
             </SettingsToggleRow>
 
             <SettingsToggleRow className="md:col-span-2">
@@ -43,10 +46,10 @@ export function KaloscopeSettingsCard({
                 checked={kaloscopeDraft.autoTagOnUpload}
                 onChange={(event) => onPatchKaloscope({ autoTagOnUpload: event.target.checked })}
               />
-              업로드/스케줄러 자동 처리
+              {t({ ko: '업로드/스케줄러 자동 처리', en: 'Auto process uploads / scheduler' })}
             </SettingsToggleRow>
 
-            <SettingsField label="디바이스">
+            <SettingsField label={t({ ko: '디바이스', en: 'Device' })}>
               <Select variant="settings" value={kaloscopeDraft.device} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
                 <option value="auto">auto</option>
                 <option value="cpu">cpu</option>
@@ -64,10 +67,10 @@ export function KaloscopeSettingsCard({
                 checked={kaloscopeDraft.keepModelLoaded}
                 onChange={(event) => onPatchKaloscope({ keepModelLoaded: event.target.checked })}
               />
-              모델 메모리 유지
+              {t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
             </SettingsToggleRow>
 
-            <SettingsField label="자동 언로드(분)">
+            <SettingsField label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
               <Input
                 type="number"
                 min={1}
@@ -86,10 +89,10 @@ export function KaloscopeSettingsCard({
                   placeholder={DEFAULT_ARTIST_LINK_URL_TEMPLATE}
                 />
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">{`{key}`} 자리에 아티스트 배지 텍스트가 들어가.</p>
+                  <p className="text-xs text-muted-foreground">{t({ ko: '{key} 자리에 아티스트 배지 텍스트가 들어가.', en: 'Artist badge text is inserted at {key}.' })}</p>
                   <Button type="button" size="sm" variant="outline" onClick={() => onPatchKaloscope({ artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE })}>
                     <RotateCcw className="h-4 w-4" />
-                    기본값
+                    {t({ ko: '기본값', en: 'Default' })}
                   </Button>
                 </div>
               </div>
@@ -100,10 +103,10 @@ export function KaloscopeSettingsCard({
         )}
 
         <div className="flex flex-wrap gap-2 text-xs md:col-span-2">
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-foreground">의존성 {formatKaloscopeDependencyLabel(kaloscopeStatus)}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">daemon {kaloscopeStatus?.isRunning ? '실행 중' : '중지'}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">loaded {kaloscopeStatus?.modelLoaded ? '예' : '아니오'}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">캐시 {kaloscopeStatus?.modelCached ? '준비됨' : '없음'}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-foreground">{t({ ko: '의존성', en: 'Dependencies' })} {formatKaloscopeDependencyLabel(kaloscopeStatus, t)}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">daemon {kaloscopeStatus?.isRunning ? t({ ko: '실행 중', en: 'running' }) : t({ ko: '중지', en: 'stopped' })}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">loaded {kaloscopeStatus?.modelLoaded ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '캐시', en: 'Cache' })} {kaloscopeStatus?.modelCached ? t({ ko: '준비됨', en: 'ready' }) : t({ ko: '없음', en: 'none' })}</span>
           <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">model {kaloscopeStatus?.currentModel ?? '—'}</span>
           <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">device {kaloscopeStatus?.currentDevice ?? '—'}</span>
         </div>

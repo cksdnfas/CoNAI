@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import { createGuestAccount, getAuthDatabaseInfo, loginLocalAccount, type AuthMutationRecord } from '@/lib/api'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
@@ -27,6 +28,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const { language, t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const databaseInfoQuery = useQuery({
     queryKey: ['auth-database-info'],
@@ -65,12 +67,12 @@ export function LoginPage() {
     onSuccess: async (result) => {
       applyAuthenticatedSession(result, username.trim())
       setPassword('')
-      showSnackbar({ message: '로그인됐어.', tone: 'info' })
+      showSnackbar({ message: t('loginPage.signedIn'), tone: 'info' })
       navigate(defaultPostLoginPath, { replace: true })
     },
     onError: (error) => {
       setPassword('')
-      showSnackbar({ message: error instanceof Error ? error.message : '로그인에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('loginPage.signInFailed'), tone: 'error' })
     },
   })
 
@@ -84,12 +86,12 @@ export function LoginPage() {
       setGuestUsername('')
       setGuestPassword('')
       setIsGuestModalOpen(false)
-      showSnackbar({ message: '게스트 계정을 만들고 바로 들어왔어.', tone: 'info' })
+      showSnackbar({ message: t('loginPage.guestAccountCreatedAndSigned'), tone: 'info' })
       navigate(defaultPostLoginPath, { replace: true })
     },
     onError: (error) => {
       setGuestPassword('')
-      showSnackbar({ message: error instanceof Error ? error.message : '게스트 계정 생성에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('loginPage.failedToCreateGuestAccount'), tone: 'error' })
     },
   })
 
@@ -115,25 +117,25 @@ export function LoginPage() {
         <div className="w-full space-y-8">
           <PageHeader
             eyebrow="Personal Access"
-            title="로그인"
+            title={t('loginPage.signIn')}
             description=""
           />
 
           <div className="grid gap-6">
             <PageSection
-              title="계정 로그인"
+              title={t('loginPage.accountSignIn')}
               className="border-primary/15 bg-card"
               bodyClassName="space-y-4"
               actions={
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">로컬 계정</Badge>
+                  <Badge variant="secondary">{t('loginPage.localAccount')}</Badge>
                   <Button
                     type="button"
                     size="icon-sm"
                     variant="ghost"
                     onClick={() => setIsRecoveryModalOpen(true)}
-                    aria-label="복구 안내"
-                    title="복구 안내"
+                    aria-label={t('loginPage.recoveryGuide')}
+                    title={t('loginPage.recoveryGuide')}
                   >
                     <CircleHelp className="h-4 w-4" />
                   </Button>
@@ -147,19 +149,19 @@ export function LoginPage() {
                   void loginMutation.mutateAsync({ nextUsername: username.trim(), nextPassword: password })
                 }}
               >
-                <SettingsField label="아이디">
+                <SettingsField label={t({ ko: '아이디', en: 'Username' })}>
                   <Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
                 </SettingsField>
-                <SettingsField label="비밀번호">
+                <SettingsField label={t({ ko: '비밀번호', en: 'Password' })}>
                   <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
                 </SettingsField>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <Button type="button" variant="outline" onClick={() => setIsGuestModalOpen(true)}>
                     <UserPlus className="h-4 w-4" />
-                    게스트 계정 만들기
+                    {t('loginPage.createGuestAccount')}
                   </Button>
                   <Button type="submit" disabled={loginMutation.isPending || username.trim().length === 0 || password.length === 0}>
-                    {loginMutation.isPending ? '로그인 중…' : '로그인'}
+                    {loginMutation.isPending ? t('loginPage.signingIn') : t('loginPage.signIn')}
                   </Button>
                 </div>
               </form>
@@ -171,7 +173,7 @@ export function LoginPage() {
       <SettingsModal
         open={isRecoveryModalOpen}
         onClose={() => setIsRecoveryModalOpen(false)}
-        title="복구 안내"
+        title={t('loginPage.recoveryGuide')}
         widthClassName="max-w-lg"
       >
         <SettingsModalBody>
@@ -181,12 +183,12 @@ export function LoginPage() {
             </div>
             <div className="space-y-1">
               <div className="text-sm font-semibold text-foreground">auth.db</div>
-              <div className="break-all text-sm text-muted-foreground">{databaseInfo?.authDbPath ?? '불러오는 중…'}</div>
+              <div className="break-all text-sm text-muted-foreground">{databaseInfo?.authDbPath ?? t('loginPage.loading')}</div>
             </div>
           </div>
 
           <SettingsInsetBlock className="text-sm text-muted-foreground">
-            {databaseInfo?.recoveryInstructions.ko ?? '복구 안내를 불러오는 중…'}
+            {(language === 'en' ? databaseInfo?.recoveryInstructions.en : databaseInfo?.recoveryInstructions.ko) ?? databaseInfo?.recoveryInstructions.ko ?? t('loginPage.loadingRecoveryGuide')}
           </SettingsInsetBlock>
         </SettingsModalBody>
       </SettingsModal>
@@ -199,7 +201,7 @@ export function LoginPage() {
           }
           setIsGuestModalOpen(false)
         }}
-        title="게스트 계정 만들기"
+        title={t('loginPage.createGuestAccount')}
         widthClassName="max-w-lg"
       >
         <form
@@ -210,24 +212,24 @@ export function LoginPage() {
           }}
         >
           <SettingsModalBody>
-            <SettingsField label="아이디">
+            <SettingsField label={t({ ko: '아이디', en: 'Username' })}>
               <Input value={guestUsername} onChange={(event) => setGuestUsername(event.target.value)} autoComplete="username" />
             </SettingsField>
 
-            <SettingsField label="비밀번호">
+            <SettingsField label={t({ ko: '비밀번호', en: 'Password' })}>
               <Input type="password" value={guestPassword} onChange={(event) => setGuestPassword(event.target.value)} autoComplete="new-password" />
             </SettingsField>
 
             <SettingsInsetBlock className="text-sm text-muted-foreground">
-              게스트 계정은 언제든 초기화될 수 있어.
+              {t({ ko: '게스트 계정은 언제든 초기화될 수 있어.', en: 'Guest accounts may be reset at any time.' })}
             </SettingsInsetBlock>
 
             <SettingsModalFooter>
               <Button type="button" variant="ghost" onClick={() => setIsGuestModalOpen(false)} disabled={guestSignupMutation.isPending}>
-                취소
+                {t({ ko: '취소', en: 'Cancel' })}
               </Button>
               <Button type="submit" disabled={guestSignupMutation.isPending || guestUsername.trim().length === 0 || guestPassword.length === 0}>
-                {guestSignupMutation.isPending ? '생성 중…' : '만들고 바로 시작'}
+                {guestSignupMutation.isPending ? t('loginPage.creating') : t('loginPage.createAndStart')}
               </Button>
             </SettingsModalFooter>
           </SettingsModalBody>

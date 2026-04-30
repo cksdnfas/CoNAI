@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import type { PromptGroupRecord } from '@/types/prompt'
+import { useI18n } from '@/i18n'
 
 interface PromptGroupEditorModalProps {
   open: boolean
@@ -31,6 +32,7 @@ export function PromptGroupEditorModal({
   onClose,
   onSubmit,
 }: PromptGroupEditorModalProps) {
+  const { t } = useI18n()
   const [groupName, setGroupName] = useState('')
   const [parentValue, setParentValue] = useState('root')
   const [isVisible, setIsVisible] = useState(true)
@@ -57,7 +59,7 @@ export function PromptGroupEditorModal({
     const trimmedName = groupName.trim()
 
     if (!trimmedName) {
-      setFormError('그룹 이름은 꼭 필요해.')
+      setFormError(t('prompts.components.prompt.group.editor.modal.group.name.is.required'))
       return
     }
 
@@ -75,24 +77,24 @@ export function PromptGroupEditorModal({
     <SettingsModal
       open={open}
       onClose={onClose}
-      title={mode === 'create' ? `${typeLabel} 그룹 만들기` : `${typeLabel} 그룹 편집`}
+      title={mode === 'create' ? t({ ko: '{typeLabel} 그룹 만들기', en: '{typeLabel} group' }, { typeLabel }) : t({ ko: '{typeLabel} 그룹 편집', en: '{typeLabel} group edit' }, { typeLabel })}
       widthClassName="max-w-2xl"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
-            <AlertTitle>입력 확인이 필요해</AlertTitle>
+            <AlertTitle>{t('prompts.components.prompt.group.editor.modal.check.your.input')}</AlertTitle>
             <AlertDescription>{formError}</AlertDescription>
           </Alert>
         ) : null}
 
         <SettingsModalBody className="space-y-5">
-          <SettingsField label="그룹 이름">
-            <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="예: 캐릭터 / 배경 / LoRA" />
+          <SettingsField label={t('prompts.components.prompt.group.editor.modal.group.name')}>
+            <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder={t('prompts.components.prompt.group.editor.modal.e.g.character.background.lora')} />
           </SettingsField>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">부모 그룹</p>
+            <p className="text-sm font-medium text-foreground">{t('prompts.components.prompt.group.editor.modal.parent.group')}</p>
             <HierarchyPicker
               items={parentGroups}
               selectedId={parentValue === 'root' ? null : Number(parentValue)}
@@ -107,16 +109,16 @@ export function PromptGroupEditorModal({
           </div>
 
           <SettingsToggleRow className="justify-between">
-            <span className="font-medium text-foreground">표시 상태</span>
+            <span className="font-medium text-foreground">{t('prompts.components.prompt.group.editor.modal.display.status')}</span>
             <input type="checkbox" checked={isVisible} onChange={(event) => setIsVisible(event.target.checked)} />
           </SettingsToggleRow>
 
           <SettingsModalFooter>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              취소
+              {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? '저장 중…' : mode === 'create' ? '그룹 만들기' : '변경 저장'}
+              {isSubmitting ? t('prompts.components.prompt.group.editor.modal.saving') : mode === 'create' ? t('prompts.components.prompt.group.editor.modal.create.group') : t('prompts.components.prompt.group.editor.modal.save.changes')}
             </Button>
           </SettingsModalFooter>
         </SettingsModalBody>

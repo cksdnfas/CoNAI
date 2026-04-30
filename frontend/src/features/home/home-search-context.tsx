@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
 import { clearSearchHistory, deleteSearchHistory, getSearchHistory, saveSearchHistory } from '@/lib/api'
 import type { SearchAiToolGroup, SearchChip, SearchHistoryEntry, SearchScope } from '@/features/search/search-types'
 import { buildSearchChipKey, buildSearchHistoryLabel, createAIToolSearchChip, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
@@ -40,6 +41,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [searchScope, setSearchScopeState] = useState<SearchScope>('positive')
   const [searchInput, setSearchInputState] = useState('')
@@ -57,7 +59,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       await queryClient.invalidateQueries({ queryKey: ['search-history'] })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '검색 히스토리를 저장하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('homeSearchContext.failedToSaveSearchHistory'), tone: 'error' })
     },
   })
 
@@ -65,10 +67,10 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     mutationFn: deleteSearchHistory,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['search-history'] })
-      showSnackbar({ message: '검색 히스토리를 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t('homeSearchContext.searchHistoryEntryDeleted'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '검색 히스토리 삭제에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('homeSearchContext.failedToDeleteSearchHistory'), tone: 'error' })
     },
   })
 
@@ -76,10 +78,10 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     mutationFn: clearSearchHistory,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['search-history'] })
-      showSnackbar({ message: '검색 히스토리를 비웠어.', tone: 'info' })
+      showSnackbar({ message: t('homeSearchContext.searchHistoryCleared'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '검색 히스토리를 비우지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('homeSearchContext.failedToClearSearchHistory'), tone: 'error' })
     },
   })
 
@@ -179,7 +181,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     setSearchInputState('')
 
     if (nextChips.length === 0) {
-      showSnackbar({ message: '검색 칩이 없어서 기본 갤러리 상태야.', tone: 'info' })
+      showSnackbar({ message: t('homeSearchContext.noSearchChipsAreActive'), tone: 'info' })
       return
     }
 
@@ -189,7 +191,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       label: buildSearchHistoryLabel(nextChips),
       chips: nextChips,
     })
-  }, [draftChips, navigate, saveHistoryMutation, showSnackbar, withPendingInputChip])
+  }, [draftChips, navigate, saveHistoryMutation, showSnackbar, t, withPendingInputChip])
 
   const submitSearchFromInput = useCallback(() => {
     applySearch()
@@ -207,8 +209,8 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     setSearchInputState('')
     openDrawer()
     navigate('/')
-    showSnackbar({ message: '저장된 검색을 다시 적용했어.', tone: 'info' })
-  }, [navigate, openDrawer, showSnackbar])
+    showSnackbar({ message: t('homeSearchContext.savedSearchReapplied'), tone: 'info' })
+  }, [navigate, openDrawer, showSnackbar, t])
 
   const value = useMemo<HomeSearchContextValue>(
     () => ({

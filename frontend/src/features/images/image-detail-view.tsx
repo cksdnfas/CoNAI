@@ -6,6 +6,7 @@ import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getImage, getImageDuplicates, getPromptSimilarImages, getRuntimeSimilaritySettings, getSimilarImages } from '@/lib/api'
 import { getErrorMessage } from '@/lib/error-message'
+import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
@@ -42,6 +43,7 @@ interface ImageDetailViewProps {
 
 /** Render the shared image detail body so page and modal presentations stay aligned. */
 export function ImageDetailView({ compositeHash, presentation = 'page', renderHeader }: ImageDetailViewProps) {
+  const { t } = useI18n()
   const canUseSplitPaneScroll = useMinWidth(1280)
   const useSplitPaneScroll = presentation === 'modal' && canUseSplitPaneScroll
   const usesDesktopRelatedImageColumns = useMinWidth(768)
@@ -267,8 +269,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
 
       {imageQuery.isError ? (
         <Alert variant="destructive">
-          <AlertTitle>이미지 상세를 불러오지 못했어</AlertTitle>
-          <AlertDescription>{getErrorMessage(imageQuery.error, '알 수 없는 오류가 발생했어.')}</AlertDescription>
+          <AlertTitle>{t('images.image.detail.view.images.details.failed.to.load')}</AlertTitle>
+          <AlertDescription>{getErrorMessage(imageQuery.error, t('images.image.detail.view.an.unknown.error.occurred'))}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -290,11 +292,11 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
               <>
                 {duplicateImages.length > 0 ? (
                   <RelatedImageGallerySection
-                    title="중복 이미지"
+                    title={t('images.image.detail.view.duplicate.images')}
                     items={duplicateImages}
                     isLoading={false}
                     errorMessage={null}
-                    emptyMessage="현재 중복 이미지가 없어."
+                    emptyMessage={t('images.image.detail.view.there.are.no.duplicate.images.right.now')}
                     activationMode={presentation === 'modal' ? 'modal' : 'navigate'}
                     mobileCardColumns={relatedImageMobileColumns}
                     desktopCardColumns={relatedImageDesktopColumns}

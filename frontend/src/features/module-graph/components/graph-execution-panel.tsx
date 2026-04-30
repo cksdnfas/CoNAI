@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
+import { useI18n } from '@/i18n'
 import type {
   GraphExecutionArtifactRecord,
   GraphExecutionFinalResultRecord,
@@ -16,7 +17,6 @@ import type {
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
-  formatDateTime,
   getArtifactPreviewUrl,
   hasGraphArtifactVisualPreview,
   parseMetadataValue,
@@ -51,6 +51,7 @@ function ExecutionOutputGroupCard({
 }: {
   group: { nodeId: string; nodeLabel: string; artifacts: GraphExecutionArtifactRecord[] }
 }) {
+  const { t, formatNumber } = useI18n()
   const [modalType, setModalType] = useState<'text' | 'image' | null>(null)
   const primaryArtifact = useMemo(() => pickPrimaryExecutionArtifact(group.artifacts), [group.artifacts])
   const modalText = useMemo(() => buildArtifactGroupModalText(group.artifacts), [group.artifacts])
@@ -66,7 +67,7 @@ function ExecutionOutputGroupCard({
             <div className="truncate text-[13px] font-semibold text-foreground">{group.nodeLabel}</div>
             {primaryArtifact ? <div className="truncate text-[10px] text-muted-foreground">{primaryArtifact.port_key}</div> : null}
           </div>
-          <Badge variant="outline" className="h-6 shrink-0 px-1.5 text-[10px]">출력 {group.artifacts.length}</Badge>
+          <Badge variant="outline" className="h-6 shrink-0 px-1.5 text-[10px]">{t({ ko: '출력 {count}', en: 'Outputs {count}' }, { count: formatNumber(group.artifacts.length) })}</Badge>
         </div>
 
         {hasVisualPreview && previewUrl && primaryArtifact ? (
@@ -84,7 +85,7 @@ function ExecutionOutputGroupCard({
             />
             <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/24 group-focus-visible:bg-black/24" />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-              <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">보기</span>
+              <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
             </div>
           </button>
         ) : (
@@ -93,10 +94,10 @@ function ExecutionOutputGroupCard({
             onClick={() => setModalType('text')}
             className="group relative flex h-[9.5rem] w-full items-center justify-center overflow-hidden rounded-sm bg-surface-lowest/80 text-sm font-medium text-foreground transition-colors hover:bg-surface-low"
           >
-            <span>텍스트 컨텐츠</span>
+            <span>{t({ ko: '텍스트 컨텐츠', en: 'Text content' })}</span>
             <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/24 group-focus-visible:bg-black/24" />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-              <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">보기</span>
+              <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
             </div>
           </button>
         )}
@@ -152,6 +153,8 @@ function SelectedExecutionSummary({
   compactArtifactGroups: Array<{ nodeId: string; nodeLabel: string; artifacts: GraphExecutionArtifactRecord[] }>
   onOpenDetail: () => void
 }) {
+  const { t, formatNumber, formatDateTime } = useI18n()
+
   return (
     <div className="space-y-4 rounded-sm border border-border bg-surface-low p-3">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-background/50 px-3 py-2 text-sm">
@@ -160,13 +163,13 @@ function SelectedExecutionSummary({
           <Badge variant={executionDetail.execution.status === 'completed' ? 'secondary' : 'outline'}>{executionDetail.execution.status}</Badge>
           <Badge variant="outline">{getExecutionModeLabel(selectedExecutionPlan)}</Badge>
           {selectedExecutionPlan?.targetNodeId ? <Badge variant="outline">{getNodeDisplayLabel(selectedGraph, selectedExecutionPlan.targetNodeId, nodeLabelOverrides)}</Badge> : null}
-          {selectedExecutionPlan?.forceRerun ? <Badge variant="outline">강제</Badge> : null}
-          {selectedExecutionPlan?.reusedFromExecutionId ? <Badge variant="outline">재사용 #{selectedExecutionPlan.reusedFromExecutionId}</Badge> : null}
+          {selectedExecutionPlan?.forceRerun ? <Badge variant="outline">{t({ ko: '강제', en: 'Forced' })}</Badge> : null}
+          {selectedExecutionPlan?.reusedFromExecutionId ? <Badge variant="outline">{t({ ko: '재사용 #{id}', en: 'Reused #{id}' }, { id: selectedExecutionPlan.reusedFromExecutionId })}</Badge> : null}
           <span className="text-[11px] text-muted-foreground">{formatDateTime(executionDetail.execution.created_date)}</span>
         </div>
         <Button type="button" size="sm" variant="outline" onClick={onOpenDetail}>
           <Eye className="h-4 w-4" />
-          상세
+          {t({ ko: '상세', en: 'Details' })}
         </Button>
       </div>
 
@@ -179,8 +182,8 @@ function SelectedExecutionSummary({
       {executionInputEntries.length > 0 ? (
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            <span>입력</span>
-            <Badge variant="outline">{executionInputEntries.length}</Badge>
+            <span>{t({ ko: '입력', en: 'Inputs' })}</span>
+            <Badge variant="outline">{formatNumber(executionInputEntries.length)}</Badge>
           </div>
           <div className="grid gap-2 md:grid-cols-2">
             {executionInputEntries.map((entry) => (
@@ -205,13 +208,13 @@ function SelectedExecutionSummary({
 
       <div className="space-y-2.5">
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          <span>출력</span>
-          <Badge variant="outline">{compactArtifactGroups.length}</Badge>
+          <span>{t({ ko: '출력', en: 'Outputs' })}</span>
+          <Badge variant="outline">{formatNumber(compactArtifactGroups.length)}</Badge>
         </div>
 
         {compactArtifactGroups.length === 0 ? (
           <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-            표시할 출력 없음
+            {t({ ko: '표시할 출력 없음', en: 'No outputs to display' })}
           </div>
         ) : (
           <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(12rem,1fr))]">
@@ -269,6 +272,7 @@ export function GraphExecutionPanel({
   description,
   showHeader = true,
 }: GraphExecutionPanelProps) {
+  const { t, formatNumber, formatDateTime } = useI18n()
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const detailSectionRefs = useRef<Record<ExecutionDetailSectionKey, HTMLDivElement | null>>({
     summary: null,
@@ -326,8 +330,8 @@ export function GraphExecutionPanel({
         variant="outline"
         onClick={onCancelExecution}
         disabled={isCancellingExecution || (selectedExecutionStatus !== 'queued' && selectedExecutionStatus !== 'running')}
-        title={isCancellingExecution ? '취소 요청 중' : '실행 취소'}
-        aria-label={isCancellingExecution ? '실행 취소 요청 중' : '실행 취소'}
+        title={isCancellingExecution ? t({ ko: '취소 요청 중', en: 'Requesting cancel' }) : t({ ko: '실행 취소', en: 'Cancel run' })}
+        aria-label={isCancellingExecution ? t({ ko: '실행 취소 요청 중', en: 'Requesting run cancel' }) : t({ ko: '실행 취소', en: 'Cancel run' })}
       >
         <Square className="h-4 w-4" />
       </Button>
@@ -337,8 +341,8 @@ export function GraphExecutionPanel({
         variant="outline"
         onClick={onRetryExecution}
         disabled={!retryable || isExecutingGraph}
-        title="다시 시도"
-        aria-label="실행 다시 시도"
+        title={t({ ko: '다시 시도', en: 'Retry' })}
+        aria-label={t({ ko: '실행 다시 시도', en: 'Retry run' })}
       >
         <RotateCcw className="h-4 w-4" />
       </Button>
@@ -348,8 +352,8 @@ export function GraphExecutionPanel({
         variant="outline"
         onClick={onRerunGraph}
         disabled={!selectedGraphId || isExecutingGraph}
-        title={isExecutingGraph ? '실행 중' : '재실행'}
-        aria-label={isExecutingGraph ? '워크플로우 실행 중' : '워크플로우 재실행'}
+        title={isExecutingGraph ? t({ ko: '실행 중', en: 'Running' }) : t({ ko: '재실행', en: 'Rerun' })}
+        aria-label={isExecutingGraph ? t({ ko: '워크플로우 실행 중', en: 'Workflow running' }) : t({ ko: '워크플로우 재실행', en: 'Rerun workflow' })}
       >
         <Play className="h-4 w-4" />
       </Button>
@@ -358,10 +362,10 @@ export function GraphExecutionPanel({
 
   const detailSectionButtons = executionDetail ? (
     <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('summary')}>요약</Button>
-      {executionInputEntries.length > 0 ? <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('inputs')}>입력</Button> : null}
-      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('artifacts')}>아티팩트</Button>
-      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('logs')}>로그</Button>
+      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('summary')}>{t({ ko: '요약', en: 'Summary' })}</Button>
+      {executionInputEntries.length > 0 ? <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('inputs')}>{t({ ko: '입력', en: 'Inputs' })}</Button> : null}
+      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('artifacts')}>{t({ ko: '아티팩트', en: 'Artifacts' })}</Button>
+      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('logs')}>{t({ ko: '로그', en: 'Logs' })}</Button>
     </div>
   ) : null
 
@@ -372,7 +376,7 @@ export function GraphExecutionPanel({
           {showHeader ? (
             <SectionHeading
               variant="inside"
-              heading="실행 결과"
+              heading={t({ ko: '실행 결과', en: 'Run results' })}
               description={description}
               actions={actionButtons}
             />
@@ -519,7 +523,7 @@ export function GraphExecutionPanel({
               <div ref={(node) => { detailSectionRefs.current.inputs = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   <span>입력</span>
-                  <Badge variant="outline">{executionInputEntries.length}</Badge>
+                  <Badge variant="outline">{formatNumber(executionInputEntries.length)}</Badge>
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
                   {executionInputEntries.map((entry) => (

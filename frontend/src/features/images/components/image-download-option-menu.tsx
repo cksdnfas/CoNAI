@@ -1,5 +1,6 @@
 import { Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import type { ImageDownloadType } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +13,7 @@ interface ImageDownloadOptionMenuProps {
 
 /** Render a compact download option menu for original vs thumbnail. */
 export function ImageDownloadOptionMenu({ targetCount, isDownloading = false, className, onSelect }: ImageDownloadOptionMenuProps) {
+  const { t } = useI18n()
   const isBatch = targetCount > 1
 
   return (
@@ -26,7 +28,11 @@ export function ImageDownloadOptionMenu({ targetCount, isDownloading = false, cl
         data-no-select-drag="true"
       >
         <Download className="h-4 w-4" />
-        {isDownloading ? '준비 중…' : isBatch ? '원본 다운로드 (ZIP)' : '원본 다운로드'}
+        {isDownloading
+          ? t('images.components.image.download.option.menu.preparing')
+          : isBatch
+            ? t('images.components.image.download.option.menu.original.download.zip')
+            : t('images.components.image.download.option.menu.original.download')}
       </Button>
       <Button
         type="button"
@@ -38,7 +44,11 @@ export function ImageDownloadOptionMenu({ targetCount, isDownloading = false, cl
         data-no-select-drag="true"
       >
         <Download className="h-4 w-4" />
-        {isDownloading ? '준비 중…' : isBatch ? '썸네일 다운로드 (ZIP)' : '썸네일 다운로드'}
+        {isDownloading
+          ? t('images.components.image.download.option.menu.preparing')
+          : isBatch
+            ? t('images.components.image.download.option.menu.thumbnails.download.zip')
+            : t('images.components.image.download.option.menu.thumbnails.download')}
       </Button>
     </div>
   )

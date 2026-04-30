@@ -1,5 +1,6 @@
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import type { PromptCollectionItem, PromptGroupRecord, PromptStatistics, PromptTypeFilter } from '@/types/prompt'
+import { useI18n } from '@/i18n'
 import { PromptSummaryPanel } from './prompt-summary-panel'
 
 interface PromptSummaryModalProps {
@@ -19,8 +20,10 @@ export function PromptSummaryModal({
   groupStatistics = [],
   onClose,
 }: PromptSummaryModalProps) {
+  const { t } = useI18n()
+
   return (
-    <SettingsModal open={open} onClose={onClose} title="상태" widthClassName="max-w-6xl">
+    <SettingsModal open={open} onClose={onClose} title={t('prompts.components.prompt.summary.modal.status')} widthClassName="max-w-6xl">
       <PromptSummaryPanel promptType={promptType} statistics={statistics} topPrompts={topPrompts} groupStatistics={groupStatistics} />
     </SettingsModal>
   )

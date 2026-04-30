@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
 import { logoutLocalAccount } from '@/lib/api'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
@@ -13,6 +14,7 @@ export function HeaderAccountMenu() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -22,13 +24,13 @@ export function HeaderAccountMenu() {
 
   const accountTypeLabel = useMemo(() => {
     if (authStatus?.accountType === 'admin') {
-      return '관리자'
+      return t({ ko: '관리자', en: 'Admin' })
     }
     if (authStatus?.accountType === 'guest') {
-      return '게스트'
+      return t({ ko: '게스트', en: 'Guest' })
     }
-    return '계정'
-  }, [authStatus?.accountType])
+    return t({ ko: '계정', en: 'Account' })
+  }, [authStatus?.accountType, t])
 
   const logoutMutation = useMutation({
     mutationFn: logoutLocalAccount,
@@ -45,12 +47,12 @@ export function HeaderAccountMenu() {
       })
       await queryClient.invalidateQueries({ queryKey: AUTH_STATUS_QUERY_KEY })
       setIsOpen(false)
-      showSnackbar({ message: '로그아웃했어.', tone: 'info' })
+      showSnackbar({ message: t('headerAccountMenu.signedOut'), tone: 'info' })
       navigate('/login', { replace: true })
     },
     onError: (error) => {
       showSnackbar({
-        message: error instanceof Error ? error.message : '로그아웃에 실패했어.',
+        message: error instanceof Error ? error.message : t('headerAccountMenu.signOutFailed'),
         tone: 'error',
       })
     },
@@ -67,18 +69,18 @@ export function HeaderAccountMenu() {
         onClick={() => setIsOpen((current) => !current)}
         data-state={isOpen ? 'open' : 'closed'}
         className="theme-shell-icon-button inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-        aria-label="계정 메뉴"
+        aria-label={t('headerAccountMenu.accountMenu')}
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        title="계정"
+        title={t({ ko: '계정', en: 'Account' })}
       >
         <CircleUserRound className="h-4 w-4" />
       </button>
 
       <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="bottom" closeOnBack>
-        <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`} role="menu" aria-label="계정 메뉴">
+        <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`} role="menu" aria-label={t('headerAccountMenu.accountMenu')}>
           <div className="space-y-1">
-            <div className={anchoredPopupLabelClassName}>현재 계정</div>
+            <div className={anchoredPopupLabelClassName}>{t({ ko: '현재 계정', en: 'Current account' })}</div>
             <div className="text-sm font-semibold text-foreground">{authStatus?.username}</div>
             <div className="text-xs text-muted-foreground">{accountTypeLabel}</div>
           </div>
@@ -92,7 +94,7 @@ export function HeaderAccountMenu() {
             disabled={logoutMutation.isPending}
           >
             <LogOut className="h-4 w-4" />
-            {logoutMutation.isPending ? '로그아웃 중…' : '로그아웃'}
+            {logoutMutation.isPending ? t('headerAccountMenu.signingOut') : t('headerAccountMenu.signOut')}
           </Button>
         </div>
       </AnchoredPopup>

@@ -1,5 +1,6 @@
 import { useCallback, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type Konva from 'konva'
+import { useI18n } from '@/i18n'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import { clampImageEditorRect, createImageEditorId, normalizeImageEditorRect } from './image-editor-utils'
 
@@ -49,6 +50,7 @@ export function useImageEditorPointerInteractions({
   createDrawLayer: (index: number) => Extract<ImageEditorLayer, { type: 'draw' }>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
   const isPanningRef = useRef(false)
   const isDrawingRef = useRef(false)
   const isCroppingRef = useRef(false)
@@ -106,7 +108,7 @@ export function useImageEditorPointerInteractions({
 
     const drawLayerId = ensureActiveDrawLayer()
     if (!drawLayerId) {
-      showSnackbar({ message: '잠긴 레이어에는 그릴 수 없어.', tone: 'error' })
+      showSnackbar({ message: t('image-editor.use.image.editor.pointer.interactions.you.cannot.draw.on.a.locked.layer'), tone: 'error' })
       return
     }
 
@@ -120,7 +122,7 @@ export function useImageEditorPointerInteractions({
         lines: [...layer.lines, nextStroke],
       }
     }))
-  }, [brushColor, brushOpacity, brushSize, ensureActiveDrawLayer, setLayers, setMaskStrokes, showSnackbar, tool])
+  }, [brushColor, brushOpacity, brushSize, ensureActiveDrawLayer, setLayers, setMaskStrokes, showSnackbar, t, tool])
 
   /** Append one point to the currently active source or mask stroke. */
   const extendStroke = useCallback((point: { x: number; y: number }) => {

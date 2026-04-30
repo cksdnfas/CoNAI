@@ -35,11 +35,22 @@ export function resolveImagePreviewState({
   return 'ready'
 }
 
+interface ImagePreviewStateLabels {
+  empty: string
+  processing: string
+  failed: string
+  unavailable: string
+}
+
 /** Resolve one user-facing placeholder label from a shared preview state. */
-export function getImagePreviewStateLabel(status: ImagePreviewStatus, emptyLabel = '미리보기 없음') {
-  if (status === 'processing') return '진행 중'
-  if (status === 'failed') return '실패'
-  if (status === 'unavailable') return '표시 불가'
-  if (status === 'empty') return emptyLabel
-  return emptyLabel
+export function getImagePreviewStateLabel(
+  status: ImagePreviewStatus,
+  emptyLabel = '미리보기 없음',
+  labels?: Partial<ImagePreviewStateLabels>,
+) {
+  if (status === 'processing') return labels?.processing ?? '진행 중'
+  if (status === 'failed') return labels?.failed ?? '실패'
+  if (status === 'unavailable') return labels?.unavailable ?? '표시 불가'
+  if (status === 'empty') return labels?.empty ?? emptyLabel
+  return labels?.empty ?? emptyLabel
 }

@@ -1,6 +1,7 @@
 import { SEARCH_AI_TOOL_OPTIONS } from '@/features/search/search-constants'
 import type { PromptCollectionItem } from '@/types/prompt'
 import type { RatingTierRecord, SearchAiToolGroup, SearchMetadataSuggestion, SearchScope } from '@/features/search/search-types'
+import { useI18n } from '@/i18n'
 
 interface SearchSuggestionListProps {
   searchScope: SearchScope
@@ -49,18 +50,24 @@ export function SearchSuggestionList({
   onSelectMetadataSuggestion,
   onSelectRatingTier,
   onSelectAIToolSuggestion,
-  emptyPromptText = '일치하는 추천 프롬프트가 없어.',
-  emptyRatingText = '사용 가능한 평가 티어가 없어.',
-  idlePromptText = '검색어 입력',
+  emptyPromptText,
+  emptyRatingText,
+  idlePromptText,
 }: SearchSuggestionListProps) {
+  const { t, formatNumber } = useI18n()
+  const resolvedEmptyPromptText = emptyPromptText ?? t('search.components.search.suggestion.list.no.matching.prompt.suggestions')
+  const resolvedEmptyRatingText = emptyRatingText ?? t('search.components.search.suggestion.list.no.rating.tiers.available')
+  const resolvedIdlePromptText = idlePromptText ?? t('search.components.search.suggestion.list.enter.a.search.term')
+  const trimmedInput = searchInput.trim()
+
   if (searchScope === 'positive' || searchScope === 'negative' || searchScope === 'auto') {
     return (
       <>
-        {searchInput.trim().length > 0 ? <SuggestionActionRow label={`"${searchInput.trim()}" 추가`} hint="Enter" onClick={onSubmitInput} /> : null}
+        {trimmedInput.length > 0 ? <SuggestionActionRow label={t({ ko: '"{value}" 추가', en: 'Add "{value}"' }, { value: trimmedInput })} hint="Enter" onClick={onSubmitInput} /> : null}
 
-        {suggestionsLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">추천 항목을 불러오는 중…</div> : null}
-        {!suggestionsLoading && searchInput.trim().length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{idlePromptText}</div> : null}
-        {!suggestionsLoading && searchInput.trim().length > 0 && promptSuggestions.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{emptyPromptText}</div> : null}
+        {suggestionsLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">{t('search.components.search.suggestion.list.loading.suggestions')}</div> : null}
+        {!suggestionsLoading && trimmedInput.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{resolvedIdlePromptText}</div> : null}
+        {!suggestionsLoading && trimmedInput.length > 0 && promptSuggestions.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{resolvedEmptyPromptText}</div> : null}
         {!suggestionsLoading && promptSuggestions.length > 0
           ? promptSuggestions.map((item) => (
               <button
@@ -70,7 +77,7 @@ export function SearchSuggestionList({
                 className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
               >
                 <span className="truncate text-sm text-secondary">{item.prompt}</span>
-                <span className="shrink-0 text-sm text-muted-foreground">{item.usage_count.toLocaleString('ko-KR')}</span>
+                <span className="shrink-0 text-sm text-muted-foreground">{formatNumber(item.usage_count)}</span>
               </button>
             ))
           : null}
@@ -81,8 +88,8 @@ export function SearchSuggestionList({
   if (searchScope === 'rating') {
     return (
       <>
-        {ratingTiersLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">평가 티어를 불러오는 중…</div> : null}
-        {!ratingTiersLoading && filteredRatingTiers.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{emptyRatingText}</div> : null}
+        {ratingTiersLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">{t('search.components.search.suggestion.list.loading.rating.tiers')}</div> : null}
+        {!ratingTiersLoading && filteredRatingTiers.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{resolvedEmptyRatingText}</div> : null}
         {!ratingTiersLoading && filteredRatingTiers.length > 0
           ? filteredRatingTiers.map((tier) => (
               <button
@@ -116,13 +123,15 @@ export function SearchSuggestionList({
 
   const metadataSuggestions = searchScope === 'model' ? modelSuggestions : loraSuggestions
   const metadataLoading = searchScope === 'model' ? modelSuggestionsLoading : loraSuggestionsLoading
-  const metadataLabel = searchScope === 'model' ? '모델' : 'LoRA'
-  const metadataEmptyText = searchInput.trim().length > 0 ? `일치하는 ${metadataLabel}이 없어.` : `추천 ${metadataLabel}이 아직 없어.`
+  const metadataLabel = searchScope === 'model' ? t('search.components.search.suggestion.list.model') : 'LoRA'
+  const metadataEmptyText = trimmedInput.length > 0
+    ? t({ ko: '일치하는 {metadataLabel}이 없어.', en: 'No matching {metadataLabel}.' }, { metadataLabel })
+    : t({ ko: '추천 {metadataLabel}이 아직 없어.', en: 'Suggested {metadataLabel} are not available yet.' }, { metadataLabel })
 
   return (
     <>
-      {searchInput.trim().length > 0 ? <SuggestionActionRow label={`"${searchInput.trim()}" 추가`} hint="Enter" onClick={onSubmitInput} /> : null}
-      {metadataLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">{metadataLabel} 추천을 불러오는 중…</div> : null}
+      {trimmedInput.length > 0 ? <SuggestionActionRow label={t({ ko: '"{value}" 추가', en: 'Add "{value}"' }, { value: trimmedInput })} hint="Enter" onClick={onSubmitInput} /> : null}
+      {metadataLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">{t({ ko: '{metadataLabel} 추천을 불러오는 중…', en: 'Loading {metadataLabel} suggestions…' }, { metadataLabel })}</div> : null}
       {!metadataLoading && metadataSuggestions.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{metadataEmptyText}</div> : null}
       {!metadataLoading && metadataSuggestions.length > 0
         ? metadataSuggestions.map((item) => (
@@ -133,7 +142,7 @@ export function SearchSuggestionList({
               className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-surface-high"
             >
               <span className="truncate text-sm text-secondary">{item.value}</span>
-              <span className="shrink-0 text-sm text-muted-foreground">{item.count.toLocaleString('ko-KR')}</span>
+              <span className="shrink-0 text-sm text-muted-foreground">{formatNumber(item.count)}</span>
             </button>
           ))
         : null}

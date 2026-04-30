@@ -16,6 +16,7 @@ import {
   UploadedFontCard,
 } from './appearance-tab-editor-shared'
 import { SettingsField } from './settings-primitives'
+import { useI18n } from '@/i18n'
 
 /** Render the general appearance controls for theme, font, and shell layout. */
 export function AppearanceGeneralEditorContent({
@@ -26,24 +27,26 @@ export function AppearanceGeneralEditorContent({
   onClearCustomFont,
   isUploadingFont,
 }: AppearanceTabEditorSectionProps) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-8">
       <section className="space-y-4">
-        <EditorSectionLead title="기본" />
+        <EditorSectionLead title={t({ ko: '기본', en: 'Basic' })} />
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label="테마 모드">
+          <SettingsField label={t({ ko: '테마 모드', en: 'Theme mode' })}>
             <Select
               variant="settings"
               value={appearanceDraft.themeMode}
               onChange={(event) => onPatchAppearance({ themeMode: event.target.value as AppearanceSettings['themeMode'] })}
             >
-              <option value="system">{getThemeModeLabel('system')}</option>
-              <option value="dark">{getThemeModeLabel('dark')}</option>
-              <option value="light">{getThemeModeLabel('light')}</option>
+              <option value="system">{getThemeModeLabel('system', t)}</option>
+              <option value="dark">{getThemeModeLabel('dark', t)}</option>
+              <option value="light">{getThemeModeLabel('light', t)}</option>
             </Select>
           </SettingsField>
 
-          <SettingsField label="밀도">
+          <SettingsField label={t({ ko: '밀도', en: 'Density' })}>
             <Select
               variant="settings"
               value={appearanceDraft.density}
@@ -51,7 +54,7 @@ export function AppearanceGeneralEditorContent({
             >
               {Object.keys(DENSITY_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
-                  {getDensityLabel(presetKey as AppearanceSettings['density'])}
+                  {getDensityLabel(presetKey as AppearanceSettings['density'], t)}
                 </option>
               ))}
             </Select>
@@ -60,9 +63,9 @@ export function AppearanceGeneralEditorContent({
       </section>
 
       <section className="space-y-4">
-        <EditorSectionLead title="폰트" />
+        <EditorSectionLead title={t({ ko: '폰트', en: 'Font' })} />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <SettingsField label="폰트 프리셋">
+          <SettingsField label={t({ ko: '폰트 프리셋', en: 'Font preset' })}>
             <Select
               variant="settings"
               value={appearanceDraft.fontPreset}
@@ -70,13 +73,13 @@ export function AppearanceGeneralEditorContent({
             >
               {Object.keys(FONT_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
-                  {getFontPresetLabel(presetKey as AppearanceSettings['fontPreset'])}
+                  {getFontPresetLabel(presetKey as AppearanceSettings['fontPreset'], t)}
                 </option>
               ))}
             </Select>
           </SettingsField>
 
-          <SettingsField label="UI 배율 (%)">
+          <SettingsField label={t({ ko: 'UI 배율 (%)', en: 'UI scale (%)' })}>
             <Input
               type="number"
               min={85}
@@ -88,7 +91,7 @@ export function AppearanceGeneralEditorContent({
             />
           </SettingsField>
 
-          <SettingsField label="글자 크기 (%)">
+          <SettingsField label={t({ ko: '글자 크기 (%)', en: 'Text size (%)' })}>
             <Input
               type="number"
               min={85}
@@ -100,7 +103,7 @@ export function AppearanceGeneralEditorContent({
             />
           </SettingsField>
 
-          <SettingsField label="본문 굵기">
+          <SettingsField label={t({ ko: '본문 굵기', en: 'Body weight' })}>
             <Select
               variant="settings"
               value={appearanceDraft.bodyFontWeightPreset}
@@ -108,13 +111,13 @@ export function AppearanceGeneralEditorContent({
             >
               {(['regular', 'medium'] as AppearanceSettings['bodyFontWeightPreset'][]).map((preset) => (
                 <option key={preset} value={preset}>
-                  {getBodyFontWeightLabel(preset)}
+                  {getBodyFontWeightLabel(preset, t)}
                 </option>
               ))}
             </Select>
           </SettingsField>
 
-          <SettingsField label="강조 굵기">
+          <SettingsField label={t({ ko: '강조 굵기', en: 'Emphasis weight' })}>
             <Select
               variant="settings"
               value={appearanceDraft.emphasisFontWeightPreset}
@@ -122,7 +125,7 @@ export function AppearanceGeneralEditorContent({
             >
               {(['standard', 'bold'] as AppearanceSettings['emphasisFontWeightPreset'][]).map((preset) => (
                 <option key={preset} value={preset}>
-                  {getEmphasisFontWeightLabel(preset)}
+                  {getEmphasisFontWeightLabel(preset, t)}
                 </option>
               ))}
             </Select>
@@ -131,9 +134,9 @@ export function AppearanceGeneralEditorContent({
 
         {appearanceDraft.fontPreset === 'custom' ? (
           <div className="grid gap-4 md:grid-cols-2">
-            <SettingsField label="본문 폰트">
+            <SettingsField label={t({ ko: '본문 폰트', en: 'Body font' })}>
               <UploadedFontCard
-                label="본문 폰트 파일"
+                label={t({ ko: '본문 폰트 파일', en: 'Body font file' })}
                 fileName={appearanceDraft.customFontFileName}
                 url={appearanceDraft.customFontUrl}
                 onUpload={onRequestSansFontUpload}
@@ -142,9 +145,9 @@ export function AppearanceGeneralEditorContent({
               />
             </SettingsField>
 
-            <SettingsField label="모노 폰트">
+            <SettingsField label={t({ ko: '모노 폰트', en: 'Mono font' })}>
               <UploadedFontCard
-                label="모노 폰트 파일"
+                label={t({ ko: '모노 폰트 파일', en: 'Mono font file' })}
                 fileName={appearanceDraft.customMonoFontFileName}
                 url={appearanceDraft.customMonoFontUrl}
                 onUpload={onRequestMonoFontUpload}
@@ -157,9 +160,9 @@ export function AppearanceGeneralEditorContent({
       </section>
 
       <section className="space-y-4">
-        <EditorSectionLead title="검색 / 반응형" />
+        <EditorSectionLead title={t({ ko: '검색 / 반응형', en: 'Search / responsive' })} />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <SettingsField label="데스크톱 본문 2칼럼 전환폭 (px)">
+          <SettingsField label={t({ ko: '데스크톱 본문 2칼럼 전환폭 (px)', en: 'Desktop content two-column breakpoint (px)' })}>
             <Input
               type="number"
               min={768}
@@ -174,9 +177,9 @@ export function AppearanceGeneralEditorContent({
       </section>
 
       <section className="space-y-4">
-        <EditorSectionLead title="카드 / 마감" />
+        <EditorSectionLead title={t({ ko: '카드 / 마감', en: 'Cards / finish' })} />
         <div className="grid gap-4 md:grid-cols-3">
-          <SettingsField label="모서리">
+          <SettingsField label={t({ ko: '모서리', en: 'Corners' })}>
             <Select
               variant="settings"
               value={appearanceDraft.radiusPreset}
@@ -184,13 +187,13 @@ export function AppearanceGeneralEditorContent({
             >
               {Object.keys(RADIUS_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
-                  {getRadiusLabel(presetKey as AppearanceSettings['radiusPreset'])}
+                  {getRadiusLabel(presetKey as AppearanceSettings['radiusPreset'], t)}
                 </option>
               ))}
             </Select>
           </SettingsField>
 
-          <SettingsField label="유리감">
+          <SettingsField label={t({ ko: '유리감', en: 'Glass effect' })}>
             <Select
               variant="settings"
               value={appearanceDraft.glassPreset}
@@ -198,13 +201,13 @@ export function AppearanceGeneralEditorContent({
             >
               {Object.keys(GLASS_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
-                  {getGlassLabel(presetKey as AppearanceSettings['glassPreset'])}
+                  {getGlassLabel(presetKey as AppearanceSettings['glassPreset'], t)}
                 </option>
               ))}
             </Select>
           </SettingsField>
 
-          <SettingsField label="그림자">
+          <SettingsField label={t({ ko: '그림자', en: 'Shadow' })}>
             <Select
               variant="settings"
               value={appearanceDraft.shadowPreset}
@@ -212,7 +215,7 @@ export function AppearanceGeneralEditorContent({
             >
               {Object.keys(SHADOW_PRESETS).map((presetKey) => (
                 <option key={presetKey} value={presetKey}>
-                  {getShadowLabel(presetKey as AppearanceSettings['shadowPreset'])}
+                  {getShadowLabel(presetKey as AppearanceSettings['shadowPreset'], t)}
                 </option>
               ))}
             </Select>

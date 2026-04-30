@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { SearchScopeTabs } from '@/features/search/components/search-scope-tabs'
 import { SearchSuggestionList } from '@/features/search/components/search-suggestion-list'
-import { SEARCH_SCOPE_LABELS, isTextInputSearchScope } from '@/features/search/search-constants'
+import { SEARCH_SCOPE_LABEL_KEYS, isTextInputSearchScope } from '@/features/search/search-constants'
 import { useSearchSuggestionData } from '@/features/search/use-search-suggestion-data'
 import type { SearchChip, SearchOperator, SearchScope } from '@/features/search/search-types'
 import {
@@ -18,6 +18,7 @@ import {
   cycleSearchOperator,
 } from '@/features/search/search-utils'
 import { parseAutoCollectChipState } from '@/features/groups/auto-collect-chip-utils'
+import { useI18n } from '@/i18n'
 
 interface AutoCollectEditorState {
   mode: 'chip' | 'json'
@@ -50,6 +51,7 @@ const SEARCH_SCOPE_PLACEHOLDERS: Partial<Record<SearchScope, string>> = {
 
 /** Render the group auto-collect editor with chip-first and JSON fallback modes. */
 export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollectChipEditorProps) {
+  const { t } = useI18n()
   const [mode, setMode] = useState<'chip' | 'json'>('chip')
   const [searchScope, setSearchScope] = useState<SearchScope>('positive')
   const [searchInput, setSearchInput] = useState('')
@@ -75,11 +77,17 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
     setMode(parsedState.initialMode)
     setChips(parsedState.chips)
     setJsonText(parsedState.jsonText)
-    setWarningMessage(parsedState.warningMessage)
+    setWarningMessage(
+      parsedState.warningMessage === '저장된 자동수집 JSON을 파싱하지 못해서 직접 편집 모드로 열었어.'
+        ? t({ ko: '저장된 자동수집 JSON을 파싱하지 못해서 직접 편집 모드로 열었어.', en: 'Could not parse the saved auto-collect JSON, so it opened in direct edit mode.' })
+        : parsedState.warningMessage
+          ? t({ ko: '기존 자동수집 규칙에 칩 편집기로 표현 못 하는 조건이 있어서 JSON 직접 편집 모드로 열었어.', en: 'Some existing auto-collect conditions cannot be represented in the chip editor, so it opened in direct JSON edit mode.' })
+          : null,
+    )
     setSearchInput('')
     setSearchScope('positive')
     setIsSuggestionPanelOpen(false)
-  }, [initialJsonText])
+  }, [initialJsonText, t])
 
   useEffect(() => {
     if (!isSuggestionPanelOpen) {
@@ -122,10 +130,10 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
       onChange({
         mode,
         parsedValue: undefined,
-        errorMessage: '자동수집 조건 JSON 형식이 올바르지 않아.',
+        errorMessage: t('groups.components.auto.collect.chip.editor.the.auto.collect.condition.json.is.not'),
       })
     }
-  }, [chips, jsonText, mode, onChange])
+  }, [chips, jsonText, mode, onChange, t])
 
   const appendChip = (chip: SearchChip | null) => {
     if (!chip) {
@@ -149,26 +157,26 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
 
   const searchSectionTitle = useMemo(() => {
     if (searchScope === 'rating') {
-      return '평가 티어'
+      return t('groups.components.auto.collect.chip.editor.rating.tier')
     }
     if (searchScope === 'tool') {
       return 'AI Tool'
     }
-    return `${SEARCH_SCOPE_LABELS[searchScope]} 추천`
-  }, [searchScope])
+    return t({ ko: '{scopeLabel} 추천', en: '{scopeLabel} suggestions' }, { scopeLabel: t(SEARCH_SCOPE_LABEL_KEYS[searchScope]) })
+  }, [searchScope, t])
 
   const isTextInputScope = isTextInputSearchScope(searchScope)
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-medium text-foreground">자동수집 조건</p>
+        <p className="text-sm font-medium text-foreground">{t('groups.components.auto.collect.chip.editor.auto.collect.conditions')}</p>
 
         <SegmentedControl
           value={mode}
           items={[
-            { value: 'chip', label: '검색칩 편집' },
-            { value: 'json', label: 'JSON 직접 편집' },
+            { value: 'chip', label: t('groups.components.auto.collect.chip.editor.edit.search.chips') },
+            { value: 'json', label: t('groups.components.auto.collect.chip.editor.edit.json.directly') },
           ]}
           onChange={(nextMode) => setMode(nextMode as AutoCollectEditorState['mode'])}
           size="xs"
@@ -177,7 +185,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
 
       {warningMessage ? (
         <Alert>
-          <AlertTitle>참고</AlertTitle>
+          <AlertTitle>{t('groups.components.auto.collect.chip.editor.note')}</AlertTitle>
           <AlertDescription>{warningMessage}</AlertDescription>
         </Alert>
       ) : null}
@@ -197,7 +205,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
                     submitSearchInput()
                   }
                 }}
-                placeholder={isTextInputScope ? SEARCH_SCOPE_PLACEHOLDERS[searchScope] : searchSectionTitle}
+                placeholder={isTextInputScope ? t({ ko: SEARCH_SCOPE_PLACEHOLDERS[searchScope] ?? '', en: searchScope === 'positive' ? 'Positive prompt' : searchScope === 'negative' ? 'Negative prompt' : searchScope === 'auto' ? 'Auto tag' : searchScope === 'model' ? 'Model name' : searchScope === 'lora' ? 'LoRA name' : '' }) : searchSectionTitle}
                 className="h-10 w-full bg-transparent outline-none placeholder:text-muted-foreground"
               />
             </div>
@@ -213,8 +221,8 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
                     type="button"
                     onClick={() => setIsSuggestionPanelOpen(false)}
                     className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground"
-                    aria-label="입력 필터 닫기"
-                    title="입력 필터 닫기"
+                    aria-label={t('groups.components.auto.collect.chip.editor.close.input.filter')}
+                    title={t('groups.components.auto.collect.chip.editor.close.input.filter')}
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -237,8 +245,8 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
                     onSelectMetadataSuggestion={(value) => appendChip(createAutoCollectChip(searchScope, 'OR', value))}
                     onSelectRatingTier={(tier) => appendChip(createRatingSearchChip(tier, { operator: 'OR' }))}
                     onSelectAIToolSuggestion={(tool) => appendChip(createAIToolSearchChip(tool, { operator: 'OR' }))}
-                    emptyRatingText="사용 가능한 평가 티어가 없어."
-                    idlePromptText="검색어 입력"
+                    emptyRatingText={t('groups.components.auto.collect.chip.editor.no.rating.tiers.available')}
+                    idlePromptText={t('groups.components.auto.collect.chip.editor.enter.a.search.term')}
                   />
                 </div>
               </div>
@@ -247,7 +255,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
 
           <SearchChipList
             chips={chips}
-            emptyMessage="아직 추가된 조건 칩이 없어."
+            emptyMessage={t('groups.components.auto.collect.chip.editor.no.condition.chips.yet')}
             onCycleOperator={(chipId) => {
               setChips((current) => current.map((item) => (item.id === chipId ? { ...item, operator: cycleSearchOperator(item.operator) } : item)))
             }}

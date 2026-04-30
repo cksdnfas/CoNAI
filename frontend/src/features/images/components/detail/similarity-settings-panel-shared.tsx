@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import { CircleQuestionMark } from 'lucide-react'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { useI18n } from '@/i18n'
 
 export function NumberInputWithSuffix({ suffix, ...props }: ComponentProps<typeof ScrubbableNumberInput> & { suffix: string }) {
   return (
@@ -16,6 +17,7 @@ export function NumberInputWithSuffix({ suffix, ...props }: ComponentProps<typeo
 }
 
 function SectionTooltip({ anchorRef, title, description }: { anchorRef: RefObject<HTMLButtonElement | null>; title: string; description: string }) {
+  const { t } = useI18n()
   const [isAnchorHovered, setIsAnchorHovered] = useState(false)
   const [isPopupHovered, setIsPopupHovered] = useState(false)
   const isOpen = isAnchorHovered || isPopupHovered
@@ -26,7 +28,7 @@ function SectionTooltip({ anchorRef, title, description }: { anchorRef: RefObjec
         ref={anchorRef}
         type="button"
         className="inline-flex text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground"
-        aria-label={`${title} 설명 보기`}
+        aria-label={t({ ko: '{title} 설명 보기', en: 'View {title} description' }, { title })}
         onMouseEnter={() => setIsAnchorHovered(true)}
         onMouseLeave={() => setIsAnchorHovered(false)}
         onFocus={() => setIsAnchorHovered(true)}

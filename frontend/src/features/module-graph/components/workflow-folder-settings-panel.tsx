@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord } from '@/lib/api'
 
 type WorkflowFolderSettingsPanelProps = {
@@ -20,8 +21,8 @@ type WorkflowFolderSettingsPanelProps = {
   onDeleteWorkflow?: () => Promise<void> | void
 }
 
-function compareFolderNames(left: string, right: string) {
-  return left.localeCompare(right, 'ko-KR', { numeric: true, sensitivity: 'base' })
+function compareFolderNames(left: string, right: string, locale: string) {
+  return left.localeCompare(right, locale, { numeric: true, sensitivity: 'base' })
 }
 
 function collectDescendantFolderIds(folders: GraphWorkflowFolderRecord[], folderId: number) {
@@ -55,6 +56,7 @@ export function WorkflowFolderSettingsPanel({
   onEditWorkflow,
   onDeleteWorkflow,
 }: WorkflowFolderSettingsPanelProps) {
+  const { locale } = useI18n()
   const [workflowFolderId, setWorkflowFolderId] = useState<number | null>(() => selectedWorkflow?.folder_id ?? null)
   const [folderName, setFolderName] = useState(() => selectedFolder?.name ?? 'Root')
   const [folderDescription, setFolderDescription] = useState(() => selectedFolder?.description ?? '')
@@ -70,6 +72,16 @@ export function WorkflowFolderSettingsPanel({
   const parentCandidateFolders = useMemo(
     () => folders.filter((folder) => !selectedFolder || (folder.id !== selectedFolder.id && !selectedFolderDescendantIds.has(folder.id))),
     [folders, selectedFolder, selectedFolderDescendantIds],
+  )
+
+  const sortedFolders = useMemo(
+    () => [...folders].sort((left, right) => compareFolderNames(left.name, right.name, locale)),
+    [folders, locale],
+  )
+
+  const sortedParentCandidateFolders = useMemo(
+    () => [...parentCandidateFolders].sort((left, right) => compareFolderNames(left.name, right.name, locale)),
+    [locale, parentCandidateFolders],
   )
 
   const currentFolderTitle = selectedFolder?.name ?? 'Root'
@@ -112,14 +124,14 @@ export function WorkflowFolderSettingsPanel({
           <div className="space-y-2">
             <div className="text-sm font-medium text-foreground">폴더 위치</div>
             <HierarchyPicker
-              items={folders}
+              items={sortedFolders}
               selectedId={workflowFolderId}
               onSelectRoot={() => setWorkflowFolderId(null)}
               onSelect={(folder) => setWorkflowFolderId(folder.id)}
               getId={(folder) => folder.id}
               getParentId={(folder) => folder.parent_id}
               getLabel={(folder) => folder.name}
-              sortItems={(left, right) => compareFolderNames(left.name, right.name)}
+              sortItems={(left, right) => compareFolderNames(left.name, right.name, locale)}
               renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
               rootLabel="Root"
             />
@@ -185,14 +197,14 @@ export function WorkflowFolderSettingsPanel({
               <div className="space-y-2">
                 <div className="text-sm font-medium text-foreground">부모 폴더</div>
                 <HierarchyPicker
-                  items={parentCandidateFolders}
+                  items={sortedParentCandidateFolders}
                   selectedId={folderParentId}
                   onSelectRoot={() => setFolderParentId(null)}
                   onSelect={(folder) => setFolderParentId(folder.id)}
                   getId={(folder) => folder.id}
                   getParentId={(folder) => folder.parent_id}
                   getLabel={(folder) => folder.name}
-                  sortItems={(left, right) => compareFolderNames(left.name, right.name)}
+                  sortItems={(left, right) => compareFolderNames(left.name, right.name, locale)}
                   renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
                   rootLabel="Root"
                 />

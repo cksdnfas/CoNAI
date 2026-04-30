@@ -13,6 +13,7 @@ import {
   updatePromptGroup,
 } from '@/lib/api'
 import type { PromptGroupExportData, PromptTypeFilter } from '@/types/prompt'
+import { useI18n } from '@/i18n'
 
 interface UsePromptPageMutationsParams {
   promptType: PromptTypeFilter
@@ -44,6 +45,7 @@ export function usePromptPageMutations({
   onAfterDeletePrompt,
 }: UsePromptPageMutationsParams) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
 
   const refreshPromptQueries = async () => {
     await Promise.all([
@@ -68,7 +70,7 @@ export function usePromptPageMutations({
       await refreshPromptQueries()
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 그룹 지정에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.assign.the.prompt.group'))
     },
   })
 
@@ -80,7 +82,7 @@ export function usePromptPageMutations({
       await refreshPromptQueries()
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 일괄 그룹 지정에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.assign.prompt.groups.in.bulk'))
     },
   })
 
@@ -92,7 +94,7 @@ export function usePromptPageMutations({
       await refreshPromptQueries()
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 그룹 생성에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.create.the.prompt.group'))
     },
   })
 
@@ -104,7 +106,7 @@ export function usePromptPageMutations({
       await refreshPromptQueries()
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 그룹 수정에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.update.the.prompt.group'))
     },
   })
 
@@ -116,7 +118,7 @@ export function usePromptPageMutations({
       await refreshPromptQueries()
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 그룹 삭제에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.delete.the.prompt.group'))
     },
   })
 
@@ -127,7 +129,7 @@ export function usePromptPageMutations({
       await refreshPromptQueries()
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 그룹 순서 변경에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.reorder.prompt.groups'))
     },
   })
 
@@ -139,7 +141,7 @@ export function usePromptPageMutations({
       await refreshPromptQueries()
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 그룹 import에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.import.prompt.groups'))
     },
   })
 
@@ -151,7 +153,7 @@ export function usePromptPageMutations({
       await refreshPromptQueries()
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 삭제에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.delete.the.prompt'))
     },
   })
 
@@ -163,7 +165,7 @@ export function usePromptPageMutations({
       await refreshPromptQueries()
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 수동 수집에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.collect.prompts.manually'))
     },
   })
 
@@ -177,7 +179,7 @@ export function usePromptPageMutations({
       ])
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 관계 재구축에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.rebuild.prompt.relationships'))
     },
   })
 
@@ -191,7 +193,7 @@ export function usePromptPageMutations({
       ])
     },
     onError: (error) => {
-      onError(error instanceof Error ? error.message : '프롬프트 taxonomy 재구축에 실패했어.')
+      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.rebuild.prompt.taxonomy'))
     },
   })
 

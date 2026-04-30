@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 interface SettingsSearchablePagedListProps<T> {
   items: T[]
@@ -31,6 +32,7 @@ export function SettingsSearchablePagedList<T>({
   listClassName,
   paginationClassName,
 }: SettingsSearchablePagedListProps<T>) {
+  const { t, formatNumber } = useI18n()
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
 
@@ -71,8 +73,8 @@ export function SettingsSearchablePagedList<T>({
   }, [page, totalPages])
 
   const countLabel = normalizedQuery
-    ? `${filteredItems.length} / ${items.length}`
-    : filteredItems.length.toLocaleString('ko-KR')
+    ? t({ ko: '{filtered} / {total}', en: '{filtered} / {total}' }, { filtered: formatNumber(filteredItems.length), total: formatNumber(items.length) })
+    : formatNumber(filteredItems.length)
 
   return (
     <div className="space-y-3">
@@ -108,14 +110,14 @@ export function SettingsSearchablePagedList<T>({
       {totalPages > 1 ? (
         <div className={cn('flex items-center justify-between gap-3 border-t border-border/70 pt-3 text-sm text-muted-foreground', paginationClassName)}>
           <span>
-            page {page} / {totalPages} · total {filteredItems.length.toLocaleString('ko-KR')}
+            {t({ ko: '페이지 {page} / {totalPages} · 총 {total}', en: 'Page {page} / {totalPages} · total {total}' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), total: formatNumber(filteredItems.length) })}
           </span>
           <div className="flex gap-2">
             <Button type="button" size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-              이전
+              {t({ ko: '이전', en: 'Previous' })}
             </Button>
             <Button type="button" size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}>
-              다음
+              {t({ ko: '다음', en: 'Next' })}
             </Button>
           </div>
         </div>

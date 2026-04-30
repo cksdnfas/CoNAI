@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import type { PromptTaxonomyInferredType, PromptTaxonomyNodeItem, PromptTaxonomyPayload, PromptTaxonomyRelationKind, PromptTypeFilter } from '@/types/prompt'
+import { useI18n } from '@/i18n'
 
 type PromptTaxonomyFilters = {
   type: PromptTypeFilter
@@ -327,6 +328,7 @@ export function PromptTaxonomyGraphPanel({
   onApplyFilters,
   onRebuild,
 }: PromptTaxonomyGraphPanelProps) {
+  const { t, formatNumber } = useI18n()
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<PromptTaxonomyCanvasNode, PromptTaxonomyCanvasEdge> | null>(null)
   const [zoom, setZoom] = useState(0.42)
   const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null)
@@ -417,9 +419,9 @@ export function PromptTaxonomyGraphPanel({
       title="Graph"
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {data ? <Badge variant="outline">N {data.nodes.length.toLocaleString('ko-KR')}</Badge> : null}
-          {data ? <Badge variant="outline">E {data.edges.length.toLocaleString('ko-KR')}</Badge> : null}
-          {data ? <Badge variant="outline">C {(graphElements.clusterCount ?? 0).toLocaleString('ko-KR')}</Badge> : null}
+          {data ? <Badge variant="outline">N {formatNumber(data.nodes.length)}</Badge> : null}
+          {data ? <Badge variant="outline">E {formatNumber(data.edges.length)}</Badge> : null}
+          {data ? <Badge variant="outline">C {formatNumber(graphElements.clusterCount ?? 0)}</Badge> : null}
           <Button type="button" variant="outline" size="sm" onClick={onApplyFilters} disabled={isLoading || isFetching}>
             Apply
           </Button>
@@ -429,8 +431,8 @@ export function PromptTaxonomyGraphPanel({
             size="icon-xs"
             onClick={() => onRebuild?.()}
             disabled={!onRebuild || isRebuilding}
-            aria-label="프롬프트 taxonomy 재구축"
-            title="taxonomy 재구축"
+            aria-label={t('prompts.components.prompt.taxonomy.graph.panel.rebuild.prompt.taxonomy')}
+            title={t('prompts.components.prompt.taxonomy.graph.panel.rebuild.taxonomy')}
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isRebuilding ? 'animate-spin' : null)} />
           </Button>
@@ -489,9 +491,9 @@ export function PromptTaxonomyGraphPanel({
         {selectedNode ? <Badge variant="outline">Selected {selectedNode.prompt}</Badge> : null}
       </div>
 
-      {isError ? <div className="text-sm text-destructive">{errorMessage ?? 'taxonomy 그래프를 불러오지 못했어.'}</div> : null}
+      {isError ? <div className="text-sm text-destructive">{errorMessage ?? t('prompts.components.prompt.taxonomy.graph.panel.failed.to.load.the.taxonomy.graph')}</div> : null}
       {(isLoading || isFetching) && !data ? <div className="h-[720px] rounded-sm border border-border/70 bg-surface-low/40" /> : null}
-      {!isLoading && !isFetching && !isError && (data?.nodes.length ?? 0) === 0 ? <div className="text-sm text-muted-foreground">항목 없음</div> : null}
+      {!isLoading && !isFetching && !isError && (data?.nodes.length ?? 0) === 0 ? <div className="text-sm text-muted-foreground">{t('prompts.components.prompt.taxonomy.graph.panel.no.items')}</div> : null}
 
       {(data?.nodes.length ?? 0) > 0 ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
@@ -536,8 +538,8 @@ export function PromptTaxonomyGraphPanel({
                   <div className="text-sm font-semibold text-foreground break-all">{selectedNode.prompt}</div>
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="outline">{INFERRED_TYPE_LABEL[selectedNode.inferred_type]}</Badge>
-                    <Badge variant="outline">Use {selectedNode.usage_count.toLocaleString('ko-KR')}</Badge>
-                    <Badge variant="outline">Links {selectedRelations.length.toLocaleString('ko-KR')}</Badge>
+                    <Badge variant="outline">Use {formatNumber(selectedNode.usage_count)}</Badge>
+                    <Badge variant="outline">Links {formatNumber(selectedRelations.length)}</Badge>
                   </div>
                   {selectedNode.canonical_prompt ? <div className="text-xs text-muted-foreground">Canonical {selectedNode.canonical_prompt}</div> : null}
                   {selectedNode.cluster_id ? <div className="text-xs text-muted-foreground break-all">Cluster {selectedNode.cluster_id}</div> : null}
@@ -559,7 +561,7 @@ export function PromptTaxonomyGraphPanel({
                           <span>{item.score.toFixed(2)}</span>
                         </span>
                       </button>
-                    )) : <div className="text-xs text-muted-foreground">관계 없음</div>}
+                    )) : <div className="text-xs text-muted-foreground">{t('prompts.components.prompt.taxonomy.graph.panel.no.relationships')}</div>}
                   </div>
                 </div>
 
@@ -579,7 +581,7 @@ export function PromptTaxonomyGraphPanel({
                         onClick={() => setSelectedPrompt(item.prompt)}
                       >
                         <span className="min-w-0 pr-2 text-xs text-foreground break-all">{item.prompt}</span>
-                        <span className="shrink-0 text-[11px] text-muted-foreground">{item.usage_count.toLocaleString('ko-KR')}</span>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">{formatNumber(item.usage_count)}</span>
                       </button>
                     ))}
                   </div>
@@ -588,7 +590,7 @@ export function PromptTaxonomyGraphPanel({
             ) : (
               <div className="space-y-2 text-sm text-muted-foreground">
                 <div className="font-medium text-foreground">Node</div>
-                <div>점 하나 누르면 cluster, canonical, relation을 바로 볼 수 있어.</div>
+                <div>{t('prompts.components.prompt.taxonomy.graph.panel.select.a.node.to.view.its.cluster')}</div>
               </div>
             )}
           </div>

@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
+import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { formatDateTime, getArtifactPreviewUrl, hasGraphArtifactVisualPreview, resolveGraphArtifactMimeType } from '../module-graph-shared'
+import { getArtifactPreviewUrl, hasGraphArtifactVisualPreview, resolveGraphArtifactMimeType } from '../module-graph-shared'
 import { buildArtifactDetailLines, buildArtifactSummaryText, getCompactExecutionArtifactLabel } from './graph-execution-panel-helpers'
 
 interface ExecutionArtifactCardProps {
@@ -17,6 +18,7 @@ interface ExecutionArtifactCardProps {
 
 /** Render one execution artifact card with either a compact clean preview or the full technical card. */
 export function ExecutionArtifactCard({ artifact, compact = false, title, hideTitle = false, overlayLabel }: ExecutionArtifactCardProps) {
+  const { t, formatDateTime } = useI18n()
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
   const previewUrl = getArtifactPreviewUrl(artifact)
   const mimeType = resolveGraphArtifactMimeType(artifact)
@@ -37,7 +39,7 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
       />
       <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/24 group-focus-visible:bg-black/24" />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-        <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">보기</span>
+        <span className="rounded-sm bg-black/72 px-2.5 py-1 text-[11px] font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
       </div>
       {overlayLabel ? (
         <div className="pointer-events-none absolute left-2 top-2 max-w-[calc(100%-1rem)] rounded-sm bg-black/70 px-2 py-1 text-[11px] font-medium text-white shadow-sm backdrop-blur-sm">

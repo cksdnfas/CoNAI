@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ChevronDown, Copy, FolderTree, GitBranch } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Badge } from '@/components/ui/badge'
+import { useI18n } from '@/i18n'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneStyle, getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
@@ -84,14 +85,15 @@ function ExtractedPromptGroupedBody({ sections }: { sections: ExtractedPromptGro
 
 function ExtractedPromptCard({ item }: ExtractedPromptCardProps) {
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const [expanded, setExpanded] = useState(true)
 
   const handleCopy = async () => {
     try {
       await copyTextToClipboard(item.text)
-      showSnackbar({ message: `${item.title}를 클립보드에 복사했어.`, tone: 'info' })
+      showSnackbar({ message: t({ ko: '{title}를 클립보드에 복사했어.', en: '{title} copied to the clipboard.' }, { title: item.title }), tone: 'info' })
     } catch {
-      showSnackbar({ message: `${item.title} 복사에 실패했어.`, tone: 'error' })
+      showSnackbar({ message: t({ ko: '{title} 복사에 실패했어.', en: '{title} copy failed.' }, { title: item.title }), tone: 'error' })
     }
   }
 
@@ -102,7 +104,7 @@ function ExtractedPromptCard({ item }: ExtractedPromptCardProps) {
           type="button"
           onClick={() => setExpanded((current) => !current)}
           className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
-          aria-label={expanded ? `${item.title} 접기` : `${item.title} 펼치기`}
+          aria-label={expanded ? t({ ko: '{title} 접기', en: 'Collapse {title}' }, { title: item.title }) : t({ ko: '{title} 펼치기', en: 'Expand {title}' }, { title: item.title })}
         >
           <ChevronDown className={cn('h-4 w-4 transition-transform', expanded ? 'rotate-0' : '-rotate-90')} />
         </button>
@@ -112,14 +114,14 @@ function ExtractedPromptCard({ item }: ExtractedPromptCardProps) {
         <div className="ml-auto flex items-center gap-2">
           {(item.badges ?? []).map((badge) => (
             <Badge key={`${item.id}:${badge}`} variant={badge === '그룹' ? 'default' : 'secondary'} className="tracking-normal normal-case" style={getPromptBadgeStyle(badge)}>
-              {badge}
+              {badge === '그룹' ? t({ ko: '그룹', en: 'Group' }) : badge}
             </Badge>
           ))}
           <button
             type="button"
             className="inline-flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-primary"
             onClick={handleCopy}
-            aria-label={`${item.title} 복사`}
+            aria-label={t({ ko: '{title} 복사', en: 'Copy {title}' }, { title: item.title })}
           >
             <Copy className="h-4 w-4" />
           </button>

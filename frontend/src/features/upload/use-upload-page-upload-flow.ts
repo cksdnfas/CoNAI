@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type ChangeEvent } from 'react'
+import { useI18n } from '@/i18n'
 import { getAppSettings, uploadMultipleImages, type UploadBatchResult, type UploadTransferProgress } from '@/lib/api'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
@@ -20,6 +21,7 @@ export function useUploadPageUploadFlow({
 }: {
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t, formatNumber } = useI18n()
   const [uploadFiles, setUploadFiles] = useState<File[]>([])
   const [uploadResult, setUploadResult] = useState<UploadBatchResult | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -84,11 +86,16 @@ export function useUploadPageUploadFlow({
         percent: 100,
       }))
       showSnackbar({
-        message: result.failed_count > 0 ? `${result.successful}개 저장, ${result.failed_count}개 실패했어.` : `${result.successful}개 저장 완료.`,
+        message: result.failed_count > 0
+          ? t({ ko: '{successful}개 저장, {failed}개 실패했어.', en: '{successful} saved, {failed} failed.' }, {
+              successful: formatNumber(result.successful),
+              failed: formatNumber(result.failed_count),
+            })
+          : t({ ko: '{successful}개 저장 완료.', en: '{successful} saved.' }, { successful: formatNumber(result.successful) }),
         tone: result.failed_count > 0 ? 'error' : 'info',
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : '업로드에 실패했어.'
+      const message = error instanceof Error ? error.message : t('useUploadPageUploadFlow.uploadFailed')
       setUploadError(message)
       showSnackbar({ message, tone: 'error' })
     } finally {
@@ -106,7 +113,7 @@ export function useUploadPageUploadFlow({
       setPendingUploadSaveInfo(null)
       await runUpload(pendingUploadSave.files, uploadImageSaveOptions)
     } catch (error) {
-      const message = error instanceof Error ? error.message : '업로드용 이미지 저장 옵션을 적용하지 못했어.'
+      const message = error instanceof Error ? error.message : t('useUploadPageUploadFlow.failedToApplyImageSave')
       setUploadError(message)
       showSnackbar({ message, tone: 'error' })
     }

@@ -1,7 +1,8 @@
 import { X } from 'lucide-react'
-import { SEARCH_SCOPE_LABELS } from '@/features/search/search-constants'
+import { SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
 import { getSearchScopeStyle } from '@/features/search/search-utils'
 import type { SearchChip } from '@/features/search/search-types'
+import { useI18n } from '@/i18n'
 
 interface SearchChipListProps {
   chips: SearchChip[]
@@ -15,27 +16,30 @@ interface SearchChipListProps {
 export function SearchChipList({
   chips,
   title = 'Current filters',
-  emptyMessage = '아직 추가된 조건 칩이 없어.',
+  emptyMessage,
   onCycleOperator,
   onRemove,
 }: SearchChipListProps) {
+  const { t } = useI18n()
+  const resolvedEmptyMessage = emptyMessage ?? t('search.components.search.chip.list.no.condition.chips.yet')
+
   return (
     <div className="space-y-2">
       {title ? <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</div> : null}
-      {chips.length === 0 ? <div className="rounded-sm border border-border/70 bg-background/60 px-4 py-4 text-sm text-muted-foreground">{emptyMessage}</div> : null}
+      {chips.length === 0 ? <div className="rounded-sm border border-border/70 bg-background/60 px-4 py-4 text-sm text-muted-foreground">{resolvedEmptyMessage}</div> : null}
       {chips.length > 0 ? (
         <div className="space-y-2">
           {chips.map((chip) => (
             <div key={chip.id} className="flex items-center gap-2 rounded-sm border border-border bg-background px-3 py-3">
               <span className="rounded-sm px-2 py-1 text-[11px] font-semibold tracking-[0.08em]" style={getSearchScopeStyle(chip.scope)}>
-                {chip.scopeLabel ?? SEARCH_SCOPE_LABELS[chip.scope]}
+                {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
               </span>
               <button
                 type="button"
                 onClick={() => onCycleOperator(chip.id)}
                 className="rounded-sm border border-primary/35 bg-primary/10 px-2.5 py-1 text-[11px] font-bold tracking-[0.16em] text-primary shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_8%,transparent)] transition hover:border-primary/55 hover:bg-primary/18 active:scale-[0.98]"
-                aria-label={`${chip.label} 연산자 변경`}
-                title="클릭해서 OR / AND / NOT 전환"
+                aria-label={t({ ko: '{label} 연산자 변경', en: 'Change {label} operator' }, { label: chip.label })}
+                title={t('search.components.search.chip.list.click.to.cycle.or.and.not')}
               >
                 {chip.operator}
               </button>
@@ -46,7 +50,7 @@ export function SearchChipList({
                 type="button"
                 onClick={() => onRemove(chip.id)}
                 className="text-muted-foreground transition hover:text-foreground"
-                aria-label={`${chip.label} 삭제`}
+                aria-label={t({ ko: '{label} 삭제', en: 'Delete {label}' }, { label: chip.label })}
               >
                 <X className="h-4 w-4" />
               </button>

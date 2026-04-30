@@ -2,6 +2,7 @@ import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type SimilaritySettingsDraft } from './image-detail-utils'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
 import { NumberInputWithSuffix, SectionTitleWithTooltip } from './similarity-settings-panel-shared'
@@ -59,13 +60,15 @@ export function SimilaritySettingsPanel({
   onPatchDraft,
   onApply,
 }: SimilaritySettingsPanelProps) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-4">
       <DetailSettingsFlyout
         isOpen={isOpen && Boolean(draft)}
         onToggle={onToggle}
-        triggerLabel={isOpen ? '이미지 유사도 설정 닫기' : '이미지 유사도 설정 열기'}
-        triggerTitle="이미지 유사도 설정"
+        triggerLabel={isOpen ? t('images.components.detail.similarity.settings.panel.close.image.similarity.settings') : t('images.components.detail.similarity.settings.panel.open.image.similarity.settings')}
+        triggerTitle={t('images.components.detail.similarity.settings.panel.image.similarity.settings')}
         panelWidthClassName="w-[min(32rem,calc(100vw-2rem))]"
         icon={<Settings2 className="h-4 w-4" />}
       >
@@ -73,7 +76,7 @@ export function SimilaritySettingsPanel({
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <SimilarityNumberField
-                label="표시 줄 수"
+                label={t('images.components.detail.similarity.settings.panel.rows.to.show')}
                 min={SIMILARITY_RESULT_ROW_MIN}
                 max={SIMILARITY_RESULT_ROW_MAX}
                 step={1}
@@ -89,16 +92,16 @@ export function SimilaritySettingsPanel({
                   onChange={(event) => onPatchDraft({ detailSimilarUseMetadataFilter: event.target.checked })}
                   className="h-4 w-4"
                 />
-                <span>비슷한 해상도만 우선 보기</span>
+                <span>{t('images.components.detail.similarity.settings.panel.prioritize.similar.resolutions.only')}</span>
               </label>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
-                <SectionTitleWithTooltip title="점수 가중치" tooltip="최종 점수 계산에 반영되는 비중" />
+                <SectionTitleWithTooltip title={t('images.components.detail.similarity.settings.panel.score.weights')} tooltip={t('images.components.detail.similarity.settings.panel.weight.used.in.the.final.score.calculation')} />
 
                 <SimilarityNumberField
-                  label="pHash 가중치"
+                  label={t('images.components.detail.similarity.settings.panel.phash.weight')}
                   min={0}
                   max={100}
                   value={draft.detailSimilarWeights.perceptualHash}
@@ -106,7 +109,7 @@ export function SimilaritySettingsPanel({
                 />
 
                 <SimilarityNumberField
-                  label="dHash 가중치"
+                  label={t('images.components.detail.similarity.settings.panel.dhash.weight')}
                   min={0}
                   max={100}
                   value={draft.detailSimilarWeights.dHash}
@@ -114,7 +117,7 @@ export function SimilaritySettingsPanel({
                 />
 
                 <SimilarityNumberField
-                  label="aHash 가중치"
+                  label={t('images.components.detail.similarity.settings.panel.ahash.weight')}
                   min={0}
                   max={100}
                   value={draft.detailSimilarWeights.aHash}
@@ -122,7 +125,7 @@ export function SimilaritySettingsPanel({
                 />
 
                 <SimilarityNumberField
-                  label="색상 가중치"
+                  label={t('images.components.detail.similarity.settings.panel.color.weight')}
                   min={0}
                   max={100}
                   value={draft.detailSimilarWeights.color}
@@ -134,10 +137,10 @@ export function SimilaritySettingsPanel({
               </div>
 
               <div className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-3">
-                <SectionTitleWithTooltip title="항목별 허용 범위" tooltip="각 항목이 이 범위 안이어야 통과" />
+                <SectionTitleWithTooltip title={t('images.components.detail.similarity.settings.panel.per.item.thresholds')} tooltip={t('images.components.detail.similarity.settings.panel.each.item.must.fall.within.this.range')} />
 
                 <SimilarityNumberField
-                  label="pHash 허용 거리"
+                  label={t('images.components.detail.similarity.settings.panel.phash.distance.threshold')}
                   min={0}
                   max={64}
                   value={draft.detailSimilarThresholds.perceptualHash}
@@ -148,7 +151,7 @@ export function SimilaritySettingsPanel({
                 />
 
                 <SimilarityNumberField
-                  label="dHash 허용 거리"
+                  label={t('images.components.detail.similarity.settings.panel.dhash.distance.threshold')}
                   min={0}
                   max={64}
                   value={draft.detailSimilarThresholds.dHash}
@@ -156,7 +159,7 @@ export function SimilaritySettingsPanel({
                 />
 
                 <SimilarityNumberField
-                  label="aHash 허용 거리"
+                  label={t('images.components.detail.similarity.settings.panel.ahash.distance.threshold')}
                   min={0}
                   max={64}
                   value={draft.detailSimilarThresholds.aHash}
@@ -164,7 +167,7 @@ export function SimilaritySettingsPanel({
                 />
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>색상 최소 유사도</label>
+                  <label className={detailSettingsLabelClassName}>{t('images.components.detail.similarity.settings.panel.minimum.color.similarity')}</label>
                   <NumberInputWithSuffix
                     suffix="%"
                     min={0}
@@ -183,10 +186,10 @@ export function SimilaritySettingsPanel({
 
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="secondary" onClick={onToggle}>
-                닫기
+                {t({ ko: '닫기', en: 'Close' })}
               </Button>
               <Button size="sm" onClick={onApply} disabled={isSaving}>
-                {isSaving ? '저장 중…' : '적용'}
+                {isSaving ? t('images.components.detail.similarity.settings.panel.saving') : t('images.components.detail.similarity.settings.panel.apply')}
               </Button>
             </div>
           </div>
@@ -195,7 +198,7 @@ export function SimilaritySettingsPanel({
 
       {errorMessage ? (
         <Alert variant="destructive">
-          <AlertTitle>유사 이미지 설정을 저장하지 못했어</AlertTitle>
+          <AlertTitle>{t('images.components.detail.similarity.settings.panel.failed.to.save.similar.image.settings')}</AlertTitle>
           <AlertDescription>{errorMessage}</AlertDescription>
         </Alert>
       ) : null}

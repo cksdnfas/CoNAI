@@ -22,6 +22,7 @@ import { usePromptListSelection } from './components/use-prompt-list-selection'
 import { canDeletePromptItem, isLockedPromptGroup, isLockedPromptItem } from './prompt-page-utils'
 import { usePromptPageMutations } from './use-prompt-page-mutations'
 import { usePromptPageQueries } from './use-prompt-page-queries'
+import { useI18n } from '@/i18n'
 
 type AssignModalState =
   | { mode: 'single'; item: PromptCollectionItem }
@@ -49,6 +50,7 @@ const PROMPT_GRAPH_MODE_ITEMS: Array<{ value: PromptGraphMode; label: string }> 
 
 export function PromptPage() {
   const { showSnackbar } = useSnackbar()
+  const { t, formatNumber } = useI18n()
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const promptListRef = useRef<HTMLDivElement | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
@@ -186,9 +188,9 @@ export function PromptPage() {
   const handleCopyPrompt = async (text: string) => {
     try {
       await copyTextToClipboard(text)
-      showSnackbar({ message: '복사했어.', tone: 'info' })
+      showSnackbar({ message: t('prompts.prompt.page.copied'), tone: 'info' })
     } catch {
-      showSnackbar({ message: '복사에 실패했어.', tone: 'error' })
+      showSnackbar({ message: t('prompts.prompt.page.copy.failed'), tone: 'error' })
     }
   }
 
@@ -241,7 +243,7 @@ export function PromptPage() {
       return
     }
     if (selectedLockedPromptCount > 0) {
-      showSnackbar({ message: 'LoRA 항목은 변경할 수 없어.', tone: 'error' })
+      showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.changed'), tone: 'error' })
       return
     }
     setAssignModalState({ mode: 'multi' })
@@ -281,7 +283,7 @@ export function PromptPage() {
       return
     }
 
-    const confirmed = window.confirm(`정말 ${selectedGroup.group_name} 그룹을 삭제할까? 포함된 프롬프트는 Unclassified로 이동해.`)
+    const confirmed = window.confirm(t({ ko: '정말 {groupName} 그룹을 삭제할까? 포함된 프롬프트는 Unclassified로 이동해.', en: 'Delete the {groupName} group? Included prompts will move to Unclassified.' }, { groupName: selectedGroup.group_name }))
     if (!confirmed) {
       return
     }
@@ -310,9 +312,9 @@ export function PromptPage() {
   const handleExportGroups = async () => {
     try {
       await exportPromptGroups(promptType)
-      showSnackbar({ message: '내보냈어.', tone: 'info' })
+      showSnackbar({ message: t('prompts.prompt.page.exported'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 그룹 export에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('prompts.prompt.page.failed.to.export.prompt.groups'), tone: 'error' })
     }
   }
 
@@ -327,22 +329,22 @@ export function PromptPage() {
       const raw = JSON.parse(await file.text()) as PromptGroupExportData
       await importPromptGroupsMutation.mutateAsync(raw)
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '프롬프트 그룹 import 파일을 읽지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('prompts.prompt.page.failed.to.read.the.prompt.group.import'), tone: 'error' })
     }
   }
 
   const handleDeleteSinglePrompt = async (item: PromptCollectionItem) => {
     if (isLockedPromptItem(item)) {
-      showSnackbar({ message: 'LoRA 항목은 삭제할 수 없어.', tone: 'error' })
+      showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.deleted'), tone: 'error' })
       return
     }
 
     if (!canDeletePromptItem(item)) {
-      showSnackbar({ message: '이미지 사용량이 0일 때만 삭제할 수 있어.', tone: 'error' })
+      showSnackbar({ message: t('prompts.prompt.page.you.can.delete.it.only.when.image'), tone: 'error' })
       return
     }
 
-    const confirmed = window.confirm(`정말 이 프롬프트를 삭제할까?\n\n${item.prompt}`)
+    const confirmed = window.confirm(t({ ko: '정말 이 프롬프트를 삭제할까?\n\n{prompt}', en: 'Delete this prompt?\n\n{prompt}' }, { prompt: item.prompt }))
     if (!confirmed) {
       return
     }
@@ -355,15 +357,15 @@ export function PromptPage() {
       return
     }
     if (selectedLockedPromptCount > 0) {
-      showSnackbar({ message: 'LoRA 항목은 삭제할 수 없어.', tone: 'error' })
+      showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.deleted'), tone: 'error' })
       return
     }
     if (selectedPromptItems.some((item) => !canDeletePromptItem(item))) {
-      showSnackbar({ message: '사용량이 남아있는 프롬프트는 삭제할 수 없어.', tone: 'error' })
+      showSnackbar({ message: t('prompts.prompt.page.prompts.with.remaining.usage.cannot.be.deleted'), tone: 'error' })
       return
     }
 
-    const confirmed = window.confirm(`선택한 ${selectedPromptItems.length.toLocaleString('ko-KR')}개 프롬프트를 삭제할까?`)
+    const confirmed = window.confirm(t({ ko: '선택한 {count}개 프롬프트를 삭제할까?', en: 'Delete {count} selected prompts?' }, { count: formatNumber(selectedPromptItems.length) }))
     if (!confirmed) {
       return
     }
@@ -376,7 +378,7 @@ export function PromptPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Prompts" />
+      <PageHeader title={t({ ko: '프롬프트', en: 'Prompts' })} />
 
       <SegmentedTabBar
         value={activeTopTab}
@@ -440,7 +442,7 @@ export function PromptPage() {
               selectedGroupId={selectedGroupId}
               totalCount={sidebarTotalCount}
               groupsLoading={groupsQuery.isLoading}
-              groupsError={groupsQuery.error instanceof Error ? groupsQuery.error.message : groupsQuery.isError ? '알 수 없는 오류가 발생했어.' : null}
+              groupsError={groupsQuery.error instanceof Error ? groupsQuery.error.message : groupsQuery.isError ? t('prompts.prompt.page.an.unknown.error.occurred') : null}
               canCollect={promptType !== 'auto'}
               onSelectGroup={(groupId) => {
                 setSelectedGroupId(groupId)
@@ -463,7 +465,7 @@ export function PromptPage() {
               <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
-                  <div className="mt-1 text-sm text-muted-foreground">{currentSectionCount.toLocaleString('ko-KR')}개 표시됨</div>
+                  <div className="mt-1 text-sm text-muted-foreground">{t({ ko: '{count}개 표시됨', en: '{count} shown' }, { count: formatNumber(currentSectionCount) })}</div>
                 </div>
 
                 <PromptToolbar
@@ -516,8 +518,8 @@ export function PromptPage() {
             selectedCount={selectedPromptItems.length}
             isSubmitting={batchAssignPromptsMutation.isPending}
             isDeleting={deletePromptMutation.isPending}
-            onAssignGroup={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: 'LoRA 항목은 변경할 수 없어.', tone: 'error' }) : handleOpenMultiAssignModal}
-            onDeleteSelected={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: 'LoRA 항목은 삭제할 수 없어.', tone: 'error' }) : () => void handleDeleteSelectedPrompts()}
+            onAssignGroup={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.changed'), tone: 'error' }) : handleOpenMultiAssignModal}
+            onDeleteSelected={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.deleted'), tone: 'error' }) : () => void handleDeleteSelectedPrompts()}
             onClear={() => setSelectedPromptIds([])}
           />
         </>

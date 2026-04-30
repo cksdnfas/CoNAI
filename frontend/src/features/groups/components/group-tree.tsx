@@ -1,5 +1,6 @@
 import { Folder, FolderOpen } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
+import { useI18n } from '@/i18n'
 import type { GroupWithHierarchy } from '@/types/group'
 
 interface GroupTreeProps {
@@ -9,6 +10,8 @@ interface GroupTreeProps {
 }
 
 export function GroupTree({ groups, selectedGroupId, onSelectGroup }: GroupTreeProps) {
+  const { formatNumber } = useI18n()
+
   return (
     <HierarchyNav
       items={groups}
@@ -20,7 +23,7 @@ export function GroupTree({ groups, selectedGroupId, onSelectGroup }: GroupTreeP
       getLabel={(group) => (
         <div className="flex min-w-0 items-center justify-between gap-2">
           <span className="truncate">{group.name}</span>
-          <span className="shrink-0 text-xs">{group.image_count.toLocaleString('ko-KR')}</span>
+          <span className="shrink-0 text-xs">{formatNumber(group.image_count)}</span>
         </div>
       )}
       sortItems={(left, right) => left.name.localeCompare(right.name)}

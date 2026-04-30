@@ -4,6 +4,7 @@ import { SegmentedControl, type SegmentedControlItem } from '@/components/common
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 type SettingsBadgeVariant = NonNullable<ComponentProps<typeof Badge>['variant']>
 export type SettingsStatusTone = 'default' | 'muted' | 'danger'
@@ -175,6 +176,8 @@ export function SettingsResourceTableRow({
   selected = false,
   onOpenOptions,
 }: SettingsResourceTableRowProps) {
+  const { t } = useI18n()
+
   return (
     <div
       className={cn(
@@ -196,8 +199,8 @@ export function SettingsResourceTableRow({
           type="button"
           size="icon-sm"
           variant={selected ? 'default' : 'ghost'}
-          title="상세 정보와 수정 열기"
-          aria-label="상세 정보와 수정 열기"
+          title={t({ ko: '상세 정보와 수정 열기', en: 'Open details and editing' })}
+          aria-label={t({ ko: '상세 정보와 수정 열기', en: 'Open details and editing' })}
           onClick={onOpenOptions}
         >
           <Settings2 className="h-4 w-4" />
@@ -285,6 +288,8 @@ export function SettingsResourceFooterActions({
   onPrimary,
   primaryDisabled = false,
 }: SettingsResourceFooterActionsProps) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-wrap justify-between gap-2">
       <Button size="sm" variant="secondary" disabled={dangerDisabled} onClick={onDanger}>
@@ -295,8 +300,8 @@ export function SettingsResourceFooterActions({
         size="icon-sm"
         disabled={primaryDisabled}
         onClick={onPrimary}
-        aria-label={typeof primaryLabel === 'string' ? primaryLabel : '저장'}
-        title={typeof primaryLabel === 'string' ? primaryLabel : '저장'}
+        aria-label={typeof primaryLabel === 'string' ? primaryLabel : t({ ko: '저장', en: 'Save' })}
+        title={typeof primaryLabel === 'string' ? primaryLabel : t({ ko: '저장', en: 'Save' })}
       >
         {primaryDisabled ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
       </Button>

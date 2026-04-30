@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import { ImageOff } from 'lucide-react'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 interface ImagePreviewPlaceholderProps {
@@ -13,13 +14,16 @@ interface ImagePreviewPlaceholderProps {
 
 /** Render one consistent fallback surface for missing, failed, or not-yet-ready image previews. */
 export function ImagePreviewPlaceholder({
-  label = '미리보기 없음',
+  label,
   className,
   iconClassName,
   labelClassName,
   compact = false,
   style,
 }: ImagePreviewPlaceholderProps) {
+  const { t } = useI18n()
+  const resolvedLabel = label ?? t('images.components.image.preview.placeholder.no.preview')
+
   return (
     <div
       className={cn(
@@ -30,7 +34,7 @@ export function ImagePreviewPlaceholder({
       style={style}
     >
       <ImageOff className={cn('shrink-0 opacity-90', compact ? 'h-6 w-6' : 'h-14 w-14', iconClassName)} strokeWidth={1.8} />
-      <span className={cn('leading-none', compact ? 'text-[10px]' : 'text-base', labelClassName)}>{label}</span>
+      <span className={cn('leading-none', compact ? 'text-[10px]' : 'text-base', labelClassName)}>{resolvedLabel}</span>
     </div>
   )
 }

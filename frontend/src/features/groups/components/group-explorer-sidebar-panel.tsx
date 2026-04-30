@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import { GroupTree } from './group-tree'
+import { useI18n } from '@/i18n'
 
 interface GroupExplorerSidebarPanelProps {
   isWideLayout: boolean
@@ -29,10 +30,12 @@ export function GroupExplorerSidebarPanel({
   headerExtra,
   onSelectGroup,
 }: GroupExplorerSidebarPanelProps) {
+  const { t, formatNumber } = useI18n()
+
   return (
     <ExplorerSidebar
       title="Explorer"
-      badge={<Badge variant="outline">{groups.length}</Badge>}
+      badge={<Badge variant="outline">{formatNumber(groups.length)}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:groups:sidebar-locked"
       className={cn(isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
@@ -49,8 +52,8 @@ export function GroupExplorerSidebarPanel({
 
       {isError ? (
         <Alert variant="destructive">
-          <AlertTitle>그룹 트리를 불러오지 못했어</AlertTitle>
-          <AlertDescription>{errorMessage ?? '알 수 없는 오류가 발생했어.'}</AlertDescription>
+          <AlertTitle>{t('groups.components.group.explorer.sidebar.panel.failed.to.load.the.group.tree')}</AlertTitle>
+          <AlertDescription>{errorMessage ?? t('groups.components.group.explorer.sidebar.panel.an.unknown.error.occurred')}</AlertDescription>
         </Alert>
       ) : null}
 

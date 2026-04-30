@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
 import { ImageDetailMedia } from '@/features/images/components/detail/image-detail-media'
 import { getDownloadName, getImageDetailRenderUrl } from '@/features/images/components/detail/image-detail-utils'
 import { downloadExistingImageWithRewrittenMetadata, getImage, saveImageMetadata } from '@/lib/api'
@@ -21,6 +22,7 @@ export function ImageMetadataEditPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const [draft, setDraft] = useState<RewriteMetadataDraft | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
 
@@ -41,7 +43,7 @@ export function ImageMetadataEditPage() {
   const downloadMutation = useMutation({
     mutationFn: async (nextDraft: RewriteMetadataDraft) => {
       if (!compositeHash) {
-        throw new Error('이미지 식별자가 없어.')
+        throw new Error(t('metadata.image.metadata.edit.page.missing.image.identifier'))
       }
 
       return downloadExistingImageWithRewrittenMetadata(compositeHash, {
@@ -50,22 +52,25 @@ export function ImageMetadataEditPage() {
       })
     },
     onSuccess: () => {
-      showSnackbar({ message: '수정 파일 다운로드를 시작했어.', tone: 'info' })
+      showSnackbar({ message: t('metadata.image.metadata.edit.page.started.downloading.the.edited.file'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '메타 다운로드에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('metadata.image.metadata.edit.page.failed.to.download.metadata'), tone: 'error' })
     },
   })
 
   const saveMutation = useMutation({
     mutationFn: async (nextDraft: RewriteMetadataDraft) => {
       if (!compositeHash) {
-        throw new Error('이미지 식별자가 없어.')
+        throw new Error(t('metadata.image.metadata.edit.page.missing.image.identifier'))
       }
 
-      const metadataPatch = buildMetadataRewritePatch(nextDraft, { clearEmptyFields: true })
+      const metadataPatch = buildMetadataRewritePatch(nextDraft, {
+        clearEmptyFields: true,
+        invalidStepsMessage: t('metadata.use.metadata.rewrite.draft.steps.must.be.a.number.greater.than'),
+      })
       if (Object.keys(metadataPatch).length === 0) {
-        throw new Error('저장할 메타 변경이 없어.')
+        throw new Error(t('metadata.image.metadata.edit.page.there.are.no.metadata.changes.to.save'))
       }
 
       return saveImageMetadata(compositeHash, metadataPatch)
@@ -79,10 +84,10 @@ export function ImageMetadataEditPage() {
       void queryClient.invalidateQueries({ queryKey: ['image-detail', compositeHash] })
       void queryClient.invalidateQueries({ queryKey: ['image-prompt-similar'] })
       setDraft(createRewriteDraftFromImage(updatedImage))
-      showSnackbar({ message: '메타 정보를 저장했어.', tone: 'info' })
+      showSnackbar({ message: t('metadata.image.metadata.edit.page.metadata.saved'), tone: 'info' })
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '메타 저장에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('metadata.image.metadata.edit.page.failed.to.save.metadata'), tone: 'error' })
     },
   })
 
@@ -113,7 +118,7 @@ export function ImageMetadataEditPage() {
       return
     }
 
-    if (!window.confirm('현재 메타 정보를 실제 파일과 라이브러리 DB에 저장할까? 이전 운영 파일은 시스템 RecycleBin에 보관돼.')) {
+    if (!window.confirm(t('metadata.image.metadata.edit.page.save.the.current.metadata.to.the.file'))) {
       return
     }
 
@@ -123,21 +128,21 @@ export function ImageMetadataEditPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="메타 수정"
+        title={t('metadata.image.metadata.edit.page.edit.metadata')}
         description={downloadName}
         actions={
           <>
             <Button variant="secondary" onClick={handleBack}>
               <ArrowLeft className="h-4 w-4" />
-              돌아가기
+              {t({ ko: '돌아가기', en: 'Back' })}
             </Button>
             <Button variant="outline" onClick={handleDownload} disabled={!draft || busy || !isEditableImage}>
               <Download className="h-4 w-4" />
-              다운로드
+              {t({ ko: '다운로드', en: 'Download' })}
             </Button>
             <Button onClick={handleSave} disabled={!draft || busy || !isEditableImage}>
               <Save className="h-4 w-4" />
-              저장
+              {t({ ko: '저장', en: 'Save' })}
             </Button>
           </>
         }
@@ -152,8 +157,8 @@ export function ImageMetadataEditPage() {
 
       {imageQuery.isError ? (
         <Alert variant="destructive">
-          <AlertTitle>편집 대상을 불러오지 못했어</AlertTitle>
-          <AlertDescription>{imageQuery.error instanceof Error ? imageQuery.error.message : '알 수 없는 오류가 발생했어.'}</AlertDescription>
+          <AlertTitle>{t('metadata.image.metadata.edit.page.failed.to.load.the.edit.target')}</AlertTitle>
+          <AlertDescription>{imageQuery.error instanceof Error ? imageQuery.error.message : t('metadata.image.metadata.edit.page.an.unknown.error.occurred')}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -178,11 +183,11 @@ export function ImageMetadataEditPage() {
             </div>
           </PageSection>
 
-          <PageSection title="메타 수정">
+          <PageSection title={t('metadata.image.metadata.edit.page.edit.metadata')}>
             {!isEditableImage ? (
               <Alert variant="destructive">
-                <AlertTitle>이 파일은 아직 저장 편집 대상이 아니야</AlertTitle>
-                <AlertDescription>정적 이미지 파일만 메타 저장을 지원해.</AlertDescription>
+                <AlertTitle>{t('metadata.image.metadata.edit.page.this.file.cannot.be.edited.in.place')}</AlertTitle>
+                <AlertDescription>{t('metadata.image.metadata.edit.page.only.static.image.files.support.metadata.saving')}</AlertDescription>
               </Alert>
             ) : null}
 
@@ -190,15 +195,15 @@ export function ImageMetadataEditPage() {
               <MetadataRewriteForm
                 draft={draft}
                 disabled={busy || !isEditableImage}
-                formatLabel="다운로드 포맷"
+                formatLabel={t('metadata.image.metadata.edit.page.download.format')}
                 onDraftChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))}
               />
             ) : null}
 
             {saveMutation.isError ? (
               <Alert variant="destructive">
-                <AlertTitle>저장에 실패했어</AlertTitle>
-                <AlertDescription>{saveMutation.error instanceof Error ? saveMutation.error.message : '알 수 없는 오류가 발생했어.'}</AlertDescription>
+                <AlertTitle>{t('metadata.image.metadata.edit.page.save.failed')}</AlertTitle>
+                <AlertDescription>{saveMutation.error instanceof Error ? saveMutation.error.message : t('metadata.image.metadata.edit.page.an.unknown.error.occurred')}</AlertDescription>
               </Alert>
             ) : null}
           </PageSection>

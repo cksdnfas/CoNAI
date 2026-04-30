@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { formatDateTime } from '@/features/module-graph/module-graph-shared'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { WallpaperFloatingCollageBody } from './wallpaper-floating-collage-widget-body'
 import {
@@ -44,19 +44,20 @@ function resolveWallpaperClockMetrics(width: number, height: number, visualStyle
 /** Render the live clock body without forcing timers on every widget. */
 function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'clock' }> }) {
   const currentTime = useWallpaperClockText()
+  const { t, locale, formatDate } = useI18n()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [containerSize, setContainerSize] = useState({ width: widget.w * 72, height: widget.h * 56 })
   const timeFormat = widget.settings.timeFormat
   const showSeconds = widget.settings.showSeconds
   const visualStyle = widget.settings.visualStyle ?? 'minimal'
-  const timeText = currentTime.toLocaleTimeString('ko-KR', {
+  const timeText = currentTime.toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     second: showSeconds ? '2-digit' : undefined,
     hour12: timeFormat === '12h',
   })
   const [hourText, minuteText, secondText] = timeText.split(':')
-  const dateText = currentTime.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })
+  const dateText = formatDate(currentTime, { month: 'long', day: 'numeric', weekday: 'long' })
   const metrics = resolveWallpaperClockMetrics(containerSize.width, containerSize.height, visualStyle, showSeconds)
   const labelTracking = `${Math.max(1.5, metrics.labelSize * 0.2)}px`
 
@@ -91,7 +92,7 @@ function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstanc
     return (
       <div ref={containerRef} className="grid h-full grid-cols-[1fr_auto] gap-3">
         <div className="flex min-w-0 flex-col justify-center rounded-sm border border-border/70 bg-surface-low px-3 py-3">
-          <div className="uppercase text-secondary" style={{ fontSize: metrics.labelSize, letterSpacing: labelTracking }}>지금</div>
+          <div className="uppercase text-secondary" style={{ fontSize: metrics.labelSize, letterSpacing: labelTracking }}>{t('wallpaper.wallpaper.widget.bodies.uppercase.text.secondary')}</div>
           <div className="mt-1 flex items-end gap-2 font-semibold tracking-[-0.08em] text-foreground" style={{ fontSize: metrics.timeSize, lineHeight: 0.92 }}>
             <span>{hourText}:{minuteText}</span>
             {showSeconds ? <span className="pb-0.5 text-muted-foreground" style={{ fontSize: metrics.secondaryTimeSize, lineHeight: 1 }}>{secondText}</span> : null}
@@ -101,7 +102,7 @@ function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstanc
           className="flex flex-col justify-between rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--secondary)_16%,transparent),transparent),var(--surface-low)] px-3 py-3 text-right"
           style={{ width: metrics.sidePanelWidth }}
         >
-          <div className="uppercase text-muted-foreground" style={{ fontSize: metrics.labelSize, letterSpacing: labelTracking }}>시계</div>
+          <div className="uppercase text-muted-foreground" style={{ fontSize: metrics.labelSize, letterSpacing: labelTracking }}>{t('wallpaper.wallpaper.widget.bodies.clock')}</div>
           <div className="text-muted-foreground" style={{ fontSize: metrics.dateSize, lineHeight: 1.2 }}>{dateText}</div>
         </div>
       </div>
@@ -136,6 +137,7 @@ function WallpaperClockBody({ widget }: { widget: Extract<WallpaperWidgetInstanc
 function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'queue-status' }> }) {
   const refreshInterval = Math.max(2, widget.settings.refreshIntervalSec) * 1000
   const visualMode = widget.settings.visualMode ?? 'tiles'
+  const { t, formatNumber } = useI18n()
 
   const queueQuery = useWallpaperBrowseContentQuery('queue-status', refreshInterval)
 
@@ -150,18 +152,18 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   }, [queueQuery.data])
 
   if (queueQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">워크플로 상태 불러오는 중…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.loading.workflow.status')}</div>
   }
 
   if (queueQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">워크플로 상태를 불러오지 못했어.</div>
+    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t('wallpaper.wallpaper.widget.bodies.workflow.status.failed.to.load')}</div>
   }
 
   const queueItems = [
-    { label: '대기', value: queueSummary.queued, tone: 'var(--secondary)', short: 'Q' },
-    { label: '실행', value: queueSummary.running, tone: '#3ddc97', short: 'R' },
-    { label: '실패', value: queueSummary.failed, tone: '#ff6b6b', short: 'F' },
-    { label: '워크플로', value: queueSummary.workflows, tone: 'var(--primary)', short: 'W' },
+    { id: 'queued', label: t('wallpaper.wallpaper.widget.bodies.queued'), value: queueSummary.queued, tone: 'var(--secondary)', short: 'Q' },
+    { id: 'running', label: t('wallpaper.wallpaper.widget.bodies.running'), value: queueSummary.running, tone: '#3ddc97', short: 'R' },
+    { id: 'failed', label: t('wallpaper.wallpaper.widget.bodies.failed'), value: queueSummary.failed, tone: '#ff6b6b', short: 'F' },
+    { id: 'workflow', label: t('wallpaper.wallpaper.widget.bodies.workflow'), value: queueSummary.workflows, tone: 'var(--primary)', short: 'W' },
   ]
   const maxValue = Math.max(...queueItems.map((item) => item.value), 1)
   const totalActive = queueSummary.queued + queueSummary.running
@@ -171,11 +173,11 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
       <div className="flex h-full flex-col justify-center gap-3 rounded-sm bg-[linear-gradient(180deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_55%)] px-1 py-1 text-xs sm:text-sm">
         <div className="mb-0.5 flex items-center justify-between gap-2 rounded-sm border border-border/60 bg-background/45 px-3 py-2 backdrop-blur-sm">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">실행</div>
-            <div className="text-sm font-semibold text-foreground">{totalActive.toLocaleString('ko-KR')} 진행 중</div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.running')}</div>
+            <div className="text-sm font-semibold text-foreground">{t('wallpaper.wallpaper.widget.bodies.totalactive.tolocalestring.en.us.active', { totalActive: formatNumber(totalActive) })}</div>
           </div>
           <div className="rounded-full border border-border/70 bg-surface-low px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            {queueSummary.failed > 0 ? '주의' : '안정'}
+            {queueSummary.failed > 0 ? t('wallpaper.wallpaper.widget.bodies.needs.attention') : t('wallpaper.wallpaper.widget.bodies.stable')}
           </div>
         </div>
 
@@ -190,13 +192,13 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
                   </span>
                   <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
                 </div>
-                <div className={cn('text-sm font-semibold text-foreground', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}>
-                  {item.value.toLocaleString('ko-KR')}
+                <div className={cn('text-sm font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+                  {formatNumber(item.value)}
                 </div>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-surface-lowest/90">
                 <div
-                  className={cn('h-full rounded-full transition-[width] duration-700 ease-out', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}
+                  className={cn('h-full rounded-full transition-[width] duration-700 ease-out', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}
                   style={{
                     width: `${ratio * 100}%`,
                     background: `linear-gradient(90deg, ${item.tone}, color-mix(in srgb, ${item.tone} 68%, white))`,
@@ -220,15 +222,15 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
           return (
             <div key={item.label} className="relative flex flex-col items-center justify-center overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_54%),var(--surface-low)] px-2 py-3">
               <div
-                className={cn('absolute inset-0 opacity-60', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}
+                className={cn('absolute inset-0 opacity-60', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}
                 style={{ background: `radial-gradient(circle at center, color-mix(in srgb, ${item.tone} 18%, transparent), transparent 62%)` }}
               />
               <div
-                className={cn('relative flex h-14 w-14 items-center justify-center rounded-full border border-border/60 text-sm font-semibold text-foreground transition-transform', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}
+                className={cn('relative flex h-14 w-14 items-center justify-center rounded-full border border-border/60 text-sm font-semibold text-foreground transition-transform', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}
                 style={{ background: `conic-gradient(${item.tone} 0deg ${degrees}deg, color-mix(in srgb, var(--surface-lowest) 92%, transparent) ${degrees}deg 360deg)` }}
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-background/92 shadow-[0_0_20px_rgba(0,0,0,0.18)] backdrop-blur-sm">
-                  {item.value.toLocaleString('ko-KR')}
+                  {formatNumber(item.value)}
                 </div>
               </div>
               <div className="relative mt-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
@@ -245,8 +247,8 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
         <div key={item.label} className="relative overflow-hidden rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--background)_20%,transparent),transparent),var(--surface-low)] px-2 py-3">
           <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: item.tone }} />
           <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
-          <div className={cn('mt-1 text-lg font-semibold text-foreground', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}>
-            {item.value.toLocaleString('ko-KR')}
+          <div className={cn('mt-1 text-lg font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+            {formatNumber(item.value)}
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-lowest/90">
             <div
@@ -268,6 +270,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
   const refreshInterval = Math.max(2, widget.settings.refreshIntervalSec) * 1000
   const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 1)
   const emphasis = widget.settings.emphasis ?? 'mixed'
+  const { t, formatNumber, formatDateTime } = useI18n()
   const motionTick = useWallpaperMotionTick(true)
   const activityQuery = useWallpaperBrowseContentQuery('activity-pulse', refreshInterval)
 
@@ -303,11 +306,11 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
   }, [activityQuery.data])
 
   if (activityQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">활동 흐름 불러오는 중…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.loading.activity.flow')}</div>
   }
 
   if (activityQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">활동 흐름을 불러오지 못했어.</div>
+    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t('wallpaper.wallpaper.widget.bodies.failed.to.load.activity.flow')}</div>
   }
 
   const emphasisWeight = emphasis === 'queue'
@@ -327,16 +330,22 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
     return Math.max(0.16, Math.min(1, 0.22 + intensity * 0.5 + wave * 0.22 * motionStrength + emphasisBoost))
   })
   const statusTone = summary.failed > 0 ? '#ff6b6b' : summary.running > 0 ? '#3ddc97' : 'var(--secondary)'
-  const activityBadge = summary.running > 0 ? '실행 중' : summary.queued > 0 ? '대기 중' : summary.recentResults > 0 ? '최근 결과' : '한가함'
+  const activityBadge = summary.running > 0
+    ? t('wallpaper.wallpaper.widget.bodies.running.25981e1a')
+    : summary.queued > 0
+      ? t('wallpaper.wallpaper.widget.bodies.queued.388f731f')
+      : summary.recentResults > 0
+        ? t('wallpaper.wallpaper.widget.bodies.recent.results')
+        : t('wallpaper.wallpaper.widget.bodies.idle')
 
   return (
     <div className="flex h-full flex-col justify-between gap-3 rounded-sm bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_18%,transparent),transparent_46%),linear-gradient(180deg,color-mix(in_srgb,var(--primary)_8%,transparent),transparent_60%)] px-3 py-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">활동</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.activity')}</div>
           <div className="mt-1 flex items-end gap-2">
             <span className="text-2xl font-semibold tracking-[-0.08em] text-foreground sm:text-3xl">{summary.running + summary.queued}</span>
-            <span className="pb-1 text-xs text-muted-foreground">진행 부하</span>
+            <span className="pb-1 text-xs text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.active.load')}</span>
           </div>
         </div>
         <div className="rounded-full border border-border/70 bg-background/50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/92 backdrop-blur-sm">
@@ -362,23 +371,23 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
 
       <div className="grid grid-cols-4 gap-2 text-center text-[11px] sm:text-xs">
         {[
-          { label: '실행', value: summary.running },
-          { label: '대기', value: summary.queued },
-          { label: '결과', value: summary.recentResults },
-          { label: '실패', value: summary.failed },
+          { id: 'running', label: t('wallpaper.wallpaper.widget.bodies.running'), value: summary.running },
+          { id: 'queued', label: t('wallpaper.wallpaper.widget.bodies.queued'), value: summary.queued },
+          { id: 'results', label: t('wallpaper.wallpaper.widget.bodies.results'), value: summary.recentResults },
+          { id: 'failed', label: t('wallpaper.wallpaper.widget.bodies.failed'), value: summary.failed },
         ].map((item) => (
           <div key={item.label} className="rounded-sm border border-border/60 bg-background/35 px-2 py-1.5 backdrop-blur-sm">
             <div className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{item.label}</div>
-            <div className={cn('mt-1 font-semibold text-foreground', item.label === '실행' && item.value > 0 ? 'animate-pulse' : undefined)}>
-              {item.value.toLocaleString('ko-KR')}
+            <div className={cn('mt-1 font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+              {formatNumber(item.value)}
             </div>
           </div>
         ))}
       </div>
 
       <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-        <span>{emphasis === 'queue' ? '실행 중심' : emphasis === 'results' ? '결과 중심' : '혼합'}</span>
-        <span>{summary.lastUpdated ? formatDateTime(summary.lastUpdated) : '업데이트 없음'}</span>
+        <span>{emphasis === 'queue' ? t('wallpaper.wallpaper.widget.bodies.queue.focus') : emphasis === 'results' ? t('wallpaper.wallpaper.widget.bodies.results.focus') : t('wallpaper.wallpaper.widget.bodies.mixed')}</span>
+        <span>{summary.lastUpdated ? formatDateTime(summary.lastUpdated) : t('wallpaper.wallpaper.widget.bodies.not.updated.yet')}</span>
       </div>
     </div>
   )

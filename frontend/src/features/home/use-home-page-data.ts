@@ -6,6 +6,7 @@ import { useHomeSearch } from '@/features/home/home-search-context'
 import { buildComplexFilterPayload } from '@/features/search/search-utils'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
+import { useI18n } from '@/i18n'
 import { addImagesToGroup, deleteImagesBulk, downloadImageSelection, getGroupsHierarchyAll, getImages, searchImagesComplex } from '@/lib/api'
 
 interface UseHomePageDataOptions {
@@ -18,6 +19,7 @@ interface UseHomePageDataOptions {
 /** Collect Home page auth state, image feed data, selection, and group actions. */
 export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOptions) {
   const queryClient = useQueryClient()
+  const { t, formatNumber } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const { appliedChips } = useHomeSearch()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -68,7 +70,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       ])
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '그룹 할당에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t('useHomePageData.failedToAssignGroup'))
     },
   })
 
@@ -113,17 +115,17 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     [visibleImages, selectedIds],
   )
 
-  const emptyStateTitle = isSearchMode ? '검색 결과가 없어' : '표시할 이미지가 아직 없어'
+  const emptyStateTitle = isSearchMode ? t('useHomePageData.noSearchResults') : t('useHomePageData.noImagesToShowYet')
   const emptyStateDescription = hasOnlyHiddenItems
-    ? '현재 등급 표시 정책 때문에 이 목록에서는 숨겨진 상태야.'
+    ? t('useHomePageData.itemsAreHiddenInThis')
     : isSearchMode
-      ? '검색 조건을 바꿔봐.'
-      : '업로드나 데이터 상태를 확인해.'
-  const errorTitle = isSearchMode ? '검색 결과를 불러오지 못했어' : '홈 피드를 불러오지 못했어'
+      ? t('useHomePageData.tryChangingTheSearchFilters')
+      : t('useHomePageData.checkTheUploadOrData')
+  const errorTitle = isSearchMode ? t('useHomePageData.failedToLoadSearchResults') : t('useHomePageData.failedToLoadTheHome')
   const loadMoreErrorMessage =
     imagesQuery.error instanceof Error
       ? imagesQuery.error.message
-      : '다음 이미지 묶음을 불러오는 중 문제가 생겼어.'
+      : t('useHomePageData.somethingWentWrongWhileLoading')
 
   const handleRetryInitialLoad = () => {
     void imagesQuery.refetch()
@@ -148,7 +150,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
 
   const handleDeleteSelected = async () => {
     if (!canDeleteImages) {
-      notifyError('삭제는 관리자 계정만 할 수 있어.')
+      notifyError(t('useHomePageData.onlyAdminAccountsCanDelete'))
       return
     }
 
@@ -156,7 +158,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       return
     }
 
-    const confirmed = window.confirm(`선택한 ${selectedCompositeHashes.length.toLocaleString('ko-KR')}개 항목을 휴지통으로 보낼까?`)
+    const selectedCount = formatNumber(selectedCompositeHashes.length)
+    const confirmed = window.confirm(t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Move {count} selected items to the Recycle Bin?' }, { count: selectedCount }))
     if (!confirmed) {
       return
     }
@@ -166,8 +169,11 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       const result = await deleteImagesBulk(selectedCompositeHashes)
       setSelectedIds([])
       notifyInfo(result.details.failed > 0
-        ? `${result.details.deleted.toLocaleString('ko-KR')}개 삭제, ${result.details.failed.toLocaleString('ko-KR')}개 실패했어.`
-        : `${result.details.deleted.toLocaleString('ko-KR')}개를 RecycleBin으로 보냈어.`)
+        ? t({ ko: '{deleted}개 삭제, {failed}개 실패했어.', en: '{deleted} deleted, {failed} failed.' }, {
+            deleted: formatNumber(result.details.deleted),
+            failed: formatNumber(result.details.failed),
+          })
+        : t({ ko: '{deleted}개를 RecycleBin으로 보냈어.', en: '{deleted} moved to the Recycle Bin.' }, { deleted: formatNumber(result.details.deleted) }))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['home-images'] }),
         queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
@@ -175,7 +181,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
       ])
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : '선택 항목 삭제에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t('useHomePageData.failedToDeleteSelectedItems'))
     } finally {
       setIsDeleting(false)
     }
@@ -187,17 +193,17 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     }
 
     if (groupsQuery.isPending) {
-      notifyInfo('커스텀 그룹 목록을 불러오는 중이야.')
+      notifyInfo(t('useHomePageData.loadingCustomGroups'))
       return
     }
 
     if (groupsQuery.isError) {
-      notifyError(groupsQuery.error instanceof Error ? groupsQuery.error.message : '그룹 목록을 불러오지 못했어.')
+      notifyError(groupsQuery.error instanceof Error ? groupsQuery.error.message : t('useHomePageData.failedToLoadGroupList'))
       return
     }
 
     if ((groupsQuery.data?.length ?? 0) === 0) {
-      notifyError('먼저 커스텀 그룹을 하나 만들어줘.')
+      notifyError(t('useHomePageData.createACustomGroupFirst'))
       return
     }
 

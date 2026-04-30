@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { cn } from '@/lib/utils'
 import type { PromptGroupRecord } from '@/types/prompt'
+import { useI18n } from '@/i18n'
 import { PromptTree } from './prompt-tree'
 
 interface PromptSidebarProps {
@@ -49,29 +50,31 @@ export function PromptSidebar({
   canMoveGroupUp = false,
   canMoveGroupDown = false,
 }: PromptSidebarProps) {
+  const { t, formatNumber } = useI18n()
+
   return (
     <ExplorerSidebar
       title="Groups"
-      badge={<Badge variant="outline">{groups.length}</Badge>}
+      badge={<Badge variant="outline">{formatNumber(groups.length)}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:prompts:sidebar-locked"
       className={cn('sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}
       bodyClassName="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
       headerExtra={
         <div className="flex flex-wrap justify-end gap-2 border-b border-white/5 pb-3">
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} aria-label="상태" title="상태">
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenSummary?.()} disabled={!onOpenSummary} aria-label={t('prompts.components.prompt.sidebar.status')} title={t('prompts.components.prompt.sidebar.status')}>
             <BarChart3 className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenCollect?.()} disabled={!onOpenCollect || !canCollect} aria-label="수동 수집" title={canCollect ? '수동 수집' : 'Auto에서는 수동 수집 불가'}>
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenCollect?.()} disabled={!onOpenCollect || !canCollect} aria-label={t('prompts.components.prompt.sidebar.manual.collect')} title={canCollect ? t('prompts.components.prompt.sidebar.manual.collect') : t('prompts.components.prompt.sidebar.manual.collect.is.not.available.for.auto')}>
             <Wrench className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} aria-label="그룹 추가" title="그룹 추가">
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} aria-label={t('prompts.components.prompt.sidebar.add.group')} title={t('prompts.components.prompt.sidebar.add.group')}>
             <FolderPlus className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onExportGroups?.()} disabled={!onExportGroups} aria-label="내보내기" title="내보내기">
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onExportGroups?.()} disabled={!onExportGroups} aria-label={t('prompts.components.prompt.sidebar.export')} title={t('prompts.components.prompt.sidebar.export')}>
             <Download className="h-4 w-4" />
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onImportGroups?.()} disabled={!onImportGroups} aria-label="가져오기" title="가져오기">
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onImportGroups?.()} disabled={!onImportGroups} aria-label={t('prompts.components.prompt.sidebar.import')} title={t('prompts.components.prompt.sidebar.import')}>
             <Upload className="h-4 w-4" />
           </Button>
         </div>
@@ -87,7 +90,7 @@ export function PromptSidebar({
 
       {groupsError ? (
         <Alert variant="destructive">
-          <AlertTitle>그룹을 불러오지 못했어</AlertTitle>
+          <AlertTitle>{t('prompts.components.prompt.sidebar.failed.to.load.groups')}</AlertTitle>
           <AlertDescription>{groupsError}</AlertDescription>
         </Alert>
       ) : null}
@@ -98,16 +101,16 @@ export function PromptSidebar({
 
           <div className="border-t border-white/5 pt-3">
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp} aria-label="위로 이동" title="위로 이동">
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp || !canMoveGroupUp} aria-label={t('prompts.components.prompt.sidebar.move.up')} title={t('prompts.components.prompt.sidebar.move.up')}>
                 <ChevronUp className="h-4 w-4" />
               </Button>
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown} aria-label="아래로 이동" title="아래로 이동">
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown || !canMoveGroupDown} aria-label={t('prompts.components.prompt.sidebar.move.down')} title={t('prompts.components.prompt.sidebar.move.down')}>
                 <ChevronDown className="h-4 w-4" />
               </Button>
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0} aria-label="편집" title="편집">
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onEditGroup?.()} disabled={!onEditGroup || selectedGroupId == null || selectedGroupId === 0} aria-label={t('prompts.components.prompt.sidebar.edit')} title={t('prompts.components.prompt.sidebar.edit')}>
                 <Pencil className="h-4 w-4" />
               </Button>
-              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0} aria-label="삭제" title="삭제">
+              <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup || selectedGroupId == null || selectedGroupId === 0} aria-label={t('prompts.components.prompt.sidebar.delete')} title={t('prompts.components.prompt.sidebar.delete')}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>

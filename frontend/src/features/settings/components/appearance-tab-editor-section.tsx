@@ -8,16 +8,18 @@ import {
   type AppearanceEditorTab,
   type AppearanceTabEditorSectionProps,
 } from './appearance-tab-editor-shared'
+import { useI18n } from '@/i18n'
 
 /** Render the tabbed appearance editor while delegating each tab to focused content components. */
 export function AppearanceTabEditorSection(props: AppearanceTabEditorSectionProps) {
+  const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<AppearanceEditorTab>('general')
 
   return (
     <div className="space-y-6">
       <SegmentedTabBar
         value={activeTab}
-        items={APPEARANCE_EDITOR_TABS}
+        items={APPEARANCE_EDITOR_TABS.map((item) => ({ ...item, label: t(item.label) }))}
         onChange={(nextTab) => setActiveTab(nextTab as AppearanceEditorTab)}
         size="xs"
         className="border-white/5"

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, ExternalLink, RefreshCcw, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
@@ -71,6 +72,7 @@ export function ImageViewModalActions({
   onViewNext,
 }: ImageViewModalActionsProps) {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const showCounter = totalCount > 1 && activeIndex >= 0
 
   const allowDetailNavigation = accessOptions?.allowDetailNavigation !== false
@@ -84,22 +86,22 @@ export function ImageViewModalActions({
 
   const navigationButtons = (
     <>
-      <Button size="icon-sm" variant="secondary" onClick={onClose} aria-label="닫기" title="닫기">
+      <Button size="icon-sm" variant="secondary" onClick={onClose} aria-label={t('images.components.detail.image.view.modal.actions.close')} title={t('images.components.detail.image.view.modal.actions.close')}>
         <X className="h-4 w-4" />
       </Button>
-      <Button size="icon-sm" variant="outline" onClick={onViewPrevious} disabled={!canViewPrevious} aria-label="이전 이미지" title="이전 이미지">
+      <Button size="icon-sm" variant="outline" onClick={onViewPrevious} disabled={!canViewPrevious} aria-label={t('images.components.detail.image.view.modal.actions.previous.images')} title={t('images.components.detail.image.view.modal.actions.previous.images')}>
         <ChevronLeft className="h-4 w-4" />
       </Button>
-      <Button size="icon-sm" variant="outline" onClick={onViewNext} disabled={!canViewNext} aria-label="다음 이미지" title="다음 이미지">
+      <Button size="icon-sm" variant="outline" onClick={onViewNext} disabled={!canViewNext} aria-label={t('images.components.detail.image.view.modal.actions.next.images')} title={t('images.components.detail.image.view.modal.actions.next.images')}>
         <ChevronRight className="h-4 w-4" />
       </Button>
       {showCounter ? <div className="px-2 text-xs text-muted-foreground">{activeIndex + 1} / {totalCount}</div> : null}
       {allowDetailNavigation ? (
-        <Button size="icon-sm" variant="outline" onClick={openDetailPage} aria-label="상세 페이지 열기" title="상세 페이지">
+        <Button size="icon-sm" variant="outline" onClick={openDetailPage} aria-label={t('images.components.detail.image.view.modal.actions.open.detail.page')} title={t('images.components.detail.image.view.modal.actions.detail.page')}>
           <ExternalLink className="h-4 w-4" />
         </Button>
       ) : null}
-      <Button size="icon-sm" variant="outline" onClick={controls.refresh} disabled={controls.isRefreshing} aria-label="새로고침" title="새로고침">
+      <Button size="icon-sm" variant="outline" onClick={controls.refresh} disabled={controls.isRefreshing} aria-label={t('images.components.detail.image.view.modal.actions.refresh')} title={t('images.components.detail.image.view.modal.actions.refresh')}>
         <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
       </Button>
     </>

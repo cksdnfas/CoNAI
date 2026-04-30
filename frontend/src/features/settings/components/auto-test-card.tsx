@@ -10,6 +10,7 @@ import type { ImageRecord } from '@/types/image'
 import { formatFileSize } from '../settings-utils'
 import { EnhancedVideoPlayer } from '@/features/images/components/detail/enhanced-video-player'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsValueTile } from './settings-primitives'
+import { useI18n } from '@/i18n'
 
 interface AutoTestCardProps {
   heading: ReactNode
@@ -44,6 +45,7 @@ export function AutoTestCard({
   isRunningTaggerAutoTest,
   isRunningKaloscopeAutoTest,
 }: AutoTestCardProps) {
+  const { t } = useI18n()
   const extractedPromptCards = autoTestImage ? getImageExtractedPromptCards(autoTestImage) : []
 
   return (
@@ -77,15 +79,15 @@ export function AutoTestCard({
                   className="aspect-square w-full object-cover"
                 />
               ) : (
-                <div className="flex aspect-square items-center justify-center px-4 text-sm text-muted-foreground">미리보기를 준비하지 못했어.</div>
+                <div className="flex aspect-square items-center justify-center px-4 text-sm text-muted-foreground">{t({ ko: '미리보기를 준비하지 못했어.', en: 'Could not prepare a preview.' })}</div>
               )}
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <SettingsValueTile label="type" value={autoTestMedia.fileType ?? '—'} />
-              <SettingsValueTile label="file" value={autoTestMedia.fileName ?? '—'} valueClassName="break-all" />
-              <SettingsValueTile label="exists" value={autoTestMedia.existsOnDisk ? 'yes' : 'no'} />
-              <SettingsValueTile label="size" value={formatFileSize(autoTestMedia.fileSize)} />
+              <SettingsValueTile label={t({ ko: '타입', en: 'Type' })} value={autoTestMedia.fileType ?? '—'} />
+              <SettingsValueTile label={t({ ko: '파일', en: 'File' })} value={autoTestMedia.fileName ?? '—'} valueClassName="break-all" />
+              <SettingsValueTile label={t({ ko: '존재 여부', en: 'Exists' })} value={autoTestMedia.existsOnDisk ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })} />
+              <SettingsValueTile label={t({ ko: '크기', en: 'Size' })} value={formatFileSize(autoTestMedia.fileSize)} />
               <SettingsValueTile
                 label="hash"
                 value={autoTestMedia.compositeHash}
@@ -103,13 +105,13 @@ export function AutoTestCard({
         </div>
       ) : (
         <SettingsInsetBlock className="text-sm text-muted-foreground">
-          해시를 확인하거나 랜덤으로 하나 골라줘. 파일이 실제로 확인된 대상만 테스트 버튼이 열려.
+          {t({ ko: '해시를 확인하거나 랜덤으로 하나 골라줘. 파일이 실제로 확인된 대상만 테스트 버튼이 열려.', en: 'Check a hash or pick one at random. Test buttons unlock only for files that are verified on disk.' })}
         </SettingsInsetBlock>
       )}
 
       {isLoadingAutoTestImage ? (
         <SettingsInsetBlock className="text-sm text-muted-foreground">
-          추출 프롬프트를 불러오는 중이야…
+          {t({ ko: '추출 프롬프트를 불러오는 중이야…', en: 'Loading extracted prompts…' })}
         </SettingsInsetBlock>
       ) : null}
 
@@ -124,10 +126,10 @@ export function AutoTestCard({
 
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={onRunTaggerAutoTest} disabled={!autoTestMedia?.existsOnDisk || isRunningTaggerAutoTest}>
-          {isRunningTaggerAutoTest ? '태거 테스트 중…' : '태거 테스트'}
+          {isRunningTaggerAutoTest ? t({ ko: '태거 테스트 중…', en: 'Running tagger test…' }) : t({ ko: '태거 테스트', en: 'Tagger test' })}
         </Button>
         <Button size="sm" variant="outline" onClick={onRunKaloscopeAutoTest} disabled={!autoTestMedia?.existsOnDisk || isRunningKaloscopeAutoTest}>
-          {isRunningKaloscopeAutoTest ? 'Kaloscope 테스트 중…' : 'Kaloscope 테스트'}
+          {isRunningKaloscopeAutoTest ? t({ ko: 'Kaloscope 테스트 중…', en: 'Running Kaloscope test…' }) : t({ ko: 'Kaloscope 테스트', en: 'Kaloscope test' })}
         </Button>
       </div>
 

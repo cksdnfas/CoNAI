@@ -1,51 +1,57 @@
+import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 
-/** Render the shared Korean status label for queue rows and widgets. */
-export function getGenerationQueueStatusLabel(record: GenerationQueueJobRecord) {
+type Translate = (input: TranslationInput, params?: TranslationParams) => string
+type FormatNumber = (value: number) => string
+
+/** Render the shared localized status label for queue rows and widgets. */
+export function getGenerationQueueStatusLabel(record: GenerationQueueJobRecord, t: Translate) {
   if (record.cancel_requested > 0 && record.status === 'completed') {
-    return '취소 요청 후 완료'
+    return t('image-generation.components.generation.queue.ui.completed.after.cancel.request')
   }
 
   if (record.cancel_requested > 0 && record.status === 'failed') {
-    return '취소 요청 후 실패'
+    return t('image-generation.components.generation.queue.ui.failed.after.cancel.request')
   }
 
   switch (record.status) {
     case 'queued':
-      return '대기 중'
+      return t('image-generation.components.generation.queue.ui.queued')
     case 'dispatching':
-      return '전송 중'
+      return t('image-generation.components.generation.queue.ui.submitting')
     case 'running':
-      return '실행 중'
+      return t('image-generation.components.generation.queue.ui.running')
     case 'completed':
-      return '완료'
+      return t('image-generation.components.generation.queue.ui.completed')
     case 'failed':
-      return '실패'
+      return t('image-generation.components.generation.queue.ui.failed')
     case 'cancelled':
-      return '취소됨'
+      return t('image-generation.components.generation.queue.ui.canceled')
     default:
       return record.status
   }
 }
 
 /** Convert raw ETA seconds into a short Korean duration label. */
-function formatGenerationQueueEtaSeconds(value?: number | null) {
+function formatGenerationQueueEtaSeconds(value: number | null | undefined, t: Translate, formatNumber: FormatNumber) {
   if (value === undefined || value === null || value < 0) {
     return null
   }
 
   if (value < 60) {
-    return `${Math.max(1, Math.round(value))}초`
+    return t('image-generation.components.generation.queue.ui.values', { seconds: formatNumber(Math.max(1, Math.round(value))) })
   }
 
   const minutes = Math.round(value / 60)
   if (minutes < 60) {
-    return `${minutes}분`
+    return t('image-generation.components.generation.queue.ui.valuemin', { minutes: formatNumber(minutes) })
   }
 
   const hours = Math.floor(minutes / 60)
   const remainMinutes = minutes % 60
-  return remainMinutes > 0 ? `${hours}시간 ${remainMinutes}분` : `${hours}시간`
+  return remainMinutes > 0
+    ? t('image-generation.components.generation.queue.ui.valuetime.valuemin', { hours: formatNumber(hours), minutes: formatNumber(remainMinutes) })
+    : t('image-generation.components.generation.queue.ui.valuetime', { hours: formatNumber(hours) })
 }
 
 function parseQueueTimestampMs(value?: string | null) {
@@ -58,42 +64,42 @@ function parseQueueTimestampMs(value?: string | null) {
 }
 
 /** Render the short workflow label for one queue entry. */
-export function getGenerationQueueWorkflowLabel(record: GenerationQueueJobRecord) {
+export function getGenerationQueueWorkflowLabel(record: GenerationQueueJobRecord, t: Translate) {
   if (record.workflow_name && record.workflow_name.trim().length > 0) {
     return record.workflow_name.trim()
   }
 
   if (record.service_type === 'novelai') {
-    return 'NAI 생성 작업'
+    return t('image-generation.components.generation.queue.ui.nai.generation.job')
   }
 
   if (record.service_type === 'codex') {
-    return `Codex 작업 #${record.id}`
+    return t('image-generation.components.generation.queue.ui.codex.job.value', { id: record.id })
   }
 
-  return `ComfyUI 작업 #${record.id}`
+  return t('image-generation.components.generation.queue.ui.comfyui.job.value', { id: record.id })
 }
 
 /** Render the creator label for one queue entry. */
-export function getGenerationQueueRequesterLabel(record: GenerationQueueJobRecord) {
+export function getGenerationQueueRequesterLabel(record: GenerationQueueJobRecord, t: Translate) {
   if (record.requested_by_username && record.requested_by_username.trim().length > 0) {
     return record.requested_by_username.trim()
   }
 
   if (record.requested_by_account_type === 'admin') {
-    return '관리자'
+    return t('image-generation.components.generation.queue.ui.admin')
   }
 
   if (record.requested_by_account_id != null) {
-    return `계정 #${record.requested_by_account_id}`
+    return t('image-generation.components.generation.queue.ui.account.value', { id: record.requested_by_account_id })
   }
 
-  return '알 수 없음'
+  return t('image-generation.components.generation.queue.ui.unknown')
 }
 
 /** Render the short remaining-time label used beside the progress gauge. */
-export function getGenerationQueueRemainingLabel(record: GenerationQueueJobRecord) {
-  return formatGenerationQueueEtaSeconds(record.estimated_total_seconds)
+export function getGenerationQueueRemainingLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber) {
+  return formatGenerationQueueEtaSeconds(record.estimated_total_seconds, t, formatNumber)
 }
 
 /** Render progress only for jobs that actually started upstream execution. */

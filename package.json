@@ -48,6 +48,7 @@
     "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",
     "verify:no-mui-deps": "node scripts/verify-no-mui-deps.mjs --mode=warn",
     "verify:no-mui-deps:strict": "node scripts/verify-no-mui-deps.mjs --mode=strict",
+    "language:preprocess": "node scripts/language-preprocess.mjs",
     "verify:policy:active-source": "node scripts/verify-repository-audit-policy.mjs --category=active-source",
     "verify:policy:generated-artifact": "node scripts/verify-repository-audit-policy.mjs --category=generated-artifact",
     "verify:migration": "npm run verify:policy:active-source && npm run verify:no-banned-imports:phase2 && npm run verify:no-ui-signatures:active && npm run verify:no-mui-deps:strict",

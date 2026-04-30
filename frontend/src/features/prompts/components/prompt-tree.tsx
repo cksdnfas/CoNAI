@@ -1,6 +1,7 @@
 import { Folder, FolderOpen } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
+import { useI18n } from '@/i18n'
 import type { PromptGroupRecord } from '@/types/prompt'
 
 interface PromptTreeProps {
@@ -11,6 +12,8 @@ interface PromptTreeProps {
 }
 
 export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGroup }: PromptTreeProps) {
+  const { formatNumber, t } = useI18n()
+
   return (
     <div className="space-y-3">
       <button
@@ -21,7 +24,7 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
           className: 'flex items-center justify-between',
         })}
       >
-        <span>{`All prompts (${totalCount.toLocaleString('ko-KR')})`}</span>
+        <span>{t({ ko: '전체 프롬프트 ({count})', en: 'All prompts ({count})' }, { count: formatNumber(totalCount) })}</span>
       </button>
 
       <HierarchyNav
@@ -34,7 +37,7 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
         getLabel={(group) => (
           <div className="flex min-w-0 items-center justify-between gap-2">
             <span className="truncate">{group.group_name}</span>
-            <span className="shrink-0 text-xs">{(group.prompt_count ?? 0).toLocaleString('ko-KR')}</span>
+            <span className="shrink-0 text-xs">{formatNumber(group.prompt_count ?? 0)}</span>
           </div>
         )}
         sortItems={(left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name)}

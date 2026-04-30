@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, ExternalLink, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useI18n } from '@/i18n'
 import { getImage } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
@@ -58,6 +59,7 @@ function useImageViewSurfaceDetail(compositeHash: string) {
 
 /** Render the medium modal surface with a large preview and prompt summary cards. */
 export function ImageViewMediumContent({ compositeHash, renderHeader }: ImageViewSurfaceContentProps) {
+  const { t } = useI18n()
   const { imageQuery, image, renderUrl, downloadUrl, downloadName } = useImageViewSurfaceDetail(compositeHash)
   const promptSummary = image ? getImageExtractedPromptSummary(image) : null
   const positivePrompt = promptSummary?.positivePrompt || '—'
@@ -93,8 +95,8 @@ export function ImageViewMediumContent({ compositeHash, renderHeader }: ImageVie
 
       {imageQuery.isError ? (
         <Alert variant="destructive">
-          <AlertTitle>이미지 상세를 불러오지 못했어</AlertTitle>
-          <AlertDescription>{imageQuery.error instanceof Error ? imageQuery.error.message : '알 수 없는 오류가 발생했어.'}</AlertDescription>
+          <AlertTitle>{t('images.components.detail.image.view.modal.surfaces.images.details.failed.to.load')}</AlertTitle>
+          <AlertDescription>{imageQuery.error instanceof Error ? imageQuery.error.message : t('images.components.detail.image.view.modal.surfaces.an.unknown.error.occurred')}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -131,6 +133,7 @@ export function ImageViewMinimalContent({
   onViewNext,
 }: ImageViewMinimalContentProps) {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const { imageQuery, image, renderUrl, downloadUrl, downloadName } = useImageViewSurfaceDetail(compositeHash)
   const showCounter = totalCount > 1 && activeIndex >= 0
   const overlayButtonClassName = 'border-white/14 bg-black/42 text-white hover:bg-black/60 hover:text-white'
@@ -139,7 +142,7 @@ export function ImageViewMinimalContent({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="이미지 보기"
+      aria-label={t('images.components.detail.image.view.modal.surfaces.view.image')}
       className="relative h-full w-full bg-black"
       onMouseDown={(event) => event.stopPropagation()}
     >
@@ -147,13 +150,13 @@ export function ImageViewMinimalContent({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={onClose} aria-label="닫기" title="닫기">
+              <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={onClose} aria-label={t('images.components.detail.image.view.modal.surfaces.close')} title={t('images.components.detail.image.view.modal.surfaces.close')}>
                 <X className="h-4 w-4" />
               </Button>
-              <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={onViewPrevious} disabled={!canViewPrevious} aria-label="이전 이미지" title="이전 이미지">
+              <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={onViewPrevious} disabled={!canViewPrevious} aria-label={t('images.components.detail.image.view.modal.surfaces.previous.images')} title={t('images.components.detail.image.view.modal.surfaces.previous.images')}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={onViewNext} disabled={!canViewNext} aria-label="다음 이미지" title="다음 이미지">
+              <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={onViewNext} disabled={!canViewNext} aria-label={t('images.components.detail.image.view.modal.surfaces.next.images')} title={t('images.components.detail.image.view.modal.surfaces.next.images')}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
               {showCounter ? <div className="px-2 text-xs text-white/72">{activeIndex + 1} / {totalCount}</div> : null}
@@ -174,8 +177,8 @@ export function ImageViewMinimalContent({
                 navigate(`/images/${compositeHash}`)
                 onClose()
               }}
-              aria-label="상세 페이지 열기"
-              title="상세 페이지"
+              aria-label={t('images.components.detail.image.view.modal.surfaces.open.detail.page')}
+              title={t('images.components.detail.image.view.modal.surfaces.detail.page')}
             >
               <ExternalLink className="h-4 w-4" />
             </Button>
@@ -185,8 +188,8 @@ export function ImageViewMinimalContent({
                 size="icon-sm"
                 variant="outline"
                 className={overlayButtonClassName}
-                ariaLabel="다운로드"
-                title="다운로드"
+                ariaLabel={t('images.components.detail.image.view.modal.surfaces.download')}
+                title={t('images.components.detail.image.view.modal.surfaces.download')}
               />
             ) : null}
           </div>
@@ -197,8 +200,8 @@ export function ImageViewMinimalContent({
         {imageQuery.isLoading ? <Skeleton className="h-[68vh] w-full max-w-5xl rounded-sm bg-white/8" /> : null}
         {imageQuery.isError ? (
           <Alert variant="destructive" className="mx-auto max-w-xl">
-            <AlertTitle>이미지를 불러오지 못했어</AlertTitle>
-            <AlertDescription>{imageQuery.error instanceof Error ? imageQuery.error.message : '알 수 없는 오류가 발생했어.'}</AlertDescription>
+            <AlertTitle>{t('images.components.detail.image.view.modal.surfaces.images.failed.to.load')}</AlertTitle>
+            <AlertDescription>{imageQuery.error instanceof Error ? imageQuery.error.message : t('images.components.detail.image.view.modal.surfaces.an.unknown.error.occurred')}</AlertDescription>
           </Alert>
         ) : null}
         {!imageQuery.isLoading && !imageQuery.isError && image ? (

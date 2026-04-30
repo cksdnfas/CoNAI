@@ -3,6 +3,7 @@ import { Download } from 'lucide-react'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import type { ImageDownloadType } from '@/lib/api'
 import { ImageDownloadOptionMenu } from './image-download-option-menu'
 
@@ -34,18 +35,19 @@ export function ImageSelectionBar({
 }: ImageSelectionBarProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLSpanElement | null>(null)
+  const { t, formatNumber } = useI18n()
   const downloadLabel = isDownloading
-    ? '다운로드 준비 중'
+    ? t('images.components.image.selection.bar.preparing.download')
     : downloadableCount > 1
-      ? 'ZIP 다운로드'
-      : '다운로드'
+      ? t('images.components.image.selection.bar.zip.download')
+      : t('images.components.image.selection.bar.download')
 
   return (
     <SelectionActionBar
       selectedCount={selectedCount}
       description={statusText ?? (downloadableCount > 0
-        ? `${downloadableCount.toLocaleString('ko-KR')}개 다운로드 가능`
-        : '다운로드 가능한 항목이 없어')}
+        ? t('images.components.image.selection.bar.value.downloadable', { count: formatNumber(downloadableCount) })
+        : t('images.components.image.selection.bar.no.downloadable.items'))}
       onClear={onClear}
       compactActions
       actions={(

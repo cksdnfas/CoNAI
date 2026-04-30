@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FolderPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { addImageToGroup, getGroupsHierarchyAll } from '@/lib/api'
 import type { ImageRecord } from '@/types/image'
@@ -15,6 +16,7 @@ interface ImageGroupAssignActionProps {
 export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const compositeHash = image?.composite_hash ?? null
 
@@ -38,7 +40,7 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
       ])
     },
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : '이미지를 그룹에 추가하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('images.components.detail.image.group.assign.action.failed.to.add.the.image.to.the'), tone: 'error' })
     },
   })
 
@@ -52,17 +54,17 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
     }
 
     if (groupsQuery.isFetching) {
-      showSnackbar({ message: '커스텀 그룹 목록을 불러오는 중이야.', tone: 'info' })
+      showSnackbar({ message: t('images.components.detail.image.group.assign.action.loading.custom.groups'), tone: 'info' })
       return
     }
 
     let groups = groupsQuery.data ?? null
     if (!groups) {
-      showSnackbar({ message: '커스텀 그룹 목록을 불러오는 중이야.', tone: 'info' })
+      showSnackbar({ message: t('images.components.detail.image.group.assign.action.loading.custom.groups'), tone: 'info' })
       const result = await groupsQuery.refetch()
 
       if (result.error) {
-        showSnackbar({ message: result.error instanceof Error ? result.error.message : '그룹 목록을 불러오지 못했어.', tone: 'error' })
+        showSnackbar({ message: result.error instanceof Error ? result.error.message : t('images.components.detail.image.group.assign.action.failed.to.load.groups'), tone: 'error' })
         return
       }
 
@@ -70,7 +72,7 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
     }
 
     if (groups.length === 0) {
-      showSnackbar({ message: '먼저 커스텀 그룹을 하나 만들어줘.', tone: 'error' })
+      showSnackbar({ message: t('images.components.detail.image.group.assign.action.create.a.custom.group.first'), tone: 'error' })
       return
     }
 
@@ -79,7 +81,7 @@ export function ImageGroupAssignAction({ image }: ImageGroupAssignActionProps) {
 
   return (
     <>
-      <Button size="icon-sm" variant="outline" onClick={() => void handleOpenModal()} disabled={assignMutation.isPending || groupsQuery.isFetching} aria-label="그룹에 추가" title="그룹에 추가">
+      <Button size="icon-sm" variant="outline" onClick={() => void handleOpenModal()} disabled={assignMutation.isPending || groupsQuery.isFetching} aria-label={t('images.components.detail.image.group.assign.action.add.to.group')} title={t('images.components.detail.image.group.assign.action.add.to.group')}>
         <FolderPlus className="h-4 w-4" />
       </Button>
 

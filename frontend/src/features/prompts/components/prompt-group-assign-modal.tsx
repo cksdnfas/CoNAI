@@ -7,6 +7,7 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { buildPromptGroupOptionItems } from '@/features/prompts/prompt-group-option-utils'
 import type { PromptGroupRecord } from '@/types/prompt'
+import { useI18n } from '@/i18n'
 
 interface PromptGroupAssignModalProps {
   open: boolean
@@ -24,6 +25,7 @@ export function PromptGroupAssignModal({
   onClose,
   onSubmit,
 }: PromptGroupAssignModalProps) {
+  const { t, formatNumber } = useI18n()
   const groupOptions = useMemo(() => buildPromptGroupOptionItems(groups), [groups])
   const [selectedGroupId, setSelectedGroupId] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
@@ -41,7 +43,7 @@ export function PromptGroupAssignModal({
     event.preventDefault()
 
     if (!selectedGroupId) {
-      setFormError('먼저 이동할 그룹을 골라줘.')
+      setFormError(t('prompts.components.prompt.group.assign.modal.choose.a.destination.group.first'))
       return
     }
 
@@ -53,20 +55,20 @@ export function PromptGroupAssignModal({
     <SettingsModal
       open={open}
       onClose={onClose}
-      title="선택 프롬프트 그룹 지정"
+      title={t('prompts.components.prompt.group.assign.modal.assign.selected.prompts.to.a.group')}
       widthClassName="max-w-xl"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
-            <AlertTitle>확인이 필요해</AlertTitle>
+            <AlertTitle>{t('prompts.components.prompt.group.assign.modal.confirmation.required')}</AlertTitle>
             <AlertDescription>{formError}</AlertDescription>
           </Alert>
         ) : null}
 
         <SettingsModalBody className="space-y-5">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">대상 그룹</p>
+            <p className="text-sm font-medium text-foreground">{t('prompts.components.prompt.group.assign.modal.target.group')}</p>
             <HierarchyPicker
               items={groups}
               selectedId={selectedGroupId ? Number(selectedGroupId) : null}
@@ -76,7 +78,7 @@ export function PromptGroupAssignModal({
               getLabel={(group) => (
                 <div className="flex min-w-0 items-center justify-between gap-2">
                   <span className="truncate">{group.group_name}</span>
-                  <span className="shrink-0 text-xs">{(group.prompt_count ?? 0).toLocaleString('ko-KR')}</span>
+                  <span className="shrink-0 text-xs">{formatNumber(group.prompt_count ?? 0)}</span>
                 </div>
               )}
               sortItems={(left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name)}
@@ -87,10 +89,10 @@ export function PromptGroupAssignModal({
 
           <SettingsModalFooter>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              취소
+              {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="submit" disabled={isSubmitting || groupOptions.length === 0}>
-              {isSubmitting ? '적용 중…' : '그룹 지정'}
+              {isSubmitting ? t('prompts.components.prompt.group.assign.modal.applying') : t('prompts.components.prompt.group.assign.modal.assign.group')}
             </Button>
           </SettingsModalFooter>
         </SettingsModalBody>

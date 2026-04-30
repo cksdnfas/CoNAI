@@ -14,14 +14,11 @@ import { BackupSourceCard } from './backup-source-card'
 import { BackupSourceListItem } from './backup-source-list-item'
 import { BackupSourceCreateForm } from './backup-source-create-form'
 import { SettingsModal } from './settings-modal'
+import { useI18n } from '@/i18n'
 
 const WATCHED_FOLDER_TABLE_GRID = 'grid-cols-[minmax(180px,1.05fr)_minmax(420px,2.4fr)_72px_72px_56px] gap-3'
 const BACKUP_SOURCE_TABLE_GRID = 'grid-cols-[minmax(180px,0.95fr)_minmax(280px,1.55fr)_minmax(240px,1.25fr)_72px_72px_56px] gap-3'
 const SCAN_LOG_TABLE_GRID = 'grid-cols-[minmax(180px,1fr)_120px_88px_88px_88px_88px_120px] gap-3'
-
-function formatTableNumber(value: number | null | undefined) {
-  return (value ?? 0).toLocaleString('ko-KR')
-}
 
 interface FoldersTabProps {
   newFolder: NewWatchedFolderDraft
@@ -106,6 +103,7 @@ export function FoldersTab({
   scanLogsLoading,
   watchersHealth,
 }: FoldersTabProps) {
+  const { t, locale, formatNumber } = useI18n()
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
   const [selectedBackupSourceId, setSelectedBackupSourceId] = useState<number | null>(null)
   const [isAddFolderModalOpen, setIsAddFolderModalOpen] = useState(false)
@@ -152,10 +150,10 @@ export function FoldersTab({
     <>
       <div className="space-y-6">
         <SettingsSection
-          heading="감시 폴더 운영"
+          heading={t({ ko: '감시 폴더 운영', en: 'Watched folder operations' })}
           actions={
             <>
-              <Button size="icon-sm" variant="outline" onClick={onRefresh} aria-label="새로고침" title="새로고침">
+              <Button size="icon-sm" variant="outline" onClick={onRefresh} aria-label={t({ ko: '새로고침', en: 'Refresh' })} title={t({ ko: '새로고침', en: 'Refresh' })}>
                 <RefreshCcw className="h-4 w-4" />
               </Button>
               <Button
@@ -163,24 +161,24 @@ export function FoldersTab({
                 variant="outline"
                 onClick={onVerifyAllFiles}
                 disabled={isVerifyingAllFiles}
-                aria-label="전체 파일 검증"
-                title="전체 파일 검증"
+                aria-label={t({ ko: '전체 파일 검증', en: 'Verify all files' })}
+                title={t({ ko: '전체 파일 검증', en: 'Verify all files' })}
               >
                 <ShieldCheck className="h-4 w-4" />
               </Button>
-              <Button size="icon-sm" onClick={onScanAll} aria-label="전체 스캔" title="전체 스캔">
+              <Button size="icon-sm" onClick={onScanAll} aria-label={t({ ko: '전체 스캔', en: 'Full scan' })} title={t({ ko: '전체 스캔', en: 'Full scan' })}>
                 <ScanSearch className="h-4 w-4" />
               </Button>
             </>
           }
         >
           <div className="grid gap-3 text-sm md:grid-cols-6">
-            <SettingsValueTile label="folders" value={folders.length} valueClassName="text-xl" />
-            <SettingsValueTile label="backup sources" value={backupSources.length} valueClassName="text-xl" />
-            <SettingsValueTile label="watching" value={watchersHealth?.watching ?? 0} valueClassName="text-xl" />
-            <SettingsValueTile label="errors" value={watchersHealth?.error ?? 0} valueClassName="text-xl" />
-            <SettingsValueTile label="events 24h" value={watchersHealth?.totalEvents24h ?? 0} valueClassName="text-xl" />
-            <SettingsValueTile label="latest scan log" value={scanLogs[0]?.folder_name ?? '—'} />
+            <SettingsValueTile label={t({ ko: '폴더', en: 'Folders' })} value={formatNumber(folders.length)} valueClassName="text-xl" />
+            <SettingsValueTile label={t({ ko: '백업 소스', en: 'Backup sources' })} value={formatNumber(backupSources.length)} valueClassName="text-xl" />
+            <SettingsValueTile label={t({ ko: '감시 중', en: 'Watching' })} value={formatNumber(watchersHealth?.watching ?? 0)} valueClassName="text-xl" />
+            <SettingsValueTile label={t({ ko: '오류', en: 'Errors' })} value={formatNumber(watchersHealth?.error ?? 0)} valueClassName="text-xl" />
+            <SettingsValueTile label={t({ ko: '24시간 이벤트', en: 'Events 24h' })} value={formatNumber(watchersHealth?.totalEvents24h ?? 0)} valueClassName="text-xl" />
+            <SettingsValueTile label={t({ ko: '최근 스캔 로그', en: 'Latest scan log' })} value={scanLogs[0]?.folder_name ?? '—'} />
           </div>
         </SettingsSection>
 
@@ -195,21 +193,21 @@ export function FoldersTab({
 
           {foldersError ? (
             <Alert variant="destructive">
-              <AlertTitle>감시 폴더를 불러오지 못했어</AlertTitle>
+              <AlertTitle>{t({ ko: '감시 폴더를 불러오지 못했어', en: 'Could not load watched folders' })}</AlertTitle>
               <AlertDescription>{foldersError}</AlertDescription>
             </Alert>
           ) : null}
 
           {!foldersLoading && !foldersError ? (
             <SettingsSection
-              heading="등록된 감시 폴더"
+              heading={t({ ko: '등록된 감시 폴더', en: 'Registered watched folders' })}
               actions={
                 <Button
                   type="button"
                   size="icon-sm"
                   onClick={() => setIsAddFolderModalOpen(true)}
-                  aria-label="감시 폴더 추가"
-                  title="감시 폴더 추가"
+                  aria-label={t({ ko: '감시 폴더 추가', en: 'Add watched folder' })}
+                  title={t({ ko: '감시 폴더 추가', en: 'Add watched folder' })}
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
@@ -220,7 +218,7 @@ export function FoldersTab({
                 <SettingsResourceTable
                   gridClassName={WATCHED_FOLDER_TABLE_GRID}
                   minWidthClassName="min-w-[860px]"
-                  headers={['이름', '경로', '활성', '감시', '']}
+                  headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '경로', en: 'Path' }), t({ ko: '활성', en: 'Active' }), t({ ko: '감시', en: 'Watcher' }), '']}
                 >
                   {folders.map((folder) => (
                     <WatchedFolderListItem
@@ -234,7 +232,7 @@ export function FoldersTab({
                   ))}
                 </SettingsResourceTable>
               ) : (
-                <div className="px-4 py-6 text-sm text-muted-foreground">등록된 감시 폴더가 없어.</div>
+                <div className="px-4 py-6 text-sm text-muted-foreground">{t({ ko: '등록된 감시 폴더가 없어.', en: 'No registered watched folders yet.' })}</div>
               )}
             </SettingsSection>
           ) : null}
@@ -251,21 +249,21 @@ export function FoldersTab({
 
           {backupSourcesError ? (
             <Alert variant="destructive">
-              <AlertTitle>백업 소스를 불러오지 못했어</AlertTitle>
+              <AlertTitle>{t({ ko: '백업 소스를 불러오지 못했어', en: 'Could not load backup sources' })}</AlertTitle>
               <AlertDescription>{backupSourcesError}</AlertDescription>
             </Alert>
           ) : null}
 
           {!backupSourcesLoading && !backupSourcesError ? (
             <SettingsSection
-              heading="등록된 백업 소스"
+              heading={t({ ko: '등록된 백업 소스', en: 'Registered backup sources' })}
               actions={
                 <Button
                   type="button"
                   size="icon-sm"
                   onClick={() => setIsAddBackupSourceModalOpen(true)}
-                  aria-label="백업 소스 추가"
-                  title="백업 소스 추가"
+                  aria-label={t({ ko: '백업 소스 추가', en: 'Add backup source' })}
+                  title={t({ ko: '백업 소스 추가', en: 'Add backup source' })}
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
@@ -276,7 +274,7 @@ export function FoldersTab({
                 <SettingsResourceTable
                   gridClassName={BACKUP_SOURCE_TABLE_GRID}
                   minWidthClassName="min-w-[1120px]"
-                  headers={['이름', '원본 경로', '대상', '활성', '감시', '']}
+                  headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '원본 경로', en: 'Source path' }), t({ ko: '대상', en: 'Target' }), t({ ko: '활성', en: 'Active' }), t({ ko: '감시', en: 'Watcher' }), '']}
                 >
                   {backupSources.map((source) => (
                     <BackupSourceListItem
@@ -289,14 +287,14 @@ export function FoldersTab({
                   ))}
                 </SettingsResourceTable>
               ) : (
-                <div className="px-4 py-6 text-sm text-muted-foreground">등록된 백업 소스가 없어.</div>
+                <div className="px-4 py-6 text-sm text-muted-foreground">{t({ ko: '등록된 백업 소스가 없어.', en: 'No registered backup sources yet.' })}</div>
               )}
             </SettingsSection>
           ) : null}
         </section>
 
         <section className="space-y-4">
-          <SettingsSection heading="최근 스캔 로그" bodyClassName="px-0 py-0">
+          <SettingsSection heading={t({ ko: '최근 스캔 로그', en: 'Recent scan logs' })} bodyClassName="px-0 py-0">
             {scanLogsLoading ? (
               <div className="space-y-2 px-4 py-4">
                 {Array.from({ length: 5 }).map((_, index) => (
@@ -305,13 +303,13 @@ export function FoldersTab({
               </div>
             ) : null}
 
-            {!scanLogsLoading && scanLogs.length === 0 ? <p className="px-4 py-6 text-sm text-muted-foreground">최근 스캔 로그가 없어.</p> : null}
+            {!scanLogsLoading && scanLogs.length === 0 ? <p className="px-4 py-6 text-sm text-muted-foreground">{t({ ko: '최근 스캔 로그가 없어.', en: 'No recent scan logs.' })}</p> : null}
 
             {!scanLogsLoading && scanLogs.length > 0 ? (
               <SettingsResourceTable
                 gridClassName={SCAN_LOG_TABLE_GRID}
                 minWidthClassName="min-w-[980px]"
-                headers={['폴더', '상태', '스캔', '신규', '기존', '오류', '시각']}
+                headers={[t({ ko: '폴더', en: 'Folder' }), t({ ko: '상태', en: 'Status' }), t({ ko: '스캔', en: 'Scanned' }), t({ ko: '신규', en: 'New' }), t({ ko: '기존', en: 'Existing' }), t({ ko: '오류', en: 'Errors' }), t({ ko: '시각', en: 'Time' })]}
               >
                 {scanLogs.map((log) => (
                   <div key={log.id} className={`grid items-center px-4 py-3 text-sm transition-colors hover:bg-surface-high/60 ${SCAN_LOG_TABLE_GRID}`}>
@@ -320,11 +318,11 @@ export function FoldersTab({
                       {log.folder_path ? <div className="truncate font-mono text-[11px] text-muted-foreground">{log.folder_path}</div> : null}
                     </div>
                     <div className="text-center text-xs uppercase tracking-[0.14em] text-muted-foreground">{log.status}</div>
-                    <div className="text-center font-medium text-foreground">{formatTableNumber(log.total_scanned)}</div>
-                    <div className="text-center font-medium text-foreground">{formatTableNumber(log.new_images)}</div>
-                    <div className="text-center font-medium text-foreground">{formatTableNumber(log.existing_images)}</div>
-                    <div className="text-center font-medium text-foreground">{formatTableNumber(log.error_count)}</div>
-                    <div className="text-center text-xs text-muted-foreground">{formatDateTime(log.scan_date)}</div>
+                    <div className="text-center font-medium text-foreground">{formatNumber(log.total_scanned ?? 0)}</div>
+                    <div className="text-center font-medium text-foreground">{formatNumber(log.new_images ?? 0)}</div>
+                    <div className="text-center font-medium text-foreground">{formatNumber(log.existing_images ?? 0)}</div>
+                    <div className="text-center font-medium text-foreground">{formatNumber(log.error_count ?? 0)}</div>
+                    <div className="text-center text-xs text-muted-foreground">{formatDateTime(log.scan_date, locale)}</div>
                   </div>
                 ))}
               </SettingsResourceTable>
@@ -336,7 +334,7 @@ export function FoldersTab({
       <SettingsModal
         open={isAddFolderModalOpen}
         onClose={() => setIsAddFolderModalOpen(false)}
-        title="감시 폴더 추가"
+        title={t({ ko: '감시 폴더 추가', en: 'Add watched folder' })}
       >
         <WatchedFolderCreateForm
           newFolder={newFolder}
@@ -352,8 +350,8 @@ export function FoldersTab({
       <SettingsModal
         open={selectedFolder != null}
         onClose={() => setSelectedFolderId(null)}
-        title={selectedFolder ? selectedFolder.folder_name || '감시 폴더 상세' : '감시 폴더 상세'}
-        description={selectedFolder ? selectedFolder.folder_path : '감시 폴더 상세 정보와 수정'}
+        title={selectedFolder ? selectedFolder.folder_name || t({ ko: '감시 폴더 상세', en: 'Watched folder details' }) : t({ ko: '감시 폴더 상세', en: 'Watched folder details' })}
+        description={selectedFolder ? selectedFolder.folder_path : t({ ko: '감시 폴더 상세 정보와 수정', en: 'Watched folder details and editing' })}
       >
         {selectedFolder ? (
           <WatchedFolderCard
@@ -375,7 +373,7 @@ export function FoldersTab({
       <SettingsModal
         open={isAddBackupSourceModalOpen}
         onClose={() => setIsAddBackupSourceModalOpen(false)}
-        title="백업 소스 추가"
+        title={t({ ko: '백업 소스 추가', en: 'Add backup source' })}
       >
         <BackupSourceCreateForm
           newBackupSource={newBackupSource}
@@ -391,8 +389,8 @@ export function FoldersTab({
       <SettingsModal
         open={selectedBackupSource != null}
         onClose={() => setSelectedBackupSourceId(null)}
-        title={selectedBackupSource ? selectedBackupSource.display_name || '백업 소스 상세' : '백업 소스 상세'}
-        description={selectedBackupSource ? selectedBackupSource.source_path : '백업 소스 상세 정보와 수정'}
+        title={selectedBackupSource ? selectedBackupSource.display_name || t({ ko: '백업 소스 상세', en: 'Backup source details' }) : t({ ko: '백업 소스 상세', en: 'Backup source details' })}
+        description={selectedBackupSource ? selectedBackupSource.source_path : t({ ko: '백업 소스 상세 정보와 수정', en: 'Backup source details and editing' })}
       >
         {selectedBackupSource ? (
           <BackupSourceCard

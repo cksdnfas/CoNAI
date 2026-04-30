@@ -4,6 +4,7 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { TaggerModelInfo, TaggerSettings } from '@/types/settings'
 import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
+import { useI18n } from '@/i18n'
 
 interface TaggerSettingsCardProps {
   heading: ReactNode
@@ -20,6 +21,8 @@ export function TaggerSettingsCard({
   taggerModels,
   onPatchTagger,
 }: TaggerSettingsCardProps) {
+  const { t } = useI18n()
+
   return (
     <SettingsSection heading={heading} actions={actions}>
       <div className="grid gap-4 md:grid-cols-2">
@@ -27,7 +30,7 @@ export function TaggerSettingsCard({
           <>
             <SettingsToggleRow className="md:col-span-2">
               <input type="checkbox" checked={taggerDraft.enabled} onChange={(event) => onPatchTagger({ enabled: event.target.checked })} />
-              WD Tagger 활성화
+              {t({ ko: 'WD Tagger 활성화', en: 'Enable WD Tagger' })}
             </SettingsToggleRow>
 
             <SettingsToggleRow className="md:col-span-2">
@@ -36,10 +39,10 @@ export function TaggerSettingsCard({
                 checked={taggerDraft.autoTagOnUpload}
                 onChange={(event) => onPatchTagger({ autoTagOnUpload: event.target.checked })}
               />
-              업로드 시 자동 태깅
+              {t({ ko: '업로드 시 자동 태깅', en: 'Auto tag on upload' })}
             </SettingsToggleRow>
 
-            <SettingsField label="모델">
+            <SettingsField label={t({ ko: '모델', en: 'Model' })}>
               <Select variant="settings" value={taggerDraft.model} onChange={(event) => onPatchTagger({ model: event.target.value as TaggerSettings['model'] })}>
                 {taggerModels.map((model) => (
                   <option key={model.name} value={model.name}>
@@ -49,7 +52,7 @@ export function TaggerSettingsCard({
               </Select>
             </SettingsField>
 
-            <SettingsField label="디바이스">
+            <SettingsField label={t({ ko: '디바이스', en: 'Device' })}>
               <Select variant="settings" value={taggerDraft.device} onChange={(event) => onPatchTagger({ device: event.target.value as TaggerSettings['device'] })}>
                 <option value="auto">auto</option>
                 <option value="cpu">cpu</option>
@@ -75,10 +78,10 @@ export function TaggerSettingsCard({
                 checked={taggerDraft.keepModelLoaded}
                 onChange={(event) => onPatchTagger({ keepModelLoaded: event.target.checked })}
               />
-              모델 메모리 유지
+              {t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
             </SettingsToggleRow>
 
-            <SettingsField label="자동 언로드(분)">
+            <SettingsField label={t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' })}>
               <Input type="number" min={1} variant="settings" value={taggerDraft.autoUnloadMinutes} onChange={(event) => onPatchTagger({ autoUnloadMinutes: Number(event.target.value) || 1 })} />
             </SettingsField>
           </>

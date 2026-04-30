@@ -10,6 +10,7 @@ import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRo
 import { collectDescendantGroupIds } from '@/features/groups/group-option-utils'
 import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import { AutoCollectChipEditor } from './auto-collect-chip-editor'
+import { useI18n } from '@/i18n'
 
 interface GroupEditorModalProps {
   open: boolean
@@ -43,6 +44,7 @@ export function GroupEditorModal({
   onClose,
   onSubmit,
 }: GroupEditorModalProps) {
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('')
@@ -97,7 +99,7 @@ export function GroupEditorModal({
     const trimmedColor = color.trim()
 
     if (!trimmedName) {
-      setFormError('그룹 이름은 꼭 필요해.')
+      setFormError(t('groups.components.group.editor.modal.group.name.is.required'))
       return
     }
 
@@ -109,8 +111,8 @@ export function GroupEditorModal({
     if (autoCollectEnabled && autoCollectEditorState.parsedValue === undefined) {
       setFormError(
         autoCollectEditorState.mode === 'chip'
-          ? '필터를 켰다면 조건 칩을 하나 이상 넣어줘야 해.'
-          : '필터를 켰다면 조건 JSON도 같이 넣어줘야 해.',
+          ? t('groups.components.group.editor.modal.add.at.least.one.condition.chip.when')
+          : t('groups.components.group.editor.modal.add.condition.json.when.filtering.is.enabled'),
       )
       return
     }
@@ -132,24 +134,24 @@ export function GroupEditorModal({
     <SettingsModal
       open={open}
       onClose={onClose}
-      title={mode === 'create' ? '커스텀 그룹 만들기' : '커스텀 그룹 편집'}
+      title={mode === 'create' ? t('groups.components.group.editor.modal.custom.group') : t('groups.components.group.editor.modal.custom.groups.edit')}
       widthClassName="max-w-3xl"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
-            <AlertTitle>입력 확인이 필요해</AlertTitle>
+            <AlertTitle>{t('groups.components.group.editor.modal.check.your.input')}</AlertTitle>
             <AlertDescription>{formError}</AlertDescription>
           </Alert>
         ) : null}
 
         <SettingsModalBody className="space-y-5">
           <div className="space-y-5">
-            <SettingsField label="그룹명">
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="예: 컨셉 아트 / 캐릭터 / 즐겨찾기" />
+            <SettingsField label={t('groups.components.group.editor.modal.group.name')}>
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('groups.components.group.editor.modal.e.g.concept.art.characters.favorites')} />
             </SettingsField>
 
-            <SettingsField label="설명">
+            <SettingsField label={t('groups.components.group.editor.modal.description')}>
               <Textarea
                 rows={3}
                 value={description}
@@ -158,7 +160,7 @@ export function GroupEditorModal({
             </SettingsField>
 
             <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">그룹 위치</p>
+              <p className="text-sm font-medium text-foreground">{t('groups.components.group.editor.modal.group.location')}</p>
               <HierarchyPicker
                 items={parentGroups}
                 selectedId={parentValue === 'root' ? null : Number(parentValue)}
@@ -174,24 +176,24 @@ export function GroupEditorModal({
 
             <div className="space-y-3">
               <SettingsToggleRow className="justify-between">
-                <p className="text-sm font-medium text-foreground">필터 적용</p>
+                <p className="text-sm font-medium text-foreground">{t('groups.components.group.editor.modal.filter.apply')}</p>
                 <input type="checkbox" checked={autoCollectEnabled} onChange={(event) => setAutoCollectEnabled(event.target.checked)} />
               </SettingsToggleRow>
 
               {autoCollectEnabled ? <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} /> : null}
             </div>
 
-            <SettingsField label="대표 색상">
+            <SettingsField label={t('groups.components.group.editor.modal.accent.color')}>
               <Input value={color} onChange={(event) => setColor(event.target.value)} placeholder="#7c3aed" />
             </SettingsField>
           </div>
 
           <SettingsModalFooter>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              취소
+              {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? '저장 중…' : mode === 'create' ? '그룹 만들기' : '변경 저장'}
+              {isSubmitting ? t('groups.components.group.editor.modal.saving') : mode === 'create' ? t('groups.components.group.editor.modal.create.group') : t('groups.components.group.editor.modal.save.changes')}
             </Button>
           </SettingsModalFooter>
         </SettingsModalBody>

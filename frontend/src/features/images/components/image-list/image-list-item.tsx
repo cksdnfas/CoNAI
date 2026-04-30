@@ -3,6 +3,7 @@ import { ImagePreviewMedia } from '@/features/images/components/image-preview-me
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
 import { ImageEditAction } from '@/features/images/components/detail/image-edit-action'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { ImageListVideoPreview } from './image-list-video-preview'
@@ -50,6 +51,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   interactive = true,
   blurPreview = false,
 }: ImageListItemProps) {
+  const { t } = useI18n()
   const previewUrl = getImageListPreviewUrl(image)
   const imageId = itemId ?? getImageListItemId(image)
   const displayName = getImageListDisplayName(image)
@@ -73,7 +75,12 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     hasPreviewUrl: Boolean(previewUrl),
     hasPreviewError,
   })
-  const placeholderLabel = getImagePreviewStateLabel(previewState)
+  const placeholderLabel = getImagePreviewStateLabel(previewState, t('images.components.image.preview.state.no.preview'), {
+    empty: t('images.components.image.preview.state.no.preview'),
+    processing: t('images.components.image.preview.state.active'),
+    failed: t('images.components.image.preview.state.failed'),
+    unavailable: t('images.components.image.preview.state.unavailable'),
+  })
 
   const content = previewUrl && !hasPreviewError ? (
     mediaKind === 'video' ? (
@@ -140,7 +147,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       )}
       data-image-id={imageId}
       data-selected={selected ? 'true' : 'false'}
-      aria-label={interactive ? `${displayName} ${selectionMode ? 'select' : 'detail'}` : displayName}
+      aria-label={interactive ? `${displayName} ${selectionMode ? t({ ko: '선택', en: 'select' }) : t({ ko: '상세', en: 'detail' })}` : displayName}
       aria-pressed={selected}
       draggable={false}
       onDragStart={preventNativeDrag}

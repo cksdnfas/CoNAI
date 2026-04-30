@@ -11,6 +11,7 @@ import {
   type AutoTestTaggerResult,
 } from '@/lib/api'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
+import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import type { ImageRecord } from '@/types/image'
 import { buildMetadataRewritePatch, useMetadataRewriteDraft } from '../metadata/use-metadata-rewrite-draft'
@@ -27,6 +28,7 @@ type ManualExtractAction = 'all' | 'tagger' | 'kaloscope'
 
 export function UploadPage() {
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const extractInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -141,7 +143,7 @@ export function UploadPage() {
           return
         }
 
-        const message = error instanceof Error ? error.message : '프롬프트 추출에 실패했어.'
+        const message = error instanceof Error ? error.message : t('uploadPage.promptExtractionFailed')
         setExtractError(message)
         showSnackbar({ message, tone: 'error' })
       })
@@ -156,7 +158,7 @@ export function UploadPage() {
     return () => {
       cancelled = true
     }
-  }, [extractFile, showSnackbar])
+  }, [extractFile, showSnackbar, t])
 
   const handleRunSelectedExtract = async () => {
     await handleExtractAction(selectedExtractAction)
@@ -173,11 +175,11 @@ export function UploadPage() {
     try {
       const result = await downloadConvertedWebP(extractFile)
       const message = result.metadataState === 'preserved'
-        ? `WebP 변환 완료. 메타 보존된 파일(${result.fileName}) 다운로드를 시작했어.`
-        : `WebP 변환 완료. 파일(${result.fileName}) 다운로드를 시작했어.`
+        ? t({ ko: 'WebP 변환 완료. 메타 보존된 파일({fileName}) 다운로드를 시작했어.', en: 'WebP conversion complete. Downloading metadata-preserved file ({fileName}).' }, { fileName: result.fileName })
+        : t({ ko: 'WebP 변환 완료. 파일({fileName}) 다운로드를 시작했어.', en: 'WebP conversion complete. Downloading file ({fileName}).' }, { fileName: result.fileName })
       showSnackbar({ message, tone: 'info' })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'WebP 변환에 실패했어.'
+      const message = error instanceof Error ? error.message : t('uploadPage.webpConversionFailed')
       setExtractError(message)
       showSnackbar({ message, tone: 'error' })
     } finally {
@@ -200,11 +202,11 @@ export function UploadPage() {
       })
 
       const message = result.rewriteState === 'patched'
-        ? `메타 수정 파일(${result.fileName}) 다운로드를 시작했어. XMP ${result.xmpState}, EXIF ${result.exifState}.`
-        : `메타 보존 파일(${result.fileName}) 다운로드를 시작했어. XMP ${result.xmpState}, EXIF ${result.exifState}.`
+        ? t({ ko: '메타 수정 파일({fileName}) 다운로드를 시작했어. XMP {xmpState}, EXIF {exifState}.', en: 'Downloading metadata-edited file ({fileName}). XMP {xmpState}, EXIF {exifState}.' }, { fileName: result.fileName, xmpState: result.xmpState, exifState: result.exifState })
+        : t({ ko: '메타 보존 파일({fileName}) 다운로드를 시작했어. XMP {xmpState}, EXIF {exifState}.', en: 'Downloading metadata-preserved file ({fileName}). XMP {xmpState}, EXIF {exifState}.' }, { fileName: result.fileName, xmpState: result.xmpState, exifState: result.exifState })
       showSnackbar({ message, tone: 'info' })
     } catch (error) {
-      const message = error instanceof Error ? error.message : '메타 수정에 실패했어.'
+      const message = error instanceof Error ? error.message : t('uploadPage.metadataEditFailed')
       setExtractError(message)
       showSnackbar({ message, tone: 'error' })
     } finally {
@@ -225,7 +227,7 @@ export function UploadPage() {
         setExtractResult(null)
         const result = await extractImageMetadataPreview(extractFile)
         setExtractResult(result)
-        showSnackbar({ message: '프롬프트 추출 완료.', tone: 'info' })
+        showSnackbar({ message: t('uploadPage.promptExtractionComplete'), tone: 'info' })
         return
       }
 
@@ -233,7 +235,7 @@ export function UploadPage() {
         setTaggerResult(null)
         const result = await extractImageTaggerPreview(extractFile)
         setTaggerResult(result)
-        showSnackbar({ message: '자동 추출 완료.', tone: 'info' })
+        showSnackbar({ message: t('uploadPage.autoExtractionComplete'), tone: 'info' })
         return
       }
 
@@ -241,7 +243,7 @@ export function UploadPage() {
         setKaloscopeResult(null)
         const result = await extractImageKaloscopePreview(extractFile)
         setKaloscopeResult(result)
-        showSnackbar({ message: '작가 추출 완료.', tone: 'info' })
+        showSnackbar({ message: t('uploadPage.artistExtractionComplete'), tone: 'info' })
         return
       }
 
@@ -260,19 +262,19 @@ export function UploadPage() {
       if (promptState.status === 'fulfilled') {
         setExtractResult(promptState.value)
       } else {
-        errors.push(promptState.reason instanceof Error ? promptState.reason.message : '프롬프트 추출 실패')
+        errors.push(promptState.reason instanceof Error ? promptState.reason.message : t('uploadPage.promptExtractionFailed2'))
       }
 
       if (taggerState.status === 'fulfilled') {
         setTaggerResult(taggerState.value)
       } else {
-        errors.push(taggerState.reason instanceof Error ? taggerState.reason.message : '자동 추출 실패')
+        errors.push(taggerState.reason instanceof Error ? taggerState.reason.message : t('uploadPage.autoExtractionFailed'))
       }
 
       if (kaloscopeState.status === 'fulfilled') {
         setKaloscopeResult(kaloscopeState.value)
       } else {
-        errors.push(kaloscopeState.reason instanceof Error ? kaloscopeState.reason.message : '작가 추출 실패')
+        errors.push(kaloscopeState.reason instanceof Error ? kaloscopeState.reason.message : t('uploadPage.artistExtractionFailed'))
       }
 
       if (errors.length > 0) {
@@ -280,10 +282,10 @@ export function UploadPage() {
         setExtractError(message)
         showSnackbar({ message, tone: 'error' })
       } else {
-        showSnackbar({ message: '한번에 추출 완료.', tone: 'info' })
+        showSnackbar({ message: t('uploadPage.allExtractionComplete'), tone: 'info' })
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : '추출에 실패했어.'
+      const message = error instanceof Error ? error.message : t('uploadPage.extractionFailed')
       setExtractError(message)
       showSnackbar({ message, tone: 'error' })
     } finally {
@@ -310,7 +312,7 @@ export function UploadPage() {
       }
 
       if (!imageFile.type.startsWith('image/')) {
-        showSnackbar({ message: '이미지 파일만 미리보기할 수 있어.', tone: 'error' })
+        showSnackbar({ message: t('uploadPage.onlyImageFilesCanBe'), tone: 'error' })
         return
       }
 
@@ -320,7 +322,7 @@ export function UploadPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Upload" />
+      <PageHeader title={t('pageAccessCatalog.upload')} />
 
       <div className="space-y-6">
         <UploadPageUploadSection

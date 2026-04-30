@@ -5,6 +5,7 @@ import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { GroupRecord, GroupWithHierarchy } from '@/types/group'
+import { useI18n } from '@/i18n'
 
 interface GroupDetailHeaderCardProps {
   group: GroupRecord
@@ -42,6 +43,7 @@ export function GroupDetailHeaderCard({
   onRunAutoCollect,
   onDeleteGroup,
 }: GroupDetailHeaderCardProps) {
+  const { t, formatNumber } = useI18n()
   const moreButtonRef = useRef<HTMLButtonElement | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [actionsOpen, setActionsOpen] = useState(false)
@@ -53,21 +55,21 @@ export function GroupDetailHeaderCard({
         <>
           <Button type="button" size="sm" variant="secondary" onClick={onOpenDownload} disabled={isGroupFileCountsLoading || isDownloadingGroup}>
             <Download className="h-4 w-4" />
-            {isDownloadingGroup ? '준비 중…' : '다운로드'}
+            {isDownloadingGroup ? t('groups.components.group.detail.header.card.preparing') : t('groups.components.group.detail.header.card.download')}
           </Button>
           {isCustomSource ? (
             <>
               <Button type="button" size="sm" variant="secondary" onClick={onOpenCreateModal}>
                 <FolderPlus className="h-4 w-4" />
-                하위 그룹 추가
+                {t({ ko: '하위 그룹 추가', en: 'Add child group' })}
               </Button>
               <Button
                 ref={moreButtonRef}
                 type="button"
                 size="icon-sm"
                 variant="secondary"
-                aria-label="그룹 추가 작업"
-                title="추가 작업"
+                aria-label={t('groups.components.group.detail.header.card.group.add.actions')}
+                title={t('groups.components.group.detail.header.card.add.actions')}
                 onClick={() => setActionsOpen((open) => !open)}
               >
                 <Ellipsis className="h-4 w-4" />
@@ -81,21 +83,21 @@ export function GroupDetailHeaderCard({
                       onOpenEditModal()
                     }}>
                       <Pencil className="h-4 w-4" />
-                      편집
+                      {t({ ko: '편집', en: 'Edit' })}
                     </Button>
                     <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => {
                       setActionsOpen(false)
                       onRunAutoCollect()
                     }} disabled={isAutoCollectPending}>
                       <Play className="h-4 w-4" />
-                      {isAutoCollectPending ? '자동수집 실행 중…' : '자동수집 실행'}
+                      {isAutoCollectPending ? t('groups.components.group.detail.header.card.auto.collecting') : t('groups.components.group.detail.header.card.run.auto.collect')}
                     </Button>
                     <Button type="button" variant="destructive" className="w-full justify-start" onClick={() => {
                       setActionsOpen(false)
                       onDeleteGroup()
                     }} disabled={isDeletePending}>
                       <Trash2 className="h-4 w-4" />
-                      삭제
+                      {t({ ko: '삭제', en: 'Delete' })}
                     </Button>
                   </div>
                 </div>
@@ -107,28 +109,28 @@ export function GroupDetailHeaderCard({
       bodyClassName="space-y-3"
     >
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Badge variant="secondary">이미지 {group.image_count.toLocaleString('ko-KR')}개</Badge>
-        <Badge variant="outline">manual {group.manual_added_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-        <Badge variant="outline">auto {group.auto_collected_count?.toLocaleString('ko-KR') ?? 0}</Badge>
-        {selectedGroupHierarchy?.has_children ? <Badge variant="outline">하위 {selectedGroupHierarchy.child_count.toLocaleString('ko-KR')}</Badge> : null}
+        <Badge variant="secondary">{t({ ko: '이미지 {count}개', en: '{count} images' }, { count: formatNumber(group.image_count) })}</Badge>
+        <Badge variant="outline">manual {formatNumber(group.manual_added_count ?? 0)}</Badge>
+        <Badge variant="outline">auto {formatNumber(group.auto_collected_count ?? 0)}</Badge>
+        {selectedGroupHierarchy?.has_children ? <Badge variant="outline">{t({ ko: '하위 {count}', en: 'Children {count}' }, { count: formatNumber(selectedGroupHierarchy.child_count) })}</Badge> : null}
       </div>
 
       {isCustomSource ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className={anchoredPopupLabelClassName}>{group.auto_collect_enabled ? '자동수집 켜짐' : '자동수집 꺼짐'}</span>
+              <span className={anchoredPopupLabelClassName}>{group.auto_collect_enabled ? t('groups.components.group.detail.header.card.auto.collect.on') : t('groups.components.group.detail.header.card.auto.collect.off')}</span>
             </div>
             <Button type="button" size="sm" variant="ghost" onClick={() => setDetailsOpen((open) => !open)}>
-              상세
+              {t({ ko: '상세', en: 'Details' })}
               <ChevronDown className={`h-4 w-4 transition-transform ${detailsOpen ? 'rotate-180' : ''}`} />
             </Button>
           </div>
 
           {(detailsOpen || isWideLayout) ? (
             <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
-              <PageInset>마지막 자동수집: {lastAutoCollectLabel}</PageInset>
-              <PageInset>부모 그룹: {parentGroupLabel}</PageInset>
+              <PageInset>{t({ ko: '마지막 자동수집: {lastAutoCollectLabel}', en: 'Last auto-collect: {lastAutoCollectLabel}' }, { lastAutoCollectLabel })}</PageInset>
+              <PageInset>{t({ ko: '부모 그룹: {parentGroupLabel}', en: 'Parent group: {parentGroupLabel}' }, { parentGroupLabel })}</PageInset>
             </div>
           ) : null}
         </>

@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import { calculateImageSaveOutputSize, resolveImageSaveFormat, type ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageSaveSettings } from '@/types/settings'
 
@@ -22,7 +23,7 @@ interface ImageSaveOptionsModalProps {
 /** Render a compact image save-options modal shared by attachment/save flows. */
 export function ImageSaveOptionsModal({
   open,
-  title = '이미지 저장',
+  title,
   options,
   sourceInfo,
   isSaving,
@@ -30,13 +31,14 @@ export function ImageSaveOptionsModal({
   onOptionsChange,
   onConfirm,
 }: ImageSaveOptionsModalProps) {
+  const { t } = useI18n()
   const targetSize = sourceInfo
     ? calculateImageSaveOutputSize(sourceInfo.width, sourceInfo.height, options)
     : null
   const resolvedFormat = resolveImageSaveFormat(options.defaultFormat, sourceInfo?.mimeType)
 
   return (
-    <SettingsModal open={open} onClose={onClose} title={title} widthClassName="max-w-2xl">
+    <SettingsModal open={open} onClose={onClose} title={title ?? t('imageSaveOptionsModal.saveImage')} widthClassName="max-w-2xl">
       <SettingsModalBody className="space-y-5">
         <div className="flex flex-wrap gap-2">
           {sourceInfo ? (
@@ -49,20 +51,20 @@ export function ImageSaveOptionsModal({
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label="포맷">
+          <SettingsField label={t({ ko: '포맷', en: 'Format' })}>
             <Select
               variant="settings"
               value={options.defaultFormat}
               onChange={(event) => onOptionsChange({ defaultFormat: event.target.value as ImageSaveSettings['defaultFormat'] })}
             >
-              <option value="original">원본 유지</option>
+              <option value="original">{t('imageSaveOptionsModal.keepOriginal')}</option>
               <option value="png">PNG</option>
               <option value="jpeg">JPEG</option>
               <option value="webp">WebP</option>
             </Select>
           </SettingsField>
 
-          <SettingsField label="품질">
+          <SettingsField label={t({ ko: '품질', en: 'Quality' })}>
             <Input
               type="number"
               min={1}
@@ -79,10 +81,10 @@ export function ImageSaveOptionsModal({
               checked={options.resizeEnabled}
               onChange={(event) => onOptionsChange({ resizeEnabled: event.target.checked })}
             />
-            저장 전에 크기 조정
+            {t({ ko: '저장 전에 크기 조정', en: 'Resize before saving' })}
           </SettingsToggleRow>
 
-          <SettingsField label="최대 가로">
+          <SettingsField label={t('imageSaveOptionsModal.maxWidth')}>
             <Input
               type="number"
               min={64}
@@ -94,7 +96,7 @@ export function ImageSaveOptionsModal({
             />
           </SettingsField>
 
-          <SettingsField label="최대 세로">
+          <SettingsField label={t('imageSaveOptionsModal.maxHeight')}>
             <Input
               type="number"
               min={64}
@@ -109,11 +111,11 @@ export function ImageSaveOptionsModal({
 
         <SettingsModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
-            취소
+            {t({ ko: '취소', en: 'Cancel' })}
           </Button>
           <Button type="button" onClick={onConfirm} disabled={isSaving}>
             <Save className="h-4 w-4" />
-            {isSaving ? '적용 중…' : '적용'}
+            {isSaving ? t({ ko: '적용 중…', en: 'Applying…' }) : t({ ko: '적용', en: 'Apply' })}
           </Button>
         </SettingsModalFooter>
       </SettingsModalBody>

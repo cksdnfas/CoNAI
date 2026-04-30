@@ -428,7 +428,8 @@ export function formatDateTime(value?: string | null) {
     return value
   }
 
-  return new Intl.DateTimeFormat('ko-KR', {
+  const locale = typeof document !== 'undefined' ? document.documentElement.lang || undefined : undefined
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(date)

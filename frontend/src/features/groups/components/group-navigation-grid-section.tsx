@@ -3,6 +3,7 @@ import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'
 import { GroupChildCard } from './group-child-card'
+import { useI18n } from '@/i18n'
 
 interface GroupNavigationGridSectionProps {
   backNavigationGroup: GroupWithHierarchy
@@ -32,8 +33,9 @@ export function GroupNavigationGridSection({
   onOpenRoot,
   isWideLayout = false,
 }: GroupNavigationGridSectionProps) {
+  const { t, formatNumber } = useI18n()
   const backTitle = parentGroupHierarchy?.name ?? rootTitle
-  const backSubtitle = parentGroupHierarchy ? '상위 그룹으로 이동' : '루트 목록으로 이동'
+  const backSubtitle = parentGroupHierarchy ? t({ ko: '상위 그룹으로 이동', en: 'Go to parent group' }) : t({ ko: '루트 목록으로 이동', en: 'Go to root list' })
   const handleOpenBack = () => {
     if (parentGroupHierarchy) {
       onOpenGroup(backNavigationGroup.id)
@@ -91,7 +93,7 @@ export function GroupNavigationGridSection({
 
           {childGroups.length > 0 ? (
             <div className="space-y-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">하위 그룹 {childGroups.length.toLocaleString('ko-KR')}개</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '하위 그룹 {count}개', en: '{count} child groups' }, { count: formatNumber(childGroups.length) })}</div>
               <div className={gridClassName}>
                 {childGroups.map((group) => (
                   <GroupChildCard

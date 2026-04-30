@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
+import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { isFinalResultModule } from '../module-graph-shared'
@@ -32,16 +33,16 @@ function normalizeFolderKey(folderId: number | null | undefined) {
   return folderId ?? null
 }
 
-function compareTreeLabels(left: string, right: string) {
-  return left.localeCompare(right, 'ko-KR', { numeric: true, sensitivity: 'base' })
+function compareTreeLabels(left: string, right: string, locale: string) {
+  return left.localeCompare(right, locale, { numeric: true, sensitivity: 'base' })
 }
 
-function sortTreeEntries(left: TreeEntry, right: TreeEntry) {
+function sortTreeEntries(left: TreeEntry, right: TreeEntry, locale: string) {
   if (left.type !== right.type) {
     return left.type === 'workflow' ? -1 : 1
   }
 
-  return compareTreeLabels(left.label, right.label)
+  return compareTreeLabels(left.label, right.label, locale)
 }
 
 /** Render one explorer-style tree sidebar for workflow folders and documents. */
@@ -56,6 +57,7 @@ export function SavedGraphList({
   leftToolbar,
   rightToolbar,
 }: SavedGraphListProps) {
+  const { locale } = useI18n()
   const [searchQuery, setSearchQuery] = useState('')
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<number[]>([])
 
@@ -69,11 +71,11 @@ export function SavedGraphList({
     }
 
     for (const entry of nextMap.values()) {
-      entry.sort((left, right) => compareTreeLabels(left.name, right.name))
+      entry.sort((left, right) => compareTreeLabels(left.name, right.name, locale))
     }
 
     return nextMap
-  }, [folders])
+  }, [folders, locale])
 
   const workflowsByFolder = useMemo(() => {
     const nextMap = new Map<number | null, GraphWorkflowRecord[]>()
@@ -85,11 +87,11 @@ export function SavedGraphList({
     }
 
     for (const entry of nextMap.values()) {
-      entry.sort((left, right) => compareTreeLabels(left.name, right.name))
+      entry.sort((left, right) => compareTreeLabels(left.name, right.name, locale))
     }
 
     return nextMap
-  }, [graphs])
+  }, [graphs, locale])
 
   const finalResultNodeCountByWorkflowId = useMemo(() => {
     const nextMap = new Map<number, number>()
@@ -208,7 +210,7 @@ export function SavedGraphList({
     const childEntries: TreeEntry[] = [
       ...childFolders.map((childFolder) => ({ type: 'folder' as const, label: childFolder.name, folder: childFolder })),
       ...childWorkflows.map((workflow) => ({ type: 'workflow' as const, label: workflow.name, workflow })),
-    ].sort(sortTreeEntries)
+    ].sort((left, right) => sortTreeEntries(left, right, locale))
 
     return (
       <div key={`folder-${folder.id}`} className="space-y-1">
@@ -260,8 +262,8 @@ export function SavedGraphList({
     () => [
       ...(foldersByParent.get(null) ?? []).map((folder) => ({ type: 'folder' as const, label: folder.name, folder })),
       ...filteredRootWorkflows.map((workflow) => ({ type: 'workflow' as const, label: workflow.name, workflow })),
-    ].sort(sortTreeEntries),
-    [filteredRootWorkflows, foldersByParent],
+    ].sort((left, right) => sortTreeEntries(left, right, locale)),
+    [filteredRootWorkflows, foldersByParent, locale],
   )
 
   return (

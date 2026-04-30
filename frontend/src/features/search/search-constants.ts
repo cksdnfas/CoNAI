@@ -20,6 +20,16 @@ export const SEARCH_SCOPE_LABELS: Record<SearchScope, string> = {
   tool: 'Tool',
 }
 
+export const SEARCH_SCOPE_LABEL_KEYS: Record<SearchScope, string> = {
+  positive: 'search.search.constants.positive',
+  negative: 'search.search.constants.negative',
+  auto: 'search.search.constants.auto',
+  rating: 'search.search.constants.rating',
+  model: 'search.search.constants.model',
+  lora: 'LoRA',
+  tool: 'Tool',
+}
+
 export const SEARCH_TEXT_INPUT_SCOPES: SearchScope[] = ['positive', 'negative', 'auto', 'model', 'lora']
 
 export const SEARCH_AI_TOOL_OPTIONS: SearchAiToolOption[] = [

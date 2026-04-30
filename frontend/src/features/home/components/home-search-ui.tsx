@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
 import { useHomeSearch } from '@/features/home/home-search-context'
+import { useI18n } from '@/i18n'
 
 const HomeSearchDrawerContentLazy = lazy(async () => {
   const module = await import('./home-search-drawer-content')
@@ -10,6 +11,7 @@ const HomeSearchDrawerContentLazy = lazy(async () => {
 /** Render the header search control as a drawer toggle button. */
 export function HomeSearchHeaderBox({ active }: { active: boolean }) {
   const { appliedChips, isDrawerOpen, openDrawer, closeDrawer } = useHomeSearch()
+  const { t } = useI18n()
 
   if (!active) {
     return null
@@ -28,8 +30,8 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
       }}
       data-state={isDrawerOpen ? 'open' : appliedChips.length > 0 ? 'active' : 'closed'}
       className="theme-shell-icon-button relative inline-flex size-9 shrink-0 items-center justify-center rounded-sm text-foreground/80 transition-all duration-300 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-      aria-label={isDrawerOpen ? '검색 닫기' : '검색 열기'}
-      title={isDrawerOpen ? '검색 닫기' : '검색'}
+      aria-label={isDrawerOpen ? t({ ko: '검색 닫기', en: 'Close search' }) : t({ ko: '검색 열기', en: 'Open search' })}
+      title={isDrawerOpen ? t({ ko: '검색 닫기', en: 'Close search' }) : t({ ko: '검색', en: 'Search' })}
     >
       <Search className="h-4 w-4" />
       {appliedChips.length > 0 ? (

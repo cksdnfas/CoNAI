@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Badge } from '@/components/ui/badge'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { PromptSimilarImage, SimilarImage } from '@/types/similarity'
 
@@ -17,12 +18,7 @@ interface SimilarityScoreOverlayCardProps {
   rows: SimilarityOverlayRow[]
 }
 
-const SIMILARITY_COMPONENT_LABELS = {
-  perceptualHash: 'pHash',
-  dHash: 'dHash',
-  aHash: 'aHash',
-  color: '색상',
-} as const
+type Translate = ReturnType<typeof useI18n>['t']
 
 /** Format one score into the compact badge string already used by image similarity UI. */
 function formatSimilarityValue(value?: number) {
@@ -40,6 +36,7 @@ function getSimilarityBadgeClassName(similarity: number) {
 
 /** Render the shared similarity score badge + popup shell used across image/text similarity cards. */
 function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: SimilarityScoreOverlayCardProps) {
+  const { t } = useI18n()
   const anchorRef = useRef<HTMLDivElement | null>(null)
   const [isAnchorHovered, setIsAnchorHovered] = useState(false)
   const [isPopupHovered, setIsPopupHovered] = useState(false)
@@ -97,7 +94,7 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: Simil
           }}
         >
           <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="font-semibold text-foreground">세부 점수</span>
+            <span className="font-semibold text-foreground">{t('images.components.detail.similarity.score.overlay.score.details')}</span>
             {popupBadgeLabel ? <Badge variant="outline" className="px-2 py-0.5 tracking-normal normal-case">{popupBadgeLabel}</Badge> : null}
           </div>
 
@@ -122,7 +119,7 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: Simil
 }
 
 /** Build per-component rows for image-similarity results. */
-function buildSimilarImageRows(item: SimilarImage): SimilarityOverlayRow[] {
+function buildSimilarImageRows(item: SimilarImage, t: Translate): SimilarityOverlayRow[] {
   const rows: SimilarityOverlayRow[] = []
   const componentScores = item.componentScores
 
@@ -140,23 +137,32 @@ function buildSimilarImageRows(item: SimilarImage): SimilarityOverlayRow[] {
       label,
       tone: score.used && !score.passed ? 'danger' : 'default',
       value: !score.available
-        ? '데이터 없음'
+        ? t('images.components.detail.similarity.score.overlay.no.data')
         : 'distance' in score
-          ? `유사 ${formatSimilarityValue(score.similarity)} · 거리 ${score.distance ?? '—'}/${score.threshold} · 비중 ${score.weight}`
-          : `유사 ${formatSimilarityValue(score.similarity)} · 기준 ${score.threshold} · 비중 ${score.weight}`,
+          ? t(
+              { ko: '유사 {similarity} · 거리 {distance}/{threshold} · 비중 {weight}', en: 'Similarity {similarity} · distance {distance}/{threshold} · weight {weight}' },
+              { similarity: formatSimilarityValue(score.similarity), distance: score.distance ?? '—', threshold: score.threshold, weight: score.weight },
+            )
+          : t(
+              { ko: '유사 {similarity} · 기준 {threshold} · 비중 {weight}', en: 'Similarity {similarity} · threshold {threshold} · weight {weight}' },
+              { similarity: formatSimilarityValue(score.similarity), threshold: score.threshold, weight: score.weight },
+            ),
     })
   }
 
-  pushRow('perceptualHash', SIMILARITY_COMPONENT_LABELS.perceptualHash, componentScores?.perceptualHash)
-  pushRow('dHash', SIMILARITY_COMPONENT_LABELS.dHash, componentScores?.dHash)
-  pushRow('aHash', SIMILARITY_COMPONENT_LABELS.aHash, componentScores?.aHash)
-  pushRow('color', SIMILARITY_COMPONENT_LABELS.color, componentScores?.color)
+  pushRow('perceptualHash', 'pHash', componentScores?.perceptualHash)
+  pushRow('dHash', 'dHash', componentScores?.dHash)
+  pushRow('aHash', 'aHash', componentScores?.aHash)
+  pushRow('color', t('images.components.detail.similarity.score.overlay.color'), componentScores?.color)
 
   if (rows.length === 0) {
     rows.push({
       key: 'fallback',
       label: 'pHash',
-      value: `유사 ${formatSimilarityValue(item.similarity)} · 거리 ${item.hammingDistance}`,
+      value: t(
+        { ko: '유사 {similarity} · 거리 {distance}', en: 'Similarity {similarity} · distance {distance}' },
+        { similarity: formatSimilarityValue(item.similarity), distance: item.hammingDistance },
+      ),
     })
   }
 
@@ -165,7 +171,8 @@ function buildSimilarImageRows(item: SimilarImage): SimilarityOverlayRow[] {
 
 /** Render the shared score overlay for image-similarity and duplicate cards. */
 export function SimilarImageScoreOverlay({ item }: { item: SimilarImage }) {
-  const rows = useMemo(() => buildSimilarImageRows(item), [item])
+  const { t } = useI18n()
+  const rows = useMemo(() => buildSimilarImageRows(item, t), [item, t])
 
   return (
     <SimilarityScoreOverlayCard
@@ -177,7 +184,7 @@ export function SimilarImageScoreOverlay({ item }: { item: SimilarImage }) {
 }
 
 /** Build per-field rows for prompt-similarity results. */
-function buildPromptSimilarImageRows(item: PromptSimilarImage): SimilarityOverlayRow[] {
+function buildPromptSimilarImageRows(item: PromptSimilarImage, t: Translate): SimilarityOverlayRow[] {
   const fields = [
     { key: 'positive', label: 'Positive', score: item.positive },
     { key: 'negative', label: 'Negative', score: item.negative },
@@ -197,16 +204,22 @@ function buildPromptSimilarImageRows(item: PromptSimilarImage): SimilarityOverla
             ? 'danger'
             : 'default',
       value: !score.hasSource || !score.hasTarget
-        ? '한쪽 텍스트 없음'
-        : `유사 ${formatSimilarityValue(score.similarity)} · 기준 ${score.threshold}`,
+        ? t('images.components.detail.similarity.score.overlay.one.side.has.no.text')
+        : t(
+            { ko: '유사 {similarity} · 기준 {threshold}', en: 'Similarity {similarity} · threshold {threshold}' },
+            { similarity: formatSimilarityValue(score.similarity), threshold: score.threshold },
+          ),
     }))
 
   if (rows.length === 0) {
     rows.push({
       key: 'fallback',
-      label: '텍스트',
+      label: t('images.components.detail.similarity.score.overlay.text'),
       tone: 'default',
-      value: `유사 ${formatSimilarityValue(item.combinedSimilarity)}`,
+      value: t(
+        { ko: '유사 {similarity}', en: 'Similarity {similarity}' },
+        { similarity: formatSimilarityValue(item.combinedSimilarity) },
+      ),
     })
   }
 
@@ -215,12 +228,13 @@ function buildPromptSimilarImageRows(item: PromptSimilarImage): SimilarityOverla
 
 /** Render the shared score overlay for prompt-similarity cards. */
 export function PromptSimilarImageScoreOverlay({ item }: { item: PromptSimilarImage }) {
-  const rows = useMemo(() => buildPromptSimilarImageRows(item), [item])
+  const { t } = useI18n()
+  const rows = useMemo(() => buildPromptSimilarImageRows(item, t), [item, t])
 
   return (
     <SimilarityScoreOverlayCard
       badgeValue={item.combinedSimilarity}
-      popupBadgeLabel="텍스트"
+      popupBadgeLabel={t('images.components.detail.similarity.score.overlay.text')}
       rows={rows}
     />
   )

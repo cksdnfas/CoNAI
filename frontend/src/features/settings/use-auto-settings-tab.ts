@@ -31,6 +31,7 @@ import type {
   TaggerSettings,
 } from '@/types/settings'
 import type { AutoTabProps } from './components/auto-tab-types'
+import { useI18n } from '@/i18n'
 
 interface UseAutoSettingsTabOptions {
   /** Whether the auto tab is currently active. */
@@ -50,7 +51,7 @@ interface UseAutoSettingsTabOptions {
 }
 
 /** Validate rating-weight inputs before sending them to the backend. */
-function validateRatingWeightsDraft(weights: RatingWeightsRecord | null) {
+function validateRatingWeightsDraft(weights: RatingWeightsRecord | null, t: ReturnType<typeof useI18n>['t']) {
   if (!weights) {
     return [] as string[]
   }
@@ -65,11 +66,11 @@ function validateRatingWeightsDraft(weights: RatingWeightsRecord | null) {
 
   for (const [label, value] of entries) {
     if (!Number.isFinite(value)) {
-      messages.push(`${label} weight는 숫자여야 해.`)
+      messages.push(t({ ko: '{label} weight는 숫자여야 해.', en: '{label} weight must be a number.' }, { label }))
       continue
     }
     if (value < 0) {
-      messages.push(`${label} weight는 0 이상이어야 해.`)
+      messages.push(t({ ko: '{label} weight는 0 이상이어야 해.', en: '{label} weight must be 0 or greater.' }, { label }))
     }
   }
 
@@ -77,9 +78,9 @@ function validateRatingWeightsDraft(weights: RatingWeightsRecord | null) {
 }
 
 /** Validate rating tiers while keeping save-time range normalization simple. */
-function validateRatingTiersDraft(tiers: RatingTierRecord[] | null) {
+function validateRatingTiersDraft(tiers: RatingTierRecord[] | null, t: ReturnType<typeof useI18n>['t']) {
   if (!tiers || tiers.length === 0) {
-    return ['최소 1개의 평가 등급이 필요해.']
+    return [t({ ko: '최소 1개의 평가 등급이 필요해.', en: 'At least one rating tier is required.' })]
   }
 
   const messages: string[] = []
@@ -88,22 +89,22 @@ function validateRatingTiersDraft(tiers: RatingTierRecord[] | null) {
     const label = tier.tier_name.trim() || `Tier ${index + 1}`
 
     if (tier.tier_name.trim().length === 0) {
-      messages.push(`등급 ${index + 1}의 이름이 비어 있어.`)
+      messages.push(t({ ko: '등급 {index}의 이름이 비어 있어.', en: 'Tier {index} needs a name.' }, { index: index + 1 }))
     }
     if (!Number.isFinite(tier.min_score) || tier.min_score < 0) {
-      messages.push(`${label}의 최소 점수는 0 이상의 숫자여야 해.`)
+      messages.push(t({ ko: '{label}의 최소 점수는 0 이상의 숫자여야 해.', en: '{label} minimum score must be a number of 0 or greater.' }, { label }))
     }
     if (index < tiers.length - 1) {
       if (tier.max_score === null || !Number.isFinite(tier.max_score)) {
-        messages.push(`${label}의 최대 점수를 넣어줘.`)
+        messages.push(t({ ko: '{label}의 최대 점수를 넣어줘.', en: 'Enter a maximum score for {label}.' }, { label }))
       } else if (tier.max_score <= tier.min_score) {
-        messages.push(`${label}의 최대 점수는 최소 점수보다 커야 해.`)
+        messages.push(t({ ko: '{label}의 최대 점수는 최소 점수보다 커야 해.', en: '{label} maximum score must be greater than the minimum score.' }, { label }))
       }
     }
 
     const nextTier = tiers[index + 1]
     if (nextTier && tier.min_score >= nextTier.min_score) {
-      messages.push(`${label} 다음 등급의 최소 점수는 더 커야 해.`)
+      messages.push(t({ ko: '{label} 다음 등급의 최소 점수는 더 커야 해.', en: 'The next tier after {label} must have a higher minimum score.' }, { label }))
     }
   })
 
@@ -142,6 +143,7 @@ export function useAutoSettingsTab({
   notifyError,
 }: UseAutoSettingsTabOptions): { tabProps: AutoTabProps } {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
   const [taggerDraft, setTaggerDraft] = useState<TaggerSettings | null>(null)
   const [kaloscopeDraft, setKaloscopeDraft] = useState<KaloscopeSettings | null>(null)
   const [ratingWeightsDraft, setRatingWeightsDraft] = useState<RatingWeightsRecord | null>(null)
@@ -189,12 +191,12 @@ export function useAutoSettingsTab({
   const effectiveRatingWeightsDraft = ratingWeightsDraft ?? ratingWeightsQuery.data ?? null
   const effectiveRatingTiersDraft = ratingTiersDraft ?? ratingTiersQuery.data ?? null
   const ratingWeightValidationMessages = useMemo(
-    () => validateRatingWeightsDraft(effectiveRatingWeightsDraft),
-    [effectiveRatingWeightsDraft],
+    () => validateRatingWeightsDraft(effectiveRatingWeightsDraft, t),
+    [effectiveRatingWeightsDraft, t],
   )
   const ratingTierValidationMessages = useMemo(
-    () => validateRatingTiersDraft(effectiveRatingTiersDraft),
-    [effectiveRatingTiersDraft],
+    () => validateRatingTiersDraft(effectiveRatingTiersDraft, t),
+    [effectiveRatingTiersDraft, t],
   )
 
   const applyAutoTestMedia = (media: AutoTestMediaRecord) => {
@@ -212,10 +214,10 @@ export function useAutoSettingsTab({
       setTaggerDependencyResult(null)
       hasAutoCheckedTaggerDependenciesRef.current = false
       await queryClient.invalidateQueries({ queryKey: ['tagger-status'] })
-      notifyInfo('프롬프트 추출 태거 설정을 저장했어.')
+      notifyInfo(t({ ko: '프롬프트 추출 태거 설정을 저장했어.', en: 'Prompt extraction tagger settings saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '태거 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '태거 설정 저장에 실패했어.', en: 'Failed to save tagger settings.' }))
     },
   })
 
@@ -225,10 +227,10 @@ export function useAutoSettingsTab({
       syncSettingsCache(settings)
       setKaloscopeDraft(settings.kaloscope)
       await refreshAutoQueries()
-      notifyInfo('자동 프롬프트 추출 설정을 저장했어.')
+      notifyInfo(t({ ko: '자동 프롬프트 추출 설정을 저장했어.', en: 'Auto prompt extraction settings saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : 'Kaloscope 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: 'Kaloscope 설정 저장에 실패했어.', en: 'Failed to save Kaloscope settings.' }))
     },
   })
 
@@ -237,10 +239,10 @@ export function useAutoSettingsTab({
     onSuccess: (weights) => {
       queryClient.setQueryData(['rating-weights'], weights)
       setRatingWeightsDraft(weights)
-      notifyInfo('평가 가중치를 저장했어.')
+      notifyInfo(t({ ko: '평가 가중치를 저장했어.', en: 'Rating weights saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '평가 가중치 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '평가 가중치 저장에 실패했어.', en: 'Failed to save rating weights.' }))
     },
   })
 
@@ -249,10 +251,10 @@ export function useAutoSettingsTab({
     onSuccess: (tiers) => {
       queryClient.setQueryData(['rating-tiers'], tiers)
       setRatingTiersDraft(tiers)
-      notifyInfo('평가 등급 설정을 저장했어.')
+      notifyInfo(t({ ko: '평가 등급 설정을 저장했어.', en: 'Rating tier settings saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '평가 등급 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '평가 등급 설정 저장에 실패했어.', en: 'Failed to save rating tier settings.' }))
     },
   })
 
@@ -262,7 +264,7 @@ export function useAutoSettingsTab({
       setTaggerDependencyResult(result)
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '태거 의존성 확인에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '태거 의존성 확인에 실패했어.', en: 'Failed to check tagger dependencies.' }))
     },
   })
 
@@ -279,16 +281,16 @@ export function useAutoSettingsTab({
     onSuccess: (media) => {
       applyAutoTestMedia(media)
       if (media.existsOnDisk) {
-        notifyInfo('테스트 대상을 확인했어.')
+        notifyInfo(t({ ko: '테스트 대상을 확인했어.', en: 'Test target verified.' }))
       } else {
-        notifyError('대상은 찾았지만 디스크에서 파일을 확인하지 못했어.')
+        notifyError(t({ ko: '대상은 찾았지만 디스크에서 파일을 확인하지 못했어.', en: 'Found the target, but could not verify the file on disk.' }))
       }
     },
     onError: (error) => {
       setAutoTestMedia(null)
       setTaggerTestResult(null)
       setKaloscopeTestResult(null)
-      notifyError(error instanceof Error ? error.message : '테스트 대상을 찾지 못했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '테스트 대상을 찾지 못했어.', en: 'Could not find a test target.' }))
     },
   })
 
@@ -297,13 +299,13 @@ export function useAutoSettingsTab({
     onSuccess: (media) => {
       applyAutoTestMedia(media)
       if (media.existsOnDisk) {
-        notifyInfo('랜덤 테스트 대상을 골랐어.')
+        notifyInfo(t({ ko: '랜덤 테스트 대상을 골랐어.', en: 'Selected a random test target.' }))
       } else {
-        notifyError('랜덤 대상은 찾았지만 디스크에서 파일을 확인하지 못했어.')
+        notifyError(t({ ko: '랜덤 대상은 찾았지만 디스크에서 파일을 확인하지 못했어.', en: 'Found a random target, but could not verify the file on disk.' }))
       }
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '랜덤 테스트 대상을 고르지 못했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '랜덤 테스트 대상을 고르지 못했어.', en: 'Could not choose a random test target.' }))
     },
   })
 
@@ -311,11 +313,11 @@ export function useAutoSettingsTab({
     mutationFn: runTaggerAutoTest,
     onSuccess: (result) => {
       setTaggerTestResult(result)
-      notifyInfo('태거 테스트가 끝났어.')
+      notifyInfo(t({ ko: '태거 테스트가 끝났어.', en: 'Tagger test finished.' }))
     },
     onError: (error) => {
       setTaggerTestResult(null)
-      notifyError(error instanceof Error ? error.message : '태거 테스트에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '태거 테스트에 실패했어.', en: 'Tagger test failed.' }))
     },
   })
 
@@ -323,11 +325,11 @@ export function useAutoSettingsTab({
     mutationFn: runKaloscopeAutoTest,
     onSuccess: (result) => {
       setKaloscopeTestResult(result)
-      notifyInfo('Kaloscope 테스트가 끝났어.')
+      notifyInfo(t({ ko: 'Kaloscope 테스트가 끝났어.', en: 'Kaloscope test finished.' }))
     },
     onError: (error) => {
       setKaloscopeTestResult(null)
-      notifyError(error instanceof Error ? error.message : 'Kaloscope 테스트에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: 'Kaloscope 테스트에 실패했어.', en: 'Kaloscope test failed.' }))
     },
   })
 

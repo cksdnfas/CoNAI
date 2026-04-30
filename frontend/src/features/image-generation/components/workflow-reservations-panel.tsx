@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsSection, SettingsValueTile } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import {
   cleanupGraphWorkflowEmptyExecutions,
   createGraphWorkflowSchedule,
@@ -29,6 +30,7 @@ function isActiveReservationExecution(status: GraphExecutionRecord['status']) {
 /** Render the dedicated workflow reservation page inside image generation. */
 export function WorkflowReservationsPanel() {
   const { showSnackbar } = useSnackbar()
+  const { t, formatNumber } = useI18n()
   const [selectedReservationExecutionIds, setSelectedReservationExecutionIds] = useState<number[]>([])
   const [isCleaningReservations, setIsCleaningReservations] = useState(false)
   const [isMutatingSchedules, setIsMutatingSchedules] = useState(false)
@@ -300,8 +302,11 @@ export function WorkflowReservationsPanel() {
 
       <SelectionActionBar
         selectedCount={selectedReservationExecutions.length}
-        summary={`${selectedReservationExecutions.length.toLocaleString('ko-KR')}개 예약 실행 선택됨`}
-        description={`${cancelableReservationExecutions.length.toLocaleString('ko-KR')}개 취소 가능 · ${deletableReservationExecutions.length.toLocaleString('ko-KR')}개 삭제 가능`}
+        summary={t('image-generation.components.workflow.reservations.panel.value.reservation.executions.selected', { count: formatNumber(selectedReservationExecutions.length) })}
+        description={t('image-generation.components.workflow.reservations.panel.value.cancelable.value.deletable', {
+          cancelable: formatNumber(cancelableReservationExecutions.length),
+          deletable: formatNumber(deletableReservationExecutions.length),
+        })}
         onClear={() => setSelectedReservationExecutionIds([])}
         actions={(
           <>

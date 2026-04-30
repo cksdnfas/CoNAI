@@ -4,6 +4,7 @@ import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'
 import { GroupChildCard } from './group-child-card'
+import { useI18n } from '@/i18n'
 
 interface GroupRootGridSectionProps {
   title: string
@@ -25,11 +26,13 @@ export function GroupRootGridSection({
   loadPreviewImage,
   onOpenGroup,
 }: GroupRootGridSectionProps) {
+  const { t, formatNumber } = useI18n()
+
   return (
     <section className="space-y-4">
       <SectionHeading
         heading={title}
-        actions={<Badge variant="secondary">{groups.length.toLocaleString('ko-KR')}개</Badge>}
+        actions={<Badge variant="secondary">{t({ ko: '{count}개', en: '{count}' }, { count: formatNumber(groups.length) })}</Badge>}
       />
 
       <div className={gridClassName}>

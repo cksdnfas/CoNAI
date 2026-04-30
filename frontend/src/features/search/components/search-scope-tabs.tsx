@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { SEARCH_SCOPE_TABS } from '@/features/search/search-constants'
+import { SEARCH_SCOPE_LABEL_KEYS, SEARCH_SCOPE_TABS } from '@/features/search/search-constants'
 import { getSearchScopeStyle } from '@/features/search/search-utils'
 import type { SearchScope } from '@/features/search/search-types'
+import { useI18n } from '@/i18n'
 
 interface SearchScopeTabsProps {
   searchScope: SearchScope
@@ -12,6 +13,7 @@ interface SearchScopeTabsProps {
 
 /** Render the shared search scope tabs with drag-scroll and edge hints. */
 export function SearchScopeTabs({ searchScope, onChange, className }: SearchScopeTabsProps) {
+  const { t } = useI18n()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const dragPointerIdRef = useRef<number | null>(null)
   const dragStartXRef = useRef(0)
@@ -86,8 +88,8 @@ export function SearchScopeTabs({ searchScope, onChange, className }: SearchScop
           type="button"
           onClick={() => scrollRef.current?.scrollBy({ left: -160, behavior: 'smooth' })}
           className="absolute left-0 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center bg-gradient-to-r from-background via-background/95 to-transparent text-sm font-semibold text-muted-foreground transition hover:text-foreground"
-          aria-label="이전 필터 항목"
-          title="이전 필터 항목"
+          aria-label={t('search.components.search.scope.tabs.previous.filter.item')}
+          title={t('search.components.search.scope.tabs.previous.filter.item')}
         >
           {'<'}
         </button>
@@ -98,8 +100,8 @@ export function SearchScopeTabs({ searchScope, onChange, className }: SearchScop
           type="button"
           onClick={() => scrollRef.current?.scrollBy({ left: 160, behavior: 'smooth' })}
           className="absolute right-0 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center bg-gradient-to-l from-background via-background/95 to-transparent text-sm font-semibold text-muted-foreground transition hover:text-foreground"
-          aria-label="다음 필터 항목"
-          title="다음 필터 항목"
+          aria-label={t('search.components.search.scope.tabs.next.filter.item')}
+          title={t('search.components.search.scope.tabs.next.filter.item')}
         >
           {'>'}
         </button>
@@ -177,7 +179,7 @@ export function SearchScopeTabs({ searchScope, onChange, className }: SearchScop
               )}
               style={searchScope === tab.value ? getSearchScopeStyle(tab.value) : undefined}
             >
-              {tab.label}
+              {t(SEARCH_SCOPE_LABEL_KEYS[tab.value])}
             </button>
           ))}
         </div>

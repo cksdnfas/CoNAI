@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Download, File, FileAudio, FileText, FileVideo, Folder, ImageIcon, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { useI18n } from '@/i18n'
 import { getGenerationWorkflowArtifacts, getPublicGenerationWorkflowArtifacts, type WorkflowArtifactEntry } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '../image-generation-shared'
@@ -30,15 +31,6 @@ function formatSize(value: number) {
   }
 
   return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
-}
-
-function formatModifiedAt(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return '—'
-  }
-
-  return date.toLocaleString()
 }
 
 function getParentPath(path: string) {
@@ -120,6 +112,7 @@ function ArtifactCard({
   onHoverPreviewChange: (preview: HoverPreviewState | null) => void
   onOpenFile: (entry: WorkflowArtifactEntry) => void
 }) {
+  const { t, formatDateTime } = useI18n()
   const isDirectory = entry.kind === 'directory'
   const canHoverPreview = !isDirectory && getPreviewKind(entry) === 'image' && Boolean(entry.fileUrl)
   const updateHoverPreview = (event: MouseEvent) => {
@@ -133,8 +126,8 @@ function ArtifactCard({
       {isDirectory ? <FolderThumbnail entry={entry} /> : <FileThumbnail entry={entry} />}
       <div className="mt-2 min-w-0 text-center">
         <div className="line-clamp-2 break-words text-xs font-medium text-foreground" title={entry.name}>{entry.name}</div>
-        <div className="mt-1 text-[11px] text-muted-foreground">{isDirectory ? 'Folder' : formatSize(entry.size)}</div>
-        <div className="text-[10px] text-muted-foreground/80">{formatModifiedAt(entry.modifiedAt)}</div>
+        <div className="mt-1 text-[11px] text-muted-foreground">{isDirectory ? t({ ko: '폴더', en: 'Folder' }) : formatSize(entry.size)}</div>
+        <div className="text-[10px] text-muted-foreground/80">{formatDateTime(entry.modifiedAt)}</div>
       </div>
     </>
   )
@@ -159,7 +152,7 @@ function ArtifactCard({
       )}
 
       {entry.downloadUrl ? (
-        <Button asChild size="icon-xs" variant="secondary" className="absolute right-3 top-3 opacity-0 shadow-sm transition-opacity group-hover:opacity-100" aria-label={`Download ${entry.name}`}>
+        <Button asChild size="icon-xs" variant="secondary" className="absolute right-3 top-3 opacity-0 shadow-sm transition-opacity group-hover:opacity-100" aria-label={t({ ko: '{name} 다운로드', en: 'Download {name}' }, { name: entry.name })}>
           <a href={entry.downloadUrl} download={isDirectory ? `${entry.name}.zip` : entry.name} onClick={(event) => event.stopPropagation()}>
             <Download className="h-3 w-3" />
           </a>
@@ -170,6 +163,7 @@ function ArtifactCard({
 }
 
 export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug = null, refreshNonce = 0, splitPaneScroll = false, onBack }: WorkflowArtifactExplorerPanelProps) {
+  const { t } = useI18n()
   const [currentPath, setCurrentPath] = useState('')
   const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null)
   const [artifactModal, setArtifactModal] = useState<ArtifactModalState | null>(null)
@@ -183,13 +177,13 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
   const breadcrumbs = useMemo(() => {
     const parts = currentPath.split('/').filter(Boolean)
     return [
-      { label: '탐색형 뷰어', path: '' },
+      { label: t('image-generation.components.workflow.artifact.explorer.panel.explorer.view'), path: '' },
       ...parts.map((part, index) => ({
         label: part,
         path: parts.slice(0, index + 1).join('/'),
       })),
     ]
-  }, [currentPath])
+  }, [currentPath, t])
 
   const entries = artifactsQuery.data?.entries ?? []
   const hoverPreviewStyle = hoverPreview
@@ -231,7 +225,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
         const content = await response.text()
         setArtifactModal({ kind: 'text', entry, content, isLoading: false })
       } catch (error) {
-        setArtifactModal({ kind: 'text', entry, content: '', isLoading: false, error: getErrorMessage(error, '텍스트 파일을 불러오지 못했어.') })
+        setArtifactModal({ kind: 'text', entry, content: '', isLoading: false, error: getErrorMessage(error, t('image-generation.components.workflow.artifact.explorer.panel.could.not.load.the.text.file')) })
       }
       return
     }
@@ -251,12 +245,12 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           {onBack ? (
-            <Button type="button" size="icon-sm" variant="ghost" onClick={onBack} aria-label="워크플로우 목록으로 돌아가기">
+            <Button type="button" size="icon-sm" variant="ghost" onClick={onBack} aria-label={t('image-generation.components.workflow.artifact.explorer.panel.back.to.workflow.list')}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
           ) : null}
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-foreground">탐색형 뷰어</h2>
+            <h2 className="text-base font-semibold text-foreground">{t('image-generation.components.workflow.artifact.explorer.panel.explorer.view')}</h2>
             <div className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground">
               {breadcrumbs.map((crumb, index) => (
                 <span key={crumb.path || 'root'} className="inline-flex items-center gap-1">
@@ -271,15 +265,15 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
         </div>
         <Button type="button" size="sm" variant="outline" onClick={() => void artifactsQuery.refetch()}>
           <RefreshCw className="mr-2 h-4 w-4" />
-          새로고침
+          {t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}
         </Button>
       </div>
 
       {artifactsQuery.isError ? (
         <div className="p-4">
           <Alert variant="destructive">
-            <AlertTitle>결과물을 불러오지 못했어</AlertTitle>
-            <AlertDescription>{getErrorMessage(artifactsQuery.error, '결과물 목록 조회 실패')}</AlertDescription>
+            <AlertTitle>{t('image-generation.components.workflow.artifact.explorer.panel.could.not.load.results')}</AlertTitle>
+            <AlertDescription>{getErrorMessage(artifactsQuery.error, t('image-generation.components.workflow.artifact.explorer.panel.failed.to.fetch.result.list'))}</AlertDescription>
           </Alert>
         </div>
       ) : null}
@@ -299,7 +293,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
             ))}
           </div>
         ) : !artifactsQuery.isLoading ? (
-          <div className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">아직 저장된 결과물이 없어.</div>
+          <div className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">{t('image-generation.components.workflow.artifact.explorer.panel.no.saved.results.yet')}</div>
         ) : null}
       </div>
 
@@ -318,7 +312,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
           <div className={cn('relative max-h-[92vh] max-w-[92vw] overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-2xl', artifactModal.kind === 'text' ? 'w-[min(860px,92vw)]' : '')} onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
               <div className="min-w-0 truncate text-sm font-medium">{artifactModal.entry.name}</div>
-              <Button type="button" size="icon-sm" variant="ghost" onClick={() => setArtifactModal(null)} aria-label="결과물 미리보기 닫기">
+              <Button type="button" size="icon-sm" variant="ghost" onClick={() => setArtifactModal(null)} aria-label={t('image-generation.components.workflow.artifact.explorer.panel.close.result.preview')}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -329,10 +323,10 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
             ) : (
               <div className="max-h-[calc(92vh-3.5rem)] overflow-auto bg-background p-4">
                 {artifactModal.isLoading ? (
-                  <div className="py-12 text-center text-sm text-muted-foreground">텍스트 불러오는 중…</div>
+                  <div className="py-12 text-center text-sm text-muted-foreground">{t('image-generation.components.workflow.artifact.explorer.panel.loading.text')}</div>
                 ) : artifactModal.error ? (
                   <Alert variant="destructive">
-                    <AlertTitle>텍스트 미리보기 실패</AlertTitle>
+                    <AlertTitle>{t('image-generation.components.workflow.artifact.explorer.panel.text.preview.failed')}</AlertTitle>
                     <AlertDescription>{artifactModal.error}</AlertDescription>
                   </Alert>
                 ) : (

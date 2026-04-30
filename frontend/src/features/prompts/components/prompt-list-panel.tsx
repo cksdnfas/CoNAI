@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PromptCollectionItem } from '@/types/prompt'
+import { useI18n } from '@/i18n'
 import { PromptListItem } from './prompt-list-item'
 
 interface PromptListPanelProps {
@@ -47,17 +48,19 @@ export function PromptListPanel({
   isLockedPromptItem,
   canDeletePromptItem,
 }: PromptListPanelProps) {
+  const { t, formatNumber } = useI18n()
+
   return (
     <section className="space-y-4">
       {isError ? (
         <Alert variant="destructive">
-          <AlertTitle>프롬프트 목록을 불러오지 못했어</AlertTitle>
-          <AlertDescription>{errorMessage ?? '알 수 없는 오류가 발생했어.'}</AlertDescription>
+          <AlertTitle>{t('prompts.components.prompt.list.panel.failed.to.load.prompts')}</AlertTitle>
+          <AlertDescription>{errorMessage ?? t('prompts.components.prompt.list.panel.an.unknown.error.occurred')}</AlertDescription>
         </Alert>
       ) : null}
 
       {!isLoading && items.length === 0 ? (
-        <PageInset className="text-sm text-muted-foreground">항목 없음</PageInset>
+        <PageInset className="text-sm text-muted-foreground">{t('prompts.components.prompt.list.panel.no.items')}</PageInset>
       ) : null}
 
       <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>
@@ -101,14 +104,14 @@ export function PromptListPanel({
       {totalPages > 0 ? (
         <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-4 text-sm text-muted-foreground">
           <span>
-            page {page} / {totalPages} · total {total.toLocaleString('ko-KR')}
+            {t({ ko: '페이지 {page} / {totalPages} · 전체 {total}', en: 'page {page} / {totalPages} · total {total}' }, { page, totalPages, total: formatNumber(total) })}
           </span>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
-              이전
+              {t({ ko: '이전', en: 'Previous' })}
             </Button>
             <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
-              다음
+              {t({ ko: '다음', en: 'Next' })}
             </Button>
           </div>
         </div>

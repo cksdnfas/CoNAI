@@ -7,6 +7,7 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { buildGroupOptionItems } from '@/features/groups/group-option-utils'
 import type { GroupWithHierarchy } from '@/types/group'
+import { useI18n } from '@/i18n'
 
 interface GroupAssignModalProps {
   open: boolean
@@ -24,6 +25,7 @@ export function GroupAssignModal({
   onClose,
   onSubmit,
 }: GroupAssignModalProps) {
+  const { t, formatNumber } = useI18n()
   const groupOptions = useMemo(() => buildGroupOptionItems(groups), [groups])
   const [selectedGroupId, setSelectedGroupId] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
@@ -41,7 +43,7 @@ export function GroupAssignModal({
     event.preventDefault()
 
     if (!selectedGroupId) {
-      setFormError('먼저 할당할 그룹을 골라줘.')
+      setFormError(t('groups.components.group.assign.modal.choose.a.group.to.assign.first'))
       return
     }
 
@@ -53,13 +55,13 @@ export function GroupAssignModal({
     <SettingsModal
       open={open}
       onClose={onClose}
-      title="선택 이미지를 그룹에 추가"
+      title={t('groups.components.group.assign.modal.add.selected.images.to.a.group')}
       widthClassName="max-w-xl"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
-            <AlertTitle>확인이 필요해</AlertTitle>
+            <AlertTitle>{t('groups.components.group.assign.modal.confirmation.required')}</AlertTitle>
             <AlertDescription>{formError}</AlertDescription>
           </Alert>
         ) : null}
@@ -67,7 +69,7 @@ export function GroupAssignModal({
         <SettingsModalBody className="space-y-5">
           {groupOptions.length > 0 ? (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">대상 그룹</p>
+              <p className="text-sm font-medium text-foreground">{t('groups.components.group.assign.modal.target.group')}</p>
               <HierarchyPicker
                 items={groups}
                 selectedId={selectedGroupId ? Number(selectedGroupId) : null}
@@ -77,7 +79,7 @@ export function GroupAssignModal({
                 getLabel={(group) => (
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <span className="truncate">{group.name}</span>
-                    <span className="shrink-0 text-xs">{group.image_count.toLocaleString('ko-KR')}</span>
+                    <span className="shrink-0 text-xs">{formatNumber(group.image_count)}</span>
                   </div>
                 )}
                 sortItems={(left, right) => left.name.localeCompare(right.name)}
@@ -87,17 +89,17 @@ export function GroupAssignModal({
             </div>
           ) : (
             <Alert>
-              <AlertTitle>그룹이 없어</AlertTitle>
-              <AlertDescription>먼저 그룹을 만들어줘.</AlertDescription>
+              <AlertTitle>{t('groups.components.group.assign.modal.no.groups')}</AlertTitle>
+              <AlertDescription>{t('groups.components.group.assign.modal.create.a.group.first')}</AlertDescription>
             </Alert>
           )}
 
           <SettingsModalFooter>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              취소
+              {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="submit" disabled={isSubmitting || groupOptions.length === 0}>
-              {isSubmitting ? '추가 중…' : '그룹에 추가'}
+              {isSubmitting ? t('groups.components.group.assign.modal.adding') : t('groups.components.group.assign.modal.add.to.group')}
             </Button>
           </SettingsModalFooter>
         </SettingsModalBody>

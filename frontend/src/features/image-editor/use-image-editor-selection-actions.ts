@@ -1,4 +1,5 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import { useI18n } from '@/i18n'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import {
   calculateImageEditorFitZoom,
@@ -82,6 +83,8 @@ export function useImageEditorSelectionActions({
   setHasStoredSelection: Dispatch<SetStateAction<boolean>>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
+
   /** Insert one pasted image layer at the center of the current document. */
   const addPasteLayerFromDataUrl = useCallback(async (imageDataUrl: string) => {
     if (documentSize.width <= 0 || documentSize.height <= 0) {
@@ -112,9 +115,9 @@ export function useImageEditorSelectionActions({
       setActiveLayerId(nextLayer.id)
       queueHistoryCommit()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '붙여넣기 이미지를 불러오지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('image-editor.use.image.editor.selection.actions.failed.to.load.the.pasted.image'), tone: 'error' })
     }
-  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, setActiveLayerId, setLayers, showSnackbar])
+  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, setActiveLayerId, setLayers, showSnackbar, t])
 
   /** Copy, cut, duplicate, or promote the selected rectangle into a movable paste layer. */
   const handleSelectionTransfer = useCallback(async (mode: 'copy' | 'cut' | 'duplicate' | 'promote') => {
@@ -124,7 +127,7 @@ export function useImageEditorSelectionActions({
 
     const normalizedSelectionRect = clampImageEditorRect(selectionRect, documentSize.width, documentSize.height)
     if (normalizedSelectionRect.width < 2 || normalizedSelectionRect.height < 2) {
-      showSnackbar({ message: '선택 영역이 너무 작아.', tone: 'error' })
+      showSnackbar({ message: t('image-editor.use.image.editor.selection.actions.the.selection.is.too.small'), tone: 'error' })
       return
     }
 
@@ -213,20 +216,20 @@ export function useImageEditorSelectionActions({
       queueHistoryCommit()
       showSnackbar({
         message: mode === 'cut'
-          ? '선택을 잘라서 새 레이어로 옮겼어.'
+          ? t('image-editor.use.image.editor.selection.actions.cut.the.selection.to.a.new.layer')
           : mode === 'duplicate'
-            ? '선택 복제 레이어를 만들었어.'
+            ? t('image-editor.use.image.editor.selection.actions.created.a.duplicate.layer.from.the.selection')
             : mode === 'promote'
-              ? '선택을 새 레이어로 승격했어.'
-              : '선택을 새 레이어로 복사했어.',
+              ? t('image-editor.use.image.editor.selection.actions.promoted.the.selection.to.a.new.layer')
+              : t('image-editor.use.image.editor.selection.actions.copied.the.selection.to.a.new.layer'),
         tone: 'info',
       })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '선택 영역을 처리하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('image-editor.use.image.editor.selection.actions.failed.to.process.the.selection'), tone: 'error' })
     } finally {
       setLoading(false)
     }
-  }, [baseImage, createDrawLayer, documentSize.height, documentSize.width, layers, queueHistoryCommit, selectionRect, selectionClipboardRef, setActiveLayerId, setBaseImage, setBaseImageDataUrl, setHasStoredSelection, setLayers, setLoading, setSelectionRect, setTool, showSnackbar])
+  }, [baseImage, createDrawLayer, documentSize.height, documentSize.width, layers, queueHistoryCommit, selectionRect, selectionClipboardRef, setActiveLayerId, setBaseImage, setBaseImageDataUrl, setHasStoredSelection, setLayers, setLoading, setSelectionRect, setTool, showSnackbar, t])
 
   /** Paste the most recently stored selection clipboard as a new paste layer. */
   const handlePasteStoredSelection = useCallback(() => {
@@ -254,8 +257,8 @@ export function useImageEditorSelectionActions({
     setLayers((current) => [...current, nextLayer])
     setActiveLayerId(nextLayer.id)
     queueHistoryCommit()
-    showSnackbar({ message: '저장된 선택을 붙여넣었어.', tone: 'info' })
-  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, selectionClipboardRef, setActiveLayerId, setLayers, showSnackbar])
+    showSnackbar({ message: t('image-editor.use.image.editor.selection.actions.pasted.the.saved.selection'), tone: 'info' })
+  }, [documentSize.height, documentSize.width, layers, queueHistoryCommit, selectionClipboardRef, setActiveLayerId, setLayers, showSnackbar, t])
 
   /** Delete the current selected rectangle from the flattened source composition. */
   const handleDeleteSelection = useCallback(async () => {
@@ -265,7 +268,7 @@ export function useImageEditorSelectionActions({
 
     const normalizedSelectionRect = clampImageEditorRect(selectionRect, documentSize.width, documentSize.height)
     if (normalizedSelectionRect.width < 2 || normalizedSelectionRect.height < 2) {
-      showSnackbar({ message: '선택 영역이 너무 작아.', tone: 'error' })
+      showSnackbar({ message: t('image-editor.use.image.editor.selection.actions.the.selection.is.too.small'), tone: 'error' })
       return
     }
 
@@ -299,13 +302,13 @@ export function useImageEditorSelectionActions({
       setSelectionRect(null)
       setTool('pan')
       queueHistoryCommit()
-      showSnackbar({ message: '선택 영역을 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t('image-editor.use.image.editor.selection.actions.deleted.the.selection'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '선택 영역을 삭제하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('image-editor.use.image.editor.selection.actions.failed.to.delete.the.selection'), tone: 'error' })
     } finally {
       setLoading(false)
     }
-  }, [baseImage, createDrawLayer, documentSize.height, documentSize.width, layers, queueHistoryCommit, selectionRect, setActiveLayerId, setBaseImage, setBaseImageDataUrl, setLayers, setLoading, setSelectionRect, setTool, showSnackbar])
+  }, [baseImage, createDrawLayer, documentSize.height, documentSize.width, layers, queueHistoryCommit, selectionRect, setActiveLayerId, setBaseImage, setBaseImageDataUrl, setLayers, setLoading, setSelectionRect, setTool, showSnackbar, t])
 
   /** Apply one crop rectangle by flattening current source and mask compositions into new bases. */
   const handleApplyCrop = useCallback(async () => {
@@ -315,7 +318,7 @@ export function useImageEditorSelectionActions({
 
     const clampedRect = clampImageEditorRect(cropRect, documentSize.width, documentSize.height)
     if (clampedRect.width < 2 || clampedRect.height < 2) {
-      showSnackbar({ message: '잘라낼 영역이 너무 작아.', tone: 'error' })
+      showSnackbar({ message: t('image-editor.use.image.editor.selection.actions.the.crop.area.is.too.small'), tone: 'error' })
       return
     }
 
@@ -406,13 +409,13 @@ export function useImageEditorSelectionActions({
       setPan({ x: 0, y: 0 })
       setZoom(calculateImageEditorFitZoom(clampedRect.width, clampedRect.height, viewportSize.width, viewportSize.height))
       queueHistoryCommit()
-      showSnackbar({ message: '크롭을 적용했어.', tone: 'info' })
+      showSnackbar({ message: t('image-editor.use.image.editor.selection.actions.crop.applied'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '크롭을 적용하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t('image-editor.use.image.editor.selection.actions.failed.to.apply.crop'), tone: 'error' })
     } finally {
       setLoading(false)
     }
-  }, [baseImage, cropRect, createDrawLayer, documentSize.height, documentSize.width, enableMaskEditing, initialMaskImage, layers, maskStrokes, queueHistoryCommit, selectionClipboardRef, setActiveLayerId, setBaseImage, setBaseImageDataUrl, setCropRect, setDocumentSize, setFlippedX, setHasStoredSelection, setInitialMaskImage, setInitialMaskImageDataUrl, setLayers, setLoading, setMaskStrokes, setPan, setRotation, setSelectionRect, setZoom, showSnackbar, viewportSize.height, viewportSize.width])
+  }, [baseImage, cropRect, createDrawLayer, documentSize.height, documentSize.width, enableMaskEditing, initialMaskImage, layers, maskStrokes, queueHistoryCommit, selectionClipboardRef, setActiveLayerId, setBaseImage, setBaseImageDataUrl, setCropRect, setDocumentSize, setFlippedX, setHasStoredSelection, setInitialMaskImage, setInitialMaskImageDataUrl, setLayers, setLoading, setMaskStrokes, setPan, setRotation, setSelectionRect, setZoom, showSnackbar, t, viewportSize.height, viewportSize.width])
 
   /** Read one image directly from the async browser clipboard API when available. */
   const handlePasteFromClipboardButton = useCallback(async () => {
@@ -431,9 +434,9 @@ export function useImageEditorSelectionActions({
 
       await addPasteLayerFromDataUrl(await readClipboardBlobAsDataUrl(await imageItem.getType(imageType)))
     } catch {
-      showSnackbar({ message: '브라우저가 직접 클립보드 읽기를 막았어. Ctrl+V를 써봐.', tone: 'error' })
+      showSnackbar({ message: t('image-editor.use.image.editor.selection.actions.the.browser.blocked.direct.clipboard.reads.try'), tone: 'error' })
     }
-  }, [addPasteLayerFromDataUrl, showSnackbar])
+  }, [addPasteLayerFromDataUrl, showSnackbar, t])
 
   return {
     addPasteLayerFromDataUrl,

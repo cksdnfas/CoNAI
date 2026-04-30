@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import type { GroupDownloadType, GroupFileCounts } from '@/types/group'
+import { useI18n } from '@/i18n'
 
 interface GroupDownloadModalProps {
   open: boolean
@@ -18,29 +19,29 @@ interface GroupDownloadModalProps {
 
 const downloadCards: Array<{
   type: GroupDownloadType
-  title: string
-  description: string
+  titleKey: string
+  descriptionKey: string
   icon: typeof ImageIcon
   countKey: keyof GroupFileCounts
 }> = [
   {
     type: 'original',
-    title: '원본 이미지',
-    description: '정적 이미지 원본만 ZIP으로 묶어 내려받아.',
+    titleKey: 'groups.components.group.download.modal.original.images',
+    descriptionKey: 'groups.components.group.download.modal.download.only.static.original.images.as.a',
     icon: ImageIcon,
     countKey: 'original',
   },
   {
     type: 'video',
-    title: 'GIF / 동영상',
-    description: 'GIF와 동영상 파일만 따로 내려받아.',
+    titleKey: 'groups.components.group.download.modal.gif.video',
+    descriptionKey: 'groups.components.group.download.modal.download.only.gif.and.video.files',
     icon: Film,
     countKey: 'video',
   },
   {
     type: 'thumbnail',
-    title: '썸네일',
-    description: '빠른 검수용으로 썸네일 ZIP을 받아.',
+    titleKey: 'groups.components.group.download.modal.thumbnails',
+    descriptionKey: 'groups.components.group.download.modal.download.a.thumbnail.zip.for.quick.review',
     icon: Images,
     countKey: 'thumbnail',
   },
@@ -56,19 +57,21 @@ export function GroupDownloadModal({
   onClose,
   onDownload,
 }: GroupDownloadModalProps) {
+  const { t, formatNumber } = useI18n()
+
   return (
     <SettingsModal
       open={open}
       onClose={onClose}
       title={title}
-      description={description ?? '현재 범위에서 내려받을 파일 종류를 골라줘.'}
+      description={description ?? t('groups.components.group.download.modal.choose.which.file.type.to.download.from')}
       widthClassName="max-w-3xl"
     >
       <SettingsModalBody>
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <Badge variant="outline">원본 {counts.original.toLocaleString('ko-KR')}개</Badge>
-          <Badge variant="outline">GIF/동영상 {counts.video.toLocaleString('ko-KR')}개</Badge>
-          <Badge variant="outline">썸네일 {counts.thumbnail.toLocaleString('ko-KR')}개</Badge>
+          <Badge variant="outline">{t({ ko: '원본 {count}개', en: '{count} originals' }, { count: formatNumber(counts.original) })}</Badge>
+          <Badge variant="outline">{t({ ko: 'GIF/동영상 {count}개', en: '{count} GIF/videos' }, { count: formatNumber(counts.video) })}</Badge>
+          <Badge variant="outline">{t({ ko: '썸네일 {count}개', en: '{count} thumbnails' }, { count: formatNumber(counts.thumbnail) })}</Badge>
         </div>
 
         <div className="space-y-2">
@@ -90,11 +93,11 @@ export function GroupDownloadModal({
                     <Icon className="h-4 w-4" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-foreground">{card.title}</span>
-                    <span className="mt-1 block text-xs text-muted-foreground">{card.description}</span>
+                    <span className="block text-sm font-semibold text-foreground">{t(card.titleKey)}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">{t(card.descriptionKey)}</span>
                   </span>
                 </span>
-                <Badge variant={availableCount > 0 ? 'secondary' : 'outline'} className="shrink-0">{availableCount.toLocaleString('ko-KR')}개</Badge>
+                <Badge variant={availableCount > 0 ? 'secondary' : 'outline'} className="shrink-0">{t({ ko: '{count}개', en: '{count}' }, { count: formatNumber(availableCount) })}</Badge>
               </Button>
             )
           })}
@@ -102,7 +105,7 @@ export function GroupDownloadModal({
 
         <SettingsModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading || isDownloading}>
-            취소
+            {t({ ko: '취소', en: 'Cancel' })}
           </Button>
         </SettingsModalFooter>
       </SettingsModalBody>

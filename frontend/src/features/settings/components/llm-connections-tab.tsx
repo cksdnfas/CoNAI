@@ -243,13 +243,13 @@ function summarizePresetValue(value: string, emptyLabel = '비어 있음') {
   return normalized.length > 72 ? `${normalized.slice(0, 72)}…` : normalized
 }
 
-function formatPresetUpdatedAt(value: string) {
+function formatPresetUpdatedAt(value: string, locale?: string) {
   const parsed = Date.parse(value)
   if (!Number.isFinite(parsed)) {
     return '—'
   }
 
-  return new Date(parsed).toLocaleString('ko-KR', {
+  return new Date(parsed).toLocaleString(locale, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',

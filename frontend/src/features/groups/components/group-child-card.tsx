@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ArrowLeft, ChevronRight, Folder } from 'lucide-react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { useGroupPreviewImage } from '@/features/groups/hooks/use-group-preview-image'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
@@ -29,6 +30,7 @@ export function GroupChildCard({
   subtitleOverride,
   cardStyle = 'compact-row',
 }: GroupChildCardProps) {
+  const { formatNumber, t } = useI18n()
   const isBack = variant === 'back'
   const isDisabled = isBack ? false : (group.child_count ?? 0) === 0 && group.image_count === 0
   const [previewFailed, setPreviewFailed] = useState(false)
@@ -41,7 +43,7 @@ export function GroupChildCard({
 
   const previewImage = previewFailed ? null : (previewQuery.data ?? null)
   const title = titleOverride ?? group.name
-  const subtitle = subtitleOverride ?? `${group.image_count.toLocaleString('ko-KR')} images`
+  const subtitle = subtitleOverride ?? t({ ko: '이미지 {count}개', en: '{count} images' }, { count: formatNumber(group.image_count) })
 
   const handleOpen = () => {
     if (!isDisabled) {

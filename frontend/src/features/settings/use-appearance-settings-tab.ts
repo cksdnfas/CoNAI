@@ -8,6 +8,7 @@ import { DEFAULT_APPEARANCE_SETTINGS, applyAppearanceTheme, extractAppearanceThe
 import { buildAppearancePackage, restoreAppearancePackage } from '@/lib/appearance-package'
 import type { AppearanceTabProps } from './components/appearance-tab.types'
 import type { AppearancePresetSlot, AppearanceSettings } from '@/types/settings'
+import { useI18n } from '@/i18n'
 
 interface UseAppearanceSettingsTabOptions {
   /** Whether the appearance tab is currently active. */
@@ -41,6 +42,7 @@ export function useAppearanceSettingsTab({
   notifyInfo,
   notifyError,
 }: UseAppearanceSettingsTabOptions): { tabProps: AppearanceTabProps } {
+  const { t } = useI18n()
   const [appearanceDraft, setAppearanceDraft] = useState<AppearanceSettings | null>(null)
   const effectiveAppearanceDraft = appearanceDraft ?? currentAppearance ?? null
 
@@ -58,10 +60,10 @@ export function useAppearanceSettingsTab({
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setAppearanceDraft(settings.appearance)
-      notifyInfo('화면 설정을 저장했어.')
+      notifyInfo(t({ ko: '화면 설정을 저장했어.', en: 'Appearance settings saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '화면 설정 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '화면 설정 저장에 실패했어.', en: 'Failed to save appearance settings.' }))
     },
   })
 
@@ -74,17 +76,17 @@ export function useAppearanceSettingsTab({
           ? { ...draft, presetSlots: settings.appearance.presetSlots }
           : settings.appearance,
       )
-      notifyInfo('테마 슬롯을 저장했어.')
+      notifyInfo(t({ ko: '테마 슬롯을 저장했어.', en: 'Theme slots saved.' }))
     },
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '테마 슬롯 저장에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '테마 슬롯 저장에 실패했어.', en: 'Failed to save theme slots.' }))
     },
   })
 
   const appearanceFontUploadMutation = useMutation({
     mutationFn: ({ file, target }: { file: File; target: 'sans' | 'mono' }) => uploadAppearanceFont(file, target),
     onError: (error) => {
-      notifyError(error instanceof Error ? error.message : '커스텀 폰트 업로드에 실패했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '커스텀 폰트 업로드에 실패했어.', en: 'Failed to upload custom font.' }))
     },
   })
 
@@ -129,9 +131,9 @@ export function useAppearanceSettingsTab({
       anchor.click()
       anchor.remove()
       URL.revokeObjectURL(url)
-      notifyInfo('현재 테마와 연결된 폰트 자산까지 패키지로 내보냈어.')
+      notifyInfo(t({ ko: '현재 테마와 연결된 폰트 자산까지 패키지로 내보냈어.', en: 'Exported a package including the current theme and linked font assets.' }))
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : '화면 설정 패키지를 내보내지 못했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '화면 설정 패키지를 내보내지 못했어.', en: 'Failed to export the appearance package.' }))
     }
   }
 
@@ -141,13 +143,13 @@ export function useAppearanceSettingsTab({
       const importedAppearance = await restoreAppearancePackage(raw, savedAppearance, uploadAppearanceFont)
 
       if (!importedAppearance) {
-        throw new Error('Appearance JSON 구조를 확인하지 못했어.')
+        throw new Error(t({ ko: 'Appearance JSON 구조를 확인하지 못했어.', en: 'Could not verify the Appearance JSON structure.' }))
       }
 
       await appearanceMutation.mutateAsync(importedAppearance)
-      notifyInfo('화면 설정 패키지를 불러와 저장했어.')
+      notifyInfo(t({ ko: '화면 설정 패키지를 불러와 저장했어.', en: 'Imported and saved the appearance package.' }))
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : '화면 설정 파일을 불러오지 못했어.')
+      notifyError(error instanceof Error ? error.message : t({ ko: '화면 설정 파일을 불러오지 못했어.', en: 'Failed to load the appearance settings file.' }))
     }
   }
 
@@ -175,7 +177,7 @@ export function useAppearanceSettingsTab({
       return next
     })
 
-    notifyInfo(`${target === 'sans' ? '본문' : '모노'} 커스텀 폰트를 업로드했어. 저장하면 기본 테마에 반영돼.`)
+    notifyInfo(t({ ko: '{targetLabel} 커스텀 폰트를 업로드했어. 저장하면 기본 테마에 반영돼.', en: 'Uploaded the {targetLabel} custom font. Save to apply it to the default theme.' }, { targetLabel: target === 'sans' ? t({ ko: '본문', en: 'body' }) : t({ ko: '모노', en: 'mono' }) }))
   }
 
   const handleAppearanceFontClear = (target: 'sans' | 'mono') => {
@@ -194,7 +196,7 @@ export function useAppearanceSettingsTab({
       return next
     })
 
-    notifyInfo(`${target === 'sans' ? '본문' : '모노'} 업로드 폰트를 draft에서 해제했어. 저장하면 반영돼.`)
+    notifyInfo(t({ ko: '{targetLabel} 업로드 폰트를 draft에서 해제했어. 저장하면 반영돼.', en: 'Cleared the {targetLabel} uploaded font from the draft. Save to apply.' }, { targetLabel: target === 'sans' ? t({ ko: '본문', en: 'body' }) : t({ ko: '모노', en: 'mono' }) }))
   }
 
   return {

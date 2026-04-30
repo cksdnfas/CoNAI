@@ -7,6 +7,7 @@ import { TaggerSettingsCard } from './tagger-settings-card'
 import { RatingWeightSettingsCard } from './rating-weight-settings-card'
 import { RatingTierSettingsCard } from './rating-tier-settings-card'
 import type { AutoTabProps } from './auto-tab-types'
+import { useI18n } from '@/i18n'
 
 export function AutoTab({
   taggerDraft,
@@ -53,11 +54,13 @@ export function AutoTab({
   isRunningTaggerAutoTest,
   isRunningKaloscopeAutoTest,
 }: AutoTabProps) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-6">
       <section>
         <AutoOverviewCard
-          heading="개요"
+          heading={t({ ko: '개요', en: 'Overview' })}
           taggerStatus={taggerStatus}
           taggerDependencyResult={taggerDependencyResult}
           kaloscopeStatus={kaloscopeStatus}
@@ -73,8 +76,8 @@ export function AutoTab({
               size="icon-sm"
               onClick={onSaveKaloscope}
               disabled={!kaloscopeDraft || isSavingKaloscope}
-              aria-label="Kaloscope 저장"
-              title="Kaloscope 저장"
+              aria-label={t({ ko: 'Kaloscope 저장', en: 'Save Kaloscope' })}
+              title={t({ ko: 'Kaloscope 저장', en: 'Save Kaloscope' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -93,8 +96,8 @@ export function AutoTab({
               size="icon-sm"
               onClick={onSaveTagger}
               disabled={!taggerDraft || isSavingTagger || isCheckingTaggerDependencies}
-              aria-label={isCheckingTaggerDependencies ? 'WD Tagger 의존성 확인 중' : 'WD Tagger 저장'}
-              title={isCheckingTaggerDependencies ? 'WD Tagger 의존성 확인 중' : 'WD Tagger 저장'}
+              aria-label={isCheckingTaggerDependencies ? t({ ko: 'WD Tagger 의존성 확인 중', en: 'Checking WD Tagger dependencies' }) : t({ ko: 'WD Tagger 저장', en: 'Save WD Tagger' })}
+              title={isCheckingTaggerDependencies ? t({ ko: 'WD Tagger 의존성 확인 중', en: 'Checking WD Tagger dependencies' }) : t({ ko: 'WD Tagger 저장', en: 'Save WD Tagger' })}
             >
               {isCheckingTaggerDependencies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             </Button>
@@ -107,14 +110,14 @@ export function AutoTab({
 
       <section>
         <RatingWeightSettingsCard
-          heading="평가 가중치"
+          heading={t({ ko: '평가 가중치', en: 'Rating weights' })}
           actions={
             <Button
               size="icon-sm"
               onClick={onSaveRatingWeights}
               disabled={!ratingWeightsDraft || isSavingRatingWeights || ratingWeightValidationMessages.length > 0}
-              aria-label="평가 가중치 저장"
-              title="평가 가중치 저장"
+              aria-label={t({ ko: '평가 가중치 저장', en: 'Save rating weights' })}
+              title={t({ ko: '평가 가중치 저장', en: 'Save rating weights' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -128,7 +131,7 @@ export function AutoTab({
 
       <section>
         <RatingTierSettingsCard
-          heading="평가 등급"
+          heading={t({ ko: '평가 등급', en: 'Rating tiers' })}
           actions={
             <>
               <Button
@@ -136,8 +139,8 @@ export function AutoTab({
                 size="icon-sm"
                 variant="outline"
                 onClick={onAddRatingTier}
-                aria-label="등급 추가"
-                title="등급 추가"
+                aria-label={t({ ko: '등급 추가', en: 'Add tier' })}
+                title={t({ ko: '등급 추가', en: 'Add tier' })}
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -145,8 +148,8 @@ export function AutoTab({
                 size="icon-sm"
                 onClick={onSaveRatingTiers}
                 disabled={!ratingTiersDraft || isSavingRatingTiers || ratingTierValidationMessages.length > 0}
-                aria-label="평가 등급 저장"
-                title="평가 등급 저장"
+                aria-label={t({ ko: '평가 등급 저장', en: 'Save rating tiers' })}
+                title={t({ ko: '평가 등급 저장', en: 'Save rating tiers' })}
               >
                 <Save className="h-4 w-4" />
               </Button>
@@ -164,14 +167,14 @@ export function AutoTab({
 
       <section>
         <AutoTestCard
-          heading="테스트"
+          heading={t({ ko: '테스트', en: 'Test' })}
           actions={
             <>
               <Button size="sm" variant="outline" onClick={onResolveAutoTestMedia} disabled={!autoTestHashInput.trim() || isResolvingAutoTestMedia}>
-                해시 확인
+                {t({ ko: '해시 확인', en: 'Check hash' })}
               </Button>
               <Button size="sm" variant="outline" onClick={onRandomAutoTestMedia} disabled={isPickingRandomAutoTestMedia}>
-                랜덤 선택
+                {t({ ko: '랜덤 선택', en: 'Random pick' })}
               </Button>
             </>
           }

@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
+import { useI18n } from '@/i18n'
 import { ImageListItem } from '@/features/images/components/image-list/image-list-item'
 import type { ImageRecord } from '@/types/image'
 import type { RelatedImageCardAspectRatio } from '@/types/settings'
@@ -51,6 +52,7 @@ export function RelatedImageGallerySection({
   renderItemPersistentOverlay,
 }: RelatedImageGallerySectionProps) {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const imageViewModal = useImageViewModal()
   const itemCompositeHashes = useMemo(
     () => items.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
@@ -106,7 +108,7 @@ export function RelatedImageGallerySection({
 
       {errorMessage ? (
         <Alert variant="destructive">
-          <AlertTitle>{title}를 불러오지 못했어</AlertTitle>
+          <AlertTitle>{t({ ko: '{title}를 불러오지 못했어', en: 'Failed to load {title}' }, { title })}</AlertTitle>
           <AlertDescription>{errorMessage}</AlertDescription>
         </Alert>
       ) : null}

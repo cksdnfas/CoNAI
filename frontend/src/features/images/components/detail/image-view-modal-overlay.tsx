@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useI18n } from '@/i18n'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 import { ImageDetailView } from '@/features/images/image-detail-view'
@@ -38,6 +39,7 @@ export function ImageViewModalOverlay({
   onViewPrevious,
   onViewNext,
 }: ImageViewModalOverlayProps) {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mobileActionsRef = useRef<HTMLDivElement | null>(null)
   const isDesktopModalLayout = useMinWidth(1280)
@@ -118,7 +120,7 @@ export function ImageViewModalOverlay({
           )}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={onViewPrevious}
-          aria-label="이전 이미지"
+          aria-label={t('images.components.detail.image.view.modal.overlay.previous.images')}
         >
           <span className={cn(
             'flex items-center justify-center rounded-full border border-white/18 bg-black/20 backdrop-blur-sm',
@@ -140,7 +142,7 @@ export function ImageViewModalOverlay({
           )}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={onViewNext}
-          aria-label="다음 이미지"
+          aria-label={t('images.components.detail.image.view.modal.overlay.next.images')}
         >
           <span className={cn(
             'flex items-center justify-center rounded-full border border-white/18 bg-black/20 backdrop-blur-sm',
@@ -169,7 +171,7 @@ export function ImageViewModalOverlay({
           ref={containerRef}
           role="dialog"
           aria-modal="true"
-          aria-label="이미지 보기"
+          aria-label={t('images.components.detail.image.view.modal.overlay.view.image')}
           tabIndex={-1}
           className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border/85 bg-background/96 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] outline-none md:p-5 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-5"
           style={
