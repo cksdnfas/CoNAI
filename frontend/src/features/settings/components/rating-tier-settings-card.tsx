@@ -133,7 +133,7 @@ export function RatingTierSettingsCard({
                     </button>
                     <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colorValue }} />
                     <span className="font-mono">#{formatNumber(index + 1)}</span>
-                    <span className="truncate">{tier.tier_name || `Tier ${index + 1}`}</span>
+                    <span className="truncate">{tier.tier_name || t({ ko: 'Tier {index}', en: 'Tier {index}' }, { index: index + 1 })}</span>
                     <span className="shrink-0">
                       {formatNumber(tier.min_score)}~{isLast ? '∞' : tier.max_score == null ? '—' : formatNumber(tier.max_score)}
                     </span>
@@ -184,7 +184,7 @@ export function RatingTierSettingsCard({
                           variant="settings"
                           value={tier.tier_name}
                           onChange={(event) => onPatchRatingTier(tier.id, { tier_name: event.target.value })}
-                          placeholder={`Tier ${index + 1}`}
+                          placeholder={t({ ko: 'Tier {index}', en: 'Tier {index}' }, { index: index + 1 })}
                         />
                       </SettingsField>
 

@@ -83,7 +83,7 @@ export function RatingWeightSettingsCard({
       {ratingWeightsDraft ? (
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SettingsField label="General weight">
+            <SettingsField label={t({ ko: 'General 가중치', en: 'General weight' })}>
               <ScrubbableNumberInput
                 min={0}
                 step={0.1}
@@ -93,7 +93,7 @@ export function RatingWeightSettingsCard({
               />
             </SettingsField>
 
-            <SettingsField label="Sensitive weight">
+            <SettingsField label={t({ ko: 'Sensitive 가중치', en: 'Sensitive weight' })}>
               <ScrubbableNumberInput
                 min={0}
                 step={0.1}
@@ -103,7 +103,7 @@ export function RatingWeightSettingsCard({
               />
             </SettingsField>
 
-            <SettingsField label="Questionable weight">
+            <SettingsField label={t({ ko: 'Questionable 가중치', en: 'Questionable weight' })}>
               <ScrubbableNumberInput
                 min={0}
                 step={0.1}
@@ -113,7 +113,7 @@ export function RatingWeightSettingsCard({
               />
             </SettingsField>
 
-            <SettingsField label="Explicit weight">
+            <SettingsField label={t({ ko: 'Explicit 가중치', en: 'Explicit weight' })}>
               <ScrubbableNumberInput
                 min={0}
                 step={0.1}
@@ -128,16 +128,16 @@ export function RatingWeightSettingsCard({
             <div className="text-sm font-semibold text-foreground">{t({ ko: 'score 미리보기', en: 'Score preview' })}</div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <SettingsField label="General score">
+              <SettingsField label={t({ ko: 'General 점수', en: 'General score' })}>
                 <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.general} onChange={(value) => handlePreviewPatch('general', value)} />
               </SettingsField>
-              <SettingsField label="Sensitive score">
+              <SettingsField label={t({ ko: 'Sensitive 점수', en: 'Sensitive score' })}>
                 <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.sensitive} onChange={(value) => handlePreviewPatch('sensitive', value)} />
               </SettingsField>
-              <SettingsField label="Questionable score">
+              <SettingsField label={t({ ko: 'Questionable 점수', en: 'Questionable score' })}>
                 <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.questionable} onChange={(value) => handlePreviewPatch('questionable', value)} />
               </SettingsField>
-              <SettingsField label="Explicit score">
+              <SettingsField label={t({ ko: 'Explicit 점수', en: 'Explicit score' })}>
                 <ScrubbableNumberInput min={0} step={0.01} variant="settings" value={previewState.explicit} onChange={(value) => handlePreviewPatch('explicit', value)} />
               </SettingsField>
             </div>

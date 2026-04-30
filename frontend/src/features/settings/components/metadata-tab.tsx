@@ -68,11 +68,11 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, onSave, isSaving, 
                   {t({ ko: 'PNG secondary extraction 활성화', en: 'Enable PNG secondary extraction' })}
                 </SettingsToggleRow>
 
-                <SettingsField label="Stealth scan mode">
+                <SettingsField label={t({ ko: 'Stealth 스캔 모드', en: 'Stealth scan mode' })}>
                   <Select variant="settings" value={metadataDraft.stealthScanMode} onChange={(event) => onPatchMetadata({ stealthScanMode: event.target.value as MetadataExtractionSettings['stealthScanMode'] })}>
-                    <option value="fast">fast</option>
-                    <option value="full">full</option>
-                    <option value="skip">skip</option>
+                    <option value="fast">{t({ ko: '빠르게', en: 'Fast' })}</option>
+                    <option value="full">{t({ ko: '전체', en: 'Full' })}</option>
+                    <option value="skip">{t({ ko: '건너뛰기', en: 'Skip' })}</option>
                   </Select>
                   <span className="mt-2 text-xs text-muted-foreground">{t({ ko: 'stealth 스캔 범위를 조절해.', en: 'Adjust the stealth scan range.' })}</span>
                 </SettingsField>
