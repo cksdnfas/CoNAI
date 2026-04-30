@@ -521,36 +521,36 @@ export function ComfyWorkflowAuthoringModal({
               </>
             ) : null}
 
-            <SettingsField label="Result view">
+            <SettingsField label="결과 표시 방식">
               <Select
                 variant="settings"
                 value={resultViewMode}
                 onChange={(event) => setResultViewMode(event.target.value as 'history' | 'artifact_explorer')}
               >
-                <option value="history">History viewer</option>
-                <option value="artifact_explorer">Artifact explorer</option>
+                <option value="history">히스토리 뷰어</option>
+                <option value="artifact_explorer">아티팩트 탐색기</option>
               </Select>
             </SettingsField>
 
             {resultViewMode === 'artifact_explorer' ? (
               <>
-                <SettingsField label="Artifact layout">
+                <SettingsField label="아티팩트 저장 방식">
                   <Select
                     variant="settings"
                     value={artifactDirectoryMode}
                     onChange={(event) => setArtifactDirectoryMode(event.target.value as 'shared' | 'per_run')}
                   >
-                    <option value="shared">General shared folder</option>
-                    <option value="per_run">Per-execution folders</option>
+                    <option value="shared">공유 폴더</option>
+                    <option value="per_run">실행별 폴더</option>
                   </Select>
                 </SettingsField>
 
-                <SettingsField label="Artifact root path">
+                <SettingsField label="아티팩트 루트 경로">
                   <Input
                     variant="settings"
                     value={artifactRootPath}
                     onChange={(event) => setArtifactRootPath(event.target.value)}
-                    placeholder="Default: runtime/artifacts/comfy-workflows/<workflow>"
+                    placeholder="기본값: runtime/artifacts/comfy-workflows/<workflow>"
                   />
                 </SettingsField>
               </>
