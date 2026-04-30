@@ -528,13 +528,13 @@ export function ComfyWorkflowAuthoringModal({
                 onChange={(event) => setResultViewMode(event.target.value as 'history' | 'artifact_explorer')}
               >
                 <option value="history">히스토리 뷰어</option>
-                <option value="artifact_explorer">아티팩트 탐색기</option>
+                <option value="artifact_explorer">탐색형 뷰어</option>
               </Select>
             </SettingsField>
 
             {resultViewMode === 'artifact_explorer' ? (
               <>
-                <SettingsField label="아티팩트 저장 방식">
+                <SettingsField label="결과 저장 방식">
                   <Select
                     variant="settings"
                     value={artifactDirectoryMode}
@@ -545,7 +545,7 @@ export function ComfyWorkflowAuthoringModal({
                   </Select>
                 </SettingsField>
 
-                <SettingsField label="아티팩트 루트 경로">
+                <SettingsField label="결과 저장 루트 경로">
                   <Input
                     variant="settings"
                     value={artifactRootPath}
