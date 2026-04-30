@@ -37,6 +37,7 @@ import {
 } from './prompt-syntax-highlight-helpers'
 import { useWildcardWorkspaceBrowser } from './use-wildcard-workspace-browser'
 import { WildcardInlinePickerExplorer } from './wildcard-inline-picker-explorer'
+import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRect } from './floating-dropdown-utils'
 
 type WildcardInlinePickerFieldProps = {
   value: string
@@ -215,14 +216,12 @@ function WildcardInlinePickerPopup({
 
   return createPortal(
     <div
-      className="z-[160] rounded-sm border border-border bg-surface-container shadow-[0_18px_40px_rgba(0,0,0,0.34)]"
+      className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'z-[160] overflow-hidden bg-surface-container')}
       style={{
-        position: 'fixed',
         top: position.top,
         left: position.left,
         width: position.width,
         maxHeight: position.maxHeight,
-        transform: position.placement === 'top' ? 'translateY(calc(-100% - 8px))' : 'translateY(8px)',
       }}
       onMouseDown={(event) => {
         event.preventDefault()
@@ -443,23 +442,12 @@ export function WildcardInlinePickerField({
       }
 
       const rect = anchor.getBoundingClientRect()
-      const viewportPadding = 12
-      const popupGap = 8
-      const availableBelow = window.innerHeight - viewportPadding - rect.bottom - popupGap
-      const availableAbove = rect.top - viewportPadding - popupGap
-      const shouldOpenAbove = availableBelow < 220 && availableAbove > availableBelow
-      const width = Math.min(rect.width, window.innerWidth - viewportPadding * 2)
-
-      let left = rect.left
-      left = Math.max(viewportPadding, Math.min(left, window.innerWidth - viewportPadding - width))
-
-      setInlinePopupPosition({
-        top: shouldOpenAbove ? rect.top : rect.bottom,
-        left,
-        width,
-        maxHeight: Math.max(140, shouldOpenAbove ? availableAbove : availableBelow),
-        placement: shouldOpenAbove ? 'top' : 'bottom',
-      })
+      setInlinePopupPosition(resolveFloatingDropdownRect(anchor, {
+        minWidth: rect.width,
+        preferredMaxHeight: 420,
+        minUsableHeight: 220,
+        gap: 8,
+      }))
     }
 
     updatePosition()

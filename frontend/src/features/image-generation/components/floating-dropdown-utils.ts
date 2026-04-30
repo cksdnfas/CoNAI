@@ -48,7 +48,7 @@ export function resolveFloatingDropdownRect(anchor: HTMLElement, options: Resolv
   return { left, top, width, maxHeight, placement }
 }
 
-export const FLOATING_DROPDOWN_MENU_CLASS = 'fixed z-[140] overflow-auto rounded-sm border border-border/80 bg-background/98 shadow-[0_18px_48px_rgba(0,0,0,0.38)] backdrop-blur-md'
+export const FLOATING_DROPDOWN_MENU_CLASS = 'fixed z-[140] rounded-sm border border-border/80 bg-background/98 shadow-[0_18px_48px_rgba(0,0,0,0.38)] backdrop-blur-md'
 
 export function getFloatingDropdownItemClassName({ selected, className }: { selected?: boolean; className?: string }) {
   return cn(

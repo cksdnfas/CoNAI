@@ -112,7 +112,7 @@ function WorkflowTargetSelect({
         ? createPortal(
             <div
               id="comfy-workflow-target-select-menu"
-              className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'p-1')}
+              className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'overflow-auto p-1')}
               style={{
                 left: menuRect.left,
                 top: menuRect.top,

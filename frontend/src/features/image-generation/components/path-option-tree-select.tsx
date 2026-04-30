@@ -220,7 +220,7 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', o
         ? createPortal(
             <div
               id={menuId}
-              className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'p-2')}
+              className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'overflow-auto p-2')}
               style={{ left: menuRect.left, top: menuRect.top, width: menuRect.width, maxHeight: menuRect.maxHeight }}
             >
               <HierarchyNav
