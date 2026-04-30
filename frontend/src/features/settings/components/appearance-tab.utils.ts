@@ -14,12 +14,12 @@ export function areThemeSettingsEqual(left: AppearanceSettings | null, right: Ap
   return JSON.stringify(extractAppearanceTheme(left)) === JSON.stringify(right)
 }
 
-export function formatSlotTimestamp(value: string | null) {
+export function formatSlotTimestamp(value: string | null, locale: string, noSaveHistoryLabel: string) {
   if (!value) {
-    return '저장 이력 없음'
+    return noSaveHistoryLabel
   }
 
-  return new Date(value).toLocaleString()
+  return new Date(value).toLocaleString(locale)
 }
 
 export function getAppearanceTabColorValues(appearanceDraft: AppearanceSettings | null): AppearanceTabColorValues {

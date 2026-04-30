@@ -1,3 +1,4 @@
+import { useI18n } from '@/i18n'
 import type { WatchedFolder } from '@/types/folder'
 import { getWatcherStatusTone, SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
 
@@ -16,6 +17,7 @@ export function WatchedFolderListItem({
   gridClassName,
   onOpenOptions,
 }: WatchedFolderListItemProps) {
+  const { t } = useI18n()
   const watcherLabel = watcherState || 'stopped'
   const isWatching = watcherLabel.toLowerCase() === 'watching'
 
@@ -26,15 +28,15 @@ export function WatchedFolderListItem({
       onOpenOptions={() => onOpenOptions(folder.id)}
       cells={[
         <div className="min-w-0 space-y-1">
-          <div className="truncate font-medium text-foreground">{folder.folder_name || '이름 없는 폴더'}</div>
-          {folder.is_default === 1 ? <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">default</div> : null}
+          <div className="truncate font-medium text-foreground">{folder.folder_name || t('watchedFolderListItem.unnamedFolder')}</div>
+          {folder.is_default === 1 ? <div className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{t({ ko: '기본', en: 'Default' })}</div> : null}
         </div>,
         <div className="break-all font-mono text-xs text-muted-foreground">{folder.folder_path}</div>,
-        <SettingsStatusIcon checked={folder.is_active === 1} title={folder.is_active === 1 ? 'active' : 'inactive'} />,
+        <SettingsStatusIcon checked={folder.is_active === 1} title={folder.is_active === 1 ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })} />,
         <SettingsStatusIcon
           checked={isWatching}
           tone={getWatcherStatusTone(watcherState)}
-          title={`watcher ${watcherLabel}`}
+          title={t({ ko: 'watcher {status}', en: 'Watcher {status}' }, { status: watcherLabel })}
         />,
       ]}
     />
