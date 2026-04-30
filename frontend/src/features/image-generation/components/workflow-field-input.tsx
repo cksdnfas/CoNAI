@@ -11,11 +11,17 @@ import { TextSegmentSpreadsheetInput } from './text-segment-spreadsheet-input'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { PowerLoraLoaderInput } from './power-lora-loader-input'
+import { PathOptionTreeSelect } from './path-option-tree-select'
 
 const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
 
 function getSelectOptionLabel(option: string) {
   return option === DROPDOWN_RANDOM_OPTION_VALUE ? '랜덤 선택' : option
+}
+
+function shouldUsePathTreeSelect(options: string[]) {
+  const pathLikeOptions = options.filter((option) => option !== DROPDOWN_RANDOM_OPTION_VALUE && /[\\/]/.test(option))
+  return pathLikeOptions.length >= 2
 }
 
 type WorkflowFieldInputProps = {
@@ -76,10 +82,23 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
   }
 
   if (field.type === 'select') {
+    const options = field.options ?? []
+    const stringValue = typeof value === 'string' ? value : ''
+
+    if (shouldUsePathTreeSelect(options)) {
+      return wrapField(
+        <PathOptionTreeSelect
+          value={stringValue}
+          options={options}
+          onChange={onChange}
+        />,
+      )
+    }
+
     return wrapField(
-      <Select value={typeof value === 'string' ? value : ''} onChange={(event) => onChange(event.target.value)}>
+      <Select value={stringValue} onChange={(event) => onChange(event.target.value)}>
         <option value="">선택</option>
-        {(field.options ?? []).map((option) => (
+        {options.map((option) => (
           <option key={option} value={option}>
             {getSelectOptionLabel(option)}
           </option>
