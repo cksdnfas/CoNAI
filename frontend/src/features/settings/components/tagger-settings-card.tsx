@@ -60,15 +60,15 @@ export function TaggerSettingsCard({
               </Select>
             </SettingsField>
 
-            <SettingsField label="General threshold">
+            <SettingsField label={t({ ko: 'General 임계값', en: 'General threshold' })}>
               <Input type="number" min={0} max={1} step={0.01} variant="settings" value={taggerDraft.generalThreshold} onChange={(event) => onPatchTagger({ generalThreshold: Number(event.target.value) || 0 })} />
             </SettingsField>
 
-            <SettingsField label="Character threshold">
+            <SettingsField label={t({ ko: 'Character 임계값', en: 'Character threshold' })}>
               <Input type="number" min={0} max={1} step={0.01} variant="settings" value={taggerDraft.characterThreshold} onChange={(event) => onPatchTagger({ characterThreshold: Number(event.target.value) || 0 })} />
             </SettingsField>
 
-            <SettingsField label="Python path" className="md:col-span-2">
+            <SettingsField label={t({ ko: 'Python 경로', en: 'Python path' })} className="md:col-span-2">
               <Input variant="settings" value={taggerDraft.pythonPath} onChange={(event) => onPatchTagger({ pythonPath: event.target.value })} />
             </SettingsField>
 

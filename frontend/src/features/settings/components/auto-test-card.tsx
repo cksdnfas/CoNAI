@@ -50,7 +50,7 @@ export function AutoTestCard({
 
   return (
     <SettingsSection heading={heading} actions={actions}>
-      <SettingsField label="Composite hash">
+      <SettingsField label={t({ ko: 'Composite hash', en: 'Composite hash' })}>
         <Input
           variant="settings"
           className="font-mono"
@@ -62,7 +62,7 @@ export function AutoTestCard({
             event.preventDefault()
             onResolveAutoTestMedia()
           }}
-          placeholder="image hash"
+          placeholder={t({ ko: 'image hash', en: 'image hash' })}
         />
       </SettingsField>
 
@@ -89,13 +89,13 @@ export function AutoTestCard({
               <SettingsValueTile label={t({ ko: '존재 여부', en: 'Exists' })} value={autoTestMedia.existsOnDisk ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })} />
               <SettingsValueTile label={t({ ko: '크기', en: 'Size' })} value={formatFileSize(autoTestMedia.fileSize)} />
               <SettingsValueTile
-                label="hash"
+                label={t({ ko: '해시', en: 'Hash' })}
                 value={autoTestMedia.compositeHash}
                 className="md:col-span-2"
                 valueClassName="break-all font-mono text-xs"
               />
               <SettingsValueTile
-                label="path"
+                label={t({ ko: '경로', en: 'Path' })}
                 value={autoTestMedia.originalFilePath ?? '—'}
                 className="md:col-span-2"
                 valueClassName="break-all font-mono text-xs"
@@ -117,7 +117,7 @@ export function AutoTestCard({
 
       {extractedPromptCards.length > 0 ? (
         <SettingsInsetBlock>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Extracted prompt</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</div>
           <div className="mt-3">
             <ExtractedPromptSections items={extractedPromptCards} />
           </div>

@@ -52,14 +52,14 @@ export function AutoOverviewCard({
         <SettingsValueTile label={t({ ko: '로드된 모델', en: 'Loaded model' })} value={taggerStatus?.currentModel ?? '—'} />
         <SettingsValueTile label={t({ ko: '현재 디바이스', en: 'Current device' })} value={taggerStatus?.currentDevice ?? '—'} />
         <SettingsValueTile
-          label="WD Tagger"
+          label={t({ ko: 'WD Tagger', en: 'WD Tagger' })}
           value={renderDependencyStatus({
             ready: taggerDependencyResult?.available ?? null,
             pending: isCheckingTaggerDependencies,
             t,
           })}
         />
-        <SettingsValueTile label="Kaloscope" value={renderDependencyStatus({ ready: kaloscopeReady, t })} />
+        <SettingsValueTile label={t({ ko: 'Kaloscope', en: 'Kaloscope' })} value={renderDependencyStatus({ ready: kaloscopeReady, t })} />
       </div>
     </SettingsSection>
   )

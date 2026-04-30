@@ -57,7 +57,7 @@ export function KaloscopeSettingsCard({
               </Select>
             </SettingsField>
 
-            <SettingsField label="Top K">
+            <SettingsField label={t({ ko: 'Top K', en: 'Top K' })}>
               <Input type="number" min={1} max={200} variant="settings" value={kaloscopeDraft.topK} onChange={(event) => onPatchKaloscope({ topK: Number(event.target.value) || 1 })} />
             </SettingsField>
 
@@ -80,7 +80,7 @@ export function KaloscopeSettingsCard({
               />
             </SettingsField>
 
-            <SettingsField label="Artist 링크 URL" className="md:col-span-2">
+            <SettingsField label={t({ ko: 'Artist 링크 URL', en: 'Artist link URL' })} className="md:col-span-2">
               <div className="space-y-2">
                 <Input
                   variant="settings"
@@ -104,11 +104,11 @@ export function KaloscopeSettingsCard({
 
         <div className="flex flex-wrap gap-2 text-xs md:col-span-2">
           <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-foreground">{t({ ko: '의존성', en: 'Dependencies' })} {formatKaloscopeDependencyLabel(kaloscopeStatus, t)}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">daemon {kaloscopeStatus?.isRunning ? t({ ko: '실행 중', en: 'running' }) : t({ ko: '중지', en: 'stopped' })}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">loaded {kaloscopeStatus?.modelLoaded ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: 'daemon', en: 'daemon' })} {kaloscopeStatus?.isRunning ? t({ ko: '실행 중', en: 'running' }) : t({ ko: '중지', en: 'stopped' })}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: 'loaded', en: 'loaded' })} {kaloscopeStatus?.modelLoaded ? t({ ko: '예', en: 'yes' }) : t({ ko: '아니오', en: 'no' })}</span>
           <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '캐시', en: 'Cache' })} {kaloscopeStatus?.modelCached ? t({ ko: '준비됨', en: 'ready' }) : t({ ko: '없음', en: 'none' })}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">model {kaloscopeStatus?.currentModel ?? '—'}</span>
-          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">device {kaloscopeStatus?.currentDevice ?? '—'}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '모델', en: 'Model' })} {kaloscopeStatus?.currentModel ?? '—'}</span>
+          <span className="rounded-full border border-border/70 bg-surface-low/45 px-3 py-1.5 text-muted-foreground">{t({ ko: '디바이스', en: 'Device' })} {kaloscopeStatus?.currentDevice ?? '—'}</span>
         </div>
       </div>
     </SettingsSection>
