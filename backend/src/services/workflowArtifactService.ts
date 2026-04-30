@@ -49,7 +49,8 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   '.pth': 'application/octet-stream',
 }
 
-const ARTIFACT_INTERNAL_DIRNAME = '.conai'
+const ARTIFACT_INTERNAL_DIRNAME = '_conai'
+const LEGACY_ARTIFACT_INTERNAL_DIRNAME = '.conai'
 const ARTIFACT_DIRECTORY_THUMBNAIL_NAME = 'thumbnail.webp'
 const ARTIFACT_TEXT_FILES_DIRNAME = 'text-files'
 
@@ -89,7 +90,7 @@ function isTextArtifactMimeType(mimeType: string | null) {
 }
 
 function isInternalArtifactEntry(name: string) {
-  return name === ARTIFACT_INTERNAL_DIRNAME
+  return name === ARTIFACT_INTERNAL_DIRNAME || name === LEGACY_ARTIFACT_INTERNAL_DIRNAME
 }
 
 async function getDirectoryGeneratedThumbnail(root: string, directory: string) {
