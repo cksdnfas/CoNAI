@@ -3,7 +3,6 @@ import { createTranslationCatalog, type ScopedLocaleResources } from './types'
 export const imageEditorResources = {
   ko: {
   "image-editor.image.editor.modal.mask.cleared": "마스크를 비웠어.",
-  "image-editor.use.image.editor.layer.session.actions.value.layer.duplicated": "${sourceLayer.name} 레이어를 복제했어.",
   "image-editor.use.image.editor.layer.session.actions.locked.visible.layers.cannot.be.merged.into": "잠긴 보이는 레이어는 전체 병합할 수 없어.",
   "image-editor.use.image.editor.layer.session.actions.merged.visible.layers.into.one": "보이는 레이어를 하나로 병합했어.",
   "image-editor.use.image.editor.layer.session.actions.failed.to.merge.visible.layers": "보이는 레이어를 병합하지 못했어.",
@@ -32,7 +31,6 @@ export const imageEditorResources = {
 },
   en: {
   "image-editor.image.editor.modal.mask.cleared": "Mask cleared.",
-  "image-editor.use.image.editor.layer.session.actions.value.layer.duplicated": "${sourceLayer.name} layer duplicated.",
   "image-editor.use.image.editor.layer.session.actions.locked.visible.layers.cannot.be.merged.into": "Locked visible layers cannot be merged into one.",
   "image-editor.use.image.editor.layer.session.actions.merged.visible.layers.into.one": "Merged visible layers into one.",
   "image-editor.use.image.editor.layer.session.actions.failed.to.merge.visible.layers": "Failed to merge visible layers.",
