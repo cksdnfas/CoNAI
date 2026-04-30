@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { CompactGenerationActionSurface, GenerationControllerFieldStack } from './shared-generation-controller'
 import { WorkflowFieldDisclosureCard } from './workflow-field-disclosure-card'
+import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownItemClassName, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 
 type WorkflowTargetOption = {
   value: string
@@ -34,7 +35,7 @@ function WorkflowTargetSelect({
   onChange: (value: string) => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
-  const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null)
+  const [menuRect, setMenuRect] = useState<FloatingDropdownRect | null>(null)
   const triggerRef = useRef<HTMLDivElement | null>(null)
   const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? null
 
@@ -46,16 +47,12 @@ function WorkflowTargetSelect({
     }
 
     const updateMenuRect = () => {
-      const rect = triggerRef.current?.getBoundingClientRect()
-      if (!rect) {
+      const triggerElement = triggerRef.current
+      if (!triggerElement) {
         return
       }
 
-      setMenuRect({
-        left: rect.left,
-        top: rect.bottom + 6,
-        width: rect.width,
-      })
+      setMenuRect(resolveFloatingDropdownRect(triggerElement, { minWidth: menuMinWidth }))
     }
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -90,7 +87,7 @@ function WorkflowTargetSelect({
       window.removeEventListener('pointerdown', handlePointerDown)
       window.removeEventListener('keydown', handleEscape)
     }
-  }, [isOpen])
+  }, [isOpen, menuMinWidth])
 
   return (
     <>
@@ -115,11 +112,12 @@ function WorkflowTargetSelect({
         ? createPortal(
             <div
               id="comfy-workflow-target-select-menu"
-              className="fixed z-[120] overflow-hidden rounded-sm border border-border/80 bg-background/95 p-1 shadow-[0_18px_48px_rgba(0,0,0,0.35)] backdrop-blur-md"
+              className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'p-1')}
               style={{
                 left: menuRect.left,
                 top: menuRect.top,
-                width: Math.max(menuRect.width, menuMinWidth),
+                width: menuRect.width,
+                maxHeight: menuRect.maxHeight,
               }}
               role="listbox"
               aria-label="생성 타겟 선택"
@@ -130,10 +128,7 @@ function WorkflowTargetSelect({
                   <button
                     key={option.value}
                     type="button"
-                    className={cn(
-                      'flex w-full items-center justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm transition-colors',
-                      isSelected ? 'bg-surface-high text-foreground' : 'text-muted-foreground hover:bg-surface-high/70 hover:text-foreground',
-                    )}
+                    className={getFloatingDropdownItemClassName({ selected: isSelected })}
                     onClick={() => {
                       onChange(option.value)
                       setIsOpen(false)

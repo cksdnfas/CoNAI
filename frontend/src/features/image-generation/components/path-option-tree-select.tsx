@@ -5,6 +5,7 @@ import { HierarchyNav, type HierarchyNavItemState } from '@/components/common/hi
 import { Button } from '@/components/ui/button'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { cn } from '@/lib/utils'
+import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 
 const PATH_RANDOM_OPTION_VALUE = '__random__'
 
@@ -135,7 +136,7 @@ function renderPathOptionIcon(node: PathOptionTreeNode, state: HierarchyNavItemS
 /** Render path-like select options as a reusable HierarchyNav tree while preserving the actual selected value. */
 export function PathOptionTreeSelect({ value, options, placeholder = '선택', onChange }: PathOptionTreeSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [menuRect, setMenuRect] = useState<{ left: number; top: number; width: number } | null>(null)
+  const [menuRect, setMenuRect] = useState<FloatingDropdownRect | null>(null)
   const triggerRef = useRef<HTMLDivElement | null>(null)
   const menuId = useId()
   const treeNodes = useMemo(() => buildPathOptionTree(options, placeholder), [options, placeholder])
@@ -151,21 +152,12 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', o
     }
 
     const updateMenuRect = () => {
-      const rect = triggerRef.current?.getBoundingClientRect()
-      if (!rect) {
+      const triggerElement = triggerRef.current
+      if (!triggerElement) {
         return
       }
 
-      const viewportPadding = 12
-      const preferredWidth = Math.max(rect.width, 320)
-      const width = Math.min(preferredWidth, window.innerWidth - viewportPadding * 2)
-      const left = Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - viewportPadding - width)
-      const maxBelow = window.innerHeight - rect.bottom - viewportPadding
-      const maxAbove = rect.top - viewportPadding
-      const shouldOpenUp = maxBelow < 260 && maxAbove > maxBelow
-      const top = shouldOpenUp ? Math.max(viewportPadding, rect.top - Math.min(420, maxAbove)) : rect.bottom + 6
-
-      setMenuRect({ left, top, width })
+      setMenuRect(resolveFloatingDropdownRect(triggerElement, { minWidth: 320 }))
     }
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -228,8 +220,8 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', o
         ? createPortal(
             <div
               id={menuId}
-              className="fixed z-[140] max-h-[min(420px,calc(100vh-1.5rem))] overflow-auto rounded-sm border border-border/80 bg-background/98 p-2 shadow-[0_18px_48px_rgba(0,0,0,0.38)] backdrop-blur-md"
-              style={{ left: menuRect.left, top: menuRect.top, width: menuRect.width }}
+              className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'p-2')}
+              style={{ left: menuRect.left, top: menuRect.top, width: menuRect.width, maxHeight: menuRect.maxHeight }}
             >
               <HierarchyNav
                 items={treeNodes}
