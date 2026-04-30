@@ -56,6 +56,48 @@ function isArtifactThumbnailCandidate(output: { format?: string; kind?: string }
   return output.kind !== 'video' && resolvedMimeType.startsWith('image/')
 }
 
+type SavedArtifactOutput = {
+  artifact: ComfyGenerationSavedArtifact
+  isImageLike: boolean
+  nodeOrder: number
+  index: number
+  originalName: string
+}
+
+function scoreArtifactThumbnailTarget(output: SavedArtifactOutput) {
+  const normalizedName = `${output.originalName}/${output.artifact.relativePath}`.toLowerCase()
+  let score = 0
+
+  if (!output.isImageLike) {
+    score -= 10_000
+  }
+
+  // Artifact bundles often include a LoRA/training preview image beside the real
+  // generated output. Prefer actual result-like images over preview helpers even
+  // when the preview node has a higher Comfy node id.
+  if (/(^|[._\-/])(preview|thumbnail|thumb|sample|intermediate|debug|mask|control)([._\-/]|$)/i.test(normalizedName)) {
+    score -= 2_000
+  }
+
+  if (/(^|[._\-/])(final|result|output)([._\-/]|$)/i.test(normalizedName)) {
+    score += 800
+  }
+
+  if (/^comfyui[_-]/i.test(path.basename(output.originalName))) {
+    score += 400
+  }
+
+  score += output.nodeOrder * 10
+  score -= output.index
+  return score
+}
+
+function pickArtifactThumbnailTarget(outputs: SavedArtifactOutput[]) {
+  return outputs
+    .filter((output) => output.isImageLike)
+    .sort((left, right) => scoreArtifactThumbnailTarget(right) - scoreArtifactThumbnailTarget(left))[0]
+}
+
 /** Backfill renamed CoNAI artifact-node inputs so older saved workflows keep running. */
 function normalizeCoNaiArtifactFileOutputNodes(workflow: Record<string, any>) {
   for (const node of Object.values(workflow)) {
@@ -108,7 +150,7 @@ export async function executeComfyGeneration(
   const artifactRunStartedAt = new Date()
   let representativeImage: ComfyGenerationRepresentativeImage | null = null
   const pendingTempPaths = new Set(collectedOutputs.map((output) => output.tempPath))
-  const savedArtifactOutputs: Array<{ artifact: ComfyGenerationSavedArtifact; isImageLike: boolean; nodeOrder: number; index: number }> = []
+  const savedArtifactOutputs: SavedArtifactOutput[] = []
 
   try {
     for (const [index, output] of collectedOutputs.entries()) {
@@ -131,6 +173,7 @@ export async function executeComfyGeneration(
             isImageLike: isArtifactThumbnailCandidate(output, savedArtifact),
             nodeOrder: parseComfyNodeOrder(output.nodeId),
             index,
+            originalName: output.subfolder ? path.join(output.subfolder, output.filename || path.basename(output.tempPath)) : output.filename || path.basename(output.tempPath),
           })
           console.log(`✅ ComfyUI artifact saved: ${savedArtifact.relativePath}`)
         } else {
@@ -176,11 +219,7 @@ export async function executeComfyGeneration(
   }
 
   if (isArtifactWorkflow && savedArtifactOutputs.length > 0) {
-    const finalNodeOrder = Math.max(...savedArtifactOutputs.map((output) => output.nodeOrder))
-    const thumbnailTarget = savedArtifactOutputs.find((output) => output.nodeOrder === finalNodeOrder && output.isImageLike)
-      ?? [...savedArtifactOutputs]
-        .filter((output) => output.isImageLike)
-        .sort((left, right) => (right.nodeOrder - left.nodeOrder) || (left.index - right.index))[0]
+    const thumbnailTarget = pickArtifactThumbnailTarget(savedArtifactOutputs)
 
     if (thumbnailTarget) {
       try {

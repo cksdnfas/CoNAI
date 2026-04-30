@@ -52,6 +52,7 @@ const MIME_BY_EXTENSION: Record<string, string> = {
 const ARTIFACT_INTERNAL_DIRNAME = '_conai'
 const LEGACY_ARTIFACT_INTERNAL_DIRNAME = '.conai'
 const ARTIFACT_DIRECTORY_THUMBNAIL_NAME = 'thumbnail.webp'
+const ARTIFACT_DIRECTORY_THUMBNAIL_MANIFEST_NAME = 'thumbnail.json'
 const ARTIFACT_TEXT_FILES_DIRNAME = 'text-files'
 
 function slugify(value: string) {
@@ -95,12 +96,36 @@ function isInternalArtifactEntry(name: string) {
 
 async function getDirectoryGeneratedThumbnail(root: string, directory: string) {
   const thumbnailPath = path.join(directory, ARTIFACT_INTERNAL_DIRNAME, ARTIFACT_DIRECTORY_THUMBNAIL_NAME)
-  const stat = await fs.promises.stat(thumbnailPath).catch(() => null)
-  if (!stat?.isFile()) {
+  const manifestPath = path.join(directory, ARTIFACT_INTERNAL_DIRNAME, ARTIFACT_DIRECTORY_THUMBNAIL_MANIFEST_NAME)
+  const [thumbnailStat, manifestStat] = await Promise.all([
+    fs.promises.stat(thumbnailPath).catch(() => null),
+    fs.promises.stat(manifestPath).catch(() => null),
+  ])
+  if (!thumbnailStat?.isFile() || !manifestStat?.isFile()) {
     return null
   }
 
   return path.relative(root, thumbnailPath).replace(/\\/g, '/')
+}
+
+function scoreDirectoryThumbnailCandidate(root: string, candidate: { absolutePath: string; mtimeMs: number }) {
+  const relativePath = path.relative(root, candidate.absolutePath).replace(/\\/g, '/').toLowerCase()
+  const basename = path.basename(candidate.absolutePath).toLowerCase()
+  let score = candidate.mtimeMs / 1000
+
+  if (/(^|[._\-/])(preview|thumbnail|thumb|sample|intermediate|debug|mask|control)([._\-/]|$)/i.test(relativePath)) {
+    score -= 2_000_000_000
+  }
+
+  if (/(^|[._\-/])(final|result|output)([._\-/]|$)/i.test(relativePath)) {
+    score += 800_000_000
+  }
+
+  if (/^comfyui[_-]/i.test(basename)) {
+    score += 400_000_000
+  }
+
+  return score
 }
 
 async function findDirectoryThumbnail(root: string, directory: string, depth = 3): Promise<string | null> {
@@ -141,9 +166,10 @@ async function findDirectoryThumbnail(root: string, directory: string, depth = 3
   }
 
   await scan(directory, depth)
-  const latestImage = candidates.sort((a, b) => b.mtimeMs - a.mtimeMs)[0]
+  const selectedImage = candidates
+    .sort((a, b) => scoreDirectoryThumbnailCandidate(root, b) - scoreDirectoryThumbnailCandidate(root, a))[0]
 
-  return latestImage ? path.relative(root, latestImage.absolutePath).replace(/\\/g, '/') : null
+  return selectedImage ? path.relative(root, selectedImage.absolutePath).replace(/\\/g, '/') : null
 }
 
 function sanitizeArtifactRelativePath(value: string | undefined | null) {
@@ -391,6 +417,15 @@ export async function writeWorkflowArtifactDirectoryThumbnail(input: {
     .resize({ width: 512, height: 512, fit: 'cover', withoutEnlargement: true })
     .webp({ quality: 82 })
     .toFile(thumbnailPath)
+
+  const sourceRelativePath = isSubPath(input.sourcePath, root)
+    ? path.relative(root, input.sourcePath).replace(/\\/g, '/')
+    : null
+  await fs.promises.writeFile(
+    path.join(thumbnailDirectory, ARTIFACT_DIRECTORY_THUMBNAIL_MANIFEST_NAME),
+    JSON.stringify({ sourceRelativePath, createdAt: new Date().toISOString() }, null, 2),
+    'utf8',
+  )
 
   return {
     absolutePath: thumbnailPath,
