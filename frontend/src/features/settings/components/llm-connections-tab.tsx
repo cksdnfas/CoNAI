@@ -373,7 +373,7 @@ function LlmConnectionFormFields({
         />
       </SettingsField>
 
-      <SettingsField label="Base URL" className="md:col-span-2">
+      <SettingsField label={t({ ko: '기본 URL', en: 'Base URL' })} className="md:col-span-2">
         <Input
           variant="settings"
           value={draft.baseUrl}
@@ -896,7 +896,7 @@ export function LlmConnectionsTab() {
           <SettingsResourceTable
             gridClassName={LLM_CONNECTIONS_TABLE_GRID}
             minWidthClassName="min-w-[1200px]"
-            headers={[t({ ko: '연결', en: 'Connection' }), 'Base URL', t({ ko: '기본 모델', en: 'Default model' }), t({ ko: '온도', en: 'Temperature' }), t({ ko: '최대 토큰', en: 'Max tokens' }), t({ ko: '활성', en: 'Active' }), '']}
+            headers={[t({ ko: '연결', en: 'Connection' }), t({ ko: '기본 URL', en: 'Base URL' }), t({ ko: '기본 모델', en: 'Default model' }), t({ ko: '온도', en: 'Temperature' }), t({ ko: '최대 토큰', en: 'Max tokens' }), t({ ko: '활성', en: 'Active' }), '']}
           >
             {llmProviders.map((provider) => (
               <LlmConnectionListItem
