@@ -79,7 +79,7 @@
 - backup source watcher / 생성 폼 / 카드 UX 후속 수정
 - 그룹 페이지/트리/이미지 섹션/드로어 흐름 후속 정리
 - 홈 검색 UI 및 이미지 리스트 상호작용 후속 수정
-- 실행 배치 파일 이름 정리 (`RUN_CoNAI_Start.bat` 기준)
+- 실행 배치 파일 이름 정리 (`RUN_CoNAI_DEV.bat`, `RUN_CoNAI_BUILD_AND_RUN.bat` 기준)
 - 불필요/구버전 문서 일부 정리
 
 ---

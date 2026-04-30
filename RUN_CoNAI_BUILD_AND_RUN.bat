@@ -1,15 +1,15 @@
 @echo off
 chcp 65001 > nul
-title CoNAI Integrated Runner
+title CoNAI Build And Run
 cd /d "%~dp0"
 
-node scripts\run-integrated-if-needed.js %*
+node scripts\run-built-if-needed.js %*
 set EXIT_CODE=%ERRORLEVEL%
 
 if not "%EXIT_CODE%"=="0" (
     echo.
     echo ================================================================
-    echo  ERROR: integrated runner failed with code %EXIT_CODE%
+    echo  ERROR: build-and-run launcher failed with code %EXIT_CODE%
     echo ================================================================
     echo.
     pause

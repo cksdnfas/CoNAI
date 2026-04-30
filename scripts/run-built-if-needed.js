@@ -138,7 +138,7 @@ function main() {
   const status = isBuildStale();
 
   console.log('');
-  console.log('=== CoNAI Integrated Runner ===');
+  console.log('=== CoNAI Build And Run ===');
   console.log(`Build status : ${status.stale ? 'stale' : 'fresh'}`);
   console.log(`Reason       : ${status.reason}`);
   console.log(`Latest source: ${formatLocalTime(status.latestSourceMs)}`);
@@ -150,12 +150,12 @@ function main() {
   }
 
   if (status.stale) {
-    console.log('Running integrated build...');
+    console.log('Running production build...');
     const buildExitCode = runCommand('npm', ['run', 'build:integrated'], { cwd: ROOT_DIR });
     if (buildExitCode !== 0) {
       process.exit(buildExitCode);
     }
-    console.log('Integrated build completed.');
+    console.log('Production build completed.');
     console.log('');
   } else {
     console.log('Skipping build, current integrated output is already up to date.');
@@ -166,7 +166,7 @@ function main() {
     process.exit(0);
   }
 
-  console.log('Starting built backend with integrated frontend...');
+  console.log('Starting built backend with bundled frontend...');
   console.log('Open: http://localhost:1666');
   console.log('');
 

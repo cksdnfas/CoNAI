@@ -3,7 +3,8 @@ setlocal
 cd /d "%~dp0"
 
 echo ========================================
-echo CoNAI AlphaTest Quick Start
+title CoNAI Dev Mode Runner
+echo CoNAI Dev Mode Runner
 echo ========================================
 echo.
 
@@ -52,7 +53,7 @@ call npm run install:all
 if errorlevel 1 goto :fail
 
 echo.
-echo [4/4] Starting CoNAI dev servers...
+echo [4/4] Starting CoNAI dev-mode servers...
 echo   - Backend:  http://localhost:1666
 for /f "tokens=2 delims==" %%a in ('findstr /b /c:"FRONTEND_URL=" ".env"') do set FRONTEND_URL=%%a
 if not defined FRONTEND_URL set FRONTEND_URL=http://localhost:1677
