@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { NaiCharacterPositionBoard } from '@/features/image-generation/components/nai-character-position-board'
+import { useI18n } from '@/i18n'
 import {
   NAI_CHARACTER_GRID_X_OPTIONS,
   NAI_CHARACTER_GRID_Y_OPTIONS,
@@ -109,6 +110,7 @@ function buildNaiCharacterPromptValue(drafts: NaiCharacterPromptDraft[]) {
 
 /** Render a compact reusable editor for NAI character prompt arrays inside module graph forms. */
 export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPromptsInputProps) {
+  const { t } = useI18n()
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const drafts = parseNaiCharacterPromptDrafts(value)
 
@@ -149,10 +151,10 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2.5">
-        <div className="text-sm font-medium text-foreground">Character Prompt</div>
+        <div className="text-sm font-medium text-foreground">{t({ ko: 'Character Prompt', en: 'Character Prompt' })}</div>
         <Button type="button" size="sm" variant="outline" onClick={handleAdd}>
           <Plus className="h-4 w-4" />
-          추가
+          {t({ ko: '추가', en: 'Add' })}
         </Button>
       </div>
 
@@ -174,7 +176,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
 
       {drafts.length === 0 ? (
         <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">
-          캐릭터 없음
+          {t({ ko: '캐릭터 없음', en: 'No characters' })}
         </div>
       ) : (
         drafts.map((draft, index) => (
@@ -197,7 +199,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
                 }}
               >
                 <Trash2 className="h-4 w-4" />
-                제거
+                {t({ ko: '제거', en: 'Remove' })}
               </Button>
             </div>
 

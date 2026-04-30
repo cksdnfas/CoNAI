@@ -1,6 +1,7 @@
 import { useEffect, useState, type RefObject, type WheelEvent } from 'react'
 import type Konva from 'konva'
 import { Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text } from 'react-konva'
+import { useI18n, type TranslationDictionary } from '@/i18n'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import { loadEditorImage } from './image-editor-utils'
 
@@ -34,24 +35,24 @@ interface ImageEditorCanvasProps {
   onMovePasteLayer: (layerId: string, nextX: number, nextY: number) => void
 }
 
-function getImageEditorToolLabel(tool: ImageEditorTool) {
+function getImageEditorToolLabel(tool: ImageEditorTool): TranslationDictionary {
   switch (tool) {
     case 'pan':
-      return 'Pan'
+      return { ko: '이동', en: 'Pan' }
     case 'select':
-      return 'Select'
+      return { ko: '선택', en: 'Select' }
     case 'brush':
-      return 'Brush'
+      return { ko: '브러시', en: 'Brush' }
     case 'eraser':
-      return 'Eraser'
+      return { ko: '지우개', en: 'Eraser' }
     case 'mask-brush':
-      return 'Mask Brush'
+      return { ko: '마스크 브러시', en: 'Mask Brush' }
     case 'mask-eraser':
-      return 'Mask Eraser'
+      return { ko: '마스크 지우개', en: 'Mask Eraser' }
     case 'crop':
-      return 'Crop'
+      return { ko: '자르기', en: 'Crop' }
     default:
-      return tool
+      return { ko: tool, en: tool }
   }
 }
 
@@ -136,6 +137,7 @@ export function ImageEditorCanvas({
   onStagePointerUp,
   onMovePasteLayer,
 }: ImageEditorCanvasProps) {
+  const { t } = useI18n()
   const isMaskTool = tool === 'mask-brush' || tool === 'mask-eraser'
   const canvasCursorClassName = tool === 'pan'
     ? 'cursor-grab'
@@ -152,34 +154,34 @@ export function ImageEditorCanvas({
       onWheelCapture={onWheel}
     >
       <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-wrap gap-2 rounded-sm border border-white/10 bg-black/55 px-3 py-2 text-[11px] text-white shadow-lg backdrop-blur-sm">
-        <span className="font-medium text-white/90">{getImageEditorToolLabel(tool)}</span>
+        <span className="font-medium text-white/90">{t(getImageEditorToolLabel(tool))}</span>
         <span className="text-white/50">•</span>
-        <span>Zoom {Math.round(zoom * 100)}%</span>
+        <span>{t({ ko: '확대 {value}%', en: 'Zoom {value}%' }, { value: Math.round(zoom * 100) })}</span>
         {(tool === 'brush' || tool === 'eraser' || tool === 'mask-brush' || tool === 'mask-eraser') ? (
           <>
             <span className="text-white/50">•</span>
-            <span>Brush {brushSize}px</span>
+            <span>{t({ ko: '브러시 {value}px', en: 'Brush {value}px' }, { value: brushSize })}</span>
             <span className="text-white/50">•</span>
-            <span>Opacity {brushOpacity}%</span>
+            <span>{t({ ko: '불투명도 {value}%', en: 'Opacity {value}%' }, { value: brushOpacity })}</span>
           </>
         ) : null}
         {normalizedSelectionRect ? (
           <>
             <span className="text-white/50">•</span>
-            <span>Selection {Math.round(normalizedSelectionRect.x)},{Math.round(normalizedSelectionRect.y)} · {Math.round(normalizedSelectionRect.width)}×{Math.round(normalizedSelectionRect.height)}</span>
+            <span>{t({ ko: '선택 {x},{y} · {width}×{height}', en: 'Selection {x},{y} · {width}×{height}' }, { x: Math.round(normalizedSelectionRect.x), y: Math.round(normalizedSelectionRect.y), width: Math.round(normalizedSelectionRect.width), height: Math.round(normalizedSelectionRect.height) })}</span>
           </>
         ) : null}
         {normalizedCropRect ? (
           <>
             <span className="text-white/50">•</span>
-            <span>Crop {Math.round(normalizedCropRect.x)},{Math.round(normalizedCropRect.y)} · {Math.round(normalizedCropRect.width)}×{Math.round(normalizedCropRect.height)}</span>
+            <span>{t({ ko: '자르기 {x},{y} · {width}×{height}', en: 'Crop {x},{y} · {width}×{height}' }, { x: Math.round(normalizedCropRect.x), y: Math.round(normalizedCropRect.y), width: Math.round(normalizedCropRect.width), height: Math.round(normalizedCropRect.height) })}</span>
           </>
         ) : null}
       </div>
       {isMaskTool ? (
         <div className="pointer-events-none absolute right-3 top-3 z-20 max-w-[280px] rounded-sm border border-red-300/25 bg-red-950/60 px-3 py-2 text-[11px] text-red-50 shadow-lg backdrop-blur-sm">
-          <div className="font-medium text-red-100">Mask mode active</div>
-          <div className="mt-1 text-red-100/80">White regions are exported as editable infill mask areas. Use <span className="font-medium">M</span> for mask brush and <span className="font-medium">Shift+M</span> for mask eraser.</div>
+          <div className="font-medium text-red-100">{t({ ko: '마스크 모드 활성화', en: 'Mask mode active' })}</div>
+          <div className="mt-1 text-red-100/80">{t({ ko: '흰색 영역은 편집 가능한 인필 마스크 영역으로 내보내져. 마스크 브러시는 ', en: 'White regions are exported as editable infill mask areas. Use ' })}<span className="font-medium">M</span>{t({ ko: ', 마스크 지우개는 ', en: ' for mask brush and ' })}<span className="font-medium">Shift+M</span>{t({ ko: ' 를 써.', en: ' for mask eraser.' })}</div>
         </div>
       ) : null}
       {baseImage ? (

@@ -55,7 +55,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const { t } = useI18n()
   const [promptDisplayMode, setPromptDisplayMode] = useState<PromptDisplayMode>(() => loadPromptDisplayMode())
   const [isArtistPromptSettingsOpen, setIsArtistPromptSettingsOpen] = useState(false)
-  const extractedPromptCards = useMemo(() => getImageExtractedPromptCards(image), [image])
+  const extractedPromptCards = useMemo(() => getImageExtractedPromptCards(image, t), [image, t])
 
   const handlePromptDisplayModeChange = (nextMode: PromptDisplayMode) => {
     setPromptDisplayMode(nextMode)
@@ -171,7 +171,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-base font-semibold tracking-tight text-foreground">{t('images.components.detail.image.detail.meta.card.metadata')}</div>
         <div className="flex items-center gap-2">
-          {image.is_processing ? <Badge variant="secondary">Processing</Badge> : null}
+          {image.is_processing ? <Badge variant="secondary">{t({ ko: '처리 중', en: 'Processing' })}</Badge> : null}
           {canEditMetadata ? (
             <Button
               size="sm"
@@ -189,22 +189,22 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
       </div>
 
       <div className={metaItemClassName}>
-        <p className="text-[11px] uppercase tracking-[0.18em]">Composite hash</p>
+        <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '복합 해시', en: 'Composite hash' })}</p>
         <p className="mt-2 break-all font-mono text-foreground">{image.composite_hash || '—'}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className={metaItemClassName}>
-          <p className="text-[11px] uppercase tracking-[0.18em]">Dimensions</p>
+          <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '크기', en: 'Dimensions' })}</p>
           <p className="mt-2 text-foreground">{image.width && image.height ? `${image.width} × ${image.height}` : '—'}</p>
         </div>
         <div className={metaItemClassName}>
-          <p className="text-[11px] uppercase tracking-[0.18em]">File size</p>
+          <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '파일 크기', en: 'File size' })}</p>
           <p className="mt-2 text-foreground">{formatBytes(image.file_size)}</p>
         </div>
         {image.ai_metadata?.model_name ? (
           <div className={`${metaItemClassName} sm:col-span-2`}>
-            <p className="text-[11px] uppercase tracking-[0.18em]">Model</p>
+            <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '모델', en: 'Model' })}</p>
             <p className="mt-2 break-words text-foreground">{image.ai_metadata.model_name}</p>
           </div>
         ) : null}
@@ -216,14 +216,14 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         ))}
         {image.original_file_path ? (
           <div className={`${metaItemClassName} sm:col-span-2`}>
-            <p className="text-[11px] uppercase tracking-[0.18em]">Path</p>
+            <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '경로', en: 'Path' })}</p>
             <p className="mt-2 break-all font-mono text-xs text-foreground/88">{image.original_file_path}</p>
           </div>
         ) : null}
         {extractedPromptCards.length > 0 ? (
           <div className={`${metaItemClassName} sm:col-span-2`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.18em]">Extracted prompt</p>
+              <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</p>
               {canTogglePromptGrouping ? (
                 <SegmentedControl
                   value={promptDisplayMode}
@@ -244,7 +244,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         {autoPromptContent ? (
           <div className={`${metaItemClassName} sm:col-span-2`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.18em]">Auto prompt</p>
+              <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '자동 프롬프트', en: 'Auto prompt' })}</p>
             </div>
             <div className="mt-3 space-y-3">
               <RatingPromptSection entries={autoPromptContent.ratingEntries} />
@@ -274,7 +274,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         {artistPromptSection ? (
           <div className={`${metaItemClassName} sm:col-span-2`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] uppercase tracking-[0.18em]">Artist prompt</p>
+              <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '작가 프롬프트', en: 'Artist prompt' })}</p>
               <Button
                 type="button"
                 size="icon-sm"

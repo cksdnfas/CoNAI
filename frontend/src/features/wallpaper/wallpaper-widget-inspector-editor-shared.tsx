@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react'
 import { Select } from '@/components/ui/select'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { SettingsField } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { WallpaperEasingPicker } from './wallpaper-easing-picker'
 import type { WallpaperEasingPreviewKind } from './wallpaper-easing-picker-preview'
@@ -96,23 +97,23 @@ function normalizeWallpaperTransitionStyle(value: string): WallpaperImageTransit
   }
 }
 
-function getWallpaperTransitionStyleLabel(style: WallpaperImageTransitionStyle | undefined) {
+function getWallpaperTransitionStyleLabel(style: WallpaperImageTransitionStyle | undefined, t: (dictionary: { ko: string; en: string }) => string) {
   switch (style ?? 'fade') {
     case 'zoom':
-      return '줌'
+      return t({ ko: '줌', en: 'Zoom' })
     case 'slide':
-      return '슬라이드'
+      return t({ ko: '슬라이드', en: 'Slide' })
     case 'blur':
-      return '블러'
+      return t({ ko: '블러', en: 'Blur' })
     case 'flip':
-      return '플립'
+      return t({ ko: '플립', en: 'Flip' })
     case 'shuffle':
-      return '셔플'
+      return t({ ko: '셔플', en: 'Shuffle' })
     case 'none':
-      return '없음'
+      return t({ ko: '없음', en: 'None' })
     case 'fade':
     default:
-      return '페이드'
+      return t({ ko: '페이드', en: 'Fade' })
   }
 }
 
@@ -182,7 +183,7 @@ export function WallpaperInspectorDisclosure({
 }
 
 export function WallpaperTransitionAnimationEditorField({
-  label = '전환 애니메이션',
+  label,
   transitionStyle,
   transitionSpeed,
   transitionDurationMs,
@@ -192,11 +193,13 @@ export function WallpaperTransitionAnimationEditorField({
   onTransitionDurationChange,
   onTransitionEasingChange,
 }: WallpaperTransitionAnimationEditorFieldProps) {
+  const { t } = useI18n()
   const durationMs = getWallpaperImageTransitionDurationMs(transitionSpeed, transitionDurationMs)
-  const summary = `${getWallpaperTransitionStyleLabel(transitionStyle)} · ${durationMs}ms`
+  const summary = `${getWallpaperTransitionStyleLabel(transitionStyle, t)} · ${durationMs}ms`
+  const effectiveLabel = label ?? t({ ko: '전환 애니메이션', en: 'Transition animation' })
 
   return (
-    <SettingsField label={label}>
+    <SettingsField label={effectiveLabel}>
       <WallpaperEasingPicker
         value={transitionEasing}
         fallbackPreset="easeOutCubic"
@@ -209,26 +212,26 @@ export function WallpaperTransitionAnimationEditorField({
         editorContent={(
           <>
             {renderWallpaperAnimationEditorCard({
-              title: '전환 옵션',
+              title: t({ ko: '전환 옵션', en: 'Transition options' }),
               children: (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <SettingsField label="전환">
+                  <SettingsField label={t({ ko: '전환', en: 'Transition' })}>
                     <Select
                       value={transitionStyle ?? 'fade'}
                       onChange={(event) => {
                         onTransitionStyleChange(normalizeWallpaperTransitionStyle(event.target.value))
                       }}
                     >
-                      <option value="fade">페이드</option>
-                      <option value="zoom">줌</option>
-                      <option value="slide">슬라이드</option>
-                      <option value="blur">블러</option>
-                      <option value="flip">플립</option>
-                      <option value="shuffle">셔플</option>
-                      <option value="none">없음</option>
+                      <option value="fade">{t({ ko: '페이드', en: 'Fade' })}</option>
+                      <option value="zoom">{t({ ko: '줌', en: 'Zoom' })}</option>
+                      <option value="slide">{t({ ko: '슬라이드', en: 'Slide' })}</option>
+                      <option value="blur">{t({ ko: '블러', en: 'Blur' })}</option>
+                      <option value="flip">{t({ ko: '플립', en: 'Flip' })}</option>
+                      <option value="shuffle">{t({ ko: '셔플', en: 'Shuffle' })}</option>
+                      <option value="none">{t({ ko: '없음', en: 'None' })}</option>
                     </Select>
                   </SettingsField>
-                  <SettingsField label="전환 시간 (ms)">
+                  <SettingsField label={t({ ko: '전환 시간 (ms)', en: 'Transition duration (ms)' })}>
                     <ScrubbableNumberInput
                       variant="settings"
                       min={80}
@@ -260,20 +263,21 @@ export function WallpaperHoverInteractionEditorFields({
   onHoverMotionChange,
   onHoverEasingChange,
 }: WallpaperHoverInteractionEditorFieldsProps) {
+  const { t } = useI18n()
   const hoverAmount = getWallpaperHoverMotionAmount(hoverMotion ?? 1)
 
   return (
-    <SettingsField label="호버 애니메이션">
+    <SettingsField label={t({ ko: '호버 애니메이션', en: 'Hover animation' })}>
       <WallpaperEasingPicker
         value={hoverEasing}
         fallbackPreset="easeOutCubic"
         previewKind="hover"
-        summary={`강도 ${hoverAmount.toFixed(1)}`}
+        summary={t({ ko: `강도 ${hoverAmount.toFixed(1)}`, en: `Strength ${hoverAmount.toFixed(1)}` })}
         previewConfig={{ hoverMotion }}
         editorContent={renderWallpaperAnimationEditorCard({
-          title: '호버 옵션',
+          title: t({ ko: '호버 옵션', en: 'Hover options' }),
           children: (
-            <SettingsField label="호버 반응">
+            <SettingsField label={t({ ko: '호버 반응', en: 'Hover response' })}>
               <ScrubbableNumberInput
                 variant="settings"
                 min={0}
@@ -295,7 +299,7 @@ export function WallpaperHoverInteractionEditorFields({
 }
 
 export function WallpaperMotionEasingEditorField({
-  label = '모션 이징',
+  label,
   easing,
   fallbackPreset = 'easeOutCubic',
   motionStrength,
@@ -305,13 +309,15 @@ export function WallpaperMotionEasingEditorField({
   editorContent,
   onEasingChange,
 }: WallpaperMotionEasingEditorFieldProps) {
+  const { t } = useI18n()
+  const effectiveLabel = label ?? t({ ko: '모션 이징', en: 'Motion easing' })
   const summaryText = summary ?? [
-    motionStrength !== undefined ? `강도 ${getWallpaperMotionStrengthMultiplier(motionStrength).toFixed(1)}` : null,
-    motionSpeed !== undefined ? `속도 ${Math.min(20, Math.max(0.2, motionSpeed)).toFixed(1)}` : null,
+    motionStrength !== undefined ? t({ ko: `강도 ${getWallpaperMotionStrengthMultiplier(motionStrength).toFixed(1)}`, en: `Strength ${getWallpaperMotionStrengthMultiplier(motionStrength).toFixed(1)}` }) : null,
+    motionSpeed !== undefined ? t({ ko: `속도 ${Math.min(20, Math.max(0.2, motionSpeed)).toFixed(1)}`, en: `Speed ${Math.min(20, Math.max(0.2, motionSpeed)).toFixed(1)}` }) : null,
   ].filter(Boolean).join(' · ')
 
   return (
-    <SettingsField label={label}>
+    <SettingsField label={effectiveLabel}>
       <WallpaperEasingPicker
         value={easing}
         fallbackPreset={fallbackPreset}
@@ -333,12 +339,13 @@ export function WallpaperPreviewOpenAnimationEditorField({
   onDurationMsChange,
   onEasingChange,
 }: WallpaperPreviewOpenAnimationEditorFieldProps) {
+  const { t } = useI18n()
   const resolvedScalePercent = Math.min(100, Math.max(60, Math.round(scalePercent ?? 88)))
   const resolvedDurationMs = Math.min(1200, Math.max(80, Math.round(durationMs ?? 260)))
   const summary = `${resolvedScalePercent}% · ${resolvedDurationMs}ms`
 
   return (
-    <SettingsField label="클릭 확대 애니메이션">
+    <SettingsField label={t({ ko: '클릭 확대 애니메이션', en: 'Click zoom animation' })}>
       <WallpaperEasingPicker
         value={easing}
         fallbackPreset="easeOutCubic"
@@ -349,10 +356,10 @@ export function WallpaperPreviewOpenAnimationEditorField({
           transitionDurationMs: resolvedDurationMs,
         }}
         editorContent={renderWallpaperAnimationEditorCard({
-          title: '확대 미리보기 옵션',
+          title: t({ ko: '확대 미리보기 옵션', en: 'Zoom preview options' }),
           children: (
             <div className="grid gap-3 sm:grid-cols-2">
-              <SettingsField label="시작 크기 (%)">
+              <SettingsField label={t({ ko: '시작 크기 (%)', en: 'Start scale (%)' })}>
                 <ScrubbableNumberInput
                   variant="settings"
                   min={60}
@@ -365,7 +372,7 @@ export function WallpaperPreviewOpenAnimationEditorField({
                   }}
                 />
               </SettingsField>
-              <SettingsField label="열림 시간 (ms)">
+              <SettingsField label={t({ ko: '열림 시간 (ms)', en: 'Open duration (ms)' })}>
                 <ScrubbableNumberInput
                   variant="settings"
                   min={80}
@@ -395,12 +402,13 @@ export function WallpaperPreviewCloseAnimationEditorField({
   onDurationMsChange,
   onEasingChange,
 }: WallpaperPreviewCloseAnimationEditorFieldProps) {
+  const { t } = useI18n()
   const resolvedScalePercent = Math.min(100, Math.max(60, Math.round(scalePercent ?? 88)))
   const resolvedDurationMs = Math.min(1200, Math.max(80, Math.round(durationMs ?? 260)))
   const summary = `${resolvedScalePercent}% · ${resolvedDurationMs}ms`
 
   return (
-    <SettingsField label="클릭 닫힘 애니메이션">
+    <SettingsField label={t({ ko: '클릭 닫힘 애니메이션', en: 'Click close animation' })}>
       <WallpaperEasingPicker
         value={easing}
         fallbackPreset="easeInOutCubic"
@@ -411,10 +419,10 @@ export function WallpaperPreviewCloseAnimationEditorField({
           transitionDurationMs: resolvedDurationMs,
         }}
         editorContent={renderWallpaperAnimationEditorCard({
-          title: '닫힘 미리보기 옵션',
+          title: t({ ko: '닫힘 미리보기 옵션', en: 'Close preview options' }),
           children: (
             <div className="grid gap-3 sm:grid-cols-2">
-              <SettingsField label="끝 크기 (%)">
+              <SettingsField label={t({ ko: '끝 크기 (%)', en: 'End scale (%)' })}>
                 <ScrubbableNumberInput
                   variant="settings"
                   min={60}
@@ -427,7 +435,7 @@ export function WallpaperPreviewCloseAnimationEditorField({
                   }}
                 />
               </SettingsField>
-              <SettingsField label="닫힘 시간 (ms)">
+              <SettingsField label={t({ ko: '닫힘 시간 (ms)', en: 'Close duration (ms)' })}>
                 <ScrubbableNumberInput
                   variant="settings"
                   min={80}

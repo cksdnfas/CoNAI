@@ -116,7 +116,7 @@ export function ImageEditAction({ image }: ImageEditActionProps) {
         <Suspense fallback={null}>
           <ImageEditorModal
             open={isEditorOpen}
-            title="Image Editor"
+            title={t({ ko: '이미지 편집기', en: 'Image Editor' })}
             sourceImageDataUrl={sourceImageUrl ?? undefined}
             sourceFileName={image?.original_file_path?.replace(/\\/g, '/').split('/').at(-1) || image?.composite_hash || 'image'}
             enableMaskEditing={false}

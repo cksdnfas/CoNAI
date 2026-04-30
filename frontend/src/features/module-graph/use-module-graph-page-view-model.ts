@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { getGraphExecution, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
+import { useI18n } from '@/i18n'
 import type { AppSettings } from '@/types/settings'
 import { buildNodeArtifactGroups, buildNodeArtifactPreview, buildGraphEditorSnapshot, getModuleNodeDisplayLabel, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
@@ -52,6 +53,8 @@ export function useModuleGraphPageViewModel({
   workflowExposedInputs: GraphWorkflowExposedInput[]
   workflowRunInputValues: Record<string, unknown>
 }) {
+  const { t } = useI18n()
+
   const nodeDerivedWorkflowExposedInputs = useMemo(
     () => deriveWorkflowExposedInputsFromNodes(nodes),
     [nodes],
@@ -201,8 +204,9 @@ export function useModuleGraphPageViewModel({
           .filter((edge) => edge.targetPortKey.length > 0),
         exposedInputs: nodeDerivedWorkflowExposedInputs,
         settings,
+        translate: t,
       }),
-    [edges, nodeDerivedWorkflowExposedInputs, nodes, settings],
+    [edges, nodeDerivedWorkflowExposedInputs, nodes, settings, t],
   )
 
   const selectedWorkflowValidationIssues = useMemo(() => {
@@ -223,8 +227,9 @@ export function useModuleGraphPageViewModel({
       exposedInputs: workflowExposedInputs,
       runtimeInputValues: workflowRunInputValues,
       settings,
+      translate: t,
     })
-  }, [moduleDefinitionById, selectedGraphRecord, settings, workflowExposedInputs, workflowRunInputValues])
+  }, [moduleDefinitionById, selectedGraphRecord, settings, t, workflowExposedInputs, workflowRunInputValues])
 
   const selectedWorkflowCanExecute = selectedWorkflowValidationIssues.every((issue) => issue.severity !== 'error')
 

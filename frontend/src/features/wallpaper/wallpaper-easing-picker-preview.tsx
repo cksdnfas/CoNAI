@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { useI18n, type TranslationDictionary } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
   buildWallpaperImageTransitionTransform,
@@ -95,20 +96,20 @@ function getWallpaperEasingGraphPointerPosition(event: { clientX: number, client
 }
 
 // Describe the currently selected preview mode.
-function getWallpaperEasingPreviewMeta(kind: WallpaperEasingPreviewKind) {
+function getWallpaperEasingPreviewMeta(kind: WallpaperEasingPreviewKind, t: (dictionary: TranslationDictionary) => string) {
   switch (kind) {
     case 'hover':
       return {
-        title: '호버 미리보기',
+        title: t({ ko: '호버 미리보기', en: 'Hover preview' }),
       }
     case 'motion':
       return {
-        title: '모션 미리보기',
+        title: t({ ko: '모션 미리보기', en: 'Motion preview' }),
       }
     case 'transition':
     default:
       return {
-        title: '전환 미리보기',
+        title: t({ ko: '전환 미리보기', en: 'Transition preview' }),
       }
   }
 }
@@ -216,6 +217,7 @@ export function WallpaperEasingGraph({
   selectedIndex?: number | null
   onSelectIndex?: (index: number | null) => void
 }) {
+  const { t } = useI18n()
   const graphRef = useRef<SVGSVGElement | null>(null)
   const [dragState, setDragState] = useState<{
     index: number
@@ -360,10 +362,10 @@ export function WallpaperEasingGraph({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>그래프 편집</span>
+        <span>{t({ ko: '그래프 편집', en: 'Edit graph' })}</span>
         <div className="flex items-center gap-2">
-          <span>빈 곳 더블클릭 추가, 점 더블클릭/우클릭 삭제</span>
-          <Button type="button" size="xs" variant="ghost" onClick={handleAddPoint}>점 추가</Button>
+          <span>{t({ ko: '빈 곳 더블클릭 추가, 점 더블클릭/우클릭 삭제', en: 'Double-click empty space to add a point, and double-click or right-click a point to delete it.' })}</span>
+          <Button type="button" size="xs" variant="ghost" onClick={handleAddPoint}>{t({ ko: '점 추가', en: 'Add point' })}</Button>
         </div>
       </div>
       <svg
@@ -408,9 +410,9 @@ export function WallpaperEasingGraph({
           )
         })}
 
-        <text x={GRAPH_PADDING} y={18} className="fill-muted-foreground text-[11px]">빠름</text>
-        <text x={GRAPH_PADDING} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-[11px]">눌림</text>
-        <text x={GRAPH_SIZE + GRAPH_PADDING - 14} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-[11px]">시간</text>
+        <text x={GRAPH_PADDING} y={18} className="fill-muted-foreground text-[11px]">{t({ ko: '빠름', en: 'Fast' })}</text>
+        <text x={GRAPH_PADDING} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-[11px]">{t({ ko: '눌림', en: 'Press' })}</text>
+        <text x={GRAPH_SIZE + GRAPH_PADDING - 14} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-[11px]">{t({ ko: '시간', en: 'Time' })}</text>
 
         <path d={`M ${mapWallpaperEasingGraphX(0)} ${mapWallpaperEasingGraphY(0)} L ${mapWallpaperEasingGraphX(1)} ${mapWallpaperEasingGraphY(1)}`} stroke="color-mix(in srgb, var(--muted-foreground) 48%, transparent)" strokeDasharray="5 6" strokeWidth="1.5" fill="none" />
         <path d={path} stroke="var(--primary)" strokeWidth="4" fill="none" />
@@ -420,7 +422,7 @@ export function WallpaperEasingGraph({
           const pointY = mapWallpaperEasingGraphY(point.y)
           const isEndpoint = index === 0 || index === normalizedPoints.length - 1
           const isSelected = selectedIndex === index
-          const label = index === 0 ? '시작' : index === normalizedPoints.length - 1 ? '끝' : `P${index}`
+          const label = index === 0 ? t({ ko: '시작', en: 'Start' }) : index === normalizedPoints.length - 1 ? t({ ko: '끝', en: 'End' }) : `P${index}`
           const valueText = `${formatWallpaperEasingGraphPointValue(point.x)}, ${formatWallpaperEasingGraphPointValue(point.y)}`
 
           return (
@@ -484,6 +486,7 @@ export function WallpaperEasingGraph({
 
 // Render one animated preview surface for the current easing value.
 function WallpaperEasingPreview({ easing, kind, config }: { easing: WallpaperAnimationEasing, kind: WallpaperEasingPreviewKind, config?: WallpaperEasingPreviewConfig }) {
+  const { t } = useI18n()
   const [replayCount, setReplayCount] = useState(0)
   const easingCss = useMemo(() => getWallpaperAnimationEasingCss(easing), [easing])
   const motionTrackRef = useRef<HTMLDivElement | null>(null)
@@ -491,7 +494,7 @@ function WallpaperEasingPreview({ easing, kind, config }: { easing: WallpaperAni
   const hoverCardRef = useRef<HTMLDivElement | null>(null)
   const transitionIncomingRef = useRef<HTMLDivElement | null>(null)
   const transitionOutgoingRef = useRef<HTMLDivElement | null>(null)
-  const meta = getWallpaperEasingPreviewMeta(kind)
+  const meta = getWallpaperEasingPreviewMeta(kind, t)
   const transitionStyle = config?.transitionStyle ?? 'fade'
   const transitionDurationMs = config?.transitionDurationMs ?? getWallpaperImageTransitionDurationMs('normal')
   const hoverMetrics = useMemo(() => resolveWallpaperHoverMotionMetrics(config?.hoverMotion), [config?.hoverMotion])
@@ -582,13 +585,13 @@ function WallpaperEasingPreview({ easing, kind, config }: { easing: WallpaperAni
           <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-muted-foreground">
             {kind === 'transition' ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{transitionDurationMs}ms</span> : null}
             {kind === 'transition' && config?.transitionStyle ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{config.transitionStyle}</span> : null}
-            {kind === 'hover' ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">강도 {getWallpaperHoverMotionAmount(config?.hoverMotion ?? 1).toFixed(1)}</span> : null}
-            <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">모션 강도 {motionStrength.toFixed(1)}</span>
-            <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">모션 속도 {motionSpeed.toFixed(1)}</span>
+            {kind === 'hover' ? <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{t({ ko: '강도', en: 'Intensity' })} {getWallpaperHoverMotionAmount(config?.hoverMotion ?? 1).toFixed(1)}</span> : null}
+            <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{t({ ko: '모션 강도', en: 'Motion strength' })} {motionStrength.toFixed(1)}</span>
+            <span className="rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5">{t({ ko: '모션 속도', en: 'Motion speed' })} {motionSpeed.toFixed(1)}</span>
           </div>
         </div>
         <Button type="button" size="xs" variant="ghost" onClick={() => setReplayCount((current) => current + 1)}>
-          다시 재생
+          {t({ ko: '다시 재생', en: 'Replay' })}
         </Button>
       </div>
 

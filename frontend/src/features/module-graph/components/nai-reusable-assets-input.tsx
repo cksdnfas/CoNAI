@@ -275,7 +275,7 @@ function sortSavedAssets<T extends { id: string; label: string; created_date: st
 
 /** Render the reusable editor and saved-asset picker for NAI vibe and reference JSON inputs. */
 export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAssetInputProps) {
-  const { formatDateTime, locale } = useI18n()
+  const { t, formatDateTime, locale } = useI18n()
   const [savedVibeSearch, setSavedVibeSearch] = useState('')
   const [savedVibeSort, setSavedVibeSort] = useState<SavedAssetSortOption>('recent')
   const [recentVibeIds, setRecentVibeIds] = useState<string[]>(() => loadRecentAssetIds('conai.nai.vibes.recent'))
@@ -409,17 +409,17 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2.5">
           <div>
-            <div className="text-sm font-medium text-foreground">Vibe Transfer</div>
-            <div className="text-xs text-muted-foreground">encoded vibe를 직접 넣거나 saved vibe를 바로 추가해.</div>
+            <div className="text-sm font-medium text-foreground">{t({ ko: 'Vibe Transfer', en: 'Vibe Transfer' })}</div>
+            <div className="text-xs text-muted-foreground">{t({ ko: 'encoded vibe를 직접 넣거나 saved vibe를 바로 추가해.', en: 'Enter an encoded vibe directly or quickly add a saved vibe.' })}</div>
           </div>
           <Button type="button" size="sm" variant="outline" onClick={() => updateVibes([...vibeDrafts, { encoded: '', strength: '0.6', informationExtracted: '1' }])}>
             <Plus className="h-4 w-4" />
-            추가
+            {t({ ko: '추가', en: 'Add' })}
           </Button>
         </div>
 
         {vibeDrafts.length === 0 ? (
-          <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">아직 vibe 입력이 없어.</div>
+          <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">{t({ ko: '아직 vibe 입력이 없어.', en: 'There are no vibe inputs yet.' })}</div>
         ) : (
           vibeDrafts.map((draft, index) => (
             <div key={`nai-vibe-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
@@ -427,13 +427,13 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                 <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
                 <Button type="button" size="sm" variant="ghost" onClick={() => updateVibes(vibeDrafts.filter((_, draftIndex) => draftIndex !== index))}>
                   <Trash2 className="h-4 w-4" />
-                  제거
+                  {t({ ko: '제거', en: 'Remove' })}
                 </Button>
               </div>
 
               <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">Reference Image</span>
-                <ImageAttachmentPickerButton label={draft.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} allowSaveDialog={false} onSelect={(image) => void handleVibeImageChange(index, image)} />
+                <span className="text-sm font-medium text-foreground">{t({ ko: '참조 이미지', en: 'Reference image' })}</span>
+                <ImageAttachmentPickerButton label={draft.image ? t({ ko: '참조 이미지 변경', en: 'Change reference image' }) : t({ ko: '참조 이미지 선택', en: 'Select reference image' })} modalTitle={t({ ko: 'Vibe {index} 이미지 선택', en: 'Select image for Vibe {index}' }, { index: index + 1 })} allowSaveDialog={false} onSelect={(image) => void handleVibeImageChange(index, image)} />
                 {draft.image ? <InlineMediaPreview src={draft.image} alt={`Vibe ${index + 1}`} frameClassName="p-3" /> : null}
               </label>
 
@@ -459,22 +459,22 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
         <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="text-sm font-medium text-foreground">Saved Vibes</div>
+              <div className="text-sm font-medium text-foreground">{t({ ko: '저장된 Vibes', en: 'Saved Vibes' })}</div>
               <Badge variant="outline">{savedVibesQuery.data?.length ?? 0}</Badge>
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px] sm:flex-row">
-              <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder="이름 / 모델 검색" />
+              <Input value={savedVibeSearch} onChange={(event) => setSavedVibeSearch(event.target.value)} placeholder={t({ ko: '이름 / 모델 검색', en: 'Search name / model' })} />
               <Select value={savedVibeSort} onChange={(event) => setSavedVibeSort(event.target.value as SavedAssetSortOption)}>
-                <option value="pinned">핀 우선</option>
-                <option value="recent">최근 사용순</option>
-                <option value="latest">최신순</option>
-                <option value="oldest">오래된순</option>
-                <option value="name">이름순</option>
+                <option value="pinned">{t({ ko: '핀 우선', en: 'Pinned first' })}</option>
+                <option value="recent">{t({ ko: '최근 사용순', en: 'Recently used' })}</option>
+                <option value="latest">{t({ ko: '최신순', en: 'Newest first' })}</option>
+                <option value="oldest">{t({ ko: '오래된순', en: 'Oldest first' })}</option>
+                <option value="name">{t({ ko: '이름순', en: 'By name' })}</option>
               </Select>
             </div>
           </div>
           {savedVibesQuery.isLoading ? (
-            <div className="text-sm text-muted-foreground">불러오는 중…</div>
+            <div className="text-sm text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</div>
           ) : filteredSavedVibes.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2">
               {filteredSavedVibes.map((asset) => (
@@ -490,16 +490,16 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                       />
                     ) : (
                       <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">
-                        no preview
+                        {t({ ko: '미리보기 없음', en: 'No preview' })}
                       </div>
                     )}
                     <div className="min-w-0 space-y-2">
                       <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
                       <div className="truncate text-xs text-muted-foreground">{asset.model}</div>
                       <div className="flex flex-wrap gap-1.5">
-                        {pinnedVibeIds.includes(asset.id) ? <Badge variant="secondary">핀</Badge> : null}
-                        <Badge variant="outline">strength {asset.strength}</Badge>
-                        <Badge variant="outline">IE {asset.information_extracted}</Badge>
+                        {pinnedVibeIds.includes(asset.id) ? <Badge variant="secondary">{t({ ko: '핀', en: 'Pinned' })}</Badge> : null}
+                        <Badge variant="outline">{t({ ko: '강도 {value}', en: 'Strength {value}' }, { value: asset.strength })}</Badge>
+                        <Badge variant="outline">{t({ ko: '정보 추출 {value}', en: 'Info extracted {value}' }, { value: asset.information_extracted })}</Badge>
                       </div>
                       <div className="text-[11px] text-muted-foreground">{formatDateTime(asset.created_date)}</div>
                     </div>
@@ -507,18 +507,18 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                   <div className="flex justify-end gap-2">
                     <Button type="button" size="sm" variant="ghost" onClick={() => togglePinnedVibe(asset.id)}>
                       {pinnedVibeIds.includes(asset.id) ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                      {pinnedVibeIds.includes(asset.id) ? '핀 해제' : '핀'}
+                      {pinnedVibeIds.includes(asset.id) ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })}
                     </Button>
                     <Button type="button" size="sm" variant="outline" onClick={() => void appendSavedVibe(asset)}>
                       <Save className="h-4 w-4" />
-                      추가
+                      {t({ ko: '추가', en: 'Add' })}
                     </Button>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 vibe가 없어.</div>
+            <div className="text-sm text-muted-foreground">{t({ ko: '검색 결과가 없거나 저장된 vibe가 없어.', en: 'There are no search results or saved vibes.' })}</div>
           )}
         </div>
       </div>
@@ -529,17 +529,17 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface-low px-3 py-2.5">
         <div>
-          <div className="text-sm font-medium text-foreground">Character Reference</div>
-          <div className="text-xs text-muted-foreground">reference 이미지를 직접 넣거나 saved reference를 추가해.</div>
+          <div className="text-sm font-medium text-foreground">{t({ ko: 'Character Reference', en: 'Character Reference' })}</div>
+          <div className="text-xs text-muted-foreground">{t({ ko: 'reference 이미지를 직접 넣거나 saved reference를 추가해.', en: 'Add a reference image directly or append a saved reference.' })}</div>
         </div>
         <Button type="button" size="sm" variant="outline" onClick={() => updateCharacterReferences([...characterReferenceDrafts, { type: 'character&style', strength: '0.6', fidelity: '1' }])}>
           <Plus className="h-4 w-4" />
-          추가
+          {t({ ko: '추가', en: 'Add' })}
         </Button>
       </div>
 
       {characterReferenceDrafts.length === 0 ? (
-        <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">아직 reference 입력이 없어.</div>
+        <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">{t({ ko: '아직 reference 입력이 없어.', en: 'There are no reference inputs yet.' })}</div>
       ) : (
         characterReferenceDrafts.map((draft, index) => (
           <div key={`nai-character-reference-input-${index}`} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
@@ -547,31 +547,31 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
               <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
               <Button type="button" size="sm" variant="ghost" onClick={() => updateCharacterReferences(characterReferenceDrafts.filter((_, draftIndex) => draftIndex !== index))}>
                 <Trash2 className="h-4 w-4" />
-                제거
+                {t({ ko: '제거', en: 'Remove' })}
               </Button>
             </div>
 
             <label className="space-y-2">
-              <span className="text-sm font-medium text-foreground">Reference Image</span>
-              <ImageAttachmentPickerButton label={draft.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} allowSaveDialog={false} onSelect={(image) => void handleCharacterReferenceImageChange(index, image)} />
+              <span className="text-sm font-medium text-foreground">{t({ ko: '참조 이미지', en: 'Reference image' })}</span>
+              <ImageAttachmentPickerButton label={draft.image ? t({ ko: '참조 이미지 변경', en: 'Change reference image' }) : t({ ko: '참조 이미지 선택', en: 'Select reference image' })} modalTitle={t({ ko: 'Reference {index} 이미지 선택', en: 'Select image for Reference {index}' }, { index: index + 1 })} allowSaveDialog={false} onSelect={(image) => void handleCharacterReferenceImageChange(index, image)} />
               {draft.image ? <InlineMediaPreview src={draft.image} alt={`Reference ${index + 1}`} frameClassName="p-3" /> : null}
             </label>
 
             <div className="grid gap-3 md:grid-cols-3">
               <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">Type</span>
+                <span className="text-sm font-medium text-foreground">{t({ ko: '유형', en: 'Type' })}</span>
                 <Select value={draft.type} onChange={(event) => updateCharacterReferences(characterReferenceDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, type: event.target.value as NaiCharacterReferenceDraft['type'] } : entry))}>
-                  <option value="character">character</option>
-                  <option value="style">style</option>
-                  <option value="character&style">character&style</option>
+                  <option value="character">{t({ ko: '캐릭터', en: 'Character' })}</option>
+                  <option value="style">{t({ ko: '스타일', en: 'Style' })}</option>
+                  <option value="character&style">{t({ ko: '캐릭터+스타일', en: 'Character + Style' })}</option>
                 </Select>
               </label>
               <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">Strength</span>
+                <span className="text-sm font-medium text-foreground">{t({ ko: '강도', en: 'Strength' })}</span>
                 <Input type="number" min={0} max={1} step={0.01} value={draft.strength} onChange={(event) => updateCharacterReferences(characterReferenceDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, strength: event.target.value } : entry))} />
               </label>
               <label className="space-y-2">
-                <span className="text-sm font-medium text-foreground">Fidelity</span>
+                <span className="text-sm font-medium text-foreground">{t({ ko: '충실도', en: 'Fidelity' })}</span>
                 <Input type="number" min={0} max={1} step={0.01} value={draft.fidelity} onChange={(event) => updateCharacterReferences(characterReferenceDrafts.map((entry, draftIndex) => draftIndex === index ? { ...entry, fidelity: event.target.value } : entry))} />
               </label>
             </div>
@@ -582,22 +582,22 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className="text-sm font-medium text-foreground">Saved Character References</div>
+            <div className="text-sm font-medium text-foreground">{t({ ko: '저장된 Character References', en: 'Saved Character References' })}</div>
             <Badge variant="outline">{savedCharacterReferencesQuery.data?.length ?? 0}</Badge>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[280px] sm:flex-row">
-            <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder="이름 / 타입 검색" />
+            <Input value={savedCharacterReferenceSearch} onChange={(event) => setSavedCharacterReferenceSearch(event.target.value)} placeholder={t({ ko: '이름 / 타입 검색', en: 'Search name / type' })} />
             <Select value={savedCharacterReferenceSort} onChange={(event) => setSavedCharacterReferenceSort(event.target.value as SavedAssetSortOption)}>
-              <option value="pinned">핀 우선</option>
-              <option value="recent">최근 사용순</option>
-              <option value="latest">최신순</option>
-              <option value="oldest">오래된순</option>
-              <option value="name">이름순</option>
+              <option value="pinned">{t({ ko: '핀 우선', en: 'Pinned first' })}</option>
+              <option value="recent">{t({ ko: '최근 사용순', en: 'Recently used' })}</option>
+              <option value="latest">{t({ ko: '최신순', en: 'Newest first' })}</option>
+              <option value="oldest">{t({ ko: '오래된순', en: 'Oldest first' })}</option>
+              <option value="name">{t({ ko: '이름순', en: 'By name' })}</option>
             </Select>
           </div>
         </div>
         {savedCharacterReferencesQuery.isLoading ? (
-          <div className="text-sm text-muted-foreground">불러오는 중…</div>
+          <div className="text-sm text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</div>
         ) : filteredSavedCharacterReferences.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-2">
             {filteredSavedCharacterReferences.map((asset) => (
@@ -613,10 +613,10 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                   <div className="min-w-0 space-y-2">
                     <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {pinnedCharacterReferenceIds.includes(asset.id) ? <Badge variant="secondary">핀</Badge> : null}
+                      {pinnedCharacterReferenceIds.includes(asset.id) ? <Badge variant="secondary">{t({ ko: '핀', en: 'Pinned' })}</Badge> : null}
                       <Badge variant="outline">{asset.type}</Badge>
-                      <Badge variant="outline">strength {asset.strength}</Badge>
-                      <Badge variant="outline">fidelity {asset.fidelity}</Badge>
+                      <Badge variant="outline">{t({ ko: '강도 {value}', en: 'Strength {value}' }, { value: asset.strength })}</Badge>
+                      <Badge variant="outline">{t({ ko: '충실도 {value}', en: 'Fidelity {value}' }, { value: asset.fidelity })}</Badge>
                     </div>
                     <div className="text-[11px] text-muted-foreground">{formatDateTime(asset.created_date)}</div>
                   </div>
@@ -624,18 +624,18 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
                 <div className="flex justify-end gap-2">
                   <Button type="button" size="sm" variant="ghost" onClick={() => togglePinnedCharacterReference(asset.id)}>
                     {pinnedCharacterReferenceIds.includes(asset.id) ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                    {pinnedCharacterReferenceIds.includes(asset.id) ? '핀 해제' : '핀'}
+                    {pinnedCharacterReferenceIds.includes(asset.id) ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })}
                   </Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => void appendSavedCharacterReference(asset)}>
                     <Save className="h-4 w-4" />
-                    추가
+                    {t({ ko: '추가', en: 'Add' })}
                   </Button>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground">검색 결과가 없거나 저장된 reference가 없어.</div>
+          <div className="text-sm text-muted-foreground">{t({ ko: '검색 결과가 없거나 저장된 reference가 없어.', en: 'There are no search results or saved references.' })}</div>
         )}
       </div>
     </div>

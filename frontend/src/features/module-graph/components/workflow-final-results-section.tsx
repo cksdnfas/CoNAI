@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import { ImageList } from '@/features/images/components/image-list/image-list'
+import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphWorkflowRecord } from '@/lib/api'
 import type { ImageRecord } from '@/types/image'
 import {
@@ -78,7 +79,7 @@ export function WorkflowFinalResultsSection({
   artifacts,
   selectedGraph,
   nodeLabelOverrides,
-  emptyLabel = '최종 결과 노드를 추가하고 원하는 출력에 연결해줘.',
+  emptyLabel,
 }: {
   finalResults: GraphExecutionFinalResultRecord[]
   artifacts: GraphExecutionArtifactRecord[]
@@ -86,6 +87,8 @@ export function WorkflowFinalResultsSection({
   nodeLabelOverrides?: Record<string, string> | null
   emptyLabel?: string
 }) {
+  const { t } = useI18n()
+  const resolvedEmptyLabel = emptyLabel ?? t({ ko: '최종 결과 노드를 추가하고 원하는 출력에 연결해줘.', en: 'Add a final result node and connect it to the output you want to finalize.' })
   const artifactsById = new Map(artifacts.map((artifact) => [artifact.id, artifact]))
   const resolvedEntries: ResolvedFinalResultEntry[] = finalResults.map((finalResult) => {
     const finalNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.final_node_id, nodeLabelOverrides)
@@ -111,14 +114,14 @@ export function WorkflowFinalResultsSection({
   return (
     <div className="space-y-2.5">
       <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        <span>결과물</span>
+        <span>{t({ ko: '결과물', en: 'Results' })}</span>
         <Badge variant="outline">{resolvedEntries.length}</Badge>
       </div>
 
       {resolvedEntries.length === 0 ? (
         <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-          <div>{emptyLabel}</div>
-          {selectedGraph ? <div className="mt-1 text-xs text-muted-foreground/90">시스템 모듈의 최종 결과를 추가한 뒤, 최종으로 확정할 출력 포트에 연결해줘.</div> : null}
+          <div>{resolvedEmptyLabel}</div>
+          {selectedGraph ? <div className="mt-1 text-xs text-muted-foreground/90">{t({ ko: '시스템 모듈의 최종 결과를 추가한 뒤, 최종으로 확정할 출력 포트에 연결해줘.', en: 'Add a final result from a system module, then connect it to the output port you want to finalize.' })}</div> : null}
         </div>
       ) : (
         <div className="space-y-3">

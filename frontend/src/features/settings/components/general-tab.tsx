@@ -54,9 +54,6 @@ export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtecti
                   >
                     <option value="ko">{t({ ko: '한국어', en: 'Korean' })}</option>
                     <option value="en">{t({ ko: '영어', en: 'English' })}</option>
-                    <option value="ja">{t({ ko: '일본어', en: 'Japanese' })}</option>
-                    <option value="zh-CN">{t({ ko: '중국어(간체)', en: 'Simplified Chinese' })}</option>
-                    <option value="zh-TW">{t({ ko: '중국어(번체)', en: 'Traditional Chinese' })}</option>
                   </Select>
                 </SettingsField>
 

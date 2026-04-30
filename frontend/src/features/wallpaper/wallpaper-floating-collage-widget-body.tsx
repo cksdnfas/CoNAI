@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
   buildWallpaperImageTransitionTransform,
@@ -507,6 +508,7 @@ function buildWallpaperFloatingCollageCardStates(
 
 /** Render one layered floating collage that always stays inside the widget area. */
 export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'floating-collage' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const spawnHoldUntilRef = useRef(0)
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
@@ -804,21 +806,21 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
   }, [aspectMode, cardStates.length, containerSize.height, containerSize.width, imageScalePercent, imageSwapMode, images, motionStrength, swapBounceCount, swapIntervalSec, transitionDurationMs])
 
   if (groupId === null) {
-    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">설정에서 그룹을 선택해.</div>
+    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">{t({ ko: '설정에서 그룹을 선택해.', en: 'Select a group in settings.' })}</div>
   }
 
   if (previewQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">콜라주 불러오는 중…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t({ ko: '콜라주 불러오는 중…', en: 'Loading collage…' })}</div>
   }
 
   if (previewQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">콜라주 이미지를 불러오지 못했어.</div>
+    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t({ ko: '콜라주 이미지를 불러오지 못했어.', en: 'Failed to load collage images.' })}</div>
   }
 
   return (
     <div ref={containerRef} className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_14%,transparent),transparent_42%),var(--surface-low)]">
       {images.length === 0 ? (
-        <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">표시할 콜라주 이미지가 없어.</div>
+        <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">{t({ ko: '표시할 콜라주 이미지가 없어.', en: 'There are no collage images to display.' })}</div>
       ) : null}
 
       {cardStates.map((card, index) => {
@@ -860,7 +862,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
               <div style={previousLayerStyle ?? undefined}>
                 <ImagePreviewMedia
                   image={previousImage}
-                  alt="플로팅 콜라주"
+                  alt={t({ ko: '플로팅 콜라주', en: 'Floating collage' })}
                   loading="eager"
                   draggable={false}
                   className={mediaClassName}
@@ -872,14 +874,14 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
               <div style={currentLayerStyle}>
                 <ImagePreviewMedia
                   image={image}
-                  alt="플로팅 콜라주"
+                  alt={t({ ko: '플로팅 콜라주', en: 'Floating collage' })}
                   loading="eager"
                   draggable={false}
                   className={mediaClassName}
                 />
               </div>
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">이미지 없음</div>
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">{t({ ko: '이미지 없음', en: 'No image' })}</div>
             )}
           </>
         )
@@ -895,7 +897,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
                 event.stopPropagation()
                 onOpenImage({
                   image,
-                  alt: '플로팅 콜라주',
+                  alt: t({ ko: '플로팅 콜라주', en: 'Floating collage' }),
                   previewOpenScalePercent: widget.settings.imagePreviewOpenScalePercent,
                   previewOpenDurationMs: widget.settings.imagePreviewOpenDurationMs,
                   previewOpenEasing: widget.settings.imagePreviewOpenEasing,

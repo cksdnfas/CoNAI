@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { useI18n } from '@/i18n'
 import type { ImageEditorLayer } from './image-editor-types'
 
 interface ImageEditorLayerPanelProps {
@@ -41,15 +42,17 @@ export function ImageEditorLayerPanel({
   onMergeLayerDown,
   onDeleteLayer,
 }: ImageEditorLayerPanelProps) {
+  const { t } = useI18n()
+
   return (
     <Card>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between border-b border-border/70 pb-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Layers className="h-4 w-4" /> Layers
+            <Layers className="h-4 w-4" /> {t({ ko: '레이어', en: 'Layers' })}
           </div>
           <Button type="button" variant="secondary" size="sm" onClick={onAddLayer}>
-            <Plus className="h-4 w-4" /> Add
+            <Plus className="h-4 w-4" /> {t({ ko: '추가', en: 'Add' })}
           </Button>
         </div>
 
@@ -61,7 +64,9 @@ export function ImageEditorLayerPanel({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1 space-y-2">
                     <button type="button" className="w-full min-w-0 text-left" onClick={() => onSetActiveLayerId(layer.id)}>
-                      <div className="text-xs text-muted-foreground">{layer.type === 'draw' ? `Draw · ${layer.lines.length} stroke${layer.lines.length === 1 ? '' : 's'}` : 'Paste bitmap'}</div>
+                      <div className="text-xs text-muted-foreground">{layer.type === 'draw'
+                        ? t({ ko: '드로우 · {count} 스트로크', en: 'Draw · {count} stroke' }, { count: layer.lines.length })
+                        : t({ ko: '비트맵 붙여넣기', en: 'Paste bitmap' })}</div>
                     </button>
                     <Input
                       value={layer.name}
@@ -74,7 +79,7 @@ export function ImageEditorLayerPanel({
                         }
                       }}
                       className="h-8"
-                      aria-label={`Layer name ${index + 1}`}
+                      aria-label={t({ ko: '레이어 이름 {index}', en: 'Layer name {index}' }, { index: index + 1 })}
                     />
                   </div>
                   <Badge variant={isActive ? 'secondary' : 'outline'}>{index + 1}</Badge>
@@ -93,10 +98,10 @@ export function ImageEditorLayerPanel({
                     <ArrowDown className="h-4 w-4" />
                   </Button>
                   <Button type="button" variant="secondary" size="sm" onClick={() => onDuplicateLayer(layer.id)} disabled={loading}>
-                    Duplicate
+                    {t({ ko: '복제', en: 'Duplicate' })}
                   </Button>
                   <Button type="button" variant="secondary" size="sm" onClick={onMergeLayerDown} disabled={!isActive || index === 0 || loading}>
-                    Merge Down
+                    {t({ ko: '아래로 병합', en: 'Merge Down' })}
                   </Button>
                   <Button type="button" variant="secondary" size="sm" onClick={() => onDeleteLayer(layer.id)} disabled={layers.length === 1 && layer.type === 'draw'}>
                     <Trash2 className="h-4 w-4" />
@@ -104,16 +109,16 @@ export function ImageEditorLayerPanel({
                 </div>
               </div>
             )
-          }) : <div className="text-sm text-muted-foreground">No layers yet.</div>}
+          }) : <div className="text-sm text-muted-foreground">{t({ ko: '아직 레이어가 없어.', en: 'No layers yet.' })}</div>}
         </div>
 
         {enableMaskEditing ? (
           <div className="space-y-2 rounded-sm border border-border bg-surface-low p-3">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-foreground">Mask layer</div>
-              <Badge variant={hasVisibleMask ? 'secondary' : 'outline'}>{hasVisibleMask ? 'Visible' : 'Empty'}</Badge>
+              <div className="text-sm font-medium text-foreground">{t({ ko: '마스크 레이어', en: 'Mask layer' })}</div>
+              <Badge variant={hasVisibleMask ? 'secondary' : 'outline'}>{hasVisibleMask ? t({ ko: '보임', en: 'Visible' }) : t({ ko: '비어 있음', en: 'Empty' })}</Badge>
             </div>
-            <div className="text-xs text-muted-foreground">The mask layer is exported separately for infill. Brush paints white. Eraser removes white.</div>
+            <div className="text-xs text-muted-foreground">{t({ ko: '마스크 레이어는 인필용으로 별도 내보내져. 브러시는 흰색을 칠하고, 지우개는 흰색을 지워.', en: 'The mask layer is exported separately for infill. Brush paints white. Eraser removes white.' })}</div>
           </div>
         ) : null}
       </CardContent>

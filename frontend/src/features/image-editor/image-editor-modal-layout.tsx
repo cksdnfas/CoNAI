@@ -2,6 +2,7 @@ import type { RefObject, WheelEvent } from 'react'
 import type Konva from 'konva'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { useI18n } from '@/i18n'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { ImageEditorCanvas } from './image-editor-canvas'
 import { ImageEditorLayerPanel } from './image-editor-layer-panel'
@@ -141,6 +142,8 @@ export function ImageEditorModalLayout({
   layerPanel,
   sessionActions,
 }: ImageEditorModalLayoutProps) {
+  const { t } = useI18n()
+
   return (
     <SettingsModal
       open={open}
@@ -160,16 +163,16 @@ export function ImageEditorModalLayout({
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-4">
                   <div className="space-y-1">
-                    <div className="text-base font-semibold text-foreground">{sourceFileName || 'Editor Session'}</div>
-                    <div className="text-xs text-muted-foreground">{sourceSummary.width > 0 ? `${sourceSummary.width} × ${sourceSummary.height}` : 'No image loaded'}</div>
+                    <div className="text-base font-semibold text-foreground">{sourceFileName || t({ ko: '편집 세션', en: 'Editor Session' })}</div>
+                    <div className="text-xs text-muted-foreground">{sourceSummary.width > 0 ? `${sourceSummary.width} × ${sourceSummary.height}` : t({ ko: '불러온 이미지가 없어.', en: 'No image loaded' })}</div>
                     {sourceSummary.activeLayerName ? (
-                      <div className="text-xs text-muted-foreground">Active layer: {sourceSummary.activeLayerName}{sourceSummary.activeLayerLocked ? ' · Locked' : ''}</div>
+                      <div className="text-xs text-muted-foreground">{t({ ko: '활성 레이어', en: 'Active layer' })}: {sourceSummary.activeLayerName}{sourceSummary.activeLayerLocked ? ` · ${t({ ko: '잠김', en: 'Locked' })}` : ''}</div>
                     ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">Zoom {Math.round(sourceSummary.zoom * 100)}%</Badge>
-                    <Badge variant="outline">Rotate {((sourceSummary.rotation % 360) + 360) % 360}°</Badge>
-                    {sourceSummary.enableMaskEditing ? <Badge variant={sourceSummary.hasVisibleMask ? 'secondary' : 'outline'}>Mask {sourceSummary.hasVisibleMask ? 'On' : 'Empty'}</Badge> : null}
+                    <Badge variant="outline">{t({ ko: '확대 {value}%', en: 'Zoom {value}%' }, { value: Math.round(sourceSummary.zoom * 100) })}</Badge>
+                    <Badge variant="outline">{t({ ko: '회전 {value}°', en: 'Rotate {value}°' }, { value: ((sourceSummary.rotation % 360) + 360) % 360 })}</Badge>
+                    {sourceSummary.enableMaskEditing ? <Badge variant={sourceSummary.hasVisibleMask ? 'secondary' : 'outline'}>{t({ ko: '마스크', en: 'Mask' })} {sourceSummary.hasVisibleMask ? t({ ko: '켜짐', en: 'On' }) : t({ ko: '비어 있음', en: 'Empty' })}</Badge> : null}
                   </div>
                 </div>
 

@@ -7,6 +7,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { useI18n } from '@/i18n'
 import { getGroupsHierarchyAll } from '@/lib/api'
 import { getAppSettings, updateAppearanceSettings } from '@/lib/api-settings'
 import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from './wallpaper-canvas-presets'
@@ -77,6 +78,7 @@ function removeSelectedWidget(layoutPreset: WallpaperLayoutPreset, widgetId: str
 }
 
 export function WallpaperEditorPage() {
+  const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const hasHydratedServerPresetsRef = useRef(false)
   const [layoutPreset, setLayoutPreset] = useState(() => loadWallpaperLayoutDraft() ?? buildWallpaperStarterLayout('landscape-1080p'))
@@ -185,7 +187,7 @@ export function WallpaperEditorPage() {
           }
         },
         onError: (error) => {
-          notifyError(error instanceof Error ? error.message : '월페이퍼 프리셋을 서버에 저장하지 못했어.')
+          notifyError(error instanceof Error ? error.message : t({ ko: '월페이퍼 프리셋을 서버에 저장하지 못했어.', en: 'Failed to save the wallpaper preset to the server.' }))
         },
       },
     )
@@ -221,7 +223,9 @@ export function WallpaperEditorPage() {
     syncWallpaperPresetState(
       nextResult.presets,
       nextResult.presetId,
-      options?.saveAsNew ? '프리셋을 새로 저장했어.' : '프리셋을 저장했어.',
+      options?.saveAsNew
+        ? t({ ko: '프리셋을 새로 저장했어.', en: 'Saved the preset as a new one.' })
+        : t({ ko: '프리셋을 저장했어.', en: 'Saved the preset.' }),
     )
   }
 
@@ -233,7 +237,7 @@ export function WallpaperEditorPage() {
     const nextPresets = deleteWallpaperLayoutPreset(savedPresets, effectiveActivePresetId)
     setSavedPresets(nextPresets)
     setActivePresetId(null)
-    syncWallpaperPresetState(nextPresets, null, '프리셋을 삭제했어.')
+    syncWallpaperPresetState(nextPresets, null, t({ ko: '프리셋을 삭제했어.', en: 'Deleted the preset.' }))
   }
 
   const handleCreateBlankCanvas = () => {
@@ -243,7 +247,7 @@ export function WallpaperEditorPage() {
     setSelectedWidgetId(null)
     setSelectedLibraryWidgetType(null)
     syncWallpaperPresetState(savedPresets, null)
-    notifyInfo('빈 신규 캔버스를 만들었어.')
+    notifyInfo(t({ ko: '빈 신규 캔버스를 만들었어.', en: 'Created a new blank canvas.' }))
   }
 
   const handleWidgetDrop = (targetWidgetId: string) => {
@@ -285,21 +289,21 @@ export function WallpaperEditorPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="월페이퍼"
-        title="월페이퍼 배치"
+        eyebrow={t({ ko: '월페이퍼', en: 'Wallpaper' })}
+        title={t({ ko: '월페이퍼 배치', en: 'Wallpaper Layout' })}
       />
 
       <section className="rounded-sm border border-border bg-surface-container/70 p-3">
         <div className="grid gap-3 lg:grid-cols-[minmax(200px,0.9fr)_minmax(220px,1.2fr)_auto] lg:items-end">
           <div className="space-y-1">
-            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">프리셋</div>
+            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '프리셋', en: 'Preset' })}</div>
             <Select
               value={effectiveActivePresetId ?? '__new__'}
               onChange={(event) => {
                 handleLoadPreset(event.target.value || null)
               }}
             >
-              <option value="__new__" hidden>미저장 새 캔버스</option>
+              <option value="__new__" hidden>{t({ ko: '미저장 새 캔버스', en: 'Unsaved new canvas' })}</option>
               {savedPresets.map((preset) => (
                 <option key={preset.id} value={preset.id}>{preset.name}</option>
               ))}
@@ -307,7 +311,7 @@ export function WallpaperEditorPage() {
           </div>
 
           <div className="space-y-1">
-            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">이름</div>
+            <div className="text-[11px] font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '이름', en: 'Name' })}</div>
             <Input
               variant="settings"
               value={layoutPreset.name}
@@ -327,8 +331,8 @@ export function WallpaperEditorPage() {
               size="icon-sm"
               disabled={wallpaperPresetMutation.isPending}
               onClick={handleCreateBlankCanvas}
-              aria-label="신규 캔버스"
-              title="신규 캔버스"
+              aria-label={t({ ko: '신규 캔버스', en: 'New canvas' })}
+              title={t({ ko: '신규 캔버스', en: 'New canvas' })}
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -337,8 +341,8 @@ export function WallpaperEditorPage() {
               size="icon-sm"
               disabled={wallpaperPresetMutation.isPending}
               onClick={() => handleSavePreset()}
-              aria-label="저장"
-              title="저장"
+              aria-label={t({ ko: '저장', en: 'Save' })}
+              title={t({ ko: '저장', en: 'Save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -347,8 +351,8 @@ export function WallpaperEditorPage() {
               size="icon-sm"
               disabled={wallpaperPresetMutation.isPending}
               onClick={() => handleSavePreset({ saveAsNew: true })}
-              aria-label="다른 이름으로 저장"
-              title="다른 이름으로 저장"
+              aria-label={t({ ko: '다른 이름으로 저장', en: 'Save as' })}
+              title={t({ ko: '다른 이름으로 저장', en: 'Save as' })}
             >
               <Copy className="h-4 w-4" />
             </Button>
@@ -357,8 +361,8 @@ export function WallpaperEditorPage() {
               size="icon-sm"
               disabled={!activePreset || wallpaperPresetMutation.isPending}
               onClick={handleDeletePreset}
-              aria-label="프리셋 삭제"
-              title="프리셋 삭제"
+              aria-label={t({ ko: '프리셋 삭제', en: 'Delete preset' })}
+              title={t({ ko: '프리셋 삭제', en: 'Delete preset' })}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -398,7 +402,13 @@ export function WallpaperEditorPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button asChild variant="outline" size="icon-sm" aria-label="초안 런타임 미리보기" title="초안 런타임 미리보기">
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="icon-sm"
+                    aria-label={t({ ko: '초안 런타임 미리보기', en: 'Preview draft runtime' })}
+                    title={t({ ko: '초안 런타임 미리보기', en: 'Preview draft runtime' })}
+                  >
                     <Link to={draftRuntimePath}>
                       <Eye className="h-4 w-4" />
                     </Link>
@@ -407,8 +417,12 @@ export function WallpaperEditorPage() {
                     variant="outline"
                     size="icon-sm"
                     onClick={() => setIsCanvasFocusMode((current) => !current)}
-                    aria-label={isCanvasFocusMode ? '집중 보기 종료' : '캔버스 집중 보기'}
-                    title={isCanvasFocusMode ? '집중 보기 종료' : '캔버스 집중 보기'}
+                    aria-label={isCanvasFocusMode
+                      ? t({ ko: '집중 보기 종료', en: 'Exit focus view' })
+                      : t({ ko: '캔버스 집중 보기', en: 'Focus canvas' })}
+                    title={isCanvasFocusMode
+                      ? t({ ko: '집중 보기 종료', en: 'Exit focus view' })
+                      : t({ ko: '캔버스 집중 보기', en: 'Focus canvas' })}
                   >
                     {isCanvasFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                   </Button>
@@ -422,7 +436,7 @@ export function WallpaperEditorPage() {
           />
 
           <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-4">
-            <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">선택 위젯 컨트롤</h2>
+            <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '선택 위젯 컨트롤', en: 'Selected widget controls' })}</h2>
 
             {selectedWidget ? (
               <>
@@ -474,23 +488,23 @@ export function WallpaperEditorPage() {
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
-                    위젯 삭제
+                    {t({ ko: '위젯 삭제', en: 'Delete widget' })}
                   </Button>
                 </div>
               </>
             ) : (
               <div className="rounded-sm border border-dashed border-border bg-surface-low px-4 py-6 text-center text-sm text-muted-foreground">
-                위젯을 선택해.
+                {t({ ko: '위젯을 선택해.', en: 'Select a widget.' })}
               </div>
             )}
           </section>
 
           <section className="space-y-3 rounded-sm border border-border bg-surface-container/70 p-4">
-            <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">위젯 순서</h2>
+            <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '위젯 순서', en: 'Widget order' })}</h2>
 
             {orderedWidgets.length === 0 ? (
               <div className="rounded-sm border border-dashed border-border bg-surface-low px-4 py-6 text-center text-sm text-muted-foreground">
-                아직 추가된 위젯이 없어.
+                {t({ ko: '아직 추가된 위젯이 없어.', en: 'No widgets added yet.' })}
               </div>
             ) : (
               <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
@@ -549,7 +563,7 @@ export function WallpaperEditorPage() {
                           <>
                             <button
                               type="button"
-                              aria-label="앞으로 이동"
+                              aria-label={t({ ko: '앞으로 이동', en: 'Move forward' })}
                               disabled={index === 0}
                               className="flex h-8 w-8 touch-none items-center justify-center rounded-sm border border-border bg-background text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-40"
                               onClick={(event) => {
@@ -562,7 +576,7 @@ export function WallpaperEditorPage() {
                             </button>
                             <button
                               type="button"
-                              aria-label="뒤로 이동"
+                              aria-label={t({ ko: '뒤로 이동', en: 'Move backward' })}
                               disabled={index === orderedWidgets.length - 1}
                               className="flex h-8 w-8 touch-none items-center justify-center rounded-sm border border-border bg-background text-muted-foreground transition disabled:cursor-not-allowed disabled:opacity-40"
                               onClick={(event) => {
@@ -587,7 +601,7 @@ export function WallpaperEditorPage() {
         </div>
 
         <section className="space-y-4 rounded-sm border border-border bg-surface-container/70 p-4">
-          <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">위젯 설정</h2>
+          <h2 className="text-sm font-semibold tracking-[0.18em] text-secondary uppercase">{t({ ko: '위젯 설정', en: 'Widget settings' })}</h2>
 
           <WallpaperWidgetInspector
             selectedWidget={selectedWidget}

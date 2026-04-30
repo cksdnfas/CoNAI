@@ -2,6 +2,7 @@ import { ChevronRight, Folder, FolderOpen, Plus } from 'lucide-react'
 import type { MouseEventHandler } from 'react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
+import { useI18n } from '@/i18n'
 import type { WildcardRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
@@ -23,11 +24,13 @@ type WildcardInlinePickerExplorerProps = {
   onToggleExpanded: (wildcardId: number) => void
 }
 
-const WILDCARD_INLINE_EXPLORER_TABS: Array<{ value: WildcardWorkspaceTab; label: string }> = [
-  { value: 'wildcards', label: '와일드카드' },
-  { value: 'preprocess', label: '전처리' },
-  { value: 'lora', label: '로라' },
-]
+function getWildcardInlineExplorerTabs(t: ReturnType<typeof useI18n>['t']): Array<{ value: WildcardWorkspaceTab; label: string }> {
+  return [
+    { value: 'wildcards', label: t('image-generation.components.wildcard.inline.picker.explorer.wildcard') },
+    { value: 'preprocess', label: t('image-generation.components.wildcard.inline.picker.explorer.preprocess') },
+    { value: 'lora', label: t('image-generation.components.wildcard.inline.picker.explorer.lora') },
+  ]
+}
 
 /** Render the bounded tree explorer UI for inline wildcard browsing. */
 export function WildcardInlinePickerExplorer({
@@ -41,6 +44,9 @@ export function WildcardInlinePickerExplorer({
   onSelectWildcard,
   onToggleExpanded,
 }: WildcardInlinePickerExplorerProps) {
+  const { t } = useI18n()
+  const tabs = getWildcardInlineExplorerTabs(t)
+
   const renderExplorerTree = (nodes: WildcardRecord[], depth = 0) => {
     if (nodes.length === 0) {
       return null
@@ -73,7 +79,13 @@ export function WildcardInlinePickerExplorer({
           }
 
           const insertSyntax = getWildcardPromptSyntax(node.name, { type: node.type, tab: activeTab })
-          const insertLabel = getWildcardPromptSyntaxLabel({ type: node.type, tab: activeTab })
+          const insertLabel = getWildcardPromptSyntaxLabel(
+            { type: node.type, tab: activeTab },
+            {
+              preprocess: t({ ko: '전처리 키워드', en: 'Preprocess keyword' }),
+              wildcard: t({ ko: '와일드카드 문법', en: 'Wildcard syntax' }),
+            },
+          )
 
           const handleInsert: MouseEventHandler<HTMLButtonElement> = (event) => {
             event.preventDefault()
@@ -88,8 +100,8 @@ export function WildcardInlinePickerExplorer({
                     type="button"
                     onMouseDown={handleToggleExpanded}
                     className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-surface-low hover:text-foreground"
-                    aria-label={isExpanded ? '접기' : '펼치기'}
-                    title={isExpanded ? '접기' : '펼치기'}
+                    aria-label={isExpanded ? t('image-generation.components.wildcard.inline.picker.explorer.collapse') : t('image-generation.components.wildcard.inline.picker.explorer.expand')}
+                    title={isExpanded ? t('image-generation.components.wildcard.inline.picker.explorer.collapse') : t('image-generation.components.wildcard.inline.picker.explorer.expand')}
                   >
                     <ChevronRight className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-90')} />
                   </button>
@@ -120,8 +132,8 @@ export function WildcardInlinePickerExplorer({
                   type="button"
                   onMouseDown={handleInsert}
                   className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-border bg-surface-lowest text-muted-foreground transition-colors hover:bg-surface-high hover:text-foreground"
-                  aria-label={`${insertSyntax} 추가`}
-                  title={`${insertLabel} ${insertSyntax} 추가`}
+                  aria-label={t({ ko: '{syntax} 추가', en: 'Add {syntax}' }, { syntax: insertSyntax })}
+                  title={t({ ko: '{label} {syntax} 추가', en: 'Add {label} {syntax}' }, { label: insertLabel, syntax: insertSyntax })}
                 >
                   <Plus className="h-4 w-4" />
                 </button>
@@ -140,7 +152,7 @@ export function WildcardInlinePickerExplorer({
       <div className="border-b border-border/70 px-3 py-2">
         <SegmentedTabBar
           value={activeTab}
-          items={WILDCARD_INLINE_EXPLORER_TABS}
+          items={tabs}
           onChange={(value) => onChangeActiveTab(value as WildcardWorkspaceTab)}
           fullWidth
           size="xs"
@@ -154,7 +166,7 @@ export function WildcardInlinePickerExplorer({
             {renderExplorerTree(treeNodes)}
           </div>
         ) : (
-          <div className="rounded-sm border border-border/70 bg-surface-low px-3 py-3 text-sm text-muted-foreground">이 분류에는 아직 항목이 없어.</div>
+          <div className="rounded-sm border border-border/70 bg-surface-low px-3 py-3 text-sm text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.explorer.no.items.in.this.category.yet')}</div>
         )}
       </div>
     </>

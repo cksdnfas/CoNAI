@@ -30,7 +30,7 @@ import { runtimeSettingsRoutes } from './settings/runtime.routes';
 import { appearanceSettingsRoutes } from './settings/appearance.routes';
 
 const router = Router();
-const validLanguages: SupportedLanguage[] = ['ko', 'en', 'ja', 'zh-CN', 'zh-TW'];
+const validLanguages: SupportedLanguage[] = ['ko', 'en'];
 const validKaloscopeDevices = ['auto', 'cpu', 'cuda'] as const;
 const validTaggerModels = ['vit', 'swinv2', 'convnext'] as const;
 const validTaggerDevices = ['auto', 'cpu', 'cuda'] as const;

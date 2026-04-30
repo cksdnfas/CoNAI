@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { useI18n } from '@/i18n'
 import { getAppSettings, getPublicGenerationWorkflow, queuePublicGenerationWorkflowJob, type WorkflowMarkedField } from '@/lib/api'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -55,6 +56,7 @@ export function PublicComfyWorkflowPage() {
   const isWideLayout = useDesktopPageLayout()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
@@ -165,9 +167,9 @@ export function PublicComfyWorkflowPage() {
       const successCount = result.enqueued_count ?? result.records?.filter(Boolean).length ?? (result.record ? 1 : 0)
 
       void refreshGenerationQueueViews(queryClient, () => setHistoryRefreshNonce((current) => current + 1))
-      showSnackbar({ message: `${workflow.name} 큐에 ${successCount}건 등록했어.`, tone: 'info' })
+      showSnackbar({ message: t({ ko: '{name} 큐에 {count}건 등록했어.', en: 'Queued {count} job(s) for {name}.' }, { name: workflow.name, count: successCount }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '공용 워크플로우 큐 등록에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '공용 워크플로우 큐 등록에 실패했어.', en: 'Failed to enqueue the public workflow.' })), tone: 'error' })
     } finally {
       setIsQueueSubmitting(false)
     }
@@ -191,8 +193,8 @@ export function PublicComfyWorkflowPage() {
   if (authStatusQuery.data?.hasCredentials === false) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>게스트 로그인 전용 페이지야</AlertTitle>
-        <AlertDescription>이 공용 워크플로우 페이지는 로컬 인증과 게스트 계정 구성이 먼저 필요해.</AlertDescription>
+        <AlertTitle>{t({ ko: '게스트 로그인 전용 페이지야', en: 'This page is for guest login only' })}</AlertTitle>
+        <AlertDescription>{t({ ko: '이 공용 워크플로우 페이지는 로컬 인증과 게스트 계정 구성이 먼저 필요해.', en: 'This public workflow page requires local authentication and guest account setup first.' })}</AlertDescription>
       </Alert>
     )
   }
@@ -216,8 +218,8 @@ export function PublicComfyWorkflowPage() {
         size="icon-sm"
         onClick={handleResetDraft}
         disabled={isQueueSubmitting}
-        aria-label="초기화"
-        title="초기화"
+        aria-label={t({ ko: '초기화', en: 'Reset' })}
+        title={t({ ko: '초기화', en: 'Reset' })}
       >
         <RotateCcw className="h-4 w-4" />
       </Button>
@@ -231,7 +233,7 @@ export function PublicComfyWorkflowPage() {
         value={queueRegistrationCount}
         onChange={setQueueRegistrationCount}
         disabled={isQueueSubmitting}
-        aria-label="큐 등록 개수"
+        aria-label={t({ ko: '큐 등록 개수', en: 'Queue registration count' })}
         inputMode="numeric"
       />
       <Button
@@ -239,8 +241,8 @@ export function PublicComfyWorkflowPage() {
         size="icon-sm"
         onClick={() => void handleQueueSubmit()}
         disabled={isQueueSubmitting || workflowFields.length === 0}
-        aria-label={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-        title={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+        aria-label={isQueueSubmitting ? t({ ko: '큐 등록 중', en: 'Submitting to queue' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} time(s)' }, { count: queueRegistrationCount })}
+        title={isQueueSubmitting ? t({ ko: '큐 등록 중', en: 'Submitting to queue' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} time(s)' }, { count: queueRegistrationCount })}
         className="shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_18%,transparent)]"
       >
         <Play className="h-4 w-4 fill-current" />
@@ -255,7 +257,7 @@ export function PublicComfyWorkflowPage() {
           <Button asChild type="button" variant="ghost" size="sm" className="w-fit">
             <Link to="/access">
               <ArrowLeft className="h-4 w-4" />
-              뒤로가기
+              {t({ ko: '뒤로가기', en: 'Back' })}
             </Link>
           </Button>
 
@@ -266,7 +268,7 @@ export function PublicComfyWorkflowPage() {
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          <Badge variant="outline">필드 {workflowFields.length}</Badge>
+          <Badge variant="outline">{t({ ko: '필드 {count}', en: 'Fields {count}' }, { count: workflowFields.length })}</Badge>
         </div>
       </div>
 
@@ -283,8 +285,8 @@ export function PublicComfyWorkflowPage() {
         size="icon-sm"
         onClick={handleResetDraft}
         disabled={isQueueSubmitting}
-        aria-label="초기화"
-        title="초기화"
+        aria-label={t({ ko: '초기화', en: 'Reset' })}
+        title={t({ ko: '초기화', en: 'Reset' })}
       >
         <RotateCcw className="h-4 w-4" />
       </Button>
@@ -295,13 +297,13 @@ export function PublicComfyWorkflowPage() {
     <>
       {missingRequiredField ? (
         <Alert>
-          <AlertTitle>입력이 더 필요해</AlertTitle>
-          <AlertDescription>{missingRequiredField.label} 필드는 꼭 채워야 해.</AlertDescription>
+          <AlertTitle>{t({ ko: '입력이 더 필요해', en: 'More input is required' })}</AlertTitle>
+          <AlertDescription>{t({ ko: '{label} 필드는 꼭 채워야 해.', en: 'The {label} field is required.' }, { label: missingRequiredField.label })}</AlertDescription>
         </Alert>
       ) : null}
 
       {workflowFields.length === 0 ? (
-        <BottomDrawerNotice>노출된 입력 필드가 아직 없어.</BottomDrawerNotice>
+        <BottomDrawerNotice>{t({ ko: '노출된 입력 필드가 아직 없어.', en: 'There are no exposed input fields yet.' })}</BottomDrawerNotice>
       ) : (
         <GenerationControllerFieldStack>
           {workflowFields.map((field) => (
@@ -349,7 +351,7 @@ export function PublicComfyWorkflowPage() {
             value={queueRegistrationCount}
             onChange={setQueueRegistrationCount}
             disabled={isQueueSubmitting}
-            aria-label="큐 등록 개수"
+            aria-label={t({ ko: '큐 등록 개수', en: 'Queue registration count' })}
             inputMode="numeric"
           />
           <Button
@@ -358,8 +360,8 @@ export function PublicComfyWorkflowPage() {
             className="rounded-none border-l border-border/70 shadow-none"
             onClick={() => void handleQueueSubmit()}
             disabled={isQueueSubmitting || workflowFields.length === 0}
-            aria-label={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-            title={isQueueSubmitting ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+            aria-label={isQueueSubmitting ? t({ ko: '큐 등록 중', en: 'Submitting to queue' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} time(s)' }, { count: queueRegistrationCount })}
+            title={isQueueSubmitting ? t({ ko: '큐 등록 중', en: 'Submitting to queue' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} time(s)' }, { count: queueRegistrationCount })}
           >
             <Play className="h-4 w-4 fill-current" />
           </Button>
@@ -377,12 +379,12 @@ export function PublicComfyWorkflowPage() {
     >
       {workflowQuery.isError ? (
         <Alert variant="destructive">
-          <AlertTitle>공용 워크플로우를 불러오지 못했어</AlertTitle>
-          <AlertDescription>{getErrorMessage(workflowQuery.error, '공용 워크플로우 조회 실패')}</AlertDescription>
+          <AlertTitle>{t({ ko: '공용 워크플로우를 불러오지 못했어', en: 'Failed to load the public workflow' })}</AlertTitle>
+          <AlertDescription>{getErrorMessage(workflowQuery.error, t({ ko: '공용 워크플로우 조회 실패', en: 'Failed to load the public workflow' }))}</AlertDescription>
         </Alert>
       ) : null}
 
-      {workflowQuery.isLoading ? <div className="text-sm text-muted-foreground">공용 워크플로우 불러오는 중…</div> : null}
+      {workflowQuery.isLoading ? <div className="text-sm text-muted-foreground">{t({ ko: '공용 워크플로우 불러오는 중…', en: 'Loading public workflow…' })}</div> : null}
 
       {workflow ? (
         isWideLayout ? (

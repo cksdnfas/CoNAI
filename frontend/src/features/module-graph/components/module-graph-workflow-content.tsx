@@ -1,4 +1,5 @@
 import { Suspense, lazy, type ReactNode } from 'react'
+import { useI18n } from '@/i18n'
 import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowBrowseContentRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
 import type { WorkflowValidationIssue } from './workflow-validation-panel'
 import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
@@ -73,6 +74,8 @@ export function ModuleGraphWorkflowBrowseContent({
   onRetryExecution: () => void
   onCancelExecution: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <ModuleWorkflowBrowseView
       isDesktopPageLayout={isDesktopPageLayout}
@@ -114,7 +117,7 @@ export function ModuleGraphWorkflowBrowseContent({
         </Suspense>
       ) : (
         <div className="rounded-sm border border-dashed border-border px-4 py-10 text-sm text-muted-foreground">
-          생성물 관리 콘텐츠를 불러오는 중이야…
+          {t({ ko: '생성물 관리 콘텐츠를 불러오는 중이야…', en: 'Loading artifact management content…' })}
         </div>
       )}
     />

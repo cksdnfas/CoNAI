@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { getThemeToneStyle } from '@/lib/theme-tones'
-import { SEARCH_AI_TOOL_OPTIONS, SEARCH_SCOPE_LABELS } from './search-constants'
+import { SEARCH_AI_TOOL_OPTIONS } from './search-constants'
 import type { RatingTierRecord, SearchAiToolGroup, SearchChip, SearchOperator, SearchScope } from './search-types'
 
 const SEARCH_OPERATOR_SEQUENCE: SearchOperator[] = ['OR', 'AND', 'NOT']
@@ -34,7 +34,6 @@ export function createTextSearchChip(scope: Exclude<SearchScope, 'rating' | 'too
       operator: options?.operator ?? 'OR',
       label: trimmedValue,
       value: trimmedValue,
-      scopeLabel: SEARCH_SCOPE_LABELS[scope],
       conditionCategory: 'basic',
       conditionType: 'model_name',
     } satisfies SearchChip
@@ -47,7 +46,6 @@ export function createTextSearchChip(scope: Exclude<SearchScope, 'rating' | 'too
       operator: options?.operator ?? 'OR',
       label: trimmedValue,
       value: trimmedValue,
-      scopeLabel: SEARCH_SCOPE_LABELS[scope],
       conditionCategory: 'basic',
       conditionType: 'lora_model',
     } satisfies SearchChip
@@ -75,7 +73,6 @@ export function createAIToolSearchChip(tool: SearchAiToolGroup, options?: { oper
     operator: options?.operator ?? 'OR',
     label: option.label,
     value: option.value,
-    scopeLabel: SEARCH_SCOPE_LABELS.tool,
     conditionCategory: 'basic',
     conditionType: 'ai_tool_group',
   } satisfies SearchChip
@@ -125,11 +122,11 @@ export function buildSearchChipKey(chip: Pick<SearchChip, 'scope' | 'value' | 'm
 }
 
 /** Build a compact label for persisted search history entries. */
-export function buildSearchHistoryLabel(chips: SearchChip[]) {
+export function buildSearchHistoryLabel(chips: SearchChip[], options?: { resolveScopeLabel?: (scope: SearchScope) => string }) {
   return chips
     .map((chip) => {
       const prefix = chip.operator === 'NOT' ? 'NOT' : chip.operator
-      const scopeLabel = chip.scopeLabel ?? SEARCH_SCOPE_LABELS[chip.scope]
+      const scopeLabel = options?.resolveScopeLabel?.(chip.scope) ?? chip.scope
       return `${prefix} ${scopeLabel} ${chip.label}`
     })
     .join(' · ')

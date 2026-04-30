@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useI18n } from '@/i18n'
 import { getThemeTonePanelStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +13,8 @@ interface SnackbarProps {
 }
 
 export function Snackbar({ open, message, tone = 'info', onClose, durationMs = 2800, nonce = 0 }: SnackbarProps) {
+  const { t } = useI18n()
+
   useEffect(() => {
     if (!open || !message) return
 
@@ -43,9 +46,9 @@ export function Snackbar({ open, message, tone = 'info', onClose, durationMs = 2
             type="button"
             onClick={onClose}
             className="shrink-0 text-xs text-muted-foreground transition hover:text-foreground"
-            aria-label="닫기"
+            aria-label={t({ ko: '닫기', en: 'Close' })}
           >
-            닫기
+            {t({ ko: '닫기', en: 'Close' })}
           </button>
         </div>
       </div>

@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
-import { useI18n } from '@/i18n'
+import { useI18n, type TranslationDictionary } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { listWallpaperWidgetDefinitions } from './wallpaper-widget-registry'
 import type { WallpaperWidgetDefinition, WallpaperWidgetType } from './wallpaper-types'
@@ -33,29 +33,29 @@ interface WallpaperWidgetLibrarySidebarProps {
 
 interface WallpaperWidgetLibraryFolder {
   id: WallpaperWidgetLibraryFolderId
-  title: string
+  title: TranslationDictionary
   widgetTypes: WallpaperWidgetType[]
 }
 
 const WALLPAPER_WIDGET_LIBRARY_FOLDERS: WallpaperWidgetLibraryFolder[] = [
   {
     id: 'realtime',
-    title: '실시간 정보',
+    title: { ko: '실시간 정보', en: 'Realtime' },
     widgetTypes: ['clock', 'queue-status', 'activity-pulse'],
   },
   {
     id: 'images',
-    title: '이미지',
+    title: { ko: '이미지', en: 'Images' },
     widgetTypes: ['recent-results', 'group-image-view', 'image-showcase', 'floating-collage'],
   },
   {
     id: 'notes',
-    title: '텍스트',
+    title: { ko: '텍스트', en: 'Text' },
     widgetTypes: ['text-note'],
   },
 ]
 
-const WIDGET_FOLDER_TITLE_BY_TYPE = new Map<WallpaperWidgetType, string>(
+const WIDGET_FOLDER_TITLE_BY_TYPE = new Map<WallpaperWidgetType, TranslationDictionary>(
   WALLPAPER_WIDGET_LIBRARY_FOLDERS.flatMap((folder) => folder.widgetTypes.map((widgetType) => [widgetType, folder.title] as const)),
 )
 
@@ -95,12 +95,12 @@ function sortWallpaperWidgetDefinitions(left: WallpaperWidgetDefinition, right: 
   return left.title.localeCompare(right.title, locale, { numeric: true, sensitivity: 'base' })
 }
 
-function matchesWallpaperWidgetQuery(widget: WallpaperWidgetDefinition, query: string) {
+function matchesWallpaperWidgetQuery(widget: WallpaperWidgetDefinition, query: string, t: (dictionary: TranslationDictionary) => string) {
   if (!query) {
     return true
   }
 
-  const folderTitle = WIDGET_FOLDER_TITLE_BY_TYPE.get(widget.type) ?? '기타'
+  const folderTitle = t(WIDGET_FOLDER_TITLE_BY_TYPE.get(widget.type) ?? { ko: '기타', en: 'Misc' })
   return [widget.title, widget.description, widget.type, folderTitle]
     .join(' ')
     .toLowerCase()
@@ -109,7 +109,7 @@ function matchesWallpaperWidgetQuery(widget: WallpaperWidgetDefinition, query: s
 
 /** Render one explorer-style wallpaper widget library with folder-style grouping. */
 export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget }: WallpaperWidgetLibrarySidebarProps) {
-  const { locale } = useI18n()
+  const { locale, t } = useI18n()
   const [searchQuery, setSearchQuery] = useState('')
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<WallpaperWidgetLibraryFolderId[]>([])
   const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -133,7 +133,7 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
           return widgetDefinitionByType.get(widgetType) ?? null
         })
         .filter((widget): widget is WallpaperWidgetDefinition => widget !== null)
-        .filter((widget) => matchesWallpaperWidgetQuery(widget, normalizedQuery))
+        .filter((widget) => matchesWallpaperWidgetQuery(widget, normalizedQuery, t))
 
       return {
         ...folder,
@@ -141,18 +141,18 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
       }
     })
 
-    const miscWidgets = widgetDefinitions.filter((widget) => !knownWidgetTypes.has(widget.type) && matchesWallpaperWidgetQuery(widget, normalizedQuery))
+    const miscWidgets = widgetDefinitions.filter((widget) => !knownWidgetTypes.has(widget.type) && matchesWallpaperWidgetQuery(widget, normalizedQuery, t))
     if (miscWidgets.length > 0) {
       folders.push({
         id: 'misc',
-        title: '기타',
+        title: { ko: '기타', en: 'Misc' },
         widgetTypes: miscWidgets.map((widget) => widget.type),
         widgets: miscWidgets,
       })
     }
 
     return folders.filter((folder) => folder.widgets.length > 0)
-  }, [normalizedQuery, widgetDefinitionByType, widgetDefinitions])
+  }, [normalizedQuery, t, widgetDefinitionByType, widgetDefinitions])
 
   const hasVisibleWidgets = visibleFolders.length > 0
 
@@ -166,7 +166,7 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
 
   return (
     <ExplorerSidebar
-      title="위젯 라이브러리"
+      title={t({ ko: '위젯 라이브러리', en: 'Widget library' })}
       badge={<Badge variant="outline">{widgetDefinitions.length}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:wallpaper:widget-library-sidebar-locked"
@@ -179,7 +179,7 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
             <Input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="위젯 검색"
+              placeholder={t({ ko: '위젯 검색', en: 'Search widgets' })}
               className="h-8 pl-9 text-sm"
             />
           </div>
@@ -201,7 +201,7 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
             >
               {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
               <Folder className="h-4 w-4 shrink-0" />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{folder.title}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{t(folder.title)}</span>
               <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
                 {folder.widgets.length}
               </Badge>
@@ -238,8 +238,8 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
 
       {!hasVisibleWidgets ? (
         <Alert>
-          <AlertTitle>검색 결과가 없어</AlertTitle>
-          <AlertDescription>다른 이름이나 설명 키워드로 다시 찾아봐.</AlertDescription>
+          <AlertTitle>{t({ ko: '검색 결과가 없어', en: 'No matching widgets' })}</AlertTitle>
+          <AlertDescription>{t({ ko: '다른 이름이나 설명 키워드로 다시 찾아봐.', en: 'Try another name or description keyword.' })}</AlertDescription>
         </Alert>
       ) : null}
     </ExplorerSidebar>

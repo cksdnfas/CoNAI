@@ -87,8 +87,8 @@ export function WorkflowReservationsPanel() {
       const successCount = results.filter((result) => result.status === 'fulfilled').length
       showSnackbar({
         message: successCount === cancelTargets.length
-          ? `${successCount}개 예약 실행 취소 요청 완료.`
-          : `${successCount}개 예약 실행 취소 요청 완료, 일부는 실패했어.`,
+          ? t({ ko: '{count}개 예약 실행 취소 요청 완료.', en: 'Submitted cancellation for {count} reservation runs.' }, { count: formatNumber(successCount) })
+          : t({ ko: '{count}개 예약 실행 취소 요청 완료, 일부는 실패했어.', en: 'Submitted cancellation for {count} reservation runs, but some failed.' }, { count: formatNumber(successCount) }),
         tone: successCount === cancelTargets.length ? 'info' : 'error',
       })
       setSelectedReservationExecutionIds([])
@@ -113,14 +113,14 @@ export function WorkflowReservationsPanel() {
         execution_ids: cleanupTargets.map((execution) => execution.id),
       })
       showSnackbar({
-        message: `예약 실행 정리 완료. ${result.deleted_count}개 삭제, ${result.skipped.length}개 건너뜀.`,
+        message: t({ ko: '예약 실행 정리 완료. {deleted}개 삭제, {skipped}개 건너뜀.', en: 'Reservation run cleanup finished. Deleted {deleted}, skipped {skipped}.' }, { deleted: formatNumber(result.deleted_count), skipped: formatNumber(result.skipped.length) }),
         tone: result.skipped.length > 0 ? 'error' : 'info',
       })
       setSelectedReservationExecutionIds([])
       await handleRefresh()
     } catch (error) {
       showSnackbar({
-        message: error instanceof Error ? error.message : '예약 실행 정리에 실패했어.',
+        message: error instanceof Error ? error.message : t({ ko: '예약 실행 정리에 실패했어.', en: 'Failed to clean up reservation runs.' }),
         tone: 'error',
       })
     } finally {
@@ -143,10 +143,10 @@ export function WorkflowReservationsPanel() {
     try {
       setIsMutatingSchedules(true)
       await createGraphWorkflowSchedule(payload)
-      showSnackbar({ message: '예약작업을 추가했어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: '예약작업을 추가했어.', en: 'Added the reservation job.' }), tone: 'info' })
       await handleRefresh()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '예약작업 생성에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약작업 생성에 실패했어.', en: 'Failed to create the reservation job.' }), tone: 'error' })
     } finally {
       setIsMutatingSchedules(false)
     }
@@ -166,10 +166,10 @@ export function WorkflowReservationsPanel() {
     try {
       setIsMutatingSchedules(true)
       await updateGraphWorkflowSchedule(scheduleId, payload)
-      showSnackbar({ message: '예약작업을 업데이트했어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: '예약작업을 업데이트했어.', en: 'Updated the reservation job.' }), tone: 'info' })
       await handleRefresh()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '예약작업 수정에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약작업 수정에 실패했어.', en: 'Failed to update the reservation job.' }), tone: 'error' })
     } finally {
       setIsMutatingSchedules(false)
     }
@@ -179,10 +179,10 @@ export function WorkflowReservationsPanel() {
     try {
       setIsMutatingSchedules(true)
       await pauseGraphWorkflowSchedule(scheduleId)
-      showSnackbar({ message: '예약작업을 일시정지했어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: '예약작업을 일시정지했어.', en: 'Paused the reservation job.' }), tone: 'info' })
       await handleRefresh()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '예약작업 일시정지에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약작업 일시정지에 실패했어.', en: 'Failed to pause the reservation job.' }), tone: 'error' })
     } finally {
       setIsMutatingSchedules(false)
     }
@@ -192,10 +192,10 @@ export function WorkflowReservationsPanel() {
     try {
       setIsMutatingSchedules(true)
       await resumeGraphWorkflowSchedule(scheduleId)
-      showSnackbar({ message: '예약작업을 다시 켰어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: '예약작업을 다시 켰어.', en: 'Resumed the reservation job.' }), tone: 'info' })
       await handleRefresh()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '예약작업 재개에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약작업 재개에 실패했어.', en: 'Failed to resume the reservation job.' }), tone: 'error' })
     } finally {
       setIsMutatingSchedules(false)
     }
@@ -206,27 +206,27 @@ export function WorkflowReservationsPanel() {
       setIsMutatingSchedules(true)
       const result = await runGraphWorkflowScheduleNow(scheduleId)
       const enqueuedCount = result.enqueue?.enqueued_count ?? 1
-      showSnackbar({ message: result.executionId ? `예약작업에서 즉시 실행 ${enqueuedCount}개를 등록했어. 첫 실행 #${result.executionId}` : result.message, tone: 'info' })
+      showSnackbar({ message: result.executionId ? t({ ko: '예약작업에서 즉시 실행 {count}개를 등록했어. 첫 실행 #{executionId}', en: 'Queued {count} immediate runs from the reservation job. First run #{executionId}.' }, { count: formatNumber(enqueuedCount), executionId: result.executionId }) : result.message, tone: 'info' })
       await handleRefresh()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '즉시 실행 요청에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '즉시 실행 요청에 실패했어.', en: 'Failed to request an immediate run.' }), tone: 'error' })
     } finally {
       setIsMutatingSchedules(false)
     }
   }
 
   const handleDeleteSchedule = async (scheduleId: number) => {
-    if (!window.confirm('이 예약작업을 정말 삭제할까? 연결된 queued 예약 실행도 함께 정리될 수 있어.')) {
+    if (!window.confirm(t({ ko: '이 예약작업을 정말 삭제할까? 연결된 queued 예약 실행도 함께 정리될 수 있어.', en: 'Delete this reservation job? Linked queued reservation runs may be cleaned up too.' }))) {
       return
     }
 
     try {
       setIsMutatingSchedules(true)
       await deleteGraphWorkflowSchedule(scheduleId)
-      showSnackbar({ message: '예약작업을 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: '예약작업을 삭제했어.', en: 'Deleted the reservation job.' }), tone: 'info' })
       await handleRefresh()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '예약작업 삭제에 실패했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약작업 삭제에 실패했어.', en: 'Failed to delete the reservation job.' }), tone: 'error' })
     } finally {
       setIsMutatingSchedules(false)
     }
@@ -235,12 +235,12 @@ export function WorkflowReservationsPanel() {
   return (
     <section className="space-y-4">
       <SettingsSection
-        heading="예약작업"
+        heading={t({ ko: '예약작업', en: 'Reservation jobs' })}
         actions={(
           <>
-            <Badge variant={schedules.length > 0 ? 'secondary' : 'outline'}>스케줄 {schedules.length}</Badge>
-            <Badge variant={reservationExecutions.length > 0 ? 'secondary' : 'outline'}>예약 실행 {reservationExecutions.length}</Badge>
-            <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleRefresh()} title="예약작업 새로고침" aria-label="예약작업 새로고침">
+            <Badge variant={schedules.length > 0 ? 'secondary' : 'outline'}>{t({ ko: '스케줄 {count}', en: 'Schedules {count}' }, { count: formatNumber(schedules.length) })}</Badge>
+            <Badge variant={reservationExecutions.length > 0 ? 'secondary' : 'outline'}>{t({ ko: '예약 실행 {count}', en: 'Reservation runs {count}' }, { count: formatNumber(reservationExecutions.length) })}</Badge>
+            <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleRefresh()} title={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })} aria-label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
               <RefreshCw className="h-4 w-4" />
             </Button>
           </>
@@ -248,19 +248,19 @@ export function WorkflowReservationsPanel() {
       >
         {reservationsQuery.isError ? (
           <Alert variant="destructive">
-            <AlertTitle>예약작업을 불러오지 못했어</AlertTitle>
-            <AlertDescription>{getErrorMessage(reservationsQuery.error, '예약작업 조회 실패')}</AlertDescription>
+            <AlertTitle>{t({ ko: '예약작업을 불러오지 못했어', en: 'Could not load reservation jobs' })}</AlertTitle>
+            <AlertDescription>{getErrorMessage(reservationsQuery.error, t({ ko: '예약작업 조회 실패', en: 'Failed to load reservation jobs' }))}</AlertDescription>
           </Alert>
         ) : null}
 
-        {!reservationsQuery.isError && reservationsQuery.isPending ? <div className="text-sm text-muted-foreground">예약작업 불러오는 중…</div> : null}
+        {!reservationsQuery.isError && reservationsQuery.isPending ? <div className="text-sm text-muted-foreground">{t({ ko: '예약작업 불러오는 중…', en: 'Loading reservation jobs…' })}</div> : null}
 
         {!reservationsQuery.isPending && !reservationsQuery.isError && reservationContent ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <SettingsValueTile label="예약작업" value={reservationContent.scope.schedule_count} valueClassName="text-lg" />
-            <SettingsValueTile label="예약 실행" value={reservationContent.scope.empty_execution_count} valueClassName="text-lg" />
-            <SettingsValueTile label="워크플로우" value={reservationContent.scope.workflow_count} valueClassName="text-lg" />
-            <SettingsValueTile label="실행" value={reservationContent.scope.execution_count} valueClassName="text-lg" />
+            <SettingsValueTile label={t({ ko: '예약작업', en: 'Reservation jobs' })} value={reservationContent.scope.schedule_count} valueClassName="text-lg" />
+            <SettingsValueTile label={t({ ko: '예약 실행', en: 'Reservation runs' })} value={reservationContent.scope.empty_execution_count} valueClassName="text-lg" />
+            <SettingsValueTile label={t({ ko: '워크플로우', en: 'Workflows' })} value={reservationContent.scope.workflow_count} valueClassName="text-lg" />
+            <SettingsValueTile label={t({ ko: '실행', en: 'Executions' })} value={reservationContent.scope.execution_count} valueClassName="text-lg" />
           </div>
         ) : null}
       </SettingsSection>
@@ -318,7 +318,7 @@ export function WorkflowReservationsPanel() {
               data-no-select-drag="true"
             >
               <XCircle className="h-4 w-4" />
-              활성 취소 ({cancelableReservationExecutions.length})
+              {t({ ko: '활성 취소 ({count})', en: 'Cancel active ({count})' }, { count: formatNumber(cancelableReservationExecutions.length) })}
             </Button>
             <Button
               size="sm"
@@ -327,7 +327,7 @@ export function WorkflowReservationsPanel() {
               data-no-select-drag="true"
             >
               <Trash2 className="h-4 w-4" />
-              빈 실행 삭제 ({deletableReservationExecutions.length})
+              {t({ ko: '빈 실행 삭제 ({count})', en: 'Delete empty runs ({count})' }, { count: formatNumber(deletableReservationExecutions.length) })}
             </Button>
           </>
         )}

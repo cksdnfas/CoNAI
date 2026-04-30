@@ -2,6 +2,7 @@ import type {
   GraphWorkflowExposedInput,
   ModuleDefinitionRecord,
 } from '@/lib/api'
+import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { AppSettings } from '@/types/settings'
 import { hasMeaningfulValue } from './components/module-graph-field-shared'
 import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
@@ -18,13 +19,15 @@ export type ValidationEdgeRecord = {
   targetPortKey: string
 }
 
+type ValidationTranslator = (input: TranslationInput, params?: TranslationParams) => string
+
 /** Build one canonical workflow-exposed-input id from node and port keys. */
 export function buildWorkflowExposedInputId(nodeId: string, portKey: string) {
   return `${nodeId}:${portKey}`
 }
 
 /** Resolve system capability validation issues from current application settings. */
-function resolveSystemCapabilityIssue(module: ModuleDefinitionRecord, settings?: AppSettings | null) {
+function resolveSystemCapabilityIssue(module: ModuleDefinitionRecord, translate: ValidationTranslator, settings?: AppSettings | null) {
   if (module.engine_type !== 'system' || !settings) {
     return null
   }
@@ -36,11 +39,11 @@ function resolveSystemCapabilityIssue(module: ModuleDefinitionRecord, settings?:
       : null
 
   if (operationKey === 'system.extract_tags_from_image' && !settings.tagger.enabled) {
-    return 'WD Tagger 기능이 비활성화돼 있어.'
+    return translate({ ko: 'WD Tagger 기능이 비활성화돼 있어.', en: 'WD Tagger is disabled.' })
   }
 
   if (operationKey === 'system.extract_artist_from_image' && !settings.kaloscope.enabled) {
-    return 'Kaloscope 기능이 비활성화돼 있어.'
+    return translate({ ko: 'Kaloscope 기능이 비활성화돼 있어.', en: 'Kaloscope is disabled.' })
   }
 
   return null
@@ -53,8 +56,9 @@ export function buildWorkflowValidationIssues(params: {
   exposedInputs: GraphWorkflowExposedInput[]
   runtimeInputValues?: Record<string, unknown>
   settings?: AppSettings | null
+  translate: ValidationTranslator
 }) {
-  const { nodes, edges, exposedInputs, runtimeInputValues = {}, settings } = params
+  const { nodes, edges, exposedInputs, runtimeInputValues = {}, settings, translate } = params
   const issues: WorkflowValidationIssue[] = []
   const connectedInputMap = new Map<string, Set<string>>()
   const connectedInputCountMap = new Map<string, Map<string, number>>()
@@ -74,15 +78,15 @@ export function buildWorkflowValidationIssues(params: {
   if (finalResultNodes.length === 0) {
     issues.push({
       id: 'missing-final-result-node',
-      nodeLabel: '워크플로우',
+      nodeLabel: translate({ ko: '워크플로우', en: 'Workflow' }),
       severity: 'error',
-      title: '최종 결과 노드가 없어',
-      detail: '실행 결과를 최종 결과로 확정하려면 최종 결과 시스템 노드를 최소 하나 추가해줘.',
+      title: translate({ ko: '최종 결과 노드가 없어', en: 'No final-result node' }),
+      detail: translate({ ko: '실행 결과를 최종 결과로 확정하려면 최종 결과 시스템 노드를 최소 하나 추가해줘.', en: 'Add at least one final-result system node to finalize execution output.' }),
     })
   }
 
   for (const node of nodes) {
-    const nodeLabel = node.module?.name ?? '알 수 없는 모듈'
+    const nodeLabel = node.module?.name ?? translate({ ko: '알 수 없는 모듈', en: 'Unknown module' })
 
     if (!node.module) {
       issues.push({
@@ -90,20 +94,20 @@ export function buildWorkflowValidationIssues(params: {
         nodeId: node.id,
         nodeLabel,
         severity: 'error',
-        title: '모듈 정의를 찾지 못했어',
-        detail: '이 노드가 참조하는 모듈이 현재 목록에 없어. 저장된 워크플로우와 모듈 카탈로그를 확인해봐.',
+        title: translate({ ko: '모듈 정의를 찾지 못했어', en: 'Could not find the module definition' }),
+        detail: translate({ ko: '이 노드가 참조하는 모듈이 현재 목록에 없어. 저장된 워크플로우와 모듈 카탈로그를 확인해봐.', en: 'The module referenced by this node is missing from the current list. Check the saved workflow and module catalog.' }),
       })
       continue
     }
 
-    const capabilityIssue = resolveSystemCapabilityIssue(node.module, settings)
+    const capabilityIssue = resolveSystemCapabilityIssue(node.module, translate, settings)
     if (capabilityIssue) {
       issues.push({
         id: `capability:${node.id}`,
         nodeId: node.id,
         nodeLabel,
         severity: 'error',
-        title: '시스템 기능이 비활성화돼 있어',
+        title: translate({ ko: '시스템 기능이 비활성화돼 있어', en: 'A system capability is disabled' }),
         detail: capabilityIssue,
       })
     }
@@ -120,8 +124,8 @@ export function buildWorkflowValidationIssues(params: {
           portKey: 'value',
           nodeLabel,
           severity: 'error',
-          title: '최종 결과 노드 입력이 비어 있어',
-          detail: '최종 결과 노드는 값 입력에 최종 결과로 확정할 업스트림 출력을 정확히 1개 연결해야 해.',
+          title: translate({ ko: '최종 결과 노드 입력이 비어 있어', en: 'The final-result node input is empty' }),
+          detail: translate({ ko: '최종 결과 노드는 값 입력에 최종 결과로 확정할 업스트림 출력을 정확히 1개 연결해야 해.', en: 'A final-result node must have exactly one upstream output connected to its value input.' }),
         })
       } else if (finalInputCount > 1) {
         issues.push({
@@ -130,8 +134,8 @@ export function buildWorkflowValidationIssues(params: {
           portKey: 'value',
           nodeLabel,
           severity: 'error',
-          title: '최종 결과 노드에 입력이 너무 많아',
-          detail: '최종 결과 노드는 값 입력에 업스트림 출력을 1개만 연결할 수 있어.',
+          title: translate({ ko: '최종 결과 노드에 입력이 너무 많아', en: 'The final-result node has too many inputs' }),
+          detail: translate({ ko: '최종 결과 노드는 값 입력에 업스트림 출력을 1개만 연결할 수 있어.', en: 'A final-result node can only accept one upstream output on its value input.' }),
         })
       }
     }
@@ -158,10 +162,10 @@ export function buildWorkflowValidationIssues(params: {
         portKey: port.key,
         nodeLabel,
         severity: exposedInput ? 'warning' : 'error',
-        title: `${exposedInput ? '실행 입력 확인 필요' : '필수 입력 누락'} · ${port.label}`,
+        title: `${exposedInput ? translate({ ko: '실행 입력 확인 필요', en: 'Runtime input needs review' }) : translate({ ko: '필수 입력 누락', en: 'Required input missing' })} · ${port.label}`,
         detail: exposedInput
-          ? `${port.label} (${port.key}) 입력은 실행 시 사용자 입력으로 채울 수 있어. 저장은 가능하지만 실행 전 값 확인이 필요해.`
-          : `${port.label} (${port.key}) 입력이 연결되지 않았고 값도 비어 있어. 이 상태로는 실행 경로가 고립돼.`,
+          ? translate({ ko: '{label} ({key}) 입력은 실행 시 사용자 입력으로 채울 수 있어. 저장은 가능하지만 실행 전 값 확인이 필요해.', en: 'The {label} ({key}) input can be filled at runtime by the user. Saving is allowed, but you should confirm the value before execution.' }, { label: port.label, key: port.key })
+          : translate({ ko: '{label} ({key}) 입력이 연결되지 않았고 값도 비어 있어. 이 상태로는 실행 경로가 고립돼.', en: 'The {label} ({key}) input is not connected and has no value. In this state, the execution path is isolated.' }, { label: port.label, key: port.key }),
       })
     }
   }

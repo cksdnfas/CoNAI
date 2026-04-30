@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useI18n } from '@/i18n'
 import type { WildcardRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { WildcardTreeEntry, WildcardWorkspaceTab } from './wildcard-generation-panel-helpers'
@@ -66,9 +67,11 @@ export function WildcardExplorerSidebarPanel({
   onDeleteSelected,
   onSelectWildcard,
 }: WildcardExplorerSidebarPanelProps) {
+  const { t } = useI18n()
+
   return (
     <ExplorerSidebar
-      title="Explorer"
+      title={t({ ko: '탐색기', en: 'Explorer' })}
       badge={<Badge variant="outline">{browserEntries.length}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:wildcards:sidebar-locked"
@@ -86,8 +89,8 @@ export function WildcardExplorerSidebarPanel({
                     variant="outline"
                     className="bg-surface-low"
                     onClick={onOpenLoraCollect}
-                    aria-label="자동 수집"
-                    title="자동 수집"
+                    aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.auto.collect')}
+                    title={t('image-generation.components.wildcard.explorer.sidebar.panel.auto.collect')}
                   >
                     <Upload className="h-4 w-4" />
                   </Button>
@@ -99,8 +102,8 @@ export function WildcardExplorerSidebarPanel({
                   className="bg-surface-low"
                   onClick={onRefreshLoraLog}
                   disabled={isRefreshingLog}
-                  aria-label="로그 새로고침"
-                  title="로그 새로고침"
+                  aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh.logs')}
+                  title={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh.logs')}
                 >
                   <History className="h-4 w-4" />
                 </Button>
@@ -116,8 +119,8 @@ export function WildcardExplorerSidebarPanel({
                       className="bg-surface-low"
                       onClick={() => onOpenCreate(selectedWildcard?.id ?? null)}
                       disabled={!canCreateInActiveTab}
-                      aria-label="항목 추가"
-                      title="항목 추가"
+                      aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.add.item')}
+                      title={t('image-generation.components.wildcard.explorer.sidebar.panel.add.item')}
                     >
                       <FolderPlus className="h-4 w-4" />
                     </Button>
@@ -128,8 +131,8 @@ export function WildcardExplorerSidebarPanel({
                       className="bg-surface-low"
                       onClick={onOpenEdit}
                       disabled={!selectedWildcard}
-                      aria-label="편집"
-                      title="편집"
+                      aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.edit')}
+                      title={t('image-generation.components.wildcard.explorer.sidebar.panel.edit')}
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -143,8 +146,8 @@ export function WildcardExplorerSidebarPanel({
                     className="border-rose-500/30 bg-surface-low text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
                     onClick={onDeleteSelected}
                     disabled={!selectedWildcard || isDeleting}
-                    aria-label="삭제"
-                    title="삭제"
+                    aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.delete')}
+                    title={t('image-generation.components.wildcard.explorer.sidebar.panel.delete')}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -154,15 +157,15 @@ export function WildcardExplorerSidebarPanel({
           </div>
 
           <div className="flex items-center gap-2">
-            <Input value={searchInput} onChange={(event) => onSearchChange(event.target.value)} placeholder="이름 또는 경로 검색" />
+            <Input value={searchInput} onChange={(event) => onSearchChange(event.target.value)} placeholder={t('image-generation.components.wildcard.explorer.sidebar.panel.search.name.or.path')} />
             <Button
               type="button"
               variant="outline"
               size="icon-sm"
               className="shrink-0 bg-surface-low"
               onClick={onRefresh}
-              aria-label="새로고침"
-              title="새로고침"
+              aria-label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}
+              title={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}
             >
               <RefreshCw className="h-4 w-4" />
             </Button>
@@ -180,8 +183,8 @@ export function WildcardExplorerSidebarPanel({
 
       {isError ? (
         <Alert variant="destructive">
-          <AlertTitle>목록을 불러오지 못했어</AlertTitle>
-          <AlertDescription>{errorMessage ?? '목록을 불러오지 못했어.'}</AlertDescription>
+          <AlertTitle>{t('image-generation.components.wildcard.explorer.sidebar.panel.could.not.load.list')}</AlertTitle>
+          <AlertDescription>{errorMessage ?? t('image-generation.components.wildcard.explorer.sidebar.panel.could.not.load.the.list')}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -214,12 +217,12 @@ export function WildcardExplorerSidebarPanel({
               })}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">검색 결과가 없어.</div>
+            <div className="text-sm text-muted-foreground">{t('image-generation.components.wildcard.explorer.sidebar.panel.no.search.results')}</div>
           )
         ) : browserTreeNodes.length > 0 ? (
           <WildcardTree entries={browserEntries} selectedId={selectedWildcardId} onSelect={onSelectWildcard} />
         ) : (
-          <div className="text-sm text-muted-foreground">표시할 항목이 아직 없어.</div>
+          <div className="text-sm text-muted-foreground">{t('image-generation.components.wildcard.explorer.sidebar.panel.no.items.to.display.yet')}</div>
         )
       ) : null}
     </ExplorerSidebar>

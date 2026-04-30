@@ -10,6 +10,7 @@ import { ModuleWorkflowEditorSupportPanel } from './module-workflow-editor-suppo
 import { NodeInspectorPanel } from './node-inspector-panel'
 import { WorkflowRunnerPanel } from './workflow-runner-panel'
 import { type WorkflowValidationIssue } from './workflow-validation-panel'
+import { useI18n } from '@/i18n'
 import { getModuleNodeDisplayLabel, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 
 export { ModuleGraphWorkflowListSidebar } from './module-graph-workflow-list-sidebar'
@@ -40,9 +41,11 @@ export function ModuleGraphWorkflowSetupFolderPanel({
   onDraftChildFolderDescriptionChange: (value: string) => void
   onCreateChildFolder: () => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-3 rounded-sm border border-border/70 bg-background/40 p-3">
-      <div className="text-sm font-medium text-foreground">저장 폴더</div>
+      <div className="text-sm font-medium text-foreground">{t({ ko: '저장 폴더', en: 'Save folder' })}</div>
 
       <HierarchyPicker
         items={folders}
@@ -54,15 +57,15 @@ export function ModuleGraphWorkflowSetupFolderPanel({
         getLabel={(folder) => folder.name}
         sortItems={(left, right) => left.name.localeCompare(right.name, 'ko')}
         renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-        rootLabel="Root"
+        rootLabel={t({ ko: '루트', en: 'Root' })}
       />
 
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-        <Input value={draftChildFolderName} onChange={(event) => onDraftChildFolderNameChange(event.target.value)} placeholder="새 자식 폴더 이름" />
-        <Input value={draftChildFolderDescription} onChange={(event) => onDraftChildFolderDescriptionChange(event.target.value)} placeholder="설명 (선택)" />
+        <Input value={draftChildFolderName} onChange={(event) => onDraftChildFolderNameChange(event.target.value)} placeholder={t({ ko: '새 자식 폴더 이름', en: 'New child folder name' })} />
+        <Input value={draftChildFolderDescription} onChange={(event) => onDraftChildFolderDescriptionChange(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
         <Button type="button" variant="outline" onClick={onCreateChildFolder} disabled={!draftChildFolderName.trim()}>
           <Plus className="h-4 w-4" />
-          폴더 생성
+          {t({ ko: '폴더 생성', en: 'Create folder' })}
         </Button>
       </div>
     </div>

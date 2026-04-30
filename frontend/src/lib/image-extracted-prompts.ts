@@ -1,3 +1,4 @@
+import type { TranslationInput } from '@/i18n'
 import type { ImageAiRawNaiParameters, ImageRecord } from '@/types/image'
 import type { PromptGroupResolveItem } from '@/types/prompt'
 
@@ -16,6 +17,38 @@ export interface ExtractedPromptCardItem {
   tone: 'positive' | 'negative' | 'character' | 'neutral'
   badges?: string[]
   groupedSections?: ExtractedPromptGroupedSection[]
+}
+
+interface ExtractedPromptCardLabels {
+  positivePrompt: string
+  negativePrompt: string
+  character: string
+  characterIndexed: (index: number) => string
+  processedBadge: string
+}
+
+const DEFAULT_EXTRACTED_PROMPT_CARD_LABELS: ExtractedPromptCardLabels = {
+  positivePrompt: '긍정 프롬프트',
+  negativePrompt: '부정 프롬프트',
+  character: '캐릭터',
+  characterIndexed: (index) => `캐릭터 ${index}`,
+  processedBadge: '가공됨',
+}
+
+function resolveExtractedPromptCardLabels(
+  translate?: (input: TranslationInput, variables?: Record<string, string | number>) => string,
+): ExtractedPromptCardLabels {
+  if (!translate) {
+    return DEFAULT_EXTRACTED_PROMPT_CARD_LABELS
+  }
+
+  return {
+    positivePrompt: translate({ ko: '긍정 프롬프트', en: 'Positive prompt' }),
+    negativePrompt: translate({ ko: '부정 프롬프트', en: 'Negative prompt' }),
+    character: translate({ ko: '캐릭터', en: 'Character' }),
+    characterIndexed: (index) => translate({ ko: '캐릭터 {index}', en: 'Character {index}' }, { index }),
+    processedBadge: translate({ ko: '가공됨', en: 'Processed' }),
+  }
 }
 
 function getTrimmedText(value?: string | null) {
@@ -286,10 +319,14 @@ export function formatGroupedPromptText(sections: ExtractedPromptGroupedSection[
 }
 
 /** Build reusable extracted prompt card data from an image record. */
-export function getImageExtractedPromptCards(image: ImageRecord) {
+export function getImageExtractedPromptCards(
+  image: ImageRecord,
+  translate?: (input: TranslationInput, variables?: Record<string, string | number>) => string,
+) {
   const rawNaiParameters = image.ai_metadata?.raw_nai_parameters
   const { positivePrompt: positiveText, negativePrompt: negativeText, characterPrompts: characterTexts } = getImageExtractedPromptSummary(image)
   const loraModels = getImageLoraModels(image)
+  const labels = resolveExtractedPromptCardLabels(translate)
 
   const cards: ExtractedPromptCardItem[] = []
 
@@ -305,17 +342,17 @@ export function getImageExtractedPromptCards(image: ImageRecord) {
   if (positiveText) {
     cards.push({
       id: 'positive-prompt',
-      title: '긍정 프롬프트',
+      title: labels.positivePrompt,
       text: positiveText,
       tone: 'positive',
-      badges: isProcessedPrompt(positiveText, getRawPositivePrompt(rawNaiParameters)) ? ['가공됨'] : undefined,
+      badges: isProcessedPrompt(positiveText, getRawPositivePrompt(rawNaiParameters)) ? [labels.processedBadge] : undefined,
     })
   }
 
   characterTexts.forEach((text, index) => {
     cards.push({
       id: `character-prompt-${index + 1}`,
-      title: characterTexts.length > 1 ? `캐릭터 ${index + 1}` : '캐릭터',
+      title: characterTexts.length > 1 ? labels.characterIndexed(index + 1) : labels.character,
       text,
       tone: 'character',
     })
@@ -324,10 +361,10 @@ export function getImageExtractedPromptCards(image: ImageRecord) {
   if (negativeText) {
     cards.push({
       id: 'negative-prompt',
-      title: '부정 프롬프트',
+      title: labels.negativePrompt,
       text: negativeText,
       tone: 'negative',
-      badges: isProcessedPrompt(negativeText, getRawNegativePrompt(rawNaiParameters)) ? ['가공됨'] : undefined,
+      badges: isProcessedPrompt(negativeText, getRawNegativePrompt(rawNaiParameters)) ? [labels.processedBadge] : undefined,
     })
   }
 

@@ -7,6 +7,7 @@ import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
+import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api'
@@ -59,14 +60,16 @@ function PanelFallback() {
   return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
 }
 
-const IMAGE_GENERATION_TABS: Array<{ value: ImageGenerationTab; label: string }> = [
-  { value: 'nai', label: 'NAI' },
-  { value: 'codex', label: 'Codex' },
-  { value: 'comfyui', label: 'ComfyUI' },
-  { value: 'wildcards', label: 'Wildcard' },
-  { value: 'workflows', label: 'Workflow' },
-  { value: 'reservations', label: '예약작업' },
-]
+function getImageGenerationTabs(t: (dictionary: { ko: string; en: string }) => string): Array<{ value: ImageGenerationTab; label: string }> {
+  return [
+    { value: 'nai', label: 'NAI' },
+    { value: 'codex', label: 'Codex' },
+    { value: 'comfyui', label: 'ComfyUI' },
+    { value: 'wildcards', label: t({ ko: '와일드카드', en: 'Wildcard' }) },
+    { value: 'workflows', label: t({ ko: '워크플로우', en: 'Workflow' }) },
+    { value: 'reservations', label: t({ ko: '예약 작업', en: 'Reservations' }) },
+  ]
+}
 
 function parseImageGenerationTab(value?: string | null): ImageGenerationTab {
   if (value === 'nai' || value === 'codex' || value === 'comfyui' || value === 'wildcards' || value === 'workflows' || value === 'workflow' || value === 'reservations') {
@@ -77,6 +80,7 @@ function parseImageGenerationTab(value?: string | null): ImageGenerationTab {
 }
 
 export function ImageGenerationPage() {
+  const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(() => loadPersistedSelectedComfyWorkflowId())
@@ -89,7 +93,8 @@ export function ImageGenerationPage() {
     enabled: selectedComfyWorkflowId !== null,
   })
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
-  const visibleTabs = IMAGE_GENERATION_TABS.filter((tab) => tab.value !== 'wildcards' || hasAuthPermission(permissionKeys, 'page.wildcards.view'))
+  const imageGenerationTabs = getImageGenerationTabs(t)
+  const visibleTabs = imageGenerationTabs.filter((tab) => tab.value !== 'wildcards' || hasAuthPermission(permissionKeys, 'page.wildcards.view'))
   const activeTab = visibleTabs.some((tab) => tab.value === parseImageGenerationTab(searchParams.get('tab')))
     ? parseImageGenerationTab(searchParams.get('tab'))
     : (visibleTabs[0]?.value ?? 'nai')
@@ -134,7 +139,17 @@ export function ImageGenerationPage() {
     }
   }, [searchParams, setSearchParams, visibleTabs])
 
-  const controllerLabel = activeTab === 'nai' ? 'NAI' : activeTab === 'codex' ? 'Codex' : activeTab === 'wildcards' ? 'Wildcard' : 'ComfyUI'
+  const controllerLabel = activeTab === 'nai'
+    ? 'NAI'
+    : activeTab === 'codex'
+      ? 'Codex'
+      : activeTab === 'wildcards'
+        ? t({ ko: '와일드카드', en: 'Wildcard' })
+        : activeTab === 'workflows'
+          ? t({ ko: '워크플로우', en: 'Workflow' })
+          : activeTab === 'reservations'
+            ? t({ ko: '예약 작업', en: 'Reservations' })
+            : 'ComfyUI'
   const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || activeTab === 'codex' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
   const useCompactNaiActionBar = activeTab === 'nai' && (useWideSplitPaneScroll || shouldUseControllerDrawer)
   const naiDrawerHeaderContentId = activeTab === 'nai' && shouldUseControllerDrawer ? 'nai-controller-drawer-header-content' : undefined
@@ -203,8 +218,8 @@ export function ImageGenerationPage() {
     >
       <div className={cn('space-y-6', useWideSplitPaneScroll && 'shrink-0 pb-6')}>
         <PageHeader
-          eyebrow="Create"
-          title="Image Generation"
+          eyebrow={t({ ko: '생성', en: 'Create' })}
+          title={t({ ko: '이미지 생성', en: 'Image Generation' })}
         />
 
         <SegmentedTabBar
@@ -285,15 +300,15 @@ export function ImageGenerationPage() {
             <CompactGenerationControllerActionBar
               isExpanded={isDrawerOpen}
               onToggle={() => setIsControllerOpen((current) => !current)}
-              expandedLabel={`${controllerLabel} 컨트롤 접기`}
-              collapsedLabel={`${controllerLabel} 컨트롤 열기`}
+              expandedLabel={t({ ko: `${controllerLabel} 컨트롤 접기`, en: `Collapse ${controllerLabel} controls` })}
+              collapsedLabel={t({ ko: `${controllerLabel} 컨트롤 열기`, en: `Open ${controllerLabel} controls` })}
               expandedContent={compactActionBarContentId ? <div id={compactActionBarContentId} className="flex items-center justify-end" /> : null}
             />
 
             <BottomDrawerSheet
               open={isDrawerOpen}
               title={useCompactControllerDrawer ? null : controllerLabel}
-              ariaLabel={`${controllerLabel} 컨트롤 패널`}
+              ariaLabel={t({ ko: `${controllerLabel} 컨트롤 패널`, en: `${controllerLabel} control panel` })}
               onClose={() => setIsControllerOpen(false)}
               headerContentId={drawerHeaderContentId}
               surfaceVariant={useCompactControllerDrawer ? 'controller' : 'default'}

@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api'
 import { toggleSelectionItem, type ModuleFieldOption } from '../image-generation-shared'
 
@@ -39,42 +40,46 @@ export function ComfyModuleSaveModal({
   onOverwriteModuleIdChange,
   onSave,
 }: ComfyModuleSaveModalProps) {
+  const { t } = useI18n()
   const selectedOverwriteModule = overwriteCandidates.find((module) => module.id === overwriteModuleId) ?? null
   return (
     <SettingsModal
       open={open}
       onClose={onClose}
-      title="ComfyUI 모듈 저장"
+      title={t({ ko: 'ComfyUI 모듈 저장', en: 'Save ComfyUI module' })}
       widthClassName="max-w-3xl"
     >
       <SettingsModalBody className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label="저장 방식">
+          <SettingsField label={t({ ko: '저장 방식', en: 'Save mode' })}>
             <Select value={overwriteModuleId ? String(overwriteModuleId) : ''} onChange={(event) => onOverwriteModuleIdChange?.(event.target.value ? Number(event.target.value) : null)}>
-              <option value="">새 모듈 생성</option>
+              <option value="">{t({ ko: '새 모듈 생성', en: 'Create new module' })}</option>
               {overwriteCandidates.map((module) => (
                 <option key={module.id} value={module.id}>#{module.id} {module.name}</option>
               ))}
             </Select>
           </SettingsField>
 
-          <SettingsField label="모듈 이름">
-            <Input value={moduleName} onChange={(event) => onModuleNameChange(event.target.value)} placeholder="ComfyUI Workflow Module" />
+          <SettingsField label={t({ ko: '모듈 이름', en: 'Module name' })}>
+            <Input value={moduleName} onChange={(event) => onModuleNameChange(event.target.value)} placeholder={t({ ko: 'ComfyUI 워크플로우 모듈', en: 'ComfyUI Workflow Module' })} />
           </SettingsField>
 
-          <SettingsField label="설명">
-            <Input value={moduleDescription} onChange={(event) => onModuleDescriptionChange(event.target.value)} placeholder="선택" />
+          <SettingsField label={t({ ko: '설명', en: 'Description' })}>
+            <Input value={moduleDescription} onChange={(event) => onModuleDescriptionChange(event.target.value)} placeholder={t({ ko: '선택', en: 'Optional' })} />
           </SettingsField>
 
           {selectedOverwriteModule ? (
             <div className="rounded-sm border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-warning-foreground md:col-span-2">
-              #{selectedOverwriteModule.id} 모듈을 같은 ID로 덮어써. 기존 그래프 연결은 포트 key가 유지되는 항목만 그대로 살아남아.
+              {t(
+                { ko: '#{id} 모듈을 같은 ID로 덮어써. 기존 그래프 연결은 포트 key가 유지되는 항목만 그대로 살아남아.', en: 'This will overwrite module #{id} with the same ID. Existing graph links only survive for items that keep the same port key.' },
+                { id: selectedOverwriteModule.id },
+              )}
             </div>
           ) : null}
         </div>
 
         <div className="space-y-3">
-          <div className="text-sm font-medium text-foreground">노출 입력</div>
+          <div className="text-sm font-medium text-foreground">{t({ ko: '노출 입력', en: 'Exposed inputs' })}</div>
           {fieldOptions.length > 0 ? (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {fieldOptions.map((field) => {
@@ -93,17 +98,17 @@ export function ComfyModuleSaveModal({
             </div>
           ) : (
             <SettingsInsetBlock className="text-sm text-muted-foreground">
-              노출 가능한 입력 필드가 없어. 이 워크플로우는 고정 모듈로 저장돼.
+              {t({ ko: '노출 가능한 입력 필드가 없어. 이 워크플로우는 고정 모듈로 저장돼.', en: 'There are no exposable input fields. This workflow will be saved as a fixed module.' })}
             </SettingsInsetBlock>
           )}
         </div>
 
         <SettingsModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
-            취소
+            {t({ ko: '취소', en: 'Cancel' })}
           </Button>
           <Button type="button" onClick={onSave} disabled={isSaving || moduleName.trim().length === 0}>
-            {isSaving ? '저장 중…' : '저장'}
+            {isSaving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
           </Button>
         </SettingsModalFooter>
       </SettingsModalBody>

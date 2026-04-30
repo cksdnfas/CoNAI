@@ -1,6 +1,7 @@
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingsField, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
   WallpaperInspectorDisclosure,
@@ -30,10 +31,11 @@ interface WallpaperWidgetInspectorProps {
 
 /** Render the editor inspector for one selected wallpaper widget. */
 export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget }: WallpaperWidgetInspectorProps) {
+  const { t } = useI18n()
   if (!selectedWidget) {
     return (
       <div className={cn('rounded-sm border border-dashed border-border bg-surface-low px-4 py-8 text-center text-sm text-muted-foreground')}>
-        위젯을 선택해.
+        {t({ ko: '위젯을 선택해.', en: 'Select a widget.' })}
       </div>
     )
   }
@@ -52,8 +54,8 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
   return (
     <div className="space-y-3">
-      <WallpaperInspectorSectionCard title="기본">
-        <SettingsField label="제목">
+      <WallpaperInspectorSectionCard title={t({ ko: '기본', en: 'Basics' })}>
+        <SettingsField label={t({ ko: '제목', en: 'Title' })}>
           <Input
             variant="settings"
             value={selectedWidget.settings.title}
@@ -65,7 +67,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
 
         {isGroupSourceWidget ? (
           <>
-            <SettingsField label="그룹">
+            <SettingsField label={t({ ko: '그룹', en: 'Group' })}>
               <Select
                 value={selectedWidget.settings.groupId !== null ? String(selectedWidget.settings.groupId) : ''}
                 onChange={(event) => {
@@ -73,7 +75,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
                   updateWidgetSettings({ groupId: nextValue ? Number(nextValue) : null })
                 }}
               >
-                <option value="">그룹 선택</option>
+                <option value="">{t({ ko: '그룹 선택', en: 'Select group' })}</option>
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>{`${'　'.repeat(group.depth ?? 0)}${group.name}`}</option>
                 ))}
@@ -81,7 +83,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
             </SettingsField>
 
             <SettingsToggleRow>
-              <span className="flex-1">하위 그룹 포함</span>
+              <span className="flex-1">{t({ ko: '하위 그룹 포함', en: 'Include child groups' })}</span>
               <input
                 type="checkbox"
                 checked={selectedWidget.settings.includeChildren !== false}
@@ -94,11 +96,11 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
         ) : null}
 
         <WallpaperInspectorDisclosure
-          title="표시"
+          title={t({ ko: '표시', en: 'Display' })}
           defaultOpen={false}
         >
           <SettingsToggleRow>
-            <span className="flex-1">제목 표시</span>
+            <span className="flex-1">{t({ ko: '제목 표시', en: 'Show title' })}</span>
             <input
               type="checkbox"
               checked={selectedWidget.settings.showTitle === true}
@@ -109,7 +111,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
           </SettingsToggleRow>
 
           <SettingsToggleRow>
-            <span className="flex-1">배경 표시</span>
+            <span className="flex-1">{t({ ko: '배경 표시', en: 'Show background' })}</span>
             <input
               type="checkbox"
               checked={selectedWidget.settings.showBackground === true}
@@ -120,7 +122,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
           </SettingsToggleRow>
 
           <SettingsToggleRow>
-            <span className="flex-1">경계선 표시</span>
+            <span className="flex-1">{t({ ko: '경계선 표시', en: 'Show border' })}</span>
             <input
               type="checkbox"
               checked={selectedWidget.settings.showBorder === true}
@@ -165,7 +167,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
           ) : null}
 
           <SettingsToggleRow>
-            <span className="flex-1">위젯 숨김</span>
+            <span className="flex-1">{t({ ko: '위젯 숨김', en: 'Hide widget' })}</span>
             <input
               type="checkbox"
               checked={selectedWidget.hidden}
@@ -176,7 +178,7 @@ export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget
           </SettingsToggleRow>
 
           <SettingsToggleRow>
-            <span className="flex-1">위젯 잠금</span>
+            <span className="flex-1">{t({ ko: '위젯 잠금', en: 'Lock widget' })}</span>
             <input
               type="checkbox"
               checked={selectedWidget.locked}

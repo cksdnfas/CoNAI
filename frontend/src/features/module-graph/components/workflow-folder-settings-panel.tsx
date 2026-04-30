@@ -56,9 +56,9 @@ export function WorkflowFolderSettingsPanel({
   onEditWorkflow,
   onDeleteWorkflow,
 }: WorkflowFolderSettingsPanelProps) {
-  const { locale } = useI18n()
+  const { locale, t } = useI18n()
   const [workflowFolderId, setWorkflowFolderId] = useState<number | null>(() => selectedWorkflow?.folder_id ?? null)
-  const [folderName, setFolderName] = useState(() => selectedFolder?.name ?? 'Root')
+  const [folderName, setFolderName] = useState(() => selectedFolder?.name ?? t({ ko: '루트', en: 'Root' }))
   const [folderDescription, setFolderDescription] = useState(() => selectedFolder?.description ?? '')
   const [folderParentId, setFolderParentId] = useState<number | null>(() => selectedFolder?.parent_id ?? null)
   const [childFolderName, setChildFolderName] = useState('')
@@ -84,7 +84,7 @@ export function WorkflowFolderSettingsPanel({
     [locale, parentCandidateFolders],
   )
 
-  const currentFolderTitle = selectedFolder?.name ?? 'Root'
+  const currentFolderTitle = selectedFolder?.name ?? t({ ko: '루트', en: 'Root' })
   const isRootSelected = selectedFolder == null
 
   const handleCreateChildFolder = async (assignToWorkflow = false) => {
@@ -108,9 +108,9 @@ export function WorkflowFolderSettingsPanel({
       {showHeader ? (
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-base font-semibold text-foreground">{selectedWorkflow ? 'Workflow' : 'Folder'}</div>
+            <div className="text-base font-semibold text-foreground">{selectedWorkflow ? t({ ko: '워크플로우', en: 'Workflow' }) : t({ ko: '폴더', en: 'Folder' })}</div>
           </div>
-          <Badge variant="outline">{selectedWorkflow ? 'workflow' : isRootSelected ? 'root' : 'folder'}</Badge>
+          <Badge variant="outline">{selectedWorkflow ? t({ ko: '워크플로우', en: 'Workflow' }) : isRootSelected ? t({ ko: '루트', en: 'Root' }) : t({ ko: '폴더', en: 'Folder' })}</Badge>
         </div>
       ) : null}
 
@@ -122,7 +122,7 @@ export function WorkflowFolderSettingsPanel({
           </div>
 
           <div className="space-y-2">
-            <div className="text-sm font-medium text-foreground">폴더 위치</div>
+            <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 위치', en: 'Folder location' })}</div>
             <HierarchyPicker
               items={sortedFolders}
               selectedId={workflowFolderId}
@@ -133,40 +133,40 @@ export function WorkflowFolderSettingsPanel({
               getLabel={(folder) => folder.name}
               sortItems={(left, right) => compareFolderNames(left.name, right.name, locale)}
               renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-              rootLabel="Root"
+              rootLabel={t({ ko: '루트', en: 'Root' })}
             />
           </div>
 
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => void onAssignWorkflowFolder(workflowFolderId)}>
               <Save className="h-4 w-4" />
-              할당 저장
+              {t({ ko: '할당 저장', en: 'Save assignment' })}
             </Button>
             {onEditWorkflow ? (
               <Button type="button" variant="secondary" onClick={onEditWorkflow}>
-                편집 열기
+                {t({ ko: '편집 열기', en: 'Open editor' })}
               </Button>
             ) : null}
             {onDeleteWorkflow ? (
               <Button type="button" variant="destructive" onClick={() => void onDeleteWorkflow()}>
                 <Trash2 className="h-4 w-4" />
-                워크플로우 삭제
+                {t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}
               </Button>
             ) : null}
           </div>
 
           <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/50 p-3">
-            <div className="text-sm font-medium text-foreground">폴더 생성</div>
-            <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder="새 폴더 이름" />
-            <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder="설명 (선택)" />
+            <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 생성', en: 'Create folder' })}</div>
+            <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
+            <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()}>
                 <Plus className="h-4 w-4" />
-                폴더 생성
+                {t({ ko: '폴더 생성', en: 'Create folder' })}
               </Button>
               <Button type="button" onClick={() => void handleCreateChildFolder(true)} disabled={!childFolderName.trim()}>
                 <Plus className="h-4 w-4" />
-                생성 후 할당
+                {t({ ko: '생성 후 할당', en: 'Create and assign' })}
               </Button>
             </div>
           </div>
@@ -176,7 +176,7 @@ export function WorkflowFolderSettingsPanel({
           <div className="space-y-1">
             <div className="text-base font-semibold text-foreground">{currentFolderTitle}</div>
             {isRootSelected ? (
-              <div className="text-sm text-muted-foreground">기본 위치</div>
+              <div className="text-sm text-muted-foreground">{t({ ko: '기본 위치', en: 'Default location' })}</div>
             ) : selectedFolder?.description ? (
               <div className="text-sm text-muted-foreground">{selectedFolder.description}</div>
             ) : null}
@@ -185,17 +185,17 @@ export function WorkflowFolderSettingsPanel({
           {!isRootSelected ? (
             <div className="space-y-3">
               <div className="space-y-2">
-                <div className="text-sm font-medium text-foreground">폴더 이름</div>
-                <Input value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder="폴더 이름" />
+                <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 이름', en: 'Folder name' })}</div>
+                <Input value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder={t({ ko: '폴더 이름', en: 'Folder name' })} />
               </div>
 
               <div className="space-y-2">
-                <div className="text-sm font-medium text-foreground">설명</div>
-                <Textarea rows={3} value={folderDescription} onChange={(event) => setFolderDescription(event.target.value)} placeholder="설명 (선택)" />
+                <div className="text-sm font-medium text-foreground">{t({ ko: '설명', en: 'Description' })}</div>
+                <Textarea rows={3} value={folderDescription} onChange={(event) => setFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
               </div>
 
               <div className="space-y-2">
-                <div className="text-sm font-medium text-foreground">부모 폴더</div>
+                <div className="text-sm font-medium text-foreground">{t({ ko: '부모 폴더', en: 'Parent folder' })}</div>
                 <HierarchyPicker
                   items={sortedParentCandidateFolders}
                   selectedId={folderParentId}
@@ -206,30 +206,30 @@ export function WorkflowFolderSettingsPanel({
                   getLabel={(folder) => folder.name}
                   sortItems={(left, right) => compareFolderNames(left.name, right.name, locale)}
                   renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-                  rootLabel="Root"
+                  rootLabel={t({ ko: '루트', en: 'Root' })}
                 />
               </div>
 
               <div className="flex flex-wrap gap-2">
                 <Button type="button" onClick={() => selectedFolder && void onUpdateFolder(selectedFolder.id, { name: folderName.trim(), description: folderDescription.trim() || null, parent_id: folderParentId })} disabled={!selectedFolder || !folderName.trim()}>
                   <Save className="h-4 w-4" />
-                  폴더 저장
+                  {t({ ko: '폴더 저장', en: 'Save folder' })}
                 </Button>
                 <Button type="button" variant="destructive" onClick={() => selectedFolder && void onDeleteFolder(selectedFolder.id)} disabled={!selectedFolder}>
                   <Trash2 className="h-4 w-4" />
-                  폴더 삭제
+                  {t({ ko: '폴더 삭제', en: 'Delete folder' })}
                 </Button>
               </div>
             </div>
           ) : null}
 
           <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/50 p-3">
-            <div className="text-sm font-medium text-foreground">폴더 생성</div>
-            <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder="새 폴더 이름" />
-            <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder="설명 (선택)" />
+            <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 생성', en: 'Create folder' })}</div>
+            <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
+            <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
             <Button type="button" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()}>
               <Plus className="h-4 w-4" />
-              폴더 생성
+              {t({ ko: '폴더 생성', en: 'Create folder' })}
             </Button>
           </div>
         </div>

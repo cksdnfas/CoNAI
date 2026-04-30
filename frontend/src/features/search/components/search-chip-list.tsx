@@ -15,17 +15,18 @@ interface SearchChipListProps {
 /** Render the shared current-filter chip list used across search UIs. */
 export function SearchChipList({
   chips,
-  title = 'Current filters',
+  title,
   emptyMessage,
   onCycleOperator,
   onRemove,
 }: SearchChipListProps) {
   const { t } = useI18n()
+  const resolvedTitle = title === undefined ? t({ ko: '현재 필터', en: 'Current filters' }) : title
   const resolvedEmptyMessage = emptyMessage ?? t('search.components.search.chip.list.no.condition.chips.yet')
 
   return (
     <div className="space-y-2">
-      {title ? <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</div> : null}
+      {resolvedTitle ? <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{resolvedTitle}</div> : null}
       {chips.length === 0 ? <div className="rounded-sm border border-border/70 bg-background/60 px-4 py-4 text-sm text-muted-foreground">{resolvedEmptyMessage}</div> : null}
       {chips.length > 0 ? (
         <div className="space-y-2">

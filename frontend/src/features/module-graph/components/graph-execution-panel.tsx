@@ -386,22 +386,22 @@ export function GraphExecutionPanel({
 
           {!selectedGraphId ? (
             <Alert>
-              <AlertTitle>그래프를 먼저 골라줘</AlertTitle>
-              <AlertDescription>워크플로우를 먼저 선택해.</AlertDescription>
+              <AlertTitle>{t({ ko: '그래프를 먼저 골라줘', en: 'Choose a graph first' })}</AlertTitle>
+              <AlertDescription>{t({ ko: '워크플로우를 먼저 선택해.', en: 'Select a workflow first.' })}</AlertDescription>
             </Alert>
           ) : null}
 
           {selectedGraphId && executionListIsError ? (
             <Alert variant="destructive">
-              <AlertTitle>실행 목록 오류</AlertTitle>
+              <AlertTitle>{t({ ko: '실행 목록 오류', en: 'Run list error' })}</AlertTitle>
               <AlertDescription>{executionListError}</AlertDescription>
             </Alert>
           ) : null}
 
           {selectedGraphId && executionList.length === 0 ? (
             <Alert>
-              <AlertTitle>실행 기록이 없어</AlertTitle>
-              <AlertDescription>먼저 실행해줘.</AlertDescription>
+              <AlertTitle>{t({ ko: '실행 기록이 없어', en: 'There is no run history' })}</AlertTitle>
+              <AlertDescription>{t({ ko: '먼저 실행해줘.', en: 'Run it first.' })}</AlertDescription>
             </Alert>
           ) : null}
 
@@ -409,8 +409,8 @@ export function GraphExecutionPanel({
             <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
               <Badge variant="outline">Q {queuedCount}</Badge>
               <Badge variant="outline">R {runningCount}</Badge>
-              {activeRunningExecution ? <span>실행 #{activeRunningExecution.id}</span> : null}
-              {nextQueuedExecution ? <span>다음 #{nextQueuedExecution.id} · {nextQueuedExecution.queue_position ?? '?'}</span> : null}
+              {activeRunningExecution ? <span>{t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: activeRunningExecution.id })}</span> : null}
+              {nextQueuedExecution ? <span>{t({ ko: '다음 #{id} · {position}', en: 'Next #{id} · {position}' }, { id: nextQueuedExecution.id, position: nextQueuedExecution.queue_position ?? '?' })}</span> : null}
             </div>
           ) : null}
 
@@ -427,22 +427,22 @@ export function GraphExecutionPanel({
                     type="button"
                     onClick={() => onSelectExecution(isSelected ? null : execution.id)}
                     className={cn('block w-full rounded-sm border px-2.5 py-2 text-left transition-colors hover:bg-surface-high', isSelected ? 'border-primary/50 bg-surface-high' : 'border-border bg-surface-low')}
-                    title={isSelected ? '다시 누르면 접기' : '클릭해서 펼치기'}
+                    title={isSelected ? t({ ko: '다시 누르면 접기', en: 'Click again to collapse' }) : t({ ko: '클릭해서 펼치기', en: 'Click to expand' })}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="text-sm font-medium text-foreground">#{execution.id}</span>
                         <Badge variant={execution.status === 'completed' ? 'secondary' : 'outline'}>{execution.status}</Badge>
                         <Badge variant="outline">{modeLabel}</Badge>
-                        {isSelected ? <Badge variant="secondary">선택</Badge> : null}
+                        {isSelected ? <Badge variant="secondary">{t({ ko: '선택', en: 'Selected' })}</Badge> : null}
                       </div>
                       <div className="text-[11px] text-muted-foreground">{formatDateTime(execution.created_date)}</div>
                     </div>
 
                     {(execution.status === 'queued' && execution.queue_position) || execution.cancel_requested || execution.error_message ? (
                       <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-                        {execution.status === 'queued' && execution.queue_position ? <span>순번 {execution.queue_position}</span> : null}
-                        {execution.cancel_requested ? <span className="text-[#ffd180]">취소 요청됨</span> : null}
+                        {execution.status === 'queued' && execution.queue_position ? <span>{t({ ko: '순번 {position}', en: 'Position {position}' }, { position: execution.queue_position })}</span> : null}
+                        {execution.cancel_requested ? <span className="text-[#ffd180]">{t({ ko: '취소 요청됨', en: 'Cancel requested' })}</span> : null}
                         {execution.error_message ? <span className="text-[#ffb4ab] line-clamp-1">{execution.error_message}</span> : null}
                       </div>
                     ) : null}
@@ -450,14 +450,14 @@ export function GraphExecutionPanel({
 
                   {isSelected && executionDetailIsError ? (
                     <Alert variant="destructive">
-                      <AlertTitle>실행 상세 오류</AlertTitle>
+                      <AlertTitle>{t({ ko: '실행 상세 오류', en: 'Run detail error' })}</AlertTitle>
                       <AlertDescription>{executionDetailError}</AlertDescription>
                     </Alert>
                   ) : null}
 
                   {isSelected && !executionDetailIsError && !selectedDetailMatches ? (
                     <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                      실행 결과 불러오는 중…
+                      {t({ ko: '실행 결과 불러오는 중…', en: 'Loading run results…' })}
                     </div>
                   ) : null}
 
@@ -483,7 +483,7 @@ export function GraphExecutionPanel({
       {executionDetail ? (
         <SettingsModal
           open={isDetailModalOpen}
-          title={`실행 상세 #${executionDetail.execution.id}`}
+          title={t({ ko: '실행 상세 #{id}', en: 'Run details #{id}' }, { id: executionDetail.execution.id })}
           headerContent={detailSectionButtons}
           onClose={() => setIsDetailModalOpen(false)}
           widthClassName="max-w-6xl"
@@ -500,19 +500,19 @@ export function GraphExecutionPanel({
                 <AlertDescription>
                   {selectedExecutionPlan?.targetNodeId ? (
                     <div className="flex items-center gap-1">
-                      <span>{selectedExecutionPlan.forceRerun ? '선택 노드 강제 재실행' : '선택 노드 실행'}</span>
-                      <TechnicalReferenceHint title={`node ${selectedExecutionPlan.targetNodeId}`} label="실행 대상 노드 내부 식별자 보기" />
+                      <span>{selectedExecutionPlan.forceRerun ? t({ ko: '선택 노드 강제 재실행', en: 'Force rerun selected node' }) : t({ ko: '선택 노드 실행', en: 'Run selected node' })}</span>
+                      <TechnicalReferenceHint title={`node ${selectedExecutionPlan.targetNodeId}`} label={t({ ko: '실행 대상 노드 내부 식별자 보기', en: 'Show internal identifier for the target node' })} />
                     </div>
                   ) : null}
-                  {selectedExecutionPlan?.forceRerun ? <div>캐시 무시: upstream도 새로 실행</div> : null}
-                  {selectedExecutionPlan?.reusedFromExecutionId ? <div>캐시 재사용: #{selectedExecutionPlan.reusedFromExecutionId} · 노드 {(selectedExecutionPlan.reusedNodeIds ?? []).length}</div> : null}
-                  {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? <div>큐 순번 {executionDetail.execution.queue_position}</div> : null}
-                  {executionDetail.execution.cancel_requested ? <div>취소 요청 접수됨</div> : null}
+                  {selectedExecutionPlan?.forceRerun ? <div>{t({ ko: '캐시 무시: upstream도 새로 실행', en: 'Ignore cache: rerun upstream as well' })}</div> : null}
+                  {selectedExecutionPlan?.reusedFromExecutionId ? <div>{t({ ko: '캐시 재사용: #{id} · 노드 {count}', en: 'Cache reused: #{id} · nodes {count}' }, { id: selectedExecutionPlan.reusedFromExecutionId, count: (selectedExecutionPlan.reusedNodeIds ?? []).length })}</div> : null}
+                  {executionDetail.execution.status === 'queued' && executionDetail.execution.queue_position ? <div>{t({ ko: '큐 순번 {position}', en: 'Queue position {position}' }, { position: executionDetail.execution.queue_position })}</div> : null}
+                  {executionDetail.execution.cancel_requested ? <div>{t({ ko: '취소 요청 접수됨', en: 'Cancel request received' })}</div> : null}
                   {executionDetail.execution.error_message ? <div>{executionDetail.execution.error_message}</div> : null}
                   {executionDetail.execution.failed_node_id ? (
                     <div className="flex items-center gap-1">
-                      <span>실패 노드 있음</span>
-                      <TechnicalReferenceHint title={`node ${executionDetail.execution.failed_node_id}`} label="실패 노드 내부 식별자 보기" />
+                      <span>{t({ ko: '실패 노드 있음', en: 'Failed node present' })}</span>
+                      <TechnicalReferenceHint title={`node ${executionDetail.execution.failed_node_id}`} label={t({ ko: '실패 노드 내부 식별자 보기', en: 'Show internal identifier for the failed node' })} />
                     </div>
                   ) : null}
                 </AlertDescription>
@@ -522,7 +522,7 @@ export function GraphExecutionPanel({
             {executionInputEntries.length > 0 ? (
               <div ref={(node) => { detailSectionRefs.current.inputs = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  <span>입력</span>
+                  <span>{t({ ko: '입력', en: 'Inputs' })}</span>
                   <Badge variant="outline">{formatNumber(executionInputEntries.length)}</Badge>
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
@@ -539,7 +539,7 @@ export function GraphExecutionPanel({
 
             <div ref={(node) => { detailSectionRefs.current.artifacts = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <span>아티팩트</span>
+                <span>{t({ ko: '아티팩트', en: 'Artifacts' })}</span>
                 <Badge variant="outline">{executionDetail.artifacts.length}</Badge>
               </div>
               {executionDetail.artifacts.map((artifact) => {
@@ -552,9 +552,9 @@ export function GraphExecutionPanel({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-sm font-medium text-foreground">출력 아티팩트</span>
+                          <span className="text-sm font-medium text-foreground">{t({ ko: '출력 아티팩트', en: 'Output artifact' })}</span>
                           <Badge variant="outline">{artifact.artifact_type}</Badge>
-                          <TechnicalReferenceHint title={`node ${artifact.node_id}\nport ${artifact.port_key}`} label="아티팩트 내부 연결 정보 보기" />
+                          <TechnicalReferenceHint title={`node ${artifact.node_id}\nport ${artifact.port_key}`} label={t({ ko: '아티팩트 내부 연결 정보 보기', en: 'Show internal connection info for the artifact' })} />
                         </div>
                         <div className="text-[11px] text-muted-foreground">{formatDateTime(artifact.created_date)}</div>
                       </div>
@@ -582,12 +582,12 @@ export function GraphExecutionPanel({
 
             <div ref={(node) => { detailSectionRefs.current.logs = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <span>로그</span>
+                <span>{t({ ko: '로그', en: 'Logs' })}</span>
                 <Badge variant="outline">{executionDetail.logs.length}</Badge>
               </div>
               {executionDetail.logs.length === 0 ? (
                 <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                  로그 없음
+                  {t({ ko: '로그 없음', en: 'No logs' })}
                 </div>
               ) : (
                 executionDetail.logs.map((log) => {
@@ -598,7 +598,7 @@ export function GraphExecutionPanel({
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Badge variant={log.level === 'error' ? 'outline' : 'secondary'}>{log.level}</Badge>
                           <span className="text-sm font-medium text-foreground">{log.event_type}</span>
-                          {log.node_id ? <TechnicalReferenceHint title={`node ${log.node_id}`} label="로그 대상 노드 내부 식별자 보기" /> : null}
+                          {log.node_id ? <TechnicalReferenceHint title={`node ${log.node_id}`} label={t({ ko: '로그 대상 노드 내부 식별자 보기', en: 'Show internal identifier for the log target node' })} /> : null}
                         </div>
                         <div className="text-[11px] text-muted-foreground">{formatDateTime(log.created_date)}</div>
                       </div>

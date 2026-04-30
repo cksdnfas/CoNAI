@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
+import { useI18n } from '@/i18n'
 import type { ComfyUIServer, WorkflowMarkedField } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
@@ -34,6 +35,7 @@ function WorkflowTargetSelect({
   menuMinWidth?: number
   onChange: (value: string) => void
 }) {
+  const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
   const [menuRect, setMenuRect] = useState<FloatingDropdownRect | null>(null)
   const triggerRef = useRef<HTMLDivElement | null>(null)
@@ -103,7 +105,7 @@ function WorkflowTargetSelect({
           aria-expanded={isOpen}
           title={selectedOption?.description ? `${selectedOption.label} · ${selectedOption.description}` : selectedOption?.label}
         >
-          <span className="min-w-0 truncate">{selectedOption?.label ?? '선택'}</span>
+          <span className="min-w-0 truncate">{selectedOption?.label ?? t({ ko: '선택', en: 'Select' })}</span>
           <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', isOpen && 'rotate-180')} />
         </Button>
       </div>
@@ -120,7 +122,7 @@ function WorkflowTargetSelect({
                 maxHeight: menuRect.maxHeight,
               }}
               role="listbox"
-              aria-label="생성 타겟 선택"
+              aria-label={t({ ko: '생성 타겟 선택', en: 'Select generation target' })}
             >
               {options.map((option) => {
                 const isSelected = option.value === value
@@ -193,6 +195,7 @@ export function ComfyWorkflowControllerPanel({
   onResetDraft,
   onGenerateSelected,
 }: ComfyWorkflowControllerPanelProps) {
+  const { t } = useI18n()
   const isModalServer = (server: ComfyUIServer) => server.backend_type === 'modal' || serverTests[server.id]?.status?.backend_type === 'modal'
   const connectedServers = servers.filter((server) => serverTests[server.id]?.status?.is_connected === true)
   const autoRoutableServers = connectedServers.filter((server) => !isModalServer(server))
@@ -234,34 +237,34 @@ export function ComfyWorkflowControllerPanel({
         : false
   const targetOptions = useMemo<WorkflowTargetOption[]>(() => {
     if (servers.length === 0) {
-      return [{ value: 'auto', label: '서버 없음' }]
+      return [{ value: 'auto', label: t({ ko: '서버 없음', en: 'No servers' }) }]
     }
 
     return [
       {
         value: 'auto',
-        label: '자동 분산',
-        description: autoRoutableServers.length > 0 ? `연결 ${autoRoutableServers.length}` : '연결 없음',
+        label: t({ ko: '자동 분산', en: 'Auto routing' }),
+        description: autoRoutableServers.length > 0 ? t({ ko: '연결 {count}', en: '{count} connected' }, { count: autoRoutableServers.length }) : t({ ko: '연결 없음', en: 'Not connected' }),
       },
       ...routingTags.map((tag) => {
         const routableCount = servers.filter((server) => (server.routing_tags ?? []).includes(tag) && (isModalServer(server) || serverTests[server.id]?.status?.is_connected === true)).length
         return {
           value: `tag:${tag}`,
           label: `#${tag}`,
-          description: routableCount > 0 ? `사용 가능 ${routableCount}` : '연결 없음',
+          description: routableCount > 0 ? t({ ko: '사용 가능 {count}', en: '{count} available' }, { count: routableCount }) : t({ ko: '연결 없음', en: 'Not connected' }),
         }
       }),
       ...servers.map((server) => {
         const connectionStatus = serverTests[server.id]?.status
         const statusLabel = isModalServer(server)
-          ? 'Modal · 생성 시 호출'
+          ? t({ ko: 'Modal · 생성 시 호출', en: 'Modal · Called on generation' })
           : connectionStatus?.is_connected === true
             ? connectionStatus.is_idle
               ? 'idle'
-              : `실행 ${connectionStatus.running_count ?? 0} · 대기 ${connectionStatus.pending_count ?? 0}`
+              : t({ ko: '실행 {running} · 대기 {pending}', en: 'Running {running} · Pending {pending}' }, { running: connectionStatus.running_count ?? 0, pending: connectionStatus.pending_count ?? 0 })
             : connectionStatus
-              ? '실패'
-              : '미확인'
+              ? t({ ko: '실패', en: 'Failed' })
+              : t({ ko: '미확인', en: 'Unchecked' })
 
         return {
           value: `server:${server.id}`,
@@ -270,7 +273,7 @@ export function ComfyWorkflowControllerPanel({
         }
       }),
     ]
-  }, [autoRoutableServers, connectedServers, routingTags, serverTests, servers])
+  }, [autoRoutableServers, routingTags, serverTests, servers, t])
 
   const desktopActionButtons = (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -280,8 +283,8 @@ export function ComfyWorkflowControllerPanel({
         variant="outline"
         onClick={onOpenModuleSave}
         disabled={isGenerating}
-        aria-label="모듈 저장"
-        title="모듈 저장"
+        aria-label={t({ ko: '모듈 저장', en: 'Save module' })}
+        title={t({ ko: '모듈 저장', en: 'Save module' })}
       >
         <Save className="h-4 w-4" />
       </Button>
@@ -307,7 +310,7 @@ export function ComfyWorkflowControllerPanel({
           value={queueRegistrationCount}
           onChange={onQueueRegistrationCountChange}
           disabled={isGenerating || workflowFields.length === 0}
-          aria-label="큐 등록 개수"
+          aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
           inputMode="numeric"
         />
 
@@ -316,8 +319,8 @@ export function ComfyWorkflowControllerPanel({
           size="icon-sm"
           onClick={onGenerateSelected}
           disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
-          aria-label={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-          title={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+          aria-label={isGenerating ? t({ ko: '큐 등록 중', en: 'Queueing' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} times' }, { count: queueRegistrationCount })}
+          title={isGenerating ? t({ ko: '큐 등록 중', en: 'Queueing' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} times' }, { count: queueRegistrationCount })}
           className="rounded-none border-l border-border/70 shadow-none"
         >
           <Play className="h-4 w-4 fill-current" />
@@ -334,8 +337,8 @@ export function ComfyWorkflowControllerPanel({
           variant="ghost"
           size="icon-sm"
           onClick={onBack}
-          aria-label="워크플로우 목록으로 돌아가기"
-          title="처음으로"
+          aria-label={t({ ko: '워크플로우 목록으로 돌아가기', en: 'Back to workflow list' })}
+          title={t({ ko: '처음으로', en: 'Back' })}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -351,8 +354,8 @@ export function ComfyWorkflowControllerPanel({
           variant="ghost"
           onClick={onResetDraft}
           disabled={isGenerating || workflowFields.length === 0}
-          aria-label="워크플로우 설정 초기화"
-          title="워크플로우 설정 초기화"
+          aria-label={t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })}
+          title={t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })}
         >
           <RotateCcw className="h-4 w-4" />
         </Button>
@@ -369,8 +372,8 @@ export function ComfyWorkflowControllerPanel({
         variant="ghost"
         size="icon-sm"
         onClick={onBack}
-        aria-label="워크플로우 목록으로 돌아가기"
-        title="처음으로"
+        aria-label={t({ ko: '워크플로우 목록으로 돌아가기', en: 'Back to workflow list' })}
+        title={t({ ko: '처음으로', en: 'Back' })}
       >
         <ArrowLeft className="h-4 w-4" />
       </Button>
@@ -381,8 +384,8 @@ export function ComfyWorkflowControllerPanel({
         variant="ghost"
         onClick={onResetDraft}
         disabled={isGenerating || workflowFields.length === 0}
-        aria-label="워크플로우 설정 초기화"
-        title="워크플로우 설정 초기화"
+        aria-label={t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })}
+        title={t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })}
       >
         <RotateCcw className="h-4 w-4" />
       </Button>
@@ -397,8 +400,8 @@ export function ComfyWorkflowControllerPanel({
         variant="outline"
         onClick={onOpenModuleSave}
         disabled={isGenerating}
-        aria-label="모듈 저장"
-        title="모듈 저장"
+        aria-label={t({ ko: '모듈 저장', en: 'Save module' })}
+        title={t({ ko: '모듈 저장', en: 'Save module' })}
       >
         <Save className="h-4 w-4" />
       </Button>
@@ -427,7 +430,7 @@ export function ComfyWorkflowControllerPanel({
           value={queueRegistrationCount}
           onChange={onQueueRegistrationCountChange}
           disabled={isGenerating || workflowFields.length === 0}
-          aria-label="큐 등록 개수"
+          aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
           inputMode="numeric"
         />
 
@@ -436,8 +439,8 @@ export function ComfyWorkflowControllerPanel({
           size="icon-sm"
           onClick={onGenerateSelected}
           disabled={isGenerating || workflowFields.length === 0 || !canGenerateSelected}
-          aria-label={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
-          title={isGenerating ? '큐 등록 중' : `큐 등록 ${queueRegistrationCount}회`}
+          aria-label={isGenerating ? t({ ko: '큐 등록 중', en: 'Queueing' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} times' }, { count: queueRegistrationCount })}
+          title={isGenerating ? t({ ko: '큐 등록 중', en: 'Queueing' }) : t({ ko: '큐 등록 {count}회', en: 'Queue {count} times' }, { count: queueRegistrationCount })}
           className="rounded-none border-l border-border/70 shadow-none"
         >
           <Play className="h-4 w-4 fill-current" />
@@ -463,8 +466,8 @@ export function ComfyWorkflowControllerPanel({
       )}>
         {servers.length === 0 ? (
           <Alert>
-            <AlertTitle>서버 필요</AlertTitle>
-            <AlertDescription>서버를 먼저 등록해줘.</AlertDescription>
+            <AlertTitle>{t({ ko: '서버 필요', en: 'Server required' })}</AlertTitle>
+            <AlertDescription>{t({ ko: '서버를 먼저 등록해줘.', en: 'Register a server first.' })}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -483,8 +486,8 @@ export function ComfyWorkflowControllerPanel({
             </GenerationControllerFieldStack>
           ) : (
             <Alert>
-              <AlertTitle>입력 필드 없음</AlertTitle>
-              <AlertDescription>노출된 필드가 없어.</AlertDescription>
+              <AlertTitle>{t({ ko: '입력 필드 없음', en: 'No input fields' })}</AlertTitle>
+              <AlertDescription>{t({ ko: '노출된 필드가 없어.', en: 'There are no exposed fields.' })}</AlertDescription>
             </Alert>
           )}
         </section>

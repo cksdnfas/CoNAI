@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
+import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { getModuleBaseDisplayName } from '../module-graph-shared'
@@ -40,15 +41,16 @@ export function ModuleGraphQuickCreateMenu({
   onSelectModule: (module: ModuleDefinitionRecord) => void
   onClose: () => void
 }) {
+  const { t, locale } = useI18n()
   const tabOptions = mode === 'connect'
     ? ([
-        { key: 'recommended', label: '추천 노드' },
-        { key: 'system', label: '시스템' },
-        { key: 'other', label: '기타' },
+        { key: 'recommended', label: t({ ko: '추천 노드', en: 'Recommended' }) },
+        { key: 'system', label: t({ ko: '시스템', en: 'System' }) },
+        { key: 'other', label: t({ ko: '기타', en: 'Other' }) },
       ] as const)
     : ([
-        { key: 'system', label: '시스템' },
-        { key: 'other', label: '기타' },
+        { key: 'system', label: t({ ko: '시스템', en: 'System' }) },
+        { key: 'other', label: t({ ko: '기타', en: 'Other' }) },
       ] as const)
   const [activeTab, setActiveTab] = useState<QuickCreateTab>(mode === 'connect' ? 'recommended' : 'system')
   const [searchQuery, setSearchQuery] = useState('')
@@ -90,13 +92,13 @@ export function ModuleGraphQuickCreateMenu({
       return matchedModules
     }
 
-    return [...matchedModules].sort((left, right) => getModuleBaseDisplayName(left.module).localeCompare(getModuleBaseDisplayName(right.module), 'ko'))
-  }, [activeTab, searchQuery, visibleModules])
+    return [...matchedModules].sort((left, right) => getModuleBaseDisplayName(left.module).localeCompare(getModuleBaseDisplayName(right.module), locale))
+  }, [activeTab, locale, searchQuery, visibleModules])
 
   const groupedModules = useMemo(() => {
     if (activeTab === 'recommended') {
       return filteredModules.length > 0
-        ? [{ key: 'recommended', label: '연결 가능한 노드', modules: filteredModules } satisfies ModuleGroup]
+        ? [{ key: 'recommended', label: t({ ko: '연결 가능한 노드', en: 'Connectable nodes' }), modules: filteredModules } satisfies ModuleGroup]
         : []
     }
 
@@ -126,9 +128,9 @@ export function ModuleGraphQuickCreateMenu({
         return normalizedLeftIndex - normalizedRightIndex
       }
 
-      return left.label.localeCompare(right.label, 'ko')
+      return left.label.localeCompare(right.label, locale)
     })
-  }, [activeTab, filteredModules])
+  }, [activeTab, filteredModules, locale, t])
 
   const flatVisibleModules = useMemo(
     () => groupedModules.flatMap((group) => group.modules),
@@ -139,8 +141,8 @@ export function ModuleGraphQuickCreateMenu({
     : flatVisibleModules[0]?.module.id ?? null
 
   const emptyMessage = activeTab === 'recommended'
-    ? '이 포트와 바로 연결할 만한 추천 노드가 아직 없어.'
-    : '조건에 맞는 노드를 찾지 못했어.'
+    ? t({ ko: '이 포트와 바로 연결할 만한 추천 노드가 아직 없어.', en: 'There are no recommended nodes that can connect directly to this port yet.' })
+    : t({ ko: '조건에 맞는 노드를 찾지 못했어.', en: 'No nodes matched your conditions.' })
 
   if (typeof document === 'undefined') {
     return null
@@ -152,7 +154,7 @@ export function ModuleGraphQuickCreateMenu({
         className="fixed z-50 w-[360px] max-w-[calc(100vw-24px)] rounded-sm border border-border bg-surface-container/95 shadow-2xl backdrop-blur-sm"
         style={{ left: anchor.x, top: anchor.y }}
         role="dialog"
-        aria-label="노드 빠른 생성 메뉴"
+        aria-label={t({ ko: '노드 빠른 생성 메뉴', en: 'Quick node creation menu' })}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
@@ -185,8 +187,8 @@ export function ModuleGraphQuickCreateMenu({
         }}
       >
         <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2.5">
-          <div className="text-sm font-semibold text-foreground">{mode === 'connect' ? '추천 노드 추가' : '노드 추가'}</div>
-          <Button type="button" variant="ghost" size="icon-xs" onClick={onClose} aria-label="빠른 생성 메뉴 닫기" title="닫기">
+          <div className="text-sm font-semibold text-foreground">{mode === 'connect' ? t({ ko: '추천 노드 추가', en: 'Add recommended node' }) : t({ ko: '노드 추가', en: 'Add node' })}</div>
+          <Button type="button" variant="ghost" size="icon-xs" onClick={onClose} aria-label={t({ ko: '빠른 생성 메뉴 닫기', en: 'Close quick create menu' })} title={t({ ko: '닫기', en: 'Close' })}>
             ×
           </Button>
         </div>
@@ -211,7 +213,7 @@ export function ModuleGraphQuickCreateMenu({
             autoFocus
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={activeTab === 'recommended' ? '추천 노드 검색' : '노드 검색'}
+            placeholder={activeTab === 'recommended' ? t({ ko: '추천 노드 검색', en: 'Search recommended nodes' }) : t({ ko: '노드 검색', en: 'Search nodes' })}
           />
 
           <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
@@ -230,7 +232,7 @@ export function ModuleGraphQuickCreateMenu({
                   {group.modules.map((item) => {
                     const module = item.module
                     const isActive = activeModuleId === module.id
-                    const itemTitle = [getModuleBaseDisplayName(module), item.recommendedCompatibility ? `호환: ${item.recommendedCompatibility}` : null, module.description ?? null]
+                    const itemTitle = [getModuleBaseDisplayName(module), item.recommendedCompatibility ? t({ ko: '호환: {value}', en: 'Compatible: {value}' }, { value: item.recommendedCompatibility }) : null, module.description ?? null]
                       .filter(Boolean)
                       .join('\n')
 

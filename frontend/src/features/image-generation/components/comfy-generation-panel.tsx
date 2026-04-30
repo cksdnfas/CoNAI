@@ -32,6 +32,7 @@ import {
   type WorkflowFieldDraftValue,
 } from '../image-generation-shared'
 import { ComfyDropdownListsSection, ComfyServerListSection, ComfyWorkflowListSection } from './comfy-home-sections'
+import { useI18n } from '@/i18n'
 import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
 import { ComfyWorkflowAuthoringModal } from './comfy-workflow-authoring-modal'
@@ -64,6 +65,7 @@ export function ComfyGenerationPanel({
   compactActionBarContentTargetId,
 }: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
+  const { t, formatNumber } = useI18n()
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
@@ -327,7 +329,7 @@ export function ComfyGenerationPanel({
       })
       setIsAuthoringModalOpen(true)
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '워크플로우 정보를 불러오지 못했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '워크플로우 정보를 불러오지 못했어.', en: 'Could not load workflow details.' })), tone: 'error' })
     }
   }
 
@@ -357,9 +359,9 @@ export function ComfyGenerationPanel({
       })
 
       await workflowsQuery.refetch()
-      showSnackbar({ message: 'ComfyUI 워크플로우를 복사했어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: 'ComfyUI 워크플로우를 복사했어.', en: 'Copied the ComfyUI workflow.' }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '워크플로우 복사에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '워크플로우 복사에 실패했어.', en: 'Failed to copy the workflow.' })), tone: 'error' })
     }
   }
 
@@ -369,7 +371,7 @@ export function ComfyGenerationPanel({
       return
     }
 
-    const confirmed = window.confirm(`정말 ${workflow.name} 워크플로우를 삭제할까?`)
+    const confirmed = window.confirm(t({ ko: '정말 {name} 워크플로우를 삭제할까?', en: 'Delete the {name} workflow?' }, { name: workflow.name }))
     if (!confirmed) {
       return
     }
@@ -380,9 +382,9 @@ export function ComfyGenerationPanel({
       if (selectedWorkflowId === workflowId) {
         onSelectedWorkflowChange(null)
       }
-      showSnackbar({ message: 'ComfyUI 워크플로우를 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: 'ComfyUI 워크플로우를 삭제했어.', en: 'Deleted the ComfyUI workflow.' }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '워크플로우 삭제에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '워크플로우 삭제에 실패했어.', en: 'Failed to delete the workflow.' })), tone: 'error' })
     }
   }
 
@@ -390,9 +392,9 @@ export function ComfyGenerationPanel({
     try {
       await createGenerationCustomDropdownList(input)
       await dropdownListsQuery.refetch()
-      showSnackbar({ message: '커스텀 드롭다운 목록을 만들었어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: '커스텀 드롭다운 목록을 만들었어.', en: 'Created the custom dropdown list.' }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '커스텀 드롭다운 목록 생성에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '커스텀 드롭다운 목록 생성에 실패했어.', en: 'Failed to create the custom dropdown list.' })), tone: 'error' })
     }
   }
 
@@ -402,7 +404,7 @@ export function ComfyGenerationPanel({
       return
     }
 
-    const confirmed = window.confirm(`정말 ${list.name} 목록을 삭제할까?`)
+    const confirmed = window.confirm(t({ ko: '정말 {name} 목록을 삭제할까?', en: 'Delete the {name} list?' }, { name: list.name }))
     if (!confirmed) {
       return
     }
@@ -410,9 +412,9 @@ export function ComfyGenerationPanel({
     try {
       await deleteGenerationCustomDropdownList(listId)
       await dropdownListsQuery.refetch()
-      showSnackbar({ message: '드롭다운 목록을 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: '드롭다운 목록을 삭제했어.', en: 'Deleted the dropdown list.' }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '드롭다운 목록 삭제에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '드롭다운 목록 삭제에 실패했어.', en: 'Failed to delete the dropdown list.' })), tone: 'error' })
     }
   }
 
@@ -420,9 +422,9 @@ export function ComfyGenerationPanel({
     try {
       await updateGenerationCustomDropdownList(listId, input)
       await dropdownListsQuery.refetch()
-      showSnackbar({ message: '드롭다운 목록을 수정했어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: '드롭다운 목록을 수정했어.', en: 'Updated the dropdown list.' }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '드롭다운 목록 수정에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '드롭다운 목록 수정에 실패했어.', en: 'Failed to update the dropdown list.' })), tone: 'error' })
     }
   }
 
@@ -435,9 +437,9 @@ export function ComfyGenerationPanel({
     try {
       const response = await scanGenerationComfyUIModelDropdownLists(input)
       await dropdownListsQuery.refetch()
-      showSnackbar({ message: response.data.message || '자동수집 목록을 갱신했어.', tone: 'info' })
+      showSnackbar({ message: response.data.message || t({ ko: '자동수집 목록을 갱신했어.', en: 'Refreshed the auto-collect list.' }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '자동수집 목록 생성에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '자동수집 목록 생성에 실패했어.', en: 'Failed to create the auto-collect list.' })), tone: 'error' })
     }
   }
 
@@ -452,7 +454,7 @@ export function ComfyGenerationPanel({
     }
 
     if (comfyModuleFieldOptions.length > 0 && comfyExposedFieldIds.length === 0) {
-      showSnackbar({ message: '최소 1개는 입력 가능 필드로 열어줘.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '최소 1개는 입력 가능 필드로 열어줘.', en: 'Expose at least one editable field.' }), tone: 'error' })
       return
     }
 
@@ -468,9 +470,9 @@ export function ComfyGenerationPanel({
       setModuleSaveWorkflowId(null)
       setComfyOverwriteModuleId(null)
       void moduleDefinitionsQuery.refetch()
-      showSnackbar({ message: comfyOverwriteModuleId ? `${moduleSaveWorkflow.name} 워크플로우로 기존 모듈을 덮어썼어.` : `${moduleSaveWorkflow.name} 워크플로우를 모듈로 저장했어.`, tone: 'info' })
+      showSnackbar({ message: comfyOverwriteModuleId ? t({ ko: '{name} 워크플로우로 기존 모듈을 덮어썼어.', en: 'Overwrote the existing module with the {name} workflow.' }, { name: moduleSaveWorkflow.name }) : t({ ko: '{name} 워크플로우를 모듈로 저장했어.', en: 'Saved the {name} workflow as a module.' }, { name: moduleSaveWorkflow.name }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'ComfyUI 모듈 저장에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: 'ComfyUI 모듈 저장에 실패했어.', en: 'Failed to save the ComfyUI module.' })), tone: 'error' })
     } finally {
       setIsSavingComfyModule(false)
     }
@@ -481,22 +483,22 @@ export function ComfyGenerationPanel({
       <div className={cn(splitPaneScroll && selectedWorkflowId !== null ? 'flex min-h-0 flex-1 flex-col gap-5' : 'space-y-5')}>
         {workflowsQuery.isError ? (
           <Alert variant="destructive">
-            <AlertTitle>워크플로우를 불러오지 못했어</AlertTitle>
-            <AlertDescription>{getErrorMessage(workflowsQuery.error, 'ComfyUI 워크플로우 조회 실패')}</AlertDescription>
+            <AlertTitle>{t({ ko: '워크플로우를 불러오지 못했어', en: 'Could not load workflows' })}</AlertTitle>
+            <AlertDescription>{getErrorMessage(workflowsQuery.error, t({ ko: 'ComfyUI 워크플로우 조회 실패', en: 'Failed to load ComfyUI workflows' }))}</AlertDescription>
           </Alert>
         ) : null}
 
         {serversQuery.isError ? (
           <Alert variant="destructive">
-            <AlertTitle>서버를 불러오지 못했어</AlertTitle>
-            <AlertDescription>{getErrorMessage(serversQuery.error, 'ComfyUI 서버 조회 실패')}</AlertDescription>
+            <AlertTitle>{t({ ko: '서버를 불러오지 못했어', en: 'Could not load servers' })}</AlertTitle>
+            <AlertDescription>{getErrorMessage(serversQuery.error, t({ ko: 'ComfyUI 서버 조회 실패', en: 'Failed to load ComfyUI servers' }))}</AlertDescription>
           </Alert>
         ) : null}
 
         {dropdownListsQuery.isError ? (
           <Alert variant="destructive">
-            <AlertTitle>드롭다운 목록을 불러오지 못했어</AlertTitle>
-            <AlertDescription>{getErrorMessage(dropdownListsQuery.error, '커스텀 드롭다운 조회 실패')}</AlertDescription>
+            <AlertTitle>{t({ ko: '드롭다운 목록을 불러오지 못했어', en: 'Could not load dropdown lists' })}</AlertTitle>
+            <AlertDescription>{getErrorMessage(dropdownListsQuery.error, t({ ko: '커스텀 드롭다운 조회 실패', en: 'Failed to load custom dropdown lists' }))}</AlertDescription>
           </Alert>
         ) : null}
 

@@ -1,24 +1,14 @@
 import type { SearchAiToolOption, SearchScope } from './search-types'
 
-export const SEARCH_SCOPE_TABS: Array<{ value: SearchScope; label: string }> = [
-  { value: 'positive', label: '긍정' },
-  { value: 'negative', label: '부정' },
-  { value: 'auto', label: '오토' },
-  { value: 'rating', label: '평가' },
-  { value: 'model', label: '모델' },
-  { value: 'lora', label: 'LoRA' },
-  { value: 'tool', label: 'Tool' },
+export const SEARCH_SCOPE_TABS: Array<{ value: SearchScope }> = [
+  { value: 'positive' },
+  { value: 'negative' },
+  { value: 'auto' },
+  { value: 'rating' },
+  { value: 'model' },
+  { value: 'lora' },
+  { value: 'tool' },
 ]
-
-export const SEARCH_SCOPE_LABELS: Record<SearchScope, string> = {
-  positive: '긍정',
-  negative: '부정',
-  auto: '오토',
-  rating: '평가',
-  model: '모델',
-  lora: 'LoRA',
-  tool: 'Tool',
-}
 
 export const SEARCH_SCOPE_LABEL_KEYS: Record<SearchScope, string> = {
   positive: 'search.search.constants.positive',
@@ -26,8 +16,8 @@ export const SEARCH_SCOPE_LABEL_KEYS: Record<SearchScope, string> = {
   auto: 'search.search.constants.auto',
   rating: 'search.search.constants.rating',
   model: 'search.search.constants.model',
-  lora: 'LoRA',
-  tool: 'Tool',
+  lora: 'search.search.constants.lora',
+  tool: 'search.search.constants.tool',
 }
 
 export const SEARCH_TEXT_INPUT_SCOPES: SearchScope[] = ['positive', 'negative', 'auto', 'model', 'lora']

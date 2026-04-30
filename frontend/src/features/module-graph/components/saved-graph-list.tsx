@@ -57,7 +57,7 @@ export function SavedGraphList({
   leftToolbar,
   rightToolbar,
 }: SavedGraphListProps) {
-  const { locale } = useI18n()
+  const { t, locale } = useI18n()
   const [searchQuery, setSearchQuery] = useState('')
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<number[]>([])
 
@@ -163,7 +163,7 @@ export function SavedGraphList({
   const renderWorkflowRow = (graph: GraphWorkflowRecord, depth: number) => {
     const finalResultNodeCount = finalResultNodeCountByWorkflowId.get(graph.id) ?? 0
     const issueMessages = [
-      finalResultNodeCount === 0 ? '최종 결과가 아직 지정되지 않았어.' : null,
+      finalResultNodeCount === 0 ? t({ ko: '최종 결과가 아직 지정되지 않았어.', en: 'No final result has been assigned yet.' }) : null,
     ].filter((message): message is string => Boolean(message))
 
     return (
@@ -184,7 +184,7 @@ export function SavedGraphList({
             {graph.name}
           </div>
           {issueMessages.length > 0 ? (
-            <Badge variant="outline" className="h-5 min-w-5 shrink-0 justify-center px-1.5" title={issueMessages.join('\n')} aria-label="주의">
+            <Badge variant="outline" className="h-5 min-w-5 shrink-0 justify-center px-1.5" title={issueMessages.join('\n')} aria-label={t({ ko: '주의', en: 'Warning' })}>
               !
             </Badge>
           ) : null}
@@ -222,7 +222,7 @@ export function SavedGraphList({
             className="h-7 w-7 shrink-0"
             onClick={() => toggleFolder(folder.id)}
             disabled={!hasChildren}
-            aria-label={isExpanded ? '폴더 접기' : '폴더 펼치기'}
+            aria-label={isExpanded ? t({ ko: '폴더 접기', en: 'Collapse folder' }) : t({ ko: '폴더 펼치기', en: 'Expand folder' })}
           >
             {hasChildren ? (
               isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
@@ -268,7 +268,7 @@ export function SavedGraphList({
 
   return (
     <ExplorerSidebar
-      title="Explorer"
+      title={t({ ko: '탐색기', en: 'Explorer' })}
       badge={<Badge variant="outline">{graphs.length}</Badge>}
       floatingFrame
       floatingLockStorageKey={WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY}
@@ -285,7 +285,7 @@ export function SavedGraphList({
 
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="검색" className="h-8 pl-9 text-sm" />
+            <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t({ ko: '검색', en: 'Search' })} className="h-8 pl-9 text-sm" />
           </div>
         </div>
       }
@@ -309,14 +309,14 @@ export function SavedGraphList({
 
       {graphs.length === 0 && folders.length === 0 ? (
         <Alert>
-          <AlertTitle>저장된 워크플로우가 없어</AlertTitle>
-          <AlertDescription>새 폴더나 새 워크플로우를 만들면 여기서 바로 탐색할 수 있어.</AlertDescription>
+          <AlertTitle>{t({ ko: '저장된 워크플로우가 없어', en: 'There are no saved workflows' })}</AlertTitle>
+          <AlertDescription>{t({ ko: '새 폴더나 새 워크플로우를 만들면 여기서 바로 탐색할 수 있어.', en: 'Create a new folder or workflow to browse it here.' })}</AlertDescription>
         </Alert>
       ) : null}
       {(graphs.length > 0 || folders.length > 0) && !hasAnyVisibleItem ? (
         <Alert>
-          <AlertTitle>검색 결과가 없어</AlertTitle>
-          <AlertDescription>다른 키워드로 찾아봐.</AlertDescription>
+          <AlertTitle>{t({ ko: '검색 결과가 없어', en: 'No search results' })}</AlertTitle>
+          <AlertDescription>{t({ ko: '다른 키워드로 찾아봐.', en: 'Try a different keyword.' })}</AlertDescription>
         </Alert>
       ) : null}
     </ExplorerSidebar>

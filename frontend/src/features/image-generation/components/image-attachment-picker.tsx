@@ -12,6 +12,7 @@ import { ImageList } from '@/features/images/components/image-list/image-list'
 import { getImageListDisplayName, getImageListItemId, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { DropSurface } from '@/features/upload/components/upload-page-sections'
+import { useI18n } from '@/i18n'
 import { useDropZoneState } from '@/features/upload/use-drop-zone-state'
 import { getAppSettings, getImages, listGenerationSaveImages, type SaveBrowserImageRecord } from '@/lib/api'
 import {
@@ -62,11 +63,7 @@ type ImageAttachmentBrowserSectionProps = {
   renderSelectedAction?: (image: ImageRecord) => ReactNode
 }
 
-const IMAGE_ATTACHMENT_SOURCE_ITEMS = [
-  { value: 'upload', label: '업로드' },
-  { value: 'system', label: '시스템' },
-  { value: 'save', label: 'Save' },
-]
+const IMAGE_ATTACHMENT_SOURCE_VALUES: ImageAttachmentSource[] = ['upload', 'system', 'save']
 
 const SYSTEM_IMAGE_PAGE_SIZE = 24
 
@@ -132,6 +129,8 @@ function ImageAttachmentBrowserSection({
   onLoadMore,
   renderSelectedAction,
 }: ImageAttachmentBrowserSectionProps) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -168,15 +167,16 @@ function ImageAttachmentBrowserSection({
           )}
         />
       ) : (
-        <ImageAttachmentEmptyState title="선택할 이미지가 없어" description="검색 조건을 바꾸거나 다른 소스를 골라봐." />
+        <ImageAttachmentEmptyState title={t({ ko: '선택할 이미지가 없어', en: 'No images to select' })} description={t({ ko: '검색 조건을 바꾸거나 다른 소스를 골라봐.', en: 'Change the search terms or choose another source.' })} />
       )}
     </div>
   )
 }
 
 /** Render a shared image attachment button backed by upload/system/save picker sources. */
-export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선택', disabled = false, allowSaveDialog = true, uploadOnly = false, onSelect }: ImageAttachmentPickerButtonProps) {
+export function ImageAttachmentPickerButton({ label, modalTitle, disabled = false, allowSaveDialog = true, uploadOnly = false, onSelect }: ImageAttachmentPickerButtonProps) {
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [source, setSource] = useState<ImageAttachmentSource>('upload')
@@ -189,10 +189,17 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
   const [saveSearch, setSaveSearch] = useState('')
   const [imageSaveOptions, setImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [pendingImageSave, setPendingImageSave] = useState<PendingImageSaveState | null>(null)
-  const sourceItems = useMemo(
-    () => (uploadOnly ? IMAGE_ATTACHMENT_SOURCE_ITEMS.filter((item) => item.value === 'upload') : IMAGE_ATTACHMENT_SOURCE_ITEMS),
-    [uploadOnly],
-  )
+  const sourceItems = useMemo(() => {
+    const values = uploadOnly ? IMAGE_ATTACHMENT_SOURCE_VALUES.filter((item) => item === 'upload') : IMAGE_ATTACHMENT_SOURCE_VALUES
+    return values.map((value) => ({
+      value,
+      label: value === 'upload'
+        ? t({ ko: '업로드', en: 'Upload' })
+        : value === 'system'
+          ? t({ ko: '시스템', en: 'System' })
+          : 'Save',
+    }))
+  }, [t, uploadOnly])
 
   const appSettingsQuery = useQuery({
     queryKey: ['app-settings'],
@@ -261,6 +268,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
   const systemHasMore = Boolean(systemImagesQuery.data?.hasMore)
   const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
+  const effectiveModalTitle = modalTitle ?? t({ ko: '이미지 선택', en: 'Select image' })
 
   useEffect(() => {
     if (!pendingImageSave) {
@@ -317,7 +325,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
       onSelect(buildSelectedImageDraftFromDataUrl(output.dataUrl, buildImageSaveOutputFileName(pendingImageSave.fileName, output.format)))
       setPendingImageSave(null)
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '이미지 저장 옵션을 적용하지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지 저장 옵션을 적용하지 못했어.', en: 'Could not apply image save options.' }), tone: 'error' })
     } finally {
       setIsImporting(false)
     }
@@ -330,7 +338,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
     }
 
     if (!file.type.startsWith('image/')) {
-      showSnackbar({ message: '이미지 파일만 첨부할 수 있어.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '이미지 파일만 첨부할 수 있어.', en: 'Only image files can be attached.' }), tone: 'error' })
       return
     }
 
@@ -341,7 +349,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
         sourceMimeType: file.type,
       })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '이미지를 불러오지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지를 불러오지 못했어.', en: 'Could not load the image.' }), tone: 'error' })
     } finally {
       setIsImporting(false)
     }
@@ -362,7 +370,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
     const sourceCandidates = buildImageAttachmentImportSourceCandidates(image)
     if (sourceCandidates.length === 0) {
-      showSnackbar({ message: '선택한 이미지 URL을 찾지 못했어.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '선택한 이미지 URL을 찾지 못했어.', en: 'Could not find the selected image URL.' }), tone: 'error' })
       return
     }
 
@@ -395,7 +403,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
         sourceMimeType: blob.type || image.mime_type || undefined,
       })
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '이미지를 가져오지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지를 가져오지 못했어.', en: 'Could not import the image.' }), tone: 'error' })
     } finally {
       setIsImporting(false)
     }
@@ -423,7 +431,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
         <div className={disabled ? 'pointer-events-none opacity-60' : undefined}>
           <DropSurface
-            ariaLabel={`${label} 업로드`}
+            ariaLabel={t({ ko: '{label} 업로드', en: 'Upload {label}' }, { label })}
             active={uploadDropZone.isDragActive}
             onClick={() => {
               if (!disabled && !isImporting) {
@@ -454,7 +462,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
             setIsOpen(false)
           }
         }}
-        title={modalTitle}
+        title={effectiveModalTitle}
         widthClassName="max-w-7xl"
       >
         <div className="space-y-5">
@@ -469,7 +477,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
           {source === 'upload' ? (
             <div className="pt-1">
               <DropSurface
-                ariaLabel="첨부할 이미지 선택"
+                ariaLabel={t({ ko: '첨부할 이미지 선택', en: 'Select image to attach' })}
                 active={uploadDropZone.isDragActive}
                 onClick={() => inputRef.current?.click()}
                 onDrop={uploadDropZone.handleDrop}
@@ -483,8 +491,8 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
           {!uploadOnly && source === 'system' ? (
             <ImageAttachmentBrowserSection
               searchValue={systemSearch}
-              searchPlaceholder="불러온 시스템 이미지에서 이름 검색"
-              searchHint="최신 이미지부터 불러오고 있어."
+              searchPlaceholder={t({ ko: '불러온 시스템 이미지에서 이름 검색', en: 'Search loaded system images by name' })}
+              searchHint={t({ ko: '최신 이미지부터 불러오고 있어.', en: 'Loading newest images first.' })}
               items={filteredSystemImages}
               selectedIds={selectedSystemIds}
               onSelectedIdsChange={handleSystemSelectionChange}
@@ -509,8 +517,8 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
                     void handleImportExistingImage(image)
                   }}
                   disabled={isImporting}
-                  aria-label="이미지 선택"
-                  title="이미지 선택"
+                  aria-label={t({ ko: '이미지 선택', en: 'Select image' })}
+                  title={t({ ko: '이미지 선택', en: 'Select image' })}
                 >
                   {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
                 </Button>
@@ -521,8 +529,8 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
           {!uploadOnly && source === 'save' ? (
             <ImageAttachmentBrowserSection
               searchValue={saveSearch}
-              searchPlaceholder="save 이미지 이름 검색"
-              searchHint="save 폴더 아래 이미지를 재귀적으로 보여줘."
+              searchPlaceholder={t({ ko: 'save 이미지 이름 검색', en: 'Search save images by name' })}
+              searchHint={t({ ko: 'save 폴더 아래 이미지를 재귀적으로 보여줘.', en: 'Shows images recursively under the save folder.' })}
               items={filteredSaveImages}
               selectedIds={selectedSaveIds}
               onSelectedIdsChange={handleSaveSelectionChange}
@@ -538,8 +546,8 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
                     void handleImportExistingImage(image)
                   }}
                   disabled={isImporting}
-                  aria-label="이미지 선택"
-                  title="이미지 선택"
+                  aria-label={t({ ko: '이미지 선택', en: 'Select image' })}
+                  title={t({ ko: '이미지 선택', en: 'Select image' })}
                 >
                   {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
                 </Button>
@@ -551,7 +559,7 @@ export function ImageAttachmentPickerButton({ label, modalTitle = '이미지 선
 
       <ImageSaveOptionsModal
         open={pendingImageSave !== null}
-        title="이미지 저장"
+        title={t({ ko: '이미지 저장', en: 'Save image' })}
         options={imageSaveOptions}
         sourceInfo={pendingImageSave?.sourceInfo ?? null}
         isSaving={isImporting}

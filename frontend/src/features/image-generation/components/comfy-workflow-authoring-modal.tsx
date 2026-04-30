@@ -18,6 +18,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import {
@@ -95,6 +96,7 @@ export function ComfyWorkflowAuthoringModal({
   onSaved,
 }: ComfyWorkflowAuthoringModalProps) {
   const { showSnackbar } = useSnackbar()
+  const { t, formatNumber } = useI18n()
   const appearanceQuery = useGlobalAppearanceSettingsQuery()
   const [workflowName, setWorkflowName] = useState('')
   const [workflowDescription, setWorkflowDescription] = useState('')
@@ -188,7 +190,7 @@ export function ComfyWorkflowAuthoringModal({
       parseWorkflowDefinition(nextValue)
       setJsonError(null)
     } catch (error) {
-      setJsonError(getErrorMessage(error, '유효한 workflow JSON이 아니야.'))
+      setJsonError(getErrorMessage(error, t({ ko: '유효한 workflow JSON이 아니야.', en: 'This is not a valid workflow JSON.' })))
     }
   }
 
@@ -207,7 +209,7 @@ export function ComfyWorkflowAuthoringModal({
         setWorkflowName(file.name.replace(/\.json$/i, ''))
       }
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'JSON 파일을 읽지 못했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: 'JSON 파일을 읽지 못했어.', en: 'Could not read the JSON file.' })), tone: 'error' })
     }
   }
 
@@ -357,7 +359,9 @@ export function ComfyWorkflowAuthoringModal({
   const dropdownListNames = dropdownLists.map((list) => list.name)
   const activeSearchMatches = workflowEditorTab === 'json' ? jsonSearchMatches : graphSearchMatches
   const activeSearchCount = activeSearchMatches.length
-  const searchPlaceholder = workflowEditorTab === 'json' ? 'Workflow JSON 검색' : '노드 title / class_type / id 검색'
+  const searchPlaceholder = workflowEditorTab === 'json'
+    ? t({ ko: 'Workflow JSON 검색', en: 'Search workflow JSON' })
+    : t({ ko: '노드 title / class_type / id 검색', en: 'Search node title / class_type / id' })
 
   const handleFieldPatch = (fieldId: string, patch: Partial<WorkflowMarkedField>) => {
     setMarkedFields((current) => current.map((field) => (field.id === fieldId ? { ...field, ...patch } : field)))
@@ -401,18 +405,18 @@ export function ComfyWorkflowAuthoringModal({
     }
 
     if (workflowName.trim().length === 0) {
-      showSnackbar({ message: '워크플로우 이름이 필요해.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '워크플로우 이름이 필요해.', en: 'Workflow name is required.' }), tone: 'error' })
       return
     }
 
     if (workflowJson.trim().length === 0 || jsonError) {
-      showSnackbar({ message: '유효한 workflow JSON이 필요해.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '유효한 workflow JSON이 필요해.', en: 'A valid workflow JSON is required.' }), tone: 'error' })
       return
     }
 
     const normalizedPublicSlug = slugifyPublicWorkflow(publicSlug)
     if (isPublicPage && normalizedPublicSlug.length === 0) {
-      showSnackbar({ message: '공용 페이지 slug가 필요해.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '공용 페이지 slug가 필요해.', en: 'Public page slug is required.' }), tone: 'error' })
       return
     }
 
@@ -443,18 +447,18 @@ export function ComfyWorkflowAuthoringModal({
         workflowId = response.data.id
       }
 
-      showSnackbar({ message: mode === 'edit' ? 'ComfyUI 워크플로우를 수정했어.' : 'ComfyUI 워크플로우를 저장했어.', tone: 'info' })
+      showSnackbar({ message: mode === 'edit' ? t({ ko: 'ComfyUI 워크플로우를 수정했어.', en: 'Updated the ComfyUI workflow.' }) : t({ ko: 'ComfyUI 워크플로우를 저장했어.', en: 'Saved the ComfyUI workflow.' }), tone: 'info' })
       onSaved?.(workflowId as number)
       onClose()
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, mode === 'edit' ? '워크플로우 수정에 실패했어.' : '워크플로우 저장에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, mode === 'edit' ? t({ ko: '워크플로우 수정에 실패했어.', en: 'Failed to update the workflow.' }) : t({ ko: '워크플로우 저장에 실패했어.', en: 'Failed to save the workflow.' })), tone: 'error' })
     } finally {
       setIsSaving(false)
     }
   }
 
-  const modalTitle = mode === 'edit' ? 'ComfyUI Workflow 수정' : 'ComfyUI Workflow 등록'
-  const submitLabel = mode === 'edit' ? '워크플로우 저장' : '워크플로우 등록'
+  const modalTitle = mode === 'edit' ? t({ ko: 'ComfyUI Workflow 수정', en: 'Edit ComfyUI Workflow' }) : t({ ko: 'ComfyUI Workflow 등록', en: 'Register ComfyUI Workflow' })
+  const submitLabel = mode === 'edit' ? t({ ko: '워크플로우 저장', en: 'Save workflow' }) : t({ ko: '워크플로우 등록', en: 'Register workflow' })
 
   return (
     <SettingsModal
@@ -464,9 +468,9 @@ export function ComfyWorkflowAuthoringModal({
       widthClassName="max-w-[1180px]"
     >
       <SettingsModalBody className="space-y-5">
-        <SettingsSection heading="기본 정보">
+        <SettingsSection heading={t({ ko: '기본 정보', en: 'Basic information' })}>
           <div className="grid gap-4">
-            <SettingsField label="이름">
+            <SettingsField label={t({ ko: '이름', en: 'Name' })}>
               <Input
                 variant="settings"
                 value={workflowName}
@@ -475,13 +479,13 @@ export function ComfyWorkflowAuthoringModal({
               />
             </SettingsField>
 
-            <SettingsField label="설명">
+            <SettingsField label={t({ ko: '설명', en: 'Description' })}>
               <Textarea
                 variant="settings"
                 rows={4}
                 value={workflowDescription}
                 onChange={(event) => setWorkflowDescription(event.target.value)}
-                placeholder="선택"
+                placeholder={t({ ko: '선택', en: 'Optional' })}
               />
             </SettingsField>
 
@@ -492,13 +496,13 @@ export function ComfyWorkflowAuthoringModal({
                 onChange={(event) => setIsPublicPage(event.target.checked)}
               />
               <div className="min-w-0">
-                <div className="text-sm font-medium text-foreground">공용 페이지 사용</div>
+                <div className="text-sm font-medium text-foreground">{t({ ko: '공용 페이지 사용', en: 'Use public page' })}</div>
               </div>
             </SettingsToggleRow>
 
             {isPublicPage ? (
               <>
-                <SettingsField label="Public slug">
+                <SettingsField label={t({ ko: '공용 slug', en: 'Public slug' })}>
                   <Input
                     variant="settings"
                     value={publicSlug}
@@ -507,7 +511,7 @@ export function ComfyWorkflowAuthoringModal({
                   />
                 </SettingsField>
 
-                <SettingsField label="공용 1회 요청 상한">
+                <SettingsField label={t({ ko: '공용 1회 요청 상한', en: 'Public per-request limit' })}>
                   <Input
                     variant="settings"
                     type="number"
@@ -521,36 +525,36 @@ export function ComfyWorkflowAuthoringModal({
               </>
             ) : null}
 
-            <SettingsField label="결과 표시 방식">
+            <SettingsField label={t({ ko: '결과 표시 방식', en: 'Result view' })}>
               <Select
                 variant="settings"
                 value={resultViewMode}
                 onChange={(event) => setResultViewMode(event.target.value as 'history' | 'artifact_explorer')}
               >
-                <option value="history">히스토리 뷰어</option>
-                <option value="artifact_explorer">탐색형 뷰어</option>
+                <option value="history">{t({ ko: '히스토리 뷰어', en: 'History viewer' })}</option>
+                <option value="artifact_explorer">{t({ ko: '탐색형 뷰어', en: 'Explorer viewer' })}</option>
               </Select>
             </SettingsField>
 
             {resultViewMode === 'artifact_explorer' ? (
               <>
-                <SettingsField label="결과 저장 방식">
+                <SettingsField label={t({ ko: '결과 저장 방식', en: 'Result storage mode' })}>
                   <Select
                     variant="settings"
                     value={artifactDirectoryMode}
                     onChange={(event) => setArtifactDirectoryMode(event.target.value as 'shared' | 'per_run')}
                   >
-                    <option value="shared">공유 폴더</option>
-                    <option value="per_run">실행별 폴더</option>
+                    <option value="shared">{t({ ko: '공유 폴더', en: 'Shared folder' })}</option>
+                    <option value="per_run">{t({ ko: '실행별 폴더', en: 'Folder per run' })}</option>
                   </Select>
                 </SettingsField>
 
-                <SettingsField label="결과 저장 루트 경로">
+                <SettingsField label={t({ ko: '결과 저장 루트 경로', en: 'Result storage root path' })}>
                   <Input
                     variant="settings"
                     value={artifactRootPath}
                     onChange={(event) => setArtifactRootPath(event.target.value)}
-                    placeholder="기본값: runtime/artifacts/comfy-workflows/<workflow>"
+                    placeholder={t({ ko: '기본값: runtime/artifacts/comfy-workflows/<workflow>', en: 'Default: runtime/artifacts/comfy-workflows/<workflow>' })}
                   />
                 </SettingsField>
               </>
@@ -563,7 +567,7 @@ export function ComfyWorkflowAuthoringModal({
             <SegmentedControl
               value={workflowEditorTab}
               items={[
-                { value: 'graph', label: 'Graph View' },
+                { value: 'graph', label: t({ ko: '그래프 보기', en: 'Graph View' }) },
                 { value: 'json', label: 'Workflow JSON' },
               ]}
               onChange={(nextTab) => setWorkflowEditorTab(nextTab as 'json' | 'graph')}
@@ -584,7 +588,7 @@ export function ComfyWorkflowAuthoringModal({
                 />
               </div>
               <div className="text-xs text-muted-foreground">
-                {graphSearchQuery.trim().length > 0 ? `${activeSearchCount}개` : '검색 없음'}
+                {graphSearchQuery.trim().length > 0 ? t({ ko: '{count}개', en: '{count}' }, { count: formatNumber(activeSearchCount) }) : t({ ko: '검색 없음', en: 'No search' })}
               </div>
               <Button
                 type="button"
@@ -596,8 +600,8 @@ export function ComfyWorkflowAuthoringModal({
                     ? 0
                     : (current - 1 + activeSearchCount) % activeSearchCount
                 ))}
-                title="이전 검색 결과"
-                aria-label="이전 검색 결과"
+                title={t({ ko: '이전 검색 결과', en: 'Previous search result' })}
+                aria-label={t({ ko: '이전 검색 결과', en: 'Previous search result' })}
               >
                 <ChevronUp className="h-4 w-4" />
               </Button>
@@ -611,15 +615,15 @@ export function ComfyWorkflowAuthoringModal({
                     ? 0
                     : (current + 1) % activeSearchCount
                 ))}
-                title="다음 검색 결과"
-                aria-label="다음 검색 결과"
+                title={t({ ko: '다음 검색 결과', en: 'Next search result' })}
+                aria-label={t({ ko: '다음 검색 결과', en: 'Next search result' })}
               >
                 <ChevronDown className="h-4 w-4" />
               </Button>
               <Button type="button" size="sm" variant="outline" asChild>
                 <label className="cursor-pointer">
                   <Upload className="h-4 w-4" />
-                  업로드
+                  {t({ ko: '업로드', en: 'Upload' })}
                   <input type="file" accept=".json,application/json" hidden onChange={(event) => void handleFileUpload(event.target.files?.[0])} />
                 </label>
               </Button>
@@ -679,7 +683,7 @@ export function ComfyWorkflowAuthoringModal({
                     </ReactFlowProvider>
                   ) : (
                     <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                      유효한 workflow JSON을 넣으면 그래프가 보여.
+                      {t({ ko: '유효한 workflow JSON을 넣으면 그래프가 보여.', en: 'Enter a valid workflow JSON to show the graph.' })}
                     </div>
                   )}
                 </div>
@@ -700,9 +704,9 @@ export function ComfyWorkflowAuthoringModal({
         />
 
         <SettingsModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>취소</Button>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>{t({ ko: '취소', en: 'Cancel' })}</Button>
           <Button type="button" onClick={() => void handleSave()} disabled={isSaving || workflowName.trim().length === 0 || workflowJson.trim().length === 0 || jsonError !== null}>
-            {isSaving ? '저장 중…' : submitLabel}
+            {isSaving ? t({ ko: '저장 중…', en: 'Saving…' }) : submitLabel}
           </Button>
         </SettingsModalFooter>
       </SettingsModalBody>

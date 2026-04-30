@@ -8,6 +8,7 @@ import { ImageAttachmentPickerButton } from '@/features/image-generation/compone
 import { DEFAULT_PROMPT_TEXTAREA_ROWS } from '@/features/image-generation/components/text-segment-spreadsheet-input'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
+import { useI18n } from '@/i18n'
 import type { GraphWorkflowExposedInput } from '@/lib/api'
 import { normalizeModulePortDescription } from '../module-graph-shared'
 import { hasMeaningfulValue } from './module-graph-field-shared'
@@ -17,8 +18,8 @@ import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } fro
 const WORKFLOW_INPUT_FIELD_SURFACE_CLASS = 'space-y-2 rounded-sm border border-border/70 bg-background/35 p-4'
 const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
 
-function getWorkflowSelectOptionLabel(option: string) {
-  return option === DROPDOWN_RANDOM_OPTION_VALUE ? '랜덤 선택' : option
+function getWorkflowSelectOptionLabel(option: string, randomSelectionLabel: string) {
+  return option === DROPDOWN_RANDOM_OPTION_VALUE ? randomSelectionLabel : option
 }
 
 function hasDefaultValue(value: unknown) {
@@ -55,6 +56,8 @@ export function WorkflowInputFields({
   onInputValueClear: (inputId: string) => void
   onInputImageChange: (inputId: string, image?: SelectedImageDraft) => Promise<void> | void
 }) {
+  const { t } = useI18n()
+
   const restoreDefaultValue = (inputDefinition: GraphWorkflowExposedInput) => {
     if (!hasDefaultValue(inputDefinition.default_value)) {
       onInputValueClear(inputDefinition.id)
@@ -76,8 +79,8 @@ export function WorkflowInputFields({
           variant="outline"
           onClick={() => restoreDefaultValue(inputDefinition)}
           disabled={!defaultAvailable || usingDefault}
-          aria-label="기본값 가져오기"
-          title="기본값 가져오기"
+          aria-label={t({ ko: '기본값 가져오기', en: 'Restore default value' })}
+          title={t({ ko: '기본값 가져오기', en: 'Restore default value' })}
         >
           <RotateCcw className="h-4 w-4" />
         </Button>
@@ -87,8 +90,8 @@ export function WorkflowInputFields({
           variant="outline"
           onClick={() => onInputValueClear(inputDefinition.id)}
           disabled={!explicitValue}
-          aria-label="값 지우기"
-          title="값 지우기"
+          aria-label={t({ ko: '값 지우기', en: 'Clear value' })}
+          title={t({ ko: '값 지우기', en: 'Clear value' })}
         >
           <Trash2 className="h-4 w-4" />
         </Button>
@@ -108,7 +111,7 @@ export function WorkflowInputFields({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
-                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+                {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
               </div>
               <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · {inputDefinition.data_type}</div>
             </div>
@@ -127,7 +130,7 @@ export function WorkflowInputFields({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
-                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+                {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
               </div>
               <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · {inputDefinition.data_type}</div>
             </div>
@@ -146,7 +149,7 @@ export function WorkflowInputFields({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
-                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+                {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
               </div>
               <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · {inputDefinition.data_type}</div>
             </div>
@@ -165,7 +168,7 @@ export function WorkflowInputFields({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
-                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+                {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
               </div>
               <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · select</div>
             </div>
@@ -176,9 +179,9 @@ export function WorkflowInputFields({
             value={typeof rawValue === 'string' ? rawValue : rawValue == null ? '' : String(rawValue)}
             onChange={(event) => onInputValueChange(inputDefinition.id, event.target.value)}
           >
-            <option value="">기본값 사용</option>
+            <option value="">{t({ ko: '기본값 사용', en: 'Use default value' })}</option>
             {inputDefinition.options.map((option) => (
-              <option key={option} value={option}>{getWorkflowSelectOptionLabel(option)}</option>
+              <option key={option} value={option}>{getWorkflowSelectOptionLabel(option, t({ ko: '랜덤 선택', en: 'Random selection' }))}</option>
             ))}
           </Select>
         </div>
@@ -192,7 +195,7 @@ export function WorkflowInputFields({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
-                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+                {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
               </div>
               <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · {inputDefinition.data_type}</div>
             </div>
@@ -216,7 +219,7 @@ export function WorkflowInputFields({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
-                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+                {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
               </div>
               <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · number</div>
             </div>
@@ -240,7 +243,7 @@ export function WorkflowInputFields({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
-                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+                {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
               </div>
               <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · boolean</div>
             </div>
@@ -251,7 +254,7 @@ export function WorkflowInputFields({
             value={typeof rawValue === 'boolean' ? String(rawValue) : ''}
             onChange={(event) => onInputValueChange(inputDefinition.id, event.target.value === '' ? '' : event.target.value === 'true')}
           >
-            <option value="">기본값 사용</option>
+            <option value="">{t({ ko: '기본값 사용', en: 'Use default value' })}</option>
             <option value="true">true</option>
             <option value="false">false</option>
           </Select>
@@ -266,14 +269,14 @@ export function WorkflowInputFields({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
-                {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+                {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
               </div>
               <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · {inputDefinition.data_type}</div>
             </div>
             {renderInputActions(inputDefinition, rawValue, explicitValue)}
           </div>
           {normalizedDescription ? <div className="text-xs text-muted-foreground">{normalizedDescription}</div> : null}
-          <ImageAttachmentPickerButton label={explicitValue ? '이미지 변경' : '이미지 선택'} modalTitle={inputDefinition.label} allowSaveDialog={false} onSelect={(image) => void onInputImageChange(inputDefinition.id, image)} />
+          <ImageAttachmentPickerButton label={explicitValue ? t({ ko: '이미지 변경', en: 'Change image' }) : t({ ko: '이미지 선택', en: 'Select image' })} modalTitle={inputDefinition.label} allowSaveDialog={false} onSelect={(image) => void onInputImageChange(inputDefinition.id, image)} />
           {typeof rawValue === 'string' && rawValue.startsWith('data:') ? (
             <InlineMediaPreview src={rawValue} alt={inputDefinition.label} frameClassName="p-3" />
           ) : null}
@@ -287,7 +290,7 @@ export function WorkflowInputFields({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
-              {inputDefinition.required ? <Badge variant="outline">required</Badge> : null}
+              {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
             </div>
             <div className="text-xs text-muted-foreground">{inputDefinition.module_name || inputDefinition.node_id} · {inputDefinition.data_type}</div>
           </div>

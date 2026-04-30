@@ -5,7 +5,7 @@ import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { SearchScopeTabs } from '@/features/search/components/search-scope-tabs'
 import { SearchSuggestionList } from '@/features/search/components/search-suggestion-list'
-import { SEARCH_SCOPE_LABELS } from '@/features/search/search-constants'
+import { SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
 import { createRatingSearchChip, getSearchScopeStyle } from '@/features/search/search-utils'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import { useSearchSuggestionData } from '@/features/search/use-search-suggestion-data'
@@ -245,7 +245,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
         style={{ width: 'min(calc(100vw - 0.75rem), 420px)' }}
       >
         <div className="theme-drawer-header flex items-center justify-between border-b border-border/80 bg-background/40">
-          <div className="text-2xl font-semibold tracking-tight text-foreground">search</div>
+          <div className="text-2xl font-semibold tracking-tight text-foreground">{t({ ko: '검색', en: 'Search' })}</div>
           <button type="button" onClick={closeDrawer} className="rounded-sm p-2 text-muted-foreground transition hover:bg-surface-high hover:text-foreground" aria-label={t('homeSearchDrawerContent.closeSearchDrawer')}>
             <X className="h-5 w-5" />
           </button>
@@ -322,7 +322,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                         {entry.chips.map((chip) => (
                           <span key={chip.id} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1.5 text-xs text-foreground">
                             <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em]" style={getSearchScopeStyle(chip.scope)}>
-                              {chip.scopeLabel ?? SEARCH_SCOPE_LABELS[chip.scope]}
+                              {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
                             </span>
                             <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tracking-[0.14em] text-primary">
                               {chip.operator}

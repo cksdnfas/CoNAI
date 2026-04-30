@@ -3,6 +3,7 @@ import { Check, Download, Pencil, Save, Star, Trash2, Upload, X } from 'lucide-r
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useI18n } from '@/i18n'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { SettingsField, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
@@ -161,6 +162,8 @@ function WallpaperSavedEasingPresetsSection({
   onRemovePreset: (presetId: string) => void
   onSelectPreset: (easing: WallpaperAnimationEasing) => void
 }) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-3 border-t border-border/70 pt-4">
       <input
@@ -171,12 +174,27 @@ function WallpaperSavedEasingPresetsSection({
         onChange={onImportPresets}
       />
       <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-medium text-foreground">내 프리셋</div>
+        <div className="text-sm font-medium text-foreground">{t({ ko: '내 프리셋', en: 'My presets' })}</div>
         <div className="flex items-center gap-2">
-          <Button type="button" size="icon-xs" variant="ghost" onClick={() => importInputRef.current?.click()} title="프리셋 가져오기" aria-label="프리셋 가져오기">
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            onClick={() => importInputRef.current?.click()}
+            title={t({ ko: '프리셋 가져오기', en: 'Import presets' })}
+            aria-label={t({ ko: '프리셋 가져오기', en: 'Import presets' })}
+          >
             <Upload className="h-3.5 w-3.5" />
           </Button>
-          <Button type="button" size="icon-xs" variant="ghost" onClick={onExportPresets} disabled={savedPresets.length === 0} title="프리셋 내보내기" aria-label="프리셋 내보내기">
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            onClick={onExportPresets}
+            disabled={savedPresets.length === 0}
+            title={t({ ko: '프리셋 내보내기', en: 'Export presets' })}
+            aria-label={t({ ko: '프리셋 내보내기', en: 'Export presets' })}
+          >
             <Download className="h-3.5 w-3.5" />
           </Button>
           <div className="text-xs text-muted-foreground">{savedPresets.length}/{MAX_WALLPAPER_SAVED_EASING_PRESETS}</div>
@@ -229,10 +247,25 @@ function WallpaperSavedEasingPresetsSection({
                     className="min-w-0 flex-1"
                   />
                   <div className="flex shrink-0 items-center gap-0.5">
-                    <Button type="button" size="icon-xs" variant="ghost" onClick={() => onRenamePreset(preset.id)} disabled={!editingPresetName.trim() || isDuplicateName} title="이름 저장" aria-label="이름 저장">
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      onClick={() => onRenamePreset(preset.id)}
+                      disabled={!editingPresetName.trim() || isDuplicateName}
+                      title={t({ ko: '이름 저장', en: 'Save name' })}
+                      aria-label={t({ ko: '이름 저장', en: 'Save name' })}
+                    >
                       <Check className="h-3.5 w-3.5" />
                     </Button>
-                    <Button type="button" size="icon-xs" variant="ghost" onClick={onCancelEditingPreset} title="이름 편집 취소" aria-label="이름 편집 취소">
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      onClick={onCancelEditingPreset}
+                      title={t({ ko: '이름 편집 취소', en: 'Cancel name edit' })}
+                      aria-label={t({ ko: '이름 편집 취소', en: 'Cancel name edit' })}
+                    >
                       <X className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -241,7 +274,7 @@ function WallpaperSavedEasingPresetsSection({
                   <WallpaperEasingGraphPreview easing={preset.easing} className="h-11 w-full" />
                 </div>
                 {isDuplicateName ? (
-                  <div className="mt-2 text-[11px] text-destructive">같은 이름의 프리셋이 이미 있어.</div>
+                  <div className="mt-2 text-[11px] text-destructive">{t({ ko: '같은 이름의 프리셋이 이미 있어.', en: 'A preset with the same name already exists.' })}</div>
                 ) : null}
               </div>
             ) : (
@@ -257,8 +290,8 @@ function WallpaperSavedEasingPresetsSection({
                     size="icon-xs"
                     variant="ghost"
                     onClick={() => onTogglePinnedPreset(preset.id)}
-                    title={preset.pinned ? '고정 해제' : '고정'}
-                    aria-label={preset.pinned ? '고정 해제' : '고정'}
+                    title={preset.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정', en: 'Pin' })}
+                    aria-label={preset.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정', en: 'Pin' })}
                     className={cn('h-6 w-6 p-0', preset.pinned ? 'text-primary' : 'text-muted-foreground')}
                   >
                     <Star className={cn('h-3.5 w-3.5', preset.pinned ? 'fill-current' : '')} />
@@ -266,10 +299,24 @@ function WallpaperSavedEasingPresetsSection({
                 )}
                 actions={(
                   <>
-                    <Button type="button" size="icon-xs" variant="ghost" onClick={() => onStartEditingPreset(preset)} title="이름 편집" aria-label="이름 편집">
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      onClick={() => onStartEditingPreset(preset)}
+                      title={t({ ko: '이름 편집', en: 'Edit name' })}
+                      aria-label={t({ ko: '이름 편집', en: 'Edit name' })}
+                    >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button type="button" size="icon-xs" variant="ghost" onClick={() => onRemovePreset(preset.id)} title="프리셋 삭제" aria-label="프리셋 삭제">
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      onClick={() => onRemovePreset(preset.id)}
+                      title={t({ ko: '프리셋 삭제', en: 'Delete preset' })}
+                      aria-label={t({ ko: '프리셋 삭제', en: 'Delete preset' })}
+                    >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </>
@@ -280,7 +327,7 @@ function WallpaperSavedEasingPresetsSection({
         </div>
       ) : (
         <div className="rounded-sm border border-dashed border-border px-3 py-5 text-center text-xs text-muted-foreground">
-          아직 저장한 커스텀 프리셋이 없어.
+          {t({ ko: '아직 저장한 커스텀 프리셋이 없어.', en: 'There are no saved custom presets yet.' })}
         </div>
       )}
     </div>
@@ -288,6 +335,7 @@ function WallpaperSavedEasingPresetsSection({
 }
 
 export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', previewKind = 'transition', summary, editorContent, previewConfig, onChange }: WallpaperEasingPickerProps) {
+  const { t } = useI18n()
   const normalizedValue = normalizeWallpaperAnimationEasing(value, fallbackPreset)
   const isCustom = normalizedValue.startsWith('cubic-bezier(') || normalizedValue.startsWith('linear(')
   const [open, setOpen] = useState(false)
@@ -560,7 +608,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
       <SettingsModal
         open={open}
         onClose={() => setOpen(false)}
-        title="이징 설정"
+        title={t({ ko: '이징 설정', en: 'Easing settings' })}
         widthClassName="max-w-6xl"
       >
         <div className="space-y-4">
@@ -569,8 +617,8 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
             onChange={(nextValue) => setActiveTab(nextValue as 'preset' | 'custom')}
             size="sm"
             items={[
-              { value: 'preset', label: '프리셋' },
-              { value: 'custom', label: '커스텀' },
+              { value: 'preset', label: t({ ko: '프리셋', en: 'Preset' }) },
+              { value: 'custom', label: t({ ko: '커스텀', en: 'Custom' }) },
             ]}
           />
 
@@ -627,19 +675,19 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                   onSelectIndex={setSelectedPointIndex}
                 />
                 <div className="rounded-sm border border-border/70 bg-surface-low px-3 py-2 text-xs text-muted-foreground">
-                  점을 클릭하면 아래 값이 같이 선택되고, 숫자는 좌우 드래그로도 조절돼. 선택된 점은 방향키로 미세 조정할 수 있어.
+                  {t({ ko: '점을 클릭하면 아래 값이 같이 선택되고, 숫자는 좌우 드래그로도 조절돼. 선택된 점은 방향키로 미세 조정할 수 있어.', en: 'Click a point to select its values below. You can also drag left and right on the numbers, and fine-tune the selected point with the arrow keys.' })}
                 </div>
                 {selectedPointIndex !== null && selectedPointIndex > 0 && selectedPointIndex < customStops.length - 1 ? (
                   <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-2">
-                    <div className="mr-2 text-xs text-muted-foreground">선택된 점 {selectedPointIndex}</div>
+                    <div className="mr-2 text-xs text-muted-foreground">{t({ ko: `선택된 점 ${selectedPointIndex}`, en: `Selected point ${selectedPointIndex}` })}</div>
                     <Button type="button" size="xs" variant="secondary" onClick={handleDuplicateSelectedPoint}>
-                      복제
+                      {t({ ko: '복제', en: 'Duplicate' })}
                     </Button>
                     <Button type="button" size="xs" variant="secondary" onClick={handleSplitSelectedSegment}>
-                      구간 분할
+                      {t({ ko: '구간 분할', en: 'Split segment' })}
                     </Button>
                     <Button type="button" size="xs" variant="ghost" onClick={() => handleRemoveCustomPoint(selectedPointIndex)}>
-                      삭제
+                      {t({ ko: '삭제', en: 'Delete' })}
                     </Button>
                   </div>
                 ) : null}
@@ -647,7 +695,11 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                   {customStops.map((point, index) => {
                     const isEndpoint = index === 0 || index === customStops.length - 1
                     const isSelected = selectedPointIndex === index
-                    const pointLabel = index === 0 ? '시작' : index === customStops.length - 1 ? '끝' : `점 ${index}`
+                    const pointLabel = index === 0
+                      ? t({ ko: '시작', en: 'Start' })
+                      : index === customStops.length - 1
+                        ? t({ ko: '끝', en: 'End' })
+                        : t({ ko: `점 ${index}`, en: `Point ${index}` })
 
                     return (
                       <div
@@ -673,7 +725,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                         }}
                       >
                         <div className="text-sm font-medium text-foreground">{pointLabel}</div>
-                        <SettingsField label="시간 X">
+                        <SettingsField label={t({ ko: '시간 X', en: 'Time X' })}>
                           <ScrubbableNumberInput
                             variant="settings"
                             step={0.01}
@@ -685,7 +737,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                             onChange={(nextValue) => updateCustomPoint(index, 'x', nextValue)}
                           />
                         </SettingsField>
-                        <SettingsField label="값 Y">
+                        <SettingsField label={t({ ko: '값 Y', en: 'Value Y' })}>
                           <ScrubbableNumberInput
                             variant="settings"
                             step={0.01}
@@ -705,8 +757,8 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                               event.stopPropagation()
                               handleRemoveCustomPoint(index)
                             }}
-                            title={`${pointLabel} 삭제`}
-                            aria-label={`${pointLabel} 삭제`}
+                            title={t({ ko: `${pointLabel} 삭제`, en: `Delete ${pointLabel}` })}
+                            aria-label={t({ ko: `${pointLabel} 삭제`, en: `Delete ${pointLabel}` })}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -725,7 +777,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                 extraContent={(
                   <>
                     <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">현재 커스텀 곡선</div>
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '현재 커스텀 곡선', en: 'Current custom curve' })}</div>
                       <div className="rounded-sm border border-border/70 bg-background px-3 py-2">
                         <WallpaperEasingGraphPreview easing={customEasing} className="h-16 w-full" />
                       </div>
@@ -735,11 +787,11 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                     </div>
 
                     <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                      <SettingsField label="프리셋으로 저장" className="gap-2">
+                      <SettingsField label={t({ ko: '프리셋으로 저장', en: 'Save as preset' })} className="gap-2">
                         <div className="flex gap-2">
                           <Input
                             variant="settings"
-                            placeholder="예: 부드러운 진입"
+                            placeholder={t({ ko: '예: 부드러운 진입', en: 'e.g. Smooth intro' })}
                             value={presetName}
                             onChange={(event) => setPresetName(event.target.value)}
                             onKeyDown={(event) => {
@@ -751,7 +803,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                           />
                           <Button type="button" onClick={handleSavePreset} disabled={!presetName.trim()}>
                             <Save className="h-4 w-4" />
-                            프리셋 저장
+                            {t({ ko: '프리셋 저장', en: 'Save preset' })}
                           </Button>
                         </div>
                       </SettingsField>
@@ -765,10 +817,10 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
 
           <SettingsModalFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              취소
+              {t({ ko: '취소', en: 'Cancel' })}
             </Button>
             <Button type="button" onClick={handleApplySelection}>
-              저장
+              {t({ ko: '저장', en: 'Save' })}
             </Button>
           </SettingsModalFooter>
         </div>

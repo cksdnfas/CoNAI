@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
 import type { WildcardTool } from '@/lib/api'
 
 export interface WildcardPreviewResult {
@@ -51,6 +52,8 @@ export function WildcardPreviewModal({
   onParsePreview,
   onCopyResult,
 }: WildcardPreviewModalProps) {
+  const { t } = useI18n()
+
   return (
     <SettingsModal
       open={open}
@@ -58,14 +61,14 @@ export function WildcardPreviewModal({
       title={(
         <span className="flex items-center gap-2">
           <WandSparkles className="h-4 w-4 text-primary" />
-          파싱 테스트
+          {t('image-generation.components.wildcard.generation.panel.parsing.test')}
         </span>
       )}
       widthClassName="max-w-4xl"
     >
       <div className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
-          <Input value={selectedWildcardSyntax} readOnly placeholder={`선택한 ${selectedWildcardSyntaxLabel}`} />
+          <Input value={selectedWildcardSyntax} readOnly placeholder={t({ ko: '선택한 {label}', en: 'Selected {label}' }, { label: selectedWildcardSyntaxLabel })} />
           <Select value={previewTool} onChange={(event) => onPreviewToolChange(event.target.value as WildcardTool | 'codex')}>
             <option value="general">General</option>
             <option value="nai">NAI</option>
@@ -73,9 +76,9 @@ export function WildcardPreviewModal({
             <option value="codex">Codex</option>
           </Select>
           <Select value={previewCount} onChange={(event) => onPreviewCountChange(event.target.value)}>
-            <option value="3">3개</option>
-            <option value="5">5개</option>
-            <option value="10">10개</option>
+            <option value="3">{t('image-generation.components.wildcard.preview.modal.3.items')}</option>
+            <option value="5">{t('image-generation.components.wildcard.preview.modal.5.items')}</option>
+            <option value="10">{t('image-generation.components.wildcard.preview.modal.10.items')}</option>
           </Select>
         </div>
 
@@ -83,23 +86,23 @@ export function WildcardPreviewModal({
           value={previewText}
           onChange={(event) => onPreviewTextChange(event.target.value)}
           rows={5}
-          placeholder="예: masterpiece, character_pose, ++lighting_style++, cinematic lighting"
+          placeholder={t('image-generation.components.wildcard.preview.modal.e.g.masterpiece.character.pose.lighting.style')}
         />
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={onFillSelectedSyntax} disabled={!selectedWildcardSyntax}>
             <Braces className="h-4 w-4" />
-            선택 항목 넣기
+            {t({ ko: '선택 항목 넣기', en: 'Insert selection' })}
           </Button>
           <Button type="button" onClick={onParsePreview} disabled={isParsing || previewText.trim().length === 0}>
             <Sparkles className="h-4 w-4" />
-            {isParsing ? '테스트 중…' : '테스트'}
+            {isParsing ? t('image-generation.components.wildcard.preview.modal.testing') : t('image-generation.components.wildcard.preview.modal.test')}
           </Button>
         </div>
 
         {parseErrorMessage ? (
           <Alert variant="destructive">
-            <AlertTitle>테스트 실패</AlertTitle>
+            <AlertTitle>{t('image-generation.components.wildcard.preview.modal.test.failed')}</AlertTitle>
             <AlertDescription>{parseErrorMessage}</AlertDescription>
           </Alert>
         ) : null}
@@ -107,20 +110,20 @@ export function WildcardPreviewModal({
         {parseResult ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline">used</Badge>
+              <Badge variant="outline">{t({ ko: '사용됨', en: 'Used' })}</Badge>
               {parseResult.usedWildcards.length > 0
                 ? parseResult.usedWildcards.map((name) => <Badge key={name} variant="outline">{name}</Badge>)
-                : <span>감지된 와일드카드가 없어.</span>}
+                : <span>{t('image-generation.components.wildcard.preview.modal.no.wildcards.detected')}</span>}
             </div>
 
             <div className="space-y-2">
               {parseResult.results.map((result, index) => (
                 <div key={`${index}:${result}`} className="rounded-sm border border-border bg-surface-low p-3 text-sm text-muted-foreground">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs uppercase tracking-[0.18em]">sample {index + 1}</div>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => onCopyResult(result, `프리뷰 결과 ${index + 1}`)}>
+                    <div className="text-xs uppercase tracking-[0.18em]">{t({ ko: '샘플 {count}', en: 'Sample {count}' }, { count: index + 1 })}</div>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => onCopyResult(result, t({ ko: '프리뷰 결과 {count}', en: 'Preview result {count}' }, { count: index + 1 }))}>
                       <Copy className="h-4 w-4" />
-                      복사
+                      {t({ ko: '복사', en: 'Copy' })}
                     </Button>
                   </div>
                   <div className="mt-2 break-words whitespace-pre-wrap text-foreground">{result}</div>

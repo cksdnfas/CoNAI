@@ -1,7 +1,7 @@
 /**
  * Supported languages for internationalization
  */
-export type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh-CN' | 'zh-TW';
+export type SupportedLanguage = 'ko' | 'en';
 
 /**
  * Language metadata for UI display
@@ -51,7 +51,4 @@ export interface GeneralSettings {
 export const SUPPORTED_LANGUAGES: LanguageInfo[] = [
   { code: 'ko', name: '한국어', englishName: 'Korean' },
   { code: 'en', name: 'English', englishName: 'English' },
-  { code: 'ja', name: '日本語', englishName: 'Japanese' },
-  { code: 'zh-CN', name: '简体中文', englishName: 'Chinese (Simplified)' },
-  { code: 'zh-TW', name: '繁體中文', englishName: 'Chinese (Traditional)' },
 ];

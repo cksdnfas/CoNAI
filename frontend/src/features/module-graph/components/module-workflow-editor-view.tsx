@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { FloatingBottomAction } from '@/components/ui/floating-bottom-action'
 import { Badge } from '@/components/ui/badge'
 import { SectionHeading } from '@/components/common/section-heading'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 interface ModuleWorkflowEditorViewProps {
@@ -48,6 +49,7 @@ function WorkflowValidationQuickPopup({
   onIssueSelect: (issue: WorkflowValidationIssue) => void
   onClose: () => void
 }) {
+  const { t, formatNumber } = useI18n()
   const errorCount = issues.filter((issue) => issue.severity === 'error').length
   const warningCount = issues.filter((issue) => issue.severity === 'warning').length
 
@@ -55,24 +57,24 @@ function WorkflowValidationQuickPopup({
     <div className="w-[min(360px,calc(100vw-2rem))] p-3">
       <div className="flex items-center justify-between gap-2 border-b border-border/70 pb-2">
         <div>
-          <div className="text-xs font-semibold tracking-[0.08em] text-muted-foreground">편집기 검증</div>
+          <div className="text-xs font-semibold tracking-[0.08em] text-muted-foreground">{t({ ko: '편집기 검증', en: 'Editor validation' })}</div>
           <div className="mt-1 text-sm font-medium text-foreground">
-            {errorCount > 0 ? '막히는 치명 이슈가 있어.' : warningCount > 0 ? '저장 전 확인할 경고가 있어.' : '지금 상태 좋아. 저장 진행해도 돼.'}
+            {errorCount > 0 ? t({ ko: '막히는 치명 이슈가 있어.', en: 'There is a blocking critical issue.' }) : warningCount > 0 ? t({ ko: '저장 전 확인할 경고가 있어.', en: 'There are warnings to review before saving.' }) : t({ ko: '지금 상태 좋아. 저장 진행해도 돼.', en: 'Everything looks good. You can save now.' })}
           </div>
         </div>
-        <Button type="button" size="icon-xs" variant="ghost" onClick={onClose} aria-label="검증 팝업 닫기" title="닫기">
+        <Button type="button" size="icon-xs" variant="ghost" onClick={onClose} aria-label={t({ ko: '검증 팝업 닫기', en: 'Close validation popup' })} title={t({ ko: '닫기', en: 'Close' })}>
           <span className="text-xs">✕</span>
         </Button>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-xs">
-        <Badge variant={errorCount > 0 ? 'outline' : 'secondary'}>{errorCount > 0 ? `치명 ${errorCount}` : 'ready'}</Badge>
-        {warningCount > 0 ? <Badge variant="outline">경고 {warningCount}</Badge> : null}
+        <Badge variant={errorCount > 0 ? 'outline' : 'secondary'}>{errorCount > 0 ? t({ ko: '치명 {count}', en: 'Critical {count}' }, { count: formatNumber(errorCount) }) : 'ready'}</Badge>
+        {warningCount > 0 ? <Badge variant="outline">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningCount) })}</Badge> : null}
       </div>
 
       {issues.length === 0 ? (
         <div className="mt-3 rounded-sm border border-border bg-surface-low px-3 py-2 text-sm text-muted-foreground">
-          막히는 이슈는 없어. 저장 전에 이름이랑 폴더만 확인하면 돼.
+          {t({ ko: '막히는 이슈는 없어. 저장 전에 이름이랑 폴더만 확인하면 돼.', en: 'There are no blocking issues. Just confirm the name and folder before saving.' })}
         </div>
       ) : (
         <div className="mt-3 space-y-2">
@@ -91,7 +93,7 @@ function WorkflowValidationQuickPopup({
             >
               <div className="flex flex-wrap items-center gap-2">
                 <div className="text-sm font-medium text-foreground">{issue.title}</div>
-                <Badge variant={issue.severity === 'error' ? 'outline' : 'secondary'}>{issue.severity === 'error' ? '치명' : '경고'}</Badge>
+                <Badge variant={issue.severity === 'error' ? 'outline' : 'secondary'}>{issue.severity === 'error' ? t({ ko: '치명', en: 'Critical' }) : t({ ko: '경고', en: 'Warning' })}</Badge>
                 <Badge variant="secondary">{issue.nodeLabel}</Badge>
               </div>
               <div className="mt-1 text-xs text-muted-foreground">{issue.detail}</div>
@@ -103,27 +105,27 @@ function WorkflowValidationQuickPopup({
   )
 }
 
-function getValidationStatus(issues: WorkflowValidationIssue[]) {
+function getValidationStatus(issues: WorkflowValidationIssue[], t: ReturnType<typeof useI18n>['t'], formatNumber: ReturnType<typeof useI18n>['formatNumber']) {
   const errorCount = issues.filter((issue) => issue.severity === 'error').length
   const warningCount = issues.filter((issue) => issue.severity === 'warning').length
 
   if (errorCount > 0) {
     return {
       tone: 'error' as ValidationStatusTone,
-      title: `검증 치명 이슈 ${errorCount}개`,
+      title: t({ ko: '검증 치명 이슈 {count}개', en: 'Validation critical issues {count}' }, { count: formatNumber(errorCount) }),
     }
   }
 
   if (warningCount > 0) {
     return {
       tone: 'warning' as ValidationStatusTone,
-      title: `검증 경고 ${warningCount}개`,
+      title: t({ ko: '검증 경고 {count}개', en: 'Validation warnings {count}' }, { count: formatNumber(warningCount) }),
     }
   }
 
   return {
     tone: 'ready' as ValidationStatusTone,
-    title: '검증 완료',
+    title: t({ ko: '검증 완료', en: 'Validation complete' }),
   }
 }
 
@@ -154,9 +156,10 @@ export function ModuleWorkflowEditorView({
   hasSelectedNode,
   hasSelectedEdge,
 }: ModuleWorkflowEditorViewProps) {
+  const { t, formatNumber } = useI18n()
   const [isValidationPopupOpen, setIsValidationPopupOpen] = useState(false)
   const validationPopupRef = useRef<HTMLDivElement | null>(null)
-  const validationStatus = useMemo(() => getValidationStatus(validationIssues), [validationIssues])
+  const validationStatus = useMemo(() => getValidationStatus(validationIssues, t, formatNumber), [formatNumber, t, validationIssues])
 
   return (
     <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
@@ -170,7 +173,7 @@ export function ModuleWorkflowEditorView({
               heading={
                 <span className="flex items-center gap-2 text-sm font-semibold">
                   <Boxes className="h-4 w-4 text-primary" />
-                  Workflow Graph
+                  {t({ ko: '워크플로우 그래프', en: 'Workflow Graph' })}
                 </span>
               }
               actions={
@@ -180,11 +183,11 @@ export function ModuleWorkflowEditorView({
                     size="sm"
                     variant="outline"
                     onClick={onOpenSaveModal}
-                    aria-label="워크플로우 저장"
-                    title="워크플로우 저장"
+                    aria-label={t({ ko: '워크플로우 저장', en: 'Save workflow' })}
+                    title={t({ ko: '워크플로우 저장', en: 'Save workflow' })}
                   >
                     <Save className="h-4 w-4" />
-                    저장
+                    {t({ ko: '저장', en: 'Save' })}
                   </Button>
                   <Button
                     type="button"
@@ -192,10 +195,10 @@ export function ModuleWorkflowEditorView({
                     variant={workflowDebugMode ? 'default' : 'outline'}
                     onClick={onWorkflowDebugModeToggle}
                     aria-pressed={workflowDebugMode}
-                    aria-label={workflowDebugMode ? '워크플로우 디버그 모드 끄기' : '워크플로우 디버그 모드 켜기'}
-                    title="워크플로우 디버그 모드"
+                    aria-label={workflowDebugMode ? t({ ko: '워크플로우 디버그 모드 끄기', en: 'Turn off workflow debug mode' }) : t({ ko: '워크플로우 디버그 모드 켜기', en: 'Turn on workflow debug mode' })}
+                    title={t({ ko: '워크플로우 디버그 모드', en: 'Workflow debug mode' })}
                   >
-                    디버그 {workflowDebugMode ? 'ON' : 'OFF'}
+                    {t({ ko: '디버그', en: 'Debug' })} {workflowDebugMode ? 'ON' : 'OFF'}
                   </Button>
                   <div ref={validationPopupRef} className="relative">
                     <Button
@@ -227,8 +230,8 @@ export function ModuleWorkflowEditorView({
                     size="icon-sm"
                     variant="outline"
                     onClick={onOpenModuleLibrary}
-                    aria-label="모듈 추가"
-                    title="모듈 추가"
+                    aria-label={t({ ko: '모듈 추가', en: 'Add module' })}
+                    title={t({ ko: '모듈 추가', en: 'Add module' })}
                   >
                     <Boxes className="h-4 w-4" />
                   </Button>
@@ -238,8 +241,8 @@ export function ModuleWorkflowEditorView({
                     variant="outline"
                     onClick={onAutoLayout}
                     disabled={nodesCount === 0}
-                    aria-label="자동 정렬"
-                    title="자동 정렬"
+                    aria-label={t({ ko: '자동 정렬', en: 'Auto layout' })}
+                    title={t({ ko: '자동 정렬', en: 'Auto layout' })}
                   >
                     <Workflow className="h-4 w-4" />
                   </Button>
@@ -249,8 +252,8 @@ export function ModuleWorkflowEditorView({
                     variant="outline"
                     onClick={onDuplicateSelectedNode}
                     disabled={!hasSelectedNode}
-                    aria-label="노드 복제"
-                    title="노드 복제"
+                    aria-label={t({ ko: '노드 복제', en: 'Duplicate node' })}
+                    title={t({ ko: '노드 복제', en: 'Duplicate node' })}
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
@@ -261,8 +264,8 @@ export function ModuleWorkflowEditorView({
                     className="ml-1 border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
                     onClick={onRemoveSelectedNode}
                     disabled={!hasSelectedNode}
-                    aria-label="노드 삭제"
-                    title="노드 삭제"
+                    aria-label={t({ ko: '노드 삭제', en: 'Delete node' })}
+                    title={t({ ko: '노드 삭제', en: 'Delete node' })}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -273,8 +276,8 @@ export function ModuleWorkflowEditorView({
                     className="border-rose-500/30 text-rose-200 hover:bg-rose-500/10 hover:text-rose-100"
                     onClick={onRemoveSelectedEdge}
                     disabled={!hasSelectedEdge}
-                    aria-label="엣지 삭제"
-                    title="엣지 삭제"
+                    aria-label={t({ ko: '엣지 삭제', en: 'Delete edge' })}
+                    title={t({ ko: '엣지 삭제', en: 'Delete edge' })}
                   >
                     <Unplug className="h-4 w-4" />
                   </Button>
@@ -284,8 +287,8 @@ export function ModuleWorkflowEditorView({
                     variant="outline"
                     className="ml-2 border-amber-500/30 text-amber-200 hover:bg-amber-500/10 hover:text-amber-100"
                     onClick={onResetCanvas}
-                    aria-label="초기화"
-                    title="초기화"
+                    aria-label={t({ ko: '초기화', en: 'Reset' })}
+                    title={t({ ko: '초기화', en: 'Reset' })}
                   >
                     <RotateCcw className="h-4 w-4" />
                   </Button>
@@ -299,14 +302,14 @@ export function ModuleWorkflowEditorView({
 
         <FloatingBottomAction type="button" onClick={onOpenEditorSupport}>
           <SlidersHorizontal className="h-4 w-4" />
-          Execution Results
+          {t({ ko: '실행 결과', en: 'Execution Results' })}
         </FloatingBottomAction>
 
         <BottomDrawerSheet
           open={isEditorSupportOpen}
           title={editorSupportTitle}
           subtitle={editorSupportSubtitle}
-          ariaLabel="워크플로우 실행 결과"
+          ariaLabel={t({ ko: '워크플로우 실행 결과', en: 'Workflow execution results' })}
           onClose={onCloseEditorSupport}
           surfaceVariant="controller"
           className={isDesktopPageLayout ? 'inset-x-auto left-1/2 w-[min(80vw,1400px)] -translate-x-1/2' : undefined}

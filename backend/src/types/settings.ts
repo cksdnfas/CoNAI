@@ -1,4 +1,4 @@
-export type SupportedLanguage = 'ko' | 'en' | 'ja' | 'zh-CN' | 'zh-TW';
+export type SupportedLanguage = 'ko' | 'en';
 
 export interface DeleteProtectionSettings {
   enabled: boolean;

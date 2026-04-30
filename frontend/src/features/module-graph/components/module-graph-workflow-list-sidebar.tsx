@@ -1,5 +1,6 @@
 import { ArrowLeft, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api'
 import { SavedGraphList } from './saved-graph-list'
 
@@ -43,6 +44,8 @@ export function ModuleGraphWorkflowListSidebar({
   onDeleteWorkflow: () => void
   onDeleteFolder: (folderId: number) => void
 }) {
+  const { t } = useI18n()
+
   return (
     <SavedGraphList
       graphs={graphs}
@@ -60,8 +63,8 @@ export function ModuleGraphWorkflowListSidebar({
             variant="outline"
             className="bg-surface-low"
             onClick={onLeaveEditor}
-            aria-label="목록으로"
-            title="목록으로"
+            aria-label={t({ ko: '목록으로', en: 'Back to list' })}
+            title={t({ ko: '목록으로', en: 'Back to list' })}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -75,8 +78,8 @@ export function ModuleGraphWorkflowListSidebar({
             variant="outline"
             className="bg-surface-low"
             onClick={onRefreshWorkspace}
-            aria-label="새로고침"
-            title="새로고침"
+            aria-label={t({ ko: '새로고침', en: 'Refresh' })}
+            title={t({ ko: '새로고침', en: 'Refresh' })}
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -99,8 +102,8 @@ export function ModuleGraphWorkflowListSidebar({
             variant="outline"
             className="bg-surface-low"
             onClick={onCreateWorkflow}
-            aria-label="새 워크플로우"
-            title="새 워크플로우"
+            aria-label={t({ ko: '새 워크플로우', en: 'New workflow' })}
+            title={t({ ko: '새 워크플로우', en: 'New workflow' })}
           >
             <Plus className="h-4 w-4" />
           </Button>
@@ -111,8 +114,8 @@ export function ModuleGraphWorkflowListSidebar({
               variant="outline"
               className="bg-surface-low"
               onClick={onEditWorkflow}
-              aria-label="워크플로우 편집"
-              title="워크플로우 편집"
+              aria-label={t({ ko: '워크플로우 편집', en: 'Edit workflow' })}
+              title={t({ ko: '워크플로우 편집', en: 'Edit workflow' })}
             >
               <PenSquare className="h-4 w-4" />
             </Button>
@@ -124,8 +127,8 @@ export function ModuleGraphWorkflowListSidebar({
               variant="outline"
               className="bg-surface-low"
               onClick={onDeleteWorkflow}
-              aria-label="워크플로우 삭제"
-              title="워크플로우 삭제"
+              aria-label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}
+              title={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -137,8 +140,8 @@ export function ModuleGraphWorkflowListSidebar({
               variant="outline"
               className="bg-surface-low"
               onClick={() => onDeleteFolder(selectedFolderRecord.id)}
-              aria-label="폴더 삭제"
-              title="폴더 삭제"
+              aria-label={t({ ko: '폴더 삭제', en: 'Delete folder' })}
+              title={t({ ko: '폴더 삭제', en: 'Delete folder' })}
             >
               <Trash2 className="h-4 w-4" />
             </Button>

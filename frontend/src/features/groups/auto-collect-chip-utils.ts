@@ -15,11 +15,13 @@ interface ComplexFilterLike {
   and_group?: FilterConditionLike[]
 }
 
+export type AutoCollectChipWarning = 'unsupported-condition' | 'parse-error'
+
 export interface ParsedAutoCollectChipState {
   initialMode: 'chip' | 'json'
   chips: SearchChip[]
   jsonText: string
-  warningMessage: string | null
+  warningMessage: AutoCollectChipWarning | null
 }
 
 /** Convert a supported auto-collect condition into the shared search-chip shape. */
@@ -74,7 +76,6 @@ function buildSearchChipFromCondition(condition: FilterConditionLike, operator: 
     value,
     minScore: condition.min_score,
     maxScore: condition.max_score,
-    scopeLabel: scope === 'model' ? '모델' : scope === 'lora' ? 'LoRA' : undefined,
     conditionCategory: condition.category,
     conditionType: condition.type,
   }
@@ -124,7 +125,7 @@ export function parseAutoCollectChipState(autoCollectJsonText?: string | null): 
           initialMode: 'json',
           chips: [],
           jsonText,
-          warningMessage: '기존 자동수집 규칙에 칩 편집기로 표현 못 하는 조건이 있어서 JSON 직접 편집 모드로 열었어.',
+          warningMessage: 'unsupported-condition',
         }
       }
 
@@ -142,7 +143,7 @@ export function parseAutoCollectChipState(autoCollectJsonText?: string | null): 
         initialMode: 'json',
         chips: [],
         jsonText: JSON.stringify(parsedValue, null, 2),
-        warningMessage: '기존 자동수집 규칙에 칩 편집기로 표현 못 하는 조건이 있어서 JSON 직접 편집 모드로 열었어.',
+        warningMessage: 'unsupported-condition',
       }
     }
 
@@ -157,7 +158,7 @@ export function parseAutoCollectChipState(autoCollectJsonText?: string | null): 
       initialMode: 'json',
       chips: [],
       jsonText,
-      warningMessage: '저장된 자동수집 JSON을 파싱하지 못해서 직접 편집 모드로 열었어.',
+      warningMessage: 'parse-error',
     }
   }
 }

@@ -34,7 +34,7 @@ export function GroupExplorerSidebarPanel({
 
   return (
     <ExplorerSidebar
-      title="Explorer"
+      title={t({ ko: '탐색기', en: 'Explorer' })}
       badge={<Badge variant="outline">{formatNumber(groups.length)}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:groups:sidebar-locked"

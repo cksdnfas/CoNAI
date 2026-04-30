@@ -19,10 +19,13 @@ ensureEnvFileExists(rootEnvPath);
 dotenv.config({ path: rootEnvPath, quiet: true });
 console.log(`[Config] Loaded environment from: ${rootEnvPath}`);
 
+const normalizedNodeEnv = process.env.NODE_ENV?.trim().toLowerCase();
+const isDevelopmentEnvironment = normalizedNodeEnv === 'development';
+const isProductionEnvironment = !isDevelopmentEnvironment;
 
 // Configure NODE_PATH for native modules in SEA (Single Executable Application)
 // This must be done before any imports that depend on native modules
-if (process.env.NODE_ENV === 'production' || isPackagedRuntime()) {
+if (isProductionEnvironment || isPackagedRuntime()) {
   const nativeModulesPath = path.join(__dirname, '..', 'node_modules');
   if (require('fs').existsSync(nativeModulesPath)) {
     process.env.NODE_PATH = nativeModulesPath;
@@ -61,7 +64,7 @@ import { startRuntimeSideEffectServices } from './startup/startRuntimeSideEffect
 
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
-const isDevelopment = process.env.NODE_ENV !== 'production';
+const isDevelopment = isDevelopmentEnvironment;
 const isSafeSmokeMode = process.env.SAFE_SMOKE_MODE === 'true';
 
 /** Resolve the Express trust-proxy setting for direct and proxied deployments. */

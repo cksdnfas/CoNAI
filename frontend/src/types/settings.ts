@@ -17,7 +17,7 @@ export interface DeleteProtectionSettings {
 }
 
 export interface GeneralSettings {
-  language: 'ko' | 'en' | 'ja' | 'zh-CN' | 'zh-TW'
+  language: 'ko' | 'en'
   deleteProtection: DeleteProtectionSettings
   enableGallery?: boolean
   autoCleanupCanvasOnShutdown?: boolean

@@ -10,6 +10,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getAppSettings, getModuleDefinitions } from '@/lib/api'
 import { createGenerationQueueJob, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { createCodexModuleFromSnapshot } from '@/lib/api-module-graph'
+import { useI18n } from '@/i18n'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
 import { buildModuleExposedFields, buildModuleUiSchema, FormField, getErrorMessage, type ModuleFieldOption, type SelectedImageDraft } from '../image-generation-shared'
@@ -66,14 +67,6 @@ const DEFAULT_CODEX_FORM: CodexFormDraft = {
 }
 
 const DEFAULT_CODEX_MODULE_FIELD_KEYS = ['prompt', 'negative_prompt', 'aspect_ratio', 'resolution']
-const CODEX_MODULE_FIELD_OPTIONS: ModuleFieldOption[] = [
-  { key: 'prompt', label: '프롬프트', dataType: 'prompt' },
-  { key: 'negative_prompt', label: '네거티브 프롬프트', dataType: 'prompt' },
-  { key: 'aspect_ratio', label: '비율', dataType: 'text', options: CODEX_ASPECT_RATIO_OPTIONS.map((option) => option.value) },
-  { key: 'resolution', label: '해상도', dataType: 'text', options: CODEX_RESOLUTION_OPTIONS.map((option) => option.value) },
-  { key: 'image', label: '참조 이미지', dataType: 'image' },
-  { key: 'mask', label: '마스크 이미지', dataType: 'mask' },
-]
 
 type PersistedCodexFormDraft = Pick<CodexFormDraft, 'prompt' | 'negativePrompt' | 'count' | 'aspectRatio' | 'resolution'>
 
@@ -192,10 +185,11 @@ export function CodexGenerationPanel({
 }: CodexGenerationPanelProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
   const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
-  const [codexModuleName, setCodexModuleName] = useState('Codex 모듈')
+  const [codexModuleName, setCodexModuleName] = useState(() => t({ ko: 'Codex 모듈', en: 'Codex module' }))
   const [codexModuleDescription, setCodexModuleDescription] = useState('')
   const [codexExposedFieldKeys, setCodexExposedFieldKeys] = useState<string[]>(DEFAULT_CODEX_MODULE_FIELD_KEYS)
   const [codexOverwriteModuleId, setCodexOverwriteModuleId] = useState<number | null>(null)
@@ -222,6 +216,15 @@ export function CodexGenerationPanel({
     () => (moduleDefinitionsQuery.data ?? []).filter((module) => module.engine_type === 'codex' && module.authoring_source === 'codex_form_snapshot'),
     [moduleDefinitionsQuery.data],
   )
+
+  const codexModuleFieldOptions = useMemo<ModuleFieldOption[]>(() => [
+    { key: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), dataType: 'prompt' },
+    { key: 'negative_prompt', label: t({ ko: '네거티브 프롬프트', en: 'Negative prompt' }), dataType: 'prompt' },
+    { key: 'aspect_ratio', label: t({ ko: '비율', en: 'Aspect ratio' }), dataType: 'text', options: CODEX_ASPECT_RATIO_OPTIONS.map((option) => option.value) },
+    { key: 'resolution', label: t({ ko: '해상도', en: 'Resolution' }), dataType: 'text', options: CODEX_RESOLUTION_OPTIONS.map((option) => option.value) },
+    { key: 'image', label: t({ ko: '참조 이미지', en: 'Reference image' }), dataType: 'image' },
+    { key: 'mask', label: t({ ko: '마스크 이미지', en: 'Mask image' }), dataType: 'mask' },
+  ], [t])
 
   const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
 
@@ -266,7 +269,7 @@ export function CodexGenerationPanel({
 
   const queueCount = useMemo(() => clampCodexCount(codexForm.count), [codexForm.count])
   const outputSize = useMemo(() => resolveCodexSize(codexForm.aspectRatio, codexForm.resolution), [codexForm.aspectRatio, codexForm.resolution])
-  const outputSizeHint = codexForm.aspectRatio === 'random' ? '랜덤 비율' : outputSize
+  const outputSizeHint = codexForm.aspectRatio === 'random' ? t({ ko: '랜덤 비율', en: 'Random ratio' }) : outputSize
   const useDrawerCompactChrome = Boolean(headerPortalTargetId)
   const headerPortalTarget = headerPortalTargetId && typeof document !== 'undefined'
     ? document.getElementById(headerPortalTargetId)
@@ -281,16 +284,16 @@ export function CodexGenerationPanel({
   const useInlineActionBar = splitPaneScroll
 
   const generateButtonLabel = isSubmitting
-    ? '큐 등록 중…'
+    ? t({ ko: '큐 등록 중…', en: 'Adding to queue…' })
     : codexStatusQuery.isPending
-      ? '상태 확인 중…'
+      ? t({ ko: '상태 확인 중…', en: 'Checking status…' })
       : codexStatusQuery.isError
-        ? '재확인 후 생성'
+        ? t({ ko: '재확인 후 생성', en: 'Check again and generate' })
         : codexStatus?.available
-          ? '생성'
+          ? t({ ko: '생성', en: 'Generate' })
           : codexStatus?.installed
-            ? '로그인 확인 후 생성'
-            : 'Codex 확인 후 생성'
+            ? t({ ko: '로그인 확인 후 생성', en: 'Check login and generate' })
+            : t({ ko: 'Codex 확인 후 생성', en: 'Check Codex and generate' })
 
   const handleFieldChange = <K extends keyof CodexFormDraft>(field: K, value: CodexFormDraft[K]) => {
     setCodexForm((current) => ({
@@ -304,7 +307,7 @@ export function CodexGenerationPanel({
   }
 
   const handleOpenModuleSave = () => {
-    setCodexModuleName((current) => current.trim().length > 0 ? current : 'Codex 모듈')
+    setCodexModuleName((current) => current.trim().length > 0 ? current : t({ ko: 'Codex 모듈', en: 'Codex module' }))
     setIsModuleSaveModalOpen(true)
   }
 
@@ -316,15 +319,15 @@ export function CodexGenerationPanel({
     }
 
     if (codexExposedFieldKeys.length === 0) {
-      showSnackbar({ message: '최소 1개는 입력 가능 필드로 열어줘.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '최소 1개는 입력 가능 필드로 열어줘.', en: 'Expose at least one editable field.' }), tone: 'error' })
       return
     }
 
     try {
       setIsSavingCodexModule(true)
       const snapshot = buildCodexModuleSnapshot(codexForm)
-      const exposedFields = buildModuleExposedFields(CODEX_MODULE_FIELD_OPTIONS, codexExposedFieldKeys)
-      const uiSchema = buildModuleUiSchema(CODEX_MODULE_FIELD_OPTIONS, snapshot, codexExposedFieldKeys)
+      const exposedFields = buildModuleExposedFields(codexModuleFieldOptions, codexExposedFieldKeys)
+      const uiSchema = buildModuleUiSchema(codexModuleFieldOptions, snapshot, codexExposedFieldKeys)
 
       await createCodexModuleFromSnapshot({
         name: moduleName,
@@ -338,9 +341,9 @@ export function CodexGenerationPanel({
       setIsModuleSaveModalOpen(false)
       setCodexOverwriteModuleId(null)
       void moduleDefinitionsQuery.refetch()
-      showSnackbar({ message: codexOverwriteModuleId ? '현재 Codex 설정으로 기존 모듈을 덮어썼어.' : '현재 Codex 설정을 모듈로 저장했어.', tone: 'info' })
+      showSnackbar({ message: codexOverwriteModuleId ? t({ ko: '현재 Codex 설정으로 기존 모듈을 덮어썼어.', en: 'Overwrote the existing module with the current Codex settings.' }) : t({ ko: '현재 Codex 설정을 모듈로 저장했어.', en: 'Saved the current Codex settings as a module.' }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'Codex 모듈 저장에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: 'Codex 모듈 저장에 실패했어.', en: 'Failed to save the Codex module.' })), tone: 'error' })
     } finally {
       setIsSavingCodexModule(false)
     }
@@ -354,7 +357,7 @@ export function CodexGenerationPanel({
     if (codexStatusQuery.isSuccess && !codexStatus?.available) {
       const codexInstalled = codexStatus?.installed ?? false
       showSnackbar({
-        message: codexInstalled ? 'Codex 로그인 상태부터 확인해줘.' : '이 서버에서 Codex를 아직 바로 쓸 수 없는 상태야.',
+        message: codexInstalled ? t({ ko: 'Codex 로그인 상태부터 확인해줘.', en: 'Check the Codex login status first.' }) : t({ ko: '이 서버에서 Codex를 아직 바로 쓸 수 없는 상태야.', en: 'Codex is not ready to use directly on this server yet.' }),
         tone: 'error',
       })
       return
@@ -363,12 +366,12 @@ export function CodexGenerationPanel({
     const prompt = codexForm.prompt.trim()
 
     if (prompt.length === 0) {
-      showSnackbar({ message: 'Codex 프롬프트를 먼저 넣어줘.', tone: 'error' })
+      showSnackbar({ message: t({ ko: 'Codex 프롬프트를 먼저 넣어줘.', en: 'Enter a Codex prompt first.' }), tone: 'error' })
       return
     }
 
     if (codexForm.maskImage && !codexForm.referenceImage) {
-      showSnackbar({ message: '마스크를 쓰려면 먼저 참조 이미지를 넣어줘.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '마스크를 쓰려면 먼저 참조 이미지를 넣어줘.', en: 'Choose a reference image before using a mask.' }), tone: 'error' })
       return
     }
 
@@ -396,9 +399,9 @@ export function CodexGenerationPanel({
       })
 
       await refreshGenerationQueueViews(queryClient, onHistoryRefresh)
-      showSnackbar({ message: response.message || 'Codex 큐에 생성 작업을 넣었어.', tone: 'info' })
+      showSnackbar({ message: response.message || t({ ko: 'Codex 큐에 생성 작업을 넣었어.', en: 'Added the Codex generation job to the queue.' }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'Codex 이미지 생성에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: 'Codex 이미지 생성에 실패했어.', en: 'Failed to generate the Codex image.' })), tone: 'error' })
     } finally {
       setIsSubmitting(false)
     }
@@ -416,8 +419,8 @@ export function CodexGenerationPanel({
           size="icon-sm"
           onClick={handleOpenModuleSave}
           disabled={isSubmitting || isSavingCodexModule}
-          aria-label="모듈 저장"
-          title="모듈 저장"
+          aria-label={t({ ko: '모듈 저장', en: 'Save module' })}
+          title={t({ ko: '모듈 저장', en: 'Save module' })}
         >
           <Save className="h-4 w-4" />
         </Button>
@@ -428,13 +431,13 @@ export function CodexGenerationPanel({
             size="icon-sm"
             onClick={() => void codexStatusQuery.refetch()}
             disabled={codexStatusQuery.isPending}
-            aria-label="Codex 상태 재확인"
-            title="Codex 상태 재확인"
+            aria-label={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
+            title={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
           >
             <RefreshCw className={cn('h-4 w-4', codexStatusQuery.isPending && 'animate-spin')} />
           </Button>
         ) : null}
-        <Button type="button" variant="ghost" size="icon-sm" onClick={handleReset} disabled={isSubmitting} aria-label="초기화" title="초기화">
+        <Button type="button" variant="ghost" size="icon-sm" onClick={handleReset} disabled={isSubmitting} aria-label={t({ ko: '초기화', en: 'Reset' })} title={t({ ko: '초기화', en: 'Reset' })}>
           <RotateCcw className="h-4 w-4" />
         </Button>
       </div>
@@ -447,8 +450,8 @@ export function CodexGenerationPanel({
       size={showGenerateLabel ? 'sm' : 'icon-sm'}
       onClick={() => void handleGenerate()}
       disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
-      aria-label={showGenerateLabel ? generateButtonLabel : (isSubmitting ? '큐 등록 중' : '큐에 추가')}
-      title={showGenerateLabel ? generateButtonLabel : (isSubmitting ? '큐 등록 중' : '큐에 추가')}
+      aria-label={showGenerateLabel ? generateButtonLabel : (isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' }))}
+      title={showGenerateLabel ? generateButtonLabel : (isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' }))}
     >
       <Sparkles className="h-4 w-4" />
       {showGenerateLabel ? generateButtonLabel : null}
@@ -467,7 +470,7 @@ export function CodexGenerationPanel({
         value={codexForm.count}
         onChange={(value) => handleFieldChange('count', value)}
         disabled={isSubmitting}
-        aria-label="큐 등록 개수"
+        aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
         inputMode="numeric"
       />
 
@@ -477,8 +480,8 @@ export function CodexGenerationPanel({
         size="icon-sm"
         onClick={handleOpenModuleSave}
         disabled={isSubmitting || isSavingCodexModule}
-        aria-label="모듈 저장"
-        title="모듈 저장"
+        aria-label={t({ ko: '모듈 저장', en: 'Save module' })}
+        title={t({ ko: '모듈 저장', en: 'Save module' })}
         className="rounded-none border-r border-border/70 shadow-none"
       >
         <Save className="h-4 w-4" />
@@ -491,8 +494,8 @@ export function CodexGenerationPanel({
           size="icon-sm"
           onClick={() => void codexStatusQuery.refetch()}
           disabled={codexStatusQuery.isPending}
-          aria-label="Codex 상태 재확인"
-          title="Codex 상태 재확인"
+          aria-label={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
+          title={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
           className="rounded-none border-l border-border/70 shadow-none"
         >
           <RefreshCw className={cn('h-4 w-4', codexStatusQuery.isPending && 'animate-spin')} />
@@ -518,8 +521,8 @@ export function CodexGenerationPanel({
           size="icon-sm"
           onClick={() => void handleGenerate()}
           disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
-          aria-label={isSubmitting ? '큐 등록 중' : '큐에 추가'}
-          title={isSubmitting ? '큐 등록 중' : '큐에 추가'}
+          aria-label={isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' })}
+          title={isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' })}
           className="rounded-none border-l border-border/70 shadow-none"
         >
           <Sparkles className="h-4 w-4" />
@@ -536,8 +539,8 @@ export function CodexGenerationPanel({
         size="icon-sm"
         onClick={handleOpenModuleSave}
         disabled={isSubmitting || isSavingCodexModule}
-        aria-label="모듈 저장"
-        title="모듈 저장"
+        aria-label={t({ ko: '모듈 저장', en: 'Save module' })}
+        title={t({ ko: '모듈 저장', en: 'Save module' })}
       >
         <Save className="h-4 w-4" />
       </Button>
@@ -551,7 +554,7 @@ export function CodexGenerationPanel({
         value={codexForm.count}
         onChange={(value) => handleFieldChange('count', value)}
         disabled={isSubmitting}
-        aria-label="큐 등록 개수"
+        aria-label={t({ ko: '큐 등록 개수', en: 'Queue count' })}
         inputMode="numeric"
       />
       {generateButton}
@@ -603,21 +606,21 @@ export function CodexGenerationPanel({
           onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
         />
 
-        <NaiControllerSection heading="Output">
+        <NaiControllerSection heading={t({ ko: '출력', en: 'Output' })}>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <FormField label="Aspect Ratio">
+            <FormField label={t({ ko: '비율', en: 'Aspect Ratio' })}>
               <Select
                 variant="detail"
                 value={codexForm.aspectRatio}
                 onChange={(event) => handleFieldChange('aspectRatio', event.target.value)}
               >
                 {CODEX_ASPECT_RATIO_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <option key={option.value} value={option.value}>{option.value === 'random' ? t({ ko: '랜덤', en: 'Random' }) : option.label}</option>
                 ))}
               </Select>
             </FormField>
 
-            <FormField label="Resolution" hint={outputSizeHint}>
+            <FormField label={t({ ko: '해상도', en: 'Resolution' })} hint={outputSizeHint}>
               <Select
                 variant="detail"
                 value={codexForm.resolution}
@@ -631,17 +634,17 @@ export function CodexGenerationPanel({
           </div>
         </NaiControllerSection>
 
-        <NaiControllerSection heading="Images">
+        <NaiControllerSection heading={t({ ko: '이미지', en: 'Images' })}>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/40 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-medium text-foreground">Reference Image</div>
-                  <div className="text-xs text-muted-foreground">편집용 입력 이미지</div>
+                  <div className="text-sm font-medium text-foreground">{t({ ko: '참조 이미지', en: 'Reference Image' })}</div>
+                  <div className="text-xs text-muted-foreground">{t({ ko: '편집용 입력 이미지', en: 'Input image for editing' })}</div>
                 </div>
                 <ImageAttachmentPickerButton
-                  label={codexForm.referenceImage ? '교체' : '선택'}
-                  modalTitle="Codex 참조 이미지 선택"
+                  label={codexForm.referenceImage ? t({ ko: '교체', en: 'Replace' }) : t({ ko: '선택', en: 'Select' })}
+                  modalTitle={t({ ko: 'Codex 참조 이미지 선택', en: 'Select Codex reference image' })}
                   onSelect={(image) => {
                     setCodexForm((current) => ({
                       ...current,
@@ -654,10 +657,10 @@ export function CodexGenerationPanel({
 
               {codexForm.referenceImage ? (
                 <div className="space-y-3">
-                  <NaiSelectedImageCard image={codexForm.referenceImage} alt="Codex reference image" />
+                  <NaiSelectedImageCard image={codexForm.referenceImage} alt={t({ ko: 'Codex 참조 이미지', en: 'Codex reference image' })} />
                   <Button type="button" variant="ghost" size="sm" onClick={() => handleFieldChange('referenceImage', undefined)}>
                     <X className="h-4 w-4" />
-                    참조 이미지 제거
+                    {t({ ko: '참조 이미지 제거', en: 'Remove reference image' })}
                   </Button>
                 </div>
               ) : null}
@@ -666,12 +669,12 @@ export function CodexGenerationPanel({
             <div className="space-y-3 rounded-sm border border-border/70 bg-surface-low/40 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-medium text-foreground">Mask Image</div>
-                  <div className="text-xs text-muted-foreground">인페인트 영역 지정</div>
+                  <div className="text-sm font-medium text-foreground">{t({ ko: '마스크 이미지', en: 'Mask Image' })}</div>
+                  <div className="text-xs text-muted-foreground">{t({ ko: '인페인트 영역 지정', en: 'Inpaint area mask' })}</div>
                 </div>
                 <ImageAttachmentPickerButton
-                  label={codexForm.maskImage ? '교체' : '선택'}
-                  modalTitle="Codex 마스크 이미지 선택"
+                  label={codexForm.maskImage ? t({ ko: '교체', en: 'Replace' }) : t({ ko: '선택', en: 'Select' })}
+                  modalTitle={t({ ko: 'Codex 마스크 이미지 선택', en: 'Select Codex mask image' })}
                   disabled={!codexForm.referenceImage}
                   onSelect={(image) => handleFieldChange('maskImage', image)}
                 />
@@ -679,14 +682,14 @@ export function CodexGenerationPanel({
 
               {codexForm.maskImage ? (
                 <div className="space-y-3">
-                  <NaiSelectedImageCard image={codexForm.maskImage} alt="Codex mask image" />
+                  <NaiSelectedImageCard image={codexForm.maskImage} alt={t({ ko: 'Codex 마스크 이미지', en: 'Codex mask image' })} />
                   <Button type="button" variant="ghost" size="sm" onClick={() => handleFieldChange('maskImage', undefined)}>
                     <X className="h-4 w-4" />
-                    마스크 제거
+                    {t({ ko: '마스크 제거', en: 'Remove mask' })}
                   </Button>
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground">참조 이미지를 먼저 선택해.</div>
+                <div className="text-xs text-muted-foreground">{t({ ko: '참조 이미지를 먼저 선택해.', en: 'Choose a reference image first.' })}</div>
               )}
             </div>
           </div>
@@ -701,7 +704,7 @@ export function CodexGenerationPanel({
         open={isModuleSaveModalOpen}
         moduleName={codexModuleName}
         moduleDescription={codexModuleDescription}
-        fieldOptions={CODEX_MODULE_FIELD_OPTIONS}
+        fieldOptions={codexModuleFieldOptions}
         exposedFieldKeys={codexExposedFieldKeys}
         isSaving={isSavingCodexModule}
         overwriteCandidates={codexOverwriteCandidates}

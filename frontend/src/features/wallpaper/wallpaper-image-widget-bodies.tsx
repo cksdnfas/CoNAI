@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { formatDateTime, getArtifactPreviewUrl } from '@/features/module-graph/module-graph-shared'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import type { WallpaperImageTransitionStyle, WallpaperWidgetInstance } from './wallpaper-types'
@@ -133,6 +134,7 @@ function getWallpaperPreviewOpenSettings(widget: WallpaperWidgetInstance) {
 
 /** Render one recent-results widget using the latest graph outputs. */
 export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'recent-results' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
+  const { t } = useI18n()
   const refreshInterval = Math.max(5, widget.settings.refreshIntervalSec) * 1000
   const visibleCount = Math.max(1, Math.min(6, widget.settings.visibleCount))
   const displayMode = widget.settings.displayMode ?? 'grid'
@@ -173,7 +175,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
         }
 
         const execution = executionById.get(finalResult.source_execution_id ?? finalResult.execution_id)
-        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? '워크플로') : '워크플로'
+        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? t({ ko: '워크플로', en: 'Workflow' })) : t({ ko: '워크플로', en: 'Workflow' })
         const previewImage = getWallpaperArtifactPreviewImage(previewUrl, workflowName, finalResult.source_metadata)
         if (!previewImage) {
           return []
@@ -184,7 +186,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
           previewImage,
           workflowName,
           createdLabel: formatDateTime(finalResult.created_date),
-          badge: '최종',
+          badge: t({ ko: '최종', en: 'Final' }),
         }]
       })
 
@@ -201,7 +203,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
         }
 
         const execution = executionById.get(artifact.execution_id)
-        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? '워크플로') : '워크플로'
+        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? t({ ko: '워크플로', en: 'Workflow' })) : t({ ko: '워크플로', en: 'Workflow' })
         const previewImage = getWallpaperArtifactPreviewImage(previewUrl, workflowName, artifact.metadata)
         if (!previewImage) {
           return []
@@ -212,7 +214,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
           previewImage,
           workflowName,
           createdLabel: formatDateTime(artifact.created_date),
-          badge: '실시간',
+          badge: t({ ko: '실시간', en: 'Live' }),
         }]
       })
 
@@ -222,11 +224,11 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
   const stackIndex = useWallpaperRotatingIndex(recentEntries.length, shiftInterval, displayMode === 'stack' && recentEntries.length > 1)
 
   if (resultsQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">최근 결과 불러오는 중…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t({ ko: '최근 결과 불러오는 중…', en: 'Loading recent results…' })}</div>
   }
 
   if (resultsQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">최근 결과를 불러오지 못했어.</div>
+    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t({ ko: '최근 결과를 불러오지 못했어.', en: 'Failed to load recent results.' })}</div>
   }
 
   if (displayMode === 'stack') {
@@ -238,7 +240,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
     return (
       <div className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_40%),var(--surface-low)]">
         {recentEntries.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">아직 최근 이미지 결과가 없어.</div>
+          <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">{t({ ko: '아직 최근 이미지 결과가 없어.', en: 'There are no recent image results yet.' })}</div>
         ) : null}
 
         {stackedEntries.map(({ entry, order }) => {
@@ -315,7 +317,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
 
         {recentEntries.length > 1 ? (
           <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/90 backdrop-blur-sm">
-            스택
+            {t({ ko: '스택', en: 'Stack' })}
           </div>
         ) : null}
       </div>
@@ -326,7 +328,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
     <div className={cn('grid h-full gap-2', visibleCount >= 4 ? 'grid-cols-2' : 'grid-cols-1')}>
       {recentEntries.length === 0 ? (
         <div className="col-span-full flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
-          아직 최근 이미지 결과가 없어.
+          {t({ ko: '아직 최근 이미지 결과가 없어.', en: 'There are no recent image results yet.' })}
         </div>
       ) : null}
 
@@ -361,6 +363,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
 
 /** Render one group-backed preview grid using the existing groups preview API. */
 export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'group-image-view' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
+  const { t } = useI18n()
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
   const visibleCount = Math.max(1, Math.min(9, widget.settings.visibleCount))
@@ -428,15 +431,15 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   const rowCount = Math.max(1, Math.ceil(Math.max(visibleImages.length, 1) / columnCount))
 
   if (groupId === null) {
-    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">설정에서 그룹을 선택해.</div>
+    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">{t({ ko: '설정에서 그룹을 선택해.', en: 'Select a group in settings.' })}</div>
   }
 
   if (previewQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">그룹 미리보기 불러오는 중…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t({ ko: '그룹 미리보기 불러오는 중…', en: 'Loading group previews…' })}</div>
   }
 
   if (previewQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">그룹 미리보기를 불러오지 못했어.</div>
+    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t({ ko: '그룹 미리보기를 불러오지 못했어.', en: 'Failed to load group previews.' })}</div>
   }
 
   return (
@@ -453,7 +456,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
     >
       {visibleImages.length === 0 ? (
         <div className="col-span-full flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
-          이 그룹에는 아직 미리보기 이미지가 없어.
+          {t({ ko: '이 그룹에는 아직 미리보기 이미지가 없어.', en: 'There are no preview images in this group yet.' })}
         </div>
       ) : null}
       {visibleImages.map((image, index) => {
@@ -481,7 +484,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
           <WallpaperPreviewImageSurface
             key={`group-grid-slot-${index}`}
             image={image}
-            alt="그룹 미리보기"
+            alt={t({ ko: '그룹 미리보기', en: 'Group preview' })}
             onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
             transitionStyle={imageTransitionStyle}
             transitionSpeed={imageTransitionSpeed}
@@ -506,7 +509,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
               transitionTimingFunction: getWallpaperAnimationEasingCss(motionEasing),
             }}
           >
-            이미지 없음
+            {t({ ko: '이미지 없음', en: 'No image' })}
           </div>
         )
       })}
@@ -517,6 +520,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
 
 /** Render one showcase-style image widget with optional motion playback. */
 export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'image-showcase' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
+  const { t } = useI18n()
   const groupId = widget.settings.groupId
   const includeChildren = widget.settings.includeChildren
   const playbackMode = widget.settings.playbackMode ?? 'carousel'
@@ -543,19 +547,19 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
     return (
       <div className="flex h-full items-end rounded-sm border border-border/70 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--secondary)_24%,transparent),transparent_55%),linear-gradient(180deg,transparent,color-mix(in_srgb,var(--primary)_10%,transparent)),var(--surface-low)] p-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.18em] text-secondary">대표 이미지</div>
-          <div className="text-sm font-medium text-foreground">설정에서 쇼케이스용 그룹을 골라.</div>
+          <div className="text-xs uppercase tracking-[0.18em] text-secondary">{t({ ko: '대표 이미지', en: 'Featured image' })}</div>
+          <div className="text-sm font-medium text-foreground">{t({ ko: '설정에서 쇼케이스용 그룹을 골라.', en: 'Choose a showcase group in settings.' })}</div>
         </div>
       </div>
     )
   }
 
   if (previewQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">쇼케이스 불러오는 중…</div>
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t({ ko: '쇼케이스 불러오는 중…', en: 'Loading showcase…' })}</div>
   }
 
   if (!imageUrl) {
-    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">표시할 쇼케이스 이미지가 없어.</div>
+    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">{t({ ko: '표시할 쇼케이스 이미지가 없어.', en: 'There is no showcase image to display.' })}</div>
   }
 
   const motionPhase = motionTick / 18 + currentIndex * 0.8
@@ -571,7 +575,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
   return (
     <WallpaperPreviewImageSurface
       image={currentImage}
-      alt="쇼케이스"
+      alt={t({ ko: '쇼케이스', en: 'Showcase' })}
       onOpenImage={mode === 'runtime' ? onOpenImage : undefined}
       transitionStyle={imageTransitionStyle}
       transitionSpeed={imageTransitionSpeed}
@@ -605,7 +609,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
             ))}
           </div>
           <div className="rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-foreground/92 backdrop-blur-sm">
-            {kenBurnsEnabled ? '켄 번즈' : '자동'}
+            {kenBurnsEnabled ? t({ ko: '켄 번즈', en: 'Ken Burns' }) : t({ ko: '자동', en: 'Auto' })}
           </div>
         </div>
       ) : null}

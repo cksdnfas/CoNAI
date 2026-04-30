@@ -18,6 +18,8 @@ export const searchResources = {
   "search.search.constants.auto": "오토",
   "search.search.constants.rating": "평가",
   "search.search.constants.model": "모델",
+  "search.search.constants.lora": "LoRA",
+  "search.search.constants.tool": "AI 도구",
 },
   en: {
   "search.components.search.chip.list.no.condition.chips.yet": "No condition chips yet.",
@@ -36,6 +38,8 @@ export const searchResources = {
   "search.search.constants.auto": "Auto",
   "search.search.constants.rating": "Rating",
   "search.search.constants.model": "Model",
+  "search.search.constants.lora": "LoRA",
+  "search.search.constants.tool": "AI Tool",
 },
 } as const satisfies ScopedLocaleResources
 

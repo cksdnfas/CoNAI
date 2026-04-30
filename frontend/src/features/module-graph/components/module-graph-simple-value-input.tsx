@@ -2,6 +2,7 @@ import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
 
 export type ModuleGraphSelectOption = string | { value: string; label: string }
 
@@ -27,7 +28,7 @@ export function ModuleGraphSimpleValueInput({
   onChange,
   options,
   placeholder,
-  emptyLabel = '기본값 사용',
+  emptyLabel,
   allowEmptyOption = true,
   className,
   rows,
@@ -35,6 +36,8 @@ export function ModuleGraphSimpleValueInput({
   max,
   step,
 }: ModuleGraphSimpleValueInputProps) {
+  const { t } = useI18n()
+  const resolvedEmptyLabel = emptyLabel ?? t({ ko: '기본값 사용', en: 'Use default value' })
   if (dataType === 'select') {
     return (
       <Select
@@ -42,7 +45,7 @@ export function ModuleGraphSimpleValueInput({
         onChange={(event) => onChange(event.target.value)}
         className={className}
       >
-        {allowEmptyOption ? <option value="">{emptyLabel}</option> : null}
+        {allowEmptyOption ? <option value="">{resolvedEmptyLabel}</option> : null}
         {(options ?? []).map((option) => {
           const resolvedOption = typeof option === 'string'
             ? { value: option, label: option }
@@ -78,7 +81,7 @@ export function ModuleGraphSimpleValueInput({
         }}
         className={className}
       >
-        <option value="">{emptyLabel}</option>
+        <option value="">{resolvedEmptyLabel}</option>
         <option value="true">true</option>
         <option value="false">false</option>
       </Select>

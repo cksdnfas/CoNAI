@@ -1,5 +1,6 @@
 import { useRef, type ComponentProps } from 'react'
 import type { VariantProps } from 'class-variance-authority'
+import { useI18n } from '@/i18n'
 import { Input, inputVariants } from '@/components/ui/input'
 
 function formatScrubbedNumber(value: number, step: number) {
@@ -28,6 +29,7 @@ export function ScrubbableNumberInput({
   variant,
   ...props
 }: ScrubbableNumberInputProps) {
+  const { t } = useI18n()
   const dragStateRef = useRef<{ pointerId: number; startX: number; startValue: number; dragging: boolean } | null>(null)
 
   const clampValue = (nextValue: number) => {
@@ -51,7 +53,7 @@ export function ScrubbableNumberInput({
       value={value}
       variant={variant}
       className={`${className ?? 'cursor-ew-resize'} touch-none select-none appearance-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-      title="좌우로 드래그해서 값 조절"
+      title={t({ ko: '좌우로 드래그해서 값 조절', en: 'Drag left or right to adjust the value' })}
       onChange={(event) => onChange(event.target.value)}
       onWheel={(event) => {
         event.currentTarget.blur()

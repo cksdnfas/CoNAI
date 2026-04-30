@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
+import { useI18n } from '@/i18n'
 import { getGraphWorkflowSchedules, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord } from '@/lib/api'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
@@ -54,6 +55,7 @@ export function WorkflowRunnerPanel({
   onValidationIssueSelect,
   showHeader = true,
 }: WorkflowRunnerPanelProps) {
+  const { t, formatNumber } = useI18n()
   const scheduleQuery = useQuery({
     queryKey: ['module-graph-workflow-schedules', selectedGraph?.id ?? null],
     queryFn: () => getGraphWorkflowSchedules({ workflowId: selectedGraph?.id ?? null }),
@@ -72,10 +74,10 @@ export function WorkflowRunnerPanel({
         {showHeader ? (
           <SectionHeading
             variant="inside"
-            heading="Workflow Runner"
+            heading={t({ ko: '워크플로우 실행기', en: 'Workflow Runner' })}
             actions={
               <Button type="button" size="sm" variant="outline" onClick={onEdit} disabled={!selectedGraph}>
-                구조 수정
+                {t({ ko: '구조 수정', en: 'Edit graph' })}
               </Button>
             }
           />
@@ -97,15 +99,15 @@ export function WorkflowRunnerPanel({
 
                 <div className="flex shrink-0 items-center gap-2">
                   {onOpenFolderSettings ? (
-                    <Button type="button" size="icon-sm" variant="outline" onClick={onOpenFolderSettings} disabled={!selectedGraph} aria-label="폴더 설정" title="폴더 설정">
+                    <Button type="button" size="icon-sm" variant="outline" onClick={onOpenFolderSettings} disabled={!selectedGraph} aria-label={t({ ko: '폴더 설정', en: 'Folder settings' })} title={t({ ko: '폴더 설정', en: 'Folder settings' })}>
                       <Folder className="h-4 w-4" />
                     </Button>
                   ) : null}
-                  <Button type="button" size="icon-sm" variant="outline" onClick={onEdit} disabled={!selectedGraph} aria-label="구조 수정" title="구조 수정">
+                  <Button type="button" size="icon-sm" variant="outline" onClick={onEdit} disabled={!selectedGraph} aria-label={t({ ko: '구조 수정', en: 'Edit graph' })} title={t({ ko: '구조 수정', en: 'Edit graph' })}>
                     <PenSquare className="h-4 w-4" />
                   </Button>
                   {onDeleteWorkflow ? (
-                    <Button type="button" size="icon-sm" variant="outline" onClick={onDeleteWorkflow} disabled={!selectedGraph} aria-label="워크플로우 삭제" title="워크플로우 삭제">
+                    <Button type="button" size="icon-sm" variant="outline" onClick={onDeleteWorkflow} disabled={!selectedGraph} aria-label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })} title={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   ) : null}
@@ -126,11 +128,11 @@ export function WorkflowRunnerPanel({
             {reviewRequiredSchedules.length > 0 ? (
               <Alert>
                 <AlertTitle className="flex flex-wrap items-center gap-1.5">
-                  <span>자동 실행 재검토 필요</span>
-                  <Badge variant="outline">{reviewRequiredSchedules.length}개</Badge>
+                  <span>{t({ ko: '자동 실행 재검토 필요', en: 'Auto-run review required' })}</span>
+                  <Badge variant="outline">{t({ ko: '{count}개', en: '{count}' }, { count: formatNumber(reviewRequiredSchedules.length) })}</Badge>
                 </AlertTitle>
                 <AlertDescription className="pt-2 text-sm text-muted-foreground">
-                  이 워크플로우가 바뀌어서 연결된 자동 실행이 일시정지됐어. 선택을 해제한 뒤 `예약작업` 탭에서 확인하고 다시 켜줘.
+                  {t({ ko: '이 워크플로우가 바뀌어서 연결된 자동 실행이 일시정지됐어. 선택을 해제한 뒤 `예약작업` 탭에서 확인하고 다시 켜줘.', en: 'This workflow changed, so linked auto-runs were paused. Deselect it, then review and re-enable them in the `Schedules` tab.' })}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -138,7 +140,7 @@ export function WorkflowRunnerPanel({
             {latestExecution ? (
               <Alert>
                 <AlertTitle className="flex flex-wrap items-center gap-1.5">
-                  <span>최근 결과</span>
+                  <span>{t({ ko: '최근 결과', en: 'Latest result' })}</span>
                   <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
                   <Badge variant="outline">{latestExecution.status}</Badge>
                 </AlertTitle>
@@ -148,10 +150,10 @@ export function WorkflowRunnerPanel({
                       finalResults={latestExecutionFinalResults}
                       artifacts={latestExecutionArtifacts}
                       selectedGraph={selectedGraph}
-                      emptyLabel="아직 선언된 최종 결과가 없어. 최종 결과 노드를 추가하고 원하는 출력에 연결해줘."
+                      emptyLabel={t({ ko: '아직 선언된 최종 결과가 없어. 최종 결과 노드를 추가하고 원하는 출력에 연결해줘.', en: 'No final result is declared yet. Add a final result node and connect it to the output you want.' })}
                     />
                   ) : (
-                    <div className="text-sm text-muted-foreground">최종 결과를 불러오는 중…</div>
+                    <div className="text-sm text-muted-foreground">{t({ ko: '최종 결과를 불러오는 중…', en: 'Loading final results…' })}</div>
                   )}
                 </AlertDescription>
               </Alert>
@@ -159,8 +161,8 @@ export function WorkflowRunnerPanel({
 
             <WorkflowValidationPanel
               issues={validationIssues}
-              title="실행 검증"
-              description="실행 전 확인"
+              title={t({ ko: '실행 검증', en: 'Run validation' })}
+              description={t({ ko: '실행 전 확인', en: 'Check before running' })}
               showHeader={false}
               onIssueSelect={onValidationIssueSelect}
             />
@@ -175,7 +177,7 @@ export function WorkflowRunnerPanel({
 
             <div className="flex flex-wrap gap-2 pt-1">
               <Button type="button" onClick={onExecute} disabled={isExecuting || !canExecute}>
-                {isExecuting ? '실행 요청 중…' : canExecute ? '실행' : '실행 불가'}
+                {isExecuting ? t({ ko: '실행 요청 중…', en: 'Requesting run…' }) : canExecute ? t({ ko: '실행', en: 'Run' }) : t({ ko: '실행 불가', en: 'Cannot run' })}
               </Button>
             </div>
           </div>

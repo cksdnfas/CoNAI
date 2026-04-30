@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/select'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
+import { useI18n } from '@/i18n'
 import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
 import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
 import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOptionRecord } from '@/lib/api-settings'
@@ -45,11 +46,13 @@ const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
 
 type LlmPresetCollectionKey = keyof LlmPresetOptionCollections
 
-const LLM_PRESET_TYPE_OPTIONS: Array<{ value: LlmPresetCollectionKey; label: string }> = [
-  { value: 'systemPromptPresets', label: '시스템 프롬프트' },
-  { value: 'promptPresets', label: '프롬프트' },
-  { value: 'structuredOutputJsonPresets', label: '구조화 출력 JSON' },
-]
+function getLlmPresetTypeOptions(t: ReturnType<typeof useI18n>['t']): Array<{ value: LlmPresetCollectionKey; label: string }> {
+  return [
+    { value: 'systemPromptPresets', label: t({ ko: '시스템 프롬프트', en: 'System prompt' }) },
+    { value: 'promptPresets', label: t({ ko: '프롬프트', en: 'Prompt' }) },
+    { value: 'structuredOutputJsonPresets', label: t({ ko: '구조화 출력 JSON', en: 'Structured output JSON' }) },
+  ]
+}
 
 type PortCellProps = {
   nodeId: string
@@ -84,7 +87,7 @@ function resolveComfyTargetValue(inputValues: Record<string, unknown> | undefine
   return 'auto'
 }
 
-function resolveComfyTargetBadgeLabel(inputValues: Record<string, unknown> | undefined) {
+function resolveComfyTargetBadgeLabel(t: ReturnType<typeof useI18n>['t'], inputValues: Record<string, unknown> | undefined) {
   const mode = resolveComfyTargetMode(inputValues)
   const tag = normalizeOptionalString(inputValues?.[GRAPH_COMFY_TARGET_TAG_KEY])
   const serverId = parsePositiveIntegerish(inputValues?.[GRAPH_COMFY_TARGET_SERVER_ID_KEY])
@@ -94,10 +97,10 @@ function resolveComfyTargetBadgeLabel(inputValues: Record<string, unknown> | und
   }
 
   if (mode === 'server' && serverId) {
-    return `서버 #${serverId}`
+    return t({ ko: '서버 #{id}', en: 'Server #{id}' }, { id: serverId })
   }
 
-  return '자동 분산'
+  return t({ ko: '자동 분산', en: 'Auto routing' })
 }
 
 function getSelectOptionValue(option: ModuleGraphSelectOption) {
@@ -139,15 +142,15 @@ function stopNodeActionEvent(event: MouseEvent<HTMLElement>) {
 }
 
 /** Build one compact hover tooltip so node cards stay visually clean. */
-function buildPortTooltip(port: ModulePortDefinition, statusLabel: string) {
+function buildPortTooltip(t: ReturnType<typeof useI18n>['t'], port: ModulePortDefinition, statusLabel: string) {
   return [
     port.label,
-    `키: ${port.key}`,
-    `타입: ${getModuleGraphPortTypeLabel(port.data_type)}`,
-    `상태: ${statusLabel}`,
+    t({ ko: '키: {key}', en: 'Key: {key}' }, { key: port.key }),
+    t({ ko: '타입: {type}', en: 'Type: {type}' }, { type: getModuleGraphPortTypeLabel(t, port.data_type) }),
+    t({ ko: '상태: {status}', en: 'Status: {status}' }, { status: statusLabel }),
     null,
-    port.required ? '필수' : null,
-    port.multiple ? '다중' : null,
+    port.required ? t({ ko: '필수', en: 'Required' }) : null,
+    port.multiple ? t({ ko: '다중', en: 'Multiple' }) : null,
     normalizeModulePortDescription(port.description) || null,
   ]
     .filter(Boolean)
@@ -193,13 +196,16 @@ function getCompactValuePreview(value: unknown) {
 }
 
 /** Render one standard minimal socket row for outputs and simple port-only surfaces. */
-function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requiredMissing, requiredMissingLabel = '입력 필요', onDisconnectInput }: PortCellProps) {
+function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requiredMissing, requiredMissingLabel, onDisconnectInput }: PortCellProps) {
+  const { t } = useI18n()
+  const resolvedRequiredMissingLabel = requiredMissingLabel ?? t({ ko: '입력 필요', en: 'Input required' })
+
   if (!port) {
     return <div className="min-h-[28px] border-b border-dashed border-border/35" aria-hidden="true" />
   }
 
   const portTypeColor = getPortTypeColor(port.data_type)
-  const statusLabel = requiredMissing ? requiredMissingLabel : connected ? '연결됨' : satisfied ? '설정됨' : '대기'
+  const statusLabel = requiredMissing ? resolvedRequiredMissingLabel : connected ? t({ ko: '연결됨', en: 'Connected' }) : satisfied ? t({ ko: '설정됨', en: 'Configured' }) : t({ ko: '대기', en: 'Waiting' })
   const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
   const alignmentClass = side === 'input' ? 'pl-4 pr-2 text-left' : 'pl-2 pr-4 text-right'
   const rowJustifyClass = side === 'input' ? 'justify-start' : 'justify-end'
@@ -208,7 +214,7 @@ function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requi
     <div
       className={`relative min-h-[28px] border-b ${alignmentClass}`}
       style={{ borderColor } as CSSProperties}
-      title={buildPortTooltip(port, statusLabel)}
+      title={buildPortTooltip(t, port, statusLabel)}
       onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
     >
       <Handle
@@ -216,7 +222,7 @@ function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requi
         type={side === 'input' ? 'target' : 'source'}
         position={side === 'input' ? Position.Left : Position.Right}
         style={buildHandleStyle({ side, color: portTypeColor })}
-        title={buildPortTooltip(port, statusLabel)}
+        title={buildPortTooltip(t, port, statusLabel)}
         onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
       />
 
@@ -250,13 +256,15 @@ function InputPortCell({
   requiredMissing: boolean
   selectOptionsOverride?: ModuleGraphSelectOption[]
 }) {
+  const { t } = useI18n()
+
   if (!port) {
     return <div className="min-h-[28px] border-b border-dashed border-border/35" aria-hidden="true" />
   }
 
   const rawValue = data.inputValues?.[port.key]
   const portTypeColor = getPortTypeColor(port.data_type)
-  const statusLabel = requiredMissing ? '입력 필요' : connected ? '연결됨' : satisfied ? '설정됨' : '대기'
+  const statusLabel = requiredMissing ? t({ ko: '입력 필요', en: 'Input required' }) : connected ? t({ ko: '연결됨', en: 'Connected' }) : satisfied ? t({ ko: '설정됨', en: 'Configured' }) : t({ ko: '대기', en: 'Waiting' })
   const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
   const uiField = data.module.ui_schema?.find((field) => field.key === port.key)
   const operationKey = getModuleOperationKey(data.module)
@@ -285,7 +293,7 @@ function InputPortCell({
 
   const renderEditor = () => {
     if (connected) {
-      return <div className="truncate text-[10px] text-muted-foreground">linked</div>
+      return <div className="truncate text-[10px] text-muted-foreground">{t({ ko: '연결됨', en: 'Linked' })}</div>
     }
 
     if (selectOptions && data.onNodeValueChange) {
@@ -296,7 +304,7 @@ function InputPortCell({
             value={rawValue}
             onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
             options={selectOptions}
-            emptyLabel={hasMeaningfulValue(port.default_value ?? uiField?.default_value) ? 'default' : 'select'}
+            emptyLabel={hasMeaningfulValue(port.default_value ?? uiField?.default_value) ? t({ ko: '기본값', en: 'Default' }) : t({ ko: '선택', en: 'Select' })}
             className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>
@@ -327,7 +335,7 @@ function InputPortCell({
             dataType="boolean"
             value={rawValue}
             onChange={(value) => data.onNodeValueChange?.(nodeId, port.key, value)}
-            emptyLabel="default"
+            emptyLabel={t({ ko: '기본값', en: 'Default' })}
             className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           />
         </div>
@@ -356,13 +364,13 @@ function InputPortCell({
   }
 
   return (
-    <div className="relative min-h-[28px] border-b pl-4 pr-2" style={{ borderColor } as CSSProperties} title={buildPortTooltip(port, statusLabel)}>
+    <div className="relative min-h-[28px] border-b pl-4 pr-2" style={{ borderColor } as CSSProperties} title={buildPortTooltip(t, port, statusLabel)}>
       <Handle
         id={buildHandleId('in', port.key)}
         type="target"
         position={Position.Left}
         style={buildHandleStyle({ side: 'input', color: portTypeColor })}
-        title={buildPortTooltip(port, statusLabel)}
+        title={buildPortTooltip(t, port, statusLabel)}
         onMouseDown={connected ? () => data.onDisconnectNodeInput?.(nodeId, port.key) : undefined}
       />
 
@@ -413,6 +421,7 @@ function SourceNodeOutputPorts({
 
 /** Render compact value controls for constant-input nodes using shared form surfaces. */
 function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>, 'id' | 'data'>) {
+  const { t } = useI18n()
   const sourcePort = isWorkflowInputSourceModule(data.module) ? data.module.exposed_inputs[0] ?? null : null
   if (!sourcePort) {
     return null
@@ -433,7 +442,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
   return (
     <div className="nodrag nowheel mt-2 space-y-1" onMouseDown={stopNodeInteraction}>
       <div className="flex min-h-[28px] items-center justify-between border-b border-border/30 px-1 pb-1 text-[11px] text-foreground">
-        <span>실행 입력</span>
+        <span>{t({ ko: '실행 입력', en: 'Run input' })}</span>
         <input
           type="checkbox"
           checked={workflowInputEnabled}
@@ -474,7 +483,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
             dataType="boolean"
             value={rawValue}
             onChange={handleValueChange}
-            emptyLabel="선택"
+            emptyLabel={t({ ko: '선택', en: 'Select' })}
             className={MODULE_GRAPH_INLINE_CONTROL_CLASS}
           />
         </div>
@@ -484,14 +493,14 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
         <div className="space-y-2">
           <div className="flex flex-wrap gap-1.5">
             <ImageAttachmentPickerButton
-              label={hasExplicitValue ? '이미지 변경' : '이미지 선택'}
+              label={hasExplicitValue ? t({ ko: '이미지 변경', en: 'Change image' }) : t({ ko: '이미지 선택', en: 'Select image' })}
               modalTitle={sourcePort.label}
               allowSaveDialog={false}
               onSelect={(image) => void data.onNodeImageChange?.(id, sourcePort.key, image)}
             />
             {hasExplicitValue ? (
               <Button type="button" size="sm" variant="ghost" onMouseDown={stopNodeActionEvent} onClick={handleValueClear}>
-                지우기
+                {t({ ko: '지우기', en: 'Clear' })}
               </Button>
             ) : null}
           </div>
@@ -504,7 +513,7 @@ function InlineWorkflowInputEditor({ id, data }: Pick<NodeProps<ModuleGraphNode>
       {sourcePort.data_type !== 'image' && sourcePort.data_type !== 'mask' && hasExplicitValue ? (
         <div className="flex justify-end">
           <Button type="button" size="sm" variant="ghost" onMouseDown={stopNodeActionEvent} onClick={handleValueClear}>
-            값 지우기
+            {t({ ko: '값 지우기', en: 'Clear value' })}
           </Button>
         </div>
       ) : null}
@@ -547,12 +556,14 @@ function renderCompactUiField({
   field,
   value,
   allowEmptyOption = true,
+  t,
 }: {
   id: string
   data: ModuleGraphNode['data']
   field: ModuleUiFieldDefinition
   value?: unknown
   allowEmptyOption?: boolean
+  t: ReturnType<typeof useI18n>['t']
 }) {
   const normalizedValue = value ?? data.inputValues?.[field.key] ?? field.default_value
 
@@ -566,7 +577,7 @@ function renderCompactUiField({
           onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
           options={field.options ?? []}
           placeholder={field.placeholder || field.description || field.label}
-          emptyLabel="선택"
+          emptyLabel={t({ ko: '선택', en: 'Select' })}
           allowEmptyOption={allowEmptyOption}
           className={`h-7 min-w-0 flex-1 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
         />
@@ -608,17 +619,18 @@ function TextMergeNodeLayout({
   connectedInputKeys: Set<string>
   connectedOutputKeys: Set<string>
 }) {
+  const { t } = useI18n()
   const inputPorts = data.module.exposed_inputs ?? []
   const outputPort = data.module.output_ports[0]
   const separatorAbField = data.module.ui_schema?.find((field) => field.key === 'separator_ab') ?? {
     key: 'separator_ab',
-    label: 'A 뒤 문자열',
+    label: t({ ko: 'A 뒤 문자열', en: 'Text after A' }),
     data_type: 'text',
     default_value: ',',
   }
   const separatorBcField = data.module.ui_schema?.find((field) => field.key === 'separator_bc') ?? {
     key: 'separator_bc',
-    label: 'B 뒤 문자열',
+    label: t({ ko: 'B 뒤 문자열', en: 'Text after B' }),
     data_type: 'text',
     default_value: ',',
   }
@@ -684,7 +696,8 @@ function TextTransformInlineField({
   data: ModuleGraphNode['data']
   field: ModuleUiFieldDefinition
 }) {
-  return renderCompactUiField({ id, data, field })
+  const { t } = useI18n()
+  return renderCompactUiField({ id, data, field, t })
 }
 
 /** Render the regex/text transform node with one source input and inline transform settings. */
@@ -783,6 +796,7 @@ function IfBranchNodeLayout({
   connectedInputKeys: Set<string>
   connectedOutputKeys: Set<string>
 }) {
+  const { t } = useI18n()
   const inputPorts = data.module.exposed_inputs ?? []
   const outputPorts = data.module.output_ports ?? []
   const uiFields = data.module.ui_schema ?? []
@@ -794,9 +808,9 @@ function IfBranchNodeLayout({
   return (
     <div className="mt-2 grid gap-1">
       <div className="grid gap-1 px-0.5 pb-1">
-        {modeField ? renderCompactUiField({ id, data, field: modeField, value: modeValue, allowEmptyOption: false }) : null}
+        {modeField ? renderCompactUiField({ id, data, field: modeField, value: modeValue, allowEmptyOption: false, t }) : null}
         {expectedTypeField && modeValue === 'type_is'
-          ? renderCompactUiField({ id, data, field: expectedTypeField, allowEmptyOption: false })
+          ? renderCompactUiField({ id, data, field: expectedTypeField, allowEmptyOption: false, t })
           : null}
       </div>
 
@@ -901,6 +915,7 @@ function NodeArtifactPreviewBody({
 
 /** Render a cleaner module graph node card with source-node specific layout. */
 export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGraphNode>) {
+  const { t } = useI18n()
   const { module } = data
   const updateNodeInternals = useUpdateNodeInternals()
   const [expandedOutputGroupKeys, setExpandedOutputGroupKeys] = useState<string[]>([])
@@ -933,7 +948,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const usesCustomNodeLabel = hasCustomModuleNodeLabel(data)
   const [isEditingLabel, setIsEditingLabel] = useState(false)
   const [labelDraft, setLabelDraft] = useState(data.label ?? '')
-  const missingStatusLabel = isWorkflowInputSource ? '값 필요' : '입력 필요'
+  const missingStatusLabel = isWorkflowInputSource ? t({ ko: '값 필요', en: 'Value required' }) : t({ ko: '입력 필요', en: 'Input required' })
   useEffect(() => {
     if (!isEditingLabel) {
       setLabelDraft(data.label ?? '')
@@ -948,11 +963,11 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
 
   const statusLabel =
     executionStatus === 'completed'
-      ? '완료'
+      ? t({ ko: '완료', en: 'Completed' })
       : executionStatus === 'failed'
-        ? '실패'
+        ? t({ ko: '실패', en: 'Failed' })
         : executionStatus === 'blocked'
-          ? '차단됨'
+          ? t({ ko: '차단됨', en: 'Blocked' })
           : missingRequiredInputCount > 0
             ? missingStatusLabel
             : null
@@ -1102,7 +1117,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     ? parsePositiveIntegerish(module.source_workflow_id ?? module.template_defaults?.workflow_id)
     : null
   const canConfigureComfyTarget = Boolean(module.engine_type === 'comfyui' && comfyWorkflowId && data.onNodeValueChange)
-  const comfyTargetBadgeLabel = canConfigureComfyTarget ? resolveComfyTargetBadgeLabel(data.inputValues) : null
+  const comfyTargetBadgeLabel = canConfigureComfyTarget ? resolveComfyTargetBadgeLabel(t, data.inputValues) : null
   const comfyTargetValue = resolveComfyTargetValue(data.inputValues)
   const comfyServersQuery = useQuery({
     queryKey: ['generation-comfyui-servers', 'module-graph-node-card'],
@@ -1158,7 +1173,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
         borderColor: selected ? accentColor : statusBorderColor,
         boxShadow: selected ? `0 0 0 2px ${accentColor}66, 0 0 0 1px ${accentColor}22` : `0 0 0 1px ${accentColor}22`,
       } as CSSProperties}
-      title={`${nodeDisplayLabel}\n기본 타입: ${moduleBaseLabel}\n모듈 ID: ${module.id}${module.description ? `\n${module.description}` : ''}`}
+      title={`${nodeDisplayLabel}\n${t({ ko: '기본 타입: {label}', en: 'Base type: {label}' }, { label: moduleBaseLabel })}\n${t({ ko: '모듈 ID: {id}', en: 'Module ID: {id}' }, { id: module.id })}${module.description ? `\n${module.description}` : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
@@ -1205,7 +1220,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                   stopNodeActionEvent(event)
                   setIsEditingLabel(true)
                 }}
-                title={selected ? '클릭해서 이름 변경' : undefined}
+                title={selected ? t({ ko: '클릭해서 이름 변경', en: 'Click to rename' }) : undefined}
               >
                 {nodeDisplayLabel}
               </button>
@@ -1214,8 +1229,8 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-          {isFinalResult ? <Badge variant="secondary">최종 결과</Badge> : null}
-          {data.executionReuseState === 'reused' ? <Badge variant="outline">캐시</Badge> : null}
+          {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
+          {data.executionReuseState === 'reused' ? <Badge variant="outline">{t({ ko: '캐시', en: 'Cache' })}</Badge> : null}
           {data.executionArtifactCount ? <Badge variant="outline">A {data.executionArtifactCount}</Badge> : null}
           {statusLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
         </div>
@@ -1234,8 +1249,8 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                 stopNodeActionEvent(event)
                 data.onExecuteNode?.()
               }}
-              title="실행"
-              aria-label="실행"
+              title={t({ ko: '실행', en: 'Run' })}
+              aria-label={t({ ko: '실행', en: 'Run' })}
             >
               <Play className="h-3.5 w-3.5" />
             </Button>
@@ -1252,8 +1267,8 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                 stopNodeActionEvent(event)
                 data.onForceExecuteNode?.()
               }}
-              title="재실행"
-              aria-label="재실행"
+              title={t({ ko: '재실행', en: 'Rerun' })}
+              aria-label={t({ ko: '재실행', en: 'Rerun' })}
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
@@ -1273,17 +1288,17 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             }}
             className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           >
-            {!hasKnownComfyTargetValue ? <option value={comfyTargetValue} disabled>외부 설정을 찾을 수 없음 ({comfyTargetBadgeLabel})</option> : null}
-            <option value="auto">자동 분산</option>
+            {!hasKnownComfyTargetValue ? <option value={comfyTargetValue} disabled>{t({ ko: '외부 설정을 찾을 수 없음 ({label})', en: 'Could not find external configuration ({label})' }, { label: comfyTargetBadgeLabel ?? '' })}</option> : null}
+            <option value="auto">{t({ ko: '자동 분산', en: 'Auto routing' })}</option>
             {comfyRoutingTags.length > 0 ? (
-              <optgroup label="태그">
+              <optgroup label={t({ ko: '태그', en: 'Tags' })}>
                 {comfyRoutingTags.map((tag) => (
                   <option key={tag} value={`tag:${tag}`}>#{tag}</option>
                 ))}
               </optgroup>
             ) : null}
             {candidateComfyServers.length > 0 ? (
-              <optgroup label="서버">
+              <optgroup label={t({ ko: '서버', en: 'Servers' })}>
                 {candidateComfyServers.map((server) => (
                   <option key={server.id} value={`server:${server.id}`}>{server.name}</option>
                 ))}
@@ -1295,7 +1310,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
 
       {canConfigureLlmModel ? (
         <div className="nodrag nowheel mt-2 space-y-1">
-          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">모델</div>
+          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '모델', en: 'Model' })}</div>
           <Select
             value={llmSelectedProviderName}
             onMouseDown={stopNodeInteraction}
@@ -1306,7 +1321,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             }}
             className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           >
-            <option value="">모델 선택</option>
+            <option value="">{t({ ko: '모델 선택', en: 'Select model' })}</option>
             {llmModelOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
@@ -1316,7 +1331,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
 
       {canConfigureCodexModel ? (
         <div className="nodrag nowheel mt-2 space-y-1">
-          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">모델</div>
+          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '모델', en: 'Model' })}</div>
           <Select
             value={codexModelValue}
             onMouseDown={stopNodeInteraction}
@@ -1338,7 +1353,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
 
       {canConfigureLlmPreset ? (
         <div className="nodrag nowheel mt-2 space-y-1.5">
-          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">프리셋</div>
+          <div className="px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '프리셋', en: 'Preset' })}</div>
           <Select
             value={llmPresetType}
             onMouseDown={stopNodeInteraction}
@@ -1350,7 +1365,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             }}
             className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           >
-            {LLM_PRESET_TYPE_OPTIONS.map((option) => (
+            {getLlmPresetTypeOptions(t).map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </Select>
@@ -1364,14 +1379,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             }}
             className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
           >
-            <option value="">{llmPresetsQuery.isLoading ? '불러오는 중' : '프리셋 선택'}</option>
+            <option value="">{llmPresetsQuery.isLoading ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: '프리셋 선택', en: 'Select preset' })}</option>
             {llmPresetNameOptions.map((preset) => (
               <option key={preset.id || preset.name} value={preset.name}>{preset.name}</option>
             ))}
           </Select>
           {selectedLlmPreset ? (
             <div className="rounded-sm border border-border/60 bg-background/45 px-2.5 py-2">
-              <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">선택 내용</div>
+              <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{t({ ko: '선택 내용', en: 'Selected content' })}</div>
               <div className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-4 text-foreground">{summarizeLlmPresetContent(selectedLlmPreset.content)}</div>
             </div>
           ) : null}
@@ -1536,7 +1551,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
 
       <SettingsModal
         open={Boolean(artifactTextModal)}
-        title={artifactTextModal?.title ?? '출력 내용'}
+        title={artifactTextModal?.title ?? t({ ko: '출력 내용', en: 'Output content' })}
         widthClassName="max-w-3xl"
         onClose={() => setArtifactTextModal(null)}
       >

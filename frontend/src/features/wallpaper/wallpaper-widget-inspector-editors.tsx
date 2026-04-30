@@ -7,6 +7,7 @@ import {
 } from './wallpaper-widget-inspector-editor-shared'
 import { WallpaperImageWidgetEditorFields } from './wallpaper-widget-inspector-image-editor-fields'
 import { WallpaperStatusWidgetEditorFields } from './wallpaper-widget-inspector-status-editor-fields'
+import { useI18n } from '@/i18n'
 import type { WallpaperWidgetInstance } from './wallpaper-types'
 
 interface WallpaperWidgetTypeEditorFieldsProps {
@@ -16,11 +17,13 @@ interface WallpaperWidgetTypeEditorFieldsProps {
 
 /** Render widget-specific editor fields while keeping the main inspector focused on shared controls. */
 export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSettings }: WallpaperWidgetTypeEditorFieldsProps) {
+  const { t } = useI18n()
+
   switch (selectedWidget.type) {
     case 'clock':
       return (
-        <WallpaperInspectorSectionCard title="시계">
-          <SettingsField label="스타일">
+        <WallpaperInspectorSectionCard title={t({ ko: '시계', en: 'Clock' })}>
+          <SettingsField label={t({ ko: '스타일', en: 'Style' })}>
             <Select
               value={selectedWidget.settings.visualStyle ?? 'minimal'}
               onChange={(event) => {
@@ -29,12 +32,12 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSe
                 })
               }}
             >
-              <option value="minimal">미니멀</option>
-              <option value="glow">글로우</option>
-              <option value="split">분할</option>
+              <option value="minimal">{t({ ko: '미니멀', en: 'Minimal' })}</option>
+              <option value="glow">{t({ ko: '글로우', en: 'Glow' })}</option>
+              <option value="split">{t({ ko: '분할', en: 'Split' })}</option>
             </Select>
           </SettingsField>
-          <SettingsField label="시간 형식">
+          <SettingsField label={t({ ko: '시간 형식', en: 'Time format' })}>
             <Select
               value={selectedWidget.settings.timeFormat}
               onChange={(event) => {
@@ -48,7 +51,7 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSe
             </Select>
           </SettingsField>
           <SettingsToggleRow>
-            <span className="flex-1">초 표시</span>
+            <span className="flex-1">{t({ ko: '초 표시', en: 'Show seconds' })}</span>
             <input
               type="checkbox"
               checked={selectedWidget.settings.showSeconds}
@@ -62,8 +65,8 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSe
 
     case 'text-note':
       return (
-        <WallpaperInspectorSectionCard title="내용">
-          <SettingsField label="내용">
+        <WallpaperInspectorSectionCard title={t({ ko: '내용', en: 'Content' })}>
+          <SettingsField label={t({ ko: '내용', en: 'Content' })}>
             <Textarea
               variant="settings"
               rows={4}

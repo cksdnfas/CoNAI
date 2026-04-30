@@ -1,25 +1,19 @@
-export type Locale = 'en' | 'ko' | 'ja' | 'zh-CN' | 'zh-TW';
+export type Locale = 'en' | 'ko';
 
 let currentLocale: Locale = 'en';
 
-/** Initialize i18n with locale from environment or system. */
+/** Initialize i18n with locale from the system language. */
 export function initI18n(): void {
-  const envLocale = process.env.LOCALE?.toLowerCase();
+  const systemLocale = Intl.DateTimeFormat().resolvedOptions().locale;
+  const language = systemLocale.split('-')[0];
 
-  if (envLocale && isValidLocale(envLocale)) {
-    currentLocale = envLocale as Locale;
-  } else {
-    const systemLocale = Intl.DateTimeFormat().resolvedOptions().locale;
-    const language = systemLocale.split('-')[0];
-
-    if (isValidLocale(language)) {
-      currentLocale = language as Locale;
-    }
+  if (isValidLocale(language)) {
+    currentLocale = language as Locale;
   }
 
   console.log(`🌐 Locale: ${currentLocale}`);
 }
 
 function isValidLocale(locale: string): boolean {
-  return ['en', 'ko', 'ja', 'zh-CN', 'zh-TW'].includes(locale);
+  return ['en', 'ko'].includes(locale);
 }

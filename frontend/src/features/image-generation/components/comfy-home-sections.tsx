@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter, SettingsSection } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import type { ComfyUIModelFolderScanInput, ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api'
 import type { ComfyUIServerTestState } from '../image-generation-shared'
 
@@ -32,12 +33,14 @@ export function ComfyWorkflowListSection({
   onCopyWorkflow,
   onDeleteWorkflow,
 }: WorkflowListSectionProps) {
+  const { t, formatNumber } = useI18n()
+
   return (
     <SettingsSection
       heading={(
         <span className="flex items-center gap-2">
           <ListTree className="h-4 w-4 text-primary" />
-          워크플로우
+          {t({ ko: '워크플로우', en: 'Workflows' })}
         </span>
       )}
       actions={(
@@ -45,7 +48,7 @@ export function ComfyWorkflowListSection({
           <Badge variant="outline">{workflows.length}</Badge>
           <Button type="button" size="sm" variant="outline" onClick={onCreateWorkflow}>
             <Plus className="h-4 w-4" />
-            등록
+            {t({ ko: '등록', en: 'Add' })}
           </Button>
         </>
       )}
@@ -68,13 +71,13 @@ export function ComfyWorkflowListSection({
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="truncate text-sm font-medium text-foreground">{workflow.name}</div>
-                      {isSelected ? <Badge variant="secondary">선택됨</Badge> : null}
+                      {isSelected ? <Badge variant="secondary">{t({ ko: '선택됨', en: 'Selected' })}</Badge> : null}
                     </div>
                     {workflow.description ? <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{workflow.description}</div> : null}
                   </button>
 
                   <div className="flex shrink-0 items-start gap-2">
-                    <Badge variant="outline">필드 {(workflow.marked_fields ?? []).length}</Badge>
+                    <Badge variant="outline">{t({ ko: '필드 {count}', en: '{count} fields' }, { count: formatNumber((workflow.marked_fields ?? []).length) })}</Badge>
                     <div className="flex gap-1">
                       <Button
                         type="button"
@@ -85,7 +88,7 @@ export function ComfyWorkflowListSection({
                           event.stopPropagation()
                           onSaveModule(workflow.id)
                         }}
-                        aria-label={`${workflow.name} 모듈 저장`}
+                        aria-label={t({ ko: '{name} 모듈 저장', en: 'Save module for {name}' }, { name: workflow.name })}
                       >
                         <Save className="h-3.5 w-3.5" />
                       </Button>
@@ -98,7 +101,7 @@ export function ComfyWorkflowListSection({
                           event.stopPropagation()
                           onEditWorkflow(workflow.id)
                         }}
-                        aria-label={`${workflow.name} 수정`}
+                        aria-label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: workflow.name })}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -111,7 +114,7 @@ export function ComfyWorkflowListSection({
                           event.stopPropagation()
                           onCopyWorkflow(workflow.id)
                         }}
-                        aria-label={`${workflow.name} 복사`}
+                        aria-label={t({ ko: '{name} 복사', en: 'Copy {name}' }, { name: workflow.name })}
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
@@ -124,7 +127,7 @@ export function ComfyWorkflowListSection({
                           event.stopPropagation()
                           onDeleteWorkflow(workflow.id)
                         }}
-                        aria-label={`${workflow.name} 삭제`}
+                        aria-label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: workflow.name })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -136,7 +139,7 @@ export function ComfyWorkflowListSection({
           })}
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">등록된 워크플로우가 없어.</div>
+        <div className="text-sm text-muted-foreground">{t({ ko: '등록된 워크플로우가 없어.', en: 'No workflows registered.' })}</div>
       )}
     </SettingsSection>
   )
@@ -152,12 +155,14 @@ type ServerListSectionProps = {
 }
 
 export function ComfyServerListSection({ servers, serverTests, onOpenCreateServer, onEditServer, onDeleteServer, onTestServer }: ServerListSectionProps) {
+  const { t, formatNumber } = useI18n()
+
   return (
     <SettingsSection
       heading={(
         <span className="flex items-center gap-2">
           <Server className="h-4 w-4 text-primary" />
-          서버
+          {t({ ko: '서버', en: 'Servers' })}
         </span>
       )}
       actions={(
@@ -165,7 +170,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
           <Badge variant="outline">{servers.length}</Badge>
           <Button type="button" size="sm" variant="outline" onClick={onOpenCreateServer}>
             <Plus className="h-4 w-4" />
-            서버 등록
+            {t({ ko: '서버 등록', en: 'Add server' })}
           </Button>
         </>
       )}
@@ -188,12 +193,12 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                         <Badge variant="outline">자동 확인 안 함</Badge>
                       ) : connectionStatus ? (
                         <Badge variant={connectionStatus.is_connected ? 'secondary' : 'outline'}>
-                          {connectionStatus.is_connected ? '연결됨' : '실패'}
+                          {connectionStatus.is_connected ? t({ ko: '연결됨', en: 'Connected' }) : t({ ko: '실패', en: 'Failed' })}
                         </Badge>
                       ) : null}
                       {connectionStatus?.is_connected && !isModalServer ? (
                         <Badge variant={connectionStatus.is_idle ? 'outline' : 'secondary'}>
-                          {connectionStatus.is_idle ? 'idle' : 'busy'}
+                          {connectionStatus.is_idle ? 'idle' : t({ ko: '사용 중', en: 'Busy' })}
                         </Badge>
                       ) : null}
                     </div>
@@ -209,7 +214,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                     {connectionStatus?.response_time !== undefined ? <div className="mt-1 text-[11px]">{connectionStatus.response_time}ms</div> : null}
                     {connectionStatus?.is_connected && !isModalServer ? (
                       <div className="mt-1 text-[11px]">
-                        running {connectionStatus.running_count ?? 0} · pending {connectionStatus.pending_count ?? 0}
+                        {t({ ko: '실행 {running} · 대기 {pending}', en: 'Running {running} · Pending {pending}' }, { running: formatNumber(connectionStatus.running_count ?? 0), pending: formatNumber(connectionStatus.pending_count ?? 0) })}
                       </div>
                     ) : null}
                     {connectionStatus?.error_message && !isModalServer ? <div className="mt-1 text-[11px] text-[#ffb4ab]">{connectionStatus.error_message}</div> : null}
@@ -223,15 +228,15 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                       variant="outline"
                       onClick={() => onTestServer(server.id)}
                       disabled={testState?.isLoading === true}
-                      title={isModalServer ? 'Modal 서버 테스트는 원격 endpoint를 호출해서 비용이 발생할 수 있어.' : undefined}
+                      title={isModalServer ? t({ ko: 'Modal 서버 테스트는 원격 endpoint를 호출해서 비용이 발생할 수 있어.', en: 'Testing a Modal server may call the remote endpoint and incur costs.' }) : undefined}
                     >
-                      {testState?.isLoading ? '확인 중…' : '테스트'}
+                      {testState?.isLoading ? t({ ko: '확인 중…', en: 'Checking…' }) : t({ ko: '테스트', en: 'Test' })}
                     </Button>
                     <div className="flex gap-1">
-                      <Button type="button" size="icon-xs" variant="ghost" onClick={() => onEditServer(server.id)} aria-label={`${server.name} 수정`}>
+                      <Button type="button" size="icon-xs" variant="ghost" onClick={() => onEditServer(server.id)} aria-label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: server.name })}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button type="button" size="icon-xs" variant="ghost" onClick={() => onDeleteServer(server.id)} aria-label={`${server.name} 삭제`}>
+                      <Button type="button" size="icon-xs" variant="ghost" onClick={() => onDeleteServer(server.id)} aria-label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: server.name })}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -242,7 +247,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
           })}
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">연결된 서버가 없어.</div>
+        <div className="text-sm text-muted-foreground">{t({ ko: '연결된 서버가 없어.', en: 'No connected servers.' })}</div>
       )}
     </SettingsSection>
   )
@@ -305,7 +310,7 @@ function getKnownModelFileName(fileName: string) {
   return fileName
 }
 
-function collectModelFoldersFromSelection(files: RelativeFile[]) {
+function collectModelFoldersFromSelection(files: RelativeFile[], locale: string) {
   const folderMap = new Map<string, ComfyUIModelFolderScanInput>()
   const firstRelativePath = files[0]?.webkitRelativePath ?? files[0]?.name ?? ''
   const selectedRootName = firstRelativePath.split('/')[0] || 'selected-folder'
@@ -360,9 +365,9 @@ function collectModelFoldersFromSelection(files: RelativeFile[]) {
     modelFolders: [...folderMap.values()]
       .map((folder) => ({
         ...folder,
-        files: [...folder.files].sort((left, right) => left.localeCompare(right, 'ko')),
+        files: [...folder.files].sort((left, right) => left.localeCompare(right, locale)),
       }))
-      .sort((left, right) => left.displayName.localeCompare(right.displayName, 'ko')),
+      .sort((left, right) => left.displayName.localeCompare(right.displayName, locale)),
   }
 }
 
@@ -376,6 +381,7 @@ type CustomDropdownListEditorModalProps = {
 }
 
 function CustomDropdownListEditorModal({ open, isSubmitting = false, initialList, readOnly = false, onClose, onSubmit }: CustomDropdownListEditorModalProps) {
+  const { t, formatNumber } = useI18n()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [itemsText, setItemsText] = useState('')
@@ -410,28 +416,28 @@ function CustomDropdownListEditorModal({ open, isSubmitting = false, initialList
   }
 
   return (
-    <SettingsModal open={open} onClose={onClose} title={readOnly ? '드롭다운 목록 상세' : initialList ? '커스텀 드롭다운 수정' : '커스텀 드롭다운 목록'} widthClassName="max-w-2xl">
+    <SettingsModal open={open} onClose={onClose} title={readOnly ? t({ ko: '드롭다운 목록 상세', en: 'Dropdown list details' }) : initialList ? t({ ko: '커스텀 드롭다운 수정', en: 'Edit custom dropdown' }) : t({ ko: '커스텀 드롭다운 목록', en: 'Custom dropdown list' })} widthClassName="max-w-2xl">
       <SettingsModalBody className="space-y-5">
-        <SettingsField label="목록 이름">
-          <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="목록 이름" readOnly={readOnly} />
+        <SettingsField label={t({ ko: '목록 이름', en: 'List name' })}>
+          <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t({ ko: '목록 이름', en: 'List name' })} readOnly={readOnly} />
         </SettingsField>
 
-        <SettingsField label="설명">
-          <Textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="설명 (선택)" readOnly={readOnly} />
+        <SettingsField label={t({ ko: '설명', en: 'Description' })}>
+          <Textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} readOnly={readOnly} />
         </SettingsField>
 
-        <SettingsField label="항목">
-          <Textarea rows={10} value={itemsText} onChange={(event) => setItemsText(event.target.value)} placeholder="항목을 줄바꿈 또는 쉼표로 입력" readOnly={readOnly} />
+        <SettingsField label={t({ ko: '항목', en: 'Items' })}>
+          <Textarea rows={10} value={itemsText} onChange={(event) => setItemsText(event.target.value)} placeholder={t({ ko: '항목을 줄바꿈 또는 쉼표로 입력', en: 'Enter items separated by new lines or commas' })} readOnly={readOnly} />
         </SettingsField>
 
         <SettingsModalFooter className="justify-between">
-          <div className="text-xs text-muted-foreground">{items.length}개 항목</div>
+          <div className="text-xs text-muted-foreground">{t({ ko: '{count}개 항목', en: '{count} items' }, { count: formatNumber(items.length) })}</div>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{readOnly ? '닫기' : '취소'}</Button>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{readOnly ? t({ ko: '닫기', en: 'Close' }) : t({ ko: '취소', en: 'Cancel' })}</Button>
             {!readOnly ? (
               <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || !name.trim() || items.length === 0}>
                 <Save className="h-4 w-4" />
-                저장
+                {t({ ko: '저장', en: 'Save' })}
               </Button>
             ) : null}
           </div>
@@ -454,6 +460,7 @@ type ComfyDropdownAutoCollectModalProps = {
 }
 
 function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, onSubmit }: ComfyDropdownAutoCollectModalProps) {
+  const { t, locale, formatNumber } = useI18n()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [selectedSourceFiles, setSelectedSourceFiles] = useState<RelativeFile[]>([])
   const [selectedSourceLabel, setSelectedSourceLabel] = useState('')
@@ -480,7 +487,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
     inputRef.current.setAttribute('directory', '')
   }, [open])
 
-  const autoScanPreview = useMemo(() => (selectedSourceFiles.length > 0 ? collectModelFoldersFromSelection(selectedSourceFiles) : null), [selectedSourceFiles])
+  const autoScanPreview = useMemo(() => (selectedSourceFiles.length > 0 ? collectModelFoldersFromSelection(selectedSourceFiles, locale) : null), [locale, selectedSourceFiles])
 
   const handlePickFolder = () => {
     inputRef.current?.click()
@@ -512,7 +519,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
   }
 
   return (
-    <SettingsModal open={open} onClose={onClose} title="ComfyUI 자동수집" widthClassName="max-w-3xl">
+    <SettingsModal open={open} onClose={onClose} title={t({ ko: 'ComfyUI 자동수집', en: 'ComfyUI auto collect' })} widthClassName="max-w-3xl">
       <SettingsModalBody className="space-y-5">
         <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => handleFolderChange(event)} />
 
@@ -520,36 +527,36 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" onClick={handlePickFolder} disabled={isSubmitting}>
               <FolderOpen className="h-4 w-4" />
-              {selectedSourceLabel ? selectedSourceLabel : '폴더 선택'}
+              {selectedSourceLabel ? selectedSourceLabel : t({ ko: '폴더 선택', en: 'Choose folder' })}
             </Button>
           </div>
 
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={mergeSubfolders} onChange={(event) => setMergeSubfolders(event.target.checked)} />
-              하위 폴더 통합
+              {t({ ko: '하위 폴더 통합', en: 'Merge subfolders' })}
             </label>
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={createBoth} onChange={(event) => setCreateBoth(event.target.checked)} disabled={!mergeSubfolders} />
-              통합 + 개별 생성
+              {t({ ko: '통합 + 개별 생성', en: 'Create merged + separate' })}
             </label>
           </div>
 
           {autoScanPreview ? (
             <Alert>
-              <AlertTitle>수집 미리보기</AlertTitle>
+              <AlertTitle>{t({ ko: '수집 미리보기', en: 'Collection preview' })}</AlertTitle>
               <AlertDescription>
-                폴더 {autoScanPreview.modelFolders.length}개, 항목 {autoScanPreview.modelFolders.reduce((sum, folder) => sum + folder.files.length, 0)}개
+                {t({ ko: '폴더 {folders}개, 항목 {items}개', en: '{folders} folders, {items} items' }, { folders: formatNumber(autoScanPreview.modelFolders.length), items: formatNumber(autoScanPreview.modelFolders.reduce((sum, folder) => sum + folder.files.length, 0)) })}
               </AlertDescription>
             </Alert>
           ) : null}
         </SettingsInsetBlock>
 
         <SettingsModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>취소</Button>
+          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{t({ ko: '취소', en: 'Cancel' })}</Button>
           <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || !autoScanPreview || autoScanPreview.modelFolders.length === 0}>
             <Upload className="h-4 w-4" />
-            자동수집 실행
+            {t({ ko: '자동수집 실행', en: 'Run auto collect' })}
           </Button>
         </SettingsModalFooter>
       </SettingsModalBody>
@@ -558,6 +565,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
 }
 
 export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false, onCreateManualList, onUpdateList, onDeleteList, onScanAutoLists }: DropdownListsSectionProps) {
+  const { t, formatNumber } = useI18n()
   const [activeTab, setActiveTab] = useState<DropdownTab>('custom')
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false)
   const [isAutoModalOpen, setIsAutoModalOpen] = useState(false)
@@ -570,27 +578,27 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
 
   return (
     <section className="space-y-3">
-      <SettingsSection heading="드롭다운 목록" actions={<Badge variant="outline">{dropdownLists.length}</Badge>}>
+      <SettingsSection heading={t({ ko: '드롭다운 목록', en: 'Dropdown lists' })} actions={<Badge variant="outline">{dropdownLists.length}</Badge>}>
         <SegmentedTabBar
           value={activeTab}
           onChange={(value) => setActiveTab(value as DropdownTab)}
           items={[
-            { value: 'custom', label: '커스텀' },
-            { value: 'auto', label: '자동수집' },
+            { value: 'custom', label: t({ ko: '커스텀', en: 'Custom' }) },
+            { value: 'auto', label: t({ ko: '자동수집', en: 'Auto collect' }) },
           ]}
         />
 
         <div className="flex items-center justify-between gap-3">
-          <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? `${customLists.length}개 목록` : `${autoLists.length}개 목록`}</div>
+          <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? t({ ko: '{count}개 목록', en: '{count} lists' }, { count: formatNumber(customLists.length) }) : t({ ko: '{count}개 목록', en: '{count} lists' }, { count: formatNumber(autoLists.length) })}</div>
           {activeTab === 'custom' ? (
             <Button type="button" size="sm" variant="outline" onClick={() => setIsCustomModalOpen(true)}>
               <Plus className="h-4 w-4" />
-              목록 추가
+              {t({ ko: '목록 추가', en: 'Add list' })}
             </Button>
           ) : (
             <Button type="button" size="sm" variant="outline" onClick={() => setIsAutoModalOpen(true)}>
               <FolderOpen className="h-4 w-4" />
-              자동수집
+              {t({ ko: '자동수집', en: 'Auto collect' })}
             </Button>
           )}
         </div>
@@ -612,26 +620,26 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium text-foreground">{list.name}</span>
                       <Badge variant={list.is_auto_collected ? 'secondary' : 'outline'}>{list.is_auto_collected ? 'auto' : 'manual'}</Badge>
-                      <Badge variant="outline">items {list.items.length}</Badge>
+                      <Badge variant="outline">{t({ ko: '항목 {count}', en: '{count} items' }, { count: formatNumber(list.items.length) })}</Badge>
                     </div>
                     {list.description ? <div className="mt-1 line-clamp-2 text-[11px]">{list.description}</div> : null}
-                    {list.source_path ? <div className="mt-1 line-clamp-1 text-[11px]">source {list.source_path}</div> : null}
+                    {list.source_path ? <div className="mt-1 line-clamp-1 text-[11px]">{t({ ko: '소스 {path}', en: 'Source {path}' }, { path: list.source_path })}</div> : null}
                     {list.items.length > 0 ? <div className="mt-1 line-clamp-1 text-[11px]">{list.items.slice(0, 6).join(', ')}</div> : null}
                   </button>
                   {!list.is_auto_collected ? (
                     <div className="flex shrink-0 gap-2">
                       <Button type="button" size="sm" variant="outline" onClick={() => setEditingCustomList(list)} disabled={isSubmitting}>
                         <Pencil className="h-4 w-4" />
-                        수정
+                        {t({ ko: '수정', en: 'Edit' })}
                       </Button>
                       <Button type="button" size="sm" variant="outline" onClick={() => void onDeleteList(list.id)} disabled={isSubmitting}>
                         <Trash2 className="h-4 w-4" />
-                        삭제
+                        {t({ ko: '삭제', en: 'Delete' })}
                       </Button>
                     </div>
                   ) : (
                     <Button type="button" size="sm" variant="outline" onClick={() => setViewingAutoList(list)}>
-                      보기
+                      {t({ ko: '보기', en: 'View' })}
                     </Button>
                   )}
                 </div>
@@ -639,7 +647,7 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
             ))}
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? '등록된 커스텀 목록이 없어.' : '자동수집된 목록이 없어.'}</div>
+          <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? t({ ko: '등록된 커스텀 목록이 없어.', en: 'No custom lists registered.' }) : t({ ko: '자동수집된 목록이 없어.', en: 'No auto-collected lists.' })}</div>
         )}
       </SettingsSection>
 

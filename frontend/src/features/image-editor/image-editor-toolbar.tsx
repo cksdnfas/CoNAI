@@ -3,6 +3,7 @@ import { Brush, ClipboardPaste, Crop, Eraser, FlipHorizontal, Hand, RotateCw, Sq
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useI18n, type TranslationDictionary } from '@/i18n'
 import type { ImageEditorTool } from './image-editor-types'
 
 interface ImageEditorToolbarProps {
@@ -79,24 +80,45 @@ function getImageEditorToolShortcut(tool: ImageEditorTool) {
   }
 }
 
-function getImageEditorToolHint(tool: ImageEditorTool) {
+function getImageEditorToolLabel(tool: ImageEditorTool): TranslationDictionary {
   switch (tool) {
     case 'pan':
-      return 'Drag the view to inspect details.'
+      return { ko: '이동', en: 'Pan' }
     case 'select':
-      return 'Create, move, or resize a selection rectangle.'
+      return { ko: '선택', en: 'Select' }
     case 'brush':
-      return 'Paint on the active draw layer.'
+      return { ko: '브러시', en: 'Brush' }
     case 'eraser':
-      return 'Erase content from the active draw layer.'
+      return { ko: '지우개', en: 'Eraser' }
     case 'mask-brush':
-      return 'Paint white editable infill regions into the mask.'
+      return { ko: '마스크', en: 'Mask' }
     case 'mask-eraser':
-      return 'Remove white regions from the mask.'
+      return { ko: '마스크 지우기', en: 'Mask erase' }
     case 'crop':
-      return 'Drag a crop area, then apply it.'
+      return { ko: '자르기', en: 'Crop' }
     default:
-      return ''
+      return { ko: '-', en: '-' }
+  }
+}
+
+function getImageEditorToolHint(tool: ImageEditorTool): TranslationDictionary {
+  switch (tool) {
+    case 'pan':
+      return { ko: '보기를 드래그해서 세부 영역을 확인해.', en: 'Drag the view to inspect details.' }
+    case 'select':
+      return { ko: '선택 영역을 만들고, 이동하거나 크기를 조절해.', en: 'Create, move, or resize a selection rectangle.' }
+    case 'brush':
+      return { ko: '현재 드로우 레이어에 칠해.', en: 'Paint on the active draw layer.' }
+    case 'eraser':
+      return { ko: '현재 드로우 레이어의 내용을 지워.', en: 'Erase content from the active draw layer.' }
+    case 'mask-brush':
+      return { ko: '마스크에 흰색 편집 가능 영역을 칠해.', en: 'Paint white editable infill regions into the mask.' }
+    case 'mask-eraser':
+      return { ko: '마스크의 흰색 영역을 지워.', en: 'Remove white regions from the mask.' }
+    case 'crop':
+      return { ko: '자르기 영역을 드래그한 다음 적용해.', en: 'Drag a crop area, then apply it.' }
+    default:
+      return { ko: '', en: '' }
   }
 }
 
@@ -134,58 +156,60 @@ export function ImageEditorToolbar({
   onClearMask,
   onApplyCrop,
 }: ImageEditorToolbarProps) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-3">
-      <ToolbarSection label="Tools">
-        <ToolButton active={tool === 'pan'} onClick={() => onToolChange('pan')} title="Pan">
-          <Hand className="h-4 w-4" /> Pan
+      <ToolbarSection label={t({ ko: '도구', en: 'Tools' })}>
+        <ToolButton active={tool === 'pan'} onClick={() => onToolChange('pan')} title={t(getImageEditorToolLabel('pan'))}>
+          <Hand className="h-4 w-4" /> {t(getImageEditorToolLabel('pan'))}
         </ToolButton>
-        <ToolButton active={tool === 'select'} onClick={() => onToolChange('select')} title="Select">
-          <Square className="h-4 w-4" /> Select
+        <ToolButton active={tool === 'select'} onClick={() => onToolChange('select')} title={t(getImageEditorToolLabel('select'))}>
+          <Square className="h-4 w-4" /> {t(getImageEditorToolLabel('select'))}
         </ToolButton>
-        <ToolButton active={tool === 'brush'} onClick={() => onToolChange('brush')} title="Brush">
-          <Brush className="h-4 w-4" /> Brush
+        <ToolButton active={tool === 'brush'} onClick={() => onToolChange('brush')} title={t(getImageEditorToolLabel('brush'))}>
+          <Brush className="h-4 w-4" /> {t(getImageEditorToolLabel('brush'))}
         </ToolButton>
-        <ToolButton active={tool === 'eraser'} onClick={() => onToolChange('eraser')} title="Eraser">
-          <Eraser className="h-4 w-4" /> Eraser
+        <ToolButton active={tool === 'eraser'} onClick={() => onToolChange('eraser')} title={t(getImageEditorToolLabel('eraser'))}>
+          <Eraser className="h-4 w-4" /> {t(getImageEditorToolLabel('eraser'))}
         </ToolButton>
         {enableMaskEditing ? (
           <>
-            <ToolButton active={tool === 'mask-brush'} onClick={() => onToolChange('mask-brush')} title="Mask Brush">
-              <Brush className="h-4 w-4" /> Mask
+            <ToolButton active={tool === 'mask-brush'} onClick={() => onToolChange('mask-brush')} title={t({ ko: '마스크 브러시', en: 'Mask brush' })}>
+              <Brush className="h-4 w-4" /> {t(getImageEditorToolLabel('mask-brush'))}
             </ToolButton>
-            <ToolButton active={tool === 'mask-eraser'} onClick={() => onToolChange('mask-eraser')} title="Mask Eraser">
-              <Eraser className="h-4 w-4" /> Mask Erase
+            <ToolButton active={tool === 'mask-eraser'} onClick={() => onToolChange('mask-eraser')} title={t({ ko: '마스크 지우개', en: 'Mask eraser' })}>
+              <Eraser className="h-4 w-4" /> {t(getImageEditorToolLabel('mask-eraser'))}
             </ToolButton>
           </>
         ) : null}
-        <ToolButton active={tool === 'crop'} onClick={() => onToolChange('crop')} title="Crop">
-          <Crop className="h-4 w-4" /> Crop
+        <ToolButton active={tool === 'crop'} onClick={() => onToolChange('crop')} title={t(getImageEditorToolLabel('crop'))}>
+          <Crop className="h-4 w-4" /> {t(getImageEditorToolLabel('crop'))}
         </ToolButton>
       </ToolbarSection>
 
       <div className="flex flex-wrap gap-3">
-        <ToolbarSection label="Brush">
+        <ToolbarSection label={t({ ko: '브러시', en: 'Brush' })}>
           <label className="space-y-1 text-xs text-muted-foreground">
-            Brush color
+            {t({ ko: '브러시 색상', en: 'Brush color' })}
             <Input type="color" value={brushColor} onChange={(event) => onBrushColorChange(event.target.value)} className="h-10 w-16 p-1" />
           </label>
           <label className="space-y-1 text-xs text-muted-foreground">
-            Brush size
+            {t({ ko: '브러시 크기', en: 'Brush size' })}
             <Input type="number" min={1} max={256} value={brushSize} onChange={(event) => onBrushSizeChange(Math.max(1, Number(event.target.value) || 1))} className="w-24" />
           </label>
           <label className="space-y-1 text-xs text-muted-foreground">
-            Opacity
+            {t({ ko: '불투명도', en: 'Opacity' })}
             <Input type="number" min={0} max={100} value={brushOpacity} onChange={(event) => onBrushOpacityChange(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} className="w-24" />
           </label>
         </ToolbarSection>
 
-        <ToolbarSection label="View">
+        <ToolbarSection label={t({ ko: '보기', en: 'View' })}>
           <Button type="button" variant="secondary" size="sm" onClick={onUndo} disabled={historyLength <= 1 || loading}>
-            Undo
+            {t({ ko: '실행 취소', en: 'Undo' })}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onRedo} disabled={redoLength === 0 || loading}>
-            Redo
+            {t({ ko: '다시 실행', en: 'Redo' })}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onZoomOut}>
             <ZoomOut className="h-4 w-4" />
@@ -194,73 +218,73 @@ export function ImageEditorToolbar({
             <ZoomIn className="h-4 w-4" />
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onFitToScreen}>
-            Fit
+            {t({ ko: '맞춤', en: 'Fit' })}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onRotate}>
-            <RotateCw className="h-4 w-4" /> Rotate
+            <RotateCw className="h-4 w-4" /> {t({ ko: '회전', en: 'Rotate' })}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onFlip}>
-            <FlipHorizontal className="h-4 w-4" /> Flip
+            <FlipHorizontal className="h-4 w-4" /> {t({ ko: '뒤집기', en: 'Flip' })}
           </Button>
         </ToolbarSection>
 
-        <ToolbarSection label="Selection">
+        <ToolbarSection label={t({ ko: '선택', en: 'Selection' })}>
           <Button type="button" variant="secondary" size="sm" onClick={onPasteFromClipboard}>
-            <ClipboardPaste className="h-4 w-4" /> Paste
+            <ClipboardPaste className="h-4 w-4" /> {t({ ko: '붙여넣기', en: 'Paste' })}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onPasteStoredSelection} disabled={!hasStoredSelection || loading}>
-            Paste Sel
+            {t({ ko: '선택 붙여넣기', en: 'Paste selection' })}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onSelectionCopy} disabled={!canApplySelectionOperation || loading}>
-            Copy Sel
+            {t({ ko: '선택 복사', en: 'Copy selection' })}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onSelectionCut} disabled={!canApplySelectionOperation || loading}>
-            Cut Sel
+            {t({ ko: '선택 잘라내기', en: 'Cut selection' })}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onSelectionDuplicate} disabled={!canApplySelectionOperation || loading}>
-            Duplicate Sel
+            {t({ ko: '선택 복제', en: 'Duplicate selection' })}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onSelectionPromote} disabled={!canApplySelectionOperation || loading}>
-            Promote Sel
+            {t({ ko: '선택 올리기', en: 'Promote selection' })}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={onSelectionDelete} disabled={!canApplySelectionOperation || loading}>
-            Delete Sel
+            {t({ ko: '선택 삭제', en: 'Delete selection' })}
           </Button>
         </ToolbarSection>
       </div>
 
       {(enableMaskEditing && onClearMask) || canApplyCrop ? (
-        <ToolbarSection label="Context">
+        <ToolbarSection label={t({ ko: '컨텍스트', en: 'Context' })}>
           {enableMaskEditing && onClearMask ? (
             <Button type="button" variant="secondary" size="sm" onClick={onClearMask}>
-              Clear Mask
+              {t({ ko: '마스크 지우기', en: 'Clear mask' })}
             </Button>
           ) : null}
           {canApplyCrop ? (
             <Button type="button" variant="secondary" size="sm" onClick={onApplyCrop} disabled={loading}>
-              Apply Crop
+              {t({ ko: '자르기 적용', en: 'Apply crop' })}
             </Button>
           ) : null}
         </ToolbarSection>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2 rounded-sm border border-border/70 bg-surface-low px-3 py-2 text-xs text-muted-foreground">
-        <Badge variant="outline">Tool {tool}</Badge>
-        <span>Shortcut {getImageEditorToolShortcut(tool)}</span>
+        <Badge variant="outline">{t({ ko: '도구', en: 'Tool' })} {t(getImageEditorToolLabel(tool))}</Badge>
+        <span>{t({ ko: '단축키', en: 'Shortcut' })} {getImageEditorToolShortcut(tool)}</span>
         <span>•</span>
-        <span>{getImageEditorToolHint(tool)}</span>
+        <span>{t(getImageEditorToolHint(tool))}</span>
         <span>•</span>
-        <span>Brush [ ]</span>
+        <span>{t({ ko: '브러시', en: 'Brush' })} [ ]</span>
         <span>•</span>
-        <span>Opacity {brushOpacity}%</span>
+        <span>{t({ ko: '불투명도', en: 'Opacity' })} {brushOpacity}%</span>
         {(tool === 'mask-brush' || tool === 'mask-eraser') ? (
           <>
             <span>•</span>
-            <span>White adds editable area</span>
+            <span>{t({ ko: '흰색은 편집 가능 영역을 추가해.', en: 'White adds editable area.' })}</span>
           </>
         ) : null}
         <span>•</span>
-        <span>Esc clears selection/crop</span>
+        <span>{t({ ko: 'Esc로 선택/자르기를 해제해.', en: 'Esc clears selection/crop.' })}</span>
       </div>
     </div>
   )

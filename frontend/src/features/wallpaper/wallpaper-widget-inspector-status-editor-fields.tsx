@@ -10,6 +10,7 @@ import {
 } from './wallpaper-widget-inspector-editor-shared'
 import type { WallpaperWidgetInstance } from './wallpaper-types'
 import { getWallpaperMotionStrengthMultiplier } from './wallpaper-widget-utils'
+import { useI18n } from '@/i18n'
 
 type WallpaperStatusWidgetInstance = Extract<WallpaperWidgetInstance, { type: 'queue-status' | 'recent-results' | 'activity-pulse' }>
 
@@ -23,11 +24,13 @@ export function WallpaperStatusWidgetEditorFields({
   selectedWidget,
   updateWidgetSettings,
 }: WallpaperStatusWidgetEditorFieldsProps) {
+  const { t } = useI18n()
+
   switch (selectedWidget.type) {
     case 'queue-status':
       return (
-        <WallpaperInspectorSectionCard title="데이터">
-          <SettingsField label="데이터 새로고침">
+        <WallpaperInspectorSectionCard title={t({ ko: '데이터', en: 'Data' })}>
+          <SettingsField label={t({ ko: '데이터 새로고침', en: 'Data refresh' })}>
             <Select
               value={String(selectedWidget.settings.refreshIntervalSec)}
               onChange={(event) => {
@@ -40,7 +43,7 @@ export function WallpaperStatusWidgetEditorFields({
             </Select>
           </SettingsField>
 
-          <SettingsField label="표시 방식">
+          <SettingsField label={t({ ko: '표시 방식', en: 'Display mode' })}>
             <Select
               value={selectedWidget.settings.visualMode ?? 'tiles'}
               onChange={(event) => {
@@ -49,9 +52,9 @@ export function WallpaperStatusWidgetEditorFields({
                 })
               }}
             >
-              <option value="tiles">타일</option>
-              <option value="bars">막대</option>
-              <option value="rings">링</option>
+              <option value="tiles">{t({ ko: '타일', en: 'Tiles' })}</option>
+              <option value="bars">{t({ ko: '막대', en: 'Bars' })}</option>
+              <option value="rings">{t({ ko: '링', en: 'Rings' })}</option>
             </Select>
           </SettingsField>
         </WallpaperInspectorSectionCard>
@@ -60,8 +63,8 @@ export function WallpaperStatusWidgetEditorFields({
     case 'recent-results':
       return (
         <>
-          <WallpaperInspectorSectionCard title="레이아웃">
-            <SettingsField label="데이터 새로고침">
+          <WallpaperInspectorSectionCard title={t({ ko: '레이아웃', en: 'Layout' })}>
+            <SettingsField label={t({ ko: '데이터 새로고침', en: 'Data refresh' })}>
               <Select
                 value={String(selectedWidget.settings.refreshIntervalSec)}
                 onChange={(event) => {
@@ -74,19 +77,19 @@ export function WallpaperStatusWidgetEditorFields({
               </Select>
             </SettingsField>
 
-            <SettingsField label="배치">
+            <SettingsField label={t({ ko: '배치', en: 'Arrangement' })}>
               <Select
                 value={selectedWidget.settings.displayMode ?? 'grid'}
                 onChange={(event) => {
                   updateWidgetSettings({ displayMode: event.target.value === 'stack' ? 'stack' : 'grid' })
                 }}
               >
-                <option value="grid">그리드</option>
-                <option value="stack">스택</option>
+                <option value="grid">{t({ ko: '그리드', en: 'Grid' })}</option>
+                <option value="stack">{t({ ko: '스택', en: 'Stack' })}</option>
               </Select>
             </SettingsField>
 
-            <SettingsField label="표시 개수">
+            <SettingsField label={t({ ko: '표시 개수', en: 'Visible count' })}>
               <Select
                 value={String(selectedWidget.settings.visibleCount)}
                 onChange={(event) => {
@@ -100,8 +103,8 @@ export function WallpaperStatusWidgetEditorFields({
             </SettingsField>
           </WallpaperInspectorSectionCard>
 
-          <WallpaperInspectorSectionCard title="전환">
-            <SettingsField label="화면 전환 간격">
+          <WallpaperInspectorSectionCard title={t({ ko: '전환', en: 'Transition' })}>
+            <SettingsField label={t({ ko: '화면 전환 간격', en: 'Screen transition interval' })}>
               <Select
                 value={String(selectedWidget.settings.shiftIntervalSec ?? 8)}
                 onChange={(event) => {
@@ -131,7 +134,7 @@ export function WallpaperStatusWidgetEditorFields({
             />
           </WallpaperInspectorSectionCard>
 
-          <WallpaperInspectorSectionCard title="상호작용">
+          <WallpaperInspectorSectionCard title={t({ ko: '상호작용', en: 'Interaction' })}>
             <WallpaperHoverInteractionEditorFields
               hoverMotion={selectedWidget.settings.imageHoverMotion}
               hoverEasing={selectedWidget.settings.hoverEasing}
@@ -148,8 +151,8 @@ export function WallpaperStatusWidgetEditorFields({
 
     case 'activity-pulse':
       return (
-        <WallpaperInspectorSectionCard title="모션">
-          <SettingsField label="데이터 새로고침">
+        <WallpaperInspectorSectionCard title={t({ ko: '모션', en: 'Motion' })}>
+          <SettingsField label={t({ ko: '데이터 새로고침', en: 'Data refresh' })}>
             <Select
               value={String(selectedWidget.settings.refreshIntervalSec)}
               onChange={(event) => {
@@ -162,7 +165,7 @@ export function WallpaperStatusWidgetEditorFields({
             </Select>
           </SettingsField>
 
-          <SettingsField label="강조 대상">
+          <SettingsField label={t({ ko: '강조 대상', en: 'Emphasis target' })}>
             <Select
               value={selectedWidget.settings.emphasis ?? 'mixed'}
               onChange={(event) => {
@@ -171,13 +174,13 @@ export function WallpaperStatusWidgetEditorFields({
                 })
               }}
             >
-              <option value="mixed">혼합</option>
-              <option value="queue">실행</option>
-              <option value="results">결과</option>
+              <option value="mixed">{t({ ko: '혼합', en: 'Mixed' })}</option>
+              <option value="queue">{t({ ko: '실행', en: 'Queue' })}</option>
+              <option value="results">{t({ ko: '결과', en: 'Results' })}</option>
             </Select>
           </SettingsField>
 
-          <SettingsField label="강도">
+          <SettingsField label={t({ ko: '강도', en: 'Strength' })}>
             <ScrubbableNumberInput
               variant="settings"
               min={0}

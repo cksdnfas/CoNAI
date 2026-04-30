@@ -66,8 +66,8 @@ export function UploadPage() {
       return []
     }
 
-    return getImageExtractedPromptCards(extractResult)
-  }, [extractResult])
+    return getImageExtractedPromptCards(extractResult, t)
+  }, [extractResult, t])
 
   const extractedGenerationParamItems = useMemo(() => {
     if (!extractResult) {

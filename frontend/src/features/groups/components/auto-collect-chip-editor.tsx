@@ -41,12 +41,21 @@ function createAutoCollectChip(scope: SearchScope, operator: SearchOperator, val
   return chip ? { ...chip } : null
 }
 
-const SEARCH_SCOPE_PLACEHOLDERS: Partial<Record<SearchScope, string>> = {
-  positive: '긍정 프롬프트',
-  negative: '부정 프롬프트',
-  auto: '오토 태그',
-  model: '모델명',
-  lora: 'LoRA 이름',
+function getSearchScopePlaceholder(scope: SearchScope, t: ReturnType<typeof useI18n>['t']) {
+  switch (scope) {
+    case 'positive':
+      return t({ ko: '긍정 프롬프트', en: 'Positive prompt' })
+    case 'negative':
+      return t({ ko: '부정 프롬프트', en: 'Negative prompt' })
+    case 'auto':
+      return t({ ko: '오토 태그', en: 'Auto tag' })
+    case 'model':
+      return t({ ko: '모델명', en: 'Model name' })
+    case 'lora':
+      return t({ ko: 'LoRA 이름', en: 'LoRA name' })
+    default:
+      return ''
+  }
 }
 
 /** Render the group auto-collect editor with chip-first and JSON fallback modes. */
@@ -78,9 +87,9 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
     setChips(parsedState.chips)
     setJsonText(parsedState.jsonText)
     setWarningMessage(
-      parsedState.warningMessage === '저장된 자동수집 JSON을 파싱하지 못해서 직접 편집 모드로 열었어.'
+      parsedState.warningMessage === 'parse-error'
         ? t({ ko: '저장된 자동수집 JSON을 파싱하지 못해서 직접 편집 모드로 열었어.', en: 'Could not parse the saved auto-collect JSON, so it opened in direct edit mode.' })
-        : parsedState.warningMessage
+        : parsedState.warningMessage === 'unsupported-condition'
           ? t({ ko: '기존 자동수집 규칙에 칩 편집기로 표현 못 하는 조건이 있어서 JSON 직접 편집 모드로 열었어.', en: 'Some existing auto-collect conditions cannot be represented in the chip editor, so it opened in direct JSON edit mode.' })
           : null,
     )
@@ -160,7 +169,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
       return t('groups.components.auto.collect.chip.editor.rating.tier')
     }
     if (searchScope === 'tool') {
-      return 'AI Tool'
+      return t({ ko: 'AI Tool', en: 'AI Tool' })
     }
     return t({ ko: '{scopeLabel} 추천', en: '{scopeLabel} suggestions' }, { scopeLabel: t(SEARCH_SCOPE_LABEL_KEYS[searchScope]) })
   }, [searchScope, t])
@@ -205,7 +214,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
                     submitSearchInput()
                   }
                 }}
-                placeholder={isTextInputScope ? t({ ko: SEARCH_SCOPE_PLACEHOLDERS[searchScope] ?? '', en: searchScope === 'positive' ? 'Positive prompt' : searchScope === 'negative' ? 'Negative prompt' : searchScope === 'auto' ? 'Auto tag' : searchScope === 'model' ? 'Model name' : searchScope === 'lora' ? 'LoRA name' : '' }) : searchSectionTitle}
+                placeholder={isTextInputScope ? getSearchScopePlaceholder(searchScope, t) : searchSectionTitle}
                 className="h-10 w-full bg-transparent outline-none placeholder:text-muted-foreground"
               />
             </div>

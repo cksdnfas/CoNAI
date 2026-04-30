@@ -46,7 +46,7 @@ export function AutoTestCard({
   isRunningKaloscopeAutoTest,
 }: AutoTestCardProps) {
   const { t } = useI18n()
-  const extractedPromptCards = autoTestImage ? getImageExtractedPromptCards(autoTestImage) : []
+  const extractedPromptCards = autoTestImage ? getImageExtractedPromptCards(autoTestImage, t) : []
 
   return (
     <SettingsSection heading={heading} actions={actions}>

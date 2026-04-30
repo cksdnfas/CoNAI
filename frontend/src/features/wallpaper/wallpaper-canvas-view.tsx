@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { GripVertical } from 'lucide-react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { useI18n } from '@/i18n'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { cn } from '@/lib/utils'
 import { getWallpaperAnimationEasingCss } from './wallpaper-widget-utils'
@@ -96,6 +97,7 @@ interface WallpaperWidgetCardProps {
 
 /** Render one widget card inside the wallpaper canvas grid. */
 function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, onSelectWidget, onStartMove, onStartResize, onOpenImage }: WallpaperWidgetCardProps) {
+  const { t } = useI18n()
   const title = String(widget.settings.title ?? widget.type)
   const showTitle = widget.settings.showTitle === true
   const showBackground = widget.settings.showBackground === true
@@ -150,7 +152,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, 
         <>
           <button
             type="button"
-            aria-label="Move widget"
+            aria-label={t({ ko: '위젯 이동', en: 'Move widget' })}
             onPointerDown={onStartMove}
             className={cn(
               'absolute left-2 top-2 flex touch-none items-center justify-center rounded-[5px] border border-border/80 bg-background/92 text-muted-foreground shadow-sm transition select-none',
@@ -162,7 +164,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, 
           </button>
           <button
             type="button"
-            aria-label="Resize widget"
+            aria-label={t({ ko: '위젯 크기 조절', en: 'Resize widget' })}
             onPointerDown={onStartResize}
             className={cn(
               'absolute bottom-2 right-2 flex touch-none items-center justify-center rounded-[5px] border border-border/80 bg-background/92 text-muted-foreground shadow-sm transition select-none',
@@ -180,6 +182,7 @@ function WallpaperWidgetCard({ widget, isSelected, mode, useMoveHandle = false, 
 
 /** Render the shared wallpaper canvas in editor or runtime mode. */
 export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selectedWidgetId, onSelectWidget, onUpdateWidgetFrame, editorHeader }: WallpaperCanvasViewProps) {
+  const { t } = useI18n()
   const [interaction, setInteraction] = useState<WallpaperInteractionState | null>(null)
   const [interactionPreview, setInteractionPreview] = useState<WallpaperInteractionPreview | null>(null)
   const [previewImage, setPreviewImage] = useState<WallpaperWidgetPreviewImage | null>(null)
@@ -360,7 +363,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
       >
         {renderedWidgets.length === 0 ? (
           <div className="col-span-full row-span-full flex items-center justify-center text-center text-sm text-muted-foreground">
-            왼쪽 라이브러리에서 위젯을 추가해서 시작해.
+            {t({ ko: '왼쪽 라이브러리에서 위젯을 추가해서 시작해.', en: 'Add a widget from the library on the left to get started.' })}
           </div>
         ) : null}
         {renderedWidgets.map((widget) => (
@@ -446,7 +449,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
         >
           <button
             type="button"
-            aria-label="이미지 미리보기 닫기"
+            aria-label={t({ ko: '이미지 미리보기 닫기', en: 'Close image preview' })}
             onClick={(event) => {
               event.stopPropagation()
               handleClosePreviewImage()
@@ -485,7 +488,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
         {editorHeader ?? (
           <>
             <span>{canvasPreset.name}</span>
-            <span>{canvasPreset.aspectRatioLabel} · {canvasPreset.gridColumns}×{canvasPreset.gridRows} 그리드</span>
+            <span>{canvasPreset.aspectRatioLabel} · {canvasPreset.gridColumns}×{canvasPreset.gridRows} {t({ ko: '그리드', en: 'grid' })}</span>
           </>
         )}
       </div>

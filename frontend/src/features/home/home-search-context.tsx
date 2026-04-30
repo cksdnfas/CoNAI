@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { clearSearchHistory, deleteSearchHistory, getSearchHistory, saveSearchHistory } from '@/lib/api'
+import { SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
 import type { SearchAiToolGroup, SearchChip, SearchHistoryEntry, SearchScope } from '@/features/search/search-types'
 import { buildSearchChipKey, buildSearchHistoryLabel, createAIToolSearchChip, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
 
@@ -188,7 +189,9 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     navigate('/')
 
     void saveHistoryMutation.mutateAsync({
-      label: buildSearchHistoryLabel(nextChips),
+      label: buildSearchHistoryLabel(nextChips, {
+        resolveScopeLabel: (scope) => t(SEARCH_SCOPE_LABEL_KEYS[scope]),
+      }),
       chips: nextChips,
     })
   }, [draftChips, navigate, saveHistoryMutation, showSnackbar, t, withPendingInputChip])

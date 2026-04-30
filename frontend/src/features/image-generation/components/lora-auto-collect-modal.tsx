@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import type { LoraFileData, LoraScanRequest } from '@/lib/api'
 
 type LoraAutoCollectModalProps = {
@@ -82,6 +83,7 @@ async function collectLoraFilesFromSelection(
 }
 
 export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSubmit }: LoraAutoCollectModalProps) {
+  const { t, formatNumber } = useI18n()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [selectedSourceFiles, setSelectedSourceFiles] = useState<RelativeFile[]>([])
   const [selectedFiles, setSelectedFiles] = useState<LoraFileData[]>([])
@@ -133,13 +135,13 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
       setSelectedFiles(nextFiles)
       return nextFiles
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : '폴더 파일을 읽는 중 오류가 났어.')
+      setFormError(error instanceof Error ? error.message : t({ ko: '폴더 파일을 읽는 중 오류가 났어.', en: 'An error occurred while reading the folder files.' }))
       setSelectedFiles([])
       return []
     } finally {
       setIsPreparingFiles(false)
     }
-  }, [buildSelectedFiles])
+  }, [buildSelectedFiles, t])
 
   const handlePickFolder = () => {
     inputRef.current?.click()
@@ -172,13 +174,13 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
 
   const handleSubmit = async () => {
     if (selectedSourceFiles.length === 0) {
-      setFormError('먼저 LoRA 폴더를 골라줘.')
+      setFormError(t({ ko: '먼저 LoRA 폴더를 골라줘.', en: 'Choose a LoRA folder first.' }))
       return
     }
 
     const parsedWeight = Number(loraWeight)
     if (!Number.isFinite(parsedWeight) || parsedWeight < 0.1 || parsedWeight > 2.0) {
-      setFormError('LoRA weight는 0.1에서 2.0 사이여야 해.')
+      setFormError(t({ ko: 'LoRA weight는 0.1에서 2.0 사이여야 해.', en: 'LoRA weight must be between 0.1 and 2.0.' }))
       return
     }
 
@@ -190,7 +192,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
       setSelectedFiles(nextFiles)
 
       if (nextFiles.length === 0) {
-        setFormError('선택한 폴더에서 LoRA 파일을 찾지 못했어.')
+        setFormError(t({ ko: '선택한 폴더에서 LoRA 파일을 찾지 못했어.', en: 'Could not find LoRA files in the selected folder.' }))
         return
       }
 
@@ -202,7 +204,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
         commonTextFilename,
       })
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : '자동 수집 준비 중 오류가 났어.')
+      setFormError(error instanceof Error ? error.message : t({ ko: '자동 수집 준비 중 오류가 났어.', en: 'An error occurred while preparing auto-collection.' }))
     } finally {
       setIsPreparingFiles(false)
     }
@@ -216,20 +218,20 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
           onClose()
         }
       }}
-      title="LoRA 자동 수집"
-      description="폴더 덤프를 읽어서 자동 수집용 LoRA 와일드카드 트리를 다시 만들자."
+      title={t({ ko: 'LoRA 자동 수집', en: 'LoRA auto-collection' })}
+      description={t({ ko: '폴더 덤프를 읽어서 자동 수집용 LoRA 와일드카드 트리를 다시 만들자.', en: 'Read a folder dump and rebuild the LoRA wildcard tree for auto-collection.' })}
       widthClassName="max-w-3xl"
     >
       <SettingsModalBody className="space-y-5">
         {formError ? (
           <Alert variant="destructive">
-            <AlertTitle>수집 준비 실패</AlertTitle>
+            <AlertTitle>{t({ ko: '수집 준비 실패', en: 'Collection preparation failed' })}</AlertTitle>
             <AlertDescription>{formError}</AlertDescription>
           </Alert>
         ) : null}
 
         <SettingsInsetBlock className="text-sm text-muted-foreground">
-          선택한 폴더 안의 `.safetensors`, 같은 이름의 `.txt`, 그리고 지정한 공용 텍스트 파일을 읽어서 auto-collected LoRA 트리를 다시 만든다.
+          {t({ ko: '선택한 폴더 안의 `.safetensors`, 같은 이름의 `.txt`, 그리고 지정한 공용 텍스트 파일을 읽어서 auto-collected LoRA 트리를 다시 만든다.', en: 'Reads `.safetensors`, same-name `.txt`, and the configured shared text file inside the selected folder, then rebuilds the auto-collected LoRA tree.' })}
         </SettingsInsetBlock>
 
         <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => void handleFileChange(event)} />
@@ -238,65 +240,65 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" onClick={handlePickFolder} disabled={isSubmitting || isPreparingFiles}>
               <FolderOpen className="h-4 w-4" />
-              {selectedFiles.length > 0 ? `LoRA ${selectedFiles.length}개 선택됨` : 'LoRA 폴더 선택'}
+              {selectedFiles.length > 0 ? t({ ko: 'LoRA {count}개 선택됨', en: '{count} LoRA files selected' }, { count: formatNumber(selectedFiles.length) }) : t({ ko: 'LoRA 폴더 선택', en: 'Select LoRA folder' })}
             </Button>
-            {isPreparingFiles ? <div className="text-sm text-muted-foreground">폴더 구조 읽는 중…</div> : null}
+            {isPreparingFiles ? <div className="text-sm text-muted-foreground">{t({ ko: '폴더 구조 읽는 중…', en: 'Reading folder structure…' })}</div> : null}
           </div>
 
           {selectedFiles.length > 0 ? (
             <div className="rounded-sm border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-muted-foreground">
-              <div className="font-medium text-foreground">LoRA 파일 {selectedFiles.length}개를 찾았어.</div>
+              <div className="font-medium text-foreground">{t({ ko: 'LoRA 파일 {count}개를 찾았어.', en: 'Found {count} LoRA files.' }, { count: formatNumber(selectedFiles.length) })}</div>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 {previewSummary.map((file) => (
                   <li key={`${file.folderName}/${file.loraName}`}>
                     <span className="font-medium text-foreground">{file.loraName}</span>
                     <span className="text-muted-foreground"> · {file.folderName || 'root'}</span>
-                    {file.promptLines.length > 0 ? <span className="text-muted-foreground"> · 프롬프트 {file.promptLines.length}줄</span> : null}
+                    {file.promptLines.length > 0 ? <span className="text-muted-foreground"> · {t({ ko: '프롬프트 {count}줄', en: '{count} prompt lines' }, { count: formatNumber(file.promptLines.length) })}</span> : null}
                   </li>
                 ))}
-                {selectedFiles.length > previewSummary.length ? <li>외 {selectedFiles.length - previewSummary.length}개 더 있어.</li> : null}
+                {selectedFiles.length > previewSummary.length ? <li>{t({ ko: '외 {count}개 더 있어.', en: '{count} more.' }, { count: formatNumber(selectedFiles.length - previewSummary.length) })}</li> : null}
               </ul>
             </div>
           ) : null}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label="기본 LoRA weight">
+          <SettingsField label={t({ ko: '기본 LoRA weight', en: 'Default LoRA weight' })}>
             <Input type="number" min="0.1" max="2.0" step="0.1" value={loraWeight} onChange={(event) => setLoraWeight(event.target.value)} />
           </SettingsField>
 
-          <SettingsField label="중복 이름 처리">
+          <SettingsField label={t({ ko: '중복 이름 처리', en: 'Duplicate name handling' })}>
             <Select value={duplicateHandling} onChange={(event) => setDuplicateHandling(event.target.value as 'number' | 'parent')}>
-              <option value="number">숫자 suffix 붙이기</option>
-              <option value="parent">부모 경로 이름 붙이기</option>
+              <option value="number">{t({ ko: '숫자 suffix 붙이기', en: 'Append numeric suffix' })}</option>
+              <option value="parent">{t({ ko: '부모 경로 이름 붙이기', en: 'Append parent path name' })}</option>
             </Select>
           </SettingsField>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label="프롬프트 매칭 모드">
+          <SettingsField label={t({ ko: '프롬프트 매칭 모드', en: 'Prompt matching mode' })}>
             <Select value={matchingMode} onChange={(event) => handleMatchingModeChange(event.target.value as MatchingMode)}>
-              <option value="filename">개별 txt 먼저, 없으면 공용 txt</option>
-              <option value="common">공용 txt 먼저, 없으면 개별 txt</option>
+              <option value="filename">{t({ ko: '개별 txt 먼저, 없으면 공용 txt', en: 'Individual txt first, then shared txt' })}</option>
+              <option value="common">{t({ ko: '공용 txt 먼저, 없으면 개별 txt', en: 'Shared txt first, then individual txt' })}</option>
             </Select>
           </SettingsField>
 
-          <SettingsField label="공용 txt 파일명">
-            <Input value={commonTextFilename} onChange={(event) => handleCommonTextFilenameChange(event.target.value)} placeholder="예: add.txt" />
+          <SettingsField label={t({ ko: '공용 txt 파일명', en: 'Shared txt filename' })}>
+            <Input value={commonTextFilename} onChange={(event) => handleCommonTextFilenameChange(event.target.value)} placeholder={t({ ko: '예: add.txt', en: 'e.g. add.txt' })} />
           </SettingsField>
         </div>
 
         <SettingsInsetBlock className="text-sm text-muted-foreground">
-          실행하면 기존 auto-collected LoRA 항목은 지워지고, 이번 폴더 기준으로 다시 생성된다.
+          {t({ ko: '실행하면 기존 auto-collected LoRA 항목은 지워지고, 이번 폴더 기준으로 다시 생성된다.', en: 'Running this removes existing auto-collected LoRA entries and recreates them from this folder.' })}
         </SettingsInsetBlock>
 
         <SettingsModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting || isPreparingFiles}>
-            취소
+            {t({ ko: '취소', en: 'Cancel' })}
           </Button>
           <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || isPreparingFiles || selectedSourceFiles.length === 0}>
             <Upload className="h-4 w-4" />
-            {isSubmitting ? '수집 중…' : '자동 수집 실행'}
+            {isSubmitting ? t({ ko: '수집 중…', en: 'Collecting…' }) : t({ ko: '자동 수집 실행', en: 'Run auto-collection' })}
           </Button>
         </SettingsModalFooter>
       </SettingsModalBody>
