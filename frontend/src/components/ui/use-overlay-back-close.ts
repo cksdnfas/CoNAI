@@ -82,6 +82,10 @@ export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverla
         return
       }
 
+      if (shouldBypassOverlayHistoryBackNavigation() && openRef.current) {
+        return
+      }
+
       const wasProgrammaticBack = programmaticBackRef.current
       pushedRef.current = false
       programmaticBackRef.current = false

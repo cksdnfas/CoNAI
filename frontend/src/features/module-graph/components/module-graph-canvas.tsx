@@ -264,12 +264,20 @@ export function ModuleGraphCanvas({
     setActionMenuState(null)
   }, [])
 
+  const suppressNextPaneClick = useCallback(() => {
+    suppressNextPaneClickRef.current = true
+    window.setTimeout(() => {
+      suppressNextPaneClickRef.current = false
+    }, 0)
+  }, [])
+
   const openQuickCreateMenuAt = useCallback((
     anchor: { x: number; y: number },
     flowPosition: { x: number; y: number },
     mode: 'pane' | 'connect',
     connectionStart: PendingConnectionStart | null,
   ) => {
+    suppressNextPaneClick()
     const menuWidth = 360
     const menuHeight = 560
     const viewportPadding = 12
@@ -283,7 +291,7 @@ export function ModuleGraphCanvas({
       flowPosition,
       connectionStart,
     })
-  }, [])
+  }, [suppressNextPaneClick])
 
   const openQuickCreateMenu = useCallback((
     event: unknown,
@@ -306,12 +314,13 @@ export function ModuleGraphCanvas({
     }
 
     const flowPosition = reactFlowInstance.screenToFlowPosition({ x: clientPoint.x, y: clientPoint.y })
+    suppressNextPaneClick()
     setActionMenuState({
       kind: 'pane',
       anchor: clientPoint,
       flowPosition,
     })
-  }, [reactFlowInstance])
+  }, [reactFlowInstance, suppressNextPaneClick])
 
   const openNodeActionMenu = useCallback((event: unknown, node: ModuleGraphNode) => {
     const anchor = getNodeQuickMenuAnchor(event)
@@ -320,6 +329,7 @@ export function ModuleGraphCanvas({
     }
 
     const flowPosition = reactFlowInstance.screenToFlowPosition({ x: anchor.x, y: anchor.y })
+    suppressNextPaneClick()
     setActionMenuState({
       kind: 'node',
       anchor,
@@ -329,7 +339,7 @@ export function ModuleGraphCanvas({
       hasAdvancedOutputPorts: hasAdvancedModuleOutputPorts(node.data.module, node.data.inputValues),
       advancedOutputPortsEnabled: isAdvancedOutputPortsEnabled(node.data.inputValues),
     })
-  }, [reactFlowInstance])
+  }, [reactFlowInstance, suppressNextPaneClick])
 
   const rememberInteractionPoint = useCallback((event: unknown) => {
     const clientPoint = getEventClientPoint(event)
@@ -477,10 +487,7 @@ export function ModuleGraphCanvas({
           const droppedOnExistingTarget = Boolean((connectionState as { toNode?: unknown } | null | undefined)?.toNode)
 
           if (pendingConnectionStart && !droppedOnExistingTarget && dragDistance >= 6) {
-            suppressNextPaneClickRef.current = true
-            window.setTimeout(() => {
-              suppressNextPaneClickRef.current = false
-            }, 0)
+            suppressNextPaneClick()
             closeActionMenu()
             openQuickCreateMenu(event, 'connect', pendingConnectionStart)
           }
