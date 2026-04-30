@@ -1,6 +1,8 @@
+import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
-import type { AutoTestKaloscopeResult } from '@/lib/api'
+import { getAppSettings, type AutoTestKaloscopeResult } from '@/lib/api'
+import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { ArtistPromptSection } from './prompt-result-sections'
 import { getSortedEntries } from './tag-result-utils'
 
@@ -12,6 +14,12 @@ interface KaloscopeResultBlockProps {
 export function KaloscopeResultBlock({ result, title }: KaloscopeResultBlockProps) {
   const { t } = useI18n()
   const artistEntries = getSortedEntries(result.artists)
+  const settingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+    staleTime: 60_000,
+  })
+  const artistLinkUrlTemplate = settingsQuery.data?.kaloscope.artistLinkUrlTemplate
 
   if (artistEntries.length === 0) return null
 
@@ -23,7 +31,12 @@ export function KaloscopeResultBlock({ result, title }: KaloscopeResultBlockProp
       </div>
 
       <div className="mt-3">
-        <ArtistPromptSection tags={artistEntries.map(([tag]) => tag)} entries={artistEntries} collapsibleScores={false} />
+        <ArtistPromptSection
+          tags={artistEntries.map(([tag]) => tag)}
+          entries={artistEntries}
+          collapsibleScores={false}
+          getTagHref={(tag) => buildArtistPromptTagUrl(tag, artistLinkUrlTemplate)}
+        />
       </div>
     </div>
   )

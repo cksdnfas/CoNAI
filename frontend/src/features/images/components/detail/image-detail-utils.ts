@@ -1,6 +1,6 @@
 import type { ImageRecord } from '@/types/image'
 import type { SimilaritySettings } from '@/types/settings'
-import { parseTaglistTokens } from '@/components/common/tag-result-utils'
+import { formatPromptTagCopyText, parseTaglistTokens } from '@/components/common/tag-result-utils'
 import { buildImageDownloadUrl } from '@/lib/api'
 import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 
@@ -222,14 +222,7 @@ export function getImageAutoPromptCopyText(image: ImageRecord) {
     return ''
   }
 
-  return [
-    ...autoPromptContent.ratingEntries.map(([tag]) => tag),
-    ...autoPromptContent.characterEntries.map(([tag]) => tag),
-    ...autoPromptContent.generalTags,
-  ]
-    .map((tag) => tag.trim())
-    .filter((tag, index, tags) => tag.length > 0 && tags.indexOf(tag) === index)
-    .join(', ')
+  return formatPromptTagCopyText(autoPromptContent.generalTags)
 }
 
 /** Build extracted artist prompt tag data for the detail metadata card. */
