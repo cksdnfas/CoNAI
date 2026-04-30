@@ -37,7 +37,7 @@ import {
 } from './prompt-syntax-highlight-helpers'
 import { useWildcardWorkspaceBrowser } from './use-wildcard-workspace-browser'
 import { WildcardInlinePickerExplorer } from './wildcard-inline-picker-explorer'
-import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRect } from './floating-dropdown-utils'
+import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRectFromRect } from './floating-dropdown-utils'
 
 type WildcardInlinePickerFieldProps = {
   value: string
@@ -150,6 +150,90 @@ function renderPromptSyntaxOverlay(value: string, tokens: PromptSyntaxToken[]) {
   }
 
   return nodes
+}
+
+const CARET_MIRROR_STYLE_PROPERTIES = [
+  'boxSizing',
+  'borderTopWidth',
+  'borderRightWidth',
+  'borderBottomWidth',
+  'borderLeftWidth',
+  'paddingTop',
+  'paddingRight',
+  'paddingBottom',
+  'paddingLeft',
+  'fontFamily',
+  'fontSize',
+  'fontStyle',
+  'fontVariant',
+  'fontWeight',
+  'letterSpacing',
+  'lineHeight',
+  'textAlign',
+  'textIndent',
+  'textTransform',
+  'tabSize',
+  'wordBreak',
+  'overflowWrap',
+] as const
+
+function resolveLineHeight(style: CSSStyleDeclaration) {
+  const lineHeight = Number.parseFloat(style.lineHeight)
+  if (Number.isFinite(lineHeight)) {
+    return lineHeight
+  }
+
+  const fontSize = Number.parseFloat(style.fontSize)
+  return Number.isFinite(fontSize) ? fontSize * 1.2 : 18
+}
+
+function getTextFieldCaretClientRect(element: HTMLInputElement | HTMLTextAreaElement, caretPosition: number) {
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  const rect = element.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null
+  }
+
+  const style = window.getComputedStyle(element)
+  const mirror = document.createElement('div')
+  const marker = document.createElement('span')
+  const position = Math.max(0, Math.min(caretPosition, element.value.length))
+
+  for (const property of CARET_MIRROR_STYLE_PROPERTIES) {
+    mirror.style[property] = style[property]
+  }
+
+  mirror.style.position = 'fixed'
+  mirror.style.visibility = 'hidden'
+  mirror.style.pointerEvents = 'none'
+  mirror.style.left = `${rect.left}px`
+  mirror.style.top = `${rect.top}px`
+  mirror.style.width = `${rect.width}px`
+  mirror.style.height = `${rect.height}px`
+  mirror.style.overflow = 'hidden'
+  mirror.style.whiteSpace = element instanceof HTMLTextAreaElement ? 'pre-wrap' : 'pre'
+
+  mirror.textContent = element.value.slice(0, position)
+  marker.textContent = '\u200b'
+  mirror.appendChild(marker)
+  document.body.appendChild(mirror)
+
+  const markerRect = marker.getBoundingClientRect()
+  const lineHeight = resolveLineHeight(style)
+  const top = markerRect.top - element.scrollTop
+  const left = markerRect.left - element.scrollLeft
+
+  document.body.removeChild(mirror)
+
+  return {
+    left,
+    top,
+    bottom: top + lineHeight,
+    width: 0,
+  }
 }
 
 function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter, onMouseLeave }: {
@@ -436,14 +520,25 @@ export function WildcardInlinePickerField({
 
     const updatePosition = () => {
       const anchor = rootRef.current
-      if (!anchor) {
+      const field = fieldRef.current
+      if (!anchor || !field) {
         setInlinePopupPosition(null)
         return
       }
 
-      const rect = anchor.getBoundingClientRect()
-      setInlinePopupPosition(resolveFloatingDropdownRect(anchor, {
-        minWidth: rect.width,
+      const fieldRect = field.getBoundingClientRect()
+      const caretRect = getTextFieldCaretClientRect(field, caretPosition)
+      const popupAnchorRect = caretRect
+        ? {
+            left: fieldRect.left,
+            top: caretRect.top,
+            bottom: caretRect.bottom,
+            width: fieldRect.width,
+          }
+        : fieldRect
+
+      setInlinePopupPosition(resolveFloatingDropdownRectFromRect(popupAnchorRect, {
+        minWidth: fieldRect.width,
         preferredMaxHeight: 420,
         minUsableHeight: 220,
         gap: 8,
@@ -458,7 +553,7 @@ export function WildcardInlinePickerField({
       window.removeEventListener('resize', updatePosition)
       window.removeEventListener('scroll', updatePosition, true)
     }
-  }, [isPopupOpen, isTreeExplorerMode, suggestions.length])
+  }, [caretPosition, fieldScrollLeft, fieldScrollTop, isPopupOpen, isTreeExplorerMode, suggestions.length, value])
 
   useEffect(() => {
     if (!activeDetectedTokenKey || typeof document === 'undefined') {
