@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PropsWithChildren
 import { Pin, PinOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 
 interface ExplorerSidebarProps extends PropsWithChildren {
   title: ReactNode
@@ -27,6 +28,7 @@ export function ExplorerSidebar({
   children,
 }: ExplorerSidebarProps) {
   const asideRef = useRef<HTMLElement | null>(null)
+  const isDesktopPageLayout = useDesktopPageLayout()
   const [isFloating, setIsFloating] = useState(false)
   const [isFloatingLocked, setIsFloatingLocked] = useState(() => {
     if (typeof window === 'undefined' || !floatingLockStorageKey) {
@@ -93,12 +95,17 @@ export function ExplorerSidebar({
   const sidebarStyle: CSSProperties | undefined = isFloatingLocked
     ? { position: 'relative', top: 'auto' }
     : undefined
+  const shouldLimitUnfixedCompactHeight = floatingFrame && !isDesktopPageLayout && !isFloatingLocked
   const shouldShowFloatingLockAction = floatingFrame && (isFloating || isFloatingLocked)
 
   return (
     <aside
       ref={asideRef}
-      className={cn('explorer-sidebar relative flex min-h-0 flex-col rounded-sm bg-surface-lowest p-4', className)}
+      className={cn(
+        'explorer-sidebar relative flex min-h-0 flex-col rounded-sm bg-surface-lowest p-4',
+        shouldLimitUnfixedCompactHeight && 'max-h-[30vh]',
+        className,
+      )}
       style={sidebarStyle}
       data-floating={!isFloatingLocked && isFloating ? 'true' : 'false'}
     >
@@ -111,7 +118,7 @@ export function ExplorerSidebar({
 
       {headerExtra ? <div className="mb-4">{headerExtra}</div> : null}
 
-      <div className={cn('min-h-0 flex-1', bodyClassName)}>{children}</div>
+      <div className={cn('min-h-0 flex-1', shouldLimitUnfixedCompactHeight && 'overflow-y-auto pr-1', bodyClassName)}>{children}</div>
 
       {shouldShowFloatingLockAction ? (
         <div className="mt-4 border-t border-white/5 pt-3">
