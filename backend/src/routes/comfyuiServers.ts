@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer';
 import { createComfyUIService, getComfyUIServerRuntimeStatuses, ParallelGenerationService } from '../services/comfyuiService';
-import { ComfyUIServerResponse, ComfyUIServerCreateData, ComfyUIServerUpdateData } from '../types/comfyuiServer';
+import { ComfyUIServerResponse, ComfyUIServerCreateData, ComfyUIServerUpdateData, type ComfyUIBackendType } from '../types/comfyuiServer';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendRouteBadRequest } from './routeValidation';
 
@@ -30,6 +30,31 @@ function sendServerNotFound(res: Response) {
 
 function normalizeRoutingTag(value: string) {
   return value.trim().toLowerCase();
+}
+
+function parseBackendTypeInput(value: unknown): ComfyUIBackendType {
+  if (value === undefined || value === null || value === '') {
+    return 'comfyui';
+  }
+
+  if (value === 'comfyui' || value === 'modal') {
+    return value;
+  }
+
+  throw new Error('backend_type must be either comfyui or modal');
+}
+
+function parseCapacityInput(value: unknown, backendType: ComfyUIBackendType) {
+  if (value === undefined || value === null || value === '') {
+    return backendType === 'modal' ? 10 : 1;
+  }
+
+  const capacity = Number(value);
+  if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100) {
+    throw new Error('capacity must be an integer between 1 and 100');
+  }
+
+  return capacity;
 }
 
 function parseRoutingTagsInput(value: unknown) {
@@ -102,7 +127,7 @@ router.get('/test-all-connections', asyncHandler(async (req: Request, res: Respo
       } as ComfyUIServerResponse);
     }
 
-    const serverList = servers.map(s => ({ id: s.id, name: s.name, endpoint: s.endpoint }));
+    const serverList = servers.map(s => ({ id: s.id, name: s.name, endpoint: s.endpoint, backend_type: s.backend_type, capacity: s.capacity }));
     const results = await ParallelGenerationService.testMultipleConnections(serverList);
 
     const response: ComfyUIServerResponse = {
@@ -167,7 +192,7 @@ router.get('/:id/status', asyncHandler(async (req: Request, res: Response) => {
       return sendServerNotFound(res);
     }
 
-    const status = await createComfyUIService(server.endpoint).getRuntimeStatus(server);
+    const status = await createComfyUIService(server.endpoint, server).getRuntimeStatus(server);
     return res.json({
       success: true,
       data: status,
@@ -199,7 +224,7 @@ router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Respon
     }
 
     const results = await ParallelGenerationService.testMultipleConnections([
-      { id: server.id, name: server.name, endpoint: server.endpoint }
+      { id: server.id, name: server.name, endpoint: server.endpoint, backend_type: server.backend_type, capacity: server.capacity }
     ]);
 
     const response: ComfyUIServerResponse = {
@@ -313,9 +338,12 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     }
 
     const parsedRoutingTags = parseRoutingTagsInput(req.body?.routing_tags);
+    const backendType = parseBackendTypeInput(req.body?.backend_type);
     const serverData: ComfyUIServerCreateData = {
       name,
       endpoint,
+      backend_type: backendType,
+      capacity: parseCapacityInput(req.body?.capacity, backendType),
       description,
       routing_tags_json: parsedRoutingTags.provided ? JSON.stringify(parsedRoutingTags.tags) : null,
       is_active
@@ -333,7 +361,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
     return res.status(201).json(response);
   } catch (error) {
-    if (error instanceof Error && (error.message.includes('routing_tags') || error.message.includes('routing tag'))) {
+    if (error instanceof Error && (error.message.includes('routing_tags') || error.message.includes('routing tag') || error.message.includes('backend_type') || error.message.includes('capacity'))) {
       return res.status(400).json({
         success: false,
         error: error.message
@@ -362,6 +390,11 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const { name, endpoint, description, is_active } = req.body;
 
   try {
+    const existingServer = ComfyUIServerModel.findById(id);
+    if (!existingServer) {
+      return sendServerNotFound(res);
+    }
+
     // 이름 중복 확인 (변경하는 경우)
     if (name) {
       const exists = await ComfyUIServerModel.existsByName(name, id);
@@ -374,9 +407,17 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     }
 
     const parsedRoutingTags = parseRoutingTagsInput(req.body?.routing_tags);
+    const backendType = req.body?.backend_type === undefined ? undefined : parseBackendTypeInput(req.body?.backend_type);
+    const capacity = req.body?.capacity !== undefined
+      ? parseCapacityInput(req.body?.capacity, backendType ?? existingServer.backend_type)
+      : backendType !== undefined
+        ? parseCapacityInput(undefined, backendType)
+        : undefined;
     const serverData: ComfyUIServerUpdateData = {
       name,
       endpoint,
+      backend_type: backendType,
+      capacity,
       description,
       routing_tags_json: parsedRoutingTags.provided ? JSON.stringify(parsedRoutingTags.tags) : undefined,
       is_active
@@ -397,7 +438,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 
     return res.json(response);
   } catch (error) {
-    if (error instanceof Error && (error.message.includes('routing_tags') || error.message.includes('routing tag'))) {
+    if (error instanceof Error && (error.message.includes('routing_tags') || error.message.includes('routing tag') || error.message.includes('backend_type') || error.message.includes('capacity'))) {
       return res.status(400).json({
         success: false,
         error: error.message

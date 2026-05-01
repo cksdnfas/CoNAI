@@ -4,7 +4,8 @@ import {
   ComfyUIServerRecord,
   ComfyUIServerCreateData,
   ComfyUIServerUpdateData,
-  WorkflowServerRecord
+  WorkflowServerRecord,
+  type ComfyUIBackendType,
 } from '../types/comfyuiServer';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
@@ -25,13 +26,29 @@ function parseRoutingTagsJson(value: unknown): string[] {
   }
 }
 
+function normalizeBackendType(value: unknown): ComfyUIBackendType {
+  return value === 'modal' ? 'modal' : 'comfyui';
+}
+
+function normalizeCapacity(value: unknown, backendType: ComfyUIBackendType): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return backendType === 'modal' ? 10 : 1;
+  }
+  return Math.max(1, Math.min(100, Math.floor(parsed)));
+}
+
 function normalizeServerRecord(row: ComfyUIServerRecord | undefined | null): ComfyUIServerRecord | null {
   if (!row) {
     return null;
   }
 
+  const backendType = normalizeBackendType(row.backend_type);
+
   return {
     ...row,
+    backend_type: backendType,
+    capacity: normalizeCapacity(row.capacity, backendType),
     routing_tags: parseRoutingTagsJson(row.routing_tags_json),
   };
 }
@@ -43,11 +60,13 @@ export class ComfyUIServerModel {
   static create(serverData: ComfyUIServerCreateData): number {
     const info = userSettingsDb.prepare(`
       INSERT INTO comfyui_servers (
-        name, endpoint, description, routing_tags_json, is_active
-      ) VALUES (?, ?, ?, ?, ?)
+        name, endpoint, backend_type, capacity, description, routing_tags_json, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       serverData.name,
       serverData.endpoint,
+      normalizeBackendType(serverData.backend_type),
+      normalizeCapacity(serverData.capacity, normalizeBackendType(serverData.backend_type)),
       serverData.description || null,
       serverData.routing_tags_json ?? null,
       serverData.is_active !== undefined ? (serverData.is_active ? 1 : 0) : 1
@@ -93,8 +112,11 @@ export class ComfyUIServerModel {
    */
   static update(id: number, serverData: ComfyUIServerUpdateData): boolean {
     // is_active를 boolean에서 number로 변환
+    const backendType = serverData.backend_type !== undefined ? normalizeBackendType(serverData.backend_type) : undefined;
     const cleanData: Record<string, any> = {
       ...serverData,
+      backend_type: backendType,
+      capacity: serverData.capacity !== undefined ? normalizeCapacity(serverData.capacity, backendType ?? 'comfyui') : undefined,
       is_active: serverData.is_active !== undefined ? (serverData.is_active ? 1 : 0) : undefined
     };
 

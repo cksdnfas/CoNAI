@@ -162,7 +162,8 @@ export class GenerationQueueService {
     }
 
     const promptId = options?.providerJobId ?? latest.provider_job_id ?? null
-    const endpoint = this.resolveComfyCancellationEndpoint(latest, options?.assignedServer)
+    const assignedServer = options?.assignedServer ?? (latest.assigned_server_id ? ComfyUIServerModel.findById(latest.assigned_server_id) : null)
+    const endpoint = this.resolveComfyCancellationEndpoint(latest, assignedServer)
     const requestedAt = new Date().toISOString()
 
     if (!promptId || !endpoint) {
@@ -175,13 +176,13 @@ export class GenerationQueueService {
       return null
     }
 
-    const comfyService = createComfyUIService(endpoint)
+    const comfyService = createComfyUIService(endpoint, assignedServer)
     const result = await comfyService.cancelPrompt(promptId)
     updateQueueRequestDebugMeta(latest, {
       cancellation_requested_at: requestedAt,
       cancellation_endpoint: endpoint,
       cancellation_prompt_id: promptId,
-      cancellation_state: result.interrupted || result.deleted ? 'requested' : 'not_found',
+      cancellation_state: assignedServer?.backend_type === 'modal' ? 'unsupported' : result.interrupted || result.deleted ? 'requested' : 'not_found',
       cancellation_result: result,
     })
     return result
@@ -647,6 +648,14 @@ export class GenerationQueueService {
     this.tryStartThrottledServiceWorkers('codex', CODEX_WORKER_KEY, 'Codex')
   }
 
+  private static getComfyServerCapacity(server: ComfyUIServerRecord) {
+    return Math.max(1, Math.floor(server.capacity ?? (server.backend_type === 'modal' ? 10 : 1)))
+  }
+
+  private static getActiveComfyWorkerCount(serverId: number) {
+    return this.getActiveWorkerCountForPrefix(`comfyui:${serverId}`)
+  }
+
   private static async tryStartComfyWorkers(): Promise<void> {
     const activeServers = ComfyUIServerModel.findActiveServers()
 
@@ -675,54 +684,63 @@ export class GenerationQueueService {
       return
     }
 
-    const availableServers = activeServers.filter((server) => !this.activeWorkerKeys.has(`comfyui:${server.id}`))
-    if (availableServers.length === 0) {
+    const serversWithLocalCapacity = activeServers.filter((server) => this.getActiveComfyWorkerCount(server.id) < this.getComfyServerCapacity(server))
+    if (serversWithLocalCapacity.length === 0) {
       return
     }
 
-    const runtimeStatuses = await getComfyUIServerRuntimeStatuses(availableServers)
+    const probeableServers = serversWithLocalCapacity.filter((server) => server.backend_type !== 'modal')
+    const runtimeStatuses = await getComfyUIServerRuntimeStatuses(probeableServers)
     const statusByServerId = new Map(runtimeStatuses.map((status) => [status.server_id, status]))
     const reservedJobIds = new Set<number>()
 
-    for (const server of availableServers) {
-      const workerKey = `comfyui:${server.id}`
-      if (this.activeWorkerKeys.has(workerKey)) {
-        continue
-      }
-
-      const runtimeStatus = statusByServerId.get(server.id)
+    for (const server of serversWithLocalCapacity) {
+      const runtimeStatus = server.backend_type === 'modal'
+        ? { is_connected: true, is_idle: true, running_count: 0, pending_count: 0 }
+        : statusByServerId.get(server.id)
       if (!runtimeStatus?.is_connected) {
         console.log(`⏭️ Skipping ComfyUI server ${server.name} (${server.id}), unreachable`)
         continue
       }
 
-      if (runtimeStatus.is_idle !== true) {
+      const capacity = this.getComfyServerCapacity(server)
+      const localRunning = this.getActiveComfyWorkerCount(server.id)
+      const availableLocalSlots = Math.max(0, capacity - localRunning)
+      if (availableLocalSlots === 0) {
+        continue
+      }
+
+      if (server.backend_type !== 'modal' && runtimeStatus.is_idle !== true) {
         console.log(
           `⏭️ Skipping ComfyUI server ${server.name} (${server.id}), busy (running=${runtimeStatus.running_count ?? 0}, pending=${runtimeStatus.pending_count ?? 0})`,
         )
         continue
       }
 
-      const candidateJob = runnableQueuedJobs.find((job) => !reservedJobIds.has(job.id) && isGenerationQueueComfyJobCompatibleWithServer(job, server, activeServers))
-      if (!candidateJob) {
-        continue
-      }
+      for (let slotIndex = 0; slotIndex < availableLocalSlots; slotIndex += 1) {
+        const candidateJob = runnableQueuedJobs.find((job) => !reservedJobIds.has(job.id) && isGenerationQueueComfyJobCompatibleWithServer(job, server, activeServers))
+        if (!candidateJob) {
+          break
+        }
 
-      const job = this.claimQueuedJobForDispatch(candidateJob.id, server.id)
-      if (!job) {
-        continue
-      }
+        const job = this.claimQueuedJobForDispatch(candidateJob.id, server.id)
+        if (!job) {
+          reservedJobIds.add(candidateJob.id)
+          continue
+        }
 
-      reservedJobIds.add(job.id)
-      this.activeWorkerKeys.add(workerKey)
-      void this.runClaimedJob(job, server)
-        .catch((error) => {
-          console.error(`❌ ComfyUI queue worker failed for job ${job.id} on server ${server.id}:`, error)
-        })
-        .finally(() => {
-          this.activeWorkerKeys.delete(workerKey)
-          this.requestDispatch()
-        })
+        reservedJobIds.add(job.id)
+        const workerKey = `comfyui:${server.id}:${job.id}`
+        this.activeWorkerKeys.add(workerKey)
+        void this.runClaimedJob(job, server)
+          .catch((error) => {
+            console.error(`❌ ComfyUI queue worker failed for job ${job.id} on server ${server.id}:`, error)
+          })
+          .finally(() => {
+            this.activeWorkerKeys.delete(workerKey)
+            this.requestDispatch()
+          })
+      }
     }
   }
 

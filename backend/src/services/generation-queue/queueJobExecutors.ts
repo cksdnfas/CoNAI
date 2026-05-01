@@ -90,11 +90,13 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
 
   const payload = parseComfyQueuePayload(job)
   const apiEndpoint = assignedServer?.endpoint ?? workflow.api_endpoint
-  const comfyService = createComfyUIService(apiEndpoint)
+  const comfyService = createComfyUIService(apiEndpoint, assignedServer)
   const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : []
   const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, payload.promptData)
-  const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui')
-  const resolvedPromptData = await reconcileComfyModelSelectionValues(workflow.workflow_json, markedFields, parsedPromptData, comfyService, { strict: true })
+  const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui', {
+    modelPathSeparator: comfyService.isModalBackend() ? 'posix' : 'windows',
+  })
+  const resolvedPromptData = await reconcileComfyModelSelectionValues(workflow.workflow_json, markedFields, parsedPromptData, comfyService, { strict: !comfyService.isModalBackend() })
   const substitutedWorkflow = comfyService.substitutePromptData(
     workflow.workflow_json,
     markedFields,

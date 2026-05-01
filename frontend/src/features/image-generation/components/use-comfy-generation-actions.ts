@@ -14,6 +14,7 @@ import {
 type ServerLike = {
   id: number
   name: string
+  backend_type?: 'comfyui' | 'modal'
   routing_tags?: string[]
 }
 
@@ -149,7 +150,8 @@ export function useComfyGenerationActions({
       let targetLabel = 'ComfyUI'
 
       if (selectedTarget === 'auto') {
-        if (connectedServers.length === 0) {
+        const connectedComfyServers = connectedServers.filter((server) => server.backend_type !== 'modal')
+        if (connectedComfyServers.length === 0) {
           showSnackbar({ message: '연결된 ComfyUI 서버가 없어.', tone: 'error' })
           return
         }
@@ -158,8 +160,14 @@ export function useComfyGenerationActions({
         targetLabel = '자동 분산'
       } else if (selectedTarget.startsWith('tag:')) {
         const selectedTag = normalizeRoutingTag(selectedTarget.slice('tag:'.length))
-        const matchingConnectedServers = connectedServers.filter((server) => (server.routing_tags ?? []).includes(selectedTag))
-        if (matchingConnectedServers.length === 0) {
+        const matchingServers = activeServers.filter((server) => {
+          if (!(server.routing_tags ?? []).includes(selectedTag)) {
+            return false
+          }
+
+          return server.backend_type === 'modal' || comfyServerTests[server.id]?.status?.is_connected === true
+        })
+        if (matchingServers.length === 0) {
           showSnackbar({ message: `연결된 #${selectedTag} 서버가 없어.`, tone: 'error' })
           return
         }
@@ -179,7 +187,7 @@ export function useComfyGenerationActions({
           return
         }
 
-        if (comfyServerTests[serverId]?.status?.is_connected !== true) {
+        if (server.backend_type !== 'modal' && comfyServerTests[serverId]?.status?.is_connected !== true) {
           showSnackbar({ message: '선택한 서버가 아직 연결 확인되지 않았어.', tone: 'error' })
           return
         }

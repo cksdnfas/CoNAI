@@ -36,10 +36,23 @@ export function useComfyServerController({
 
   /** Update one editable ComfyUI server form field. */
   const handleComfyServerFieldChange = (field: keyof ComfyUIServerFormDraft, value: string) => {
-    setComfyServerForm((current) => ({
-      ...current,
-      [field]: value,
-    }))
+    setComfyServerForm((current) => {
+      if (field === 'backendType') {
+        const backendType = value === 'modal' ? 'modal' : 'comfyui'
+        return {
+          ...current,
+          backendType,
+          capacity: current.capacity === '1' || current.capacity === '10' || current.capacity.trim().length === 0
+            ? (backendType === 'modal' ? '10' : '1')
+            : current.capacity,
+        }
+      }
+
+      return {
+        ...current,
+        [field]: value,
+      }
+    })
   }
 
   /** Reset server editor state back to the default create flow. */
@@ -62,6 +75,18 @@ export function useComfyServerController({
 
   /** Test a single ComfyUI server and cache its reachability state. */
   const handleTestComfyServer = useCallback(async (serverId: number, options?: { silent?: boolean }) => {
+    const server = activeServers.find((item) => item.id === serverId)
+    if (server?.backend_type === 'modal') {
+      if (options?.silent) {
+        return
+      }
+
+      const confirmed = window.confirm('Modal 서버 테스트는 원격 endpoint를 호출해서 GPU 컨테이너가 켜지고 비용이 발생할 수 있어. 계속할까?')
+      if (!confirmed) {
+        return
+      }
+    }
+
     setComfyServerTests((current) => ({
       ...current,
       [serverId]: {
@@ -82,7 +107,9 @@ export function useComfyServerController({
       }))
 
       if (!options?.silent) {
-        showSnackbar({ message: status.is_connected ? 'ComfyUI 서버 연결 확인 완료.' : 'ComfyUI 서버 연결 실패.', tone: status.is_connected ? 'info' : 'error' })
+        const successMessage = server?.backend_type === 'modal' ? 'Modal 서버 수동 테스트 완료.' : 'ComfyUI 서버 연결 확인 완료.'
+        const failureMessage = server?.backend_type === 'modal' ? 'Modal 서버 수동 테스트 실패.' : 'ComfyUI 서버 연결 실패.'
+        showSnackbar({ message: status.is_connected ? successMessage : failureMessage, tone: status.is_connected ? 'info' : 'error' })
       }
     } catch (error) {
       const message = getErrorMessage(error, 'ComfyUI 서버 연결 테스트에 실패했어.')
@@ -98,7 +125,7 @@ export function useComfyServerController({
         showSnackbar({ message, tone: 'error' })
       }
     }
-  }, [showSnackbar])
+  }, [activeServers, showSnackbar])
 
   useEffect(() => {
     if (selectedTarget === 'auto' || selectedTarget.startsWith('tag:')) {
@@ -122,7 +149,7 @@ export function useComfyServerController({
       return
     }
 
-    const untestedServers = activeServers.filter((server) => !comfyServerTests[server.id])
+    const untestedServers = activeServers.filter((server) => server.backend_type !== 'modal' && !comfyServerTests[server.id])
     if (untestedServers.length === 0) {
       return
     }
@@ -140,6 +167,7 @@ export function useComfyServerController({
 
     const name = comfyServerForm.name.trim()
     const endpoint = comfyServerForm.endpoint.trim()
+    const capacity = Math.max(1, Math.min(100, Number.parseInt(comfyServerForm.capacity, 10) || (comfyServerForm.backendType === 'modal' ? 10 : 1)))
 
     if (name.length === 0 || endpoint.length === 0) {
       showSnackbar({ message: '서버 이름과 endpoint는 꼭 필요해.', tone: 'error' })
@@ -153,6 +181,8 @@ export function useComfyServerController({
         await updateGenerationComfyUIServer(editingServerId, {
           name,
           endpoint,
+          backend_type: comfyServerForm.backendType,
+          capacity,
           description: comfyServerForm.description.trim() || undefined,
           routing_tags: parseRoutingTagsCsv(comfyServerForm.routingTags),
           is_active: true,
@@ -161,12 +191,16 @@ export function useComfyServerController({
         await refetchServers()
         setSelectedTarget(`server:${editingServerId}`)
         handleCloseServerModal()
-        showSnackbar({ message: 'ComfyUI 서버를 수정했어.', tone: 'info' })
-        await handleTestComfyServer(editingServerId)
+        showSnackbar({ message: comfyServerForm.backendType === 'modal' ? 'Modal 서버를 수정했어. 자동 상태확인은 건너뛸게.' : 'ComfyUI 서버를 수정했어.', tone: 'info' })
+        if (comfyServerForm.backendType !== 'modal') {
+          await handleTestComfyServer(editingServerId)
+        }
       } else {
         const response = await createGenerationComfyUIServer({
           name,
           endpoint,
+          backend_type: comfyServerForm.backendType,
+          capacity,
           description: comfyServerForm.description.trim() || undefined,
           routing_tags: parseRoutingTagsCsv(comfyServerForm.routingTags),
         })
@@ -174,8 +208,10 @@ export function useComfyServerController({
         await refetchServers()
         setSelectedTarget(`server:${response.data.id}`)
         handleCloseServerModal()
-        showSnackbar({ message: 'ComfyUI 서버를 등록했어.', tone: 'info' })
-        await handleTestComfyServer(response.data.id)
+        showSnackbar({ message: comfyServerForm.backendType === 'modal' ? 'Modal 서버를 등록했어. 자동 상태확인은 건너뛸게.' : 'ComfyUI 서버를 등록했어.', tone: 'info' })
+        if (comfyServerForm.backendType !== 'modal') {
+          await handleTestComfyServer(response.data.id)
+        }
       }
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, editingServerId !== null ? 'ComfyUI 서버 수정에 실패했어.' : 'ComfyUI 서버 등록에 실패했어.'), tone: 'error' })
@@ -195,6 +231,8 @@ export function useComfyServerController({
     setComfyServerForm({
       name: server.name,
       endpoint: server.endpoint,
+      backendType: server.backend_type ?? 'comfyui',
+      capacity: String(server.capacity ?? (server.backend_type === 'modal' ? 10 : 1)),
       description: server.description ?? '',
       routingTags: (server.routing_tags ?? []).join(', '),
     })

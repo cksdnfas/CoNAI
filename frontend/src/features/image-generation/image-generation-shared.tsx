@@ -105,6 +105,8 @@ export type WorkflowFieldDraftValue = string | WorkflowTextDraftSegments | Selec
 export type ComfyUIServerFormDraft = {
   name: string
   endpoint: string
+  backendType: 'comfyui' | 'modal'
+  capacity: string
   description: string
   routingTags: string
 }
@@ -195,6 +197,8 @@ export const DEFAULT_NAI_FORM: NAIFormDraft = {
 export const DEFAULT_COMFYUI_SERVER_FORM: ComfyUIServerFormDraft = {
   name: '',
   endpoint: 'http://127.0.0.1:8188',
+  backendType: 'comfyui',
+  capacity: '1',
   description: '',
   routingTags: '',
 }

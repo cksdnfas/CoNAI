@@ -33,6 +33,8 @@ function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
         ? "NULLIF(TRIM(url), '')"
         : 'NULL';
 
+  const backendTypeExpr = hasColumn(db, 'comfyui_servers', 'backend_type') ? "COALESCE(backend_type, 'comfyui')" : "'comfyui'";
+  const capacityExpr = hasColumn(db, 'comfyui_servers', 'capacity') ? 'COALESCE(capacity, 1)' : '1';
   const descriptionExpr = hasColumn(db, 'comfyui_servers', 'description') ? 'description' : 'NULL';
   const isActiveExpr = hasColumn(db, 'comfyui_servers', 'is_active') ? 'COALESCE(is_active, 1)' : '1';
   const isDefaultExpr = hasColumn(db, 'comfyui_servers', 'is_default') ? 'COALESCE(is_default, 0)' : '0';
@@ -56,6 +58,8 @@ function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name VARCHAR(255) NOT NULL UNIQUE,
         endpoint VARCHAR(500) NOT NULL,
+        backend_type TEXT NOT NULL DEFAULT 'comfyui',
+        capacity INTEGER NOT NULL DEFAULT 1,
         description TEXT,
         is_active BOOLEAN DEFAULT 1,
         is_default BOOLEAN DEFAULT 0,
@@ -64,12 +68,14 @@ function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
       );
 
       INSERT INTO comfyui_servers__new (
-        id, name, endpoint, description, is_active, is_default, created_date, updated_date
+        id, name, endpoint, backend_type, capacity, description, is_active, is_default, created_date, updated_date
       )
       SELECT
         id,
         name,
         ${endpointExpr} AS endpoint,
+        ${backendTypeExpr} AS backend_type,
+        ${capacityExpr} AS capacity,
         ${descriptionExpr} AS description,
         ${isActiveExpr} AS is_active,
         ${isDefaultExpr} AS is_default,

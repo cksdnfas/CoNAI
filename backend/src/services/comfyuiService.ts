@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import FormData from 'form-data';
 import { WorkflowRecord, MarkedField, ComfyUIPromptResponse, ComfyUIHistoryResponse, ComfyUIOutputFile } from '../types/workflow';
-import type { ComfyUIQueueState, ComfyUIServerRecord, ComfyUIServerRuntimeStatus } from '../types/comfyuiServer';
+import type { ComfyUIBackendType, ComfyUIQueueState, ComfyUIServerRecord, ComfyUIServerRuntimeStatus } from '../types/comfyuiServer';
 import { runtimePaths } from '../config/runtimePaths';
 
 type ComfyUIQueueResponse = {
@@ -23,6 +23,24 @@ type CollectedComfyOutput = ComfyUIOutputFile & {
 type WaitForCompletionOptions = {
   shouldCancel?: () => boolean | Promise<boolean>;
   onCancelRequested?: (promptId: string) => void | Promise<void>;
+};
+
+type ComfyUIServiceOptions = {
+  backendType?: ComfyUIBackendType;
+  capacity?: number;
+};
+
+type ModalComfyFile = {
+  node_id?: string;
+  filename?: string;
+  data_base64?: string;
+  format?: string;
+};
+
+type ModalComfyGenerateResponse = {
+  images?: ModalComfyFile[];
+  videos?: ModalComfyFile[];
+  error?: string;
 };
 
 export type ComfyUICancelPromptResult = {
@@ -116,8 +134,12 @@ function resolveAxiosErrorMessage(error: unknown) {
  */
 export class ComfyUIService {
   private axiosInstance: AxiosInstance;
+  private backendType: ComfyUIBackendType;
+  private capacity: number;
 
-  constructor(private apiEndpoint: string) {
+  constructor(private apiEndpoint: string, options: ComfyUIServiceOptions = {}) {
+    this.backendType = options.backendType ?? 'comfyui';
+    this.capacity = Math.max(1, Math.floor(options.capacity ?? (this.backendType === 'modal' ? 10 : 1)));
     this.axiosInstance = axios.create({
       baseURL: apiEndpoint,
       timeout: 1800000, // 30분 타임아웃 (30 * 60 * 1000)
@@ -127,8 +149,22 @@ export class ComfyUIService {
     });
   }
 
+  isModalBackend() {
+    return this.backendType === 'modal';
+  }
+
+  createProviderJobId() {
+    return this.isModalBackend()
+      ? `modal-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+      : '';
+  }
+
   /** Load the exact allowed option list for one node input from the target ComfyUI server. */
   async getNodeInputOptions(classType: string, inputKey: string): Promise<string[] | null> {
+    if (this.isModalBackend()) {
+      return null;
+    }
+
     try {
       const response = await this.axiosInstance.get(`/object_info/${classType}`);
       const options = response.data?.[classType]?.input?.required?.[inputKey]?.[0];
@@ -434,6 +470,82 @@ export class ComfyUIService {
     return tempFiles;
   }
 
+  private writeModalOutputToTemp(file: ModalComfyFile, fallbackName: string, kind: ComfyOutputKind): CollectedComfyOutput & { tempPath: string } {
+    const encoded = typeof file.data_base64 === 'string' ? file.data_base64 : '';
+    if (!encoded) {
+      throw new Error(`Modal ComfyUI output ${file.filename ?? fallbackName} did not include data_base64`);
+    }
+
+    const filename = path.basename(file.filename || fallbackName);
+    const tempDir = runtimePaths.tempDir;
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    const ext = path.extname(filename) || (kind === 'video' ? '.mp4' : '.png');
+    const tempFilePath = path.join(tempDir, `modal_comfyui_${Date.now()}_${Math.random().toString(36).slice(2, 9)}${ext}`);
+    fs.writeFileSync(tempFilePath, Buffer.from(encoded, 'base64'));
+
+    return {
+      filename,
+      subfolder: '',
+      type: 'output',
+      format: file.format,
+      nodeId: String(file.node_id ?? 'modal'),
+      kind,
+      tempPath: tempFilePath,
+    };
+  }
+
+  /**
+   * Run a workflow through the Modal wrapper endpoint and materialize returned base64 outputs locally.
+   */
+  async runModalWorkflowAndCollectOutputs(
+    workflow: Record<string, any>,
+    providerJobId: string,
+    options?: WaitForCompletionOptions & { onlyFinalOutput?: boolean },
+  ): Promise<Array<CollectedComfyOutput & { tempPath: string }>> {
+    if (!this.isModalBackend()) {
+      throw new Error('runModalWorkflowAndCollectOutputs requires a modal backend server');
+    }
+
+    if (await options?.shouldCancel?.()) {
+      await options?.onCancelRequested?.(providerJobId);
+      throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE);
+    }
+
+    let response;
+    try {
+      response = await axios.post<ModalComfyGenerateResponse>(this.apiEndpoint, { workflow }, {
+        timeout: 1800000,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      throw new Error(`Modal ComfyUI request failed: ${resolveAxiosErrorMessage(error)}`);
+    }
+
+    if (response.data?.error) {
+      throw new Error(`Modal ComfyUI generation error: ${response.data.error}`);
+    }
+
+    if (await options?.shouldCancel?.()) {
+      throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE);
+    }
+
+    const imageOutputs = Array.isArray(response.data?.images) ? response.data.images : [];
+    const videoOutputs = Array.isArray(response.data?.videos) ? response.data.videos : [];
+    const outputs = [
+      ...imageOutputs.map((file, index) => this.writeModalOutputToTemp(file, `modal_image_${index}.png`, 'image')),
+      ...videoOutputs.map((file, index) => this.writeModalOutputToTemp(file, `modal_video_${index}.mp4`, 'video')),
+    ];
+
+    if (outputs.length === 0) {
+      throw new Error('No outputs generated by Modal ComfyUI');
+    }
+
+    return options?.onlyFinalOutput === false ? outputs : outputs.slice(-1);
+  }
+
   /**
    * Try to cancel one submitted prompt on the upstream ComfyUI server.
    * Pending prompts are removed from the queue and running prompts trigger /interrupt.
@@ -442,6 +554,16 @@ export class ComfyUIService {
     const normalizedPromptId = typeof promptId === 'string' ? promptId.trim() : '';
     if (!normalizedPromptId) {
       throw new Error('ComfyUI prompt cancellation requires a prompt id');
+    }
+
+    if (this.isModalBackend()) {
+      return {
+        promptId: normalizedPromptId,
+        matchedRunning: false,
+        matchedPending: false,
+        interrupted: false,
+        deleted: false,
+      };
     }
 
     try {
@@ -492,6 +614,12 @@ export class ComfyUIService {
     // 따라서 promptData를 그대로 ComfyUI로 전송
 
     console.log('🚀 Submitting workflow to ComfyUI (pre-substituted from frontend)');
+
+    if (this.isModalBackend()) {
+      const promptId = this.createProviderJobId();
+      const outputs = await this.runModalWorkflowAndCollectOutputs(promptData, promptId);
+      return { promptId, imagePaths: outputs.map((output) => output.tempPath) };
+    }
 
     const promptId = await this.submitPrompt(promptData);
     const outputs = await this.collectGeneratedOutputs(promptId);
@@ -551,9 +679,48 @@ export class ComfyUIService {
   /**
    * Combine reachability and queue occupancy into one runtime status payload.
    */
-  async getRuntimeStatus(serverMeta?: Pick<ComfyUIServerRecord, 'id' | 'name' | 'endpoint'>): Promise<ComfyUIServerRuntimeStatus> {
+  async getRuntimeStatus(serverMeta?: Pick<ComfyUIServerRecord, 'id' | 'name' | 'endpoint' | 'backend_type' | 'capacity'>): Promise<ComfyUIServerRuntimeStatus> {
     const startedAt = Date.now();
     const observedAt = new Date().toISOString();
+    const backendType = serverMeta?.backend_type ?? this.backendType;
+    const capacity = Math.max(1, Math.floor(serverMeta?.capacity ?? this.capacity));
+
+    if (backendType === 'modal') {
+      try {
+        const isConnected = await this.testConnection();
+        return {
+          server_id: serverMeta?.id ?? 0,
+          server_name: serverMeta?.name ?? '',
+          endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
+          backend_type: backendType,
+          capacity,
+          available_count: isConnected ? capacity : 0,
+          is_connected: isConnected,
+          response_time: Date.now() - startedAt,
+          error_message: undefined,
+          is_idle: isConnected,
+          pending_count: 0,
+          running_count: 0,
+          observed_at: observedAt,
+        };
+      } catch (error) {
+        return {
+          server_id: serverMeta?.id ?? 0,
+          server_name: serverMeta?.name ?? '',
+          endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
+          backend_type: backendType,
+          capacity,
+          available_count: 0,
+          is_connected: false,
+          response_time: Date.now() - startedAt,
+          error_message: resolveAxiosErrorMessage(error),
+          is_idle: false,
+          pending_count: 0,
+          running_count: 0,
+          observed_at: observedAt,
+        };
+      }
+    }
 
     try {
       const queueState = await this.getQueueState();
@@ -561,6 +728,9 @@ export class ComfyUIService {
         server_id: serverMeta?.id ?? 0,
         server_name: serverMeta?.name ?? '',
         endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
+        backend_type: backendType,
+        capacity,
+        available_count: queueState.is_idle ? 1 : 0,
         is_connected: true,
         response_time: Date.now() - startedAt,
         error_message: undefined,
@@ -574,6 +744,9 @@ export class ComfyUIService {
         server_id: serverMeta?.id ?? 0,
         server_name: serverMeta?.name ?? '',
         endpoint: serverMeta?.endpoint ?? this.apiEndpoint,
+        backend_type: backendType,
+        capacity,
+        available_count: 0,
         is_connected: false,
         response_time: Date.now() - startedAt,
         error_message: resolveAxiosErrorMessage(error),
@@ -591,6 +764,14 @@ export class ComfyUIService {
    */
   async testConnection(): Promise<boolean> {
     try {
+      if (this.isModalBackend()) {
+        const response = await axios.get(this.apiEndpoint, {
+          timeout: 15000,
+          validateStatus: (status) => status < 500,
+        });
+        return response.status < 500;
+      }
+
       await this.axiosInstance.get('/system_stats', { timeout: 5000 });
       return true;
     } catch (error) {
@@ -602,8 +783,11 @@ export class ComfyUIService {
 /**
  * 워크플로우에 맞는 ComfyUI 서비스 인스턴스 생성
  */
-export function createComfyUIService(apiEndpoint: string): ComfyUIService {
-  return new ComfyUIService(apiEndpoint);
+export function createComfyUIService(apiEndpoint: string, server?: Pick<ComfyUIServerRecord, 'backend_type' | 'capacity'> | null): ComfyUIService {
+  return new ComfyUIService(apiEndpoint, {
+    backendType: server?.backend_type ?? 'comfyui',
+    capacity: server?.capacity,
+  });
 }
 
 /**
@@ -612,7 +796,28 @@ export function createComfyUIService(apiEndpoint: string): ComfyUIService {
 export async function getComfyUIServerRuntimeStatuses(servers: ComfyUIServerRecord[]): Promise<ComfyUIServerRuntimeStatus[]> {
   const results = await Promise.allSettled(
     servers.map(async (server) => {
-      const comfyService = new ComfyUIService(server.endpoint);
+      if (server.backend_type === 'modal') {
+        return {
+          server_id: server.id,
+          server_name: server.name,
+          endpoint: server.endpoint,
+          backend_type: server.backend_type,
+          capacity: server.capacity,
+          available_count: 0,
+          is_connected: false,
+          response_time: undefined,
+          error_message: 'Modal status is not checked automatically to avoid waking the GPU endpoint.',
+          is_idle: undefined,
+          pending_count: undefined,
+          running_count: undefined,
+          observed_at: new Date().toISOString(),
+        } satisfies ComfyUIServerRuntimeStatus;
+      }
+
+      const comfyService = new ComfyUIService(server.endpoint, {
+        backendType: server.backend_type,
+        capacity: server.capacity,
+      });
       return comfyService.getRuntimeStatus(server);
     })
   );
@@ -627,6 +832,9 @@ export async function getComfyUIServerRuntimeStatuses(servers: ComfyUIServerReco
       server_id: server.id,
       server_name: server.name,
       endpoint: server.endpoint,
+      backend_type: server.backend_type,
+      capacity: server.capacity,
+      available_count: 0,
       is_connected: false,
       response_time: undefined,
       error_message: resolveAxiosErrorMessage(result.reason),
@@ -650,7 +858,7 @@ export class ParallelGenerationService {
    * @returns 각 서버의 생성 결과
    */
   static async generateOnMultipleServers(
-    servers: Array<{ id: number; name: string; endpoint: string }>,
+    servers: Array<{ id: number; name: string; endpoint: string; backend_type?: ComfyUIBackendType; capacity?: number }>,
     workflow: WorkflowRecord,
     promptData: Record<string, any>
   ): Promise<Array<{
@@ -664,7 +872,10 @@ export class ParallelGenerationService {
     const results = await Promise.allSettled(
       servers.map(async (server) => {
         try {
-          const comfyService = new ComfyUIService(server.endpoint);
+          const comfyService = new ComfyUIService(server.endpoint, {
+            backendType: server.backend_type,
+            capacity: server.capacity,
+          });
           const result = await comfyService.generateImages(workflow, promptData);
 
           return {
@@ -707,7 +918,7 @@ export class ParallelGenerationService {
    * @returns 각 서버의 프롬프트 ID
    */
   static async submitToMultipleServers(
-    servers: Array<{ id: number; name: string; endpoint: string }>,
+    servers: Array<{ id: number; name: string; endpoint: string; backend_type?: ComfyUIBackendType; capacity?: number }>,
     workflow: WorkflowRecord,
     promptData: Record<string, any>
   ): Promise<Array<{
@@ -723,10 +934,18 @@ export class ParallelGenerationService {
     const results = await Promise.allSettled(
       servers.map(async (server) => {
         try {
-          const comfyService = new ComfyUIService(server.endpoint);
+          const comfyService = new ComfyUIService(server.endpoint, {
+            backendType: server.backend_type,
+            capacity: server.capacity,
+          });
 
           // ComfyUI에 프롬프트 제출 (promptData가 이미 완전한 workflow)
-          const promptId = await comfyService.submitPrompt(promptData);
+          const promptId = comfyService.isModalBackend()
+            ? comfyService.createProviderJobId()
+            : await comfyService.submitPrompt(promptData);
+          if (comfyService.isModalBackend()) {
+            await comfyService.runModalWorkflowAndCollectOutputs(promptData, promptId);
+          }
 
           return {
             serverId: server.id,
@@ -765,7 +984,7 @@ export class ParallelGenerationService {
    * @returns 각 서버의 연결 상태
    */
   static async testMultipleConnections(
-    servers: Array<{ id: number; name: string; endpoint: string }>
+    servers: Array<{ id: number; name: string; endpoint: string; backend_type?: ComfyUIBackendType; capacity?: number }>
   ): Promise<Array<{
     serverId: number;
     serverName: string;
@@ -777,7 +996,10 @@ export class ParallelGenerationService {
       servers.map(async (server) => {
         const startTime = Date.now();
         try {
-          const comfyService = new ComfyUIService(server.endpoint);
+          const comfyService = new ComfyUIService(server.endpoint, {
+            backendType: server.backend_type,
+            capacity: server.capacity,
+          });
           const isConnected = await comfyService.testConnection();
           const responseTime = Date.now() - startTime;
 

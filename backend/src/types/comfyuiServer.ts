@@ -1,3 +1,5 @@
+export type ComfyUIBackendType = 'comfyui' | 'modal';
+
 /**
  * ComfyUI 서버 데이터베이스 레코드
  */
@@ -5,6 +7,8 @@ export interface ComfyUIServerRecord {
   id: number;
   name: string;
   endpoint: string;
+  backend_type: ComfyUIBackendType;
+  capacity: number;
   description?: string;
   routing_tags_json?: string | null;
   routing_tags?: string[];
@@ -19,6 +23,8 @@ export interface ComfyUIServerRecord {
 export interface ComfyUIServerCreateData {
   name: string;
   endpoint: string;
+  backend_type?: ComfyUIBackendType;
+  capacity?: number;
   description?: string;
   routing_tags_json?: string | null;
   is_active?: boolean;
@@ -30,6 +36,8 @@ export interface ComfyUIServerCreateData {
 export interface ComfyUIServerUpdateData {
   name?: string;
   endpoint?: string;
+  backend_type?: ComfyUIBackendType;
+  capacity?: number;
   description?: string;
   routing_tags_json?: string | null;
   is_active?: boolean;
@@ -73,6 +81,9 @@ export interface ComfyUIQueueState {
  * Runtime status combining connectivity and current upstream occupancy.
  */
 export interface ComfyUIServerRuntimeStatus extends ServerStatus {
+  backend_type?: ComfyUIBackendType;
+  capacity?: number;
+  available_count?: number;
   is_idle?: boolean;
   pending_count?: number;
   running_count?: number;

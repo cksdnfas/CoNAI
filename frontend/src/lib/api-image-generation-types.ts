@@ -154,10 +154,14 @@ export interface GenerationWorkflowDetail extends GenerationWorkflow {
   workflow_json: string
 }
 
+export type ComfyUIBackendType = 'comfyui' | 'modal'
+
 export interface ComfyUIServer {
   id: number
   name: string
   endpoint: string
+  backend_type: ComfyUIBackendType
+  capacity: number
   description?: string
   routing_tags?: string[]
   is_active: boolean
@@ -183,6 +187,8 @@ export interface ComfyUIModelFolderScanInput {
 export interface CreateComfyUIServerPayload {
   name: string
   endpoint: string
+  backend_type?: ComfyUIBackendType
+  capacity?: number
   description?: string
   routing_tags?: string[]
 }
@@ -190,6 +196,8 @@ export interface CreateComfyUIServerPayload {
 export interface UpdateComfyUIServerPayload {
   name?: string
   endpoint?: string
+  backend_type?: ComfyUIBackendType
+  capacity?: number
   description?: string
   routing_tags?: string[]
   is_active?: boolean
@@ -199,6 +207,9 @@ export interface ComfyUIServerConnectionStatus {
   server_id: number
   server_name: string
   endpoint: string
+  backend_type?: ComfyUIBackendType
+  capacity?: number
+  available_count?: number
   is_connected: boolean
   response_time?: number
   error_message?: string

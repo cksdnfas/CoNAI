@@ -23,8 +23,8 @@ const COMFY_MODEL_PATH_INPUT_KEYS = new Set([
 ])
 
 /** Normalize ComfyUI model-path separators to the same form exposed by the server object-info API. */
-function normalizeComfyModelPathValue(field: WorkflowPromptFieldLike, value: string, tool: 'comfyui' | 'nai') {
-  if (tool !== 'comfyui' || !value.includes('/')) {
+function normalizeComfyModelPathValue(field: WorkflowPromptFieldLike, value: string, tool: 'comfyui' | 'nai', modelPathSeparator: 'windows' | 'posix') {
+  if (tool !== 'comfyui') {
     return value
   }
 
@@ -36,7 +36,9 @@ function normalizeComfyModelPathValue(field: WorkflowPromptFieldLike, value: str
     return value
   }
 
-  return value.replace(/\//g, '\\')
+  return modelPathSeparator === 'posix'
+    ? value.replace(/\\/g, '/')
+    : value.replace(/\//g, '\\')
 }
 
 function resolveRandomDropdownValue(field: WorkflowPromptFieldLike) {
@@ -67,6 +69,7 @@ export function resolveWorkflowPromptValues<T extends Record<string, any>>(
   markedFields: WorkflowPromptFieldLike[],
   promptData: T,
   tool: 'comfyui' | 'nai' = 'comfyui',
+  options: { modelPathSeparator?: 'windows' | 'posix' } = {},
 ): T {
   const resolvedPromptData: Record<string, any> = { ...promptData }
 
@@ -85,7 +88,7 @@ export function resolveWorkflowPromptValues<T extends Record<string, any>>(
 
     const normalizedValue = rawValue === DROPDOWN_RANDOM_OPTION_VALUE && field.type === 'select'
       ? resolveRandomDropdownValue(field)
-      : normalizeComfyModelPathValue(field, rawValue, tool)
+      : normalizeComfyModelPathValue(field, rawValue, tool, options.modelPathSeparator ?? 'windows')
 
     if (field.type === 'select') {
       resolvedPromptData[field.id] = normalizedValue

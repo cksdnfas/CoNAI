@@ -31,6 +31,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name VARCHAR(255) NOT NULL UNIQUE,
       endpoint VARCHAR(500) NOT NULL,
+      backend_type TEXT NOT NULL DEFAULT 'comfyui',
+      capacity INTEGER NOT NULL DEFAULT 1,
       description TEXT,
       routing_tags_json TEXT,
       is_active BOOLEAN DEFAULT 1,
@@ -363,6 +365,14 @@ export function createUserSettingsSchema(db: Database.Database): void {
     if (hasColumn('comfyui_servers', 'url')) {
       db.exec('UPDATE comfyui_servers SET endpoint = COALESCE(endpoint, url) WHERE endpoint IS NULL');
     }
+  }
+  if (!hasColumn('comfyui_servers', 'backend_type')) {
+    console.log('  Migrating comfyui_servers: adding backend_type column');
+    db.exec("ALTER TABLE comfyui_servers ADD COLUMN backend_type TEXT NOT NULL DEFAULT 'comfyui'");
+  }
+  if (!hasColumn('comfyui_servers', 'capacity')) {
+    console.log('  Migrating comfyui_servers: adding capacity column');
+    db.exec('ALTER TABLE comfyui_servers ADD COLUMN capacity INTEGER NOT NULL DEFAULT 1');
   }
   if (!hasColumn('comfyui_servers', 'description')) {
     console.log('  Migrating comfyui_servers: adding description column');

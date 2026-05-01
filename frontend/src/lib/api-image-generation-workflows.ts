@@ -72,6 +72,13 @@ function normalizeComfyUIServerStatus(payload: Record<string, unknown>): ComfyUI
     server_id: Number(payload.server_id ?? payload.serverId ?? 0),
     server_name: String(payload.server_name ?? payload.serverName ?? ''),
     endpoint: String(payload.endpoint ?? ''),
+    backend_type: payload.backend_type === 'modal' ? 'modal' : payload.backendType === 'modal' ? 'modal' : 'comfyui',
+    capacity: typeof payload.capacity === 'number' ? payload.capacity : undefined,
+    available_count: typeof payload.available_count === 'number'
+      ? payload.available_count
+      : typeof payload.availableCount === 'number'
+        ? payload.availableCount
+        : undefined,
     is_connected: payload.is_connected === true || payload.isConnected === true,
     response_time: typeof payload.response_time === 'number'
       ? payload.response_time

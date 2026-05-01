@@ -175,6 +175,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
           {servers.map((server) => {
             const testState = serverTests[server.id]
             const connectionStatus = testState?.status
+            const isModalServer = server.backend_type === 'modal'
 
             return (
               <div key={server.id} className="rounded-sm border border-border bg-surface-low px-3 py-3 text-sm text-muted-foreground">
@@ -182,10 +183,13 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium text-foreground">{server.name}</span>
+                      {isModalServer ? <Badge variant="outline">Modal</Badge> : null}
                       {connectionStatus ? (
                         <Badge variant={connectionStatus.is_connected ? 'secondary' : 'outline'}>
                           {connectionStatus.is_connected ? '연결됨' : '실패'}
                         </Badge>
+                      ) : isModalServer ? (
+                        <Badge variant="outline">자동 확인 안 함</Badge>
                       ) : null}
                       {connectionStatus?.is_connected ? (
                         <Badge variant={connectionStatus.is_idle ? 'outline' : 'secondary'}>
@@ -213,7 +217,14 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                   </div>
 
                   <div className="flex shrink-0 flex-col items-end gap-2">
-                    <Button type="button" size="sm" variant="outline" onClick={() => onTestServer(server.id)} disabled={testState?.isLoading === true}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onTestServer(server.id)}
+                      disabled={testState?.isLoading === true}
+                      title={isModalServer ? 'Modal 서버 테스트는 원격 endpoint를 호출해서 비용이 발생할 수 있어.' : undefined}
+                    >
                       {testState?.isLoading ? '확인 중…' : '테스트'}
                     </Button>
                     <div className="flex gap-1">

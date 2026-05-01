@@ -103,7 +103,10 @@ export async function executeComfyGeneration(
   const { comfyService, workflow, imageSaveOptions, artifactWorkflow, onPromptSubmitted, shouldCancel, onCancelRequested } = input
   const normalizedWorkflow = normalizeCoNaiArtifactFileOutputNodes(workflow)
 
-  const promptId = await comfyService.submitPrompt(normalizedWorkflow)
+  const isArtifactWorkflow = artifactWorkflow?.result_view_mode === 'artifact_explorer'
+  const promptId = comfyService.isModalBackend()
+    ? comfyService.createProviderJobId()
+    : await comfyService.submitPrompt(normalizedWorkflow)
   await onPromptSubmitted?.(promptId)
 
   if (await shouldCancel?.()) {
@@ -111,12 +114,17 @@ export async function executeComfyGeneration(
     throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
   }
 
-  const isArtifactWorkflow = artifactWorkflow?.result_view_mode === 'artifact_explorer'
-  const collectedOutputs = await comfyService.collectGeneratedOutputs(promptId, {
-    shouldCancel,
-    onCancelRequested,
-    onlyFinalOutput: !isArtifactWorkflow,
-  })
+  const collectedOutputs = comfyService.isModalBackend()
+    ? await comfyService.runModalWorkflowAndCollectOutputs(normalizedWorkflow, promptId, {
+      shouldCancel,
+      onCancelRequested,
+      onlyFinalOutput: !isArtifactWorkflow,
+    })
+    : await comfyService.collectGeneratedOutputs(promptId, {
+      shouldCancel,
+      onCancelRequested,
+      onlyFinalOutput: !isArtifactWorkflow,
+    })
 
   if (await shouldCancel?.()) {
     throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)

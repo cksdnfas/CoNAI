@@ -55,6 +55,13 @@ export function getGenerationQueueEligibleServerIds(job: GenerationQueueJobRecor
     })
   }
 
+  if (job.requested_server_id == null && !job.requested_server_tag) {
+    eligibleServerIds = eligibleServerIds.filter((serverId) => {
+      const server = activeServers.find((candidate) => candidate.id === serverId)
+      return server?.backend_type !== 'modal'
+    })
+  }
+
   return eligibleServerIds
 }
 
