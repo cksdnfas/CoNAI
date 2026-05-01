@@ -17,6 +17,10 @@ import {
   type WildcardTreeEntry,
 } from './wildcard-generation-panel-helpers'
 
+function hasVisibleWildcardItems(items: WildcardItemRecord[]) {
+  return items.some((item) => item.content.trim().length > 0)
+}
+
 /** Render the hierarchical wildcard tree used by the left workspace explorer. */
 export function WildcardTree({
   entries,
@@ -109,8 +113,16 @@ export function WildcardDetailCard({
   const activeItems = activeItemTool === 'general' ? selectedGeneralItems : activeItemTool === 'comfyui' ? selectedComfyItems : selectedNaiItems
 
   useEffect(() => {
-    setActiveItemTool('general')
-  }, [selectedWildcard?.id])
+    setActiveItemTool(
+      hasVisibleWildcardItems(selectedGeneralItems)
+        ? 'general'
+        : hasVisibleWildcardItems(selectedNaiItems)
+          ? 'nai'
+          : hasVisibleWildcardItems(selectedComfyItems)
+            ? 'comfyui'
+            : 'general',
+    )
+  }, [selectedWildcard?.id, selectedGeneralItems, selectedNaiItems, selectedComfyItems])
 
   return (
     <section className="space-y-4">
