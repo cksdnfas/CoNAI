@@ -193,8 +193,9 @@ export function ComfyWorkflowControllerPanel({
   onResetDraft,
   onGenerateSelected,
 }: ComfyWorkflowControllerPanelProps) {
+  const isModalServer = (server: ComfyUIServer) => server.backend_type === 'modal' || serverTests[server.id]?.status?.backend_type === 'modal'
   const connectedServers = servers.filter((server) => serverTests[server.id]?.status?.is_connected === true)
-  const autoRoutableServers = connectedServers.filter((server) => server.backend_type !== 'modal')
+  const autoRoutableServers = connectedServers.filter((server) => !isModalServer(server))
   const routingTags = Array.from(new Set(servers.flatMap((server) => server.routing_tags ?? []))).sort((left, right) => left.localeCompare(right))
   const selectedServer = selectedTarget.startsWith('server:')
     ? servers.find((server) => server.id === Number(selectedTarget.slice('server:'.length))) ?? null
@@ -222,14 +223,14 @@ export function ComfyWorkflowControllerPanel({
 
   const selectedTag = selectedTarget.startsWith('tag:') ? selectedTarget.slice('tag:'.length) : null
   const selectedTagRoutableServers = selectedTag
-    ? servers.filter((server) => (server.routing_tags ?? []).includes(selectedTag) && (server.backend_type === 'modal' || serverTests[server.id]?.status?.is_connected === true))
+    ? servers.filter((server) => (server.routing_tags ?? []).includes(selectedTag) && (isModalServer(server) || serverTests[server.id]?.status?.is_connected === true))
     : []
   const canGenerateSelected = selectedTarget === 'auto'
     ? autoRoutableServers.length > 0
     : selectedTag !== null
       ? selectedTagRoutableServers.length > 0
       : selectedServer
-        ? selectedServer.backend_type === 'modal' || serverTests[selectedServer.id]?.status?.is_connected === true
+        ? isModalServer(selectedServer) || serverTests[selectedServer.id]?.status?.is_connected === true
         : false
   const targetOptions = useMemo<WorkflowTargetOption[]>(() => {
     if (servers.length === 0) {
@@ -243,7 +244,7 @@ export function ComfyWorkflowControllerPanel({
         description: autoRoutableServers.length > 0 ? `연결 ${autoRoutableServers.length}` : '연결 없음',
       },
       ...routingTags.map((tag) => {
-        const routableCount = servers.filter((server) => (server.routing_tags ?? []).includes(tag) && (server.backend_type === 'modal' || serverTests[server.id]?.status?.is_connected === true)).length
+        const routableCount = servers.filter((server) => (server.routing_tags ?? []).includes(tag) && (isModalServer(server) || serverTests[server.id]?.status?.is_connected === true)).length
         return {
           value: `tag:${tag}`,
           label: `#${tag}`,
@@ -252,8 +253,8 @@ export function ComfyWorkflowControllerPanel({
       }),
       ...servers.map((server) => {
         const connectionStatus = serverTests[server.id]?.status
-        const statusLabel = server.backend_type === 'modal' && !connectionStatus
-          ? 'Modal · 수동 테스트'
+        const statusLabel = isModalServer(server)
+          ? 'Modal · 생성 시 호출'
           : connectionStatus?.is_connected === true
             ? connectionStatus.is_idle
               ? 'idle'

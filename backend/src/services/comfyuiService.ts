@@ -793,25 +793,30 @@ export function createComfyUIService(apiEndpoint: string, server?: Pick<ComfyUIS
 /**
  * Collect runtime occupancy status for multiple ComfyUI servers in parallel.
  */
+export function buildUnprobedModalRuntimeStatus(server: ComfyUIServerRecord): ComfyUIServerRuntimeStatus {
+  const capacity = Math.max(1, Math.floor(server.capacity ?? 10));
+  return {
+    server_id: server.id,
+    server_name: server.name,
+    endpoint: server.endpoint,
+    backend_type: 'modal',
+    capacity,
+    available_count: capacity,
+    is_connected: true,
+    response_time: undefined,
+    error_message: undefined,
+    is_idle: true,
+    pending_count: undefined,
+    running_count: undefined,
+    observed_at: new Date().toISOString(),
+  };
+}
+
 export async function getComfyUIServerRuntimeStatuses(servers: ComfyUIServerRecord[]): Promise<ComfyUIServerRuntimeStatus[]> {
   const results = await Promise.allSettled(
     servers.map(async (server) => {
       if (server.backend_type === 'modal') {
-        return {
-          server_id: server.id,
-          server_name: server.name,
-          endpoint: server.endpoint,
-          backend_type: server.backend_type,
-          capacity: server.capacity,
-          available_count: 0,
-          is_connected: false,
-          response_time: undefined,
-          error_message: 'Modal status is not checked automatically to avoid waking the GPU endpoint.',
-          is_idle: undefined,
-          pending_count: undefined,
-          running_count: undefined,
-          observed_at: new Date().toISOString(),
-        } satisfies ComfyUIServerRuntimeStatus;
+        return buildUnprobedModalRuntimeStatus(server);
       }
 
       const comfyService = new ComfyUIService(server.endpoint, {
@@ -996,6 +1001,15 @@ export class ParallelGenerationService {
       servers.map(async (server) => {
         const startTime = Date.now();
         try {
+          if (server.backend_type === 'modal') {
+            return {
+              serverId: server.id,
+              serverName: server.name,
+              isConnected: true,
+              error: 'Modal connection test skipped to avoid waking the GPU endpoint.',
+            };
+          }
+
           const comfyService = new ComfyUIService(server.endpoint, {
             backendType: server.backend_type,
             capacity: server.capacity,

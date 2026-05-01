@@ -211,8 +211,13 @@ export async function deleteGenerationWorkflow(workflowId: number) {
 }
 
 /** Load one ComfyUI server runtime status, including connectivity and current occupancy. */
-export async function testGenerationComfyUIServer(serverId: number) {
-  const response = await requestJson<TestComfyUIServerResponse>(`/api/comfyui-servers/${serverId}/status`)
+export async function testGenerationComfyUIServer(serverId: number, options?: { probe?: boolean }) {
+  const searchParams = new URLSearchParams()
+  if (options?.probe) {
+    searchParams.set('probe', 'true')
+  }
+  const queryString = searchParams.toString()
+  const response = await requestJson<TestComfyUIServerResponse>(`/api/comfyui-servers/${serverId}/status${queryString ? `?${queryString}` : ''}`)
   return normalizeComfyUIServerStatus(response.data as unknown as Record<string, unknown>)
 }
 

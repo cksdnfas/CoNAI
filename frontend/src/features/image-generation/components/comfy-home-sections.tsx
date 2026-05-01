@@ -175,7 +175,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
           {servers.map((server) => {
             const testState = serverTests[server.id]
             const connectionStatus = testState?.status
-            const isModalServer = server.backend_type === 'modal'
+            const isModalServer = server.backend_type === 'modal' || connectionStatus?.backend_type === 'modal'
 
             return (
               <div key={server.id} className="rounded-sm border border-border bg-surface-low px-3 py-3 text-sm text-muted-foreground">
@@ -184,14 +184,14 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium text-foreground">{server.name}</span>
                       {isModalServer ? <Badge variant="outline">Modal</Badge> : null}
-                      {connectionStatus ? (
+                      {isModalServer ? (
+                        <Badge variant="outline">자동 확인 안 함</Badge>
+                      ) : connectionStatus ? (
                         <Badge variant={connectionStatus.is_connected ? 'secondary' : 'outline'}>
                           {connectionStatus.is_connected ? '연결됨' : '실패'}
                         </Badge>
-                      ) : isModalServer ? (
-                        <Badge variant="outline">자동 확인 안 함</Badge>
                       ) : null}
-                      {connectionStatus?.is_connected ? (
+                      {connectionStatus?.is_connected && !isModalServer ? (
                         <Badge variant={connectionStatus.is_idle ? 'outline' : 'secondary'}>
                           {connectionStatus.is_idle ? 'idle' : 'busy'}
                         </Badge>
@@ -207,12 +207,12 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                       </div>
                     ) : null}
                     {connectionStatus?.response_time !== undefined ? <div className="mt-1 text-[11px]">{connectionStatus.response_time}ms</div> : null}
-                    {connectionStatus?.is_connected ? (
+                    {connectionStatus?.is_connected && !isModalServer ? (
                       <div className="mt-1 text-[11px]">
                         running {connectionStatus.running_count ?? 0} · pending {connectionStatus.pending_count ?? 0}
                       </div>
                     ) : null}
-                    {connectionStatus?.error_message ? <div className="mt-1 text-[11px] text-[#ffb4ab]">{connectionStatus.error_message}</div> : null}
+                    {connectionStatus?.error_message && !isModalServer ? <div className="mt-1 text-[11px] text-[#ffb4ab]">{connectionStatus.error_message}</div> : null}
                     {testState?.error ? <div className="mt-1 text-[11px] text-[#ffb4ab]">{testState.error}</div> : null}
                   </div>
 

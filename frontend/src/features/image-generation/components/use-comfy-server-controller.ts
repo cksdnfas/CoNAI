@@ -97,7 +97,7 @@ export function useComfyServerController({
     }))
 
     try {
-      const status = await testGenerationComfyUIServer(serverId)
+      const status = await testGenerationComfyUIServer(serverId, { probe: server?.backend_type === 'modal' })
       setComfyServerTests((current) => ({
         ...current,
         [serverId]: {

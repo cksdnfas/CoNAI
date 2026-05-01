@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer';
-import { createComfyUIService, getComfyUIServerRuntimeStatuses, ParallelGenerationService } from '../services/comfyuiService';
+import { buildUnprobedModalRuntimeStatus, createComfyUIService, getComfyUIServerRuntimeStatuses, ParallelGenerationService } from '../services/comfyuiService';
 import { ComfyUIServerResponse, ComfyUIServerCreateData, ComfyUIServerUpdateData, type ComfyUIBackendType } from '../types/comfyuiServer';
 import { asyncHandler } from '../middleware/errorHandler';
 import { sendRouteBadRequest } from './routeValidation';
@@ -192,7 +192,10 @@ router.get('/:id/status', asyncHandler(async (req: Request, res: Response) => {
       return sendServerNotFound(res);
     }
 
-    const status = await createComfyUIService(server.endpoint, server).getRuntimeStatus(server);
+    const shouldProbeModal = req.query.probe === 'true';
+    const status = server.backend_type === 'modal' && !shouldProbeModal
+      ? buildUnprobedModalRuntimeStatus(server)
+      : await createComfyUIService(server.endpoint, server).getRuntimeStatus(server);
     return res.json({
       success: true,
       data: status,
