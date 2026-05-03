@@ -32,6 +32,7 @@ import externalApiRoutes from '../routes/externalApi.routes';
 import civitaiRoutes from '../routes/civitai.routes';
 import searchHistoryRoutes from '../routes/search-history.routes';
 import searchOptionsRoutes from '../routes/search-options.routes';
+import { danbooruBrowserRoutes } from '../routes/danbooruBrowser.routes';
 import { wallpaperRuntimeRoutes } from '../routes/wallpaperRuntime.routes';
 import { runtimeAppearanceRoutes } from '../routes/runtimeAppearance.routes';
 import { runtimeMediaSettingsRoutes } from '../routes/runtime-media-settings.routes';
@@ -137,6 +138,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     optionalAuth(req, res, next);
   }, imageRoutes);
   app.use('/api/prompt-collection', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), promptCollectionRoutes);
+  app.use('/api/danbooru-browser', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), danbooruBrowserRoutes);
   app.use('/api/prompt-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), promptGroupRoutes);
   app.use('/api/negative-prompt-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), negativePromptGroupRoutes);
   app.use('/api/groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), groupRoutes);

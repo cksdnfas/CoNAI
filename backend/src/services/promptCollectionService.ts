@@ -2,9 +2,6 @@ import { PromptSearchResult, PromptStatistics } from '@conai/shared';
 import { PromptCollectionIngestService } from './promptCollectionIngestService';
 import { PromptCollectionMutationService } from './promptCollectionMutationService';
 import { PromptCollectionQueryService } from './promptCollectionQueryService';
-import { PromptRelationService } from './promptRelationService';
-import { PromptTaxonomyService } from './promptTaxonomyService';
-import type { PromptRelationPromptType, PromptTaxonomyInferredType } from '../types/promptRelations';
 
 export class PromptCollectionService {
   static async collectFromImage(prompt: string | null, negativePrompt: string | null, characterPromptText: string | null = null): Promise<void> {
@@ -102,50 +99,4 @@ export class PromptCollectionService {
     return PromptCollectionQueryService.resolvePromptsWithGroups(prompts, type);
   }
 
-  static getRelatedPrompts(prompt: string, type: PromptRelationPromptType = 'positive', limit = 12) {
-    return PromptRelationService.getRelatedPrompts(prompt, type, limit);
-  }
-
-  static getPromptGraph(
-    type: PromptRelationPromptType = 'positive',
-    options?: {
-      minScore?: number;
-      minSharedCount?: number;
-      minUsageCount?: number;
-      limit?: number;
-    },
-  ) {
-    return PromptRelationService.getGraph(type, options);
-  }
-
-  static getPromptTaxonomyRelatedPrompts(
-    prompt: string,
-    type: PromptRelationPromptType = 'positive',
-    options?: {
-      relationKind?: 'same_family' | 'string_variant' | 'all';
-      limit?: number;
-    },
-  ) {
-    return PromptTaxonomyService.getRelatedPrompts(prompt, type, options);
-  }
-
-  static getPromptTaxonomyGraph(
-    type: PromptRelationPromptType = 'positive',
-    options?: {
-      inferredType?: PromptTaxonomyInferredType | 'all';
-      relationKind?: 'same_family' | 'string_variant' | 'all';
-      minScore?: number;
-      limit?: number;
-    },
-  ) {
-    return PromptTaxonomyService.getGraph(type, options);
-  }
-
-  static rebuildTaxonomy() {
-    return PromptTaxonomyService.rebuildAll();
-  }
-
-  static rebuildRelations() {
-    return PromptRelationService.rebuildAll();
-  }
 }

@@ -1,7 +1,6 @@
 import { PromptCollectionModel } from '../models/PromptCollection';
 import { PromptGroupModel } from '../models/PromptGroup';
 import { isLoRAModel, cleanPromptTerm, parsePromptWithLoRAs, removeLoRAWeight } from '@conai/shared';
-import { PromptRelationService } from './promptRelationService';
 
 export class PromptCollectionIngestService {
   /**
@@ -189,8 +188,6 @@ export class PromptCollectionIngestService {
         console.log(`⚠️ Skipping invalid negative prompt: "${negativePrompt}"`);
       }
 
-      PromptRelationService.collectFromImage(prompt, negativePrompt, characterPromptText);
-
       console.log(`⏱️ [PromptCollection] ✅ Total collection time: ${Date.now() - startTime}ms`);
     } catch (error) {
       console.error(`⏱️ [PromptCollection] ❌ Failed after ${Date.now() - startTime}ms:`, error);
@@ -261,7 +258,6 @@ export class PromptCollectionIngestService {
         }
       }
 
-      PromptRelationService.removeFromImage(prompt, negativePrompt, characterPromptText, autoTags);
     } catch (error) {
       console.error('Error removing prompts from image:', error);
       throw error;

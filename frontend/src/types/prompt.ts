@@ -1,5 +1,4 @@
 export type PromptTypeFilter = 'positive' | 'negative' | 'auto'
-export type PromptGraphMode = 'usage' | 'taxonomy'
 export type PromptSortBy = 'usage_count' | 'created_at' | 'prompt'
 export type PromptSortOrder = 'ASC' | 'DESC'
 
@@ -35,124 +34,6 @@ export interface PromptSearchPayload {
     limit: number
     total: number
     totalPages: number
-  }
-}
-
-export interface PromptRelatedItem {
-  id: number
-  prompt: string
-  usage_count: number
-  group_id: number | null
-  shared_count: number
-  score: number
-}
-
-export interface PromptRelatedPayload {
-  items: PromptRelatedItem[]
-  total: number
-  source: {
-    prompt: string
-    type: PromptTypeFilter
-  }
-}
-
-export interface PromptGraphNodeItem {
-  id: number
-  prompt: string
-  usage_count: number
-  group_id: number | null
-  degree: number
-}
-
-export interface PromptGraphEdgeItem {
-  source_prompt: string
-  target_prompt: string
-  shared_count: number
-  score: number
-}
-
-export interface PromptGraphPayload {
-  nodes: PromptGraphNodeItem[]
-  edges: PromptGraphEdgeItem[]
-  filters: {
-    type: PromptTypeFilter
-    min_score: number
-    min_shared_count: number
-    min_usage_count: number
-    limit: number
-  }
-}
-
-export type PromptTaxonomyInferredType =
-  | 'quality'
-  | 'subject'
-  | 'count_or_composition'
-  | 'pose_or_action'
-  | 'body_or_expression'
-  | 'hair_or_face'
-  | 'clothing_or_accessory'
-  | 'prop_or_object'
-  | 'background_or_setting'
-  | 'lighting_or_mood'
-  | 'style'
-  | 'artist_or_source'
-  | 'meta_or_technical'
-  | 'unknown'
-
-export type PromptTaxonomyRelationKind = 'same_family' | 'string_variant'
-
-export interface PromptTaxonomyNodeItem {
-  id: number
-  prompt: string
-  usage_count: number
-  group_id: number | null
-  inferred_type: PromptTaxonomyInferredType
-  cluster_id: string | null
-  canonical_prompt: string | null
-}
-
-export interface PromptTaxonomyEdgeItem {
-  source_prompt: string
-  target_prompt: string
-  relation_kind: PromptTaxonomyRelationKind
-  score: number
-}
-
-export interface PromptTaxonomyPayload {
-  nodes: PromptTaxonomyNodeItem[]
-  edges: PromptTaxonomyEdgeItem[]
-  filters: {
-    type: PromptTypeFilter
-    inferred_type: PromptTaxonomyInferredType | 'all'
-    relation_kind: PromptTaxonomyRelationKind | 'all'
-    min_score: number
-    limit: number
-  }
-}
-
-export interface PromptTaxonomyRelatedItem {
-  id: number
-  prompt: string
-  usage_count: number
-  group_id: number | null
-  inferred_type: PromptTaxonomyInferredType
-  cluster_id: string | null
-  canonical_prompt: string | null
-  relation_kind: PromptTaxonomyRelationKind
-  score: number
-}
-
-export interface PromptTaxonomyRelatedPayload {
-  items: PromptTaxonomyRelatedItem[]
-  total: number
-  source: {
-    prompt: string
-    type: PromptTypeFilter
-    usage_count: number
-    group_id: number | null
-    inferred_type: PromptTaxonomyInferredType | 'unknown'
-    cluster_id: string | null
-    canonical_prompt: string | null
   }
 }
 
@@ -208,4 +89,34 @@ export interface PromptGroupImportResult {
   reassigned_groups: { old_id: number; new_id: number; group_name: string }[]
   updated_prompts: number
   message: string
+}
+
+export type DanbooruPromptGroupingMode = 'unclassified-only' | 'overwrite-existing'
+
+export interface DanbooruPromptGroupingTypeResult {
+  type: PromptTypeFilter
+  totalPrompts: number
+  eligiblePrompts: number
+  matchedPrompts: number
+  assignedPrompts: number
+  createdGroups: number
+  reusedGroups: number
+  matchedGroups: number
+  skippedAssignedPrompts: number
+  sampleUnmatchedPrompts: Array<{ prompt: string; usage_count: number }>
+}
+
+export interface DanbooruPromptGroupingResult {
+  mode: DanbooruPromptGroupingMode
+  database: {
+    available: boolean
+    path: string
+    expectedPath: string
+    expectedDirectory: string
+    downloadUrl: string
+    filePatterns: string[]
+    matchedBy: 'configured' | 'default' | 'discovered' | 'missing'
+  }
+  totals: Omit<DanbooruPromptGroupingTypeResult, 'type' | 'sampleUnmatchedPrompts'>
+  byType: DanbooruPromptGroupingTypeResult[]
 }

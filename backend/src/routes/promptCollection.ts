@@ -1,13 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { PromptCollectionService } from '../services/promptCollectionService';
-import type { PromptTaxonomyInferredType } from '../types/promptRelations';
-import { PromptCollectionResponse,
-successResponse,
-errorResponse,
-paginatedResponse,
-PAGINATION,
-validateId } from '@conai/shared';
+import { PromptGroupService } from '../services/promptGroupService';
+import {
+  successResponse,
+  errorResponse,
+  PAGINATION,
+  validateId,
+} from '@conai/shared';
 
 const router = Router();
 
@@ -120,149 +120,6 @@ router.get('/top', async (req: Request, res: Response) => {
 });
 
 /**
- * 연관 프롬프트 조회
- * GET /api/prompt-collection/related
- */
-router.get('/related', async (req: Request, res: Response) => {
-  try {
-    const { prompt = '', type = 'positive', limit = '12' } = req.query;
-
-    const result = PromptCollectionService.getRelatedPrompts(
-      String(prompt),
-      type as 'positive' | 'negative' | 'auto',
-      parseInt(limit as string, 10)
-    );
-
-    return res.json(successResponse(result));
-  } catch (error) {
-    console.error('Error getting related prompts:', error);
-    return res.status(500).json(errorResponse('Failed to get related prompts'));
-  }
-});
-
-/**
- * 자동 taxonomy 연관 프롬프트 조회
- * GET /api/prompt-collection/taxonomy-related
- */
-router.get('/taxonomy-related', async (req: Request, res: Response) => {
-  try {
-    const { prompt = '', type = 'positive', relationKind = 'all', limit = '12' } = req.query;
-
-    const result = PromptCollectionService.getPromptTaxonomyRelatedPrompts(
-      String(prompt),
-      type as 'positive' | 'negative' | 'auto',
-      {
-        relationKind: relationKind as 'same_family' | 'string_variant' | 'all',
-        limit: parseInt(limit as string, 10),
-      }
-    );
-
-    return res.json(successResponse(result));
-  } catch (error) {
-    console.error('Error getting prompt taxonomy related prompts:', error);
-    return res.status(500).json(errorResponse('Failed to get prompt taxonomy related prompts'));
-  }
-});
-
-/**
- * 전체 프롬프트 관계 그래프 조회
- * GET /api/prompt-collection/graph
- */
-router.get('/graph', async (req: Request, res: Response) => {
-  try {
-    const {
-      type = 'positive',
-      minScore = '55',
-      minSharedCount = '3',
-      minUsageCount = '2',
-      limit = '180',
-    } = req.query;
-
-    const result = PromptCollectionService.getPromptGraph(
-      type as 'positive' | 'negative' | 'auto',
-      {
-        minScore: Number(minScore),
-        minSharedCount: Number(minSharedCount),
-        minUsageCount: Number(minUsageCount),
-        limit: Number(limit),
-      }
-    );
-
-    return res.json(successResponse(result));
-  } catch (error) {
-    console.error('Error getting prompt graph:', error);
-    return res.status(500).json(errorResponse('Failed to get prompt graph'));
-  }
-});
-
-/**
- * 자동 taxonomy 그래프 조회
- * GET /api/prompt-collection/taxonomy-graph
- */
-router.get('/taxonomy-graph', async (req: Request, res: Response) => {
-  try {
-    const {
-      type = 'positive',
-      inferredType = 'all',
-      relationKind = 'all',
-      minScore = '0.58',
-      limit = '180',
-    } = req.query;
-
-    const result = PromptCollectionService.getPromptTaxonomyGraph(
-      type as 'positive' | 'negative' | 'auto',
-      {
-        inferredType: inferredType as PromptTaxonomyInferredType | 'all',
-        relationKind: relationKind as 'same_family' | 'string_variant' | 'all',
-        minScore: Number(minScore),
-        limit: Number(limit),
-      }
-    );
-
-    return res.json(successResponse(result));
-  } catch (error) {
-    console.error('Error getting prompt taxonomy graph:', error);
-    return res.status(500).json(errorResponse('Failed to get prompt taxonomy graph'));
-  }
-});
-
-/**
- * 자동 taxonomy 재구축
- * POST /api/prompt-collection/rebuild-taxonomy
- */
-router.post('/rebuild-taxonomy', async (_req: Request, res: Response) => {
-  try {
-    const result = PromptCollectionService.rebuildTaxonomy();
-
-    return res.json(successResponse({
-      ...result,
-      message: `Prompt taxonomy rebuild complete (${result.nodes} terms, ${result.relations} relations)`
-    }));
-  } catch (error) {
-    console.error('Error rebuilding prompt taxonomy:', error);
-    return res.status(500).json(errorResponse('Failed to rebuild prompt taxonomy'));
-  }
-});
-
-/**
- * 프롬프트 관계 재구축
- * POST /api/prompt-collection/rebuild-relations
- */
-router.post('/rebuild-relations', async (_req: Request, res: Response) => {
-  try {
-    const result = PromptCollectionService.rebuildRelations();
-
-    return res.json(successResponse({
-      ...result,
-      message: `Prompt relation rebuild complete (${result.updated}/${result.processed})`
-    }));
-  } catch (error) {
-    console.error('Error rebuilding prompt relations:', error);
-    return res.status(500).json(errorResponse('Failed to rebuild prompt relations'));
-  }
-});
-
-/**
  * 그룹 프롬프트 조회
  * GET /api/prompt-collection/group/:groupId
  */
@@ -366,6 +223,36 @@ router.post('/resolve-groups', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error resolving prompt groups:', error);
     return res.status(500).json(errorResponse('Failed to resolve prompt groups'));
+  }
+});
+
+/**
+ * 단부루 taxonomy 기반 프롬프트 그룹 자동 구성 미리보기
+ * GET /api/prompt-collection/danbooru-grouping/preview
+ */
+router.get('/danbooru-grouping/preview', async (req: Request, res: Response) => {
+  try {
+    const mode = req.query.mode === 'overwrite-existing' ? 'overwrite-existing' : 'unclassified-only';
+    const result = PromptGroupService.previewDanbooruGrouping(mode);
+    return res.json(successResponse(result));
+  } catch (error) {
+    console.error('Error previewing Danbooru grouping:', error);
+    return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'Failed to preview Danbooru grouping'));
+  }
+});
+
+/**
+ * 단부루 taxonomy 기반 프롬프트 그룹 자동 구성 적용
+ * POST /api/prompt-collection/danbooru-grouping/apply
+ */
+router.post('/danbooru-grouping/apply', async (req: Request, res: Response) => {
+  try {
+    const mode = req.body?.mode === 'overwrite-existing' ? 'overwrite-existing' : 'unclassified-only';
+    const result = PromptGroupService.applyDanbooruGrouping(mode);
+    return res.json(successResponse(result));
+  } catch (error) {
+    console.error('Error applying Danbooru grouping:', error);
+    return res.status(500).json(errorResponse(error instanceof Error ? error.message : 'Failed to apply Danbooru grouping'));
   }
 });
 

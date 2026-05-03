@@ -4,8 +4,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
-import { hasAuthPermission } from '@/features/auth/auth-permissions'
-import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -29,11 +27,6 @@ const CodexGenerationPanelLazy = lazy(async () => {
   return { default: module.CodexGenerationPanel }
 })
 
-const WildcardGenerationPanelLazy = lazy(async () => {
-  const module = await import('./components/wildcard-generation-panel')
-  return { default: module.WildcardGenerationPanel }
-})
-
 const GenerationHistoryPanelLazy = lazy(async () => {
   const module = await import('./components/generation-history-panel')
   return { default: module.GenerationHistoryPanel }
@@ -54,7 +47,7 @@ const WorkflowReservationsPanelLazy = lazy(async () => {
   return { default: module.WorkflowReservationsPanel }
 })
 
-type ImageGenerationTab = 'nai' | 'codex' | 'comfyui' | 'wildcards' | 'workflows' | 'reservations'
+type ImageGenerationTab = 'nai' | 'codex' | 'comfyui' | 'workflows' | 'reservations'
 
 function PanelFallback() {
   return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
@@ -65,14 +58,13 @@ function getImageGenerationTabs(t: (dictionary: { ko: string; en: string }) => s
     { value: 'nai', label: 'NAI' },
     { value: 'codex', label: 'Codex' },
     { value: 'comfyui', label: 'ComfyUI' },
-    { value: 'wildcards', label: t({ ko: '와일드카드', en: 'Wildcard' }) },
     { value: 'workflows', label: t({ ko: '워크플로우', en: 'Workflow' }) },
     { value: 'reservations', label: t({ ko: '예약 작업', en: 'Reservations' }) },
   ]
 }
 
 function parseImageGenerationTab(value?: string | null): ImageGenerationTab {
-  if (value === 'nai' || value === 'codex' || value === 'comfyui' || value === 'wildcards' || value === 'workflows' || value === 'workflow' || value === 'reservations') {
+  if (value === 'nai' || value === 'codex' || value === 'comfyui' || value === 'workflows' || value === 'workflow' || value === 'reservations') {
     return value === 'workflow' ? 'workflows' : value
   }
 
@@ -85,16 +77,14 @@ export function ImageGenerationPage() {
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(() => loadPersistedSelectedComfyWorkflowId())
   const [isControllerOpen, setIsControllerOpen] = useState(false)
-  const authStatusQuery = useAuthStatusQuery()
   const isWideLayout = useDesktopPageLayout()
   const selectedComfyWorkflowQuery = useQuery({
     queryKey: ['image-generation-selected-comfy-workflow', selectedComfyWorkflowId, historyRefreshNonce],
     queryFn: () => getGenerationWorkflow(selectedComfyWorkflowId as number),
     enabled: selectedComfyWorkflowId !== null,
   })
-  const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const imageGenerationTabs = getImageGenerationTabs(t)
-  const visibleTabs = imageGenerationTabs.filter((tab) => tab.value !== 'wildcards' || hasAuthPermission(permissionKeys, 'page.wildcards.view'))
+  const visibleTabs = imageGenerationTabs
   const activeTab = visibleTabs.some((tab) => tab.value === parseImageGenerationTab(searchParams.get('tab')))
     ? parseImageGenerationTab(searchParams.get('tab'))
     : (visibleTabs[0]?.value ?? 'nai')
@@ -143,13 +133,11 @@ export function ImageGenerationPage() {
     ? 'NAI'
     : activeTab === 'codex'
       ? 'Codex'
-      : activeTab === 'wildcards'
-        ? t({ ko: '와일드카드', en: 'Wildcard' })
-        : activeTab === 'workflows'
-          ? t({ ko: '워크플로우', en: 'Workflow' })
-          : activeTab === 'reservations'
-            ? t({ ko: '예약 작업', en: 'Reservations' })
-            : 'ComfyUI'
+      : activeTab === 'workflows'
+        ? t({ ko: '워크플로우', en: 'Workflow' })
+        : activeTab === 'reservations'
+          ? t({ ko: '예약 작업', en: 'Reservations' })
+          : 'ComfyUI'
   const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || activeTab === 'codex' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
   const useCompactNaiActionBar = activeTab === 'nai' && (useWideSplitPaneScroll || shouldUseControllerDrawer)
   const naiDrawerHeaderContentId = activeTab === 'nai' && shouldUseControllerDrawer ? 'nai-controller-drawer-header-content' : undefined
@@ -202,9 +190,7 @@ export function ImageGenerationPage() {
             compactActionBarContentTargetId={activeTab === 'comfyui' ? compactActionBarContentId : undefined}
           />
         )
-        : activeTab === 'wildcards'
-          ? <WildcardGenerationPanelLazy refreshNonce={0} />
-          : null
+        : null
 
   const isDrawerOpen = shouldUseControllerDrawer && isControllerOpen
 

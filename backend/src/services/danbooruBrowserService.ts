@@ -1,0 +1,896 @@
+import Database from 'better-sqlite3';
+import fs from 'fs';
+import path from 'path';
+import { runtimePaths } from '../config/runtimePaths';
+
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 100;
+const CHARACTER_PAGE_SIZE = 30;
+const DEFAULT_RELATED_TAG_LIMIT_PER_CHARACTER = 100;
+const MAX_RELATED_TAG_LIMIT_PER_CHARACTER = 500;
+const RELATED_TAG_CATEGORY_NAMES = ['general', 'artist', 'copyright', 'character', 'meta'] as const;
+const DANBOORU_DB_DOWNLOAD_URL = 'https://github.com/cksdnfas/danbooru-db-viewer';
+const DANBOORU_DB_FILE_PATTERNS = ['danbooru.sqlite', '*danbooru*.sqlite', '*danbooru*.sqlite3', '*danbooru*.db'];
+const DANBOORU_DB_EXTENSIONS = new Set(['.sqlite', '.sqlite3', '.db']);
+const CHARACTER_IMAGE_DIRECTORY_NAME = 'character-images';
+const CHARACTER_IMAGE_EXTENSIONS = new Set(['.webp', '.png', '.jpg', '.jpeg', '.gif']);
+
+type RelatedTagCategoryName = typeof RELATED_TAG_CATEGORY_NAMES[number];
+
+interface CharacterRelatedTagFilterOptions {
+  categories?: RelatedTagCategoryName[];
+  scoreMin?: number;
+  scoreMax?: number;
+}
+
+export type DanbooruBrowserSection = 'tags' | 'artists' | 'characters';
+
+export interface DanbooruBrowserTreeNode {
+  id: string;
+  label: string;
+  translatedLabel?: string | null;
+  parentId: string | null;
+  section: DanbooruBrowserSection;
+  count: number;
+  directCount?: number;
+  filter?: {
+    categoryCode?: number;
+    taxonomyNodeId?: number;
+    copyrightTagId?: number;
+  };
+}
+
+export interface DanbooruBrowserPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface DanbooruBrowserTagRecord {
+  id: number;
+  name: string;
+  displayName: string;
+  translatedName?: string | null;
+  normalizedName: string;
+  usageCount: number;
+}
+
+export interface DanbooruBrowserArtistRecord {
+  tagId: number;
+  name: string;
+  displayName: string;
+  normalizedName: string;
+  worksCount: number;
+  danbooruUrl: string;
+}
+
+export interface DanbooruBrowserRelatedTagRecord {
+  id: number;
+  name: string;
+  displayName: string;
+  translatedName?: string | null;
+  categoryName: string;
+  usageCount: number;
+  score: number | null;
+}
+
+export interface DanbooruBrowserCopyrightRecord {
+  tagId: number;
+  name: string;
+  displayName: string;
+  confidence: number;
+  isPrimary: boolean;
+}
+
+export interface DanbooruBrowserCharacterImageRecord {
+  fileName: string;
+  url: string;
+}
+
+export interface DanbooruBrowserCharacterRecord {
+  tagId: number;
+  name: string;
+  displayName: string;
+  normalizedName: string;
+  worksCount: number;
+  copyrights: DanbooruBrowserCopyrightRecord[];
+  relatedTags: DanbooruBrowserRelatedTagRecord[];
+  images: DanbooruBrowserCharacterImageRecord[];
+  danbooruUrl: string;
+}
+
+export interface DanbooruBrowserDatabaseInfo {
+  available: boolean;
+  path: string;
+  expectedPath: string;
+  expectedDirectory: string;
+  downloadUrl: string;
+  filePatterns: string[];
+  matchedBy: 'configured' | 'default' | 'discovered' | 'missing';
+}
+
+interface CountRow {
+  total: number;
+}
+
+interface TagRow {
+  id: number;
+  name: string;
+  normalized_name: string;
+  display_name: string | null;
+  translated_name?: string | null;
+  post_count: number;
+  category_code?: number;
+  category_name?: string;
+}
+
+interface ArtistRow {
+  tag_id: number;
+  name: string;
+  normalized_name: string;
+  post_count: number;
+}
+
+interface CharacterRow {
+  tag_id: number;
+  name: string;
+  normalized_name: string;
+  post_count: number;
+}
+
+interface TaxonomyNodeRow {
+  id: number;
+  node_key: string;
+  title: string;
+  description: string | null;
+  translated_title?: string | null;
+  direct_member_tag_count: number;
+  member_tag_count: number;
+}
+
+interface CopyrightTreeRow {
+  tag_id: number;
+  name: string;
+  translated_name?: string | null;
+  post_count: number;
+  character_count: number;
+}
+
+interface CharacterCopyrightRow {
+  character_tag_id: number;
+  tag_id: number;
+  name: string;
+  post_count: number;
+  confidence: number;
+  is_primary: number;
+}
+
+interface CharacterRelatedTagRow {
+  character_tag_id: number;
+  id: number;
+  name: string;
+  display_name: string | null;
+  translated_name?: string | null;
+  category_name: string;
+  post_count: number;
+  score: number | null;
+}
+
+function isDanbooruDbCandidate(fileName: string): boolean {
+  const lowerFileName = fileName.toLowerCase();
+  const extension = path.extname(lowerFileName);
+  return lowerFileName.includes('danbooru')
+    && DANBOORU_DB_EXTENSIONS.has(extension)
+    && !lowerFileName.endsWith('-wal')
+    && !lowerFileName.endsWith('-shm')
+    && !lowerFileName.endsWith('-journal');
+}
+
+function compareDanbooruDbCandidates(left: string, right: string): number {
+  const scoreCandidate = (filePath: string) => {
+    const fileName = path.basename(filePath).toLowerCase();
+    const extension = path.extname(fileName);
+    const baseName = fileName.slice(0, fileName.length - extension.length);
+    const stat = fs.statSync(filePath);
+
+    return {
+      exact: fileName === 'danbooru.sqlite' ? 0 : 1,
+      startsWith: baseName.startsWith('danbooru') ? 0 : 1,
+      extension: extension === '.sqlite' ? 0 : extension === '.sqlite3' ? 1 : 2,
+      length: fileName.length,
+      newest: -stat.mtimeMs,
+      fileName,
+    };
+  };
+
+  const leftScore = scoreCandidate(left);
+  const rightScore = scoreCandidate(right);
+  return leftScore.exact - rightScore.exact
+    || leftScore.startsWith - rightScore.startsWith
+    || leftScore.extension - rightScore.extension
+    || leftScore.length - rightScore.length
+    || leftScore.newest - rightScore.newest
+    || leftScore.fileName.localeCompare(rightScore.fileName);
+}
+
+function findDanbooruDbCandidate(directory: string): string | null {
+  if (!fs.existsSync(directory)) {
+    return null;
+  }
+
+  const candidates = fs.readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && isDanbooruDbCandidate(entry.name))
+    .map((entry) => path.join(directory, entry.name))
+    .sort(compareDanbooruDbCandidates);
+
+  return candidates[0] ?? null;
+}
+
+export function resolveDanbooruDbInfo(): DanbooruBrowserDatabaseInfo {
+  const expectedDirectory = runtimePaths.databaseDir;
+  const expectedPath = path.join(expectedDirectory, 'danbooru.sqlite');
+  const configuredPath = process.env.DANBOORU_SQLITE_PATH?.trim();
+
+  if (configuredPath) {
+    const resolvedConfiguredPath = path.resolve(configuredPath);
+    const exists = fs.existsSync(resolvedConfiguredPath);
+    return {
+      available: exists,
+      path: resolvedConfiguredPath,
+      expectedPath: resolvedConfiguredPath,
+      expectedDirectory: path.dirname(resolvedConfiguredPath),
+      downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
+      filePatterns: DANBOORU_DB_FILE_PATTERNS,
+      matchedBy: exists ? 'configured' : 'missing',
+    };
+  }
+
+  if (fs.existsSync(expectedPath)) {
+    return {
+      available: true,
+      path: expectedPath,
+      expectedPath,
+      expectedDirectory,
+      downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
+      filePatterns: DANBOORU_DB_FILE_PATTERNS,
+      matchedBy: 'default',
+    };
+  }
+
+  const discoveredPath = findDanbooruDbCandidate(expectedDirectory);
+  if (discoveredPath) {
+    return {
+      available: true,
+      path: discoveredPath,
+      expectedPath,
+      expectedDirectory,
+      downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
+      filePatterns: DANBOORU_DB_FILE_PATTERNS,
+      matchedBy: 'discovered',
+    };
+  }
+
+  return {
+    available: false,
+    path: expectedPath,
+    expectedPath,
+    expectedDirectory,
+    downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
+    filePatterns: DANBOORU_DB_FILE_PATTERNS,
+    matchedBy: 'missing',
+  };
+}
+
+function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
+}
+
+function parseRelatedTagCategories(value: unknown): RelatedTagCategoryName[] | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  if (value.trim().length === 0) {
+    return [];
+  }
+
+  const allowed = new Set<RelatedTagCategoryName>(RELATED_TAG_CATEGORY_NAMES);
+  const categories = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item): item is RelatedTagCategoryName => allowed.has(item as RelatedTagCategoryName));
+
+  return Array.from(new Set(categories));
+}
+
+function parseRelatedTagScore(value: unknown): number | undefined {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  return Math.min(1, Math.max(0, parsed));
+}
+
+function normalizeQuery(value?: string | null): string {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+function buildDanbooruPostsUrl(tagName: string): string {
+  return `https://danbooru.donmai.us/posts?tags=${encodeURIComponent(tagName)}`;
+}
+
+function displayName(name: string, displayNameValue?: string | null): string {
+  return displayNameValue || name.replace(/_/g, ' ');
+}
+
+function sanitizeCharacterImageDirectoryName(name: string): string {
+  const sanitized = name
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/[.\s]+$/g, '');
+  return sanitized || 'character';
+}
+
+function isCharacterImageFile(fileName: string): boolean {
+  return CHARACTER_IMAGE_EXTENSIONS.has(path.extname(fileName).toLowerCase());
+}
+
+function buildCharacterImageUrl(tagId: number, fileName: string): string {
+  return `/api/danbooru-browser/character-images/${tagId}/${encodeURIComponent(fileName)}`;
+}
+
+function resolveTaxonomyParentKeyFromNodeKey(nodeKey: string, nodeKeySet: Set<string>): string | null {
+  const parts = nodeKey.split('__');
+
+  for (let length = parts.length - 1; length > 0; length -= 1) {
+    const candidate = parts.slice(0, length).join('__');
+    if (nodeKeySet.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  if ((parts[0] === 'manual' || parts[0] === 'proposed') && parts.length >= 3) {
+    const groupKey = parts[1];
+    const candidates = [
+      groupKey,
+      `${parts[0]}__${groupKey}`,
+      `manual__${groupKey}`,
+      groupKey.startsWith('manual_') ? `manual__${groupKey.slice('manual_'.length)}` : `manual__${groupKey}`,
+    ];
+
+    for (const candidate of candidates) {
+      if (nodeKeySet.has(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
+function findExactMemberCountSubset(candidates: TaxonomyNodeRow[], targetCount: number): TaxonomyNodeRow[] {
+  const sorted = [...candidates].sort((left, right) => right.member_tag_count - left.member_tag_count || left.id - right.id);
+  const memo = new Set<string>();
+
+  const search = (index: number, remaining: number): TaxonomyNodeRow[] | null => {
+    if (remaining === 0) return [];
+    if (remaining < 0 || index >= sorted.length) return null;
+
+    const memoKey = `${index}:${remaining}`;
+    if (memo.has(memoKey)) return null;
+
+    const current = sorted[index];
+    if (current.member_tag_count <= remaining) {
+      const withCurrent = search(index + 1, remaining - current.member_tag_count);
+      if (withCurrent) return [current, ...withCurrent];
+    }
+
+    const withoutCurrent = search(index + 1, remaining);
+    if (withoutCurrent) return withoutCurrent;
+
+    memo.add(memoKey);
+    return null;
+  };
+
+  return search(0, targetCount) ?? [];
+}
+
+function buildTaxonomyParentKeyByKey(rows: TaxonomyNodeRow[]): Map<string, string> {
+  const nodeKeySet = new Set(rows.map((row) => row.node_key));
+  const parentKeyByKey = new Map<string, string>();
+
+  for (const row of rows) {
+    const parentKey = resolveTaxonomyParentKeyFromNodeKey(row.node_key, nodeKeySet);
+    if (parentKey) {
+      parentKeyByKey.set(row.node_key, parentKey);
+    }
+  }
+
+  const tagLabParentGroups = rows.filter((row) => row.description?.startsWith('TAG LAB parent group:'));
+  const tagLabCategories = rows.filter((row) =>
+    row.description?.startsWith('TAG LAB category:')
+    && row.direct_member_tag_count === 0
+    && !row.description.startsWith('TAG LAB parent group:')
+    && !parentKeyByKey.has(row.node_key),
+  );
+
+  for (const parentGroup of tagLabParentGroups) {
+    const children = findExactMemberCountSubset(tagLabCategories, parentGroup.member_tag_count);
+    for (const child of children) {
+      parentKeyByKey.set(child.node_key, parentGroup.node_key);
+    }
+  }
+
+  return parentKeyByKey;
+}
+
+class DanbooruBrowserService {
+  private db: Database.Database | null = null;
+  private taxonomyDescendantIdsById: Map<number, number[]> | null = null;
+
+  private getDb(): Database.Database {
+    if (this.db) {
+      return this.db;
+    }
+
+    const database = resolveDanbooruDbInfo();
+    if (!database.available) {
+      throw new Error(`Danbooru database not found. Place a DB file matching ${database.filePatterns.join(' or ')} in ${database.expectedDirectory}. Download guide: ${database.downloadUrl}`);
+    }
+
+    const nextDb = new Database(database.path, { readonly: true, fileMustExist: true });
+    nextDb.pragma('query_only = ON');
+    this.db = nextDb;
+    return nextDb;
+  }
+
+  private getCharacterImageRootDirectory(): string {
+    return path.join(runtimePaths.databaseDir, CHARACTER_IMAGE_DIRECTORY_NAME);
+  }
+
+  private getCharacterImageDirectory(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): string | null {
+    const rootDirectory = this.getCharacterImageRootDirectory();
+    if (!fs.existsSync(rootDirectory)) {
+      return null;
+    }
+
+    const candidates = Array.from(new Set([
+      row.name,
+      row.normalized_name,
+      sanitizeCharacterImageDirectoryName(row.name),
+      sanitizeCharacterImageDirectoryName(row.normalized_name),
+      `${sanitizeCharacterImageDirectoryName(row.name)}__${row.tag_id}`,
+      `${sanitizeCharacterImageDirectoryName(row.normalized_name)}__${row.tag_id}`,
+    ].filter(Boolean)));
+
+    for (const candidate of candidates) {
+      const candidatePath = path.join(rootDirectory, candidate);
+      if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isDirectory()) {
+        return candidatePath;
+      }
+    }
+
+    return null;
+  }
+
+  private getCharacterImageRecords(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): DanbooruBrowserCharacterImageRecord[] {
+    const directory = this.getCharacterImageDirectory(row);
+    if (!directory) {
+      return [];
+    }
+
+    return fs.readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && isCharacterImageFile(entry.name))
+      .map((entry) => entry.name)
+      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }))
+      .map((fileName) => ({
+        fileName,
+        url: buildCharacterImageUrl(row.tag_id, fileName),
+      }));
+  }
+
+  getCharacterImageFilePath(tagId: unknown, fileName: string): string | null {
+    const parsedTagId = Number(tagId);
+    if (!Number.isFinite(parsedTagId) || !fileName || fileName.includes('/') || fileName.includes('\\')) {
+      return null;
+    }
+
+    const row = this.getDb().prepare(`
+      SELECT tag_id, name, normalized_name, post_count
+      FROM characters
+      WHERE tag_id = ?
+    `).get(Math.trunc(parsedTagId)) as CharacterRow | undefined;
+    if (!row) {
+      return null;
+    }
+
+    const directory = this.getCharacterImageDirectory(row);
+    if (!directory) {
+      return null;
+    }
+
+    const filePath = path.join(directory, fileName);
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile() || !isCharacterImageFile(fileName)) {
+      return null;
+    }
+
+    return filePath;
+  }
+
+  getSummary() {
+    const database = resolveDanbooruDbInfo();
+    if (!database.available) {
+      return {
+        dbPath: database.path,
+        database,
+        counts: {
+          tags: 0,
+          artists: 0,
+          characters: 0,
+        },
+        tree: [
+          { id: 'tags', label: 'Tags', parentId: null, section: 'tags', count: 0 },
+          { id: 'artists', label: 'Artists', parentId: null, section: 'artists', count: 0 },
+          { id: 'characters', label: 'Characters', parentId: null, section: 'characters', count: 0 },
+        ] satisfies DanbooruBrowserTreeNode[],
+      };
+    }
+
+    const db = this.getDb();
+    const tagCount = db.prepare('SELECT COUNT(*) AS total FROM tags WHERE is_deprecated = 0').get() as CountRow;
+    const artistCount = db.prepare('SELECT COUNT(*) AS total FROM artists').get() as CountRow;
+    const characterCount = db.prepare('SELECT COUNT(*) AS total FROM characters').get() as CountRow;
+    const taxonomyRows = this.getTaxonomyRows();
+    const taxonomyParentKeyByKey = buildTaxonomyParentKeyByKey(taxonomyRows);
+    const taxonomyIdByKey = new Map(taxonomyRows.map((row) => [row.node_key, row.id] as const));
+    const copyrightNodes = db.prepare(`
+      SELECT cp.tag_id, cp.name, tt.translated_name, cp.post_count, COUNT(DISTINCT l.character_tag_id) AS character_count
+      FROM copyrights cp
+      JOIN character_copyright_links l ON l.copyright_tag_id = cp.tag_id
+      LEFT JOIN tag_translations tt ON tt.tag_id = cp.tag_id AND tt.locale = 'ko'
+      GROUP BY cp.tag_id, cp.name, tt.translated_name, cp.post_count
+      ORDER BY character_count DESC, cp.post_count DESC
+      LIMIT 120
+    `).all() as CopyrightTreeRow[];
+
+    const tree: DanbooruBrowserTreeNode[] = [
+      { id: 'tags', label: 'Tags', parentId: null, section: 'tags', count: tagCount.total },
+      ...taxonomyRows.map((node) => {
+        const parentKey = taxonomyParentKeyByKey.get(node.node_key) ?? null;
+        const parentId = parentKey ? taxonomyIdByKey.get(parentKey) : null;
+
+        return {
+          id: `taxonomy:${node.id}`,
+          label: node.title,
+          translatedLabel: node.translated_title,
+          parentId: parentId ? `taxonomy:${parentId}` : 'tags',
+          section: 'tags' as const,
+          count: node.member_tag_count,
+          directCount: node.direct_member_tag_count,
+          filter: { taxonomyNodeId: node.id },
+        };
+      }),
+      { id: 'artists', label: 'Artists', parentId: null, section: 'artists', count: artistCount.total },
+      { id: 'characters', label: 'Characters', parentId: null, section: 'characters', count: characterCount.total },
+      ...copyrightNodes.map((copyright) => ({
+        id: `copyright:${copyright.tag_id}`,
+        label: copyright.name.replace(/_/g, ' '),
+        translatedLabel: copyright.translated_name,
+        parentId: 'characters',
+        section: 'characters' as const,
+        count: copyright.character_count,
+        filter: { copyrightTagId: copyright.tag_id },
+      })),
+    ];
+
+    return {
+      dbPath: database.path,
+      database,
+      counts: {
+        tags: tagCount.total,
+        artists: artistCount.total,
+        characters: characterCount.total,
+      },
+      tree,
+    };
+  }
+
+  private getTaxonomyRows(): TaxonomyNodeRow[] {
+    return this.getDb().prepare(`
+      SELECT n.id, n.node_key, n.title, n.description, nt.translated_title, n.direct_member_tag_count, n.member_tag_count
+      FROM taxonomy_nodes n
+      LEFT JOIN taxonomy_node_translations nt ON nt.node_key = n.node_key AND nt.locale = 'ko'
+      WHERE n.node_type = 'manual_group'
+      ORDER BY n.member_tag_count DESC, n.title ASC
+    `).all() as TaxonomyNodeRow[];
+  }
+
+  private getTaxonomyDescendantIds(taxonomyNodeId: number): number[] {
+    if (!this.taxonomyDescendantIdsById) {
+      const rows = this.getTaxonomyRows();
+      const parentKeyByKey = buildTaxonomyParentKeyByKey(rows);
+      const idByKey = new Map(rows.map((row) => [row.node_key, row.id] as const));
+      const childIdsById = new Map<number, number[]>();
+
+      for (const row of rows) {
+        const parentKey = parentKeyByKey.get(row.node_key) ?? null;
+        const parentId = parentKey ? idByKey.get(parentKey) : null;
+        if (parentId) {
+          const children = childIdsById.get(parentId) ?? [];
+          children.push(row.id);
+          childIdsById.set(parentId, children);
+        }
+      }
+
+      const collect = (nodeId: number): number[] => {
+        const collected = [nodeId];
+        for (const childId of childIdsById.get(nodeId) ?? []) {
+          collected.push(...collect(childId));
+        }
+        return collected;
+      };
+
+      this.taxonomyDescendantIdsById = new Map(rows.map((row) => [row.id, collect(row.id)] as const));
+    }
+
+    return this.taxonomyDescendantIdsById.get(taxonomyNodeId) ?? [taxonomyNodeId];
+  }
+
+  listTags(params: { q?: string; category?: string; taxonomyNodeId?: string; page?: unknown; limit?: unknown }) {
+    const db = this.getDb();
+    const page = clampInteger(params.page, 1, 1, 100_000);
+    const limit = clampInteger(params.limit, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
+    const offset = (page - 1) * limit;
+    const q = normalizeQuery(params.q);
+    const clauses = ['is_deprecated = 0'];
+    const values: Array<string | number> = [];
+
+    if (q) {
+      clauses.push('(normalized_name LIKE ? ESCAPE \'\\\' OR display_name LIKE ? ESCAPE \'\\\')');
+      const pattern = `%${escapeLike(q)}%`;
+      values.push(pattern, pattern.replace(/_/g, ' '));
+    }
+
+    if (params.category !== undefined && params.category !== null && params.category !== '') {
+      const categoryCode = Number(params.category);
+      if (Number.isFinite(categoryCode)) {
+        clauses.push('category_code = ?');
+        values.push(Math.trunc(categoryCode));
+      }
+    }
+
+    const taxonomyNodeId = Number(params.taxonomyNodeId);
+    if (Number.isFinite(taxonomyNodeId)) {
+      const taxonomyNodeIds = this.getTaxonomyDescendantIds(Math.trunc(taxonomyNodeId));
+      const placeholders = taxonomyNodeIds.map(() => '?').join(',');
+      clauses.push(`EXISTS (SELECT 1 FROM taxonomy_tag_memberships tm WHERE tm.tag_id = tags.id AND tm.taxonomy_node_id IN (${placeholders}))`);
+      values.push(...taxonomyNodeIds);
+    }
+
+    const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const total = (db.prepare(`SELECT COUNT(*) AS total FROM tags ${whereSql}`).get(...values) as CountRow).total;
+    const rows = db.prepare(`
+      SELECT tags.id, tags.name, tags.normalized_name, tags.display_name, tt.translated_name, tags.post_count
+      FROM tags
+      LEFT JOIN tag_translations tt ON tt.tag_id = tags.id AND tt.locale = 'ko'
+      ${whereSql}
+      ORDER BY tags.post_count DESC, tags.name ASC
+      LIMIT ? OFFSET ?
+    `).all(...values, limit, offset) as TagRow[];
+
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        normalizedName: row.normalized_name,
+        displayName: displayName(row.name, row.display_name),
+        translatedName: row.translated_name,
+        usageCount: row.post_count,
+      })),
+      pagination: this.buildPagination(page, limit, total),
+    };
+  }
+
+  listArtists(params: { q?: string; page?: unknown; limit?: unknown }) {
+    const db = this.getDb();
+    const page = clampInteger(params.page, 1, 1, 100_000);
+    const limit = clampInteger(params.limit, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
+    const offset = (page - 1) * limit;
+    const q = normalizeQuery(params.q);
+    const clauses: string[] = [];
+    const values: Array<string | number> = [];
+
+    if (q) {
+      clauses.push('normalized_name LIKE ? ESCAPE \'\\\'');
+      values.push(`%${escapeLike(q)}%`);
+    }
+
+    const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const total = (db.prepare(`SELECT COUNT(*) AS total FROM artists ${whereSql}`).get(...values) as CountRow).total;
+    const rows = db.prepare(`
+      SELECT tag_id, name, normalized_name, post_count
+      FROM artists
+      ${whereSql}
+      ORDER BY post_count DESC, name ASC
+      LIMIT ? OFFSET ?
+    `).all(...values, limit, offset) as ArtistRow[];
+
+    return {
+      items: rows.map((row) => ({
+        tagId: row.tag_id,
+        name: row.name,
+        normalizedName: row.normalized_name,
+        displayName: displayName(row.name),
+        worksCount: row.post_count,
+        danbooruUrl: buildDanbooruPostsUrl(row.name),
+      })),
+      pagination: this.buildPagination(page, limit, total),
+    };
+  }
+
+  listCharacters(params: { q?: string; copyrightTagId?: string; page?: unknown; limit?: unknown; relatedTagCategories?: unknown; relatedTagScoreMin?: unknown; relatedTagScoreMax?: unknown; relatedTagLimit?: unknown }) {
+    const db = this.getDb();
+    const page = clampInteger(params.page, 1, 1, 100_000);
+    const limit = clampInteger(params.limit, CHARACTER_PAGE_SIZE, 1, CHARACTER_PAGE_SIZE);
+    const relatedTagLimit = clampInteger(params.relatedTagLimit, DEFAULT_RELATED_TAG_LIMIT_PER_CHARACTER, 0, MAX_RELATED_TAG_LIMIT_PER_CHARACTER);
+    const offset = (page - 1) * limit;
+    const q = normalizeQuery(params.q);
+    const scoreMin = parseRelatedTagScore(params.relatedTagScoreMin);
+    const scoreMax = parseRelatedTagScore(params.relatedTagScoreMax);
+    const relatedTagFilters: CharacterRelatedTagFilterOptions = {
+      categories: parseRelatedTagCategories(params.relatedTagCategories),
+      scoreMin: scoreMin !== undefined && scoreMax !== undefined ? Math.min(scoreMin, scoreMax) : scoreMin,
+      scoreMax: scoreMin !== undefined && scoreMax !== undefined ? Math.max(scoreMin, scoreMax) : scoreMax,
+    };
+    const clauses: string[] = [];
+    const values: Array<string | number> = [];
+
+    if (q) {
+      clauses.push('c.normalized_name LIKE ? ESCAPE \'\\\'');
+      values.push(`%${escapeLike(q)}%`);
+    }
+
+    const copyrightTagId = Number(params.copyrightTagId);
+    if (Number.isFinite(copyrightTagId)) {
+      clauses.push('EXISTS (SELECT 1 FROM character_copyright_links l WHERE l.character_tag_id = c.tag_id AND l.copyright_tag_id = ?)');
+      values.push(Math.trunc(copyrightTagId));
+    }
+
+    const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const total = (db.prepare(`SELECT COUNT(*) AS total FROM characters c ${whereSql}`).get(...values) as CountRow).total;
+    const rows = db.prepare(`
+      SELECT c.tag_id, c.name, c.normalized_name, c.post_count
+      FROM characters c
+      ${whereSql}
+      ORDER BY c.post_count DESC, c.name ASC
+      LIMIT ? OFFSET ?
+    `).all(...values, limit, offset) as CharacterRow[];
+
+    const tagIds = rows.map((row) => row.tag_id);
+    const copyrightsByCharacter = this.getCopyrightsByCharacter(tagIds);
+    const relatedTagsByCharacter = this.getRelatedTagsByCharacter(tagIds, relatedTagFilters, relatedTagLimit);
+
+    return {
+      items: rows.map((row) => ({
+        tagId: row.tag_id,
+        name: row.name,
+        normalizedName: row.normalized_name,
+        displayName: displayName(row.name),
+        worksCount: row.post_count,
+        copyrights: copyrightsByCharacter.get(row.tag_id) ?? [],
+        relatedTags: relatedTagsByCharacter.get(row.tag_id) ?? [],
+        images: this.getCharacterImageRecords(row),
+        danbooruUrl: buildDanbooruPostsUrl(row.name),
+      })),
+      pagination: this.buildPagination(page, limit, total),
+    };
+  }
+
+  private getCopyrightsByCharacter(tagIds: number[]): Map<number, DanbooruBrowserCopyrightRecord[]> {
+    const result = new Map<number, DanbooruBrowserCopyrightRecord[]>();
+    if (tagIds.length === 0) {
+      return result;
+    }
+
+    const placeholders = tagIds.map(() => '?').join(',');
+    const rows = this.getDb().prepare(`
+      SELECT l.character_tag_id, cp.tag_id, cp.name, cp.post_count, l.confidence, l.is_primary
+      FROM character_copyright_links l
+      JOIN copyrights cp ON cp.tag_id = l.copyright_tag_id
+      WHERE l.character_tag_id IN (${placeholders})
+      ORDER BY l.is_primary DESC, l.confidence DESC, cp.post_count DESC
+    `).all(...tagIds) as CharacterCopyrightRow[];
+
+    for (const row of rows) {
+      const bucket = result.get(row.character_tag_id) ?? [];
+      bucket.push({
+        tagId: row.tag_id,
+        name: row.name,
+        displayName: displayName(row.name),
+        confidence: row.confidence,
+        isPrimary: row.is_primary === 1,
+      });
+      result.set(row.character_tag_id, bucket);
+    }
+
+    return result;
+  }
+
+  private getRelatedTagsByCharacter(tagIds: number[], filters: CharacterRelatedTagFilterOptions = {}, relatedTagLimit = DEFAULT_RELATED_TAG_LIMIT_PER_CHARACTER): Map<number, DanbooruBrowserRelatedTagRecord[]> {
+    const result = new Map<number, DanbooruBrowserRelatedTagRecord[]>();
+    if (tagIds.length === 0 || relatedTagLimit <= 0) {
+      return result;
+    }
+
+    const placeholders = tagIds.map(() => '?').join(',');
+    const values: unknown[] = [...tagIds];
+    const clauses = [`crt.character_tag_id IN (${placeholders})`, 'rt.is_deprecated = 0'];
+
+    if (filters.categories !== undefined) {
+      if (filters.categories.length === 0) {
+        return result;
+      }
+      clauses.push(`rt.category_name IN (${filters.categories.map(() => '?').join(',')})`);
+      values.push(...filters.categories);
+    }
+    if (filters.scoreMin !== undefined) {
+      clauses.push('crt.score >= ?');
+      values.push(filters.scoreMin);
+    }
+    if (filters.scoreMax !== undefined) {
+      clauses.push('crt.score <= ?');
+      values.push(filters.scoreMax);
+    }
+
+    const rows = this.getDb().prepare(`
+      SELECT crt.character_tag_id, rt.id, rt.name, rt.display_name, tt.translated_name, rt.category_name, rt.post_count, crt.score
+      FROM character_related_tags crt
+      JOIN tags rt ON rt.id = crt.related_tag_id
+      LEFT JOIN tag_translations tt ON tt.tag_id = rt.id AND tt.locale = 'ko'
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY crt.character_tag_id ASC, crt.score DESC, rt.post_count DESC
+    `).all(...values) as CharacterRelatedTagRow[];
+
+    for (const row of rows) {
+      const bucket = result.get(row.character_tag_id) ?? [];
+      if (bucket.length >= relatedTagLimit) {
+        continue;
+      }
+      bucket.push({
+        id: row.id,
+        name: row.name,
+        displayName: displayName(row.name, row.display_name),
+        translatedName: row.translated_name,
+        categoryName: row.category_name,
+        usageCount: row.post_count,
+        score: row.score,
+      });
+      result.set(row.character_tag_id, bucket);
+    }
+
+    return result;
+  }
+
+  private buildPagination(page: number, limit: number, total: number): DanbooruBrowserPagination {
+    return {
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+}
+
+export const danbooruBrowserService = new DanbooruBrowserService();

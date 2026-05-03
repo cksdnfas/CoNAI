@@ -1,38 +1,19 @@
 import { fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import type { ApiResponse } from '@/types/image'
 import type {
+  DanbooruPromptGroupingMode,
+  DanbooruPromptGroupingResult,
   PromptCollectionItem,
   PromptGroupExportData,
   PromptGroupImportResult,
   PromptGroupRecord,
   PromptGroupResolveItem,
-  PromptGraphPayload,
   PromptSearchPayload,
   PromptSortBy,
   PromptSortOrder,
   PromptStatistics,
-  PromptTaxonomyInferredType,
-  PromptTaxonomyPayload,
-  PromptTaxonomyRelationKind,
   PromptTypeFilter,
 } from '@/types/prompt'
-
-const TAXONOMY_INFERRED_TYPE_VALUES = new Set<PromptTaxonomyInferredType>([
-  'quality',
-  'subject',
-  'count_or_composition',
-  'pose_or_action',
-  'body_or_expression',
-  'hair_or_face',
-  'clothing_or_accessory',
-  'prop_or_object',
-  'background_or_setting',
-  'lighting_or_mood',
-  'style',
-  'artist_or_source',
-  'meta_or_technical',
-  'unknown',
-])
 
 function normalizePromptItem(item: PromptCollectionItem & { synonyms?: string[] | null; type?: string | null }): PromptCollectionItem {
   return {
@@ -97,6 +78,30 @@ export async function getPromptStatistics() {
   const response = await fetchJson<ApiResponse<PromptStatistics>>('/api/prompt-collection/statistics')
   if (!response.success) {
     throw new Error(response.error || '프롬프트 통계를 불러오지 못했어.')
+  }
+  return response.data
+}
+
+export async function getDanbooruPromptGroupingPreview(mode: DanbooruPromptGroupingMode = 'unclassified-only') {
+  const searchParams = new URLSearchParams()
+  searchParams.set('mode', mode)
+  const response = await fetchJson<ApiResponse<DanbooruPromptGroupingResult>>(`/api/prompt-collection/danbooru-grouping/preview?${searchParams.toString()}`)
+  if (!response.success) {
+    throw new Error(response.error || '단부루 기반 그룹 미리보기를 불러오지 못했어.')
+  }
+  return response.data
+}
+
+export async function applyDanbooruPromptGrouping(mode: DanbooruPromptGroupingMode = 'unclassified-only') {
+  const response = await fetchJson<ApiResponse<DanbooruPromptGroupingResult>>('/api/prompt-collection/danbooru-grouping/apply', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ mode }),
+  })
+  if (!response.success) {
+    throw new Error(response.error || '단부루 기반 그룹 자동 구성을 적용하지 못했어.')
   }
   return response.data
 }
@@ -293,140 +298,6 @@ export async function collectPrompts(input: { prompt?: string; negativePrompt?: 
 
   if (!response.success || !response.data) {
     throw new Error(response.error || '프롬프트 수집 실행에 실패했어.')
-  }
-
-  return response.data
-}
-
-export async function getPromptGraph(params?: {
-  type?: PromptTypeFilter
-  minScore?: number
-  minSharedCount?: number
-  minUsageCount?: number
-  limit?: number
-}) {
-  const searchParams = new URLSearchParams()
-  searchParams.set('type', params?.type ?? 'positive')
-  searchParams.set('minScore', String(params?.minScore ?? 55))
-  searchParams.set('minSharedCount', String(params?.minSharedCount ?? 3))
-  searchParams.set('minUsageCount', String(params?.minUsageCount ?? 2))
-  searchParams.set('limit', String(params?.limit ?? 180))
-
-  const response = await fetchJson<ApiResponse<PromptGraphPayload>>(`/api/prompt-collection/graph?${searchParams.toString()}`)
-  if (!response.success) {
-    throw new Error(response.error || '프롬프트 그래프를 불러오지 못했어.')
-  }
-
-  const normalizedType: PromptTypeFilter = response.data.filters.type === 'negative' || response.data.filters.type === 'auto'
-    ? response.data.filters.type
-    : 'positive'
-
-  return {
-    ...response.data,
-    nodes: response.data.nodes.map((node) => ({
-      ...node,
-      id: Number(node.id),
-      prompt: String(node.prompt),
-      usage_count: Number(node.usage_count ?? 0),
-      group_id: node.group_id ?? null,
-      degree: Number(node.degree ?? 0),
-    })),
-    edges: response.data.edges.map((edge) => ({
-      ...edge,
-      source_prompt: String(edge.source_prompt),
-      target_prompt: String(edge.target_prompt),
-      shared_count: Number(edge.shared_count ?? 0),
-      score: Number(edge.score ?? 0),
-    })),
-    filters: {
-      ...response.data.filters,
-      type: normalizedType,
-      min_score: Number(response.data.filters.min_score ?? 0),
-      min_shared_count: Number(response.data.filters.min_shared_count ?? 0),
-      min_usage_count: Number(response.data.filters.min_usage_count ?? 0),
-      limit: Number(response.data.filters.limit ?? 0),
-    },
-  }
-}
-
-export async function getPromptTaxonomyGraph(params?: {
-  type?: PromptTypeFilter
-  inferredType?: PromptTaxonomyInferredType | 'all'
-  relationKind?: PromptTaxonomyRelationKind | 'all'
-  minScore?: number
-  limit?: number
-}) {
-  const searchParams = new URLSearchParams()
-  searchParams.set('type', params?.type ?? 'positive')
-  searchParams.set('inferredType', params?.inferredType ?? 'all')
-  searchParams.set('relationKind', params?.relationKind ?? 'all')
-  searchParams.set('minScore', String(params?.minScore ?? 0.58))
-  searchParams.set('limit', String(params?.limit ?? 180))
-
-  const response = await fetchJson<ApiResponse<PromptTaxonomyPayload>>(`/api/prompt-collection/taxonomy-graph?${searchParams.toString()}`)
-  if (!response.success) {
-    throw new Error(response.error || '프롬프트 taxonomy 그래프를 불러오지 못했어.')
-  }
-
-  const normalizedType: PromptTypeFilter = response.data.filters.type === 'negative' || response.data.filters.type === 'auto'
-    ? response.data.filters.type
-    : 'positive'
-  const normalizedInferredType: PromptTaxonomyInferredType | 'all' = TAXONOMY_INFERRED_TYPE_VALUES.has(response.data.filters.inferred_type as PromptTaxonomyInferredType)
-    ? response.data.filters.inferred_type as PromptTaxonomyInferredType
-    : 'all'
-  const normalizedRelationKind: PromptTaxonomyRelationKind | 'all' = response.data.filters.relation_kind === 'same_family' || response.data.filters.relation_kind === 'string_variant'
-    ? response.data.filters.relation_kind
-    : 'all'
-
-  return {
-    ...response.data,
-    nodes: response.data.nodes.map((node) => ({
-      ...node,
-      id: Number(node.id),
-      prompt: String(node.prompt),
-      usage_count: Number(node.usage_count ?? 0),
-      group_id: node.group_id ?? null,
-      inferred_type: node.inferred_type,
-      cluster_id: node.cluster_id ?? null,
-      canonical_prompt: node.canonical_prompt ?? null,
-    })),
-    edges: response.data.edges.map((edge) => ({
-      ...edge,
-      source_prompt: String(edge.source_prompt),
-      target_prompt: String(edge.target_prompt),
-      relation_kind: edge.relation_kind,
-      score: Number(edge.score ?? 0),
-    })),
-    filters: {
-      ...response.data.filters,
-      type: normalizedType,
-      inferred_type: normalizedInferredType,
-      relation_kind: normalizedRelationKind,
-      min_score: Number(response.data.filters.min_score ?? 0),
-      limit: Number(response.data.filters.limit ?? 0),
-    },
-  }
-}
-
-export async function rebuildPromptRelations() {
-  const response = await fetchJson<ApiResponse<{ processed: number; updated: number; cleared: number; message: string }>>('/api/prompt-collection/rebuild-relations', {
-    method: 'POST',
-  })
-
-  if (!response.success) {
-    throw new Error(response.error || '프롬프트 관계 재구축에 실패했어.')
-  }
-
-  return response.data
-}
-
-export async function rebuildPromptTaxonomy() {
-  const response = await fetchJson<ApiResponse<{ processed: number; nodes: number; clusters: number; relations: number; message: string }>>('/api/prompt-collection/rebuild-taxonomy', {
-    method: 'POST',
-  })
-
-  if (!response.success) {
-    throw new Error(response.error || '프롬프트 taxonomy 재구축에 실패했어.')
   }
 
   return response.data

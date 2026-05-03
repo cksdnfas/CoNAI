@@ -92,10 +92,16 @@ export function ExplorerSidebar({
     }
   }, [floatingFrame, isFloatingLocked, onFloatingChange])
 
+  const shouldLimitUnfixedCompactHeight = floatingFrame && !isDesktopPageLayout && !isFloatingLocked
   const sidebarStyle: CSSProperties | undefined = isFloatingLocked
     ? { position: 'relative', top: 'auto' }
-    : undefined
-  const shouldLimitUnfixedCompactHeight = floatingFrame && !isDesktopPageLayout && !isFloatingLocked
+    : shouldLimitUnfixedCompactHeight
+      ? {
+          position: 'sticky',
+          top: 'calc(var(--theme-shell-header-height) + 1.5rem)',
+          maxHeight: '30vh',
+        }
+      : undefined
   const shouldShowFloatingLockAction = floatingFrame && (isFloating || isFloatingLocked)
 
   return (
@@ -103,7 +109,6 @@ export function ExplorerSidebar({
       ref={asideRef}
       className={cn(
         'explorer-sidebar relative flex min-h-0 flex-col rounded-sm bg-surface-lowest p-4',
-        shouldLimitUnfixedCompactHeight && 'max-h-[30vh]',
         className,
       )}
       style={sidebarStyle}

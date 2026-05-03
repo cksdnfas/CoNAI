@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getPromptGraph, getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getPromptTaxonomyGraph, getTopPrompts, searchPromptCollection } from '@/lib/api'
-import type { PromptSortBy, PromptSortOrder, PromptTaxonomyInferredType, PromptTaxonomyRelationKind, PromptTypeFilter } from '@/types/prompt'
+import { getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getTopPrompts, searchPromptCollection } from '@/lib/api'
+import type { PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
 import { getPromptTypeTotal, getSortedSiblingGroups } from './prompt-page-utils'
 
 interface UsePromptPageQueriesParams {
@@ -11,25 +11,9 @@ interface UsePromptPageQueriesParams {
   page: number
   sortBy: PromptSortBy
   sortOrder: PromptSortOrder
-  graphEnabled?: boolean
-  graphFilters?: {
-    type: PromptTypeFilter
-    minScore: number
-    minSharedCount: number
-    minUsageCount: number
-    limit: number
-  }
-  taxonomyGraphEnabled?: boolean
-  taxonomyGraphFilters?: {
-    type: PromptTypeFilter
-    inferredType: PromptTaxonomyInferredType | 'all'
-    relationKind: PromptTaxonomyRelationKind | 'all'
-    minScore: number
-    limit: number
-  }
 }
 
-export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder, graphEnabled = false, graphFilters, taxonomyGraphEnabled = false, taxonomyGraphFilters }: UsePromptPageQueriesParams) {
+export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder }: UsePromptPageQueriesParams) {
   const groupsQuery = useQuery({
     queryKey: ['prompt-groups', promptType],
     queryFn: () => getPromptGroups(promptType),
@@ -64,30 +48,6 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
       }),
   })
 
-  const promptGraphQuery = useQuery({
-    queryKey: ['prompt-graph', graphFilters?.type ?? 'positive', graphFilters?.minScore ?? 55, graphFilters?.minSharedCount ?? 3, graphFilters?.minUsageCount ?? 2, graphFilters?.limit ?? 180],
-    queryFn: () => getPromptGraph({
-      type: graphFilters?.type ?? 'positive',
-      minScore: graphFilters?.minScore ?? 55,
-      minSharedCount: graphFilters?.minSharedCount ?? 3,
-      minUsageCount: graphFilters?.minUsageCount ?? 2,
-      limit: graphFilters?.limit ?? 180,
-    }),
-    enabled: graphEnabled,
-  })
-
-  const promptTaxonomyGraphQuery = useQuery({
-    queryKey: ['prompt-taxonomy-graph', taxonomyGraphFilters?.type ?? 'positive', taxonomyGraphFilters?.inferredType ?? 'all', taxonomyGraphFilters?.relationKind ?? 'all', taxonomyGraphFilters?.minScore ?? 0.58, taxonomyGraphFilters?.limit ?? 180],
-    queryFn: () => getPromptTaxonomyGraph({
-      type: taxonomyGraphFilters?.type ?? 'positive',
-      inferredType: taxonomyGraphFilters?.inferredType ?? 'all',
-      relationKind: taxonomyGraphFilters?.relationKind ?? 'all',
-      minScore: taxonomyGraphFilters?.minScore ?? 0.58,
-      limit: taxonomyGraphFilters?.limit ?? 180,
-    }),
-    enabled: taxonomyGraphEnabled,
-  })
-
   const selectedGroup = useMemo(
     () => (groupsQuery.data ?? []).find((group) => group.id === selectedGroupId) ?? null,
     [groupsQuery.data, selectedGroupId],
@@ -109,8 +69,6 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
     topPromptsQuery,
     groupStatisticsQuery,
     promptSearchQuery,
-    promptGraphQuery,
-    promptTaxonomyGraphQuery,
     selectedGroup,
     siblingGroups,
     totalCount,

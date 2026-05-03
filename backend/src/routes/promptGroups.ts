@@ -389,7 +389,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       return res.status(400).json(response);
     }
 
-    const success = await PromptGroupService.deleteGroup(groupId, type as 'positive' | 'negative');
+    const success = await PromptGroupService.deleteGroup(groupId, type as 'positive' | 'negative' | 'auto');
 
     const response: PromptGroupResponse = {
       success: true,

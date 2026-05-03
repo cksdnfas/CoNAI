@@ -7,6 +7,7 @@ import { SettingsSegmentedTable } from '@/features/settings/components/settings-
 import { useI18n } from '@/i18n'
 import {
   type WildcardItemRecord,
+  type WildcardRecord,
   type WildcardScanLog,
   type WildcardTool,
 } from '@/lib/api'

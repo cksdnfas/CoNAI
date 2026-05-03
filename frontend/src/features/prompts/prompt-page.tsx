@@ -1,19 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { PageHeader } from '@/components/common/page-header'
-import { SegmentedControl } from '@/components/common/segmented-control'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { exportPromptGroups } from '@/lib/api'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import type { PromptCollectionItem, PromptGraphMode, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTaxonomyInferredType, PromptTaxonomyRelationKind, PromptTypeFilter } from '@/types/prompt'
+import type { PromptCollectionItem, PromptGroupExportData, PromptGroupRecord, PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
 import { PromptCollectModal } from './components/prompt-collect-modal'
 import { PromptGroupAssignModal } from './components/prompt-group-assign-modal'
-import { PromptGraphPanel } from './components/prompt-graph-panel'
 import { PromptGroupEditorModal } from './components/prompt-group-editor-modal'
+import { PromptDanbooruGroupingModal } from './components/prompt-danbooru-grouping-modal'
 import { PromptListPanel } from './components/prompt-list-panel'
-import { PromptTaxonomyGraphPanel } from './components/prompt-taxonomy-graph-panel'
 import { PromptSelectionBar } from './components/prompt-selection-bar'
 import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
@@ -34,19 +34,21 @@ type GroupEditorState =
   | { mode: 'edit'; group: PromptGroupRecord }
   | null
 
-type PromptPageTopTab = PromptTypeFilter | 'graph'
+type PromptPageTopTab = PromptTypeFilter | 'wildcards' | 'danbooru'
 
-const PROMPT_PAGE_TABS: Array<{ value: PromptPageTopTab; label: string }> = [
-  { value: 'positive', label: 'Positive' },
-  { value: 'negative', label: 'Negative' },
-  { value: 'auto', label: 'Auto' },
-  { value: 'graph', label: 'Graph' },
-]
+const WildcardGenerationPanelLazy = lazy(async () => {
+  const module = await import('@/features/image-generation/components/wildcard-generation-panel')
+  return { default: module.WildcardGenerationPanel }
+})
 
-const PROMPT_GRAPH_MODE_ITEMS: Array<{ value: PromptGraphMode; label: string }> = [
-  { value: 'usage', label: 'Usage' },
-  { value: 'taxonomy', label: 'Taxonomy' },
-]
+const PromptDanbooruBrowserPanelLazy = lazy(async () => {
+  const module = await import('./components/prompt-danbooru-browser-panel')
+  return { default: module.PromptDanbooruBrowserPanel }
+})
+
+function PanelFallback() {
+  return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
+}
 
 export function PromptPage() {
   const { showSnackbar } = useSnackbar()
@@ -54,10 +56,21 @@ export function PromptPage() {
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const promptListRef = useRef<HTMLDivElement | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
+  const authStatusQuery = useAuthStatusQuery()
+  const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
+  const canViewWildcards = hasAuthPermission(permissionKeys, 'page.wildcards.view')
+  const promptPageTabs = useMemo<Array<{ value: PromptPageTopTab; label: string }>>(() => [
+    { value: 'positive', label: 'Positive' },
+    { value: 'negative', label: 'Negative' },
+    { value: 'auto', label: 'Auto' },
+    { value: 'danbooru', label: 'Danbooru' },
+    ...(canViewWildcards ? [{ value: 'wildcards' as const, label: 'Wildcard' }] : []),
+  ], [canViewWildcards, t])
 
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false)
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false)
+  const [isDanbooruGroupingModalOpen, setIsDanbooruGroupingModalOpen] = useState(false)
   const [activeTopTab, setActiveTopTab] = useState<PromptPageTopTab>('positive')
   const [promptType, setPromptType] = useState<PromptTypeFilter>('positive')
   const [selectedGroupId, setSelectedGroupId] = useState<number | null | undefined>(undefined)
@@ -68,11 +81,6 @@ export function PromptPage() {
   const [page, setPage] = useState(1)
   const [selectedPromptIds, setSelectedPromptIds] = useState<number[]>([])
   const [activePrompt, setActivePrompt] = useState<{ prompt: string; type: PromptTypeFilter } | null>(null)
-  const [graphMode, setGraphMode] = useState<PromptGraphMode>('usage')
-  const [graphDraftFilters, setGraphDraftFilters] = useState({ type: 'positive' as PromptTypeFilter, minScore: 55, minSharedCount: 3, minUsageCount: 2, limit: 180 })
-  const [graphFilters, setGraphFilters] = useState({ type: 'positive' as PromptTypeFilter, minScore: 55, minSharedCount: 3, minUsageCount: 2, limit: 180 })
-  const [taxonomyGraphDraftFilters, setTaxonomyGraphDraftFilters] = useState({ type: 'positive' as PromptTypeFilter, inferredType: 'all' as PromptTaxonomyInferredType | 'all', relationKind: 'all' as PromptTaxonomyRelationKind | 'all', minScore: 0.58, limit: 180 })
-  const [taxonomyGraphFilters, setTaxonomyGraphFilters] = useState({ type: 'positive' as PromptTypeFilter, inferredType: 'all' as PromptTaxonomyInferredType | 'all', relationKind: 'all' as PromptTaxonomyRelationKind | 'all', minScore: 0.58, limit: 180 })
   const [assignModalState, setAssignModalState] = useState<AssignModalState>(null)
   const [groupEditorState, setGroupEditorState] = useState<GroupEditorState>(null)
 
@@ -82,8 +90,6 @@ export function PromptPage() {
     topPromptsQuery,
     groupStatisticsQuery,
     promptSearchQuery,
-    promptGraphQuery,
-    promptTaxonomyGraphQuery,
     selectedGroup,
     siblingGroups,
     totalCount,
@@ -94,10 +100,6 @@ export function PromptPage() {
     page,
     sortBy,
     sortOrder,
-    graphEnabled: activeTopTab === 'graph' && graphMode === 'usage',
-    graphFilters,
-    taxonomyGraphEnabled: activeTopTab === 'graph' && graphMode === 'taxonomy',
-    taxonomyGraphFilters,
   })
 
   const isSelectedGroupLocked = isLockedPromptGroup(selectedGroup)
@@ -134,8 +136,6 @@ export function PromptPage() {
     importPromptGroupsMutation,
     deletePromptMutation,
     collectPromptsMutation,
-    rebuildPromptRelationsMutation,
-    rebuildPromptTaxonomyMutation,
   } = usePromptPageMutations({
     promptType,
     onInfo: (message) => showSnackbar({ message, tone: 'info' }),
@@ -169,6 +169,12 @@ export function PromptPage() {
     onSelectedIdsChange: setSelectedPromptIds,
     onDragStateChange: setIsDraggingSelection,
   })
+
+  useEffect(() => {
+    if (activeTopTab === 'wildcards' && !canViewWildcards) {
+      setActiveTopTab(promptType)
+    }
+  }, [activeTopTab, canViewWildcards, promptType])
 
   useEffect(() => {
     setSelectedPromptIds([])
@@ -208,11 +214,9 @@ export function PromptPage() {
   const handleChangeTopTab = (nextTab: PromptPageTopTab) => {
     setActiveTopTab(nextTab)
 
-    if (nextTab === 'graph') {
-      setGraphDraftFilters((current) => ({ ...current, type: promptType }))
-      setGraphFilters((current) => ({ ...current, type: promptType }))
-      setTaxonomyGraphDraftFilters((current) => ({ ...current, type: promptType }))
-      setTaxonomyGraphFilters((current) => ({ ...current, type: promptType }))
+    if (nextTab === 'wildcards' || nextTab === 'danbooru') {
+      setSelectedGroupId(undefined)
+      setPage(1)
       return
     }
 
@@ -224,14 +228,6 @@ export function PromptPage() {
   const handleActivatePrompt = async (prompt: string, type: PromptTypeFilter = promptType) => {
     setActivePrompt({ prompt, type })
     await handleCopyPrompt(prompt)
-  }
-
-  const handleApplyGraphFilters = () => {
-    setGraphFilters(graphDraftFilters)
-  }
-
-  const handleApplyTaxonomyGraphFilters = () => {
-    setTaxonomyGraphFilters(taxonomyGraphDraftFilters)
   }
 
   const handleTogglePromptSelection = (promptId: number, checked: boolean) => {
@@ -283,7 +279,7 @@ export function PromptPage() {
       return
     }
 
-    const confirmed = window.confirm(t({ ko: '정말 {groupName} 그룹을 삭제할까? 포함된 프롬프트는 Unclassified로 이동해.', en: 'Delete the {groupName} group? Included prompts will move to Unclassified.' }, { groupName: selectedGroup.group_name }))
+    const confirmed = window.confirm(t({ ko: '정말 {groupName} 그룹을 삭제할까? 하위 그룹까지 삭제되고 포함된 프롬프트는 Unclassified로 이동해.', en: 'Delete the {groupName} group? Child groups will also be deleted, and included prompts will move to Unclassified.' }, { groupName: selectedGroup.group_name }))
     if (!confirmed) {
       return
     }
@@ -382,58 +378,18 @@ export function PromptPage() {
 
       <SegmentedTabBar
         value={activeTopTab}
-        items={PROMPT_PAGE_TABS}
+        items={promptPageTabs}
         onChange={(nextTab) => handleChangeTopTab(nextTab as PromptPageTopTab)}
       />
 
-      {activeTopTab === 'graph' ? (
-        <div className="space-y-4">
-          <SegmentedControl
-            value={graphMode}
-            items={PROMPT_GRAPH_MODE_ITEMS}
-            onChange={(value) => setGraphMode(value as PromptGraphMode)}
-          />
-
-          {graphMode === 'usage' ? (
-            <PromptGraphPanel
-              data={promptGraphQuery.data}
-              draftFilters={graphDraftFilters}
-              isLoading={promptGraphQuery.isLoading}
-              isFetching={promptGraphQuery.isFetching}
-              isError={promptGraphQuery.isError}
-              errorMessage={promptGraphQuery.error instanceof Error ? promptGraphQuery.error.message : null}
-              isRebuilding={rebuildPromptRelationsMutation.isPending}
-              onDraftFiltersChange={(patch) => setGraphDraftFilters((current) => ({ ...current, ...patch }))}
-              onApplyFilters={handleApplyGraphFilters}
-              onRebuild={() => {
-                void rebuildPromptRelationsMutation.mutateAsync()
-                  .then(() => {
-                    void promptGraphQuery.refetch()
-                  })
-                  .catch(() => undefined)
-              }}
-            />
-          ) : (
-            <PromptTaxonomyGraphPanel
-              data={promptTaxonomyGraphQuery.data}
-              draftFilters={taxonomyGraphDraftFilters}
-              isLoading={promptTaxonomyGraphQuery.isLoading}
-              isFetching={promptTaxonomyGraphQuery.isFetching}
-              isError={promptTaxonomyGraphQuery.isError}
-              errorMessage={promptTaxonomyGraphQuery.error instanceof Error ? promptTaxonomyGraphQuery.error.message : null}
-              isRebuilding={rebuildPromptTaxonomyMutation.isPending}
-              onDraftFiltersChange={(patch) => setTaxonomyGraphDraftFilters((current) => ({ ...current, ...patch }))}
-              onApplyFilters={handleApplyTaxonomyGraphFilters}
-              onRebuild={() => {
-                void rebuildPromptTaxonomyMutation.mutateAsync()
-                  .then(() => {
-                    void promptTaxonomyGraphQuery.refetch()
-                  })
-                  .catch(() => undefined)
-              }}
-            />
-          )}
-        </div>
+      {activeTopTab === 'wildcards' ? (
+        <Suspense fallback={<PanelFallback />}>
+          <WildcardGenerationPanelLazy refreshNonce={0} />
+        </Suspense>
+      ) : activeTopTab === 'danbooru' ? (
+        <Suspense fallback={<PanelFallback />}>
+          <PromptDanbooruBrowserPanelLazy />
+        </Suspense>
       ) : (
         <>
           <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
@@ -457,6 +413,7 @@ export function PromptPage() {
               onImportGroups={() => importInputRef.current?.click()}
               onOpenSummary={() => setIsSummaryModalOpen(true)}
               onOpenCollect={() => setIsCollectModalOpen(true)}
+              onOpenDanbooruGrouping={() => setIsDanbooruGroupingModalOpen(true)}
               canMoveGroupUp={canMoveGroupUp}
               canMoveGroupDown={canMoveGroupDown}
             />
@@ -522,49 +479,56 @@ export function PromptPage() {
             onDeleteSelected={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.deleted'), tone: 'error' }) : () => void handleDeleteSelectedPrompts()}
             onClear={() => setSelectedPromptIds([])}
           />
+
+          <PromptGroupAssignModal
+            open={assignModalState !== null}
+            groups={assignableGroups}
+            selectedCount={assignModalState?.mode === 'single' ? 1 : selectedPromptItems.length}
+            isSubmitting={assignSinglePromptMutation.isPending || batchAssignPromptsMutation.isPending}
+            onClose={() => setAssignModalState(null)}
+            onSubmit={handleSubmitAssign}
+          />
+
+          <PromptGroupEditorModal
+            open={groupEditorState !== null}
+            mode={groupEditorState?.mode ?? 'create'}
+            promptType={promptType}
+            groups={editableParentGroups}
+            group={groupEditorState?.mode === 'edit' ? groupEditorState.group : null}
+            defaultParentId={groupEditorState?.mode === 'create' ? groupEditorState.defaultParentId : null}
+            isSubmitting={createPromptGroupMutation.isPending || updatePromptGroupMutation.isPending}
+            onClose={() => setGroupEditorState(null)}
+            onSubmit={handleSubmitGroupEditor}
+          />
+
+          <PromptCollectModal
+            open={isCollectModalOpen}
+            isSubmitting={collectPromptsMutation.isPending}
+            onClose={() => setIsCollectModalOpen(false)}
+            onSubmit={async (input) => {
+              await collectPromptsMutation.mutateAsync(input)
+            }}
+          />
+
+          <PromptDanbooruGroupingModal
+            open={isDanbooruGroupingModalOpen}
+            onClose={() => setIsDanbooruGroupingModalOpen(false)}
+            onInfo={(message) => showSnackbar({ message, tone: 'info' })}
+            onError={(message) => showSnackbar({ message, tone: 'error' })}
+          />
+
+          <PromptSummaryModal
+            open={isSummaryModalOpen}
+            promptType={promptType}
+            statistics={statisticsQuery.data}
+            topPrompts={topPromptsQuery.data ?? []}
+            groupStatistics={groupStatisticsQuery.data ?? []}
+            onClose={() => setIsSummaryModalOpen(false)}
+          />
+
+          <input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => void handleImportFileChange(event)} />
         </>
       )}
-
-      <PromptGroupAssignModal
-        open={assignModalState !== null}
-        groups={assignableGroups}
-        selectedCount={assignModalState?.mode === 'single' ? 1 : selectedPromptItems.length}
-        isSubmitting={assignSinglePromptMutation.isPending || batchAssignPromptsMutation.isPending}
-        onClose={() => setAssignModalState(null)}
-        onSubmit={handleSubmitAssign}
-      />
-
-      <PromptGroupEditorModal
-        open={groupEditorState !== null}
-        mode={groupEditorState?.mode ?? 'create'}
-        promptType={promptType}
-        groups={editableParentGroups}
-        group={groupEditorState?.mode === 'edit' ? groupEditorState.group : null}
-        defaultParentId={groupEditorState?.mode === 'create' ? groupEditorState.defaultParentId : null}
-        isSubmitting={createPromptGroupMutation.isPending || updatePromptGroupMutation.isPending}
-        onClose={() => setGroupEditorState(null)}
-        onSubmit={handleSubmitGroupEditor}
-      />
-
-      <PromptCollectModal
-        open={isCollectModalOpen}
-        isSubmitting={collectPromptsMutation.isPending}
-        onClose={() => setIsCollectModalOpen(false)}
-        onSubmit={async (input) => {
-          await collectPromptsMutation.mutateAsync(input)
-        }}
-      />
-
-      <PromptSummaryModal
-        open={isSummaryModalOpen}
-        promptType={promptType}
-        statistics={statisticsQuery.data}
-        topPrompts={topPromptsQuery.data ?? []}
-        groupStatistics={groupStatisticsQuery.data ?? []}
-        onClose={() => setIsSummaryModalOpen(false)}
-      />
-
-      <input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => void handleImportFileChange(event)} />
     </div>
   )
 }

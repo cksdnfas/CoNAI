@@ -1,4 +1,4 @@
-import { BarChart3, ChevronDown, ChevronUp, Download, FolderPlus, Pencil, Trash2, Upload, Wrench } from 'lucide-react'
+import { BarChart3, ChevronDown, ChevronUp, Download, FolderPlus, Pencil, Tags, Trash2, Upload, Wrench } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,7 @@ interface PromptSidebarProps {
   onImportGroups?: () => void
   onOpenSummary?: () => void
   onOpenCollect?: () => void
+  onOpenDanbooruGrouping?: () => void
   canMoveGroupUp?: boolean
   canMoveGroupDown?: boolean
 }
@@ -47,6 +48,7 @@ export function PromptSidebar({
   onImportGroups,
   onOpenSummary,
   onOpenCollect,
+  onOpenDanbooruGrouping,
   canMoveGroupUp = false,
   canMoveGroupDown = false,
 }: PromptSidebarProps) {
@@ -70,6 +72,9 @@ export function PromptSidebar({
           </Button>
           <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} aria-label={t('prompts.components.prompt.sidebar.add.group')} title={t('prompts.components.prompt.sidebar.add.group')}>
             <FolderPlus className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onOpenDanbooruGrouping?.()} disabled={!onOpenDanbooruGrouping} aria-label={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru auto grouping' })} title={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru auto grouping' })}>
+            <Tags className="h-4 w-4" />
           </Button>
           <Button type="button" size="icon-sm" variant="outline" className="bg-surface-low" onClick={() => onExportGroups?.()} disabled={!onExportGroups} aria-label={t('prompts.components.prompt.sidebar.export')} title={t('prompts.components.prompt.sidebar.export')}>
             <Download className="h-4 w-4" />

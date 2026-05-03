@@ -5,6 +5,8 @@ import { getNavigationItemClassName } from './navigation-item'
 
 export type HierarchyNodeId = number | string
 
+const EMPTY_EXPANDED_IDS: HierarchyNodeId[] = []
+
 export interface HierarchyNavItemState {
   depth: number
   hasChildren: boolean
@@ -26,6 +28,7 @@ interface HierarchyNavProps<T> {
   getItemClassName?: (item: T, state: HierarchyNavItemState) => string | undefined
   expandable?: boolean
   expandOnSelect?: boolean | ((item: T, state: HierarchyNavItemState) => boolean)
+  defaultExpandedIds?: HierarchyNodeId[]
   className?: string
 }
 
@@ -80,6 +83,7 @@ export function HierarchyNav<T>({
   getItemClassName,
   expandable = false,
   expandOnSelect,
+  defaultExpandedIds = EMPTY_EXPANDED_IDS,
   className,
 }: HierarchyNavProps<T>) {
   const itemsByParentId = useMemo(() => buildHierarchyMap(items, getParentId, sortItems), [items, getParentId, sortItems])
@@ -87,26 +91,29 @@ export function HierarchyNav<T>({
     () => new Map(items.map((item) => [getId(item), getParentId(item) ?? null] as const)),
     [items, getId, getParentId],
   )
-  const [expandedIds, setExpandedIds] = useState<Set<HierarchyNodeId>>(() => new Set(collectAncestorIds(parentById, selectedId)))
+  const [expandedIds, setExpandedIds] = useState<Set<HierarchyNodeId>>(() => new Set([...defaultExpandedIds, ...collectAncestorIds(parentById, selectedId)]))
 
   useEffect(() => {
     if (!expandable) {
       return
     }
 
-    const ancestorIds = collectAncestorIds(parentById, selectedId)
-    if (ancestorIds.length === 0) {
+    const idsToExpand = [...defaultExpandedIds, ...collectAncestorIds(parentById, selectedId)]
+    if (idsToExpand.length === 0) {
       return
     }
 
     setExpandedIds((current) => {
+      if (idsToExpand.every((id) => current.has(id))) {
+        return current
+      }
       const next = new Set(current)
-      for (const ancestorId of ancestorIds) {
-        next.add(ancestorId)
+      for (const id of idsToExpand) {
+        next.add(id)
       }
       return next
     })
-  }, [expandable, parentById, selectedId])
+  }, [defaultExpandedIds, expandable, parentById, selectedId])
 
   const toggleExpanded = (itemId: HierarchyNodeId) => {
     setExpandedIds((current) => {

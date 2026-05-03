@@ -7,8 +7,6 @@ import {
   deletePrompt,
   deletePromptGroup,
   importPromptGroups,
-  rebuildPromptRelations,
-  rebuildPromptTaxonomy,
   reorderPromptGroups,
   updatePromptGroup,
 } from '@/lib/api'
@@ -53,10 +51,6 @@ export function usePromptPageMutations({
       queryClient.invalidateQueries({ queryKey: ['prompt-group-statistics', promptType] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-top', promptType] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-search', promptType] }),
-      queryClient.invalidateQueries({ queryKey: ['prompt-related'] }),
-      queryClient.invalidateQueries({ queryKey: ['prompt-graph'] }),
-      queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-graph'] }),
-      queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-related'] }),
       queryClient.invalidateQueries({ queryKey: ['prompt-statistics'] }),
     ])
     await onAfterRefresh?.()
@@ -169,34 +163,6 @@ export function usePromptPageMutations({
     },
   })
 
-  const rebuildPromptRelationsMutation = useMutation({
-    mutationFn: rebuildPromptRelations,
-    onSuccess: async (result) => {
-      onInfo(result.message)
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['prompt-related'] }),
-        queryClient.invalidateQueries({ queryKey: ['prompt-graph'] }),
-      ])
-    },
-    onError: (error) => {
-      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.rebuild.prompt.relationships'))
-    },
-  })
-
-  const rebuildPromptTaxonomyMutation = useMutation({
-    mutationFn: rebuildPromptTaxonomy,
-    onSuccess: async (result) => {
-      onInfo(result.message)
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-graph'] }),
-        queryClient.invalidateQueries({ queryKey: ['prompt-taxonomy-related'] }),
-      ])
-    },
-    onError: (error) => {
-      onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.rebuild.prompt.taxonomy'))
-    },
-  })
-
   return {
     assignSinglePromptMutation,
     batchAssignPromptsMutation,
@@ -207,8 +173,6 @@ export function usePromptPageMutations({
     importPromptGroupsMutation,
     deletePromptMutation,
     collectPromptsMutation,
-    rebuildPromptRelationsMutation,
-    rebuildPromptTaxonomyMutation,
     refreshPromptQueries,
   }
 }
