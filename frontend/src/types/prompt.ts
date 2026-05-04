@@ -108,6 +108,8 @@ export interface DanbooruPromptGroupingTypeResult {
 
 export interface DanbooruPromptGroupingResult {
   mode: DanbooruPromptGroupingMode
+  language: 'ko' | 'en'
+  includeAssignedPrompts: boolean
   database: {
     available: boolean
     path: string

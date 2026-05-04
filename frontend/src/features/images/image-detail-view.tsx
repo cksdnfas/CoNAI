@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
@@ -35,19 +35,69 @@ export interface ImageDetailViewHeaderControls {
   refresh: () => void
 }
 
+function isImageRecordLike(value: unknown): value is ImageRecord {
+  return Boolean(value && typeof value === 'object' && typeof (value as ImageRecord).composite_hash === 'string')
+}
+
+function findCachedImageRecord(value: unknown, compositeHash: string, depth = 0): ImageRecord | undefined {
+  if (!value || depth > 4) {
+    return undefined
+  }
+
+  if (isImageRecordLike(value) && value.composite_hash === compositeHash) {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findCachedImageRecord(item, compositeHash, depth + 1)
+      if (found) return found
+    }
+    return undefined
+  }
+
+  if (typeof value !== 'object') {
+    return undefined
+  }
+
+  const record = value as Record<string, unknown>
+  for (const key of ['images', 'items', 'pages', 'image', 'data']) {
+    const found = findCachedImageRecord(record[key], compositeHash, depth + 1)
+    if (found) return found
+  }
+
+  return undefined
+}
+
 interface ImageDetailViewProps {
   compositeHash: string
   presentation?: 'page' | 'modal'
+  initialImage?: ImageRecord | null
   renderHeader?: (controls: ImageDetailViewHeaderControls) => ReactNode
 }
 
 /** Render the shared image detail body so page and modal presentations stay aligned. */
-export function ImageDetailView({ compositeHash, presentation = 'page', renderHeader }: ImageDetailViewProps) {
+export function ImageDetailView({ compositeHash, presentation = 'page', initialImage = null, renderHeader }: ImageDetailViewProps) {
   const { t } = useI18n()
   const canUseSplitPaneScroll = useMinWidth(1280)
   const useSplitPaneScroll = presentation === 'modal' && canUseSplitPaneScroll
   const usesDesktopRelatedImageColumns = useMinWidth(768)
   const [isPrimaryMediaReady, setIsPrimaryMediaReady] = useState(false)
+  const queryClient = useQueryClient()
+
+  const cachedInitialImage = useMemo(() => {
+    if (initialImage?.composite_hash === compositeHash) {
+      return initialImage
+    }
+
+    const queries = queryClient.getQueryCache().findAll()
+    for (const query of queries) {
+      const found = findCachedImageRecord(query.state.data, compositeHash)
+      if (found) return found
+    }
+
+    return undefined
+  }, [compositeHash, initialImage, queryClient])
 
   useEffect(() => {
     if (presentation === 'page') {
@@ -84,6 +134,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', renderHe
     queryKey: ['image-detail', compositeHash],
     queryFn: () => getImage(compositeHash),
     enabled: Boolean(compositeHash),
+    initialData: cachedInitialImage,
   })
 
   const image = imageQuery.data

@@ -82,9 +82,15 @@ export async function getPromptStatistics() {
   return response.data
 }
 
-export async function getDanbooruPromptGroupingPreview(mode: DanbooruPromptGroupingMode = 'unclassified-only') {
+export async function getDanbooruPromptGroupingPreview(options?: { mode?: DanbooruPromptGroupingMode; language?: 'ko' | 'en'; includeAssignedPrompts?: boolean }) {
   const searchParams = new URLSearchParams()
-  searchParams.set('mode', mode)
+  searchParams.set('mode', options?.mode ?? 'unclassified-only')
+  if (options?.language) {
+    searchParams.set('language', options.language)
+  }
+  if (options?.includeAssignedPrompts) {
+    searchParams.set('includeAssignedPrompts', 'true')
+  }
   const response = await fetchJson<ApiResponse<DanbooruPromptGroupingResult>>(`/api/prompt-collection/danbooru-grouping/preview?${searchParams.toString()}`)
   if (!response.success) {
     throw new Error(response.error || '단부루 기반 그룹 미리보기를 불러오지 못했어.')
@@ -92,13 +98,17 @@ export async function getDanbooruPromptGroupingPreview(mode: DanbooruPromptGroup
   return response.data
 }
 
-export async function applyDanbooruPromptGrouping(mode: DanbooruPromptGroupingMode = 'unclassified-only') {
+export async function applyDanbooruPromptGrouping(options?: { mode?: DanbooruPromptGroupingMode; language?: 'ko' | 'en'; includeAssignedPrompts?: boolean }) {
   const response = await fetchJson<ApiResponse<DanbooruPromptGroupingResult>>('/api/prompt-collection/danbooru-grouping/apply', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ mode }),
+    body: JSON.stringify({
+      mode: options?.mode ?? 'unclassified-only',
+      language: options?.language,
+      includeAssignedPrompts: options?.includeAssignedPrompts ?? false,
+    }),
   })
   if (!response.success) {
     throw new Error(response.error || '단부루 기반 그룹 자동 구성을 적용하지 못했어.')

@@ -78,6 +78,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
 
   const canViewPrevious = activeIndex > 0
   const canViewNext = activeIndex >= 0 && activeIndex < modalState.compositeHashes.length - 1
+  const activeSourceItem = modalState.compositeHash ? modalState.sourceItemsByHash[modalState.compositeHash] : null
 
   // 썸네일 스트립은 성능 문제로 잠시 비활성화한다.
   // 탐색 컨텍스트 자체는 유지하므로, 필요할 때 UI와 배치 로드만 다시 연결하면 된다.
@@ -264,6 +265,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         <Suspense fallback={<ImageViewModalFallback />}>
           <ImageViewModalOverlayLazy
             compositeHash={modalState.compositeHash}
+            initialImage={activeSourceItem}
             activeIndex={activeIndex}
             totalCount={modalState.compositeHashes.length}
             viewMode={viewMode}

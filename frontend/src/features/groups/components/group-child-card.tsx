@@ -16,6 +16,7 @@ interface GroupChildCardProps {
   variant?: 'default' | 'back'
   titleOverride?: string
   subtitleOverride?: string
+  totalImageCount?: number
   cardStyle?: GroupExplorerCardStyle
 }
 
@@ -28,11 +29,13 @@ export function GroupChildCard({
   variant = 'default',
   titleOverride,
   subtitleOverride,
+  totalImageCount,
   cardStyle = 'compact-row',
 }: GroupChildCardProps) {
   const { formatNumber, t } = useI18n()
   const isBack = variant === 'back'
-  const isDisabled = isBack ? false : (group.child_count ?? 0) === 0 && group.image_count === 0
+  const effectiveTotalImageCount = totalImageCount ?? group.image_count
+  const isDisabled = isBack ? false : (group.child_count ?? 0) === 0 && effectiveTotalImageCount === 0
   const [previewFailed, setPreviewFailed] = useState(false)
   const previewQuery = useGroupPreviewImage({
     groupId: group.id,
@@ -43,7 +46,7 @@ export function GroupChildCard({
 
   const previewImage = previewFailed ? null : (previewQuery.data ?? null)
   const title = titleOverride ?? group.name
-  const subtitle = subtitleOverride ?? t({ ko: '이미지 {count}개', en: '{count} images' }, { count: formatNumber(group.image_count) })
+  const subtitle = subtitleOverride ?? t({ ko: '이미지 {count}개', en: '{count} images' }, { count: formatNumber(effectiveTotalImageCount) })
 
   const handleOpen = () => {
     if (!isDisabled) {

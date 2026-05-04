@@ -24,6 +24,13 @@ export class PromptCollectionMutationService {
 
   static async setGroupId(promptId: number, groupId: number | null, type: 'positive' | 'negative' | 'auto' = 'positive') {
     try {
+      const prompt = await PromptCollectionModel.findById(promptId, type);
+      if (prompt?.group_id && PromptGroupService.isDanbooruManagedGroupId(prompt.group_id, type)) {
+        throw new Error('Danbooru auto-group prompts are managed automatically');
+      }
+      if (groupId !== null && PromptGroupService.isDanbooruManagedGroupId(groupId, type)) {
+        throw new Error('Danbooru auto-groups are managed automatically');
+      }
       return await PromptCollectionModel.setGroupId(promptId, groupId, type);
     } catch (error) {
       console.error('Error setting group ID:', error);
@@ -38,6 +45,9 @@ export class PromptCollectionMutationService {
         const group = await PromptGroupService.getGroupById(prompt.group_id, type);
         if (isProtectedLoRAGroup(group)) {
           throw new Error('LoRA prompts are protected');
+        }
+        if (PromptGroupService.isDanbooruManagedGroupId(prompt.group_id, type)) {
+          throw new Error('Danbooru auto-group prompts are managed automatically');
         }
       }
 
@@ -56,12 +66,18 @@ export class PromptCollectionMutationService {
         if (isProtectedLoRAGroup(currentGroup)) {
           throw new Error('LoRA prompts are protected');
         }
+        if (PromptGroupService.isDanbooruManagedGroupId(prompt.group_id, type)) {
+          throw new Error('Danbooru auto-group prompts are managed automatically');
+        }
       }
 
       if (groupId !== null) {
         const targetGroup = await PromptGroupService.getGroupById(groupId, type);
         if (isProtectedLoRAGroup(targetGroup)) {
           throw new Error('LoRA group is protected');
+        }
+        if (PromptGroupService.isDanbooruManagedGroupId(groupId, type)) {
+          throw new Error('Danbooru auto-groups are managed automatically');
         }
       }
 
@@ -101,6 +117,9 @@ export class PromptCollectionMutationService {
         if (isProtectedLoRAGroup(targetGroup)) {
           throw new Error('LoRA group is protected');
         }
+        if (PromptGroupService.isDanbooruManagedGroupId(groupId, type)) {
+          throw new Error('Danbooru auto-groups are managed automatically');
+        }
       }
 
       for (const promptText of prompts) {
@@ -114,7 +133,7 @@ export class PromptCollectionMutationService {
           if (existing) {
             if (existing.group_id) {
               const currentGroup = await PromptGroupService.getGroupById(existing.group_id, type);
-              if (isProtectedLoRAGroup(currentGroup)) {
+              if (isProtectedLoRAGroup(currentGroup) || PromptGroupService.isDanbooruManagedGroupId(existing.group_id, type)) {
                 failed.push(trimmedPrompt);
                 continue;
               }

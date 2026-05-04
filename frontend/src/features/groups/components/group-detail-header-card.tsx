@@ -18,6 +18,7 @@ interface GroupDetailHeaderCardProps {
   isDeletePending: boolean
   lastAutoCollectLabel: string
   parentGroupLabel: string
+  imageCountLabel: string
   onOpenDownload: () => void
   onOpenCreateModal: () => void
   onOpenEditModal: () => void
@@ -37,6 +38,7 @@ export function GroupDetailHeaderCard({
   isDeletePending,
   lastAutoCollectLabel,
   parentGroupLabel,
+  imageCountLabel,
   onOpenDownload,
   onOpenCreateModal,
   onOpenEditModal,
@@ -109,7 +111,7 @@ export function GroupDetailHeaderCard({
       bodyClassName="space-y-3"
     >
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Badge variant="secondary">{t({ ko: '이미지 {count}개', en: '{count} images' }, { count: formatNumber(group.image_count) })}</Badge>
+        <Badge variant="secondary">{t({ ko: '이미지 {count}개', en: '{count} images' }, { count: imageCountLabel })}</Badge>
         <Badge variant="outline">manual {formatNumber(group.manual_added_count ?? 0)}</Badge>
         <Badge variant="outline">auto {formatNumber(group.auto_collected_count ?? 0)}</Badge>
         {selectedGroupHierarchy?.has_children ? <Badge variant="outline">{t({ ko: '하위 {count}', en: 'Children {count}' }, { count: formatNumber(selectedGroupHierarchy.child_count) })}</Badge> : null}

@@ -12,7 +12,7 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
 
-const PRIMARY_NAV_ORDER = ['/groups', '/prompts', '/generation', '/upload', '/wallpaper', '/wallpaper/runtime', '/settings'] as const
+const PRIMARY_NAV_ORDER = ['/groups', '/prompts', '/generation', '/upload', '/wallpaper', '/settings'] as const
 
 const navItems: Array<{ to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }> = [
   { to: '/access', labelKey: 'appShell.availablePages', icon: ShieldCheck, permissionKey: null },

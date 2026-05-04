@@ -4,12 +4,12 @@ import fs from 'fs';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
+import { MediaMetadataFileQueries } from '../../models/Image/MediaMetadataFileQueries';
 import { resolveUploadsPath } from '../../config/runtimePaths';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { enrichImageWithFileView } from './utils';
 import {
   buildBatchDownloadArchive,
-  buildImageWithFileViewData,
   getActiveFileOrBlock,
   getCompositeHashOrBlock,
   getExistingActiveFilePathOrBlock,
@@ -80,21 +80,28 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
   }
 
   try {
-    const file = await getActiveFileOrBlock(res, compositeHash, 'File not found');
+    const image = MediaMetadataFileQueries.findByHashWithFile(compositeHash);
 
-    if (!file) {
-      return;
-    }
+    if (!image) {
+      const metadata = await MediaMetadataModel.findByHash(compositeHash);
+      if (metadata && ImageSafetyService.isHidden(metadata.rating_score)) {
+        res.status(403).json({
+          success: false,
+          error: 'This image is hidden by the current safety policy'
+        });
+        return;
+      }
 
-    const metadata = await getVisibleMetadataOrBlock(res, compositeHash);
-
-    if (!metadata) {
+      res.status(404).json({
+        success: false,
+        error: metadata ? 'File not found' : 'Metadata not found'
+      });
       return;
     }
 
     res.json({
       success: true,
-      data: enrichImageWithFileView(buildImageWithFileViewData(metadata, file))
+      data: enrichImageWithFileView(image)
     });
     return;
   } catch (error) {

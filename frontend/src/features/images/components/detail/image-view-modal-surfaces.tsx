@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/i18n'
 import { getImage } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import type { ImageRecord } from '@/types/image'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { ImageDetailMedia } from './image-detail-media'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
@@ -17,11 +18,13 @@ import { getDownloadName, getImageDetailDownloadUrl, getImageDetailRenderUrl } f
 
 interface ImageViewSurfaceContentProps {
   compositeHash: string
+  initialImage?: ImageRecord | null
   renderHeader: (controls: ImageDetailViewHeaderControls) => ReactNode
 }
 
 interface ImageViewMinimalContentProps {
   compositeHash: string
+  initialImage?: ImageRecord | null
   activeIndex: number
   totalCount: number
   viewMode: ImageViewModalMode
@@ -39,11 +42,12 @@ function ImageViewSidePanel({ children, className }: { children: ReactNode; clas
 }
 
 /** Load the active image detail payload used by modal content surfaces. */
-function useImageViewSurfaceDetail(compositeHash: string) {
+function useImageViewSurfaceDetail(compositeHash: string, initialImage?: ImageRecord | null) {
   const imageQuery = useQuery({
     queryKey: ['image-detail', compositeHash],
     queryFn: () => getImage(compositeHash),
     enabled: Boolean(compositeHash),
+    initialData: initialImage?.composite_hash === compositeHash ? initialImage : undefined,
   })
 
   const image = imageQuery.data
@@ -58,9 +62,9 @@ function useImageViewSurfaceDetail(compositeHash: string) {
 }
 
 /** Render the medium modal surface with a large preview and prompt summary cards. */
-export function ImageViewMediumContent({ compositeHash, renderHeader }: ImageViewSurfaceContentProps) {
+export function ImageViewMediumContent({ compositeHash, initialImage = null, renderHeader }: ImageViewSurfaceContentProps) {
   const { t } = useI18n()
-  const { imageQuery, image, renderUrl, downloadUrl, downloadName } = useImageViewSurfaceDetail(compositeHash)
+  const { imageQuery, image, renderUrl, downloadUrl, downloadName } = useImageViewSurfaceDetail(compositeHash, initialImage)
   const promptSummary = image ? getImageExtractedPromptSummary(image) : null
   const positivePrompt = promptSummary?.positivePrompt || '—'
   const negativePrompt = promptSummary?.negativePrompt || '—'
@@ -122,6 +126,7 @@ export function ImageViewMediumContent({ compositeHash, renderHeader }: ImageVie
 /** Render the minimal modal surface as an immersive media viewer. */
 export function ImageViewMinimalContent({
   compositeHash,
+  initialImage = null,
   activeIndex,
   totalCount,
   viewMode,
@@ -134,7 +139,7 @@ export function ImageViewMinimalContent({
 }: ImageViewMinimalContentProps) {
   const navigate = useNavigate()
   const { t } = useI18n()
-  const { imageQuery, image, renderUrl, downloadUrl, downloadName } = useImageViewSurfaceDetail(compositeHash)
+  const { imageQuery, image, renderUrl, downloadUrl, downloadName } = useImageViewSurfaceDetail(compositeHash, initialImage)
   const showCounter = totalCount > 1 && activeIndex >= 0
   const overlayButtonClassName = 'border-white/14 bg-black/42 text-white hover:bg-black/60 hover:text-white'
 

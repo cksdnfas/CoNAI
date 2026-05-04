@@ -232,8 +232,10 @@ router.post('/resolve-groups', async (req: Request, res: Response) => {
  */
 router.get('/danbooru-grouping/preview', async (req: Request, res: Response) => {
   try {
-    const mode = req.query.mode === 'overwrite-existing' ? 'overwrite-existing' : 'unclassified-only';
-    const result = PromptGroupService.previewDanbooruGrouping(mode);
+    const includeAssignedPrompts = req.query.includeAssignedPrompts === 'true' || req.query.include_assigned_prompts === 'true';
+    const mode = req.query.mode === 'overwrite-existing' || includeAssignedPrompts ? 'overwrite-existing' : 'unclassified-only';
+    const language = req.query.language === 'ko' ? 'ko' : 'en';
+    const result = PromptGroupService.previewDanbooruGrouping({ mode, language, includeAssignedPrompts });
     return res.json(successResponse(result));
   } catch (error) {
     console.error('Error previewing Danbooru grouping:', error);
@@ -247,8 +249,10 @@ router.get('/danbooru-grouping/preview', async (req: Request, res: Response) => 
  */
 router.post('/danbooru-grouping/apply', async (req: Request, res: Response) => {
   try {
-    const mode = req.body?.mode === 'overwrite-existing' ? 'overwrite-existing' : 'unclassified-only';
-    const result = PromptGroupService.applyDanbooruGrouping(mode);
+    const includeAssignedPrompts = req.body?.includeAssignedPrompts === true || req.body?.include_assigned_prompts === true;
+    const mode = req.body?.mode === 'overwrite-existing' || includeAssignedPrompts ? 'overwrite-existing' : 'unclassified-only';
+    const language = req.body?.language === 'ko' ? 'ko' : 'en';
+    const result = PromptGroupService.applyDanbooruGrouping({ mode, language, includeAssignedPrompts });
     return res.json(successResponse(result));
   } catch (error) {
     console.error('Error applying Danbooru grouping:', error);

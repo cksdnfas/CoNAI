@@ -7,10 +7,12 @@ import { cn } from '@/lib/utils'
 import { ImageDetailView } from '@/features/images/image-detail-view'
 import { ImageViewModalActions, type ImageViewModalMode } from './image-view-modal-actions'
 import { ImageViewMediumContent, ImageViewMinimalContent } from './image-view-modal-surfaces'
+import type { ImageRecord } from '@/types/image'
 import type { ImageViewModalAccessOptions } from './image-view-modal-context'
 
 interface ImageViewModalOverlayProps {
   compositeHash: string
+  initialImage?: ImageRecord | null
   activeIndex: number
   totalCount: number
   openSessionId: number
@@ -27,6 +29,7 @@ interface ImageViewModalOverlayProps {
 /** Render the full-screen image view modal only after the modal is opened. */
 export function ImageViewModalOverlay({
   compositeHash,
+  initialImage,
   activeIndex,
   totalCount,
   openSessionId,
@@ -156,6 +159,7 @@ export function ImageViewModalOverlay({
       {viewMode === 'minimal' ? (
         <ImageViewMinimalContent
           compositeHash={compositeHash}
+          initialImage={initialImage}
           activeIndex={activeIndex}
           totalCount={totalCount}
           viewMode={viewMode}
@@ -189,6 +193,7 @@ export function ImageViewModalOverlay({
               <ImageDetailView
                 compositeHash={compositeHash}
                 presentation="modal"
+                initialImage={initialImage}
                 renderHeader={(controls) => (
                   <ImageViewModalActions
                     compositeHash={compositeHash}
@@ -210,6 +215,7 @@ export function ImageViewModalOverlay({
             ) : (
               <ImageViewMediumContent
                 compositeHash={compositeHash}
+                initialImage={initialImage}
                 renderHeader={(controls) => (
                   <ImageViewModalActions
                     compositeHash={compositeHash}

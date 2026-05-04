@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, GripVertical, Lock, Maximize2, Minimize2, Plus, Save, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -409,9 +408,9 @@ export function WallpaperEditorPage() {
                     aria-label={t({ ko: '초안 런타임 미리보기', en: 'Preview draft runtime' })}
                     title={t({ ko: '초안 런타임 미리보기', en: 'Preview draft runtime' })}
                   >
-                    <Link to={draftRuntimePath}>
+                    <a href={draftRuntimePath} target="_blank" rel="noreferrer">
                       <Eye className="h-4 w-4" />
-                    </Link>
+                    </a>
                   </Button>
                   <Button
                     variant="outline"

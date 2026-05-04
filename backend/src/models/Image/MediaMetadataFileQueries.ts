@@ -148,6 +148,21 @@ export class MediaMetadataFileQueries {
     return { items, total: countRow.total, hasMore };
   }
 
+  /** Load one active visible image by composite hash with metadata and file columns in a single query. */
+  static findByHashWithFile(compositeHash: string): any | null {
+    const visibleCondition = getVisibleMediaMetadataCondition();
+    const query = `
+      ${ACTIVE_FILE_WITH_METADATA_SELECT}
+      WHERE if.file_status = 'active'
+        AND if.composite_hash = ?
+        AND ${visibleCondition}
+      ORDER BY if.last_verified_date DESC, if.id DESC
+      LIMIT 1
+    `;
+
+    return db.prepare(query).get(compositeHash) ?? null;
+  }
+
   /** Load joined file rows for a fixed composite-hash set. */
   static findByHashesWithFiles(compositeHashes: string[]): any[] {
     if (compositeHashes.length === 0) return [];

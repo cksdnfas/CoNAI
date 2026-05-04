@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { AlertTriangle, WandSparkles } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -54,16 +55,18 @@ function TypeSummaryCard({ item }: { item: DanbooruPromptGroupingTypeResult }) {
 }
 
 export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: PromptDanbooruGroupingModalProps) {
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, language } = useI18n()
   const queryClient = useQueryClient()
+  const [includeAssignedPrompts, setIncludeAssignedPrompts] = useState(false)
+  const groupingMode = includeAssignedPrompts ? 'overwrite-existing' : 'unclassified-only'
   const previewQuery = useQuery({
-    queryKey: ['prompt-danbooru-grouping-preview', 'unclassified-only'],
-    queryFn: () => getDanbooruPromptGroupingPreview('unclassified-only'),
+    queryKey: ['prompt-danbooru-grouping-preview', groupingMode, language, includeAssignedPrompts],
+    queryFn: () => getDanbooruPromptGroupingPreview({ mode: groupingMode, language, includeAssignedPrompts }),
     enabled: open,
   })
 
   const applyMutation = useMutation({
-    mutationFn: () => applyDanbooruPromptGrouping('unclassified-only'),
+    mutationFn: () => applyDanbooruPromptGrouping({ mode: groupingMode, language, includeAssignedPrompts }),
     onSuccess: async (result) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['prompt-groups'] }),
@@ -88,17 +91,27 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
       open={open}
       onClose={onClose}
       title={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru-based group setup' })}
-      description={t({ ko: 'Positive, Auto, Negative 3가지 수집 목록 모두에 적용해. 안전하게 기존 그룹이 없는 미분류 항목만 배치해.', en: 'Applies to Positive, Auto, and Negative collections. Safely assigns only unclassified prompts.' })}
+      description={t({ ko: 'Positive, Auto, Negative 3가지 수집 목록 모두에 적용해. 기존 Danbooru 자동 그룹은 매번 지우고 다시 만들어.', en: 'Applies to Positive, Auto, and Negative collections. Existing Danbooru auto groups are rebuilt each time.' })}
       widthClassName="max-w-4xl"
     >
       <div className="space-y-4">
         <Alert>
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>{t({ ko: '안전 모드', en: 'Safe mode' })}</AlertTitle>
+          <AlertTitle>{includeAssignedPrompts ? t({ ko: '수동 분류 포함', en: 'Manual assignments included' }) : t({ ko: '수동 분류 보호', en: 'Manual assignments protected' })}</AlertTitle>
           <AlertDescription>
-            {t({ ko: '기존에 사람이 지정한 group_id는 덮어쓰지 않아. group_id가 비어 있는 프롬프트만 단부루 taxonomy 그룹으로 이동해.', en: 'Existing manual group assignments are not overwritten. Only prompts with an empty group_id are moved into Danbooru taxonomy groups.' })}
+            {includeAssignedPrompts
+              ? t({ ko: '사용자가 직접 분류한 태그까지 포함해 Danbooru 기준으로 다시 배치해. LoRA 보호 그룹은 건드리지 않아.', en: 'Manually assigned tags are also reassigned by Danbooru taxonomy. Protected LoRA groups are left untouched.' })
+              : t({ ko: '미분류 항목과 기존 Danbooru 자동 그룹 항목만 다시 배치해. 사용자가 직접 분류한 태그는 유지돼.', en: 'Only unclassified items and existing Danbooru auto-group items are reassigned. Manual assignments stay in place.' })}
           </AlertDescription>
         </Alert>
+
+        <label className="flex items-start gap-3 rounded-sm border border-border/70 bg-surface-low p-3 text-sm">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" checked={includeAssignedPrompts} onChange={(event) => setIncludeAssignedPrompts(event.target.checked)} />
+          <span className="space-y-1">
+            <span className="block font-medium text-foreground">{t({ ko: '사용자가 직접 분류한 태그도 포함', en: 'Include manually classified tags' })}</span>
+            <span className="block text-xs text-muted-foreground">{t({ ko: '켜면 기존 수동 group_id도 Danbooru taxonomy 기준으로 재분류해.', en: 'When enabled, existing manual group assignments are also reclassified by Danbooru taxonomy.' })}</span>
+          </span>
+        </label>
 
         {previewQuery.isLoading ? (
           <div className="rounded-sm border border-border/70 bg-surface-container/35 p-6 text-sm text-muted-foreground">{t({ ko: '미리보기 계산 중...', en: 'Calculating preview...' })}</div>

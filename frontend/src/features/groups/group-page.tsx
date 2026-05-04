@@ -1,5 +1,5 @@
 import { Download, FolderMinus, FolderPlus, Pencil, Play, RotateCcw, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,7 @@ import { GroupDetailHeaderCard } from './components/group-detail-header-card'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
+import { buildGroupCountMaps, getGroupHierarchyCountLabel } from './group-count-utils'
 import { formatGroupTimestamp, getGroupCardGridClassName, groupSources, normalizeGroupSourceKey, type GroupEditorState, type GroupSourceKey } from './group-page-shared'
 import { useGroupPageQueries } from './use-group-page-queries'
 import { useGroupPageActions } from './use-group-page-actions'
@@ -95,6 +96,9 @@ export function GroupPage() {
     selectedGroupImageIds,
     downloadScope,
   })
+
+  const groupCountMaps = useMemo(() => buildGroupCountMaps(allGroups), [allGroups])
+  const selectedGroupCountLabel = selectedGroupHierarchy ? getGroupHierarchyCountLabel(selectedGroupHierarchy, groupCountMaps, formatNumber) : formatNumber(selectedGroupQuery.data?.image_count ?? 0)
 
   const {
     createGroupMutation,
@@ -254,6 +258,7 @@ export function GroupPage() {
             <GroupRootGridSection
               title={getSourceLabel(selectedSource, 'rootSection')}
               groups={rootGroups}
+              allGroups={allGroups}
               cardStyle={groupExplorerCardStyle}
               gridClassName={getGroupCardGridClassName(groupExplorerCardStyle)}
               previewSourceKey={selectedSource.key}
@@ -287,6 +292,7 @@ export function GroupPage() {
                   isDeletePending={deleteGroupMutation.isPending}
                   lastAutoCollectLabel={formatGroupTimestamp(selectedGroupQuery.data.auto_collect_last_run, { emptyLabel: t({ ko: '아직 없음', en: 'Not yet' }), formatDateTime })}
                   parentGroupLabel={selectedGroupHierarchy?.parent_id == null ? t('groups.group.page.root.group') : t('groups.group.page.linked.as.a.child.group')}
+                  imageCountLabel={selectedGroupCountLabel}
                   onOpenDownload={handleOpenGroupDownloadModal}
                   onOpenCreateModal={handleOpenCreateModal}
                   onOpenEditModal={handleOpenEditModal}
@@ -301,6 +307,7 @@ export function GroupPage() {
                   parentGroupHierarchy={parentGroupHierarchy}
                   rootTitle={getSourceLabel(selectedSource, 'root')}
                   childGroups={childGroups}
+                  allGroups={allGroups}
                   cardStyle={groupExplorerCardStyle}
                   gridClassName={getGroupCardGridClassName(groupExplorerCardStyle)}
                   previewSourceKey={selectedSource.key}

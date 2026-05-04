@@ -19,7 +19,7 @@ import { PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
 import { PromptToolbar } from './components/prompt-toolbar'
 import { usePromptListSelection } from './components/use-prompt-list-selection'
-import { canDeletePromptItem, isLockedPromptGroup, isLockedPromptItem } from './prompt-page-utils'
+import { canDeletePromptItem, isDanbooruPromptGroup, isLockedPromptGroup, isLockedPromptItem, isProtectedLoRAPromptGroup } from './prompt-page-utils'
 import { usePromptPageMutations } from './use-prompt-page-mutations'
 import { usePromptPageQueries } from './use-prompt-page-queries'
 import { useI18n } from '@/i18n'
@@ -102,7 +102,10 @@ export function PromptPage() {
     sortOrder,
   })
 
-  const isSelectedGroupLocked = isLockedPromptGroup(selectedGroup)
+  const promptGroups = groupsQuery.data ?? []
+  const isSelectedGroupProtected = isProtectedLoRAPromptGroup(selectedGroup)
+  const isSelectedGroupDanbooru = isDanbooruPromptGroup(selectedGroup, promptGroups)
+  const isSelectedGroupLocked = isSelectedGroupProtected || isSelectedGroupDanbooru
   const selectedGroupSiblingIndex = siblingGroups.findIndex((group) => group.id === selectedGroup?.id)
   const canMoveGroupUp = !isSelectedGroupLocked && selectedGroupSiblingIndex > 0
   const canMoveGroupDown = !isSelectedGroupLocked && selectedGroupSiblingIndex >= 0 && selectedGroupSiblingIndex < siblingGroups.length - 1
@@ -113,14 +116,14 @@ export function PromptPage() {
     () => items.filter((item) => selectedPromptIds.includes(item.id)),
     [items, selectedPromptIds],
   )
-  const selectedLockedPromptCount = selectedPromptItems.filter((item) => isLockedPromptItem(item)).length
+  const selectedLockedPromptCount = selectedPromptItems.filter((item) => isLockedPromptItem(item, promptGroups)).length
   const assignableGroups = useMemo(
-    () => (groupsQuery.data ?? []).filter((group) => group.id !== 0 && !isLockedPromptGroup(group)),
-    [groupsQuery.data],
+    () => promptGroups.filter((group) => group.id !== 0 && !isLockedPromptGroup(group, promptGroups)),
+    [promptGroups],
   )
   const editableParentGroups = useMemo(
-    () => (groupsQuery.data ?? []).filter((group) => group.id !== 0 && !isLockedPromptGroup(group)),
-    [groupsQuery.data],
+    () => promptGroups.filter((group) => group.id !== 0 && !isLockedPromptGroup(group, promptGroups)),
+    [promptGroups],
   )
   const currentSectionTitle = selectedGroup?.group_name ?? 'All prompts'
   const currentSectionCount = pagination?.total ?? 0
@@ -239,7 +242,7 @@ export function PromptPage() {
       return
     }
     if (selectedLockedPromptCount > 0) {
-      showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.changed'), tone: 'error' })
+      showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 변경할 수 없어.', en: 'Protected auto-group items cannot be changed manually.' }), tone: 'error' })
       return
     }
     setAssignModalState({ mode: 'multi' })
@@ -275,7 +278,7 @@ export function PromptPage() {
   }
 
   const handleDeleteSelectedGroup = async () => {
-    if (!selectedGroup || selectedGroup.id === 0 || isSelectedGroupLocked) {
+    if (!selectedGroup || selectedGroup.id === 0 || isSelectedGroupProtected) {
       return
     }
 
@@ -330,12 +333,12 @@ export function PromptPage() {
   }
 
   const handleDeleteSinglePrompt = async (item: PromptCollectionItem) => {
-    if (isLockedPromptItem(item)) {
-      showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.deleted'), tone: 'error' })
+    if (isLockedPromptItem(item, promptGroups)) {
+      showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 삭제할 수 없어.', en: 'Protected auto-group items cannot be deleted manually.' }), tone: 'error' })
       return
     }
 
-    if (!canDeletePromptItem(item)) {
+    if (!canDeletePromptItem(item, promptGroups)) {
       showSnackbar({ message: t('prompts.prompt.page.you.can.delete.it.only.when.image'), tone: 'error' })
       return
     }
@@ -353,10 +356,10 @@ export function PromptPage() {
       return
     }
     if (selectedLockedPromptCount > 0) {
-      showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.deleted'), tone: 'error' })
+      showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 삭제할 수 없어.', en: 'Protected auto-group items cannot be deleted manually.' }), tone: 'error' })
       return
     }
-    if (selectedPromptItems.some((item) => !canDeletePromptItem(item))) {
+    if (selectedPromptItems.some((item) => !canDeletePromptItem(item, promptGroups))) {
       showSnackbar({ message: t('prompts.prompt.page.prompts.with.remaining.usage.cannot.be.deleted'), tone: 'error' })
       return
     }
@@ -406,7 +409,7 @@ export function PromptPage() {
               }}
               onCreateGroup={() => setGroupEditorState({ mode: 'create', defaultParentId: isSelectedGroupLocked ? null : (selectedGroupId ?? null) })}
               onEditGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => setGroupEditorState({ mode: 'edit', group: selectedGroup }) : undefined}
-              onDeleteGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => void handleDeleteSelectedGroup() : undefined}
+              onDeleteGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupProtected ? () => void handleDeleteSelectedGroup() : undefined}
               onMoveGroupUp={canMoveGroupUp ? () => void handleMoveSelectedGroup('up') : undefined}
               onMoveGroupDown={canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
               onExportGroups={() => void handleExportGroups()}
@@ -465,8 +468,8 @@ export function PromptPage() {
                   }
                   void handleActivatePrompt(item.prompt, item.type)
                 }}
-                isLockedPromptItem={isLockedPromptItem}
-                canDeletePromptItem={canDeletePromptItem}
+                isLockedPromptItem={(item) => isLockedPromptItem(item, promptGroups)}
+                canDeletePromptItem={(item) => canDeletePromptItem(item, promptGroups)}
               />
             </section>
           </div>
@@ -475,8 +478,8 @@ export function PromptPage() {
             selectedCount={selectedPromptItems.length}
             isSubmitting={batchAssignPromptsMutation.isPending}
             isDeleting={deletePromptMutation.isPending}
-            onAssignGroup={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.changed'), tone: 'error' }) : handleOpenMultiAssignModal}
-            onDeleteSelected={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t('prompts.prompt.page.lora.items.cannot.be.deleted'), tone: 'error' }) : () => void handleDeleteSelectedPrompts()}
+            onAssignGroup={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 변경할 수 없어.', en: 'Protected auto-group items cannot be changed manually.' }), tone: 'error' }) : handleOpenMultiAssignModal}
+            onDeleteSelected={selectedLockedPromptCount > 0 ? () => showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 삭제할 수 없어.', en: 'Protected auto-group items cannot be deleted manually.' }), tone: 'error' }) : () => void handleDeleteSelectedPrompts()}
             onClear={() => setSelectedPromptIds([])}
           />
 

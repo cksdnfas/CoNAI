@@ -16,16 +16,41 @@ export function getSortedSiblingGroups(groups: PromptGroupRecord[], group: Promp
     .sort((left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name))
 }
 
-export function isLockedPromptGroup(group?: PromptGroupRecord | null) {
+export function isProtectedLoRAPromptGroup(group?: PromptGroupRecord | null) {
   return group?.group_name?.trim().toLowerCase() === 'lora'
 }
 
-export function isLockedPromptItem(item: PromptCollectionItem) {
-  return item.group_info?.group_name?.trim().toLowerCase() === 'lora'
+export function isDanbooruPromptGroup(group?: PromptGroupRecord | null, groups: PromptGroupRecord[] = []) {
+  if (!group) {
+    return false
+  }
+
+  const byId = new Map(groups.map((item) => [item.id, item] as const))
+  const visited = new Set<number>()
+  let current: PromptGroupRecord | null | undefined = group
+
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id)
+    const normalizedName = current.group_name.trim().toLowerCase()
+    if (current.parent_id == null && (normalizedName === 'danbooru' || normalizedName === '단부루')) {
+      return true
+    }
+    current = current.parent_id == null ? null : byId.get(current.parent_id)
+  }
+
+  return false
 }
 
-export function canDeletePromptItem(item: PromptCollectionItem) {
-  return !isLockedPromptItem(item) && item.usage_count <= 0
+export function isLockedPromptGroup(group?: PromptGroupRecord | null, groups: PromptGroupRecord[] = []) {
+  return isProtectedLoRAPromptGroup(group) || isDanbooruPromptGroup(group, groups)
+}
+
+export function isLockedPromptItem(item: PromptCollectionItem, groups: PromptGroupRecord[] = []) {
+  return isProtectedLoRAPromptGroup(item.group_info) || isDanbooruPromptGroup(item.group_info, groups)
+}
+
+export function canDeletePromptItem(item: PromptCollectionItem, groups: PromptGroupRecord[] = []) {
+  return !isLockedPromptItem(item, groups) && item.usage_count <= 0
 }
 
 export function getPromptTypeTotal(promptType: PromptTypeFilter, statistics?: PromptStatistics) {

@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { buildGroupCountMaps, getGroupHierarchyCountLabel } from '@/features/groups/group-count-utils'
 import { buildGroupOptionItems } from '@/features/groups/group-option-utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import { useI18n } from '@/i18n'
@@ -27,6 +28,7 @@ export function GroupAssignModal({
 }: GroupAssignModalProps) {
   const { t, formatNumber } = useI18n()
   const groupOptions = useMemo(() => buildGroupOptionItems(groups), [groups])
+  const { childCountByGroupId, totalImageCountByGroupId } = useMemo(() => buildGroupCountMaps(groups), [groups])
   const [selectedGroupId, setSelectedGroupId] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -76,12 +78,16 @@ export function GroupAssignModal({
                 onSelect={(group) => setSelectedGroupId(String(group.id))}
                 getId={(group) => group.id}
                 getParentId={(group) => group.parent_id}
-                getLabel={(group) => (
-                  <div className="flex min-w-0 items-center justify-between gap-2">
-                    <span className="truncate">{group.name}</span>
-                    <span className="shrink-0 text-xs">{formatNumber(group.image_count)}</span>
-                  </div>
-                )}
+                getLabel={(group) => {
+                  const countLabel = getGroupHierarchyCountLabel(group, { childCountByGroupId, totalImageCountByGroupId }, formatNumber)
+
+                  return (
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <span className="truncate">{group.name}</span>
+                      <span className="shrink-0 text-xs tabular-nums">{countLabel}</span>
+                    </div>
+                  )
+                }}
                 sortItems={(left, right) => left.name.localeCompare(right.name)}
                 renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
                 showRootOption={false}
