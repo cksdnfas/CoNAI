@@ -33,6 +33,9 @@ export interface CleanupReport {
  * 4. Completed records without composite_hash (data corruption)
  */
 export class CleanupService {
+  private static periodicCleanupTimer: NodeJS.Timeout | null = null;
+  private static cleanupInProgress = false;
+
   /**
    * Find failed generation records older than specified hours
    * These records never completed and should be cleaned up
@@ -273,6 +276,45 @@ export class CleanupService {
       console.log(`✅ Periodic cleanup: ${report.deleted} records deleted, ${report.updated} records updated`);
     } else {
       console.log('✅ Periodic cleanup: No records to clean');
+    }
+  }
+
+  /** Start automatic periodic cleanup for orphaned/stale generation history rows. */
+  static startPeriodicCleanup(intervalMs: number = 6 * 60 * 60 * 1000): void {
+    if (this.periodicCleanupTimer) {
+      return;
+    }
+
+    this.periodicCleanupTimer = setInterval(() => {
+      void this.runPeriodicCleanupSafely();
+    }, intervalMs);
+
+    console.log(`🧹 Generation history cleanup scheduler ready (${Math.round(intervalMs / 1000)}s)`);
+  }
+
+  /** Stop the automatic generation history cleanup scheduler. */
+  static stopPeriodicCleanup(): void {
+    if (!this.periodicCleanupTimer) {
+      return;
+    }
+
+    clearInterval(this.periodicCleanupTimer);
+    this.periodicCleanupTimer = null;
+  }
+
+  private static async runPeriodicCleanupSafely(): Promise<void> {
+    if (this.cleanupInProgress) {
+      console.log('⏭️ Generation history cleanup already running; skipping this interval');
+      return;
+    }
+
+    this.cleanupInProgress = true;
+    try {
+      await this.runPeriodicCleanup();
+    } catch (error) {
+      console.warn('⚠️  Failed to run periodic generation history cleanup:', error instanceof Error ? error.message : error);
+    } finally {
+      this.cleanupInProgress = false;
     }
   }
 }

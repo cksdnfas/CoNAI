@@ -96,6 +96,10 @@ export class DeletionService {
     if (!metadata) {
       // ✅ Idempotent: Already deleted images return success instead of error
       console.warn(`⚠️ Image already deleted or not found: ${compositeHash}`);
+      const deletedHistoryCount = GenerationHistoryModel.deleteByCompositeHash(compositeHash);
+      if (deletedHistoryCount > 0) {
+        console.log(`🧹 Removed ${deletedHistoryCount} orphaned generation history record(s) for ${compositeHash}`);
+      }
       return true;
     }
 
@@ -146,6 +150,11 @@ export class DeletionService {
 
     if (!deleted) {
       throw new Error('Failed to delete image from database');
+    }
+
+    const deletedHistoryCount = GenerationHistoryModel.deleteByCompositeHash(compositeHash);
+    if (deletedHistoryCount > 0) {
+      console.log(`🧹 Removed ${deletedHistoryCount} generation history record(s) linked to ${compositeHash}`);
     }
 
     console.log(`✅ Image ${compositeHash} deleted successfully`);
@@ -229,7 +238,11 @@ export class DeletionService {
 
           // 메타데이터 삭제
           MediaMetadataModel.delete(composite_hash);
+          const deletedHistoryCount = GenerationHistoryModel.deleteByCompositeHash(composite_hash);
           console.log(`✅ Metadata cleaned up for ${composite_hash}`);
+          if (deletedHistoryCount > 0) {
+            console.log(`🧹 Removed ${deletedHistoryCount} generation history record(s) linked to ${composite_hash}`);
+          }
         }
       } else {
         console.log(`📋 ${remainingFiles.length} file(s) remaining with same hash - keeping metadata`);

@@ -296,6 +296,17 @@ export class GenerationHistoryModel {
   }
 
   /**
+   * Delete every history row linked to a main-image composite hash.
+   * Used when the image record itself is removed so history does not keep a
+   * completed-but-unresolvable row that the UI renders as still processing.
+   */
+  static deleteByCompositeHash(compositeHash: string): number {
+    const stmt = apiGenDb.prepare('DELETE FROM api_generation_history WHERE composite_hash = ?');
+    const info = stmt.run(compositeHash);
+    return info.changes;
+  }
+
+  /**
    * Get total count with filters
    */
   static count(filters: Omit<FilterOptions, 'limit' | 'offset'> = {}): number {

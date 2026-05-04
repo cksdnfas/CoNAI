@@ -72,6 +72,9 @@ export async function startRuntimeSideEffectServices(isSafeSmokeMode: boolean) {
   GraphWorkflowScheduleService.start()
   GenerationQueueService.start()
 
+  const { CleanupService } = await import('../services/cleanupService')
+  CleanupService.startPeriodicCleanup()
+
   const autoTagSchedulerStarted = autoTagScheduler.start()
   if (!autoTagSchedulerStarted) {
     console.log('🤖 Auto-tag scheduler skipped: all processors disabled')

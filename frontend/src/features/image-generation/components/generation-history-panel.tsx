@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { ArrowLeft, RefreshCw, Trash2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -44,6 +44,7 @@ type GenerationHistoryPanelProps = {
 }
 
 const GENERATION_HISTORY_PAGE_SIZE = 40
+const GENERATION_HISTORY_REFRESH_WATCH_MS = 30_000
 
 function hasInFlightHistory(records: GenerationHistoryResponse['records']) {
   return records.some((record) => {
@@ -97,12 +98,21 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [isDownloadingSelection, setIsDownloadingSelection] = useState(false)
   const [isCleaningFailed, setIsCleaningFailed] = useState(false)
+  const [historyRefreshWatchUntil, setHistoryRefreshWatchUntil] = useState(0)
   const isAdmin = authStatusQuery.data?.isAdmin === true
   const requesterAccountId = authStatusQuery.data?.accountId ?? null
   const requesterAccountType = authStatusQuery.data?.accountType ?? null
   const isPublicView = Boolean(publicWorkflowSlug)
   const historyScope = isPublicView ? 'public-workflow' : (isAdmin ? 'all-users' : 'mine-only')
-  const historyQueryKey = ['image-generation-history', serviceType, workflowId ?? null, publicWorkflowSlug ?? null, historyScope, requesterAccountId, requesterAccountType] as const
+  const historyQueryKey = useMemo(() => [
+    'image-generation-history',
+    serviceType,
+    workflowId ?? null,
+    publicWorkflowSlug ?? null,
+    historyScope,
+    requesterAccountId,
+    requesterAccountType,
+  ] as const, [historyScope, publicWorkflowSlug, requesterAccountId, requesterAccountType, serviceType, workflowId])
   const historyQuery = useInfiniteQuery({
     queryKey: historyQueryKey,
     initialPageParam: 0,
@@ -132,18 +142,29 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     refetchInterval: (query) => {
       const pages = query.state.data?.pages ?? []
       const records = pages.flatMap((page) => page.records)
-      return hasInFlightHistory(records) ? 1500 : false
+      if (hasInFlightHistory(records)) {
+        return 1500
+      }
+
+      return historyRefreshWatchUntil > Date.now() ? 1500 : false
     },
   })
   const refetchHistory = historyQuery.refetch
+  const refreshHistory = useCallback(async (options: { watchForNewRows?: boolean } = {}) => {
+    if (options.watchForNewRows) {
+      setHistoryRefreshWatchUntil(Date.now() + GENERATION_HISTORY_REFRESH_WATCH_MS)
+    }
+
+    await refetchHistory()
+  }, [refetchHistory])
 
   useEffect(() => {
     if (refreshNonce === 0) {
       return
     }
 
-    void refetchHistory()
-  }, [refreshNonce, refetchHistory])
+    void refreshHistory({ watchForNewRows: true })
+  }, [refreshNonce, refreshHistory])
 
   const isHistoryLoading = authStatusQuery.isPending || historyQuery.isPending
   const historyRecords = useMemo(
@@ -251,7 +272,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       setIsDeletingSelection(true)
       await Promise.all(selectedHistoryRecords.map((record) => deleteGenerationHistoryRecord(record.id, true)))
       setSelectedHistoryIds([])
-      await refetchHistory()
+      await refreshHistory()
       showSnackbar({ message: t('image-generation.components.generation.history.panel.valueresults.moved.to.recyclebin', { count: formatNumber(selectedHistoryRecords.length) }), tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.delete.history')), tone: 'error' })
@@ -271,7 +292,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         ? await cleanupPublicGenerationWorkflowFailedHistory(publicWorkflowSlug)
         : await cleanupFailedGenerationHistory()
       setSelectedHistoryIds([])
-      await refetchHistory()
+      await refreshHistory()
       showSnackbar({ message: result.message || t('image-generation.components.generation.history.panel.failed.history.cleaned.up'), tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.clean.up.failed.history')), tone: 'error' })
@@ -333,8 +354,8 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             <Trash2 className="h-4 w-4" />
             {isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
           </Button>
-          <Button type="button" size="icon-sm" variant="outline" onClick={() => void refetchHistory()} title={t('image-generation.components.generation.history.panel.refresh.history')} aria-label={t('image-generation.components.generation.history.panel.refresh.history')}>
-            <RefreshCw className="h-4 w-4" />
+          <Button type="button" size="icon-sm" variant="outline" onClick={() => void refreshHistory({ watchForNewRows: true })} title={t('image-generation.components.generation.history.panel.refresh.history')} aria-label={t('image-generation.components.generation.history.panel.refresh.history')}>
+            <RefreshCw className={cn('h-4 w-4', historyQuery.isFetching && 'animate-spin')} />
           </Button>
         </div>
       </div>

@@ -12,6 +12,7 @@ export async function refreshGenerationQueueViews(queryClient: QueryClient, onHi
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ['image-generation-queue'] }),
     queryClient.invalidateQueries({ queryKey: ['image-generation-queue-stats'] }),
+    queryClient.invalidateQueries({ queryKey: ['image-generation-history'] }),
   ])
 
   onHistoryRefresh()

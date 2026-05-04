@@ -522,6 +522,15 @@ ${tips.join('\n')}
         } catch (error) {
           console.warn('⚠️  Error stopping temp image cleanup scheduler:', error);
         }
+
+        // Stop generation history cleanup scheduler
+        try {
+          const { CleanupService } = await import('./services/cleanupService');
+          CleanupService.stopPeriodicCleanup();
+          console.log('✅ Generation history cleanup scheduler stopped');
+        } catch (error) {
+          console.warn('⚠️  Error stopping generation history cleanup scheduler:', error);
+        }
       }
 
       // Cleanup all temp files on shutdown
