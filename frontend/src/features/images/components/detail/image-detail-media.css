@@ -124,6 +124,12 @@
   min-height: 2.4rem;
 }
 
+.conai-video-player__mount,
+.conai-video-player__mount > video {
+  height: 100%;
+  width: 100%;
+}
+
 .conai-video-player__media {
   display: block;
 }

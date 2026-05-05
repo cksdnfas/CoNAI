@@ -1,8 +1,11 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
+import { useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import type { ImageRecord } from '@/types/image'
 import { ImageViewModalContext, type ImageViewModalAccessOptions, type ImageViewModalOpenInput } from './image-view-modal-context'
 import type { ImageViewModalMode } from './image-view-modal-actions'
+import { ImageViewModalOverlay } from './image-view-modal-overlay'
+import { getImage } from '@/lib/api'
 
 interface ImageViewModalState {
   compositeHash: string | null
@@ -14,11 +17,6 @@ interface ImageViewModalState {
   stripFocusBehavior: ScrollBehavior | null
   accessOptions: ImageViewModalAccessOptions
 }
-
-const ImageViewModalOverlayLazy = lazy(async () => {
-  const module = await import('./image-view-modal-overlay')
-  return { default: module.ImageViewModalOverlay }
-})
 
 const IMAGE_VIEW_MODAL_MODE_STORAGE_KEY = 'conai:image-view-modal:mode'
 
@@ -39,8 +37,19 @@ function persistImageViewModalMode(mode: ImageViewModalMode) {
   window.localStorage.setItem(IMAGE_VIEW_MODAL_MODE_STORAGE_KEY, mode)
 }
 
-function ImageViewModalFallback() {
-  return <div className="fixed inset-0 z-[90] bg-black/72" aria-hidden="true" />
+function warmImagePreviewSource(image?: ImageRecord | null) {
+  if (typeof window === 'undefined' || !image) {
+    return
+  }
+
+  const previewUrl = image.thumbnail_url || image.image_url
+  if (!previewUrl) {
+    return
+  }
+
+  const previewImage = new Image()
+  previewImage.decoding = 'async'
+  previewImage.src = previewUrl
 }
 
 function buildSourceItemsByHash(items?: ImageRecord[]) {
@@ -56,6 +65,7 @@ function buildSourceItemsByHash(items?: ImageRecord[]) {
 
 /** Provide a global image view modal for app-shell image browsing flows. */
 export function ImageViewModalProvider({ children }: PropsWithChildren) {
+  const queryClient = useQueryClient()
   const [modalState, setModalState] = useState<ImageViewModalState>({
     compositeHash: null,
     compositeHashes: [],
@@ -79,6 +89,24 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   const canViewPrevious = activeIndex > 0
   const canViewNext = activeIndex >= 0 && activeIndex < modalState.compositeHashes.length - 1
   const activeSourceItem = modalState.compositeHash ? modalState.sourceItemsByHash[modalState.compositeHash] : null
+  const isModalOpen = Boolean(modalState.compositeHash)
+
+  useEffect(() => {
+    if (!modalState.compositeHash || activeIndex < 0) {
+      return
+    }
+
+    const neighborHashes = [modalState.compositeHashes[activeIndex - 1], modalState.compositeHashes[activeIndex + 1]]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+
+    for (const neighborHash of neighborHashes) {
+      void queryClient.prefetchQuery({
+        queryKey: ['image-detail', neighborHash],
+        queryFn: () => getImage(neighborHash),
+        staleTime: 0,
+      })
+    }
+  }, [activeIndex, modalState.compositeHash, modalState.compositeHashes, queryClient])
 
   // 썸네일 스트립은 성능 문제로 잠시 비활성화한다.
   // 탐색 컨텍스트 자체는 유지하므로, 필요할 때 UI와 배치 로드만 다시 연결하면 된다.
@@ -90,6 +118,14 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       ? compositeHashes
       : [input.compositeHash, ...compositeHashes]
     const nextSourceItemsByHash = buildSourceItemsByHash(input.sourceItems)
+    const activeInputImage = nextSourceItemsByHash[input.compositeHash]
+
+    warmImagePreviewSource(activeInputImage)
+    void queryClient.prefetchQuery({
+      queryKey: ['image-detail', input.compositeHash],
+      queryFn: () => getImage(input.compositeHash),
+      staleTime: 0,
+    })
 
     setModalState((current) => {
       const isFreshOpen = !current.compositeHash
@@ -113,7 +149,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         accessOptions: input.accessOptions ?? current.accessOptions,
       }
     })
-  }, [])
+  }, [queryClient])
 
   const syncImageViewSequence = useCallback((input: { compositeHashes: string[]; sourceId: string; sourceItems?: ImageRecord[] }) => {
     setModalState((current) => {
@@ -160,7 +196,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     }))
   }, [])
 
-  useOverlayBackClose({ open: Boolean(modalState.compositeHash), onClose: closeImageView })
+  useOverlayBackClose({ open: isModalOpen, onClose: closeImageView })
 
   const handleViewModeChange = useCallback((nextMode: ImageViewModalMode) => {
     setViewMode(nextMode)
@@ -210,11 +246,21 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   }, [])
 
   useEffect(() => {
-    if (!modalState.compositeHash) {
+    if (!isModalOpen) {
       return
     }
 
-    const previousOverflow = document.body.style.overflow
+    const openedAtHref = window.location.href
+    const scrollX = window.scrollX
+    const scrollY = window.scrollY
+    const previousBodyStyle = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      top: document.body.style.top,
+      left: document.body.style.left,
+      right: document.body.style.right,
+      width: document.body.style.width,
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         closeImageView()
@@ -234,13 +280,29 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     }
 
     document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.left = `-${scrollX}px`
+    document.body.style.right = '0'
+    document.body.style.width = '100%'
     window.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      document.body.style.overflow = previousOverflow
+      document.body.style.overflow = previousBodyStyle.overflow
+      document.body.style.position = previousBodyStyle.position
+      document.body.style.top = previousBodyStyle.top
+      document.body.style.left = previousBodyStyle.left
+      document.body.style.right = previousBodyStyle.right
+      document.body.style.width = previousBodyStyle.width
       window.removeEventListener('keydown', handleKeyDown)
+
+      if (window.location.href === openedAtHref) {
+        window.requestAnimationFrame(() => {
+          window.scrollTo({ top: scrollY, left: scrollX, behavior: 'instant' as ScrollBehavior })
+        })
+      }
     }
-  }, [closeImageView, modalState.compositeHash, viewNextImage, viewPreviousImage])
+  }, [closeImageView, isModalOpen, viewNextImage, viewPreviousImage])
 
   const contextValue = useMemo(
     () => ({
@@ -262,23 +324,21 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     <ImageViewModalContext.Provider value={contextValue}>
       {children}
       {modalState.compositeHash ? (
-        <Suspense fallback={<ImageViewModalFallback />}>
-          <ImageViewModalOverlayLazy
-            compositeHash={modalState.compositeHash}
-            initialImage={activeSourceItem}
-            activeIndex={activeIndex}
-            totalCount={modalState.compositeHashes.length}
-            viewMode={viewMode}
-            onChangeViewMode={handleViewModeChange}
-            openSessionId={modalState.openSessionId}
-            canViewPrevious={canViewPrevious}
-            canViewNext={canViewNext}
-            accessOptions={modalState.accessOptions}
-            onClose={closeImageView}
-            onViewPrevious={viewPreviousImage}
-            onViewNext={viewNextImage}
-          />
-        </Suspense>
+        <ImageViewModalOverlay
+          compositeHash={modalState.compositeHash}
+          initialImage={activeSourceItem}
+          activeIndex={activeIndex}
+          totalCount={modalState.compositeHashes.length}
+          viewMode={viewMode}
+          onChangeViewMode={handleViewModeChange}
+          openSessionId={modalState.openSessionId}
+          canViewPrevious={canViewPrevious}
+          canViewNext={canViewNext}
+          accessOptions={modalState.accessOptions}
+          onClose={closeImageView}
+          onViewPrevious={viewPreviousImage}
+          onViewNext={viewNextImage}
+        />
       ) : null}
     </ImageViewModalContext.Provider>
   )

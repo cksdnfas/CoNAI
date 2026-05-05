@@ -14,7 +14,7 @@ import { ImageDetailMedia } from './image-detail-media'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
 import { ImageViewModeSwitcher, type ImageViewModalMode } from './image-view-modal-actions'
 import { getImageExtractedPromptSummary } from '@/lib/image-extracted-prompts'
-import { getDownloadName, getImageDetailDownloadUrl, getImageDetailRenderUrl } from './image-detail-utils'
+import { formatBytes, getDownloadName, getImageDetailDownloadUrl, getImageDetailRenderUrl, getImageGenerationParamItems } from './image-detail-utils'
 
 interface ImageViewSurfaceContentProps {
   compositeHash: string
@@ -47,7 +47,8 @@ function useImageViewSurfaceDetail(compositeHash: string, initialImage?: ImageRe
     queryKey: ['image-detail', compositeHash],
     queryFn: () => getImage(compositeHash),
     enabled: Boolean(compositeHash),
-    initialData: initialImage?.composite_hash === compositeHash ? initialImage : undefined,
+    placeholderData: initialImage?.composite_hash === compositeHash ? initialImage : undefined,
+    staleTime: 0,
   })
 
   const image = imageQuery.data
@@ -113,6 +114,7 @@ export function ImageViewMediumContent({ compositeHash, initialImage = null, ren
           </ImageViewSidePanel>
 
           <ImageViewSidePanel className="divide-y divide-border/70 text-sm text-muted-foreground">
+            <ImageInfoSection image={image} />
             <PromptField label="Positive" value={positivePrompt} />
             <PromptField label="Negative" value={negativePrompt} />
             <PromptField label="Character" value={characterPrompt} />
@@ -214,6 +216,38 @@ export function ImageViewMinimalContent({
         ) : null}
       </div>
     </div>
+  )
+}
+
+function formatImageDimensions(image: ImageRecord) {
+  return image.width && image.height ? `${image.width} × ${image.height}` : '—'
+}
+
+/** Render compact image information inside the medium surface sidebar. */
+function ImageInfoSection({ image }: { image: ImageRecord }) {
+  const { t } = useI18n()
+  const generationParamItems = getImageGenerationParamItems(image)
+  const fields = [
+    { label: t({ ko: '크기', en: 'Dimensions' }), value: formatImageDimensions(image) },
+    { label: t({ ko: '파일 크기', en: 'File size' }), value: formatBytes(image.file_size) },
+    { label: 'MIME', value: image.mime_type || image.file_type || '—' },
+    image.ai_metadata?.model_name ? { label: t({ ko: '모델', en: 'Model' }), value: image.ai_metadata.model_name } : null,
+    ...generationParamItems.map((item) => ({ label: item.label, value: item.value })),
+  ].filter((item): item is { label: string; value: string } => item !== null)
+
+  return (
+    <section className="px-4 py-4">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '이미지 정보', en: 'Image information' })}</p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {fields.map((item) => (
+          <div key={item.label} className="rounded-sm border border-border/70 bg-surface-container/45 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{item.label}</p>
+            <p className="mt-1 break-words text-xs text-foreground">{item.value}</p>
+          </div>
+        ))}
+      </div>
+      {image.original_file_path ? <p className="mt-3 break-all font-mono text-[11px] text-muted-foreground/90">{image.original_file_path}</p> : null}
+    </section>
   )
 }
 

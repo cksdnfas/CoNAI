@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, LoaderCircle, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -485,6 +485,7 @@ function InteractiveImageDetailMedia({
   const [pixelPreviewMode, setPixelPreviewMode] = useState<PixelPreviewMode>(() => loadImagePixelPreviewMode())
   const [pixelPreviewSettings, setPixelPreviewSettings] = useState<PixelPreviewSettings>(() => loadImagePixelPreviewSettings())
   const [isPixelPreviewPanelOpen, setIsPixelPreviewPanelOpen] = useState(false)
+  const [isPixelPreviewReady, setIsPixelPreviewReady] = useState(false)
   const isPixelPreviewEnabled = pixelPreviewMode !== 'off'
 
   useEffect(() => {
@@ -621,15 +622,18 @@ function InteractiveImageDetailMedia({
 
   useEffect(() => {
     if (!shouldRenderPixelPreview || !pixelPreviewProfile) {
+      setIsPixelPreviewReady(false)
       return
     }
 
     const canvas = canvasRef.current
     if (!canvas) {
+      setIsPixelPreviewReady(false)
       return
     }
 
     let cancelled = false
+    setIsPixelPreviewReady(false)
     const sourceImage = new Image()
 
     sourceImage.onload = async () => {
@@ -668,6 +672,9 @@ function InteractiveImageDetailMedia({
 
       try {
         const iq = await import('image-q')
+        if (cancelled) {
+          return
+        }
         const sourceImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
         const sourceContainer = iq.utils.PointContainer.fromImageData(sourceImageData)
         const palette = iq.buildPaletteSync([sourceContainer], {
@@ -678,21 +685,29 @@ function InteractiveImageDetailMedia({
         const quantizedImageData = applyImageToPixelStylePalette(sourceImageData, palette.getPointContainer().getPointArray().map((point) => ({ r: point.r, g: point.g, b: point.b })), pixelPreviewProfile.ditherStrength)
         sampleContext.putImageData(sharpenPixelPreview(boostPixelPreviewEdges(quantizedImageData, pixelPreviewProfile.edgeBoost), pixelPreviewProfile.sharpness), 0, 0)
       } catch (error) {
+        if (cancelled) {
+          return
+        }
         const fallbackImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
         sampleContext.putImageData(sharpenPixelPreview(boostPixelPreviewEdges(fallbackImageData, pixelPreviewProfile.edgeBoost), pixelPreviewProfile.sharpness), 0, 0)
         console.warn('Failed to apply image-q pixel preview; falling back to plain pixel sampling.', error)
       }
 
+      if (cancelled) {
+        return
+      }
       canvas.width = sourceWidth
       canvas.height = sourceHeight
       canvasContext.imageSmoothingEnabled = false
       canvasContext.clearRect(0, 0, sourceWidth, sourceHeight)
       canvasContext.drawImage(sampleCanvas, 0, 0, pixelWidth, pixelHeight, 0, 0, sourceWidth, sourceHeight)
+      setIsPixelPreviewReady(true)
       onPrimaryLoad?.()
     }
 
     sourceImage.onerror = () => {
       if (!cancelled) {
+        setIsPixelPreviewReady(false)
         setHasRenderError(true)
       }
     }
@@ -1019,13 +1034,29 @@ function InteractiveImageDetailMedia({
           }}
         >
           {shouldRenderPixelPreview ? (
-            <canvas
-              ref={canvasRef}
-              role="img"
-              aria-label={altText}
-              className={cn('block h-auto w-auto pointer-events-none select-none', className)}
-              style={{ imageRendering: 'pixelated' }}
-            />
+            <div className="relative inline-flex max-h-full max-w-full items-center justify-center">
+              <img
+                src={renderUrl}
+                alt={altText}
+                className={cn('block h-auto w-auto pointer-events-none select-none transition-opacity duration-150', className, isPixelPreviewReady && 'opacity-0')}
+                draggable={false}
+                onLoad={onPrimaryLoad}
+                onError={() => setHasRenderError(true)}
+              />
+              <canvas
+                ref={canvasRef}
+                role="img"
+                aria-label={altText}
+                className={cn('absolute inset-0 h-full w-full pointer-events-none select-none transition-opacity duration-150', isPixelPreviewReady ? 'opacity-100' : 'opacity-0')}
+                style={{ imageRendering: 'pixelated' }}
+              />
+              {!isPixelPreviewReady ? (
+                <div className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-black/45 px-2 py-1 text-[11px] font-medium text-white/82 shadow-sm backdrop-blur-sm">
+                  <LoaderCircle className="h-3 w-3 animate-spin" />
+                  {t({ ko: '적용 중', en: 'Applying' })}
+                </div>
+              ) : null}
+            </div>
           ) : (
             <img src={renderUrl} alt={altText} className={cn('block h-auto w-auto pointer-events-none select-none', className)} draggable={false} onLoad={onPrimaryLoad} onError={() => setHasRenderError(true)} />
           )}

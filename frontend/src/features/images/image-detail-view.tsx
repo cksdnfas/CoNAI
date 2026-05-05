@@ -90,6 +90,10 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       return initialImage
     }
 
+    if (presentation === 'modal') {
+      return undefined
+    }
+
     const queries = queryClient.getQueryCache().findAll()
     for (const query of queries) {
       const found = findCachedImageRecord(query.state.data, compositeHash)
@@ -97,7 +101,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     }
 
     return undefined
-  }, [compositeHash, initialImage, queryClient])
+  }, [compositeHash, initialImage, presentation, queryClient])
 
   useEffect(() => {
     if (presentation === 'page') {
@@ -134,7 +138,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     queryKey: ['image-detail', compositeHash],
     queryFn: () => getImage(compositeHash),
     enabled: Boolean(compositeHash),
-    initialData: cachedInitialImage,
+    placeholderData: cachedInitialImage,
+    staleTime: 0,
   })
 
   const image = imageQuery.data
@@ -288,18 +293,21 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     },
   }
 
+  const detailViewportHeightClassName = 'xl:min-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))]'
   const detailShellClassName = presentation === 'modal'
-    ? 'xl:h-full'
-    : 'xl:h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))]'
+    ? 'xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:space-y-0'
+    : detailViewportHeightClassName
 
   const detailGridClassName = cn(
-    'grid gap-8 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]',
-    presentation === 'page' ? 'bg-background xl:items-start' : 'xl:h-full xl:items-stretch',
+    'grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]',
+    presentation === 'page'
+      ? cn('bg-background xl:items-start', detailViewportHeightClassName)
+      : 'xl:h-full xl:min-h-0 xl:flex-1 xl:items-stretch',
   )
 
   return (
-    <div className={cn('space-y-8 xl:flex xl:min-h-0 xl:flex-col xl:space-y-0', detailShellClassName)}>
-      {renderHeader ? <div className="xl:pb-6">{renderHeader(headerControls)}</div> : null}
+    <div className={cn('space-y-8', detailShellClassName)}>
+      {renderHeader ? <div className={cn(presentation === 'modal' && 'xl:pb-6')}>{renderHeader(headerControls)}</div> : null}
 
       {imageQuery.isLoading ? (
         <div className={detailGridClassName}>
@@ -339,6 +347,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               </div>
             </div>
 
+            {!canUseSplitPaneScroll ? <ImageDetailMetaCard image={image as ImageRecord} /> : null}
+
             {isSecondaryContentReady ? (
               <>
                 {duplicateImages.length > 0 ? (
@@ -375,13 +385,15 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
             ) : null}
           </div>
 
-          <div
-            className={cn(
-              useSplitPaneScroll && 'xl:min-h-0 xl:overflow-y-auto xl:pr-2 image-detail-scroll-pane',
-            )}
-          >
-            <ImageDetailMetaCard image={image as ImageRecord} />
-          </div>
+          {canUseSplitPaneScroll ? (
+            <div
+              className={cn(
+                useSplitPaneScroll && 'xl:min-h-0 xl:overflow-y-auto xl:pr-2 image-detail-scroll-pane',
+              )}
+            >
+              <ImageDetailMetaCard image={image as ImageRecord} />
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

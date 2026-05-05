@@ -84,11 +84,10 @@ export function EnhancedVideoPlayer({
   autoPlay = false,
   preload = 'metadata',
 }: EnhancedVideoPlayerProps) {
-  const { resolvedSourceUrl } = useCachedVideoSource(renderUrl)
+  const { resolvedSourceUrl } = useCachedVideoSource(renderUrl, { backgroundOnly: true })
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const mediaMountRef = useRef<HTMLDivElement | null>(null)
   const playerRef = useRef<Plyr | null>(null)
-  const [useNativeControlsFallback, setUseNativeControlsFallback] = useState(false)
   const [naturalSize, setNaturalSize] = useState<MediaSize | null>(null)
   const [availableSize, setAvailableSize] = useState<MediaSize | null>(null)
 
@@ -105,7 +104,6 @@ export function EnhancedVideoPlayer({
   }, [])
 
   useEffect(() => {
-    setUseNativeControlsFallback(false)
     setNaturalSize(null)
   }, [resolvedSourceUrl])
 
@@ -124,32 +122,48 @@ export function EnhancedVideoPlayer({
   }, [updateAvailableSize])
 
   useEffect(() => {
+    const mountElement = mediaMountRef.current
+    if (!mountElement) {
+      return
+    }
+
+    const previousPlayer = playerRef.current
+    playerRef.current = null
+    destroyPlyrSafely(previousPlayer)
+    mountElement.replaceChildren()
+
     if (!resolvedSourceUrl) {
-      const activePlayer = playerRef.current
-      playerRef.current = null
-      destroyPlyrSafely(activePlayer)
       return
     }
 
     let disposed = false
+    const videoElement = document.createElement('video')
+    videoElement.className = 'conai-video-player__media h-full w-full bg-black object-contain'
+    videoElement.autoplay = autoPlay
+    videoElement.controls = false
+    videoElement.loop = loop
+    videoElement.playsInline = true
+    videoElement.preload = preload
+    videoElement.src = resolvedSourceUrl
+
+    const handleLoadedMetadata = () => {
+      if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+        setNaturalSize({ width: videoElement.videoWidth, height: videoElement.videoHeight })
+        updateAvailableSize()
+      }
+    }
+
+    videoElement.addEventListener('loadedmetadata', handleLoadedMetadata)
+    mountElement.appendChild(videoElement)
 
     const setup = async () => {
-      const node = videoRef.current
-      if (!node) {
-        return
-      }
-
-      const previousPlayer = playerRef.current
-      playerRef.current = null
-      destroyPlyrSafely(previousPlayer)
-
       try {
         const { default: PlyrClass } = await import('plyr')
-        if (disposed || videoRef.current !== node) {
+        if (disposed || !mountElement.contains(videoElement)) {
           return
         }
 
-        const createdPlayer = new PlyrClass(node, {
+        const createdPlayer = new PlyrClass(videoElement, {
           autoplay: autoPlay,
           iconUrl: '/vendor/plyr.svg',
           controls: buildPlyrControls(),
@@ -163,7 +177,7 @@ export function EnhancedVideoPlayer({
           settings: [],
         })
 
-        if (disposed || videoRef.current !== node) {
+        if (disposed) {
           destroyPlyrSafely(createdPlayer)
           return
         }
@@ -171,13 +185,13 @@ export function EnhancedVideoPlayer({
         playerRef.current = createdPlayer
 
         if (autoPlay) {
-          void node.play().catch(() => {
+          void videoElement.play().catch(() => {
             // Browser autoplay policy may still block unmuted playback.
           })
         }
       } catch (error) {
         console.warn('[EnhancedVideoPlayer] Falling back to native video controls.', error)
-        setUseNativeControlsFallback(true)
+        videoElement.controls = true
       }
     }
 
@@ -185,11 +199,16 @@ export function EnhancedVideoPlayer({
 
     return () => {
       disposed = true
+      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      videoElement.pause()
       const activePlayer = playerRef.current
       playerRef.current = null
       destroyPlyrSafely(activePlayer)
+      if (mediaMountRef.current === mountElement) {
+        mountElement.replaceChildren()
+      }
     }
-  }, [autoPlay, resolvedSourceUrl])
+  }, [autoPlay, loop, preload, resolvedSourceUrl, updateAvailableSize])
 
   const fittedSize = availableSize && naturalSize ? getLargestContainedSize(availableSize, naturalSize) : null
   const fittedStyle: CSSProperties = fittedSize
@@ -219,29 +238,8 @@ export function EnhancedVideoPlayer({
         ['--plyr-video-progress-buffered-background' as string]: 'color-mix(in srgb, var(--foreground) 10%, transparent)',
       }}
     >
-      {!resolvedSourceUrl ? (
-        <div className="absolute inset-0 z-10 animate-pulse bg-surface-lowest" aria-hidden="true" />
-      ) : (
-        <video
-          key={resolvedSourceUrl}
-          ref={videoRef}
-          className="conai-video-player__media h-full w-full bg-black object-contain"
-          autoPlay={autoPlay}
-          controls={useNativeControlsFallback}
-          loop={loop}
-          playsInline
-          preload={preload}
-          onLoadedMetadata={(event) => {
-            const target = event.currentTarget
-            if (target.videoWidth > 0 && target.videoHeight > 0) {
-              setNaturalSize({ width: target.videoWidth, height: target.videoHeight })
-              updateAvailableSize()
-            }
-          }}
-        >
-          <source src={resolvedSourceUrl} />
-        </video>
-      )}
+      {!resolvedSourceUrl ? <div className="absolute inset-0 z-10 animate-pulse bg-surface-lowest" aria-hidden="true" /> : null}
+      <div ref={mediaMountRef} className="conai-video-player__mount h-full w-full" />
     </div>
   )
 }
