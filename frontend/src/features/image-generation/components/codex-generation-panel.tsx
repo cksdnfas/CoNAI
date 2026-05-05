@@ -19,6 +19,7 @@ import { CodexModuleSaveModal } from './codex-module-save-modal'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
 import { NaiControllerSection, NaiPromptSection } from './nai-generation-panel-sections'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
+import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import { CompactGenerationActionSurface } from './shared-generation-controller'
 
 type CodexGenerationPanelProps = {
@@ -72,8 +73,8 @@ type PersistedCodexFormDraft = Pick<CodexFormDraft, 'prompt' | 'negativePrompt' 
 
 function buildCodexModuleSnapshot(form: CodexFormDraft) {
   return {
-    prompt: form.prompt.trim(),
-    negative_prompt: form.negativePrompt.trim(),
+    prompt: normalizeTextSegmentSpreadsheetText(form.prompt).trim(),
+    negative_prompt: normalizeTextSegmentSpreadsheetText(form.negativePrompt).trim(),
     aspect_ratio: form.aspectRatio,
     resolution: form.resolution,
     image: form.referenceImage?.dataUrl || null,
@@ -363,7 +364,7 @@ export function CodexGenerationPanel({
       return
     }
 
-    const prompt = codexForm.prompt.trim()
+    const prompt = normalizeTextSegmentSpreadsheetText(codexForm.prompt).trim()
 
     if (prompt.length === 0) {
       showSnackbar({ message: t({ ko: 'Codex 프롬프트를 먼저 넣어줘.', en: 'Enter a Codex prompt first.' }), tone: 'error' })
@@ -382,7 +383,7 @@ export function CodexGenerationPanel({
         request_summary: `Codex ${operationLabel} · ${prompt.slice(0, 48)}`,
         request_payload: {
           prompt,
-          negative_prompt: codexForm.negativePrompt.trim() || undefined,
+          negative_prompt: normalizeTextSegmentSpreadsheetText(codexForm.negativePrompt).trim() || undefined,
           count: queueCount,
           operation: codexForm.referenceImage ? (codexForm.maskImage ? 'infill' : 'edit') : 'generate',
           size: resolveCodexSize(pickCodexAspectRatio(codexForm.aspectRatio), codexForm.resolution),

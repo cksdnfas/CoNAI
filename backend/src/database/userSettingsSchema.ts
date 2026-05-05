@@ -109,6 +109,32 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // 7b. Prompt presets table (authoring helpers inserted directly into prompt fields)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS prompt_presets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      parent_id INTEGER DEFAULT NULL,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (parent_id) REFERENCES prompt_presets(id) ON DELETE SET NULL
+    )
+  `);
+
+  // 7c. Prompt preset description/value pairs
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS prompt_preset_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      preset_id INTEGER NOT NULL,
+      description TEXT NOT NULL,
+      value TEXT NOT NULL,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (preset_id) REFERENCES prompt_presets(id) ON DELETE CASCADE
+    )
+  `);
+
   // 8. External API providers table (for external API authentication)
   db.exec(`
     CREATE TABLE IF NOT EXISTS external_api_providers (
@@ -441,6 +467,36 @@ export function createUserSettingsSchema(db: Database.Database): void {
     db.exec('ALTER TABLE custom_dropdown_lists ADD COLUMN source_path TEXT');
   }
 
+  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_presets'").get()) {
+    console.log('  Migrating user settings: creating prompt_presets table');
+    db.exec(`
+      CREATE TABLE prompt_presets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        parent_id INTEGER DEFAULT NULL,
+        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (parent_id) REFERENCES prompt_presets(id) ON DELETE SET NULL
+      )
+    `);
+  }
+
+  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_preset_items'").get()) {
+    console.log('  Migrating user settings: creating prompt_preset_items table');
+    db.exec(`
+      CREATE TABLE prompt_preset_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        preset_id INTEGER NOT NULL,
+        description TEXT NOT NULL,
+        value TEXT NOT NULL,
+        order_index INTEGER NOT NULL DEFAULT 0,
+        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (preset_id) REFERENCES prompt_presets(id) ON DELETE CASCADE
+      )
+    `);
+  }
+
   // Migrate external_api_providers table
   if (!hasColumn('external_api_providers', 'provider_type')) {
     console.log('  Migrating external_api_providers: adding provider_type column');
@@ -647,6 +703,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_name ON custom_dropdown_lists(name)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_created_date ON custom_dropdown_lists(created_date)',
     'CREATE INDEX IF NOT EXISTS idx_custom_dropdown_lists_is_auto_collected ON custom_dropdown_lists(is_auto_collected)',
+    'CREATE INDEX IF NOT EXISTS idx_prompt_presets_name ON prompt_presets(name)',
+    'CREATE INDEX IF NOT EXISTS idx_prompt_presets_parent_id ON prompt_presets(parent_id)',
+    'CREATE INDEX IF NOT EXISTS idx_prompt_preset_items_preset_id ON prompt_preset_items(preset_id)',
     'CREATE INDEX IF NOT EXISTS idx_external_api_providers_name ON external_api_providers(provider_name)',
     'CREATE INDEX IF NOT EXISTS idx_external_api_providers_is_enabled ON external_api_providers(is_enabled)',
     'CREATE INDEX IF NOT EXISTS idx_external_api_providers_type ON external_api_providers(provider_type)',

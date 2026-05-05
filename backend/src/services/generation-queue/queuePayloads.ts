@@ -1,4 +1,5 @@
 import { WildcardService } from '../wildcardService'
+import { stripPromptPresetComments } from '../../utils/promptComments'
 import type { GeneratedImageSaveOptions } from '../../utils/fileSaver'
 import type { AIMetadata } from '../metadata/types'
 import type { NAIMetadataInputParams } from '../../utils/nai/metadata'
@@ -55,7 +56,7 @@ export function parseCodexWildcardText(value: unknown) {
     return undefined
   }
 
-  return WildcardService.parseWildcards(trimmed, 'codex')
+  return stripPromptPresetComments(WildcardService.parseWildcards(trimmed, 'codex'))
 }
 
 export function parseCodexQueuePayload(record: GenerationQueueJobRecord) {

@@ -33,6 +33,7 @@ import civitaiRoutes from '../routes/civitai.routes';
 import searchHistoryRoutes from '../routes/search-history.routes';
 import searchOptionsRoutes from '../routes/search-options.routes';
 import { danbooruBrowserRoutes } from '../routes/danbooruBrowser.routes';
+import { promptPresetRoutes } from '../routes/prompt-presets.routes';
 import { wallpaperRuntimeRoutes } from '../routes/wallpaperRuntime.routes';
 import { runtimeAppearanceRoutes } from '../routes/runtimeAppearance.routes';
 import { runtimeMediaSettingsRoutes } from '../routes/runtime-media-settings.routes';
@@ -141,6 +142,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/danbooru-browser', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), danbooruBrowserRoutes);
   app.use('/api/prompt-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), promptGroupRoutes);
   app.use('/api/negative-prompt-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), negativePromptGroupRoutes);
+  app.use('/api/prompt-presets', optionalAuth, promptPresetRoutes);
   app.use('/api/groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), groupRoutes);
   app.use('/api/auto-folder-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), autoFolderGroupRoutes);
   app.get('/api/settings/appearance-public', options.readOnlyLimiter, (_req, res) => {

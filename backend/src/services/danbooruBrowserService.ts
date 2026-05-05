@@ -92,6 +92,7 @@ export interface DanbooruBrowserCharacterRecord {
   tagId: number;
   name: string;
   displayName: string;
+  translatedName?: string | null;
   normalizedName: string;
   worksCount: number;
   copyrights: DanbooruBrowserCopyrightRecord[];
@@ -136,6 +137,7 @@ interface CharacterRow {
   tag_id: number;
   name: string;
   normalized_name: string;
+  translated_name?: string | null;
   post_count: number;
 }
 
@@ -658,9 +660,10 @@ class DanbooruBrowserService {
     const values: Array<string | number> = [];
 
     if (q) {
-      clauses.push('(normalized_name LIKE ? ESCAPE \'\\\' OR display_name LIKE ? ESCAPE \'\\\')');
+      clauses.push('(normalized_name LIKE ? ESCAPE \'\\\' OR display_name LIKE ? ESCAPE \'\\\' OR EXISTS (SELECT 1 FROM tag_translations tq WHERE tq.tag_id = tags.id AND tq.locale = \'ko\' AND tq.translated_name LIKE ? ESCAPE \'\\\'))');
       const pattern = `%${escapeLike(q)}%`;
-      values.push(pattern, pattern.replace(/_/g, ' '));
+      const translatedPattern = `%${escapeLike(String(params.q ?? '').trim().toLowerCase())}%`;
+      values.push(pattern, pattern.replace(/_/g, ' '), translatedPattern);
     }
 
     if (params.category !== undefined && params.category !== null && params.category !== '') {
@@ -758,8 +761,10 @@ class DanbooruBrowserService {
     const values: Array<string | number> = [];
 
     if (q) {
-      clauses.push('c.normalized_name LIKE ? ESCAPE \'\\\'');
-      values.push(`%${escapeLike(q)}%`);
+      clauses.push('(c.normalized_name LIKE ? ESCAPE \'\\\' OR EXISTS (SELECT 1 FROM tag_translations tq WHERE tq.tag_id = c.tag_id AND tq.locale = \'ko\' AND tq.translated_name LIKE ? ESCAPE \'\\\'))');
+      const pattern = `%${escapeLike(q)}%`;
+      const translatedPattern = `%${escapeLike(String(params.q ?? '').trim().toLowerCase())}%`;
+      values.push(pattern, translatedPattern);
     }
 
     const copyrightTagId = Number(params.copyrightTagId);
@@ -771,8 +776,9 @@ class DanbooruBrowserService {
     const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     const total = (db.prepare(`SELECT COUNT(*) AS total FROM characters c ${whereSql}`).get(...values) as CountRow).total;
     const rows = db.prepare(`
-      SELECT c.tag_id, c.name, c.normalized_name, c.post_count
+      SELECT c.tag_id, c.name, c.normalized_name, tt.translated_name, c.post_count
       FROM characters c
+      LEFT JOIN tag_translations tt ON tt.tag_id = c.tag_id AND tt.locale = 'ko'
       ${whereSql}
       ORDER BY c.post_count DESC, c.name ASC
       LIMIT ? OFFSET ?
@@ -788,6 +794,7 @@ class DanbooruBrowserService {
         name: row.name,
         normalizedName: row.normalized_name,
         displayName: displayName(row.name),
+        translatedName: row.translated_name,
         worksCount: row.post_count,
         copyrights: copyrightsByCharacter.get(row.tag_id) ?? [],
         relatedTags: relatedTagsByCharacter.get(row.tag_id) ?? [],

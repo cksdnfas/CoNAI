@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { readBlobAsDataUrl } from '@/lib/file-data-url'
+import { normalizeTextSegmentSpreadsheetText } from './components/prompt-text-segment-helpers'
 import type {
   ComfyUIServerConnectionStatus,
   GenerationHistoryRecord,
@@ -754,8 +755,8 @@ export function resolveNaiResolutionPreset(width: string, height: string) {
 export function buildNaiCharacterPromptPayload(characters: NAICharacterPromptDraft[]) {
   return normalizeNaiCharacterPromptDrafts(characters)
     .map((character) => ({
-      prompt: character.prompt.trim(),
-      uc: character.uc.trim(),
+      prompt: normalizeTextSegmentSpreadsheetText(character.prompt).trim(),
+      uc: normalizeTextSegmentSpreadsheetText(character.uc).trim(),
       center_x: parseNumberInput(character.centerX, 0.5),
       center_y: parseNumberInput(character.centerY, 0.5),
     }))
@@ -788,8 +789,8 @@ export function buildNaiCharacterReferencePayload(characterReferences: NAICharac
 /** Build a backend-ready NAI snapshot from the current form draft. */
 export function buildNaiModuleSnapshot(form: NAIFormDraft) {
   return {
-    prompt: form.prompt.trim(),
-    negative_prompt: form.negativePrompt.trim() || '',
+    prompt: normalizeTextSegmentSpreadsheetText(form.prompt).trim(),
+    negative_prompt: normalizeTextSegmentSpreadsheetText(form.negativePrompt).trim() || '',
     model: form.model,
     action: form.action,
     sampler: form.sampler,

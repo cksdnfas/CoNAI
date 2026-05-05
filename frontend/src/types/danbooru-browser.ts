@@ -89,6 +89,7 @@ export interface DanbooruBrowserCharacterRecord {
   tagId: number
   name: string
   displayName: string
+  translatedName?: string | null
   normalizedName: string
   worksCount: number
   copyrights: DanbooruBrowserCopyrightRecord[]

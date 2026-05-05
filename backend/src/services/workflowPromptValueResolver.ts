@@ -1,4 +1,5 @@
 import { CustomDropdownListModel } from '../models/CustomDropdownList'
+import { stripPromptPresetComments } from '../utils/promptComments'
 import { WildcardService } from './wildcardService'
 
 export type WorkflowPromptFieldLike = {
@@ -97,7 +98,7 @@ export function resolveWorkflowPromptValues<T extends Record<string, any>>(
 
     const trimmedValue = normalizedValue.trim()
     resolvedPromptData[field.id] = trimmedValue.length > 0
-      ? WildcardService.parseWildcards(normalizedValue, tool)
+      ? stripPromptPresetComments(WildcardService.parseWildcards(normalizedValue, tool))
       : normalizedValue
   }
 

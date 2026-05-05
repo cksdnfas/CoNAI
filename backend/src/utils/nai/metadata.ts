@@ -2,7 +2,7 @@
  * NovelAI metadata normalization helpers shared by direct generation and graph execution.
  */
 import { WildcardService } from '../../services/wildcardService'
-
+import { stripPromptPresetComments } from '../promptComments'
 
 export interface NAICharacterPrompt {
   prompt: string
@@ -81,7 +81,7 @@ function parseNaiWildcardText(value: string | undefined) {
     return ''
   }
 
-  return WildcardService.parseWildcards(trimmedValue, 'nai')
+  return stripPromptPresetComments(WildcardService.parseWildcards(trimmedValue, 'nai'))
 }
 
 /** Parse JSON-or-array payloads into a safe array shape. */

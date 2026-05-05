@@ -7,7 +7,7 @@ import {
   type PromptWildcardTool,
 } from './wildcard-inline-picker-helpers'
 
-export type PromptSyntaxTokenKind = 'wildcard' | 'preprocess' | 'lora'
+export type PromptSyntaxTokenKind = 'wildcard' | 'preprocess' | 'lora' | 'comment'
 
 export type PromptSyntaxToken = {
   id: string
@@ -30,6 +30,7 @@ export type PromptSyntaxToken = {
 
 const WILDCARD_TOKEN_REGEX = /\+\+([^+\r\n]+?)\+\+/g
 const LORA_TOKEN_REGEX = /<lora:([^:>]+?)(?::([^>]+?))?>/gi
+const PROMPT_COMMENT_TOKEN_REGEX = /\/\/([^/\r\n]+?)\/\//g
 const MAX_PREVIEW_ITEMS = 3
 
 function normalizePromptSyntaxName(value: string) {
@@ -104,7 +105,7 @@ function buildPreviewState(
   if (!record || !tool) {
     return {
       previewItems: [] as string[],
-      fallbackMessage: kind === 'lora' ? 'LoRA 태그로만 동작해.' : '프롬프트로 그대로 동작해.',
+      fallbackMessage: kind === 'comment' ? '프리셋 주석이야. 생성 요청 전에는 제거돼.' : kind === 'lora' ? 'LoRA 태그로만 동작해.' : '프롬프트로 그대로 동작해.',
     }
   }
 
@@ -139,12 +140,12 @@ function buildToken(
 
   return {
     id: `${kind}:${start}:${end}:${value}`,
-    key: `${kind}:${normalizePromptSyntaxName(record?.name ?? value)}`,
+    key: kind === 'comment' ? 'comment:prompt-preset' : `${kind}:${normalizePromptSyntaxName(record?.name ?? value)}`,
     kind,
     start,
     end,
     rawText: value,
-    name: record?.name ?? value,
+    name: kind === 'comment' ? '프리셋 주석' : record?.name ?? value,
     count: 1,
     pathText: buildPathText(record),
     toolItemCount: record && options?.tool ? countWildcardItemsForTool(record.items, options.tool) : null,
@@ -203,6 +204,18 @@ export function detectPromptSyntaxTokens(value: string, records: FlattenedWildca
   )
 
   const tokens: PromptSyntaxToken[] = []
+
+  for (const match of value.matchAll(PROMPT_COMMENT_TOKEN_REGEX)) {
+    const rawText = match[0]
+    const commentName = match[1]?.trim()
+    const start = match.index ?? -1
+
+    if (!commentName || start < 0) {
+      continue
+    }
+
+    tokens.push(buildToken('comment', rawText, start, start + rawText.length, maps))
+  }
 
   for (const match of value.matchAll(WILDCARD_TOKEN_REGEX)) {
     const rawText = match[0]
@@ -296,6 +309,10 @@ export function getPromptSyntaxKindLabel(kind: PromptSyntaxTokenKind) {
 
   if (kind === 'preprocess') {
     return '전처리'
+  }
+
+  if (kind === 'comment') {
+    return '주석'
   }
 
   return 'LoRA'

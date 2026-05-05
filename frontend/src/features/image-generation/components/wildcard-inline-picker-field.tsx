@@ -1,11 +1,13 @@
 import { createPortal } from 'react-dom'
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject, type UIEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject, type SyntheticEvent, type UIEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { inputVariants } from '@/components/ui/input'
 import { textareaVariants } from '@/components/ui/textarea'
-import { getWildcards } from '@/lib/api'
+import { getDanbooruBrowserCharacters, getDanbooruBrowserTags, getWildcards, searchPromptCollection } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import type { PromptCollectionItem, PromptTypeFilter } from '@/types/prompt'
+import type { DanbooruBrowserCharacterRecord, DanbooruBrowserRelatedTagRecord, DanbooruBrowserTagRecord } from '@/types/danbooru-browser'
 import {
   getWildcardPromptSyntax,
   type WildcardWorkspaceTab,
@@ -49,6 +51,7 @@ type WildcardInlinePickerFieldProps = {
   disabled?: boolean
   className?: string
   showDetectedSyntax?: boolean
+  autocompletePromptType?: PromptTypeFilter
 }
 
 type PromptSyntaxPopupPosition = {
@@ -65,6 +68,35 @@ type InlinePickerPopupPosition = {
   maxHeight: number
   placement: 'top' | 'bottom'
 }
+
+type PromptAutocompleteQuery = {
+  query: string
+  start: number
+  end: number
+}
+
+type PromptAutocompleteSuggestion = {
+  id: string
+  kind: 'prompt' | 'tag' | 'character'
+  label: string
+  insertText: string
+  translatedName?: string | null
+  secondaryText?: string
+  usageCount?: number
+  relatedTags?: DanbooruBrowserRelatedTagRecord[]
+}
+
+type PromptRelatedTagTab = 'general' | 'character' | 'other'
+
+const PROMPT_AUTOCOMPLETE_SEPARATOR_PATTERN = /[,\n]/
+const PROMPT_AUTOCOMPLETE_PAGE_SIZE = 7
+const PROMPT_AUTOCOMPLETE_RELATED_TAG_LIMIT = 42
+const PROMPT_AUTOCOMPLETE_LABEL_MAX_LENGTH = 48
+const PROMPT_RELATED_TAG_TABS: Array<{ id: PromptRelatedTagTab; label: string }> = [
+  { id: 'general', label: '일반' },
+  { id: 'character', label: '캐릭터' },
+  { id: 'other', label: '그외' },
+]
 
 /** Highlight the first matched query segment inside one suggestion label. */
 function renderHighlightedText(text: string, query: string) {
@@ -94,6 +126,168 @@ function renderHighlightedText(text: string, query: string) {
   )
 }
 
+function normalizeAutocompleteText(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function resolvePromptAutocompleteQuery(value: string, caretPosition: number): PromptAutocompleteQuery | null {
+  if (caretPosition < 0) {
+    return null
+  }
+
+  const caret = Math.max(0, Math.min(caretPosition, value.length))
+  let segmentStart = caret
+  while (segmentStart > 0 && !PROMPT_AUTOCOMPLETE_SEPARATOR_PATTERN.test(value[segmentStart - 1])) {
+    segmentStart -= 1
+  }
+
+  let segmentEnd = caret
+  while (segmentEnd < value.length && !PROMPT_AUTOCOMPLETE_SEPARATOR_PATTERN.test(value[segmentEnd])) {
+    segmentEnd += 1
+  }
+
+  while (segmentStart < segmentEnd && /\s/.test(value[segmentStart])) {
+    segmentStart += 1
+  }
+  while (segmentEnd > segmentStart && /\s/.test(value[segmentEnd - 1])) {
+    segmentEnd -= 1
+  }
+
+  return {
+    query: value.slice(segmentStart, caret).trim(),
+    start: segmentStart,
+    end: segmentEnd,
+  }
+}
+
+function buildPromptAutocompleteInsertion(value: string, insertionText: string, range: PromptAutocompleteQuery, mode: 'replace' | 'append' = 'replace') {
+  const insertionPoint = mode === 'append' ? range.end : range.start
+  const replaceEnd = mode === 'append' ? range.end : range.end
+  const before = value.slice(0, insertionPoint)
+  const after = value.slice(replaceEnd)
+  const trimmedAfter = after.replace(/^\s+/, '')
+  const needsPrefix = mode === 'append' && before.length > 0 && !/[\s,\n]$/.test(before)
+  const needsSuffix = trimmedAfter.length === 0 || !/^[,\n]/.test(trimmedAfter)
+  const prefix = needsPrefix ? ', ' : ''
+  const suffix = needsSuffix ? ', ' : ''
+  const nextValue = `${before}${prefix}${insertionText}${suffix}${trimmedAfter}`
+  const nextCaretPosition = before.length + prefix.length + insertionText.length + suffix.length
+
+  return { nextValue, nextCaretPosition }
+}
+
+function getAutocompleteUsageCount(suggestion: Pick<PromptAutocompleteSuggestion, 'usageCount'>) {
+  return suggestion.usageCount ?? 0
+}
+
+function buildPromptAutocompleteSuggestions({
+  prompts,
+  tags,
+  characters,
+}: {
+  prompts: PromptCollectionItem[]
+  tags: DanbooruBrowserTagRecord[]
+  characters: DanbooruBrowserCharacterRecord[]
+}): PromptAutocompleteSuggestion[] {
+  const suggestions: PromptAutocompleteSuggestion[] = [
+    ...prompts.map((item) => ({
+      id: `prompt:${item.type}:${item.id}`,
+      kind: 'prompt' as const,
+      label: item.prompt,
+      insertText: item.prompt,
+      secondaryText: item.group_info?.group_name ?? item.type,
+      usageCount: item.usage_count,
+    })),
+    ...characters.map((item) => ({
+      id: `character:${item.tagId}`,
+      kind: 'character' as const,
+      label: item.displayName,
+      insertText: item.name,
+      translatedName: item.translatedName,
+      secondaryText: item.copyrights.map((copyright) => copyright.displayName).slice(0, 2).join(' · '),
+      usageCount: item.worksCount,
+      relatedTags: item.relatedTags
+        .slice()
+        .sort((left, right) => right.usageCount - left.usageCount)
+        .slice(0, PROMPT_AUTOCOMPLETE_RELATED_TAG_LIMIT),
+    })),
+    ...tags.map((item) => ({
+      id: `tag:${item.id}`,
+      kind: 'tag' as const,
+      label: item.displayName,
+      insertText: item.name,
+      translatedName: item.translatedName,
+      secondaryText: 'Danbooru tag',
+      usageCount: item.usageCount,
+    })),
+  ]
+
+  const seen = new Set<string>()
+  return suggestions
+    .filter((suggestion) => {
+      const key = normalizeAutocompleteText(suggestion.insertText)
+      if (seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+    .sort((left, right) => getAutocompleteUsageCount(right) - getAutocompleteUsageCount(left))
+}
+
+function getRelatedTagTab(categoryName: string): PromptRelatedTagTab {
+  const normalizedCategoryName = categoryName.toLowerCase()
+  if (normalizedCategoryName === 'general') {
+    return 'general'
+  }
+  if (normalizedCategoryName === 'character') {
+    return 'character'
+  }
+  return 'other'
+}
+
+function getPromptAutocompleteKindLabel(kind: PromptAutocompleteSuggestion['kind']) {
+  if (kind === 'character') {
+    return '캐릭터'
+  }
+  if (kind === 'tag') {
+    return '단부루'
+  }
+  return '프롬프트'
+}
+
+function formatPromptAutocompleteCount(count: number | undefined) {
+  if (count === undefined) {
+    return null
+  }
+  if (count < 100) {
+    return String(count)
+  }
+
+  const value = count / 1000
+  return `${value.toFixed(1).replace(/\.0$/, '')}K`
+}
+
+function truncatePromptAutocompleteText(text: string, maxLength = PROMPT_AUTOCOMPLETE_LABEL_MAX_LENGTH) {
+  const trimmed = text.trim()
+  if (trimmed.length <= maxLength) {
+    return trimmed
+  }
+  return `${trimmed.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`
+}
+
+function formatPromptAutocompleteLabel(item: Pick<PromptAutocompleteSuggestion, 'label' | 'translatedName' | 'usageCount'>) {
+  const labelText = truncatePromptAutocompleteText(item.label)
+  const translatedText = item.translatedName?.trim()
+  const formattedCount = formatPromptAutocompleteCount(item.usageCount)
+  const countText = formattedCount ? ` (${formattedCount})` : ''
+  return `${labelText}${translatedText ? ` [${truncatePromptAutocompleteText(translatedText, 24)}]` : ''}${countText}`
+}
+
+function isSameAutocompleteCharacter(left: PromptAutocompleteSuggestion | null, right: PromptAutocompleteSuggestion | null) {
+  return left?.kind === 'character' && right?.kind === 'character' && left.id === right.id
+}
+
 function getPromptSyntaxHighlightClass(kind: PromptSyntaxTokenKind) {
   if (kind === 'wildcard') {
     return 'rounded-[0.2rem] bg-sky-400/20 ring-1 ring-inset ring-sky-300/18'
@@ -101,6 +295,10 @@ function getPromptSyntaxHighlightClass(kind: PromptSyntaxTokenKind) {
 
   if (kind === 'preprocess') {
     return 'rounded-[0.2rem] bg-amber-400/18 ring-1 ring-inset ring-amber-300/20'
+  }
+
+  if (kind === 'comment') {
+    return 'rounded-[0.2rem] bg-emerald-400/16 ring-1 ring-inset ring-emerald-300/20'
   }
 
   return 'rounded-[0.2rem] bg-violet-400/18 ring-1 ring-inset ring-violet-300/20'
@@ -115,6 +313,10 @@ function getPromptSyntaxChipClass(kind: PromptSyntaxTokenKind, isActive: boolean
 
   if (kind === 'preprocess') {
     return cn(shared, isActive ? 'border-amber-300/60 bg-amber-400/18 text-foreground' : 'border-amber-400/20 bg-amber-400/10 text-foreground/90 hover:bg-amber-400/16')
+  }
+
+  if (kind === 'comment') {
+    return cn(shared, isActive ? 'border-emerald-300/60 bg-emerald-400/18 text-foreground' : 'border-emerald-400/20 bg-emerald-400/10 text-foreground/90 hover:bg-emerald-400/16')
   }
 
   return cn(shared, isActive ? 'border-violet-300/60 bg-violet-400/18 text-foreground' : 'border-violet-400/20 bg-violet-400/10 text-foreground/90 hover:bg-violet-400/16')
@@ -212,11 +414,13 @@ function getTextFieldCaretClientRect(element: HTMLInputElement | HTMLTextAreaEle
   mirror.style.left = `${rect.left}px`
   mirror.style.top = `${rect.top}px`
   mirror.style.width = `${rect.width}px`
-  mirror.style.height = `${rect.height}px`
-  mirror.style.overflow = 'hidden'
+  mirror.style.minHeight = `${rect.height}px`
+  mirror.style.height = 'auto'
+  mirror.style.overflow = 'visible'
   mirror.style.whiteSpace = element instanceof HTMLTextAreaElement ? 'pre-wrap' : 'pre'
+  mirror.style.wordWrap = 'break-word'
 
-  mirror.textContent = element.value.slice(0, position)
+  mirror.textContent = element.value.slice(0, position) || '\u200b'
   marker.textContent = '\u200b'
   mirror.appendChild(marker)
   document.body.appendChild(mirror)
@@ -317,6 +521,154 @@ function WildcardInlinePickerPopup({
   )
 }
 
+function PromptAutocompletePopup({
+  position,
+  suggestions,
+  activeCharacter,
+  isLoading,
+  onSelect,
+  onSelectRelatedTag,
+}: {
+  position: InlinePickerPopupPosition
+  suggestions: PromptAutocompleteSuggestion[]
+  activeCharacter: PromptAutocompleteSuggestion | null
+  isLoading: boolean
+  onSelect: (suggestion: PromptAutocompleteSuggestion) => void
+  onSelectRelatedTag: (tagName: string) => void
+}) {
+  const [suggestionPage, setSuggestionPage] = useState(0)
+  const [relatedTagTab, setRelatedTagTab] = useState<PromptRelatedTagTab>('general')
+  const [relatedTagPage, setRelatedTagPage] = useState(0)
+  const relatedTags = useMemo(() => (
+    (activeCharacter?.relatedTags ?? [])
+      .slice()
+      .sort((left, right) => right.usageCount - left.usageCount)
+  ), [activeCharacter?.relatedTags])
+  const hasActiveCharacter = activeCharacter !== null
+  const visibleSuggestions = hasActiveCharacter ? [] : suggestions.slice(suggestionPage * PROMPT_AUTOCOMPLETE_PAGE_SIZE, (suggestionPage + 1) * PROMPT_AUTOCOMPLETE_PAGE_SIZE)
+  const suggestionPageCount = Math.max(1, Math.ceil(suggestions.length / PROMPT_AUTOCOMPLETE_PAGE_SIZE))
+  const relatedTagsByTab = relatedTags.filter((tag) => getRelatedTagTab(tag.categoryName) === relatedTagTab)
+  const visibleRelatedTags = relatedTagsByTab.slice(relatedTagPage * PROMPT_AUTOCOMPLETE_PAGE_SIZE, (relatedTagPage + 1) * PROMPT_AUTOCOMPLETE_PAGE_SIZE)
+  const relatedTagPageCount = Math.max(1, Math.ceil(relatedTagsByTab.length / PROMPT_AUTOCOMPLETE_PAGE_SIZE))
+
+  useEffect(() => {
+    setSuggestionPage(0)
+  }, [suggestions])
+
+  useEffect(() => {
+    setRelatedTagTab('general')
+    setRelatedTagPage(0)
+  }, [activeCharacter])
+
+  useEffect(() => {
+    setRelatedTagPage(0)
+  }, [relatedTagTab])
+
+  const renderPager = (page: number, pageCount: number, onPageChange: (page: number) => void) => (
+    pageCount > 1 ? (
+      <div className="flex items-center justify-end gap-1 pt-1">
+        <button
+          type="button"
+          disabled={page <= 0}
+          onMouseDown={(event) => {
+            event.preventDefault()
+            onPageChange(Math.max(0, page - 1))
+          }}
+          className="rounded-full border border-border/70 px-2 py-0.5 text-xs text-muted-foreground transition hover:bg-surface-high disabled:opacity-40"
+        >
+          &lt;
+        </button>
+        <button
+          type="button"
+          disabled={page >= pageCount - 1}
+          onMouseDown={(event) => {
+            event.preventDefault()
+            onPageChange(Math.min(pageCount - 1, page + 1))
+          }}
+          className="rounded-full border border-border/70 px-2 py-0.5 text-xs text-muted-foreground transition hover:bg-surface-high disabled:opacity-40"
+        >
+          &gt;
+        </button>
+      </div>
+    ) : null
+  )
+
+  return (
+    <WildcardInlinePickerPopup position={position}>
+      <div className="max-h-[inherit] overflow-y-auto p-2">
+        {hasActiveCharacter ? (
+          <div className="space-y-2">
+            <div className="truncate px-1 text-[11px] text-muted-foreground">{activeCharacter.label} 연관 태그</div>
+            <div className="flex flex-wrap gap-1">
+              {PROMPT_RELATED_TAG_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    setRelatedTagTab(tab.id)
+                  }}
+                  className={cn(
+                    'rounded-full border px-2 py-0.5 text-[11px] transition',
+                    relatedTagTab === tab.id ? 'border-primary/50 bg-primary/15 text-foreground' : 'border-border/70 text-muted-foreground hover:bg-surface-high',
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {visibleRelatedTags.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {visibleRelatedTags.map((tag) => (
+                  <button
+                    key={`${activeCharacter.id}:related:${tag.id}`}
+                    type="button"
+                    title={tag.translatedName ? `${tag.displayName} [${tag.translatedName}]` : tag.displayName}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                      onSelectRelatedTag(tag.name)
+                    }}
+                    className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-surface-lowest px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high"
+                  >
+                    <span className="truncate">{formatPromptAutocompleteLabel({ label: tag.displayName, translatedName: tag.translatedName, usageCount: tag.usageCount })}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="px-1 py-1 text-xs text-muted-foreground">이 분류에는 연관 태그가 없어.</div>
+            )}
+            {renderPager(relatedTagPage, relatedTagPageCount, setRelatedTagPage)}
+          </div>
+        ) : isLoading ? (
+          <div className="px-2 py-2 text-xs text-muted-foreground">불러오는 중…</div>
+        ) : visibleSuggestions.length > 0 ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-1.5">
+              {visibleSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion.id}
+                  type="button"
+                  title={getPromptAutocompleteKindLabel(suggestion.kind)}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    onSelect(suggestion)
+                  }}
+                  className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-surface-lowest px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high"
+                >
+                  <span className="truncate">{formatPromptAutocompleteLabel(suggestion)}</span>
+                </button>
+              ))}
+            </div>
+            {renderPager(suggestionPage, suggestionPageCount, setSuggestionPage)}
+          </div>
+        ) : (
+          <div className="px-2 py-2 text-xs text-muted-foreground">추천 없음</div>
+        )}
+      </div>
+    </WildcardInlinePickerPopup>
+  )
+}
+
 /** Shared prompt-like text field with ++ wildcard autocomplete for NAI and ComfyUI. */
 export function WildcardInlinePickerField({
   value,
@@ -328,6 +680,7 @@ export function WildcardInlinePickerField({
   disabled = false,
   className,
   showDetectedSyntax = true,
+  autocompletePromptType = 'positive',
 }: WildcardInlinePickerFieldProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
@@ -348,6 +701,8 @@ export function WildcardInlinePickerField({
   const [activeDetectedTokenKey, setActiveDetectedTokenKey] = useState<string | null>(null)
   const [detectedPopupPosition, setDetectedPopupPosition] = useState<PromptSyntaxPopupPosition | null>(null)
   const [inlinePopupPosition, setInlinePopupPosition] = useState<InlinePickerPopupPosition | null>(null)
+  const [promptAutocompletePopupPosition, setPromptAutocompletePopupPosition] = useState<InlinePickerPopupPosition | null>(null)
+  const [selectedPromptAutocompleteCharacter, setSelectedPromptAutocompleteCharacter] = useState<PromptAutocompleteSuggestion | null>(null)
 
   const wildcardsQuery = useQuery({
     queryKey: ['wildcards', 'inline-picker'],
@@ -434,6 +789,12 @@ export function WildcardInlinePickerField({
 
   const isTreeExplorerMode = filterMode === 'all' && (activeQuery === null || (activeQuery?.query.trim().length ?? 0) === 0)
   const isPopupOpen = isFocused && (activeQuery !== null || isExplorerPinned) && !disabled
+  const activePromptAutocompleteQuery = useMemo(
+    () => (activeQuery === null && !isExplorerPinned ? resolvePromptAutocompleteQuery(value, caretPosition) : null),
+    [activeQuery, caretPosition, isExplorerPinned, value],
+  )
+  const promptAutocompleteSearchText = activePromptAutocompleteQuery?.query.trim() ?? ''
+  const isPromptAutocompleteOpen = isFocused && !disabled && !isPopupOpen && activePromptAutocompleteQuery !== null
   const normalizedActiveQuery = activeQuery?.query.trim() ?? ''
   const indexedSuggestions = suggestions.map((suggestion, index) => ({ ...suggestion, index }))
   const recentSuggestions = normalizedActiveQuery.length === 0
@@ -443,9 +804,81 @@ export function WildcardInlinePickerField({
     ? indexedSuggestions.filter((suggestion) => !Number.isFinite(suggestion.recentIndex))
     : indexedSuggestions
 
+  const promptAutocompletePromptsQuery = useQuery({
+    queryKey: ['prompt-inline-autocomplete', 'collection', autocompletePromptType, promptAutocompleteSearchText],
+    queryFn: () => searchPromptCollection({
+      query: promptAutocompleteSearchText,
+      type: autocompletePromptType,
+      page: 1,
+      limit: PROMPT_AUTOCOMPLETE_PAGE_SIZE * 3,
+      sortBy: 'usage_count',
+      sortOrder: 'DESC',
+    }),
+    enabled: isPromptAutocompleteOpen,
+    staleTime: 30_000,
+  })
+  const promptAutocompleteTagsQuery = useQuery({
+    queryKey: ['prompt-inline-autocomplete', 'danbooru-tags', promptAutocompleteSearchText],
+    queryFn: () => getDanbooruBrowserTags({ query: promptAutocompleteSearchText, page: 1, limit: PROMPT_AUTOCOMPLETE_PAGE_SIZE * 3 }),
+    enabled: isPromptAutocompleteOpen && promptAutocompleteSearchText.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  })
+  const promptAutocompleteCharactersQuery = useQuery({
+    queryKey: ['prompt-inline-autocomplete', 'danbooru-characters', promptAutocompleteSearchText],
+    queryFn: () => getDanbooruBrowserCharacters({
+      query: promptAutocompleteSearchText,
+      page: 1,
+      limit: PROMPT_AUTOCOMPLETE_PAGE_SIZE * 3,
+      relatedTagLimit: PROMPT_AUTOCOMPLETE_RELATED_TAG_LIMIT,
+    }),
+    enabled: isPromptAutocompleteOpen && promptAutocompleteSearchText.length >= 2,
+    staleTime: 60_000,
+    retry: false,
+  })
+  const promptAutocompleteSuggestions = useMemo(
+    () => buildPromptAutocompleteSuggestions({
+      prompts: promptAutocompletePromptsQuery.data?.items ?? [],
+      tags: promptAutocompleteTagsQuery.data?.items ?? [],
+      characters: promptAutocompleteCharactersQuery.data?.items ?? [],
+    }),
+    [promptAutocompleteCharactersQuery.data?.items, promptAutocompletePromptsQuery.data?.items, promptAutocompleteTagsQuery.data?.items],
+  )
+  const exactPromptAutocompleteCharacter = useMemo(() => {
+    const normalizedQuery = normalizeAutocompleteText(promptAutocompleteSearchText).replace(/ /g, '_')
+    if (!normalizedQuery) {
+      return null
+    }
+
+    return promptAutocompleteSuggestions.find((suggestion) => (
+      suggestion.kind === 'character'
+        && (normalizeAutocompleteText(suggestion.insertText) === normalizedQuery || normalizeAutocompleteText(suggestion.label).replace(/ /g, '_') === normalizedQuery)
+    )) ?? null
+  }, [promptAutocompleteSearchText, promptAutocompleteSuggestions])
+  const activePromptAutocompleteCharacter = isSameAutocompleteCharacter(selectedPromptAutocompleteCharacter, exactPromptAutocompleteCharacter)
+    ? selectedPromptAutocompleteCharacter
+    : (selectedPromptAutocompleteCharacter ?? exactPromptAutocompleteCharacter)
+  const isPromptAutocompleteLoading = promptAutocompletePromptsQuery.isLoading || promptAutocompleteTagsQuery.isLoading || promptAutocompleteCharactersQuery.isLoading
+
+  useLayoutEffect(() => {
+    if (!multiline || !(fieldRef.current instanceof HTMLTextAreaElement)) {
+      return
+    }
+
+    const field = fieldRef.current
+    field.style.height = 'auto'
+    field.style.height = `${field.scrollHeight}px`
+  }, [multiline, rows, value])
+
   useEffect(() => {
     setActiveIndex(0)
   }, [activeQuery?.query, filterMode, tool])
+
+  useEffect(() => {
+    if (selectedPromptAutocompleteCharacter && promptAutocompleteSearchText.length > 0 && normalizeAutocompleteText(selectedPromptAutocompleteCharacter.insertText) !== normalizeAutocompleteText(promptAutocompleteSearchText)) {
+      setSelectedPromptAutocompleteCharacter(null)
+    }
+  }, [promptAutocompleteSearchText, selectedPromptAutocompleteCharacter])
 
   useEffect(() => {
     setFilterMode(readStoredWildcardFilterMode(tool))
@@ -556,6 +989,48 @@ export function WildcardInlinePickerField({
   }, [caretPosition, fieldScrollLeft, fieldScrollTop, isPopupOpen, isTreeExplorerMode, suggestions.length, value])
 
   useEffect(() => {
+    if (!isPromptAutocompleteOpen || typeof window === 'undefined') {
+      setPromptAutocompletePopupPosition(null)
+      return
+    }
+
+    const updatePosition = () => {
+      const field = fieldRef.current
+      if (!field) {
+        setPromptAutocompletePopupPosition(null)
+        return
+      }
+
+      const fieldRect = field.getBoundingClientRect()
+      const caretRect = getTextFieldCaretClientRect(field, caretPosition)
+      const popupAnchorRect = caretRect
+        ? {
+            left: fieldRect.left,
+            top: caretRect.top,
+            bottom: caretRect.bottom,
+            width: fieldRect.width,
+          }
+        : fieldRect
+
+      setPromptAutocompletePopupPosition(resolveFloatingDropdownRectFromRect(popupAnchorRect, {
+        minWidth: Math.min(Math.max(fieldRect.width * 0.55, 240), 420),
+        preferredMaxHeight: 180,
+        minUsableHeight: 96,
+        gap: 10,
+      }))
+    }
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [caretPosition, fieldScrollLeft, fieldScrollTop, isPromptAutocompleteOpen, promptAutocompleteSuggestions.length, value])
+
+  useEffect(() => {
     if (!activeDetectedTokenKey || typeof document === 'undefined') {
       return
     }
@@ -580,11 +1055,23 @@ export function WildcardInlinePickerField({
 
   const syncCaretPosition = (element: HTMLInputElement | HTMLTextAreaElement) => {
     setCaretPosition(element.selectionStart ?? element.value.length)
+    setFieldScrollTop(element.scrollTop)
+    setFieldScrollLeft(element.scrollLeft)
+  }
+
+  const syncCaretPositionAfterSelection = (element: HTMLInputElement | HTMLTextAreaElement, clearSelectedCharacter = false) => {
+    window.requestAnimationFrame(() => {
+      syncCaretPosition(element)
+      if (clearSelectedCharacter) {
+        setSelectedPromptAutocompleteCharacter(null)
+      }
+    })
   }
 
   const handleChangeValue = (nextValue: string, element: HTMLInputElement | HTMLTextAreaElement) => {
     onChange(nextValue)
     syncCaretPosition(element)
+    setSelectedPromptAutocompleteCharacter(null)
 
     if (activeQuery === null && isExplorerPinned) {
       setIsExplorerPinned(false)
@@ -623,26 +1110,64 @@ export function WildcardInlinePickerField({
     })
   }
 
+  const handleInsertPromptAutocomplete = (suggestion: PromptAutocompleteSuggestion) => {
+    if (!fieldRef.current || !activePromptAutocompleteQuery) {
+      return
+    }
+
+    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, suggestion.insertText, activePromptAutocompleteQuery)
+
+    onChange(nextValue)
+    setCaretPosition(nextCaretPosition)
+    setSelectedPromptAutocompleteCharacter(suggestion.kind === 'character' ? suggestion : null)
+
+    window.requestAnimationFrame(() => {
+      fieldRef.current?.focus()
+      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
+    })
+  }
+
+  const handleInsertPromptRelatedTag = (tagName: string) => {
+    if (!fieldRef.current || !activePromptAutocompleteQuery) {
+      return
+    }
+
+    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, tagName, activePromptAutocompleteQuery, 'append')
+
+    onChange(nextValue)
+    setCaretPosition(nextCaretPosition)
+
+    window.requestAnimationFrame(() => {
+      fieldRef.current?.focus()
+      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
+    })
+  }
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (!isPopupOpen || isTreeExplorerMode || suggestions.length === 0) {
-      return
+    if (isPopupOpen && !isTreeExplorerMode && suggestions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setActiveIndex((current) => (current + 1) % suggestions.length)
+        return
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setActiveIndex((current) => (current - 1 + suggestions.length) % suggestions.length)
+        return
+      }
+
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault()
+        handleInsertWildcard(suggestions[activeIndex]?.record.name ?? suggestions[0].record.name)
+        return
+      }
     }
 
-    if (event.key === 'ArrowDown') {
+    if (isPromptAutocompleteOpen && event.key === 'Escape') {
       event.preventDefault()
-      setActiveIndex((current) => (current + 1) % suggestions.length)
-      return
-    }
-
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setActiveIndex((current) => (current - 1 + suggestions.length) % suggestions.length)
-      return
-    }
-
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault()
-      handleInsertWildcard(suggestions[activeIndex]?.record.name ?? suggestions[0].record.name)
+      setCaretPosition(-1)
+      setSelectedPromptAutocompleteCharacter(null)
       return
     }
 
@@ -659,8 +1184,13 @@ export function WildcardInlinePickerField({
     disabled,
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => handleChangeValue(event.target.value, event.target),
     onKeyDown: handleKeyDown,
-    onKeyUp: (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => syncCaretPosition(event.currentTarget),
-    onClick: (event: MouseEvent<HTMLInputElement | HTMLTextAreaElement>) => syncCaretPosition(event.currentTarget),
+    onKeyUp: (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const isNavigationKey = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)
+      syncCaretPositionAfterSelection(event.currentTarget, isNavigationKey)
+    },
+    onClick: (event: MouseEvent<HTMLInputElement | HTMLTextAreaElement>) => syncCaretPositionAfterSelection(event.currentTarget, true),
+    onMouseUp: (event: MouseEvent<HTMLInputElement | HTMLTextAreaElement>) => syncCaretPositionAfterSelection(event.currentTarget, true),
+    onSelect: (event: SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => syncCaretPositionAfterSelection(event.currentTarget, true),
     onScroll: (event: UIEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setFieldScrollTop(event.currentTarget.scrollTop)
       setFieldScrollLeft(event.currentTarget.scrollLeft)
@@ -787,7 +1317,7 @@ export function WildcardInlinePickerField({
             }}
             rows={rows}
             {...sharedProps}
-            className={cn(textareaVariants(), showDetectedSyntax && detectedTokens.length > 0 ? 'relative z-10 bg-transparent' : 'relative z-10', className)}
+            className={cn(textareaVariants(), 'overflow-hidden', showDetectedSyntax && detectedTokens.length > 0 ? 'relative z-10 bg-transparent' : 'relative z-10', className)}
           />
         ) : (
           <input
@@ -833,7 +1363,7 @@ export function WildcardInlinePickerField({
                   setActiveDetectedTokenKey((current) => current === token.key ? null : token.key)
                 }}
               >
-                <span className="max-w-[12rem] truncate">{token.rawText}</span>
+                <span className="max-w-[12rem] truncate">{token.kind === 'comment' ? `주석 ${token.count}개 항목` : token.rawText}</span>
                 <span className="text-muted-foreground">{getPromptSyntaxKindLabel(token.kind)}</span>
                 {token.count > 1 ? <Badge variant="secondary">{token.count}</Badge> : null}
               </button>
@@ -853,6 +1383,17 @@ export function WildcardInlinePickerField({
           onMouseLeave={() => {
             scheduleDetectedPopupClose()
           }}
+        />
+      ) : null}
+
+      {isPromptAutocompleteOpen && promptAutocompletePopupPosition ? (
+        <PromptAutocompletePopup
+          position={promptAutocompletePopupPosition}
+          suggestions={promptAutocompleteSuggestions}
+          activeCharacter={activePromptAutocompleteCharacter}
+          isLoading={isPromptAutocompleteLoading}
+          onSelect={handleInsertPromptAutocomplete}
+          onSelectRelatedTag={handleInsertPromptRelatedTag}
         />
       ) : null}
 

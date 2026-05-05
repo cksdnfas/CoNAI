@@ -4,6 +4,7 @@ import { triggerBlobDownload } from '@/lib/api-client'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import { createNaiModuleFromSnapshot, upscaleNaiImage } from '@/lib/api'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
+import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import type { GenerationImageSaveOptions } from '@/lib/api-image-generation'
 import {
   buildNaiCharacterPromptPayload,
@@ -71,7 +72,10 @@ export function useNaiGenerationActions({
       return
     }
 
-    if (naiForm.prompt.trim().length === 0) {
+    const prompt = normalizeTextSegmentSpreadsheetText(naiForm.prompt).trim()
+    const negativePrompt = normalizeTextSegmentSpreadsheetText(naiForm.negativePrompt).trim()
+
+    if (prompt.length === 0) {
       showSnackbar({ message: 'NAI 프롬프트를 먼저 넣어줘.', tone: 'error' })
       return
     }
@@ -102,10 +106,10 @@ export function useNaiGenerationActions({
       setIsNaiGenerating(true)
       const response = await createGenerationQueueJob({
         service_type: 'novelai',
-        request_summary: `NAI queue job · ${naiForm.prompt.trim().slice(0, 48)}`,
+        request_summary: `NAI queue job · ${prompt.slice(0, 48)}`,
         request_payload: {
-          prompt: naiForm.prompt.trim(),
-          negative_prompt: naiForm.negativePrompt.trim() || undefined,
+          prompt,
+          negative_prompt: negativePrompt || undefined,
           model: naiForm.model,
           action: naiForm.action,
           sampler: naiForm.sampler,

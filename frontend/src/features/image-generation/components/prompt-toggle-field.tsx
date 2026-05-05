@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
-import { TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
+import { TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows, joinTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
 import {
   WORKFLOW_FIELD_DISCLOSURE_ACTIVE_CLASS,
   WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS,
@@ -40,12 +40,14 @@ function PromptSpreadsheetDisclosure({
   placeholder,
   isExpanded,
   onToggle,
+  autocompletePromptType,
   onChange,
 }: {
   tool: PromptWildcardTool
   label: string
   value: string
   placeholder: string
+  autocompletePromptType: 'positive' | 'negative'
   isExpanded: boolean
   onToggle: () => void
   onChange: (value: string) => void
@@ -89,7 +91,8 @@ function PromptSpreadsheetDisclosure({
             tool={tool}
             value={value}
             placeholder={placeholder}
-            onChange={(nextRows) => onChange(nextRows.join('\n'))}
+            autocompletePromptType={autocompletePromptType}
+            onChange={(nextRows) => onChange(joinTextSegmentSpreadsheetRows(nextRows))}
           />
         </div>
       ) : null}
@@ -120,6 +123,7 @@ export function PromptToggleField({
         label={positiveLabel ?? t('image-generation.components.prompt.toggle.field.positive')}
         value={positiveValue}
         placeholder={positivePlaceholder}
+        autocompletePromptType="positive"
         isExpanded={isPositiveExpanded}
         onToggle={() => setIsPositiveExpanded((current) => !current)}
         onChange={onPositiveChange}
@@ -130,6 +134,7 @@ export function PromptToggleField({
         label={negativeLabel ?? t('image-generation.components.prompt.toggle.field.negative')}
         value={negativeValue}
         placeholder={negativePlaceholder}
+        autocompletePromptType="negative"
         isExpanded={isNegativeExpanded}
         onToggle={() => setIsNegativeExpanded((current) => !current)}
         onChange={onNegativeChange}
