@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject, type SyntheticEvent, type UIEvent } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { inputVariants } from '@/components/ui/input'
@@ -566,105 +567,118 @@ function PromptAutocompletePopup({
 
   const renderPager = (page: number, pageCount: number, onPageChange: (page: number) => void) => (
     pageCount > 1 ? (
-      <div className="flex items-center justify-end gap-1 pt-1">
-        <button
-          type="button"
-          disabled={page <= 0}
-          onMouseDown={(event) => {
-            event.preventDefault()
-            onPageChange(Math.max(0, page - 1))
-          }}
-          className="rounded-full border border-border/70 px-2 py-0.5 text-xs text-muted-foreground transition hover:bg-surface-high disabled:opacity-40"
-        >
-          &lt;
-        </button>
-        <button
-          type="button"
-          disabled={page >= pageCount - 1}
-          onMouseDown={(event) => {
-            event.preventDefault()
-            onPageChange(Math.min(pageCount - 1, page + 1))
-          }}
-          className="rounded-full border border-border/70 px-2 py-0.5 text-xs text-muted-foreground transition hover:bg-surface-high disabled:opacity-40"
-        >
-          &gt;
-        </button>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border/70 bg-surface-container/95 px-2 py-1.5">
+        <span className="px-1 font-mono text-[11px] text-muted-foreground">{page + 1}/{pageCount}</span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="이전 추천 페이지"
+            title="이전"
+            disabled={page <= 0}
+            onMouseDown={(event) => {
+              event.preventDefault()
+              onPageChange(Math.max(0, page - 1))
+            }}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-sm border border-border/70 bg-surface-lowest text-muted-foreground transition hover:bg-surface-high hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label="다음 추천 페이지"
+            title="다음"
+            disabled={page >= pageCount - 1}
+            onMouseDown={(event) => {
+              event.preventDefault()
+              onPageChange(Math.min(pageCount - 1, page + 1))
+            }}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-sm border border-border/70 bg-surface-lowest text-muted-foreground transition hover:bg-surface-high hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
     ) : null
   )
 
   return (
     <WildcardInlinePickerPopup position={position}>
-      <div className="max-h-[inherit] overflow-y-auto p-2">
-        {hasActiveCharacter ? (
-          <div className="space-y-2">
-            <div className="truncate px-1 text-[11px] text-muted-foreground">{activeCharacter.label} 연관 태그</div>
-            <div className="flex flex-wrap gap-1">
-              {PROMPT_RELATED_TAG_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                    setRelatedTagTab(tab.id)
-                  }}
-                  className={cn(
-                    'rounded-full border px-2 py-0.5 text-[11px] transition',
-                    relatedTagTab === tab.id ? 'border-primary/50 bg-primary/15 text-foreground' : 'border-border/70 text-muted-foreground hover:bg-surface-high',
-                  )}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            {visibleRelatedTags.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {visibleRelatedTags.map((tag) => (
+      {hasActiveCharacter ? (
+        <>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            <div className="space-y-2">
+              <div className="truncate px-1 text-[11px] text-muted-foreground">{activeCharacter.label} 연관 태그</div>
+              <div className="flex flex-wrap gap-1">
+                {PROMPT_RELATED_TAG_TABS.map((tab) => (
                   <button
-                    key={`${activeCharacter.id}:related:${tag.id}`}
+                    key={tab.id}
                     type="button"
-                    title={tag.translatedName ? `${tag.displayName} [${tag.translatedName}]` : tag.displayName}
                     onMouseDown={(event) => {
                       event.preventDefault()
-                      onSelectRelatedTag(tag.name)
+                      setRelatedTagTab(tab.id)
+                    }}
+                    className={cn(
+                      'rounded-full border px-2 py-0.5 text-[11px] transition',
+                      relatedTagTab === tab.id ? 'border-primary/50 bg-primary/15 text-foreground' : 'border-border/70 text-muted-foreground hover:bg-surface-high',
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              {visibleRelatedTags.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {visibleRelatedTags.map((tag) => (
+                    <button
+                      key={`${activeCharacter.id}:related:${tag.id}`}
+                      type="button"
+                      title={tag.translatedName ? `${tag.displayName} [${tag.translatedName}]` : tag.displayName}
+                      onMouseDown={(event) => {
+                        event.preventDefault()
+                        onSelectRelatedTag(tag.name)
+                      }}
+                      className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-surface-lowest px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high"
+                    >
+                      <span className="truncate">{formatPromptAutocompleteLabel({ label: tag.displayName, translatedName: tag.translatedName, usageCount: tag.usageCount })}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-1 py-1 text-xs text-muted-foreground">이 분류에는 연관 태그가 없어.</div>
+              )}
+            </div>
+          </div>
+          {renderPager(relatedTagPage, relatedTagPageCount, setRelatedTagPage)}
+        </>
+      ) : (
+        <>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            {isLoading ? (
+              <div className="px-2 py-2 text-xs text-muted-foreground">불러오는 중…</div>
+            ) : visibleSuggestions.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {visibleSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.id}
+                    type="button"
+                    title={getPromptAutocompleteKindLabel(suggestion.kind)}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                      onSelect(suggestion)
                     }}
                     className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-surface-lowest px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high"
                   >
-                    <span className="truncate">{formatPromptAutocompleteLabel({ label: tag.displayName, translatedName: tag.translatedName, usageCount: tag.usageCount })}</span>
+                    <span className="truncate">{formatPromptAutocompleteLabel(suggestion)}</span>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="px-1 py-1 text-xs text-muted-foreground">이 분류에는 연관 태그가 없어.</div>
+              <div className="px-2 py-2 text-xs text-muted-foreground">추천 없음</div>
             )}
-            {renderPager(relatedTagPage, relatedTagPageCount, setRelatedTagPage)}
           </div>
-        ) : isLoading ? (
-          <div className="px-2 py-2 text-xs text-muted-foreground">불러오는 중…</div>
-        ) : visibleSuggestions.length > 0 ? (
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-1.5">
-              {visibleSuggestions.map((suggestion) => (
-                <button
-                  key={suggestion.id}
-                  type="button"
-                  title={getPromptAutocompleteKindLabel(suggestion.kind)}
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                    onSelect(suggestion)
-                  }}
-                  className="inline-flex max-w-full items-center rounded-full border border-border/70 bg-surface-lowest px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high"
-                >
-                  <span className="truncate">{formatPromptAutocompleteLabel(suggestion)}</span>
-                </button>
-              ))}
-            </div>
-            {renderPager(suggestionPage, suggestionPageCount, setSuggestionPage)}
-          </div>
-        ) : (
-          <div className="px-2 py-2 text-xs text-muted-foreground">추천 없음</div>
-        )}
-      </div>
+          {!isLoading && visibleSuggestions.length > 0 ? renderPager(suggestionPage, suggestionPageCount, setSuggestionPage) : null}
+        </>
+      )}
     </WildcardInlinePickerPopup>
   )
 }
