@@ -53,11 +53,12 @@ export function PromptSidebar({
   canMoveGroupDown = false,
 }: PromptSidebarProps) {
   const { t, formatNumber } = useI18n()
+  const visibleGroupCount = groups.filter((group) => group.id === 0 || Boolean(group.is_visible)).length
 
   return (
     <ExplorerSidebar
       title="Groups"
-      badge={<Badge variant="outline">{formatNumber(groups.length)}</Badge>}
+      badge={<Badge variant="outline">{formatNumber(visibleGroupCount)}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:prompts:sidebar-locked"
       className={cn('sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}

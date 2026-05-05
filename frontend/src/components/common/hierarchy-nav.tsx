@@ -33,7 +33,7 @@ interface HierarchyNavProps<T> {
 }
 
 /** Build a parent-to-children map for hierarchy navigation rendering. */
-function buildHierarchyMap<T>(items: T[], getParentId: (item: T) => HierarchyNodeId | null | undefined, sortItems?: (left: T, right: T) => number) {
+function buildHierarchyMap<T>(items: T[], getId: (item: T) => HierarchyNodeId, getParentId: (item: T) => HierarchyNodeId | null | undefined, sortItems?: (left: T, right: T) => number) {
   const map = new Map<HierarchyNodeId | null, T[]>()
 
   for (const item of items) {
@@ -43,10 +43,17 @@ function buildHierarchyMap<T>(items: T[], getParentId: (item: T) => HierarchyNod
     map.set(parentId, siblings)
   }
 
-  if (sortItems) {
-    for (const siblings of map.values()) {
-      siblings.sort(sortItems)
-    }
+  for (const siblings of map.values()) {
+    siblings.sort((left, right) => {
+      const leftHasChildren = (map.get(getId(left)) ?? []).length > 0
+      const rightHasChildren = (map.get(getId(right)) ?? []).length > 0
+
+      if (leftHasChildren !== rightHasChildren) {
+        return leftHasChildren ? -1 : 1
+      }
+
+      return sortItems?.(left, right) ?? 0
+    })
   }
 
   return map
@@ -86,7 +93,7 @@ export function HierarchyNav<T>({
   defaultExpandedIds = EMPTY_EXPANDED_IDS,
   className,
 }: HierarchyNavProps<T>) {
-  const itemsByParentId = useMemo(() => buildHierarchyMap(items, getParentId, sortItems), [items, getParentId, sortItems])
+  const itemsByParentId = useMemo(() => buildHierarchyMap(items, getId, getParentId, sortItems), [items, getId, getParentId, sortItems])
   const parentById = useMemo(
     () => new Map(items.map((item) => [getId(item), getParentId(item) ?? null] as const)),
     [items, getId, getParentId],

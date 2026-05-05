@@ -34,11 +34,16 @@ type GroupEditorState =
   | { mode: 'edit'; group: PromptGroupRecord }
   | null
 
-type PromptPageTopTab = PromptTypeFilter | 'wildcards' | 'danbooru'
+type PromptPageTopTab = PromptTypeFilter | 'wildcards' | 'presets' | 'danbooru'
 
 const WildcardGenerationPanelLazy = lazy(async () => {
   const module = await import('@/features/image-generation/components/wildcard-generation-panel')
   return { default: module.WildcardGenerationPanel }
+})
+
+const PromptPresetPanelLazy = lazy(async () => {
+  const module = await import('./components/prompt-preset-panel')
+  return { default: module.PromptPresetPanel }
 })
 
 const PromptDanbooruBrowserPanelLazy = lazy(async () => {
@@ -60,11 +65,12 @@ export function PromptPage() {
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const canViewWildcards = hasAuthPermission(permissionKeys, 'page.wildcards.view')
   const promptPageTabs = useMemo<Array<{ value: PromptPageTopTab; label: string }>>(() => [
-    { value: 'positive', label: 'Positive' },
-    { value: 'negative', label: 'Negative' },
-    { value: 'auto', label: 'Auto' },
-    { value: 'danbooru', label: 'Danbooru' },
-    ...(canViewWildcards ? [{ value: 'wildcards' as const, label: 'Wildcard' }] : []),
+    { value: 'positive', label: t({ ko: '긍정', en: 'Positive' }) },
+    { value: 'negative', label: t({ ko: '부정', en: 'Negative' }) },
+    { value: 'auto', label: t({ ko: '자동', en: 'Auto' }) },
+    { value: 'danbooru', label: t({ ko: '단부루', en: 'Danbooru' }) },
+    ...(canViewWildcards ? [{ value: 'wildcards' as const, label: t({ ko: '와일드카드', en: 'Wildcard' }) }] : []),
+    { value: 'presets', label: t({ ko: '프리셋', en: 'Preset' }) },
   ], [canViewWildcards, t])
 
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
@@ -217,7 +223,7 @@ export function PromptPage() {
   const handleChangeTopTab = (nextTab: PromptPageTopTab) => {
     setActiveTopTab(nextTab)
 
-    if (nextTab === 'wildcards' || nextTab === 'danbooru') {
+    if (nextTab === 'wildcards' || nextTab === 'presets' || nextTab === 'danbooru') {
       setSelectedGroupId(undefined)
       setPage(1)
       return
@@ -388,6 +394,10 @@ export function PromptPage() {
       {activeTopTab === 'wildcards' ? (
         <Suspense fallback={<PanelFallback />}>
           <WildcardGenerationPanelLazy refreshNonce={0} />
+        </Suspense>
+      ) : activeTopTab === 'presets' ? (
+        <Suspense fallback={<PanelFallback />}>
+          <PromptPresetPanelLazy />
         </Suspense>
       ) : activeTopTab === 'danbooru' ? (
         <Suspense fallback={<PanelFallback />}>

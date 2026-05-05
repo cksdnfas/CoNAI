@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { AlertTriangle, WandSparkles } from 'lucide-react'
+import { WandSparkles } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,33 +16,39 @@ interface PromptDanbooruGroupingModalProps {
   onError: (message: string) => void
 }
 
+function PreviewMetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-sm border border-border/75 bg-surface-container/70 px-3 py-2.5">
+      <div className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">{label}</div>
+      <div className="mt-1 font-mono text-lg font-semibold leading-none text-foreground">{value}</div>
+    </div>
+  )
+}
+
+function TypeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-surface-low px-2.5 py-2">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-0.5 font-mono text-sm font-semibold text-foreground">{value}</div>
+    </div>
+  )
+}
+
 function TypeSummaryCard({ item }: { item: DanbooruPromptGroupingTypeResult }) {
   const { t, formatNumber } = useI18n()
   const matchRate = item.eligiblePrompts > 0 ? Math.round((item.matchedPrompts / item.eligiblePrompts) * 1000) / 10 : 0
 
   return (
-    <div className="rounded-sm border border-border/70 bg-surface-container/35 p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <div className="rounded-sm border border-border/75 bg-surface-container/55 p-3">
+      <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold capitalize text-foreground">{item.type}</div>
-        <Badge variant="outline">{matchRate}%</Badge>
+        <Badge variant="outline" className="shrink-0 font-mono">{matchRate}%</Badge>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
-        <div>
-          <div>{t({ ko: '대상', en: 'Eligible' })}</div>
-          <div className="font-mono text-foreground">{formatNumber(item.eligiblePrompts)}</div>
-        </div>
-        <div>
-          <div>{t({ ko: '매칭', en: 'Matched' })}</div>
-          <div className="font-mono text-foreground">{formatNumber(item.matchedPrompts)}</div>
-        </div>
-        <div>
-          <div>{t({ ko: '그룹', en: 'Groups' })}</div>
-          <div className="font-mono text-foreground">{formatNumber(item.matchedGroups)}</div>
-        </div>
-        <div>
-          <div>{t({ ko: '기존 분류 제외', en: 'Skipped assigned' })}</div>
-          <div className="font-mono text-foreground">{formatNumber(item.skippedAssignedPrompts)}</div>
-        </div>
+      <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-sm border border-border/70 bg-border/70 text-xs sm:grid-cols-4">
+        <TypeMetric label={t({ ko: '대상', en: 'Eligible' })} value={formatNumber(item.eligiblePrompts)} />
+        <TypeMetric label={t({ ko: '매칭', en: 'Matched' })} value={formatNumber(item.matchedPrompts)} />
+        <TypeMetric label={t({ ko: '그룹', en: 'Groups' })} value={formatNumber(item.matchedGroups)} />
+        <TypeMetric label={t({ ko: '제외', en: 'Skipped' })} value={formatNumber(item.skippedAssignedPrompts)} />
       </div>
       {item.sampleUnmatchedPrompts.length > 0 ? (
         <div className="mt-3 border-t border-border/60 pt-2 text-xs text-muted-foreground">
@@ -91,26 +97,12 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
       open={open}
       onClose={onClose}
       title={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru-based group setup' })}
-      description={t({ ko: 'Positive, Auto, Negative 3가지 수집 목록 모두에 적용해. 기존 Danbooru 자동 그룹은 매번 지우고 다시 만들어.', en: 'Applies to Positive, Auto, and Negative collections. Existing Danbooru auto groups are rebuilt each time.' })}
       widthClassName="max-w-4xl"
     >
       <div className="space-y-4">
-        <Alert>
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>{includeAssignedPrompts ? t({ ko: '수동 분류 포함', en: 'Manual assignments included' }) : t({ ko: '수동 분류 보호', en: 'Manual assignments protected' })}</AlertTitle>
-          <AlertDescription>
-            {includeAssignedPrompts
-              ? t({ ko: '사용자가 직접 분류한 태그까지 포함해 Danbooru 기준으로 다시 배치해. LoRA 보호 그룹은 건드리지 않아.', en: 'Manually assigned tags are also reassigned by Danbooru taxonomy. Protected LoRA groups are left untouched.' })
-              : t({ ko: '미분류 항목과 기존 Danbooru 자동 그룹 항목만 다시 배치해. 사용자가 직접 분류한 태그는 유지돼.', en: 'Only unclassified items and existing Danbooru auto-group items are reassigned. Manual assignments stay in place.' })}
-          </AlertDescription>
-        </Alert>
-
-        <label className="flex items-start gap-3 rounded-sm border border-border/70 bg-surface-low p-3 text-sm">
-          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" checked={includeAssignedPrompts} onChange={(event) => setIncludeAssignedPrompts(event.target.checked)} />
-          <span className="space-y-1">
-            <span className="block font-medium text-foreground">{t({ ko: '사용자가 직접 분류한 태그도 포함', en: 'Include manually classified tags' })}</span>
-            <span className="block text-xs text-muted-foreground">{t({ ko: '켜면 기존 수동 group_id도 Danbooru taxonomy 기준으로 재분류해.', en: 'When enabled, existing manual group assignments are also reclassified by Danbooru taxonomy.' })}</span>
-          </span>
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-sm border border-border/75 bg-surface-container/70 px-3 py-2.5 text-sm transition-colors hover:bg-surface-high/70">
+          <span className="font-medium text-foreground">{t({ ko: '사용자가 직접 분류한 태그도 포함', en: 'Include manually classified tags' })}</span>
+          <input type="checkbox" className="h-4 w-4 shrink-0 accent-primary" checked={includeAssignedPrompts} onChange={(event) => setIncludeAssignedPrompts(event.target.checked)} />
         </label>
 
         {previewQuery.isLoading ? (
@@ -127,22 +119,10 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
         {preview ? (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-sm border border-border/70 bg-surface-low p-3">
-                <div className="text-xs text-muted-foreground">{t({ ko: '대상 프롬프트', en: 'Eligible prompts' })}</div>
-                <div className="mt-1 font-mono text-lg font-semibold">{formatNumber(preview.totals.eligiblePrompts)}</div>
-              </div>
-              <div className="rounded-sm border border-border/70 bg-surface-low p-3">
-                <div className="text-xs text-muted-foreground">{t({ ko: '매칭 프롬프트', en: 'Matched prompts' })}</div>
-                <div className="mt-1 font-mono text-lg font-semibold">{formatNumber(preview.totals.matchedPrompts)}</div>
-              </div>
-              <div className="rounded-sm border border-border/70 bg-surface-low p-3">
-                <div className="text-xs text-muted-foreground">{t({ ko: '생성 기준 그룹', en: 'Matched groups' })}</div>
-                <div className="mt-1 font-mono text-lg font-semibold">{formatNumber(preview.totals.matchedGroups)}</div>
-              </div>
-              <div className="rounded-sm border border-border/70 bg-surface-low p-3">
-                <div className="text-xs text-muted-foreground">{t({ ko: '기존 분류 제외', en: 'Skipped assigned' })}</div>
-                <div className="mt-1 font-mono text-lg font-semibold">{formatNumber(preview.totals.skippedAssignedPrompts)}</div>
-              </div>
+              <PreviewMetricCard label={t({ ko: '대상 프롬프트', en: 'Eligible prompts' })} value={formatNumber(preview.totals.eligiblePrompts)} />
+              <PreviewMetricCard label={t({ ko: '매칭 프롬프트', en: 'Matched prompts' })} value={formatNumber(preview.totals.matchedPrompts)} />
+              <PreviewMetricCard label={t({ ko: '생성 기준 그룹', en: 'Matched groups' })} value={formatNumber(preview.totals.matchedGroups)} />
+              <PreviewMetricCard label={t({ ko: '기존 분류 제외', en: 'Skipped assigned' })} value={formatNumber(preview.totals.skippedAssignedPrompts)} />
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">

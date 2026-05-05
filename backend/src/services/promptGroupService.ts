@@ -205,6 +205,7 @@ export class PromptGroupService {
   ): Promise<PromptGroupWithPrompts[]> {
     try {
       const groups = await PromptGroupModel.findAllWithCounts(includeHidden, type);
+      const visibleGroups = includeHidden ? groups : [...this.getHiddenDanbooruRootGroupsWithCounts(type), ...groups];
 
       // "Unclassified" 그룹 추가 (group_id가 NULL인 프롬프트들)
       const unclassifiedCount = await this.getUnclassifiedPromptCount(type);
@@ -220,7 +221,7 @@ export class PromptGroupService {
         updated_at: ''
       };
 
-      return [unclassifiedGroup, ...groups];
+      return [unclassifiedGroup, ...visibleGroups];
     } catch (error) {
       console.error('Error getting all groups:', error);
       throw error;
@@ -661,6 +662,24 @@ export class PromptGroupService {
     return language === 'ko' ? DANBOORU_GROUP_ROOT_NAME_KO : DANBOORU_GROUP_ROOT_NAME_EN;
   }
 
+  private static getHiddenDanbooruRootGroupsWithCounts(type: PromptCollectionType): PromptGroupWithPrompts[] {
+    const groupTableName = getTableName(type);
+    const promptTableName = getPromptTableName(type);
+    const placeholders = DANBOORU_GROUP_ROOT_NAMES.map(() => '?').join(',');
+    return db.prepare(`
+      SELECT
+        g.*,
+        COUNT(p.id) as prompt_count
+      FROM ${groupTableName} g
+      LEFT JOIN ${promptTableName} p ON g.id = p.group_id
+      WHERE g.is_visible = 0
+        AND g.parent_id IS NULL
+        AND g.group_name IN (${placeholders})
+      GROUP BY g.id
+      ORDER BY g.display_order ASC
+    `).all(...DANBOORU_GROUP_ROOT_NAMES) as PromptGroupWithPrompts[];
+  }
+
   private static getDanbooruRootGroupIds(type: PromptCollectionType): number[] {
     const tableName = getTableName(type);
     const placeholders = DANBOORU_GROUP_ROOT_NAMES.map(() => '?').join(',');
@@ -866,7 +885,7 @@ export class PromptGroupService {
     return this.summarizeDanbooruGrouping(options, database, byType);
   }
 
-  private static findOrCreateDanbooruGroup(type: PromptCollectionType, groupName: string, parentId: number | null, fallbackSuffix: string): { id: number; created: boolean } {
+  private static findOrCreateDanbooruGroup(type: PromptCollectionType, groupName: string, parentId: number | null, fallbackSuffix: string, isVisible = true): { id: number; created: boolean } {
     const tableName = getTableName(type);
     const findByName = (name: string) => db.prepare(`SELECT id, parent_id FROM ${tableName} WHERE group_name = ?`).get(name) as { id: number; parent_id: number | null } | undefined;
     const existing = findByName(groupName);
@@ -893,8 +912,8 @@ export class PromptGroupService {
     const maxOrderRow = db.prepare(`SELECT COALESCE(MAX(display_order), 0) AS maxOrder FROM ${tableName}`).get() as { maxOrder: number };
     const info = db.prepare(`
       INSERT INTO ${tableName} (group_name, display_order, is_visible, parent_id, created_at, updated_at)
-      VALUES (?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `).run(nextGroupName, maxOrderRow.maxOrder + 1, parentId);
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(nextGroupName, maxOrderRow.maxOrder + 1, isVisible ? 1 : 0, parentId);
 
     return { id: info.lastInsertRowid as number, created: true };
   }
@@ -962,7 +981,7 @@ export class PromptGroupService {
         };
       }
 
-      const rootGroup = this.findOrCreateDanbooruGroup(type, this.getDanbooruGroupRootName(options.language), null, 'root');
+      const rootGroup = this.findOrCreateDanbooruGroup(type, this.getDanbooruGroupRootName(options.language), null, 'root', options.includeAssignedPrompts);
       if (rootGroup.created) createdGroups += 1;
       else reusedGroups += 1;
 

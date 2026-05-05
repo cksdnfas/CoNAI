@@ -14,13 +14,15 @@ interface PromptTreeProps {
 
 export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGroup }: PromptTreeProps) {
   const { formatNumber, t } = useI18n()
+  const treeGroups = useMemo(() => groups.filter((group) => group.id === 0 || Boolean(group.is_visible)), [groups])
+  const visibleGroupIds = useMemo(() => new Set(treeGroups.map((group) => group.id)), [treeGroups])
   const { childCountByGroupId, totalPromptCountByGroupId } = useMemo(() => {
     const childrenByParentId = new Map<number, PromptGroupRecord[]>()
     const childCounts = new Map<number, number>()
     const totals = new Map<number, number>()
 
-    for (const group of groups) {
-      if (group.parent_id == null) continue
+    for (const group of treeGroups) {
+      if (group.parent_id == null || !visibleGroupIds.has(group.parent_id)) continue
       const children = childrenByParentId.get(group.parent_id) ?? []
       children.push(group)
       childrenByParentId.set(group.parent_id, children)
@@ -32,7 +34,7 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
       if (visiting.has(groupId)) return 0
 
       visiting.add(groupId)
-      const group = groups.find((item) => item.id === groupId)
+      const group = treeGroups.find((item) => item.id === groupId)
       let total = group?.prompt_count ?? 0
       for (const child of childrenByParentId.get(groupId) ?? []) {
         total += collectTotal(child.id, visiting)
@@ -42,7 +44,7 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
       return total
     }
 
-    for (const group of groups) {
+    for (const group of treeGroups) {
       collectTotal(group.id)
     }
 
@@ -50,7 +52,7 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
       childCountByGroupId: childCounts,
       totalPromptCountByGroupId: totals,
     }
-  }, [groups])
+  }, [treeGroups, visibleGroupIds])
 
   return (
     <div className="space-y-3">
@@ -66,12 +68,12 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
       </button>
 
       <HierarchyNav
-        items={groups}
+        items={treeGroups}
         expandable
         selectedId={selectedGroupId}
         onSelect={(group) => onSelectGroup(group.id)}
         getId={(group) => group.id}
-        getParentId={(group) => group.parent_id}
+        getParentId={(group) => (group.parent_id != null && visibleGroupIds.has(group.parent_id) ? group.parent_id : null)}
         getLabel={(group) => {
           const directCount = group.prompt_count ?? 0
           const hasChildren = (childCountByGroupId.get(group.id) ?? 0) > 0

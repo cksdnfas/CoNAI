@@ -109,32 +109,29 @@ function PromptGroupingOptionsFlyout({ isOpen, options, onToggle, onChange }: Pr
       panelWidthClassName="w-[min(22rem,calc(100vw-2rem))]"
       icon={<SlidersHorizontal className="h-4 w-4" />}
     >
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <label className={detailSettingsLabelClassName}>{t({ ko: '분류 깊이', en: 'Classification depth' })}</label>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-4 rounded-sm border border-border/75 bg-surface-container/70 px-3 py-2.5">
+          <label className={detailSettingsLabelClassName} htmlFor="prompt-grouping-depth-input">{t({ ko: '분류 깊이', en: 'Classification depth' })}</label>
           <input
+            id="prompt-grouping-depth-input"
             type="number"
             min={PROMPT_GROUPING_DEPTH_MIN}
             max={PROMPT_GROUPING_DEPTH_MAX}
             step={1}
             value={options.classificationDepth}
             onChange={(event) => onChange({ classificationDepth: clampPromptGroupingDepth(Number(event.target.value)) })}
-            className="h-9 w-24 rounded-sm border border-border bg-surface-low px-3 text-sm text-foreground outline-none focus:border-primary"
+            className="h-8 w-16 rounded-sm border border-border bg-surface-low px-2 text-center font-mono text-sm font-semibold text-foreground outline-none transition-colors focus:border-primary"
           />
-          <p className="text-xs leading-5 text-muted-foreground">{t({ ko: '1차는 루트 그룹이야. 숫자를 올리면 하위 분류까지 합쳐서 쪼개 보여줘.', en: 'Depth 1 is the root group. Increase it to split by deeper child classifications.' })}</p>
         </div>
 
-        <label className="flex items-start gap-3 text-sm text-foreground">
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-sm border border-border/75 bg-surface-container/70 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-surface-high/70">
+          <span className="font-medium">{t({ ko: 'Danbooru를 루트 그룹으로 취급', en: 'Treat Danbooru as the root group' })}</span>
           <input
             type="checkbox"
             checked={options.treatDanbooruAsRoot}
             onChange={(event) => onChange({ treatDanbooruAsRoot: event.target.checked })}
-            className="mt-0.5 h-4 w-4 accent-primary"
+            className="h-4 w-4 shrink-0 accent-primary"
           />
-          <span className="space-y-1">
-            <span className="block font-medium">{t({ ko: 'Danbooru를 루트 그룹으로 취급', en: 'Treat Danbooru as the root group' })}</span>
-            <span className="block text-xs leading-5 text-muted-foreground">{t({ ko: '꺼두면 Danbooru는 1차 분류에서 제외하고, 그 자식 그룹부터 1차로 보여줘.', en: 'When off, Danbooru is skipped at depth 1 and its child groups become the first displayed level.' })}</span>
-          </span>
         </label>
       </div>
     </DetailSettingsFlyout>
