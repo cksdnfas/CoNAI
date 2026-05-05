@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, FilePenLine, Settings2 } from 'lucide-react'
+import { Copy, FilePenLine, Settings2, SlidersHorizontal } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -18,9 +18,10 @@ import { useI18n } from '@/i18n'
 import { getAppSettings, resolvePromptGroups, updateKaloscopeSettings } from '@/lib/api'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { copyTextToClipboard } from '@/lib/clipboard'
-import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms } from '@/lib/image-extracted-prompts'
+import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms, type PromptGroupingDisplayOptions } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
+import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
 import { formatBytes, getImageArtistPromptSection, getImageAutoPromptContent, getImageAutoPromptCopyText, getImageGenerationParamItems } from './image-detail-utils'
 
 interface ImageDetailMetaCardProps {
@@ -30,6 +31,13 @@ interface ImageDetailMetaCardProps {
 type PromptDisplayMode = 'plain' | 'grouped'
 
 const PROMPT_DISPLAY_MODE_STORAGE_KEY = 'conai:image-detail:prompt-display-mode'
+const PROMPT_GROUPING_OPTIONS_STORAGE_KEY = 'conai:image-detail:prompt-grouping-options'
+const DEFAULT_PROMPT_GROUPING_OPTIONS: PromptGroupingDisplayOptions = {
+  classificationDepth: 1,
+  treatDanbooruAsRoot: false,
+}
+const PROMPT_GROUPING_DEPTH_MIN = 1
+const PROMPT_GROUPING_DEPTH_MAX = 6
 
 function loadPromptDisplayMode(): PromptDisplayMode {
   if (typeof window === 'undefined') {
@@ -47,6 +55,92 @@ function persistPromptDisplayMode(mode: PromptDisplayMode) {
   window.localStorage.setItem(PROMPT_DISPLAY_MODE_STORAGE_KEY, mode)
 }
 
+function clampPromptGroupingDepth(value: number) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_PROMPT_GROUPING_OPTIONS.classificationDepth
+  }
+
+  return Math.max(PROMPT_GROUPING_DEPTH_MIN, Math.min(PROMPT_GROUPING_DEPTH_MAX, Math.trunc(value)))
+}
+
+function normalizePromptGroupingOptions(value: Partial<PromptGroupingDisplayOptions> | null | undefined): PromptGroupingDisplayOptions {
+  return {
+    classificationDepth: clampPromptGroupingDepth(Number(value?.classificationDepth ?? DEFAULT_PROMPT_GROUPING_OPTIONS.classificationDepth)),
+    treatDanbooruAsRoot: value?.treatDanbooruAsRoot ?? DEFAULT_PROMPT_GROUPING_OPTIONS.treatDanbooruAsRoot,
+  }
+}
+
+function loadPromptGroupingOptions(): PromptGroupingDisplayOptions {
+  if (typeof window === 'undefined') {
+    return DEFAULT_PROMPT_GROUPING_OPTIONS
+  }
+
+  try {
+    return normalizePromptGroupingOptions(JSON.parse(window.localStorage.getItem(PROMPT_GROUPING_OPTIONS_STORAGE_KEY) || 'null') as Partial<PromptGroupingDisplayOptions> | null)
+  } catch {
+    return DEFAULT_PROMPT_GROUPING_OPTIONS
+  }
+}
+
+function persistPromptGroupingOptions(options: PromptGroupingDisplayOptions) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(PROMPT_GROUPING_OPTIONS_STORAGE_KEY, JSON.stringify(options))
+}
+
+interface PromptGroupingOptionsFlyoutProps {
+  isOpen: boolean
+  options: PromptGroupingDisplayOptions
+  onToggle: () => void
+  onChange: (patch: Partial<PromptGroupingDisplayOptions>) => void
+}
+
+function PromptGroupingOptionsFlyout({ isOpen, options, onToggle, onChange }: PromptGroupingOptionsFlyoutProps) {
+  const { t } = useI18n()
+
+  return (
+    <DetailSettingsFlyout
+      isOpen={isOpen}
+      onToggle={onToggle}
+      triggerLabel={isOpen ? t({ ko: '프롬프트 그룹 표시 옵션 닫기', en: 'Close prompt grouping options' }) : t({ ko: '프롬프트 그룹 표시 옵션 열기', en: 'Open prompt grouping options' })}
+      triggerTitle={t({ ko: '프롬프트 그룹 표시 옵션', en: 'Prompt grouping display options' })}
+      panelWidthClassName="w-[min(22rem,calc(100vw-2rem))]"
+      icon={<SlidersHorizontal className="h-4 w-4" />}
+    >
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <label className={detailSettingsLabelClassName}>{t({ ko: '분류 깊이', en: 'Classification depth' })}</label>
+          <input
+            type="number"
+            min={PROMPT_GROUPING_DEPTH_MIN}
+            max={PROMPT_GROUPING_DEPTH_MAX}
+            step={1}
+            value={options.classificationDepth}
+            onChange={(event) => onChange({ classificationDepth: clampPromptGroupingDepth(Number(event.target.value)) })}
+            className="h-9 w-24 rounded-sm border border-border bg-surface-low px-3 text-sm text-foreground outline-none focus:border-primary"
+          />
+          <p className="text-xs leading-5 text-muted-foreground">{t({ ko: '1차는 루트 그룹이야. 숫자를 올리면 하위 분류까지 합쳐서 쪼개 보여줘.', en: 'Depth 1 is the root group. Increase it to split by deeper child classifications.' })}</p>
+        </div>
+
+        <label className="flex items-start gap-3 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={options.treatDanbooruAsRoot}
+            onChange={(event) => onChange({ treatDanbooruAsRoot: event.target.checked })}
+            className="mt-0.5 h-4 w-4 accent-primary"
+          />
+          <span className="space-y-1">
+            <span className="block font-medium">{t({ ko: 'Danbooru를 루트 그룹으로 취급', en: 'Treat Danbooru as the root group' })}</span>
+            <span className="block text-xs leading-5 text-muted-foreground">{t({ ko: '꺼두면 Danbooru는 1차 분류에서 제외하고, 그 자식 그룹부터 1차로 보여줘.', en: 'When off, Danbooru is skipped at depth 1 and its child groups become the first displayed level.' })}</span>
+          </span>
+        </label>
+      </div>
+    </DetailSettingsFlyout>
+  )
+}
+
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -54,12 +148,22 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const [promptDisplayMode, setPromptDisplayMode] = useState<PromptDisplayMode>(() => loadPromptDisplayMode())
+  const [promptGroupingOptions, setPromptGroupingOptions] = useState<PromptGroupingDisplayOptions>(() => loadPromptGroupingOptions())
+  const [isPromptGroupingOptionsOpen, setIsPromptGroupingOptionsOpen] = useState(false)
   const [isArtistPromptSettingsOpen, setIsArtistPromptSettingsOpen] = useState(false)
   const extractedPromptCards = useMemo(() => getImageExtractedPromptCards(image, t), [image, t])
 
   const handlePromptDisplayModeChange = (nextMode: PromptDisplayMode) => {
     setPromptDisplayMode(nextMode)
     persistPromptDisplayMode(nextMode)
+  }
+
+  const handlePromptGroupingOptionsChange = (patch: Partial<PromptGroupingDisplayOptions>) => {
+    setPromptGroupingOptions((current) => {
+      const nextOptions = normalizePromptGroupingOptions({ ...current, ...patch })
+      persistPromptGroupingOptions(nextOptions)
+      return nextOptions
+    })
   }
   const positivePromptTerms = useMemo(() => getImagePromptTerms(image, 'positive'), [image])
   const negativePromptTerms = useMemo(() => getImagePromptTerms(image, 'negative'), [image])
@@ -117,7 +221,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         }
 
         if (positivePromptGroupQuery.data) {
-          const groupedSections = buildGroupedPromptSections(positivePromptTerms, positivePromptGroupQuery.data)
+          const groupedSections = buildGroupedPromptSections(positivePromptTerms, positivePromptGroupQuery.data, promptGroupingOptions)
           const groupedText = formatGroupedPromptText(groupedSections)
           return { ...item, text: groupedText || item.text, groupedSections }
         }
@@ -129,7 +233,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         }
 
         if (negativePromptGroupQuery.data) {
-          const groupedSections = buildGroupedPromptSections(negativePromptTerms, negativePromptGroupQuery.data)
+          const groupedSections = buildGroupedPromptSections(negativePromptTerms, negativePromptGroupQuery.data, promptGroupingOptions)
           const groupedText = formatGroupedPromptText(groupedSections)
           return { ...item, text: groupedText || item.text, groupedSections }
         }
@@ -146,6 +250,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     positivePromptGroupQuery.isPending,
     positivePromptTerms,
     promptDisplayMode,
+    promptGroupingOptions,
     t,
   ])
 
@@ -225,15 +330,23 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[11px] uppercase tracking-[0.18em]">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</p>
               {canTogglePromptGrouping ? (
-                <SegmentedControl
-                  value={promptDisplayMode}
-                  items={[
-                    { value: 'plain', label: t('images.components.detail.image.detail.meta.card.plain') },
-                    { value: 'grouped', label: t('images.components.detail.image.detail.meta.card.group') },
-                  ]}
-                  onChange={(nextMode) => handlePromptDisplayModeChange(nextMode as PromptDisplayMode)}
-                  size="xs"
-                />
+                <div className="flex items-center gap-2">
+                  <SegmentedControl
+                    value={promptDisplayMode}
+                    items={[
+                      { value: 'plain', label: t('images.components.detail.image.detail.meta.card.plain') },
+                      { value: 'grouped', label: t('images.components.detail.image.detail.meta.card.group') },
+                    ]}
+                    onChange={(nextMode) => handlePromptDisplayModeChange(nextMode as PromptDisplayMode)}
+                    size="xs"
+                  />
+                  <PromptGroupingOptionsFlyout
+                    isOpen={isPromptGroupingOptionsOpen}
+                    options={promptGroupingOptions}
+                    onToggle={() => setIsPromptGroupingOptionsOpen((current) => !current)}
+                    onChange={handlePromptGroupingOptionsChange}
+                  />
+                </div>
               ) : null}
             </div>
             <div className="mt-3">

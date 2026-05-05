@@ -10,6 +10,16 @@ export interface ExtractedPromptGroupedSection {
   kind: 'root' | 'child' | 'unclassified'
 }
 
+export interface PromptGroupingDisplayOptions {
+  classificationDepth: number
+  treatDanbooruAsRoot: boolean
+}
+
+const DEFAULT_PROMPT_GROUPING_DISPLAY_OPTIONS: PromptGroupingDisplayOptions = {
+  classificationDepth: 1,
+  treatDanbooruAsRoot: false,
+}
+
 export interface ExtractedPromptCardItem {
   id: string
   title: string
@@ -226,12 +236,35 @@ function getPromptGroupingPath(groupInfo?: PromptGroupResolveItem['group_info'])
   return [groupInfo.group_name]
 }
 
-function getPromptGroupingKind(groupInfo?: PromptGroupResolveItem['group_info']): ExtractedPromptGroupedSection['kind'] {
-  if (!groupInfo || groupInfo.group_name === 'Unclassified') {
+function isDanbooruRootGroupName(value?: string | null) {
+  const normalized = value?.trim().toLowerCase()
+  return normalized === 'danbooru' || normalized === '단부루'
+}
+
+function normalizePromptGroupingDisplayOptions(options?: Partial<PromptGroupingDisplayOptions>): PromptGroupingDisplayOptions {
+  const parsedDepth = Number(options?.classificationDepth)
+  return {
+    classificationDepth: Number.isFinite(parsedDepth) ? Math.max(1, Math.min(6, Math.trunc(parsedDepth))) : DEFAULT_PROMPT_GROUPING_DISPLAY_OPTIONS.classificationDepth,
+    treatDanbooruAsRoot: options?.treatDanbooruAsRoot ?? DEFAULT_PROMPT_GROUPING_DISPLAY_OPTIONS.treatDanbooruAsRoot,
+  }
+}
+
+function getVisiblePromptGroupingPath(groupInfo: PromptGroupResolveItem['group_info'] | undefined, options: PromptGroupingDisplayOptions) {
+  const sourcePath = getPromptGroupingPath(groupInfo)
+  const shiftedPath = !options.treatDanbooruAsRoot && isDanbooruRootGroupName(sourcePath[0])
+    ? sourcePath.slice(1)
+    : sourcePath
+  const visiblePath = (shiftedPath.length > 0 ? shiftedPath : sourcePath).slice(0, options.classificationDepth)
+
+  return visiblePath.length > 0 ? visiblePath : ['미분류']
+}
+
+function getPromptGroupingKind(groupInfo: PromptGroupResolveItem['group_info'] | undefined, visiblePath: string[]): ExtractedPromptGroupedSection['kind'] {
+  if (!groupInfo || groupInfo.group_name === 'Unclassified' || visiblePath[0] === '미분류') {
     return 'unclassified'
   }
 
-  return groupInfo.parent_id === null || groupInfo.parent_id === undefined ? 'root' : 'child'
+  return visiblePath.length <= 1 ? 'root' : 'child'
 }
 
 export function getImagePromptTerms(image: ImageRecord, type: 'positive' | 'negative') {
@@ -263,11 +296,16 @@ export function getImageLoraModels(image: ImageRecord) {
   ])
 }
 
-export function buildGroupedPromptSections(terms: string[], resolvedItems: PromptGroupResolveItem[]) {
+export function buildGroupedPromptSections(
+  terms: string[],
+  resolvedItems: PromptGroupResolveItem[],
+  options?: Partial<PromptGroupingDisplayOptions>,
+) {
   if (terms.length === 0) {
     return [] as ExtractedPromptGroupedSection[]
   }
 
+  const displayOptions = normalizePromptGroupingDisplayOptions(options)
   const resolvedByKey = new Map(
     resolvedItems.map((item) => [item.query.trim().toLowerCase(), item] as const),
   )
@@ -276,10 +314,11 @@ export function buildGroupedPromptSections(terms: string[], resolvedItems: Promp
 
   terms.forEach((term) => {
     const resolvedItem = resolvedByKey.get(term.trim().toLowerCase())
-    const label = getPromptGroupingLabel(resolvedItem?.group_info)
+    const visiblePath = getVisiblePromptGroupingPath(resolvedItem?.group_info, displayOptions)
+    const label = visiblePath.join(' > ') || getPromptGroupingLabel(resolvedItem?.group_info)
     const order = getPromptGroupingOrder(resolvedItem?.group_info)
     const hierarchyPath = getPromptGroupingPath(resolvedItem?.group_info)
-    const kind = getPromptGroupingKind(resolvedItem?.group_info)
+    const kind = getPromptGroupingKind(resolvedItem?.group_info, visiblePath)
     const existing = grouped.get(label)
 
     if (existing) {
