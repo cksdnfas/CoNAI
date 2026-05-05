@@ -1,4 +1,6 @@
+import { buildApiUrl, triggerBlobDownload } from '@/lib/api-client'
 import { requestJson } from './api-image-generation-request'
+import type { ImageDownloadType } from './api-images'
 import type { GenerationHistoryRecord, GenerationServiceType, SaveBrowserImageRecord } from './api-image-generation-types'
 
 export interface GenerationHistoryResponse {
@@ -85,6 +87,30 @@ export async function cleanupFailedGenerationHistory() {
   return requestJson<{ success: boolean; message: string; deleted: number }>('/api/generation-history/cleanup-failed', {
     method: 'POST',
   })
+}
+
+/** Download selected generation-history outputs without applying gallery safety hiding. */
+export async function downloadGenerationHistorySelection(historyIds: number[], type: ImageDownloadType = 'original') {
+  if (historyIds.length === 0) {
+    return
+  }
+
+  const response = await fetch(buildApiUrl('/api/generation-history/download/batch'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/zip',
+    },
+    body: JSON.stringify({ historyIds, type }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Generation history download failed: ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  triggerBlobDownload(blob, `conai-generation-history-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`)
 }
 
 /** Load browser-ready image entries from the runtime save directory. */

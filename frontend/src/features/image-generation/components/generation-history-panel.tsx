@@ -17,7 +17,7 @@ import {
   cleanupFailedGenerationHistory,
   cleanupPublicGenerationWorkflowFailedHistory,
   deleteGenerationHistoryRecord,
-  downloadImageSelection,
+  downloadGenerationHistorySelection,
   getGenerationHistory,
   getGenerationWorkflowHistory,
   getPublicGenerationWorkflowHistory,
@@ -61,13 +61,14 @@ function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['record
   const imageSource = resolveHistoryImageSource(record)
   const displayStatus = resolveHistoryDisplayStatus(record)
   const hasLinkedImage = Boolean(record.actual_composite_hash)
+  const historyMediaBaseUrl = `/api/generation-history/${record.id}`
 
   return {
     id: `generation-history-${record.id}`,
     composite_hash: hasLinkedImage ? imageSource.compositeHash : null,
     original_file_path: null,
-    thumbnail_url: hasLinkedImage ? imageSource.thumbnailUrl : null,
-    image_url: hasLinkedImage ? imageSource.imageUrl : null,
+    thumbnail_url: hasLinkedImage ? `${historyMediaBaseUrl}/thumbnail` : null,
+    image_url: hasLinkedImage ? `${historyMediaBaseUrl}/file` : null,
     mime_type: record.actual_mime_type ?? null,
     width: record.actual_width ?? null,
     height: record.actual_height ?? null,
@@ -227,8 +228,11 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
     [historyRecordMap, selectedHistoryIds],
   )
-  const downloadableCompositeHashes = useMemo(
-    () => Array.from(new Set(selectedHistoryRecords.map((record) => record.composite_hash).filter((hash): hash is string => typeof hash === 'string' && hash.length > 0))),
+  const downloadableHistoryIds = useMemo(
+    () => selectedHistoryRecords
+      .filter((record) => Boolean(record.actual_composite_hash || record.composite_hash))
+      .map((record) => record.id)
+      .filter((id): id is number => typeof id === 'number'),
     [selectedHistoryRecords],
   )
   const historyLabel = isPublicView
@@ -302,13 +306,13 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   }
 
   const handleDownloadSelected = async (type: 'thumbnail' | 'original') => {
-    if (downloadableCompositeHashes.length === 0 || isDownloadingSelection) {
+    if (downloadableHistoryIds.length === 0 || isDownloadingSelection) {
       return
     }
 
     try {
       setIsDownloadingSelection(true)
-      await downloadImageSelection(downloadableCompositeHashes, type)
+      await downloadGenerationHistorySelection(downloadableHistoryIds, type)
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.download.the.selected.images')), tone: 'error' })
     } finally {
@@ -447,10 +451,10 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
       <ImageSelectionBar
         selectedCount={selectedHistoryRecords.length}
-        downloadableCount={downloadableCompositeHashes.length}
+        downloadableCount={downloadableHistoryIds.length}
         isDownloading={isDownloadingSelection}
-        statusText={downloadableCompositeHashes.length > 0
-          ? t('image-generation.components.generation.history.panel.valuedownloadable', { count: formatNumber(downloadableCompositeHashes.length) })
+        statusText={downloadableHistoryIds.length > 0
+          ? t('image-generation.components.generation.history.panel.valuedownloadable', { count: formatNumber(downloadableHistoryIds.length) })
           : t('image-generation.components.generation.history.panel.no.downloadable.results')}
         trailingActions={!isPublicView && isAdmin ? (
           <Button

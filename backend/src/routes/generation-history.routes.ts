@@ -5,6 +5,17 @@ import { GenerationHistoryService } from '../services/generationHistoryService';
 import { asyncHandler } from '../middleware/errorHandler';
 import { requireAdmin } from '../middleware/authMiddleware';
 import { GenerationHistoryModel, ServiceType } from '../models/GenerationHistory';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
+import {
+  buildBatchDownloadArchive,
+  getActiveFileOrBlock,
+  getExistingActiveFilePathOrBlock,
+  serveThumbnailOrOriginal,
+  streamCacheableFile,
+  streamRangeFile,
+  type ImageDownloadType,
+} from './images/query-file-helpers';
+import { resolveUploadsPath } from '../config/runtimePaths';
 
 const router = express.Router();
 
@@ -63,6 +74,64 @@ function applyHistoryAccessScope(req: Request, filters: Record<string, any>, min
   }
 
   return { forceEmpty: false } as const;
+}
+
+function parseImageDownloadType(value: unknown): ImageDownloadType {
+  return value === 'thumbnail' ? 'thumbnail' : 'original';
+}
+
+function canAccessHistoryRecord(req: Request, record: { requested_by_account_id?: number | null; requested_by_account_type?: string | null }) {
+  if (isAdminRequest(req)) {
+    return true;
+  }
+
+  const requesterAccountId = getRequesterAccountId(req);
+  const requesterAccountType = req.session?.accountType;
+  return requesterAccountId !== null
+    && record.requested_by_account_id === requesterAccountId
+    && record.requested_by_account_type === requesterAccountType;
+}
+
+function getHistoryCompositeHash(record: { actual_composite_hash?: string | null; composite_hash?: string | null }) {
+  return record.actual_composite_hash || record.composite_hash || null;
+}
+
+async function getAccessibleHistoryMediaOrBlock(req: Request, res: Response, idValue: string) {
+  const historyId = parseInt(idValue, 10);
+  if (!Number.isInteger(historyId) || historyId <= 0) {
+    res.status(400).json({ success: false, error: 'Invalid generation history id' });
+    return null;
+  }
+
+  const record = await GenerationHistoryService.getHistoryDetail(historyId);
+  if (!record) {
+    res.status(404).json({ success: false, error: 'Generation history not found' });
+    return null;
+  }
+
+  if (!canAccessHistoryRecord(req, record)) {
+    res.status(403).json({ success: false, error: 'Not allowed to access this generation history item' });
+    return null;
+  }
+
+  const compositeHash = getHistoryCompositeHash(record);
+  if (!compositeHash) {
+    res.status(404).json({ success: false, error: 'Generation history image not found' });
+    return null;
+  }
+
+  const metadata = await MediaMetadataModel.findByHash(compositeHash);
+  if (!metadata) {
+    res.status(404).json({ success: false, error: 'Metadata not found' });
+    return null;
+  }
+
+  const file = await getActiveFileOrBlock(res, compositeHash, 'Image file not found');
+  if (!file) {
+    return null;
+  }
+
+  return { record, compositeHash, metadata, file };
 }
 
 /**
@@ -188,6 +257,97 @@ router.get(
       success: true,
       statistics: stats
     });
+  })
+);
+
+/**
+ * POST /api/generation-history/download/batch
+ * Download authorized generation-history outputs without applying gallery safety hiding.
+ */
+router.post(
+  '/download/batch',
+  asyncHandler(async (req: Request, res: Response) => {
+    const historyIds: number[] = Array.isArray(req.body?.historyIds)
+      ? req.body.historyIds
+          .map((value: unknown) => Number(value))
+          .filter((value: number) => Number.isInteger(value) && value > 0)
+      : [];
+    const uniqueHistoryIds = Array.from(new Set(historyIds)).slice(0, 500);
+    const downloadType = parseImageDownloadType(req.body?.type);
+
+    if (uniqueHistoryIds.length === 0) {
+      res.status(400).json({ success: false, error: 'No valid generation history ids provided' });
+      return;
+    }
+
+    const records = uniqueHistoryIds
+      .map((historyId) => GenerationHistoryModel.findByIdWithMetadata(historyId))
+      .filter((record): record is Exclude<ReturnType<typeof GenerationHistoryModel.findByIdWithMetadata>, null> => record !== null)
+      .filter((record) => canAccessHistoryRecord(req, record));
+    const compositeHashes = Array.from(new Set(records.map(getHistoryCompositeHash).filter((hash): hash is string => Boolean(hash))));
+
+    if (compositeHashes.length === 0) {
+      res.status(404).json({ success: false, error: 'No downloadable generation history images were found' });
+      return;
+    }
+
+    const archive = await buildBatchDownloadArchive(compositeHashes, downloadType, { includeHidden: true });
+    if (!archive) {
+      res.status(404).json({ success: false, error: `No downloadable ${downloadType} files were found` });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Length', archive.zipBuffer.length);
+    res.setHeader('Content-Disposition', `attachment; filename="${archive.archiveName}"; filename*=UTF-8''${encodeURIComponent(archive.archiveName)}`);
+    res.send(archive.zipBuffer);
+  })
+);
+
+/**
+ * GET /api/generation-history/:id/file
+ * Serve an authorized generation-history output without applying gallery safety hiding.
+ */
+router.get(
+  '/:id/file',
+  asyncHandler(async (req: Request, res: Response) => {
+    const media = await getAccessibleHistoryMediaOrBlock(req, res, routeParam(req.params.id));
+    if (!media) {
+      return;
+    }
+
+    const originalPath = getExistingActiveFilePathOrBlock(res, media.file, {
+      missingError: 'File not found on disk',
+      warnMessage: `[GenerationHistoryServe] File missing on disk during raw file access: ${resolveUploadsPath(media.file.original_file_path)}`,
+    });
+
+    if (!originalPath) {
+      return;
+    }
+
+    const mimeType = media.file.mime_type;
+    if (mimeType && mimeType.startsWith('video/')) {
+      streamRangeFile(req, res, originalPath, mimeType);
+      return;
+    }
+
+    await streamCacheableFile(req, res, originalPath, mimeType);
+  })
+);
+
+/**
+ * GET /api/generation-history/:id/thumbnail
+ * Serve an authorized generation-history output thumbnail without applying gallery safety hiding.
+ */
+router.get(
+  '/:id/thumbnail',
+  asyncHandler(async (req: Request, res: Response) => {
+    const media = await getAccessibleHistoryMediaOrBlock(req, res, routeParam(req.params.id));
+    if (!media) {
+      return;
+    }
+
+    await serveThumbnailOrOriginal(req, res, media.compositeHash, media.metadata, media.file);
   })
 );
 

@@ -421,14 +421,18 @@ export async function resolveDownloadFileForType(
 }
 
 /** Build a zip archive from visible active files for batch download. */
-export async function buildBatchDownloadArchive(compositeHashes: string[], downloadType: ImageDownloadType = 'original') {
+export async function buildBatchDownloadArchive(
+  compositeHashes: string[],
+  downloadType: ImageDownloadType = 'original',
+  options: { includeHidden?: boolean } = {},
+) {
   const zip = new AdmZip();
   const usedNames = new Map<string, number>();
   let addedCount = 0;
 
   for (const compositeHash of compositeHashes) {
     const metadata = MediaMetadataModel.findByHash(compositeHash);
-    if (!metadata || ImageSafetyService.isHidden(metadata.rating_score)) {
+    if (!metadata || (!options.includeHidden && ImageSafetyService.isHidden(metadata.rating_score))) {
       continue;
     }
 
