@@ -177,15 +177,21 @@ export function createGenerationQueueReadRoutes() {
 
       })
 
-    const completedRelevantRecords = filterQueueRecords(GenerationQueueModel.findRecentCompleted(), {
+    const hasActiveRelevantRecords = activeRelevantRecords.length > 0
 
-      serviceType,
+    const completedRelevantRecords = hasActiveRelevantRecords
 
-      workflowId,
+      ? filterQueueRecords(GenerationQueueModel.findRecentCompleted(), {
 
-    })
+        serviceType,
 
-    const activeComfyServers = ComfyUIServerModel.findActiveServers()
+        workflowId,
+
+      })
+
+      : []
+
+    const activeComfyServers = hasActiveRelevantRecords ? ComfyUIServerModel.findActiveServers() : []
 
     const activeComfyServerCount = activeComfyServers.length
 
