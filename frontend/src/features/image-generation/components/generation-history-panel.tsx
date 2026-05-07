@@ -57,18 +57,40 @@ function getGenerationHistorySelectionId(record: GenerationHistoryResponse['reco
   return `generation-history-${record.id}`
 }
 
+function dedupeHistoryRecords(records: GenerationHistoryResponse['records']) {
+  const seenIds = new Set<number>()
+  return records.filter((record) => {
+    if (seenIds.has(record.id)) {
+      return false
+    }
+
+    seenIds.add(record.id)
+    return true
+  })
+}
+
+function getHistoryMediaVersion(record: GenerationHistoryResponse['records'][number]) {
+  return [
+    record.actual_composite_hash ?? record.composite_hash ?? '',
+    record.actual_width ?? record.width ?? '',
+    record.actual_height ?? record.height ?? '',
+    resolveHistoryDisplayStatus(record),
+  ].join(':')
+}
+
 function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['records'][number]): ImageRecord {
   const imageSource = resolveHistoryImageSource(record)
   const displayStatus = resolveHistoryDisplayStatus(record)
   const hasLinkedImage = Boolean(record.actual_composite_hash)
   const historyMediaBaseUrl = `/api/generation-history/${record.id}`
+  const historyMediaVersion = encodeURIComponent(getHistoryMediaVersion(record))
 
   return {
     id: `generation-history-${record.id}`,
     composite_hash: hasLinkedImage ? imageSource.compositeHash : null,
     original_file_path: null,
-    thumbnail_url: hasLinkedImage ? `${historyMediaBaseUrl}/thumbnail` : null,
-    image_url: hasLinkedImage ? `${historyMediaBaseUrl}/file` : null,
+    thumbnail_url: hasLinkedImage ? `${historyMediaBaseUrl}/thumbnail?v=${historyMediaVersion}` : null,
+    image_url: hasLinkedImage ? `${historyMediaBaseUrl}/file?v=${historyMediaVersion}` : null,
     mime_type: record.actual_mime_type ?? null,
     width: record.actual_width ?? null,
     height: record.actual_height ?? null,
@@ -169,7 +191,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
   const isHistoryLoading = authStatusQuery.isPending || historyQuery.isPending
   const historyRecords = useMemo(
-    () => (historyQuery.data?.pages ?? []).flatMap((page) => page.records),
+    () => dedupeHistoryRecords((historyQuery.data?.pages ?? []).flatMap((page) => page.records)),
     [historyQuery.data?.pages],
   )
   const inFlightHistoryCount = useMemo(
@@ -192,6 +214,12 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     [historyRecords],
   )
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
+  const historyListLayoutKey = useMemo(
+    () => historyRecords
+      .map((record) => `${record.id}:${getHistoryMediaVersion(record)}`)
+      .join('|'),
+    [historyRecords],
+  )
   const {
     renderItemPersistentOverlay: renderSafetyPersistentOverlay,
     shouldBlurItemPreview,
@@ -380,6 +408,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
 
         {!isHistoryLoading && historyImages.length > 0 ? (
           <ImageList
+            key={historyListLayoutKey}
             items={historyImages}
             layout="masonry"
             activationMode="modal"

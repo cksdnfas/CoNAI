@@ -65,10 +65,11 @@ export function PromptListPanel({
 
       <div ref={promptListRef} className={isDraggingSelection ? 'select-none' : undefined}>
         <div className="space-y-1">
-          <div className="hidden grid-cols-[32px_minmax(0,1fr)_auto] border-b border-border/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground sm:grid">
+          <div className="hidden grid-cols-[32px_auto_minmax(0,1fr)_auto] border-b border-border/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground sm:grid">
             <span />
+            <span>Usage</span>
             <span>Prompt</span>
-            <span className="text-right">Usage / Actions</span>
+            <span className="text-right">Actions</span>
           </div>
 
           {isLoading ? (

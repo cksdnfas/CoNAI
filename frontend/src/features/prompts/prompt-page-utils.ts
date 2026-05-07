@@ -66,3 +66,17 @@ export function getPromptTypeTotal(promptType: PromptTypeFilter, statistics?: Pr
   }
   return statistics.total_auto_prompts
 }
+
+export function formatPromptUsageCount(value: number): string {
+  if (value < 1000) {
+    return String(value)
+  }
+
+  const thousands = value / 1000
+  if (value >= 100000) {
+    return `${Math.round(thousands)}K`
+  }
+
+  const oneDecimalThousands = Math.floor(thousands * 10) / 10
+  return `${oneDecimalThousands.toFixed(1).replace(/\.0$/, '')}K`
+}

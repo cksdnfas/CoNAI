@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
-import { addImageToGroup, getGroupsHierarchyAll } from '@/lib/api'
+import { addImageToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
 import type { ImageRecord } from '@/types/image'
 
 interface ImageGroupAssignActionProps {

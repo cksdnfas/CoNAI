@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import type { ImageRecord } from '@/types/image'
 import { ImageViewModalContext, type ImageViewModalAccessOptions, type ImageViewModalOpenInput } from './image-view-modal-context'
 import type { ImageViewModalMode } from './image-view-modal-actions'
-import { ImageViewModalOverlay } from './image-view-modal-overlay'
-import { getImage } from '@/lib/api'
+import { getImage } from '@/lib/api-images'
+
+const ImageViewModalOverlayLazy = lazy(async () => {
+  const module = await import('./image-view-modal-overlay')
+  return { default: module.ImageViewModalOverlay }
+})
 
 interface ImageViewModalState {
   compositeHash: string | null
@@ -324,21 +328,23 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     <ImageViewModalContext.Provider value={contextValue}>
       {children}
       {modalState.compositeHash ? (
-        <ImageViewModalOverlay
-          compositeHash={modalState.compositeHash}
-          initialImage={activeSourceItem}
-          activeIndex={activeIndex}
-          totalCount={modalState.compositeHashes.length}
-          viewMode={viewMode}
-          onChangeViewMode={handleViewModeChange}
-          openSessionId={modalState.openSessionId}
-          canViewPrevious={canViewPrevious}
-          canViewNext={canViewNext}
-          accessOptions={modalState.accessOptions}
-          onClose={closeImageView}
-          onViewPrevious={viewPreviousImage}
-          onViewNext={viewNextImage}
-        />
+        <Suspense fallback={null}>
+          <ImageViewModalOverlayLazy
+            compositeHash={modalState.compositeHash}
+            initialImage={activeSourceItem}
+            activeIndex={activeIndex}
+            totalCount={modalState.compositeHashes.length}
+            viewMode={viewMode}
+            onChangeViewMode={handleViewModeChange}
+            openSessionId={modalState.openSessionId}
+            canViewPrevious={canViewPrevious}
+            canViewNext={canViewNext}
+            accessOptions={modalState.accessOptions}
+            onClose={closeImageView}
+            onViewPrevious={viewPreviousImage}
+            onViewNext={viewNextImage}
+          />
+        </Suspense>
       ) : null}
     </ImageViewModalContext.Provider>
   )

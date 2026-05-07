@@ -5,7 +5,8 @@ import { ImageSaveOptionsModal } from '@/components/media/image-save-options-mod
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { getAppSettings, getExistingImageEditorSourceUrl, saveEditedImageToCanvas } from '@/lib/api'
+import { getExistingImageEditorSourceUrl, saveEditedImageToCanvas } from '@/lib/api-images'
+import { getAppSettings } from '@/lib/api-settings'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
   buildImageSaveOutput,

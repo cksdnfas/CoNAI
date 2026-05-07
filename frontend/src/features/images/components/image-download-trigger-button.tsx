@@ -4,13 +4,12 @@ import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { downloadImageSelection, type ImageDownloadType } from '@/lib/api'
+import { downloadImageSelection, type ImageDownloadType } from '@/lib/api-images'
 import { triggerBlobDownload } from '@/lib/api-client'
+import { getErrorMessage } from '@/lib/error-message'
 import type { ImageRecord } from '@/types/image'
-import { getErrorMessage } from '@/features/image-generation/image-generation-shared'
 import { getImageListMediaKind } from './image-list/image-list-utils'
 import { getDownloadName, getImageDetailRenderUrl, loadImageDetailRenderMode } from './detail/image-detail-utils'
-import { getActivePixelPreviewProfile, renderPixelPreviewPngBlob } from './detail/image-detail-pixel-preview'
 import { ImageDownloadOptionMenu } from './image-download-option-menu'
 
 interface ImageDownloadTriggerButtonProps {
@@ -32,10 +31,21 @@ function getVisibleDownloadMode(image: ImageRecord): ImageDownloadType {
   return image.thumbnail_url ? 'thumbnail' : 'original'
 }
 
+const IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-enabled'
+
 function getFilteredDownloadName(image: ImageRecord, mode: ImageDownloadType) {
   const downloadName = getDownloadName(image.original_file_path, image.composite_hash)
   const baseName = downloadName.replace(/\.[^/.]+$/, '') || (image.composite_hash ? String(image.composite_hash) : 'image')
   return `${baseName}-filtered-${mode}.png`
+}
+
+function hasActivePixelPreviewDownloadOption() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const savedValue = window.localStorage.getItem(IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY)
+  return savedValue === 'soft' || savedValue === 'medium' || savedValue === 'strong' || savedValue === 'custom' || savedValue === 'true'
 }
 
 /** Render one download button that opens the global thumbnail/original choice modal. */
@@ -54,7 +64,7 @@ export function ImageDownloadTriggerButton({
   const [isDownloading, setIsDownloading] = useState(false)
   const containerRef = useRef<HTMLSpanElement | null>(null)
   const compositeHash = typeof image?.composite_hash === 'string' && image.composite_hash.length > 0 ? image.composite_hash : null
-  const filteredDownloadMode = image && getImageListMediaKind(image) === 'image' && getActivePixelPreviewProfile() ? getVisibleDownloadMode(image) : null
+  const filteredDownloadMode = image && getImageListMediaKind(image) === 'image' && hasActivePixelPreviewDownloadOption() ? getVisibleDownloadMode(image) : null
 
   const handleSelect = async (type: 'thumbnail' | 'original') => {
     if (!compositeHash || isDownloading) {
@@ -77,6 +87,7 @@ export function ImageDownloadTriggerButton({
       return
     }
 
+    const { getActivePixelPreviewProfile, renderPixelPreviewPngBlob } = await import('./detail/image-detail-pixel-preview')
     const pixelPreviewProfile = getActivePixelPreviewProfile()
     if (!pixelPreviewProfile) {
       return

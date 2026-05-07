@@ -16,11 +16,11 @@ export type PixelPreviewProfile = PixelPreviewSettings & {
 }
 
 const PIXEL_PREVIEW_MODE_LABELS: Record<PixelPreviewMode, string> = {
-  off: '꺼짐',
-  soft: '약',
-  medium: '중',
-  strong: '강',
-  custom: '수동',
+  off: 'off',
+  soft: 'soft',
+  medium: 'medium',
+  strong: 'strong',
+  custom: 'custom',
 }
 const IMAGE_PIXEL_PREVIEW_PRESETS: Record<Exclude<PixelPreviewMode, 'off' | 'custom'>, PixelPreviewSettings> = {
   soft: { targetLongEdge: 512, colorCount: 192, ditherStrength: 0.08, edgeBoost: 0.04, sharpness: 0.08, smoothing: true },

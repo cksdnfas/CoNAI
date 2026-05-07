@@ -1,16 +1,22 @@
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Image, ShieldCheck, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
+import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
 import { HomeSearchDrawer, HomeSearchHeaderBox } from '@/features/home/components/home-search-ui'
 import { HeaderAccountMenu } from '@/features/auth/header-account-menu'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { GenerationQueueHeaderWidget } from '@/features/image-generation/components/generation-queue-header-widget'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
+
+const GenerationQueueHeaderWidgetLazy = lazy(async () => {
+  const module = await import('@/features/image-generation/components/generation-queue-header-widget')
+  return { default: module.GenerationQueueHeaderWidget }
+})
 
 const PRIMARY_NAV_ORDER = ['/groups', '/prompts', '/generation', '/upload', '/wallpaper', '/settings'] as const
 
@@ -21,6 +27,25 @@ const navItems: Array<{ to: string; labelKey: string; icon: LucideIcon; permissi
     return item ? [{ to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
   }),
 ]
+
+function DeferredGenerationQueueHeaderWidget() {
+  const [shouldRender, setShouldRender] = useState(false)
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => setShouldRender(true), 350)
+    return () => window.clearTimeout(timerId)
+  }, [])
+
+  if (!shouldRender) {
+    return null
+  }
+
+  return (
+    <Suspense fallback={null}>
+      <GenerationQueueHeaderWidgetLazy />
+    </Suspense>
+  )
+}
 
 export function AppShell() {
   return (
@@ -79,6 +104,8 @@ function AppShellLayout() {
               className="flex shrink-0 items-center gap-3 rounded-sm transition-opacity hover:opacity-90"
               aria-label={t({ ko: '홈으로 이동', en: 'Go to Home' })}
               title={t('pageAccessCatalog.home')}
+              onMouseEnter={() => prefetchAppRoute('/')}
+              onFocus={() => prefetchAppRoute('/')}
             >
               <div className="rounded-sm bg-surface-high p-2 text-secondary">
                 <Image className="h-4 w-4" />
@@ -110,6 +137,8 @@ function AppShellLayout() {
                       title={label}
                       draggable={false}
                       onClick={handleNavItemClick}
+                      onMouseEnter={() => prefetchAppRoute(to)}
+                      onFocus={() => prefetchAppRoute(to)}
                       onDragStart={(event) => event.preventDefault()}
                       className={({ isActive }) =>
                         cn(
@@ -142,7 +171,7 @@ function AppShellLayout() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-4">
-            {shouldShowGenerationQueueWidget ? <GenerationQueueHeaderWidget /> : null}
+            {shouldShowGenerationQueueWidget ? <DeferredGenerationQueueHeaderWidget /> : null}
             <HomeSearchHeaderBox active={!isAnonymousSession} />
             <HeaderAccountMenu />
           </div>

@@ -1,7 +1,7 @@
 import type { ImageRecord } from '@/types/image'
 import type { SimilaritySettings } from '@/types/settings'
 import { formatPromptTagCopyText, parseTaglistTokens } from '@/components/common/tag-result-utils'
-import { buildImageDownloadUrl } from '@/lib/api'
+import { buildImageDownloadUrl } from '@/lib/api-images'
 import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 
 export function formatBytes(value?: number | null) {

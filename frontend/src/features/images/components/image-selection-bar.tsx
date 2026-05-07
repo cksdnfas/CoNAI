@@ -4,7 +4,7 @@ import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
-import type { ImageDownloadType } from '@/lib/api'
+import type { ImageDownloadType } from '@/lib/api-images'
 import { ImageDownloadOptionMenu } from './image-download-option-menu'
 
 interface ImageSelectionBarProps {
