@@ -1,9 +1,10 @@
-import { type CSSProperties, type DragEventHandler, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type DragEventHandler, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { getImageListPreviewUrl } from './image-list-utils'
 
 const MAX_CONCURRENT_INITIAL_VIDEO_PREVIEW_LOADS = 3
+const VIDEO_PREVIEW_LOAD_TIMEOUT_MS = 8_000
 
 type VideoPreviewLoadTask = {
   id: string
@@ -81,12 +82,31 @@ export function ImageListVideoPreview({
   const [isSourceEnabled, setIsSourceEnabled] = useState(() => Boolean(previewUrl && startedVideoPreviewSources.has(previewUrl)))
   const releaseLoadRef = useRef<(() => void) | null>(null)
   const hasReleasedLoadRef = useRef(false)
+  const activeLoadTimeoutRef = useRef<number | null>(null)
+
+  const finishActiveLoad = useCallback(() => {
+    if (hasReleasedLoadRef.current) {
+      return
+    }
+
+    hasReleasedLoadRef.current = true
+    releaseLoadRef.current = null
+    if (activeLoadTimeoutRef.current !== null) {
+      window.clearTimeout(activeLoadTimeoutRef.current)
+      activeLoadTimeoutRef.current = null
+    }
+    releaseVideoPreviewLoad(requestId)
+  }, [requestId])
 
   useEffect(() => {
     setHasLoadedFrame(false)
     hasReleasedLoadRef.current = false
     releaseLoadRef.current?.()
     releaseLoadRef.current = null
+    if (activeLoadTimeoutRef.current !== null) {
+      window.clearTimeout(activeLoadTimeoutRef.current)
+      activeLoadTimeoutRef.current = null
+    }
     setIsSourceEnabled(Boolean(previewUrl && startedVideoPreviewSources.has(previewUrl)))
   }, [previewUrl])
 
@@ -106,6 +126,9 @@ export function ImageListVideoPreview({
         }
 
         startedVideoPreviewSources.add(previewUrl)
+        activeLoadTimeoutRef.current = window.setTimeout(() => {
+          finishActiveLoad()
+        }, VIDEO_PREVIEW_LOAD_TIMEOUT_MS)
         setIsSourceEnabled(true)
       },
     })
@@ -114,18 +137,12 @@ export function ImageListVideoPreview({
       cancelled = true
       releaseLoadRef.current?.()
       releaseLoadRef.current = null
+      if (activeLoadTimeoutRef.current !== null) {
+        window.clearTimeout(activeLoadTimeoutRef.current)
+        activeLoadTimeoutRef.current = null
+      }
     }
-  }, [isSourceEnabled, previewUrl, requestId, videoNode])
-
-  const finishActiveLoad = () => {
-    if (hasReleasedLoadRef.current) {
-      return
-    }
-
-    hasReleasedLoadRef.current = true
-    releaseLoadRef.current = null
-    releaseVideoPreviewLoad(requestId)
-  }
+  }, [finishActiveLoad, isSourceEnabled, previewUrl, requestId, videoNode])
 
   if (!previewUrl) {
     return null

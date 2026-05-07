@@ -122,6 +122,17 @@ function determineFileType(mimeType: string, filePath: string): FileType {
   return 'image';
 }
 
+function resolveBackgroundMediaConcurrency(): number {
+  const configured = Number.parseInt(process.env.CONAI_BACKGROUND_MEDIA_CONCURRENCY ?? '', 10);
+  if (Number.isFinite(configured) && configured > 0) {
+    return Math.min(configured, 8);
+  }
+
+  // Hashing, thumbnails, FFprobe, and SQLite writes are all heavy enough that
+  // saturating every CPU core makes the gallery feel stalled while scans run.
+  return Math.max(1, Math.min(3, Math.floor(os.cpus().length / 2) || 1));
+}
+
 /**
  * Background Processor Service
  *
@@ -136,7 +147,7 @@ function determineFileType(mimeType: string, filePath: string): FileType {
 export class BackgroundProcessorService {
   private static processing = false;
   private static readonly BATCH_SIZE = 50;
-  private static readonly CONCURRENCY = Math.max(2, os.cpus().length * 2);
+  private static readonly CONCURRENCY = resolveBackgroundMediaConcurrency();
 
   /**
    * Register and process a media file that this backend just saved.

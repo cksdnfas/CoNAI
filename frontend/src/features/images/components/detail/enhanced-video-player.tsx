@@ -3,7 +3,6 @@ import './image-detail-media.css'
 
 import type Plyr from 'plyr'
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
-import { useCachedVideoSource } from '@/features/images/components/video/use-cached-video-source'
 import { cn } from '@/lib/utils'
 
 function destroyPlyrSafely(player: Plyr | null) {
@@ -84,7 +83,6 @@ export function EnhancedVideoPlayer({
   autoPlay = false,
   preload = 'metadata',
 }: EnhancedVideoPlayerProps) {
-  const { resolvedSourceUrl } = useCachedVideoSource(renderUrl, { backgroundOnly: true })
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mediaMountRef = useRef<HTMLDivElement | null>(null)
   const playerRef = useRef<Plyr | null>(null)
@@ -105,7 +103,7 @@ export function EnhancedVideoPlayer({
 
   useEffect(() => {
     setNaturalSize(null)
-  }, [resolvedSourceUrl])
+  }, [renderUrl])
 
   useEffect(() => {
     updateAvailableSize()
@@ -132,7 +130,7 @@ export function EnhancedVideoPlayer({
     destroyPlyrSafely(previousPlayer)
     mountElement.replaceChildren()
 
-    if (!resolvedSourceUrl) {
+    if (!renderUrl) {
       return
     }
 
@@ -144,7 +142,9 @@ export function EnhancedVideoPlayer({
     videoElement.loop = loop
     videoElement.playsInline = true
     videoElement.preload = preload
-    videoElement.src = resolvedSourceUrl
+    // Keep full playback on the backend range-streaming URL. Warming videos as
+    // full blobs competes with modal navigation and can starve later media loads.
+    videoElement.src = renderUrl
 
     const handleLoadedMetadata = () => {
       if (videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
@@ -208,7 +208,7 @@ export function EnhancedVideoPlayer({
         mountElement.replaceChildren()
       }
     }
-  }, [autoPlay, loop, preload, resolvedSourceUrl, updateAvailableSize])
+  }, [autoPlay, loop, preload, renderUrl, updateAvailableSize])
 
   const fittedSize = availableSize && naturalSize ? getLargestContainedSize(availableSize, naturalSize) : null
   const fittedStyle: CSSProperties = fittedSize
@@ -238,7 +238,7 @@ export function EnhancedVideoPlayer({
         ['--plyr-video-progress-buffered-background' as string]: 'color-mix(in srgb, var(--foreground) 10%, transparent)',
       }}
     >
-      {!resolvedSourceUrl ? <div className="absolute inset-0 z-10 animate-pulse bg-surface-lowest" aria-hidden="true" /> : null}
+      {!renderUrl ? <div className="absolute inset-0 z-10 animate-pulse bg-surface-lowest" aria-hidden="true" /> : null}
       <div ref={mediaMountRef} className="conai-video-player__mount h-full w-full" />
     </div>
   )

@@ -13,6 +13,17 @@ import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { CivitaiSettings } from '../models/CivitaiSettings';
 import type { ModelReference } from './metadata/types';
 
+function resolveBackgroundQueueBatchSize(): number {
+  const configured = Number.parseInt(process.env.CONAI_BACKGROUND_QUEUE_BATCH_SIZE ?? '', 10);
+  if (Number.isFinite(configured) && configured > 0) {
+    return Math.min(configured, 8);
+  }
+
+  // Metadata extraction can involve Sharp and DB writes. Keep a small default so
+  // background work does not monopolize the process while users browse media.
+  return 2;
+}
+
 /**
  * 백그라운드 작업 타입
  */
@@ -49,7 +60,7 @@ export class BackgroundQueueService {
   private static queue: BackgroundTask[] = [];
   private static processing = false;
   private static readonly MAX_RETRIES = 3;
-  private static readonly BATCH_SIZE = 5; // 동시 처리 작업 수
+  private static readonly BATCH_SIZE = resolveBackgroundQueueBatchSize(); // 동시 처리 작업 수
 
   /**
    * 메타데이터 추출 작업 추가
