@@ -57,9 +57,9 @@ export interface RegisterAppRoutesResult {
   frontendDistPath: string | null;
 }
 
-/** Register one static runtime directory with shared CORS and cache headers. */
+/** Register one trusted-mode static runtime directory with shared CORS and cache headers. */
 function registerRuntimeStaticDirectory(app: Express, mountPath: string, directoryPath: string): void {
-  app.use(mountPath, optionalAuth, express.static(directoryPath, {
+  app.use(mountPath, express.static(directoryPath, {
     setHeaders: (res, filePath) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');

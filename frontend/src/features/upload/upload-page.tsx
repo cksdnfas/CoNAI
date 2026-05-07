@@ -7,9 +7,8 @@ import {
   extractImageKaloscopePreview,
   extractImageMetadataPreview,
   extractImageTaggerPreview,
-  type AutoTestKaloscopeResult,
-  type AutoTestTaggerResult,
-} from '@/lib/api'
+} from '@/lib/api-images'
+import type { AutoTestKaloscopeResult, AutoTestTaggerResult } from '@/lib/api-settings'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'

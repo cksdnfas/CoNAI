@@ -7,7 +7,8 @@ import { buildComplexFilterPayload } from '@/features/search/search-utils'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
 import { useI18n } from '@/i18n'
-import { addImagesToGroup, deleteImagesBulk, downloadImageSelection, getGroupsHierarchyAll, getImages, searchImagesComplex } from '@/lib/api'
+import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
+import { deleteImagesBulk, downloadImageSelection, getImages, searchImagesComplex } from '@/lib/api-images'
 
 interface UseHomePageDataOptions {
   /** Show a success/info snackbar for Home page actions. */

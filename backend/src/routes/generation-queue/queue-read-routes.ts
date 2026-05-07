@@ -19,6 +19,15 @@ import {
 } from './queue-route-helpers'
 import { computeQueueEtas, computeQueuePositions } from './queue-eta'
 
+function matchesActiveQueueStatusFilter(statuses: GenerationQueueJobStatus[] | undefined) {
+  if (!statuses || statuses.length !== ACTIVE_QUEUE_STATUSES.length) {
+    return false
+  }
+
+  const statusSet = new Set(statuses)
+  return ACTIVE_QUEUE_STATUSES.every((status) => statusSet.has(status))
+}
+
 export function createGenerationQueueReadRoutes() {
   const router = express.Router()
 
@@ -136,13 +145,15 @@ export function createGenerationQueueReadRoutes() {
 
     const requesterAccountId = getRequesterAccountId(req)
 
-    let records = filterQueueRecords(GenerationQueueModel.findAll(statuses), {
+    const filteredRecords = filterQueueRecords(GenerationQueueModel.findAll(statuses), {
 
       serviceType,
 
       workflowId,
 
     })
+
+    let records = filteredRecords
 
     if (mineOnly) {
 
@@ -154,13 +165,17 @@ export function createGenerationQueueReadRoutes() {
 
     }
 
-    const activeRelevantRecords = filterQueueRecords(GenerationQueueModel.findAll(ACTIVE_QUEUE_STATUSES), {
+    const activeRelevantRecords = matchesActiveQueueStatusFilter(statuses)
 
-      serviceType,
+      ? filteredRecords
 
-      workflowId,
+      : filterQueueRecords(GenerationQueueModel.findAll(ACTIVE_QUEUE_STATUSES), {
 
-    })
+        serviceType,
+
+        workflowId,
+
+      })
 
     const completedRelevantRecords = filterQueueRecords(GenerationQueueModel.findRecentCompleted(), {
 

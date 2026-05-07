@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type ChangeEvent } from 'react'
 import { useI18n } from '@/i18n'
-import { getAppSettings, uploadMultipleImages, type UploadBatchResult, type UploadTransferProgress } from '@/lib/api'
+import { uploadMultipleImages, type UploadBatchResult, type UploadTransferProgress } from '@/lib/api-images'
+import { getAppSettings } from '@/lib/api-settings'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
   loadImageSaveSourceInfo,

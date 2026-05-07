@@ -11,7 +11,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
-import { createGuestAccount, getAuthDatabaseInfo, loginLocalAccount, type AuthMutationRecord } from '@/lib/api'
+import { createGuestAccount, getAuthDatabaseInfo, loginLocalAccount, type AuthMutationRecord } from '@/lib/api-auth'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
 /** Sanitize one post-login redirect target to local app paths only. */

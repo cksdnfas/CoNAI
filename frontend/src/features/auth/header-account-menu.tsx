@@ -6,7 +6,7 @@ import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName 
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { logoutLocalAccount } from '@/lib/api'
+import { logoutLocalAccount } from '@/lib/api-auth'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
 /** Render one compact header account button with a mini popup for logout. */

@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  getAppSettings,
   getGraphExecution,
   getGraphWorkflowBrowseContent,
   getGraphWorkflowExecutions,
@@ -10,7 +9,8 @@ import {
   getGraphWorkflows,
   getModuleDefinitions,
   type GraphExecutionRecord,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
+import { getAppSettings } from '@/lib/api-settings'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 

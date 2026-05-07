@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { AuthStatusRecord } from '@/lib/api-auth'
-import { getAuthStatus } from '@/lib/api'
+import { getAuthStatus } from '@/lib/api-auth'
 
 export const AUTH_STATUS_QUERY_KEY = ['auth-status'] as const
 
