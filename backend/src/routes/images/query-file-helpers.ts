@@ -187,18 +187,6 @@ export function getExistingActiveFilePathOrBlock(
   return filePath;
 }
 
-/** Build the detail-route image payload from visible metadata and one active file. */
-export function buildImageWithFileViewData(metadata: ImageMetadataRecord, file: ImageFileRecord) {
-  return {
-    ...metadata,
-    file_id: file.id,
-    original_file_path: file.original_file_path,
-    file_size: file.file_size,
-    mime_type: file.mime_type || 'image/jpeg',
-    file_type: file.file_type
-  };
-}
-
 /** Stream a video-like file with range support and long-lived caching headers. */
 export function streamRangeFile(req: Request, res: Response, filePath: string, mimeType: string) {
   const stats = fs.statSync(filePath);

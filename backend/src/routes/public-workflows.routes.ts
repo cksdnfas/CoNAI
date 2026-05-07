@@ -13,6 +13,7 @@ import { GenerationQueueService } from '../services/generationQueueService';
 import { settingsService } from '../services/settingsService';
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
 import type { MarkedField, WorkflowRecord } from '../types/workflow';
+import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers';
 
 const router = Router();
 
@@ -21,16 +22,6 @@ const PUBLIC_QUEUE_MAX_COUNT_DEFAULT = 32;
 
 function getPublicWorkflowOrNull(slug: string) {
   return WorkflowModel.findPublicBySlug(slug.trim().toLowerCase());
-}
-
-function getRequesterAccountId(req: Request) {
-  return typeof req.session?.accountId === 'number' ? req.session.accountId : null;
-}
-
-function getRequesterAccountType(req: Request) {
-  return req.session?.accountType === 'admin' || req.session?.accountType === 'guest'
-    ? req.session.accountType
-    : null;
 }
 
 function parseMarkedFields(markedFieldsJson?: string | null): MarkedField[] {

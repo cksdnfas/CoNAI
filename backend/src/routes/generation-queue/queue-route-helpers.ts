@@ -4,7 +4,10 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../../services/generationQueueRouting'
 import { AuthAccessControlService } from '../../services/authAccessControlService'
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
+import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
+
+export { getRequesterAccountId } from '../requester-session-helpers'
 
 export const ACTIVE_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['queued', 'dispatching', 'running']
 export const TERMINAL_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['completed', 'failed', 'cancelled']
@@ -79,14 +82,6 @@ export function parseRequestedServerTag(value: unknown) {
   }
 
   return normalized
-}
-
-function isAdminRequest(req: Request) {
-  return req.session?.accountType === 'admin'
-}
-
-export function getRequesterAccountId(req: Request) {
-  return typeof req.session?.accountId === 'number' ? req.session.accountId : null
 }
 
 function canAccessJob(req: Request, job: GenerationQueueJobRecord) {

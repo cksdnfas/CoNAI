@@ -16,6 +16,7 @@ import {
   type ImageDownloadType,
 } from './images/query-file-helpers';
 import { resolveUploadsPath } from '../config/runtimePaths';
+import { getRequesterAccountId, isAdminRequest } from './requester-session-helpers';
 
 const router = express.Router();
 
@@ -38,14 +39,6 @@ function parsePositiveIntegerQuery(value: unknown): number | undefined {
   }
 
   return parsed;
-}
-
-function isAdminRequest(req: Request) {
-  return req.session?.accountType === 'admin';
-}
-
-function getRequesterAccountId(req: Request) {
-  return typeof req.session?.accountId === 'number' ? req.session.accountId : null;
 }
 
 function applyHistoryAccessScope(req: Request, filters: Record<string, any>, mineOnly: boolean) {
