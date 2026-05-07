@@ -15,6 +15,16 @@ export type ImageDownloadType = 'original' | 'thumbnail';
 
 const IMMUTABLE_FILE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
+export const MAX_BATCH_DOWNLOAD_FILE_COUNT = 200;
+export const MAX_BATCH_DOWNLOAD_TOTAL_SOURCE_BYTES = 512 * 1024 * 1024;
+
+export class BatchDownloadLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BatchDownloadLimitError';
+  }
+}
+
 /** Build a stable ETag from file mtime and size. */
 function generateETag(stats: fs.Stats): string {
   const hash = crypto.createHash('md5');
@@ -429,8 +439,9 @@ export async function buildBatchDownloadArchive(
   const zip = new AdmZip();
   const usedNames = new Map<string, number>();
   let addedCount = 0;
+  let totalSourceBytes = 0;
 
-  for (const compositeHash of compositeHashes) {
+  for (const compositeHash of compositeHashes.slice(0, MAX_BATCH_DOWNLOAD_FILE_COUNT)) {
     const metadata = MediaMetadataModel.findByHash(compositeHash);
     if (!metadata || (!options.includeHidden && ImageSafetyService.isHidden(metadata.rating_score))) {
       continue;
@@ -445,6 +456,12 @@ export async function buildBatchDownloadArchive(
     const resolved = await resolveDownloadFileForType(compositeHash, metadata, file, downloadType);
     if (!resolved) {
       continue;
+    }
+
+    const stats = fs.statSync(resolved.filePath);
+    totalSourceBytes += stats.size;
+    if (totalSourceBytes > MAX_BATCH_DOWNLOAD_TOTAL_SOURCE_BYTES) {
+      throw new BatchDownloadLimitError(`Batch download is limited to ${MAX_BATCH_DOWNLOAD_TOTAL_SOURCE_BYTES} bytes of source files`);
     }
 
     const parsedName = path.parse(file.original_file_path);

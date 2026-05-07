@@ -197,6 +197,7 @@ export function GenerationQueueHeaderWidget() {
   const globalQueueQuery = useQuery({
     queryKey: ['image-generation-queue', 'header-widget', 'global-active'],
     queryFn: () => getGenerationQueue({ status: ACTIVE_QUEUE_STATUSES }),
+    enabled: hasGenerationPermission,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
       return activeCount > 0 || isOpen ? ACTIVE_QUEUE_REFETCH_INTERVAL_MS : IDLE_QUEUE_REFETCH_INTERVAL_MS
@@ -210,7 +211,7 @@ export function GenerationQueueHeaderWidget() {
       serviceType: filterParams.serviceType,
       workflowId: filterParams.workflowId,
     }),
-    enabled: isFilteredQueueView,
+    enabled: hasGenerationPermission && isFilteredQueueView,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
       return activeCount > 0 || isOpen ? ACTIVE_QUEUE_REFETCH_INTERVAL_MS : IDLE_QUEUE_REFETCH_INTERVAL_MS

@@ -9,6 +9,8 @@ import { resolveUploadsPath } from '../../config/runtimePaths';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { enrichImageWithFileView } from './utils';
 import {
+  BatchDownloadLimitError,
+  MAX_BATCH_DOWNLOAD_FILE_COUNT,
   buildBatchDownloadArchive,
   getActiveFileOrBlock,
   getCompositeHashOrBlock,
@@ -206,6 +208,13 @@ router.post('/download/batch', asyncHandler(async (req: Request, res: Response) 
     });
   }
 
+  if (uniqueHashes.length > MAX_BATCH_DOWNLOAD_FILE_COUNT) {
+    return res.status(413).json({
+      success: false,
+      error: `Batch download is limited to ${MAX_BATCH_DOWNLOAD_FILE_COUNT} files`
+    });
+  }
+
   try {
     const archive = await buildBatchDownloadArchive(uniqueHashes, downloadType);
 
@@ -222,6 +231,13 @@ router.post('/download/batch', asyncHandler(async (req: Request, res: Response) 
     res.send(archive.zipBuffer);
     return;
   } catch (error) {
+    if (error instanceof BatchDownloadLimitError) {
+      return res.status(413).json({
+        success: false,
+        error: error.message
+      });
+    }
+
     console.error('Batch download error:', error);
     return res.status(500).json({
       success: false,
