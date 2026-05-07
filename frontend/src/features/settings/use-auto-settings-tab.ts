@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getImage } from '@/lib/api-images'
+import { getRatingTiers } from '@/lib/api-search'
 import {
   checkTaggerDependencies,
-  getImage,
   getKaloscopeStatus,
   getRandomAutoTestMedia,
-  getRatingTiers,
   getRatingWeights,
   getTaggerModels,
   getTaggerStatus,
@@ -16,13 +16,11 @@ import {
   updateRatingTiers,
   updateRatingWeights,
   updateTaggerSettings,
-} from '@/lib/api'
-import type {
-  AutoTestKaloscopeResult,
-  AutoTestMediaRecord,
-  AutoTestTaggerResult,
-  RatingWeightsRecord,
-} from '@/lib/api'
+  type AutoTestKaloscopeResult,
+  type AutoTestMediaRecord,
+  type AutoTestTaggerResult,
+  type RatingWeightsRecord,
+} from '@/lib/api-settings'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 import type {

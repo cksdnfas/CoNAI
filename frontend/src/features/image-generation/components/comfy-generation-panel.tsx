@@ -2,23 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import type { GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
 import {
-  createComfyModuleFromWorkflow,
   createGenerationCustomDropdownList,
   createGenerationWorkflow,
   deleteGenerationCustomDropdownList,
   deleteGenerationWorkflow,
-  getAppSettings,
   getGenerationComfyUIServers,
   getGenerationCustomDropdownLists,
   getGenerationWorkflow,
   getGenerationWorkflows,
-  getModuleDefinitions,
   scanGenerationComfyUIModelDropdownLists,
   updateGenerationCustomDropdownList,
-  type GenerationWorkflow,
-  type GenerationWorkflowDetail,
-} from '@/lib/api'
+} from '@/lib/api-image-generation-workflows'
+import { createComfyModuleFromWorkflow, getModuleDefinitions } from '@/lib/api-module-graph'
+import { getAppSettings } from '@/lib/api-settings'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
 import {

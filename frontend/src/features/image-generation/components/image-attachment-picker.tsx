@@ -14,7 +14,10 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { DropSurface } from '@/features/upload/components/upload-page-sections'
 import { useI18n } from '@/i18n'
 import { useDropZoneState } from '@/features/upload/use-drop-zone-state'
-import { getAppSettings, getImages, listGenerationSaveImages, type SaveBrowserImageRecord } from '@/lib/api'
+import { listGenerationSaveImages } from '@/lib/api-image-generation-history'
+import type { SaveBrowserImageRecord } from '@/lib/api-image-generation-types'
+import { getImages } from '@/lib/api-images'
+import { getAppSettings } from '@/lib/api-settings'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
   buildImageSaveOutput,

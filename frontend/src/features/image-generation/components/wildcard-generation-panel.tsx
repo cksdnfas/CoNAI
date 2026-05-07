@@ -16,7 +16,7 @@ import {
   type LoraScanRequest,
   type WildcardRecord,
   type WildcardTool,
-} from '@/lib/api'
+} from '@/lib/api-wildcards'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'

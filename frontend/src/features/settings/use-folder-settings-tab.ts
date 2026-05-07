@@ -2,27 +2,29 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   addBackupSource,
-  addWatchedFolder,
   deleteBackupSource,
-  deleteWatchedFolder,
   getBackupSources,
+  restartBackupSourceWatcher,
+  startBackupSourceWatcher,
+  stopBackupSourceWatcher,
+  updateBackupSource,
+  validateBackupSourcePath,
+} from '@/lib/api-backup-sources'
+import {
+  addWatchedFolder,
+  deleteWatchedFolder,
   getRecentFolderScanLogs,
   getWatchedFolders,
   getWatchersHealth,
-  restartBackupSourceWatcher,
   restartFolderWatcher,
-  runFileVerification,
   scanAllWatchedFolders,
   scanWatchedFolder,
-  startBackupSourceWatcher,
   startFolderWatcher,
-  stopBackupSourceWatcher,
   stopFolderWatcher,
-  updateBackupSource,
   updateWatchedFolder,
-  validateBackupSourcePath,
   validateWatchedFolderPath,
-} from '@/lib/api'
+} from '@/lib/api-folders'
+import { runFileVerification } from '@/lib/api-settings'
 import type { BackupSourceUpdateInput, WatchedFolderUpdateInput } from '@/types/folder'
 import { createNewBackupSourceDraft, createNewWatchedFolderDraft, normalizeBackupTargetPath, parseCommaSeparatedInput } from './settings-utils'
 import { useI18n } from '@/i18n'

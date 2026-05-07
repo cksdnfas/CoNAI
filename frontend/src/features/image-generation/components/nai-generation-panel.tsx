@@ -5,12 +5,9 @@ import { ImageSaveOptionsModal } from '@/components/media/image-save-options-mod
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { cn } from '@/lib/utils'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
-import {
-  getAppSettings,
-  getModuleDefinitions,
-  getNaiCostEstimate,
-  getNaiUserData,
-} from '@/lib/api'
+import { getNaiCostEstimate, getNaiUserData } from '@/lib/api-image-generation-nai'
+import { getModuleDefinitions } from '@/lib/api-module-graph'
+import { getAppSettings } from '@/lib/api-settings'
 import {
   clampNaiSampleCount,
   getErrorMessage,

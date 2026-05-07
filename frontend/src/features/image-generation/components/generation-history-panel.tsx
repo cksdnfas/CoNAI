@@ -15,13 +15,12 @@ import { useImageListColumnPreference } from '@/features/images/components/image
 import type { ImageRecord } from '@/types/image'
 import {
   cleanupFailedGenerationHistory,
-  cleanupPublicGenerationWorkflowFailedHistory,
   deleteGenerationHistoryRecord,
   downloadGenerationHistorySelection,
   getGenerationHistory,
   getGenerationWorkflowHistory,
-  getPublicGenerationWorkflowHistory,
-} from '@/lib/api'
+} from '@/lib/api-image-generation-history'
+import { cleanupPublicGenerationWorkflowFailedHistory, getPublicGenerationWorkflowHistory } from '@/lib/api-public-workflows'
 import type { GenerationHistoryResponse } from '@/lib/api-image-generation-history'
 import type { GenerationServiceType } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'

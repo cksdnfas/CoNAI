@@ -21,13 +21,8 @@ import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
-import {
-  createGenerationWorkflow,
-  updateGenerationWorkflow,
-  type CustomDropdownList,
-  type GenerationWorkflowDetail,
-  type WorkflowMarkedField,
-} from '@/lib/api'
+import type { CustomDropdownList, GenerationWorkflowDetail, WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { createGenerationWorkflow, updateGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import {
   buildWorkflowMarkedFieldFromInput,
   findAuthoringGraphMatches,
