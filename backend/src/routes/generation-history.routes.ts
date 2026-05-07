@@ -69,6 +69,68 @@ function applyHistoryAccessScope(req: Request, filters: Record<string, any>, min
   return { forceEmpty: false } as const;
 }
 
+function buildHistoryQueryFilters(query: Request['query'], options: { includeServiceType?: boolean } = {}) {
+  const {
+    service_type,
+    generation_status,
+    requested_by_account_id,
+    requested_by_account_type,
+    server_id,
+    queue_job_id,
+    limit = '50',
+    offset = '0'
+  } = query;
+
+  const filters: any = {
+    limit: parseInt(limit as string),
+    offset: parseInt(offset as string)
+  };
+
+  if (options.includeServiceType && service_type && (service_type === 'comfyui' || service_type === 'novelai' || service_type === 'codex')) {
+    filters.service_type = service_type as ServiceType;
+  }
+
+  if (generation_status) {
+    filters.generation_status = generation_status;
+  }
+
+  try {
+    const requestedByAccountId = parsePositiveIntegerQuery(requested_by_account_id);
+    const serverId = parsePositiveIntegerQuery(server_id);
+    const queueJobId = parsePositiveIntegerQuery(queue_job_id);
+
+    if (requestedByAccountId !== undefined) {
+      filters.requested_by_account_id = requestedByAccountId;
+    }
+
+    if (serverId !== undefined) {
+      filters.server_id = serverId;
+    }
+
+    if (queueJobId !== undefined) {
+      filters.queue_job_id = queueJobId;
+    }
+  } catch {
+    return {
+      filters,
+      error: 'requested_by_account_id, server_id, and queue_job_id must be positive integers'
+    } as const;
+  }
+
+  if (requested_by_account_type !== undefined) {
+    if (requested_by_account_type !== 'admin' && requested_by_account_type !== 'guest') {
+      return {
+        filters,
+        error: 'requested_by_account_type must be either admin or guest'
+      } as const;
+    }
+
+    filters.requested_by_account_type = requested_by_account_type;
+  }
+
+  return { filters, error: null } as const;
+}
+
 function parseImageDownloadType(value: unknown): ImageDownloadType {
   return value === 'thumbnail' ? 'thumbnail' : 'original';
 }
@@ -135,68 +197,13 @@ async function getAccessibleHistoryMediaOrBlock(req: Request, res: Response, idV
 router.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const {
-      service_type,
-      generation_status,
-      requested_by_account_id,
-      requested_by_account_type,
-      server_id,
-      queue_job_id,
-      mine,
-      limit = '50',
-      offset = '0'
-    } = req.query;
-
-    const filters: any = {
-      limit: parseInt(limit as string),
-      offset: parseInt(offset as string)
-    };
-
-    if (service_type && (service_type === 'comfyui' || service_type === 'novelai' || service_type === 'codex')) {
-      filters.service_type = service_type as ServiceType;
-    }
-
-    if (generation_status) {
-      filters.generation_status = generation_status;
-    }
-
-    try {
-      const requestedByAccountId = parsePositiveIntegerQuery(requested_by_account_id);
-      const serverId = parsePositiveIntegerQuery(server_id);
-      const queueJobId = parsePositiveIntegerQuery(queue_job_id);
-
-      if (requestedByAccountId !== undefined) {
-        filters.requested_by_account_id = requestedByAccountId;
-      }
-
-      if (serverId !== undefined) {
-        filters.server_id = serverId;
-      }
-
-      if (queueJobId !== undefined) {
-        filters.queue_job_id = queueJobId;
-      }
-    } catch {
-      res.status(400).json({
-        success: false,
-        error: 'requested_by_account_id, server_id, and queue_job_id must be positive integers'
-      });
+    const { filters, error } = buildHistoryQueryFilters(req.query, { includeServiceType: true });
+    if (error) {
+      res.status(400).json({ success: false, error });
       return;
     }
 
-    if (requested_by_account_type !== undefined) {
-      if (requested_by_account_type !== 'admin' && requested_by_account_type !== 'guest') {
-        res.status(400).json({
-          success: false,
-          error: 'requested_by_account_type must be either admin or guest'
-        });
-        return;
-      }
-
-      filters.requested_by_account_type = requested_by_account_type;
-    }
-
-    const accessScope = applyHistoryAccessScope(req, filters, mine === 'true');
+    const accessScope = applyHistoryAccessScope(req, filters, req.query.mine === 'true');
     if (accessScope.forceEmpty) {
       res.json({
         success: true,
@@ -549,63 +556,13 @@ router.get(
   '/workflow/:workflowId',
   asyncHandler(async (req: Request, res: Response) => {
     const workflowId = routeParam(req.params.workflowId);
-    const {
-      generation_status,
-      requested_by_account_id,
-      requested_by_account_type,
-      server_id,
-      queue_job_id,
-      mine,
-      limit = '50',
-      offset = '0'
-    } = req.query;
-
-    const filters: any = {
-      limit: parseInt(limit as string),
-      offset: parseInt(offset as string)
-    };
-
-    if (generation_status) {
-      filters.generation_status = generation_status;
-    }
-
-    try {
-      const requestedByAccountId = parsePositiveIntegerQuery(requested_by_account_id);
-      const serverId = parsePositiveIntegerQuery(server_id);
-      const queueJobId = parsePositiveIntegerQuery(queue_job_id);
-
-      if (requestedByAccountId !== undefined) {
-        filters.requested_by_account_id = requestedByAccountId;
-      }
-
-      if (serverId !== undefined) {
-        filters.server_id = serverId;
-      }
-
-      if (queueJobId !== undefined) {
-        filters.queue_job_id = queueJobId;
-      }
-    } catch {
-      res.status(400).json({
-        success: false,
-        error: 'requested_by_account_id, server_id, and queue_job_id must be positive integers'
-      });
+    const { filters, error } = buildHistoryQueryFilters(req.query);
+    if (error) {
+      res.status(400).json({ success: false, error });
       return;
     }
 
-    if (requested_by_account_type !== undefined) {
-      if (requested_by_account_type !== 'admin' && requested_by_account_type !== 'guest') {
-        res.status(400).json({
-          success: false,
-          error: 'requested_by_account_type must be either admin or guest'
-        });
-        return;
-      }
-
-      filters.requested_by_account_type = requested_by_account_type;
-    }
-
-    const accessScope = applyHistoryAccessScope(req, filters, mine === 'true');
+    const accessScope = applyHistoryAccessScope(req, filters, req.query.mine === 'true');
     if (accessScope.forceEmpty) {
       res.json({
         success: true,
