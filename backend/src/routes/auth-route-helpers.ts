@@ -42,6 +42,8 @@ export function setAuthenticatedSession(req: Request, account: SessionAuthAccoun
   req.session.accountType = account.account_type;
   req.session.groupKeys = resolvedAccess.groupKeys;
   req.session.permissionKeys = resolvedAccess.permissionKeys;
+  req.session.accessCacheAccountId = account.id;
+  req.session.accessCacheUpdatedAt = Date.now();
 }
 
 /** Build the current auth-status payload while keeping additive compatibility. */

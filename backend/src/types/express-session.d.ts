@@ -9,5 +9,7 @@ declare module 'express-session' {
     accountType?: AuthAccountType;
     groupKeys?: string[];
     permissionKeys?: string[];
+    accessCacheAccountId?: number;
+    accessCacheUpdatedAt?: number;
   }
 }

@@ -3,11 +3,18 @@ import { AuthAccount } from '../models/AuthAccount';
 import { hasConfiguredAuth } from '../routes/auth-route-helpers';
 import { AuthAccessControlService } from '../services/authAccessControlService';
 
+const SESSION_ACCESS_CACHE_TTL_MS = 60_000;
+
 /**
  * Require authentication middleware.
- * Returns 401 if not authenticated.
+ * When local auth is not configured, treat the app as trusted personal/bootstrap mode.
  */
 export const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
+  if (!hasConfiguredAuth()) {
+    next();
+    return;
+  }
+
   if (req.session?.authenticated === true) {
     next();
   } else {
@@ -51,9 +58,25 @@ function refreshSessionAccess(req: Request): string[] {
     return req.session?.permissionKeys ?? [];
   }
 
+  const now = Date.now();
+  const cachedPermissionKeys = req.session.permissionKeys;
+  const cachedGroupKeys = req.session.groupKeys;
+  const cacheUpdatedAt = req.session.accessCacheUpdatedAt;
+  const isFreshSessionAccessCache = Array.isArray(cachedPermissionKeys)
+    && Array.isArray(cachedGroupKeys)
+    && req.session.accessCacheAccountId === accountId
+    && typeof cacheUpdatedAt === 'number'
+    && now - cacheUpdatedAt < SESSION_ACCESS_CACHE_TTL_MS;
+
+  if (isFreshSessionAccessCache) {
+    return cachedPermissionKeys;
+  }
+
   const resolvedAccess = AuthAccessControlService.resolveForAccountId(accountId);
   req.session.groupKeys = resolvedAccess.groupKeys;
   req.session.permissionKeys = resolvedAccess.permissionKeys;
+  req.session.accessCacheAccountId = accountId;
+  req.session.accessCacheUpdatedAt = now;
   return resolvedAccess.permissionKeys;
 }
 

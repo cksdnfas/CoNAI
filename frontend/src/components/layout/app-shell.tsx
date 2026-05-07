@@ -69,7 +69,7 @@ function AppShellLayout() {
     ? shouldShowAccessOverviewNav
     : hasAuthPermission(permissionKeys, item.permissionKey))
   const isWallpaperRuntime = location.pathname === '/wallpaper/runtime'
-  const shouldShowGenerationQueueWidget = authStatusQuery.data?.authenticated === true
+  const shouldShowGenerationQueueWidget = authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true
   const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')
   const {
     navScrollRef,
