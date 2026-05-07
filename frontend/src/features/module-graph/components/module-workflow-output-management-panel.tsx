@@ -14,7 +14,7 @@ import type {
   GraphWorkflowBrowseContentRecord,
   GraphWorkflowFolderRecord,
   GraphWorkflowRecord,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
 import { triggerBrowserDownload } from '@/lib/api-client'
 import {
   copyGraphWorkflowArtifactsToFolder,

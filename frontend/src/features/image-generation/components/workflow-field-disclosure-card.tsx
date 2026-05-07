@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, CircleQuestionMark } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import type { WorkflowMarkedField } from '@/lib/api'
+import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { hasWorkflowFieldValue, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { WorkflowFieldInput } from './workflow-field-input'
 

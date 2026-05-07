@@ -3,7 +3,7 @@ import type {
   GraphExecutionFinalResultRecord,
   GraphExecutionRecord,
   GraphWorkflowBrowseContentRecord,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
 import { buildApiUrl } from '@/lib/api-client'
 import type { ImageRecord } from '@/types/image'
 import { buildArtifactTextPreview, getArtifactPreviewUrl, parseArtifactMetadataRecord, resolveGraphArtifactMimeType } from '../module-graph-shared'

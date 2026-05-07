@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { applyDanbooruPromptGrouping, getDanbooruPromptGroupingPreview } from '@/lib/api'
+import { applyDanbooruPromptGrouping, getDanbooruPromptGroupingPreview } from '@/lib/api-prompts'
 import type { DanbooruPromptGroupingTypeResult } from '@/types/prompt'
 import { useI18n } from '@/i18n'
 

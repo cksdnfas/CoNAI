@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { WildcardRecord } from '@/lib/api'
+import type { WildcardRecord } from '@/lib/api-wildcards'
 import {
   filterWildcardTree,
   flattenWildcardTree,

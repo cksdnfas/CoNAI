@@ -1,7 +1,7 @@
 import { ArrowLeft, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api'
+import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { SavedGraphList } from './saved-graph-list'
 
 /** Render the saved-workflow sidebar and its browse/editor toolbar actions. */

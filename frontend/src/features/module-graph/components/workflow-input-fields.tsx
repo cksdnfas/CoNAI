@@ -9,7 +9,7 @@ import { DEFAULT_PROMPT_TEXTAREA_ROWS } from '@/features/image-generation/compon
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowExposedInput } from '@/lib/api'
+import type { GraphWorkflowExposedInput } from '@/lib/api-module-graph'
 import { normalizeModulePortDescription } from '../module-graph-shared'
 import { hasMeaningfulValue } from './module-graph-field-shared'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'

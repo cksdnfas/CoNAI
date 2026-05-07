@@ -2,7 +2,7 @@ import type {
   GraphExecutionArtifactRecord,
   GraphWorkflowExposedInput,
   GraphWorkflowRecord,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
 import {
   buildArtifactTextPreview,
   buildArtifactTextValue,

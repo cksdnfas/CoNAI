@@ -7,7 +7,7 @@ import {
   updateGraphWorkflow,
   type GraphExecutionRecord,
   type GraphWorkflowRecord,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
 import { buildGraphEditorSnapshot, buildGraphPayload, getModuleNodeDisplayLabel, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
 

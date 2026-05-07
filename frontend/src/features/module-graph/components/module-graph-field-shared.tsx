@@ -1,7 +1,7 @@
 import { CircleHelp } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import type { TranslationDictionary } from '@/i18n/resources/types'
-import type { ModulePortDefinition } from '@/lib/api'
+import type { ModulePortDefinition } from '@/lib/api-module-graph'
 
 const MODULE_GRAPH_PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], TranslationDictionary> = {
   image: { ko: '이미지', en: 'Image' },

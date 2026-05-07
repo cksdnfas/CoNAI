@@ -1,6 +1,6 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api'
+import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

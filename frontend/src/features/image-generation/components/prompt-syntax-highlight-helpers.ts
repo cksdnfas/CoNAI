@@ -1,4 +1,4 @@
-import type { WildcardTool } from '@/lib/api'
+import type { WildcardTool } from '@/lib/api-wildcards'
 import {
   countStoredWildcardItemsForTool,
   countWildcardItemsForTool,

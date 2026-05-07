@@ -11,7 +11,7 @@ import type {
   ModuleDefinitionRecord,
   ModulePortDataType,
   ModulePortDefinition,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
 
 export { normalizeOptionalString, parsePositiveIntegerish } from '@/lib/primitive-normalizers'
 

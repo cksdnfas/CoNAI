@@ -1,10 +1,10 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getAutoFolderGroupFileCounts } from '@/lib/api-auto-folder-groups'
 import {
-  getAutoFolderGroupFileCounts,
   getGroupFileCounts,
   getGroupImages,
   getGroupsHierarchyAll,
-} from '@/lib/api'
+} from '@/lib/api-groups'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { createEmptyGroupFileCounts, getDownloadCountsFromImages, type GroupSourceDefinition } from './group-page-shared'

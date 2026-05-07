@@ -12,7 +12,7 @@ import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { useI18n } from '@/i18n'
-import type { WildcardRecord, WildcardTool } from '@/lib/api'
+import type { WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
 
 export interface WildcardEditorModalInput {
   name: string

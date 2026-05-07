@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { loginNai, loginNaiWithToken } from '@/lib/api'
+import { loginNai, loginNaiWithToken } from '@/lib/api-image-generation-nai'
 import { getErrorMessage } from '../image-generation-shared'
 
 export type NaiLoginMode = 'account' | 'token'

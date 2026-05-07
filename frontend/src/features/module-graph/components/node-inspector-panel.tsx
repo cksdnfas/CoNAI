@@ -12,7 +12,7 @@ import { InlineMediaPreview } from '@/features/images/components/inline-media-pr
 import { useI18n } from '@/i18n'
 import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib/api-external-api'
 import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOptionRecord } from '@/lib/api-settings'
-import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
+import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'

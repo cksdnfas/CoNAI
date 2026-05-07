@@ -1,4 +1,4 @@
-import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult, RatingWeightsRecord } from '@/lib/api'
+import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult, RatingWeightsRecord } from '@/lib/api-settings'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 import type {

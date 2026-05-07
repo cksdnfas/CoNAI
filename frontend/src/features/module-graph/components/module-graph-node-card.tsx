@@ -15,7 +15,8 @@ import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib
 import { getLlmPresetOptions, type LlmPresetOptionCollections, type LlmPresetOptionRecord } from '@/lib/api-settings'
 import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
-import type { ComfyUIServer, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api'
+import type { ComfyUIServer } from '@/lib/api-image-generation-types'
+import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import {
   WORKFLOW_INPUT_ENABLED_KEY,

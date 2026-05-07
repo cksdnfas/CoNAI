@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { addEdge, MarkerType, type Connection } from '@xyflow/react'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api'
+import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import {
   buildAutoLayoutedNodes,

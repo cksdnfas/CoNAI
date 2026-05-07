@@ -14,7 +14,7 @@ import type {
   GraphWorkflowScheduleRecord,
   GraphWorkflowScheduleStatus,
   GraphWorkflowScheduleType,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '../module-graph-shared'
 import { WorkflowInputFields } from './workflow-input-fields'
 

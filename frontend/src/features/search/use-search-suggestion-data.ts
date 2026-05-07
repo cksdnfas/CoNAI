@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getRatingTiers, getSearchLoraSuggestions, getSearchModelSuggestions, searchPromptCollection } from '@/lib/api'
+import { searchPromptCollection } from '@/lib/api-prompts'
+import { getRatingTiers, getSearchLoraSuggestions, getSearchModelSuggestions } from '@/lib/api-search'
 import type { SearchScope } from './search-types'
 
 /** Load shared prompt, rating, model, and LoRA suggestions for the reusable search UI. */

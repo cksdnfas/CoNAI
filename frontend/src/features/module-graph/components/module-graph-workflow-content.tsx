@@ -1,6 +1,6 @@
 import { Suspense, lazy, type ReactNode } from 'react'
 import { useI18n } from '@/i18n'
-import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowBrowseContentRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowBrowseContentRecord, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api-module-graph'
 import type { WorkflowValidationIssue } from './workflow-validation-panel'
 import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
 import { ModuleWorkflowBrowseView } from './module-workflow-browse-view'

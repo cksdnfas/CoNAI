@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/select'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
-import type { LoraFileData, LoraScanRequest } from '@/lib/api'
+import type { LoraFileData, LoraScanRequest } from '@/lib/api-wildcards'
 
 type LoraAutoCollectModalProps = {
   open: boolean

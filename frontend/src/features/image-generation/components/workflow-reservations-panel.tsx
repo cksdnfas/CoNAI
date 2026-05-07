@@ -19,7 +19,7 @@ import {
   updateGraphWorkflowSchedule,
   cancelGraphExecution,
 } from '@/lib/api-module-graph'
-import type { GraphExecutionRecord, GraphWorkflowRecord } from '@/lib/api'
+import type { GraphExecutionRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
 import { getErrorMessage } from '../image-generation-shared'
 import { ModuleWorkflowEmptyRunsTab } from '@/features/module-graph/components/module-workflow-empty-runs-tab'
 

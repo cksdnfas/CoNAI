@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ImageRecord } from '@/types/image'
-import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord } from '@/lib/api'
+import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord } from '@/lib/api-module-graph'
 import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset, WallpaperImageHoverMotion, WallpaperImageTransitionSpeed } from './wallpaper-types'
 
 /** Render one live clock string for the wallpaper clock widget. */

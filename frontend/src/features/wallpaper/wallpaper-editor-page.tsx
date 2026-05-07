@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
-import { getGroupsHierarchyAll } from '@/lib/api'
+import { getGroupsHierarchyAll } from '@/lib/api-groups'
 import { getAppSettings, updateAppearanceSettings } from '@/lib/api-settings'
 import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from './wallpaper-canvas-presets'
 import {

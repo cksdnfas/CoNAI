@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useEdgesState, useNodesState } from '@xyflow/react'
-import type { GraphWorkflowExposedInput, GraphWorkflowFolderRecord } from '@/lib/api'
+import type { GraphWorkflowExposedInput, GraphWorkflowFolderRecord } from '@/lib/api-module-graph'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
 import { buildGraphEditorSnapshot, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { persistWorkflowRunnerDraft } from './workflow-runner-draft-storage'

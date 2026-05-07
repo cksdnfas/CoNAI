@@ -4,8 +4,8 @@ import {
   deleteGenerationComfyUIServer,
   testGenerationComfyUIServer,
   updateGenerationComfyUIServer,
-} from '@/lib/api'
-import type { ComfyUIServer } from '@/lib/api-image-generation'
+} from '@/lib/api-image-generation-workflows'
+import type { ComfyUIServer } from '@/lib/api-image-generation-types'
 import {
   DEFAULT_COMFYUI_SERVER_FORM,
   getErrorMessage,

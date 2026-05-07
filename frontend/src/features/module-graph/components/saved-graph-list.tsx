@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api'
+import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { isFinalResultModule } from '../module-graph-shared'
 

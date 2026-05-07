@@ -5,7 +5,7 @@ import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName, AnchoredPopup } from '@/components/ui/anchored-popup'
-import { buildPromptPresetInsertionText, getPromptPresets, type PromptPresetRecord } from '@/lib/api'
+import { buildPromptPresetInsertionText, getPromptPresets, type PromptPresetRecord } from '@/lib/api-prompt-presets'
 import { cn } from '@/lib/utils'
 import type { RefObject } from 'react'
 

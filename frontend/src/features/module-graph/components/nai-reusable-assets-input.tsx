@@ -14,9 +14,8 @@ import {
   getNaiVibeAsset,
   listNaiCharacterReferenceAssets,
   listNaiVibeAssets,
-  type StoredNaiCharacterReferenceAsset,
-  type StoredNaiVibeAsset,
-} from '@/lib/api'
+} from '@/lib/api-image-generation-nai'
+import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 
 type NaiReusableAssetKind = 'vibes' | 'character_refs'
 

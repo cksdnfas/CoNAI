@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
-import { getAppSettings, type AutoTestKaloscopeResult } from '@/lib/api'
+import { getAppSettings, type AutoTestKaloscopeResult } from '@/lib/api-settings'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { ArtistPromptSection } from './prompt-result-sections'
 import { getSortedEntries } from './tag-result-utils'

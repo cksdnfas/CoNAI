@@ -1,18 +1,17 @@
 import { useMutation } from '@tanstack/react-query'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { downloadAutoFolderGroupArchive, rebuildAutoFolderGroups } from '@/lib/api-auto-folder-groups'
 import {
   addImagesToGroup,
   createGroup,
   deleteGroup,
-  deleteImagesBulk,
-  downloadAutoFolderGroupArchive,
   downloadGroupArchive,
-  rebuildAutoFolderGroups,
   removeImagesFromGroup,
   runAllGroupsAutoCollect,
   runGroupAutoCollect,
   updateGroup,
-} from '@/lib/api'
+} from '@/lib/api-groups'
+import { deleteImagesBulk } from '@/lib/api-images'
 import type { GroupDownloadType, GroupMutationInput, GroupRecord } from '@/types/group'
 import type { GroupEditorState, GroupSourceDefinition } from './group-page-shared'
 import { useI18n } from '@/i18n'

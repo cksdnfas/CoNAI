@@ -1,6 +1,6 @@
 import { Suspense, lazy, useMemo } from 'react'
 import type { Connection, OnEdgesChange, OnNodesChange } from '@xyflow/react'
-import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { ModuleGraphWorkflowSaveModal } from './components/module-graph-workflow-save-modal'
 const ModuleGraphCanvasLazy = lazy(async () => {

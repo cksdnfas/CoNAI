@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Background, Controls, MarkerType, MiniMap, ReactFlow, type Connection, type OnEdgesChange, type OnNodesChange, type ReactFlowInstance } from '@xyflow/react'
-import type { ModuleDefinitionRecord } from '@/lib/api'
+import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { ModuleGraphActionMenu, type ModuleGraphActionMenuState } from './module-graph-action-menu'
 import { ModuleGraphQuickCreateMenu } from './module-graph-quick-create-menu'

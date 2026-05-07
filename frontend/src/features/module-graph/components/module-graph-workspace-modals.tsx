@@ -3,7 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api'
+import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 
 const WorkflowFolderSettingsPanelLazy = lazy(async () => {
   const module = await import('./workflow-folder-settings-panel')

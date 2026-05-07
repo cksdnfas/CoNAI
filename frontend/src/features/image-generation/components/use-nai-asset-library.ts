@@ -11,7 +11,7 @@ import {
   saveNaiVibeAsset,
   updateNaiCharacterReferenceAsset,
   updateNaiVibeAsset,
-} from '@/lib/api'
+} from '@/lib/api-image-generation-nai'
 import {
   buildSelectedImageDraftFromUrl,
   getErrorMessage,

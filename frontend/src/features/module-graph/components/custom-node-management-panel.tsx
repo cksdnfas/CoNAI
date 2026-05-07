@@ -20,7 +20,7 @@ import {
   testCustomNode,
   type CustomNodeScaffoldTemplate,
   type CustomNodeTestResult,
-} from '@/lib/api'
+} from '@/lib/api-custom-nodes'
 import { copyTextToClipboard } from '@/lib/clipboard'
 
 type CustomNodeManagementPanelProps = {

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import type { WildcardTool } from '@/lib/api'
+import type { WildcardTool } from '@/lib/api-wildcards'
 
 export interface WildcardPreviewResult {
   usedWildcards: string[]

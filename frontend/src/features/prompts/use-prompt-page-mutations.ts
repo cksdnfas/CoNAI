@@ -9,7 +9,7 @@ import {
   importPromptGroups,
   reorderPromptGroups,
   updatePromptGroup,
-} from '@/lib/api'
+} from '@/lib/api-prompts'
 import type { PromptGroupExportData, PromptTypeFilter } from '@/types/prompt'
 import { useI18n } from '@/i18n'
 

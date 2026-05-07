@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useImageListSelection } from '@/features/images/components/image-list/use-image-list-selection'
 import { useI18n } from '@/i18n'
-import type { GraphExecutionArtifactRecord, GraphExecutionRecord } from '@/lib/api'
+import type { GraphExecutionArtifactRecord, GraphExecutionRecord } from '@/lib/api-module-graph'
 import { buildArtifactTextPreview } from '../module-graph-shared'
 
 /** Render non-media and intermediate workflow artifacts for cleanup-oriented management. */

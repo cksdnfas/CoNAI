@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import {
   updateAppearanceSettings,
   uploadAppearanceFont,
-} from '@/lib/api'
+} from '@/lib/api-settings'
 import { DEFAULT_APPEARANCE_SETTINGS, applyAppearanceTheme, extractAppearanceTheme } from '@/lib/appearance'
 import { buildAppearancePackage, restoreAppearancePackage } from '@/lib/appearance-package'
 import type { AppearanceTabProps } from './components/appearance-tab.types'

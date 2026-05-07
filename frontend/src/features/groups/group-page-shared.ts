@@ -4,12 +4,14 @@ import {
   getAutoFolderGroupImages,
   getAutoFolderGroupPreviewImage,
   getAutoFolderGroupsHierarchyAll,
+} from '@/lib/api-auto-folder-groups'
+import {
   getGroup,
   getGroupBreadcrumb,
   getGroupImages,
   getGroupPreviewImage,
   getGroupsHierarchyAll,
-} from '@/lib/api'
+} from '@/lib/api-groups'
 import type { GroupFileCounts, GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'

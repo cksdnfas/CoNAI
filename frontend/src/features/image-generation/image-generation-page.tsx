@@ -8,7 +8,7 @@ import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import { getGenerationWorkflow } from '@/lib/api'
+import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
 import { loadPersistedSelectedComfyWorkflowId, persistSelectedComfyWorkflowId } from './image-generation-shared'
 

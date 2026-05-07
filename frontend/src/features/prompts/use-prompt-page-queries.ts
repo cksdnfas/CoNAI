@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getTopPrompts, searchPromptCollection } from '@/lib/api'
+import { getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getTopPrompts, searchPromptCollection } from '@/lib/api-prompts'
 import type { PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
 import { getPromptTypeTotal, getSortedSiblingGroups } from './prompt-page-utils'
 

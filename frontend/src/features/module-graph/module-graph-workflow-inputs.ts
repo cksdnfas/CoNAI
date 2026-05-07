@@ -1,4 +1,4 @@
-import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api'
+import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { buildWorkflowExposedInputId } from './module-graph-validation'
 import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, normalizeModulePortDescription, normalizeOptionalString, type ModuleGraphNode } from './module-graph-shared'
 

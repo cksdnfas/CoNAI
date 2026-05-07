@@ -14,7 +14,7 @@ import type {
   GraphExecutionLogRecord,
   GraphExecutionRecord,
   GraphWorkflowRecord,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import {
   getArtifactPreviewUrl,

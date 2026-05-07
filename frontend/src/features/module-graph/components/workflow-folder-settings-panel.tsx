@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowFolderRecord, GraphWorkflowRecord } from '@/lib/api'
+import type { GraphWorkflowFolderRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
 
 type WorkflowFolderSettingsPanelProps = {
   folders: GraphWorkflowFolderRecord[]

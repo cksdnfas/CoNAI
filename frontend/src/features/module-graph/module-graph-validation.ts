@@ -1,7 +1,7 @@
 import type {
   GraphWorkflowExposedInput,
   ModuleDefinitionRecord,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
 import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { AppSettings } from '@/types/settings'
 import { hasMeaningfulValue } from './components/module-graph-field-shared'

@@ -4,10 +4,9 @@ import { normalizeTextSegmentSpreadsheetText } from './components/prompt-text-se
 import type {
   ComfyUIServerConnectionStatus,
   GenerationHistoryRecord,
-  ModulePortDataType,
-  ModuleUiFieldDefinition,
   WorkflowMarkedField,
-} from '@/lib/api'
+} from '@/lib/api-image-generation-types'
+import type { ModulePortDataType, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 
 export { getErrorMessage } from '@/lib/error-message'
 

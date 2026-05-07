@@ -3,7 +3,7 @@ import type { MouseEventHandler } from 'react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
-import type { WildcardRecord } from '@/lib/api'
+import type { WildcardRecord } from '@/lib/api-wildcards'
 import { cn } from '@/lib/utils'
 import {
   getWildcardPromptSyntax,

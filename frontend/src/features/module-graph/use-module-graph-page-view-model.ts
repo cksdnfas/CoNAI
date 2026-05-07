@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
-import { getGraphExecution, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api'
+import { getGraphExecution, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { useI18n } from '@/i18n'
 import type { AppSettings } from '@/types/settings'
 import { buildNodeArtifactGroups, buildNodeArtifactPreview, buildGraphEditorSnapshot, getModuleNodeDisplayLabel, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'

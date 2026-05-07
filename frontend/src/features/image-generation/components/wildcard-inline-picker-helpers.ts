@@ -1,4 +1,4 @@
-import type { WildcardItemRecord, WildcardRecord, WildcardTool } from '@/lib/api'
+import type { WildcardItemRecord, WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
 
 export type PromptWildcardTool = WildcardTool | 'codex'
 

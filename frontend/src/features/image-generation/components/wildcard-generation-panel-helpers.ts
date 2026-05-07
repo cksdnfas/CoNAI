@@ -1,4 +1,4 @@
-import type { WildcardRecord } from '@/lib/api'
+import type { WildcardRecord } from '@/lib/api-wildcards'
 import { copyTextToClipboard } from '@/lib/clipboard'
 
 export type WildcardWorkspaceTab = 'wildcards' | 'preprocess' | 'lora'

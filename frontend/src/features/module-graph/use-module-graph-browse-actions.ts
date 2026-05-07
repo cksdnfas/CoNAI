@@ -11,7 +11,7 @@ import {
   type GraphWorkflowFolderRecord,
   type GraphWorkflowRecord,
   type ModuleDefinitionRecord,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
 import { buildFlowFromGraphRecord, buildGraphEditorSnapshot, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'

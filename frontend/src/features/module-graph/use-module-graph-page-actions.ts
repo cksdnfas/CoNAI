@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api'
+import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
 import type { WorkflowValidationIssue } from './components/workflow-validation-panel'
 import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-shared'

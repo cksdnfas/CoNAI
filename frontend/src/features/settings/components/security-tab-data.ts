@@ -19,7 +19,7 @@ import {
   updateAuthPermissionGroup,
   updateBuiltInPageAccess,
   updateLocalAccount,
-} from '@/lib/api'
+} from '@/lib/api-auth'
 import type {
   AuthMutationRecord,
   AuthPermissionGroupSummaryItem,

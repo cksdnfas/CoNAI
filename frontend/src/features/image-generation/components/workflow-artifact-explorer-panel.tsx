@@ -5,7 +5,9 @@ import { ArrowLeft, Download, File, FileAudio, FileText, FileVideo, Folder, Imag
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useI18n } from '@/i18n'
-import { getGenerationWorkflowArtifacts, getPublicGenerationWorkflowArtifacts, type WorkflowArtifactEntry } from '@/lib/api'
+import type { WorkflowArtifactEntry } from '@/lib/api-image-generation-types'
+import { getGenerationWorkflowArtifacts } from '@/lib/api-image-generation-workflows'
+import { getPublicGenerationWorkflowArtifacts } from '@/lib/api-public-workflows'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '../image-generation-shared'
 

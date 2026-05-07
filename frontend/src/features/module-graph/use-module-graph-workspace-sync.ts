@@ -5,7 +5,7 @@ import {
   type GraphExecutionArtifactRecord,
   type GraphExecutionRecord,
   type GraphWorkflowExposedInput,
-} from '@/lib/api'
+} from '@/lib/api-module-graph'
 import {
   buildNodeArtifactGroups,
   buildNodeArtifactPreview,

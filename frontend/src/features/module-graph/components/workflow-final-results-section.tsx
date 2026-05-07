@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useI18n } from '@/i18n'
-import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphWorkflowRecord } from '@/lib/api'
+import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
 import type { ImageRecord } from '@/types/image'
 import {
   getArtifactPreviewUrl,

@@ -1,6 +1,6 @@
 import { Check, GripVertical, Plus } from 'lucide-react'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
-import type { WorkflowMarkedField } from '@/lib/api'
+import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { buildPowerLoraNodeItemsFromInputs } from './power-lora-loader-input'
 
 type WorkflowJsonNodeRecord = {

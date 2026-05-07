@@ -11,7 +11,7 @@ import {
   updateImageSaveSettings,
   updateMetadataSettings,
   updateVideoOptimizationSettings,
-} from '@/lib/api'
+} from '@/lib/api-settings'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'

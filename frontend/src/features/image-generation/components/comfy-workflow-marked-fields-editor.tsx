@@ -6,7 +6,7 @@ import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsField, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
-import type { WorkflowMarkedField } from '@/lib/api'
+import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import { ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react'
 

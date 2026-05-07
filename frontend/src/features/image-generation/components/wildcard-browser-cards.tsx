@@ -10,7 +10,7 @@ import {
   type WildcardRecord,
   type WildcardScanLog,
   type WildcardTool,
-} from '@/lib/api'
+} from '@/lib/api-wildcards'
 import {
   formatWildcardDateTime,
   getWildcardPromptSyntax,

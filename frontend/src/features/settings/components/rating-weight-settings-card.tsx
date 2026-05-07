@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import type { RatingTierRecord } from '@/features/search/search-types'
-import type { RatingWeightsRecord } from '@/lib/api'
+import type { RatingWeightsRecord } from '@/lib/api-settings'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsValueTile } from './settings-primitives'
 import { useI18n } from '@/i18n'
 
