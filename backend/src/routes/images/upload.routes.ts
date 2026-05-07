@@ -20,6 +20,15 @@ const UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
 
 registerUploadMetadataUtilityRoutes(router);
 
+type ProcessedUploadData = {
+  filename: string;
+  originalPath: string;
+  width: number | null;
+  height: number | null;
+  fileSize: number;
+  mimeType?: string;
+};
+
 async function processSavedUploadMedia(relativePath: string, mimeType: string) {
   return BackgroundProcessorService.processSavedMediaFile(
     path.join(UPLOAD_BASE_PATH, relativePath),
@@ -28,6 +37,51 @@ async function processSavedUploadMedia(relativePath: string, mimeType: string) {
       quiet: true,
     },
   );
+}
+
+async function processUploadFile(file: Express.Multer.File, imageSaveOptions: ReturnType<typeof parseUploadImageSaveOptions>): Promise<ProcessedUploadData> {
+  if (isVideoFile(file.mimetype)) {
+    const processedVideo = await VideoProcessor.processVideo(file, UPLOAD_BASE_PATH);
+    return {
+      filename: processedVideo.filename,
+      originalPath: processedVideo.originalPath,
+      width: processedVideo.width,
+      height: processedVideo.height,
+      fileSize: processedVideo.fileSize,
+    };
+  }
+
+  if (isImageFile(file.mimetype)) {
+    const processedImage = await processImageUploadWithSettings(file, UPLOAD_BASE_PATH, imageSaveOptions);
+    return {
+      filename: processedImage.filename,
+      originalPath: processedImage.originalPath,
+      width: processedImage.width,
+      height: processedImage.height,
+      fileSize: processedImage.fileSize,
+      mimeType: 'mimeType' in processedImage ? processedImage.mimeType : undefined,
+    };
+  }
+
+  throw new Error(`Unsupported file type: ${file.mimetype}`);
+}
+
+async function buildUploadResult(file: Express.Multer.File, imageSaveOptions: ReturnType<typeof parseUploadImageSaveOptions>): Promise<NonNullable<UploadResponse['data']>> {
+  const processedData = await processUploadFile(file, imageSaveOptions);
+  const mimeType = processedData.mimeType || file.mimetype;
+  const mediaProcessing = await processSavedUploadMedia(processedData.originalPath, mimeType);
+
+  return {
+    id: mediaProcessing.fileId,
+    filename: processedData.filename,
+    original_name: file.originalname,
+    thumbnail_url: '',
+    file_size: processedData.fileSize,
+    mime_type: mimeType,
+    width: processedData.width,
+    height: processedData.height,
+    upload_date: new Date().toISOString(),
+  };
 }
 
 /**
@@ -55,64 +109,14 @@ router.post('/upload', uploadSingle, asyncHandler(async (req: Request, res: Resp
 
   try {
     const imageSaveOptions = parseUploadImageSaveOptions(req.body);
-    let processedData: {
-      filename: string;
-      originalPath: string;
-      width: number;
-      height: number;
-      fileSize: number;
-      mimeType?: string;
-    };
-
-    // 파일 타입에 따라 분기 처리
-    if (isVideoFile(file.mimetype)) {
-      console.log('🎬 Uploading video (file save only)...');
-      const processedVideo = await VideoProcessor.processVideo(file, UPLOAD_BASE_PATH);
-      console.log('✅ Video saved successfully');
-
-      processedData = {
-        filename: processedVideo.filename,
-        originalPath: processedVideo.originalPath,
-        width: processedVideo.width,
-        height: processedVideo.height,
-        fileSize: processedVideo.fileSize
-      };
-    } else if (isImageFile(file.mimetype)) {
-      console.log('🖼️  Uploading image (file save only)...');
-      const processedImage = await processImageUploadWithSettings(file, UPLOAD_BASE_PATH, imageSaveOptions);
-      console.log('✅ Image saved successfully');
-
-      processedData = {
-        filename: processedImage.filename,
-        originalPath: processedImage.originalPath,
-        width: processedImage.width,
-        height: processedImage.height,
-        fileSize: processedImage.fileSize,
-        mimeType: 'mimeType' in processedImage ? processedImage.mimeType : undefined,
-      };
-    } else {
-      throw new Error(`Unsupported file type: ${file.mimetype}`);
-    }
-
-    const mimeType = processedData.mimeType || file.mimetype;
-    const mediaProcessing = await processSavedUploadMedia(processedData.originalPath, mimeType);
+    const uploadResult = await buildUploadResult(file, imageSaveOptions);
 
     const response: UploadResponse = {
       success: true,
-      data: {
-        id: mediaProcessing.fileId,
-        filename: processedData.filename,
-        original_name: file.originalname,
-        thumbnail_url: '',
-        file_size: processedData.fileSize,
-        mime_type: mimeType,
-        width: processedData.width,
-        height: processedData.height,
-        upload_date: new Date().toISOString()
-      }
+      data: uploadResult
     };
 
-    console.log('📨 Upload complete, file saved to:', processedData.originalPath);
+    console.log('📨 Upload complete, file saved to:', uploadResult.filename);
     return res.status(201).json(response);
   } catch (error) {
     console.error('❌ Upload error:', error);
@@ -146,53 +150,7 @@ router.post('/upload-multiple', uploadMultiple, asyncHandler(async (req: Request
 
     for (const file of files) {
       try {
-        let processedData: {
-          filename: string;
-          originalPath: string;
-          width: number;
-          height: number;
-          fileSize: number;
-          mimeType?: string;
-        };
-
-        // 파일 타입에 따라 분기 처리
-        if (isVideoFile(file.mimetype)) {
-          const processedVideo = await VideoProcessor.processVideo(file, UPLOAD_BASE_PATH);
-          processedData = {
-            filename: processedVideo.filename,
-            originalPath: processedVideo.originalPath,
-            width: processedVideo.width,
-            height: processedVideo.height,
-            fileSize: processedVideo.fileSize
-          };
-        } else if (isImageFile(file.mimetype)) {
-          const processedImage = await processImageUploadWithSettings(file, UPLOAD_BASE_PATH, imageSaveOptions);
-          processedData = {
-            filename: processedImage.filename,
-            originalPath: processedImage.originalPath,
-            width: processedImage.width,
-            height: processedImage.height,
-            fileSize: processedImage.fileSize,
-            mimeType: 'mimeType' in processedImage ? processedImage.mimeType : undefined,
-          };
-        } else {
-          throw new Error(`Unsupported file type: ${file.mimetype}`);
-        }
-
-        const mimeType = processedData.mimeType || file.mimetype;
-        const mediaProcessing = await processSavedUploadMedia(processedData.originalPath, mimeType);
-
-        results.push({
-          id: mediaProcessing.fileId,
-          filename: processedData.filename,
-          original_name: file.originalname,
-          thumbnail_url: '',
-          file_size: processedData.fileSize,
-          mime_type: mimeType,
-          width: processedData.width,
-          height: processedData.height,
-          upload_date: new Date().toISOString()
-        });
+        results.push(await buildUploadResult(file, imageSaveOptions));
 
         console.log(`✅ ${file.originalname} saved`);
       } catch (error) {
