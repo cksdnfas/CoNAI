@@ -11,7 +11,7 @@ import { asyncHandler } from '../../middleware/errorHandler'
 import { routeParam } from '../routeParam'
 import { sendRouteBadRequest } from '../routeValidation'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'
-import { parseGraphRouteInteger } from './route-helpers'
+import { parseGraphExecutionInputValues, parseGraphRouteInteger } from './route-helpers'
 
 export function createGraphWorkflowExecutionRoutes() {
   const router = Router()
@@ -92,7 +92,7 @@ export function createGraphWorkflowExecutionRoutes() {
     }
 
     try {
-      const inputValues = req.body?.input_values && typeof req.body.input_values === 'object' ? req.body.input_values as Record<string, unknown> : undefined
+      const inputValues = parseGraphExecutionInputValues(req.body?.input_values)
       const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues)
       return res.status(201).json({ success: true, data: result } as ModuleGraphResponse)
     } catch (error) {
@@ -123,7 +123,7 @@ export function createGraphWorkflowExecutionRoutes() {
         return res.status(404).json({ success: false, error: 'Graph node not found' } as ModuleGraphResponse)
       }
 
-      const inputValues = req.body?.input_values && typeof req.body.input_values === 'object' ? req.body.input_values as Record<string, unknown> : undefined
+      const inputValues = parseGraphExecutionInputValues(req.body?.input_values)
       const forceRerun = req.body?.force_rerun === true
       const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, nodeId, forceRerun)
       return res.status(201).json({ success: true, data: result } as ModuleGraphResponse)

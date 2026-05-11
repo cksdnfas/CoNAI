@@ -54,6 +54,10 @@ export function parseGraphRouteInteger(value: string | string[] | undefined) {
   return parseInt(routeParam(routeParam(value)))
 }
 
+export function parseGraphExecutionInputValues(value: unknown) {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : undefined
+}
+
 export function sendGraphRouteNotFound(res: Response, error: string) {
   res.status(404).json({ success: false, error } as ModuleGraphResponse)
   return null
