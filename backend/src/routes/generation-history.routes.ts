@@ -17,6 +17,7 @@ import {
 } from './images/query-file-helpers';
 import { resolveUploadsPath } from '../config/runtimePaths';
 import { getRequesterAccountId, isAdminRequest } from './requester-session-helpers';
+import { parsePositiveInteger } from './routeValidation';
 
 const router = express.Router();
 
@@ -28,17 +29,17 @@ const upload = multer({
   }
 });
 
-function parsePositiveIntegerQuery(value: unknown): number | undefined {
+function parseOptionalPositiveIntegerQuery(value: unknown): number | undefined {
+  const parsed = parsePositiveInteger(value);
+  if (parsed !== null) {
+    return parsed;
+  }
+
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
 
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error('positive-integer');
-  }
-
-  return parsed;
+  throw new Error('positive-integer');
 }
 
 function applyHistoryAccessScope(req: Request, filters: Record<string, any>, mineOnly: boolean) {
@@ -95,9 +96,9 @@ function buildHistoryQueryFilters(query: Request['query'], options: { includeSer
   }
 
   try {
-    const requestedByAccountId = parsePositiveIntegerQuery(requested_by_account_id);
-    const serverId = parsePositiveIntegerQuery(server_id);
-    const queueJobId = parsePositiveIntegerQuery(queue_job_id);
+    const requestedByAccountId = parseOptionalPositiveIntegerQuery(requested_by_account_id);
+    const serverId = parseOptionalPositiveIntegerQuery(server_id);
+    const queueJobId = parseOptionalPositiveIntegerQuery(queue_job_id);
 
     if (requestedByAccountId !== undefined) {
       filters.requested_by_account_id = requestedByAccountId;
