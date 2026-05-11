@@ -34,6 +34,10 @@ const DANBOORU_GROUP_ROOT_NAME_EN = 'Danbooru';
 const DANBOORU_GROUP_ROOT_NAME_KO = '단부루';
 const DANBOORU_GROUP_ROOT_NAMES = [DANBOORU_GROUP_ROOT_NAME_EN, DANBOORU_GROUP_ROOT_NAME_KO];
 
+function danbooruRootNamePlaceholders(): string {
+  return DANBOORU_GROUP_ROOT_NAMES.map(() => '?').join(',');
+}
+
 interface DanbooruTaxonomyNodeRow {
   id: number;
   node_key: string;
@@ -665,7 +669,7 @@ export class PromptGroupService {
   private static getHiddenDanbooruRootGroupsWithCounts(type: PromptCollectionType): PromptGroupWithPrompts[] {
     const groupTableName = getTableName(type);
     const promptTableName = getPromptTableName(type);
-    const placeholders = DANBOORU_GROUP_ROOT_NAMES.map(() => '?').join(',');
+    const placeholders = danbooruRootNamePlaceholders();
     return db.prepare(`
       SELECT
         g.*,
@@ -682,7 +686,7 @@ export class PromptGroupService {
 
   private static getDanbooruRootGroupIds(type: PromptCollectionType): number[] {
     const tableName = getTableName(type);
-    const placeholders = DANBOORU_GROUP_ROOT_NAMES.map(() => '?').join(',');
+    const placeholders = danbooruRootNamePlaceholders();
     const rows = db.prepare(`SELECT id FROM ${tableName} WHERE parent_id IS NULL AND group_name IN (${placeholders})`).all(...DANBOORU_GROUP_ROOT_NAMES) as Array<{ id: number }>;
     return rows.map((row) => row.id);
   }
