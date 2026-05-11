@@ -25,9 +25,9 @@ import {
 
 const MAX_BULK_SCHEDULE_ENQUEUE_COUNT = 100
 
-function parseScheduleEnqueueCount(value: unknown) {
+function parseBoundedScheduleEnqueueCount(value: unknown, defaultValue: number, minValue: number) {
   if (value === undefined || value === null || value === '') {
-    return 0
+    return defaultValue
   }
 
   const parsed = Number(value)
@@ -35,20 +35,15 @@ function parseScheduleEnqueueCount(value: unknown) {
     return null
   }
 
-  return parsed >= 0 && parsed <= MAX_BULK_SCHEDULE_ENQUEUE_COUNT ? parsed : null
+  return parsed >= minValue && parsed <= MAX_BULK_SCHEDULE_ENQUEUE_COUNT ? parsed : null
+}
+
+function parseScheduleEnqueueCount(value: unknown) {
+  return parseBoundedScheduleEnqueueCount(value, 0, 0)
 }
 
 function parseScheduleRunEnqueueCount(value: unknown) {
-  if (value === undefined || value === null || value === '') {
-    return 1
-  }
-
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed)) {
-    return null
-  }
-
-  return parsed >= 1 && parsed <= MAX_BULK_SCHEDULE_ENQUEUE_COUNT ? parsed : null
+  return parseBoundedScheduleEnqueueCount(value, 1, 1)
 }
 
 function parseStoredScheduleInputValues(value?: string | null) {
