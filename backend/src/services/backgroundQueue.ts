@@ -11,7 +11,7 @@ import { CivitaiService } from './civitaiService';
 import { ImageModel, ModelRole } from '../models/ImageModel';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { CivitaiSettings } from '../models/CivitaiSettings';
-import type { ModelReference } from './metadata/types';
+import type { AIMetadata, ModelReference } from './metadata/types';
 
 function resolveBackgroundQueueBatchSize(): number {
   const configured = Number.parseInt(process.env.CONAI_BACKGROUND_QUEUE_BATCH_SIZE ?? '', 10);
@@ -22,6 +22,41 @@ function resolveBackgroundQueueBatchSize(): number {
   // Metadata extraction can involve Sharp and DB writes. Keep a small default so
   // background work does not monopolize the process while users browse media.
   return 2;
+}
+
+function serializeMetadataArray<T>(value: T[] | undefined): string | null {
+  return Array.isArray(value) && value.length > 0 ? JSON.stringify(value) : null;
+}
+
+function metadataPersistenceFields(aiInfo: AIMetadata) {
+  const prompt = aiInfo.prompt || aiInfo.positive_prompt || null;
+  const negativePrompt = aiInfo.negative_prompt || aiInfo.uc || null;
+  const modelReferences = aiInfo.model_references ?? [];
+
+  return {
+    prompt,
+    hasCollectablePrompt: Boolean(prompt || aiInfo.character_prompt_text),
+    modelReferences,
+    updates: {
+      ai_tool: aiInfo.ai_tool || null,
+      model_name: aiInfo.model || aiInfo.model_name || null,
+      lora_models: serializeMetadataArray(aiInfo.lora_models),
+      steps: aiInfo.steps ?? null,
+      cfg_scale: aiInfo.cfg_scale ?? aiInfo.scale ?? null,
+      sampler: aiInfo.sampler || null,
+      seed: aiInfo.seed ?? null,
+      scheduler: aiInfo.scheduler || null,
+      prompt,
+      negative_prompt: negativePrompt,
+      denoise_strength: aiInfo.denoise_strength ?? aiInfo.denoising_strength ?? null,
+      generation_time: aiInfo.generation_time ?? null,
+      batch_size: aiInfo.batch_size ?? null,
+      batch_index: aiInfo.batch_index ?? null,
+      model_references: serializeMetadataArray(modelReferences),
+      character_prompt_text: aiInfo.character_prompt_text || null,
+      raw_nai_parameters: aiInfo.raw_nai_parameters || null,
+    },
+  };
 }
 
 /**
@@ -231,42 +266,11 @@ export class BackgroundQueueService {
   static async extractAndPersistMetadata(filePath: string, compositeHash: string): Promise<void> {
     const aiMetadata = await MetadataExtractor.extractMetadata(filePath);
     const aiInfo = aiMetadata.ai_info || {};
-
-    // Persist the same normalized values that the upload preview exposes.
-    const prompt = aiInfo.prompt || aiInfo.positive_prompt || null;
-    const negativePrompt = aiInfo.negative_prompt || aiInfo.uc || null;
-    const cfgScale = aiInfo.cfg_scale ?? aiInfo.scale ?? null;
-    const denoiseStrength = aiInfo.denoise_strength ?? aiInfo.denoising_strength ?? null;
-    const loraModelsJson = Array.isArray(aiInfo.lora_models) && aiInfo.lora_models.length > 0
-      ? JSON.stringify(aiInfo.lora_models)
-      : null;
-
-    // model_references를 JSON으로 직렬화
-    const modelReferencesJson = aiInfo.model_references && aiInfo.model_references.length > 0
-      ? JSON.stringify(aiInfo.model_references)
-      : null;
+    const persistence = metadataPersistenceFields(aiInfo);
 
     // media_metadata 업데이트
     try {
-      MediaMetadataModel.update(compositeHash, {
-        ai_tool: aiInfo.ai_tool || null,
-        model_name: aiInfo.model || aiInfo.model_name || null,
-        lora_models: loraModelsJson,
-        steps: aiInfo.steps ?? null,
-        cfg_scale: cfgScale,
-        sampler: aiInfo.sampler || null,
-        seed: aiInfo.seed ?? null,
-        scheduler: aiInfo.scheduler || null,
-        prompt,
-        negative_prompt: negativePrompt,
-        denoise_strength: denoiseStrength,
-        generation_time: aiInfo.generation_time ?? null,
-        batch_size: aiInfo.batch_size ?? null,
-        batch_index: aiInfo.batch_index ?? null,
-        model_references: modelReferencesJson,
-        character_prompt_text: aiInfo.character_prompt_text || null,
-        raw_nai_parameters: aiInfo.raw_nai_parameters || null,
-      });
+      MediaMetadataModel.update(compositeHash, persistence.updates);
     } catch (error) {
       if (error instanceof RangeError) {
         logger.error(`  ❌ RangeError during metadata update (skipping): ${path.basename(filePath)}`);
@@ -297,7 +301,7 @@ export class BackgroundQueueService {
     }
 
     // 프롬프트가 있으면 프롬프트 수집 작업 추가
-    if (prompt || aiInfo.character_prompt_text) {
+    if (persistence.hasCollectablePrompt) {
       try {
         this.addPromptCollectionTask(filePath, compositeHash);
       } catch (error) {
@@ -306,9 +310,9 @@ export class BackgroundQueueService {
     }
 
     // 모델 참조가 있으면 Civitai 조회 작업 추가
-    if (aiInfo.model_references && aiInfo.model_references.length > 0) {
+    if (persistence.modelReferences.length > 0) {
       try {
-        this.addCivitaiModelLookupTask(compositeHash, aiInfo.model_references);
+        this.addCivitaiModelLookupTask(compositeHash, persistence.modelReferences);
       } catch (error) {
         logger.warn(`  ⚠️  Civitai 조회 작업 추가 실패: ${path.basename(filePath)}`, error);
       }
