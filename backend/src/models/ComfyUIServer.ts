@@ -38,11 +38,7 @@ function normalizeCapacity(value: unknown, backendType: ComfyUIBackendType): num
   return Math.max(1, Math.min(100, Math.floor(parsed)));
 }
 
-function normalizeServerRecord(row: ComfyUIServerRecord | undefined | null): ComfyUIServerRecord | null {
-  if (!row) {
-    return null;
-  }
-
+function normalizeServerFields<T extends { backend_type?: unknown; capacity?: unknown; routing_tags_json?: unknown }>(row: T) {
   const backendType = normalizeBackendType(row.backend_type);
 
   return {
@@ -53,11 +49,22 @@ function normalizeServerRecord(row: ComfyUIServerRecord | undefined | null): Com
   };
 }
 
+function normalizeServerRecord(row: ComfyUIServerRecord | undefined | null): ComfyUIServerRecord | null {
+  if (!row) {
+    return null;
+  }
+
+  return normalizeServerFields(row);
+}
+
 export class ComfyUIServerModel {
   /**
    * 새 서버 생성
    */
   static create(serverData: ComfyUIServerCreateData): number {
+    const backendType = normalizeBackendType(serverData.backend_type);
+    const capacity = normalizeCapacity(serverData.capacity, backendType);
+
     const info = userSettingsDb.prepare(`
       INSERT INTO comfyui_servers (
         name, endpoint, backend_type, capacity, description, routing_tags_json, is_active
@@ -65,8 +72,8 @@ export class ComfyUIServerModel {
     `).run(
       serverData.name,
       serverData.endpoint,
-      normalizeBackendType(serverData.backend_type),
-      normalizeCapacity(serverData.capacity, normalizeBackendType(serverData.backend_type)),
+      backendType,
+      capacity,
       serverData.description || null,
       serverData.routing_tags_json ?? null,
       serverData.is_active !== undefined ? (serverData.is_active ? 1 : 0) : 1
@@ -226,10 +233,7 @@ export class WorkflowServerModel {
     query += ' ORDER BY s.id ASC';
 
     const rows = userSettingsDb.prepare(query).all(workflowId) as any[];
-    return (rows || []).map((row) => ({
-      ...row,
-      routing_tags: parseRoutingTagsJson(row.routing_tags_json),
-    }));
+    return (rows || []).map((row) => normalizeServerFields(row));
   }
 
   /**
