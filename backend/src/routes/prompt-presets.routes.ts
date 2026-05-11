@@ -35,6 +35,31 @@ function normalizePresetName(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalizePresetDescription(value: unknown) {
+  return typeof value === 'string' ? value.trim() : null;
+}
+
+function parsePresetRouteId(value: string) {
+  const id = parseInt(value, 10);
+  return Number.isNaN(id) ? null : id;
+}
+
+function resolvePresetParentId(value: unknown, missingValue: number | null | undefined, currentPresetId?: number) {
+  const parentId = value === undefined ? missingValue : value === null ? null : Number(value);
+
+  if (parentId !== null && parentId !== undefined) {
+    if (!Number.isInteger(parentId) || !PromptPresetModel.findById(parentId)) {
+      return { ok: false as const, error: 'Parent prompt preset not found' };
+    }
+
+    if (currentPresetId !== undefined && PromptPresetModel.checkCircularReference(currentPresetId, parentId)) {
+      return { ok: false as const, error: 'Circular parent reference detected' };
+    }
+  }
+
+  return { ok: true as const, parentId };
+}
+
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const withItems = req.query.withItems !== 'false';
   const hierarchical = req.query.hierarchical === 'true';
@@ -52,8 +77,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(req.params.id), 10);
-  if (Number.isNaN(id)) {
+  const id = parsePresetRouteId(routeParam(req.params.id));
+  if (id === null) {
     return res.status(400).json({ success: false, error: 'Invalid prompt preset ID' });
   }
 
@@ -80,18 +105,15 @@ router.post('/', requirePermission('prompts.create'), asyncHandler(async (req: R
     return res.status(409).json({ success: false, error: 'Prompt preset with this name already exists' });
   }
 
-  const parentId = req.body?.parent_id ?? null;
-  if (parentId !== null) {
-    const numericParentId = Number(parentId);
-    if (!Number.isInteger(numericParentId) || !PromptPresetModel.findById(numericParentId)) {
-      return res.status(400).json({ success: false, error: 'Parent prompt preset not found' });
-    }
+  const parentResult = resolvePresetParentId(req.body?.parent_id, null);
+  if (!parentResult.ok) {
+    return res.status(400).json({ success: false, error: parentResult.error });
   }
 
   const data: PromptPresetCreateData = {
     name,
-    description: typeof req.body?.description === 'string' ? req.body.description.trim() : null,
-    parent_id: parentId === null ? null : Number(parentId),
+    description: normalizePresetDescription(req.body?.description),
+    parent_id: parentResult.parentId,
     items,
   };
 
@@ -100,8 +122,8 @@ router.post('/', requirePermission('prompts.create'), asyncHandler(async (req: R
 }));
 
 router.put('/:id', requirePermission('prompts.update'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(req.params.id), 10);
-  if (Number.isNaN(id)) {
+  const id = parsePresetRouteId(routeParam(req.params.id));
+  if (id === null) {
     return res.status(400).json({ success: false, error: 'Invalid prompt preset ID' });
   }
 
@@ -119,15 +141,9 @@ router.put('/:id', requirePermission('prompts.update'), asyncHandler(async (req:
     return res.status(409).json({ success: false, error: 'Prompt preset with this name already exists' });
   }
 
-  let parentId: number | null | undefined = undefined;
-  if (req.body?.parent_id !== undefined) {
-    parentId = req.body.parent_id === null ? null : Number(req.body.parent_id);
-    if (parentId !== null && (!Number.isInteger(parentId) || !PromptPresetModel.findById(parentId))) {
-      return res.status(400).json({ success: false, error: 'Parent prompt preset not found' });
-    }
-    if (parentId !== null && PromptPresetModel.checkCircularReference(id, parentId)) {
-      return res.status(400).json({ success: false, error: 'Circular parent reference detected' });
-    }
+  const parentResult = resolvePresetParentId(req.body?.parent_id, undefined, id);
+  if (!parentResult.ok) {
+    return res.status(400).json({ success: false, error: parentResult.error });
   }
 
   const normalizedItems = req.body?.items === undefined ? undefined : normalizePresetItems(req.body.items);
@@ -138,8 +154,8 @@ router.put('/:id', requirePermission('prompts.update'), asyncHandler(async (req:
 
   const data: PromptPresetUpdateData = {
     ...(name !== undefined ? { name } : {}),
-    ...(req.body?.description !== undefined ? { description: typeof req.body.description === 'string' ? req.body.description.trim() : null } : {}),
-    ...(parentId !== undefined ? { parent_id: parentId } : {}),
+    ...(req.body?.description !== undefined ? { description: normalizePresetDescription(req.body.description) } : {}),
+    ...(parentResult.parentId !== undefined ? { parent_id: parentResult.parentId } : {}),
     ...(items !== undefined ? { items } : {}),
   };
 
@@ -148,8 +164,8 @@ router.put('/:id', requirePermission('prompts.update'), asyncHandler(async (req:
 }));
 
 router.delete('/:id', requirePermission('prompts.delete'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(req.params.id), 10);
-  if (Number.isNaN(id)) {
+  const id = parsePresetRouteId(routeParam(req.params.id));
+  if (id === null) {
     return res.status(400).json({ success: false, error: 'Invalid prompt preset ID' });
   }
 
