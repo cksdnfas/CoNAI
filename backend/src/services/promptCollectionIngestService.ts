@@ -77,20 +77,21 @@ export class PromptCollectionIngestService {
     return { positiveGroupId, negativeGroupId };
   }
 
-  private static async collectPositiveLikePrompt(prompt: string, groupId?: number) {
-    const { loras, terms } = parsePromptWithLoRAs(prompt);
+  private static cleanLoRAPrompts(loras: string[], groupId: number | undefined, logLabel: string) {
     const loraPrompts: Array<{ prompt: string; group_id?: number }> = [];
-    const termPrompts: Array<{ prompt: string; group_id?: number }> = [];
-
     for (const lora of loras) {
       try {
         const cleanedLoRA = removeLoRAWeight(lora);
         loraPrompts.push({ prompt: cleanedLoRA, group_id: groupId });
       } catch (loraError) {
-        console.error(`❌ Failed to clean LoRA "${lora}":`, loraError);
+        console.error(`❌ Failed to clean ${logLabel} LoRA "${lora}":`, loraError);
       }
     }
+    return loraPrompts;
+  }
 
+  private static cleanTermPrompts(terms: string[], logLabel: string) {
+    const termPrompts: Array<{ prompt: string; group_id?: number }> = [];
     for (const term of terms) {
       const trimmed = term.trim();
       if (!trimmed || trimmed.length < 2) continue;
@@ -100,9 +101,16 @@ export class PromptCollectionIngestService {
           termPrompts.push({ prompt: cleaned });
         }
       } catch (termError) {
-        console.error(`❌ Failed to clean term "${trimmed}":`, termError);
+        console.error(`❌ Failed to clean ${logLabel} term "${trimmed}":`, termError);
       }
     }
+    return termPrompts;
+  }
+
+  private static async collectPositiveLikePrompt(prompt: string, groupId?: number) {
+    const { loras, terms } = parsePromptWithLoRAs(prompt);
+    const loraPrompts = this.cleanLoRAPrompts(loras, groupId, 'positive');
+    const termPrompts = this.cleanTermPrompts(terms, 'positive');
 
     if (loraPrompts.length > 0) {
       await PromptCollectionModel.batchAddOrIncrement(loraPrompts);
@@ -114,30 +122,8 @@ export class PromptCollectionIngestService {
 
   private static async collectNegativePrompt(prompt: string, groupId?: number) {
     const { loras, terms } = parsePromptWithLoRAs(prompt);
-    const loraPrompts: Array<{ prompt: string; group_id?: number }> = [];
-    const termPrompts: Array<{ prompt: string; group_id?: number }> = [];
-
-    for (const lora of loras) {
-      try {
-        const cleanedLoRA = removeLoRAWeight(lora);
-        loraPrompts.push({ prompt: cleanedLoRA, group_id: groupId });
-      } catch (loraError) {
-        console.error(`❌ Failed to clean negative LoRA "${lora}":`, loraError);
-      }
-    }
-
-    for (const term of terms) {
-      const trimmed = term.trim();
-      if (!trimmed || trimmed.length < 2) continue;
-      try {
-        const cleaned = cleanPromptTerm(trimmed);
-        if (cleaned && cleaned.length >= 2) {
-          termPrompts.push({ prompt: cleaned });
-        }
-      } catch (termError) {
-        console.error(`❌ Failed to clean negative term "${trimmed}":`, termError);
-      }
-    }
+    const loraPrompts = this.cleanLoRAPrompts(loras, groupId, 'negative');
+    const termPrompts = this.cleanTermPrompts(terms, 'negative');
 
     if (loraPrompts.length > 0) {
       await PromptCollectionModel.batchAddOrIncrementNegative(loraPrompts);
@@ -162,19 +148,7 @@ export class PromptCollectionIngestService {
 
       if (this.isValidPrompt(characterPromptText)) {
         const { terms } = parsePromptWithLoRAs(characterPromptText!);
-        const termPrompts: Array<{ prompt: string; group_id?: number }> = [];
-        for (const term of terms) {
-          const trimmed = term.trim();
-          if (!trimmed || trimmed.length < 2) continue;
-          try {
-            const cleaned = cleanPromptTerm(trimmed);
-            if (cleaned && cleaned.length >= 2) {
-              termPrompts.push({ prompt: cleaned });
-            }
-          } catch (termError) {
-            console.error(`❌ Failed to clean character term "${trimmed}":`, termError);
-          }
-        }
+        const termPrompts = this.cleanTermPrompts(terms, 'character');
         if (termPrompts.length > 0) {
           await PromptCollectionModel.batchAddOrIncrement(termPrompts);
         }
