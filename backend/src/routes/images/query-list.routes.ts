@@ -13,6 +13,7 @@ import {
   buildEnrichedImageListResponse,
   buildImageListResponse,
   buildImageSearchParams,
+  buildImageSearchRouteRequest,
 } from './query-list-helpers';
 
 const router = Router();
@@ -156,56 +157,19 @@ router.post('/random-from-search', asyncHandler(async (req: Request, res: Respon
 }));
 
 router.post('/search', asyncHandler(async (req: Request, res: Response) => {
-  const {
-    search_text,
-    negative_text,
-    ai_tool,
-    model_name,
-    min_width,
-    max_width,
-    min_height,
-    max_height,
-    min_file_size,
-    max_file_size,
-    start_date,
-    end_date,
-    group_id,
-    page = 1,
-    limit = 20,
-    sortBy = 'first_seen_date',
-    sortOrder = 'DESC'
-  } = req.body;
+  const searchRequest = buildImageSearchRouteRequest(req.body);
 
   try {
-    const searchParams = buildImageSearchParams({
-      search_text,
-      negative_text,
-      ai_tool,
-      model_name,
-      min_width,
-      max_width,
-      min_height,
-      max_height,
-      min_file_size,
-      max_file_size,
-      start_date,
-      end_date,
-      group_id
-    });
-
     const result = await ImageSearchModel.advancedSearch(
-      searchParams,
-      parseInt(page),
-      parseInt(limit),
-      sortBy === 'upload_date' ? 'first_seen_date' : sortBy,
-      sortOrder
+      searchRequest.searchParams,
+      searchRequest.page,
+      searchRequest.limit,
+      searchRequest.sortBy,
+      searchRequest.sortOrder
     );
 
-    const pageNumber = parseInt(page);
-    const limitNumber = parseInt(limit);
-
     return res.json(
-      buildEnrichedImageListResponse(result.images, result.total, pageNumber, limitNumber)
+      buildEnrichedImageListResponse(result.images, result.total, searchRequest.page, searchRequest.limit)
     );
   } catch (error) {
     console.error('Advanced search error:', error);
@@ -218,38 +182,8 @@ router.post('/search', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.post('/search/ids', asyncHandler(async (req: Request, res: Response) => {
-  const {
-    search_text,
-    negative_text,
-    ai_tool,
-    model_name,
-    min_width,
-    max_width,
-    min_height,
-    max_height,
-    min_file_size,
-    max_file_size,
-    start_date,
-    end_date,
-    group_id
-  } = req.body;
-
   try {
-    const searchParams = buildImageSearchParams({
-      search_text,
-      negative_text,
-      ai_tool,
-      model_name,
-      min_width,
-      max_width,
-      min_height,
-      max_height,
-      min_file_size,
-      max_file_size,
-      start_date,
-      end_date,
-      group_id
-    });
+    const searchParams = buildImageSearchParams(req.body);
 
     const ids = await ImageSearchModel.searchImageFileIds(searchParams);
 

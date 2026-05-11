@@ -18,6 +18,17 @@ export interface BatchThumbnailLookupResult {
   error?: string;
 }
 
+type ImageSearchRouteSortBy = 'upload_date' | 'filename' | 'file_size' | 'width' | 'height';
+type ImageSearchRouteSortOrder = 'ASC' | 'DESC';
+
+export interface ImageSearchRouteRequest {
+  searchParams: ImageSearchParamsInput;
+  page: number;
+  limit: number;
+  sortBy: ImageSearchRouteSortBy;
+  sortOrder: ImageSearchRouteSortOrder;
+}
+
 export type BatchThumbnailLookupResults = Record<string, BatchThumbnailLookupResult>;
 
 /** Parse the shared image-search body shape without changing existing number coercion. */
@@ -36,6 +47,22 @@ export function buildImageSearchParams(body: Record<string, any>): ImageSearchPa
     start_date: body.start_date,
     end_date: body.end_date,
     group_id: body.group_id !== undefined ? parseInt(body.group_id, 10) : undefined
+  };
+}
+
+/** Parse the full advanced-search route payload while preserving existing defaults/coercion. */
+export function buildImageSearchRouteRequest(body: Record<string, any>): ImageSearchRouteRequest {
+  const page = body.page === undefined ? 1 : body.page;
+  const limit = body.limit === undefined ? 20 : body.limit;
+  const sortBy = body.sortBy === undefined ? 'first_seen_date' : body.sortBy;
+  const sortOrder = body.sortOrder === undefined ? 'DESC' : body.sortOrder;
+
+  return {
+    searchParams: buildImageSearchParams(body),
+    page: parseInt(page, 10),
+    limit: parseInt(limit, 10),
+    sortBy: (sortBy === 'first_seen_date' ? 'upload_date' : sortBy) as ImageSearchRouteSortBy,
+    sortOrder: sortOrder as ImageSearchRouteSortOrder,
   };
 }
 
