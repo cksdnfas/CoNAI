@@ -16,6 +16,38 @@ import { sendRouteBadRequest } from '../routeValidation';
 
 const router = Router();
 
+interface ImageTagRecord {
+  composite_hash?: string;
+  id?: string;
+  original_file_path?: string;
+  file_path?: string;
+  file_mime_type?: string;
+  mime_type?: string;
+  auto_tags?: string | null;
+}
+
+interface TaggingTarget {
+  compositeHash: string;
+  imagePath: string;
+  mimeType?: string;
+  existingAutoTags: string | null;
+}
+
+interface FailedTaggingResult {
+  composite_hash: string;
+  success: false;
+  error: string;
+  error_type?: string;
+}
+
+interface SuccessfulTaggingResult {
+  composite_hash: string;
+  success: true;
+  auto_tags: unknown;
+}
+
+type TaggingResultPayload = FailedTaggingResult | SuccessfulTaggingResult;
+
 /** Read the shared image tagging route param without redundant re-normalization. */
 function getTaggingCompositeHash(req: Request): string {
   return routeParam(req.params.id);
@@ -29,6 +61,194 @@ function validateBatchImageIds(res: Response, imageIds: unknown): imageIds is an
   }
 
   return true;
+}
+
+function parseBatchLimit(limit: unknown): number {
+  return limit ? parseInt(limit as string) : 100;
+}
+
+function createFailedTaggingResult(compositeHash: string, error: string, errorType?: string): FailedTaggingResult {
+  return errorType
+    ? { composite_hash: compositeHash, success: false, error, error_type: errorType }
+    : { composite_hash: compositeHash, success: false, error };
+}
+
+function queryActiveImageRecord(compositeHash: string): ImageTagRecord | null {
+  return db.prepare(`
+    SELECT
+      mm.*,
+      if.original_file_path,
+      if.mime_type as file_mime_type
+    FROM media_metadata mm
+    LEFT JOIN image_files if ON mm.composite_hash = if.composite_hash AND if.file_status = 'active'
+    WHERE mm.composite_hash = ?
+    LIMIT 1
+  `).get(compositeHash) as ImageTagRecord | null;
+}
+
+function buildTargetFromRecord(
+  record: ImageTagRecord,
+  compositeHash: string,
+  filePath: string,
+  missingFileError: string,
+): { target: TaggingTarget } | { failure: FailedTaggingResult } {
+  const imagePath = resolveUploadsPath(filePath);
+
+  if (!fs.existsSync(imagePath)) {
+    return { failure: createFailedTaggingResult(compositeHash, missingFileError) };
+  }
+
+  return {
+    target: {
+      compositeHash,
+      imagePath,
+      mimeType: record.file_mime_type || record.mime_type,
+      existingAutoTags: record.auto_tags || null,
+    },
+  };
+}
+
+function resolveHashTaggingTarget(
+  compositeHash: string,
+  errors: {
+    notFound: string;
+    noActiveFile: string;
+    missingFile: string;
+  },
+): { target: TaggingTarget } | { failure: FailedTaggingResult } {
+  const imageData = queryActiveImageRecord(compositeHash);
+
+  if (!imageData) {
+    return { failure: createFailedTaggingResult(compositeHash, errors.notFound) };
+  }
+
+  if (!imageData.original_file_path) {
+    return { failure: createFailedTaggingResult(compositeHash, errors.noActiveFile) };
+  }
+
+  return buildTargetFromRecord(imageData, compositeHash, imageData.original_file_path, errors.missingFile);
+}
+
+function resolveRecordTaggingTarget(
+  image: ImageTagRecord,
+  noFilePathError: string,
+  missingFileError: string,
+): { target: TaggingTarget } | { failure: FailedTaggingResult } {
+  const compositeHash = image.composite_hash || image.id || '';
+  const filePath = image.original_file_path || image.file_path;
+
+  if (!filePath) {
+    return { failure: createFailedTaggingResult(compositeHash, noFilePathError) };
+  }
+
+  return buildTargetFromRecord(image, compositeHash, filePath, missingFileError);
+}
+
+async function runTagger(target: TaggingTarget, logPrefix: string, verboseResult = false): Promise<TaggerResult> {
+  const isVideo = ImageTaggerService.isVideoFile(target.imagePath, target.mimeType);
+  if (verboseResult && isVideo) {
+    logger.debug('[ImageTag] Detected video file, extracting frames...');
+  }
+
+  const taggerResult = isVideo
+    ? await imageTaggerService.tagVideo(target.imagePath)
+    : await imageTaggerService.tagImage(target.imagePath);
+
+  if (verboseResult) {
+    logger.debug(`${logPrefix} Tagger result details logged to file`);
+    logger.verbose(`${logPrefix} Tagger result:`, {
+      success: taggerResult.success,
+      hasCaption: !!taggerResult.caption,
+      hasGeneral: !!taggerResult.general,
+      captionLength: taggerResult.caption?.length || 0,
+    });
+  }
+
+  return taggerResult;
+}
+
+async function calculateRatingScore(taggerResult: TaggerResult, logPrefix: string, logSuccess = false): Promise<number | null> {
+  const ratingData = extractRatingData(taggerResult.rating);
+  if (!ratingData) {
+    return null;
+  }
+
+  try {
+    const scoreResult = await RatingScoreService.calculateScore(ratingData);
+    if (logSuccess) {
+      logger.debug(`${logPrefix} Calculated rating_score: ${scoreResult.score}`);
+    }
+    return scoreResult.score;
+  } catch (error) {
+    logger.error(`${logPrefix} Failed to calculate rating_score:`, error);
+    return null;
+  }
+}
+
+async function tagAndPersistTarget(
+  target: TaggingTarget,
+  logPrefix: string,
+  options: { verboseResult?: boolean; logRatingScore?: boolean; includeErrorType?: boolean } = {},
+): Promise<TaggingResultPayload> {
+  const taggerResult = await runTagger(target, logPrefix, options.verboseResult);
+
+  if (!taggerResult.success) {
+    return createFailedTaggingResult(
+      target.compositeHash,
+      taggerResult.error || 'Tagging failed',
+      options.includeErrorType ? taggerResult.error_type : undefined,
+    );
+  }
+
+  const autoTagsJson = await buildMergedAutoTags(target.existingAutoTags, taggerResult, target.imagePath, target.mimeType);
+  if (options.verboseResult) {
+    logger.debug(`${logPrefix} Formatted JSON length: ${autoTagsJson?.length || 0}`);
+    if (autoTagsJson) {
+      logger.verbose(`${logPrefix} Formatted JSON preview: ${autoTagsJson.substring(0, 100)}`);
+    }
+  }
+
+  const ratingScore = await calculateRatingScore(taggerResult, logPrefix, options.logRatingScore);
+  MediaMetadataModel.update(target.compositeHash, {
+    auto_tags: autoTagsJson,
+    rating_score: ratingScore,
+  });
+
+  return {
+    composite_hash: target.compositeHash,
+    success: true,
+    auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null,
+  };
+}
+
+async function processHashTaggingItem(
+  compositeHash: string,
+  logPrefix: string,
+): Promise<TaggingResultPayload> {
+  const resolved = resolveHashTaggingTarget(compositeHash, {
+    notFound: 'Image not found',
+    noActiveFile: 'No active file found',
+    missingFile: 'Image file not found',
+  });
+
+  if ('failure' in resolved) {
+    return resolved.failure;
+  }
+
+  return await tagAndPersistTarget(resolved.target, logPrefix);
+}
+
+async function processRecordTaggingItem(
+  image: ImageTagRecord,
+  logPrefix: string,
+): Promise<TaggingResultPayload> {
+  const resolved = resolveRecordTaggingTarget(image, 'No file path available', 'Image file not found');
+
+  if ('failure' in resolved) {
+    return resolved.failure;
+  }
+
+  return await tagAndPersistTarget(resolved.target, logPrefix);
 }
 
 router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
@@ -49,17 +269,7 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
   try {
     logger.debug(`[TagRoute] Querying database for composite_hash: ${compositeHash}`);
 
-    const imageData = db.prepare(`
-      SELECT
-        mm.*,
-        if.original_file_path,
-        if.mime_type as file_mime_type
-      FROM media_metadata mm
-      LEFT JOIN image_files if ON mm.composite_hash = if.composite_hash AND if.file_status = 'active'
-      WHERE mm.composite_hash = ?
-      LIMIT 1
-    `).get(compositeHash) as any;
-
+    const imageData = queryActiveImageRecord(compositeHash);
     if (!imageData) {
       logger.debug('[TagRoute] Media not found in database');
       return res.status(404).json({ success: false, error: 'Image or video not found' });
@@ -84,53 +294,24 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
 
     logger.debug(`[ImageTag] Tagging file ${compositeHash}: ${imagePath}`);
 
-    const mimeType = imageData.file_mime_type || imageData.mime_type;
-    let taggerResult: TaggerResult;
-    if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
-      logger.debug('[ImageTag] Detected video file, extracting frames...');
-      taggerResult = await imageTaggerService.tagVideo(imagePath);
-    } else {
-      taggerResult = await imageTaggerService.tagImage(imagePath);
-    }
+    const result = await tagAndPersistTarget(
+      {
+        compositeHash,
+        imagePath,
+        mimeType: imageData.file_mime_type || imageData.mime_type,
+        existingAutoTags: imageData.auto_tags || null,
+      },
+      '[ImageTag]',
+      { verboseResult: true, logRatingScore: true, includeErrorType: true },
+    );
 
-    logger.debug('[ImageTag] Tagger result details logged to file');
-    logger.verbose('[ImageTag] Tagger result:', {
-      success: taggerResult.success,
-      hasCaption: !!taggerResult.caption,
-      hasGeneral: !!taggerResult.general,
-      captionLength: taggerResult.caption?.length || 0
-    });
-
-    if (!taggerResult.success) {
+    if (!result.success) {
       return res.status(500).json({
         success: false,
-        error: taggerResult.error || 'Tagging failed',
-        details: { error_type: taggerResult.error_type }
+        error: result.error,
+        details: { error_type: result.error_type },
       });
     }
-
-    const autoTagsJson = await buildMergedAutoTags(imageData.auto_tags || null, taggerResult, imagePath, mimeType);
-    logger.debug(`[ImageTag] Formatted JSON length: ${autoTagsJson?.length || 0}`);
-    if (autoTagsJson) {
-      logger.verbose(`[ImageTag] Formatted JSON preview: ${autoTagsJson.substring(0, 100)}`);
-    }
-
-    let ratingScore: number | null = null;
-    const ratingData = extractRatingData(taggerResult.rating);
-    if (ratingData) {
-      try {
-        const scoreResult = await RatingScoreService.calculateScore(ratingData);
-        ratingScore = scoreResult.score;
-        logger.debug(`[ImageTag] Calculated rating_score: ${ratingScore}`);
-      } catch (error) {
-        logger.error('[ImageTag] Failed to calculate rating_score:', error);
-      }
-    }
-
-    MediaMetadataModel.update(compositeHash, {
-      auto_tags: autoTagsJson,
-      rating_score: ratingScore
-    });
 
     logger.info(`[ImageTag] Successfully tagged ${compositeHash}`);
     QueryCacheService.invalidateImageCache(compositeHash, false);
@@ -138,9 +319,9 @@ router.post('/:id/tag', asyncHandler(async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: {
-        composite_hash: compositeHash,
-        auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
-      }
+        composite_hash: result.composite_hash,
+        auto_tags: result.auto_tags,
+      },
     });
     return;
   } catch (error) {
@@ -165,80 +346,19 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
     let failCount = 0;
 
     logger.debug(`[BatchTag] Starting batch tagging for ${image_ids.length} images`);
-    const results: any[] = [];
+    const results: TaggingResultPayload[] = [];
 
     for (const compositeHash of image_ids) {
       try {
-        const imageData = db.prepare(`
-          SELECT
-            mm.*,
-            if.original_file_path,
-            if.mime_type as file_mime_type
-          FROM media_metadata mm
-          LEFT JOIN image_files if ON mm.composite_hash = if.composite_hash AND if.file_status = 'active'
-          WHERE mm.composite_hash = ?
-          LIMIT 1
-        `).get(compositeHash) as any;
+        const result = await processHashTaggingItem(compositeHash, '[BatchTag]');
+        results.push(result);
 
-        if (!imageData) {
-          results.push({ composite_hash: compositeHash, success: false, error: 'Image not found' });
-          failCount++;
-          continue;
-        }
-
-        if (!imageData.original_file_path) {
-          results.push({ composite_hash: compositeHash, success: false, error: 'No active file found' });
-          failCount++;
-          continue;
-        }
-
-        const imagePath = resolveUploadsPath(imageData.original_file_path);
-        if (!fs.existsSync(imagePath)) {
-          results.push({ composite_hash: compositeHash, success: false, error: 'Image file not found' });
-          failCount++;
-          continue;
-        }
-
-        const mimeType = imageData.file_mime_type || imageData.mime_type;
-        let taggerResult: TaggerResult;
-        if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
-          taggerResult = await imageTaggerService.tagVideo(imagePath);
+        if (result.success) {
+          successCount++;
+          logger.debug(`[BatchTag] Tagged image ${compositeHash} (${successCount}/${image_ids.length})`);
         } else {
-          taggerResult = await imageTaggerService.tagImage(imagePath);
-        }
-
-        if (!taggerResult.success) {
-          results.push({ composite_hash: compositeHash, success: false, error: taggerResult.error || 'Tagging failed' });
           failCount++;
-          continue;
         }
-
-        const autoTagsJson = await buildMergedAutoTags(imageData.auto_tags || null, taggerResult, imagePath, mimeType);
-
-        let ratingScore: number | null = null;
-        const ratingData = extractRatingData(taggerResult.rating);
-        if (ratingData) {
-          try {
-            const scoreResult = await RatingScoreService.calculateScore(ratingData);
-            ratingScore = scoreResult.score;
-          } catch (error) {
-            logger.error('[BatchTag] Failed to calculate rating_score:', error);
-          }
-        }
-
-        MediaMetadataModel.update(compositeHash, {
-          auto_tags: autoTagsJson,
-          rating_score: ratingScore
-        });
-
-        results.push({
-          composite_hash: compositeHash,
-          success: true,
-          auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
-        });
-        successCount++;
-
-        logger.debug(`[BatchTag] Tagged image ${compositeHash} (${successCount}/${image_ids.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         results.push({ composite_hash: compositeHash, success: false, error: message });
@@ -255,8 +375,8 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
         total: image_ids.length,
         success_count: successCount,
         fail_count: failCount,
-        results
-      }
+        results,
+      },
     });
     return;
   } catch (error) {
@@ -271,7 +391,7 @@ router.post('/batch-tag', asyncHandler(async (req: Request, res: Response) => {
 
 router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Response) => {
   const { limit } = req.body;
-  const maxLimit = limit ? parseInt(limit) : 100;
+  const maxLimit = parseBatchLimit(limit);
 
   try {
     const untaggedImages = await ImageTaggingModel.findUntagged(maxLimit);
@@ -284,78 +404,31 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
           success_count: 0,
           fail_count: 0,
           message: 'No untagged images found',
-          results: []
-        }
+          results: [],
+        },
       });
       return;
     }
 
     logger.debug(`[BatchTagUnprocessed] Processing ${untaggedImages.length} untagged images`);
-    const results = [];
+    const results: TaggingResultPayload[] = [];
     let successCount = 0;
     let failCount = 0;
 
     for (const image of untaggedImages) {
       try {
-        const compositeHash = image.composite_hash || image.id;
-        const filePath = image.original_file_path || image.file_path;
+        const result = await processRecordTaggingItem(image, '[BatchTagUnprocessed]');
+        results.push(result);
 
-        if (!filePath) {
-          results.push({ composite_hash: compositeHash, success: false, error: 'No file path available' });
-          failCount++;
-          continue;
-        }
-
-        const imagePath = resolveUploadsPath(filePath);
-        if (!fs.existsSync(imagePath)) {
-          results.push({ composite_hash: compositeHash, success: false, error: 'Image file not found' });
-          failCount++;
-          continue;
-        }
-
-        const mimeType = image.file_mime_type || image.mime_type;
-        let taggerResult: TaggerResult;
-        if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
-          taggerResult = await imageTaggerService.tagVideo(imagePath);
+        if (result.success) {
+          successCount++;
+          logger.debug(`[BatchTagUnprocessed] Tagged file ${result.composite_hash} (${successCount}/${untaggedImages.length})`);
         } else {
-          taggerResult = await imageTaggerService.tagImage(imagePath);
-        }
-
-        if (!taggerResult.success) {
-          results.push({ composite_hash: compositeHash, success: false, error: taggerResult.error || 'Tagging failed' });
           failCount++;
-          continue;
         }
-
-        const autoTagsJson = await buildMergedAutoTags(image.auto_tags || null, taggerResult, imagePath, mimeType);
-
-        let ratingScore: number | null = null;
-        const ratingData = extractRatingData(taggerResult.rating);
-        if (ratingData) {
-          try {
-            const scoreResult = await RatingScoreService.calculateScore(ratingData);
-            ratingScore = scoreResult.score;
-          } catch (error) {
-            logger.error('[BatchTagUnprocessed] Failed to calculate rating_score:', error);
-          }
-        }
-
-        MediaMetadataModel.update(compositeHash, {
-          auto_tags: autoTagsJson,
-          rating_score: ratingScore
-        });
-
-        results.push({
-          composite_hash: compositeHash,
-          success: true,
-          auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
-        });
-        successCount++;
-
-        logger.debug(`[BatchTagUnprocessed] Tagged file ${compositeHash} (${successCount}/${untaggedImages.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        const compositeHash = image.composite_hash || image.id;
+        const compositeHash = image.composite_hash || image.id || '';
         results.push({ composite_hash: compositeHash, success: false, error: message });
         failCount++;
       }
@@ -370,8 +443,8 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
         total: untaggedImages.length,
         success_count: successCount,
         fail_count: failCount,
-        results
-      }
+        results,
+      },
     });
     return;
   } catch (error) {
@@ -386,7 +459,7 @@ router.post('/batch-tag-unprocessed', asyncHandler(async (req: Request, res: Res
 
 router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) => {
   const { limit, force } = req.body;
-  const maxLimit = limit ? parseInt(limit) : 100;
+  const maxLimit = parseBatchLimit(limit);
   const forceRetag = force !== undefined ? force : true;
 
   try {
@@ -408,89 +481,28 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
           success_count: 0,
           fail_count: 0,
           message: 'No images found',
-          results: []
-        }
+          results: [],
+        },
       });
       return;
     }
 
     logger.debug(`[BatchTagAll] Processing ${compositeHashes.length} images (force=${forceRetag})`);
-    const results = [];
+    const results: TaggingResultPayload[] = [];
     let successCount = 0;
     let failCount = 0;
 
     for (const compositeHash of compositeHashes) {
       try {
-        const imageData = db.prepare(`
-          SELECT
-            mm.*,
-            if.original_file_path,
-            if.mime_type as file_mime_type
-          FROM media_metadata mm
-          LEFT JOIN image_files if ON mm.composite_hash = if.composite_hash AND if.file_status = 'active'
-          WHERE mm.composite_hash = ?
-          LIMIT 1
-        `).get(compositeHash) as any;
+        const result = await processHashTaggingItem(compositeHash, '[BatchTagAll]');
+        results.push(result);
 
-        if (!imageData) {
-          results.push({ composite_hash: compositeHash, success: false, error: 'Image not found' });
-          failCount++;
-          continue;
-        }
-
-        if (!imageData.original_file_path) {
-          results.push({ composite_hash: compositeHash, success: false, error: 'No active file found' });
-          failCount++;
-          continue;
-        }
-
-        const imagePath = resolveUploadsPath(imageData.original_file_path);
-        if (!fs.existsSync(imagePath)) {
-          results.push({ composite_hash: compositeHash, success: false, error: 'Image file not found' });
-          failCount++;
-          continue;
-        }
-
-        const mimeType = imageData.file_mime_type || imageData.mime_type;
-        let taggerResult: TaggerResult;
-        if (ImageTaggerService.isVideoFile(imagePath, mimeType)) {
-          taggerResult = await imageTaggerService.tagVideo(imagePath);
+        if (result.success) {
+          successCount++;
+          logger.debug(`[BatchTagAll] Tagged file ${compositeHash} (${successCount}/${compositeHashes.length})`);
         } else {
-          taggerResult = await imageTaggerService.tagImage(imagePath);
-        }
-
-        if (!taggerResult.success) {
-          results.push({ composite_hash: compositeHash, success: false, error: taggerResult.error || 'Tagging failed' });
           failCount++;
-          continue;
         }
-
-        const autoTagsJson = await buildMergedAutoTags(imageData.auto_tags || null, taggerResult, imagePath, mimeType);
-
-        let ratingScore: number | null = null;
-        const ratingData = extractRatingData(taggerResult.rating);
-        if (ratingData) {
-          try {
-            const scoreResult = await RatingScoreService.calculateScore(ratingData);
-            ratingScore = scoreResult.score;
-          } catch (error) {
-            logger.error('[BatchTagAll] Failed to calculate rating_score:', error);
-          }
-        }
-
-        MediaMetadataModel.update(compositeHash, {
-          auto_tags: autoTagsJson,
-          rating_score: ratingScore
-        });
-
-        results.push({
-          composite_hash: compositeHash,
-          success: true,
-          auto_tags: autoTagsJson ? JSON.parse(autoTagsJson) : null
-        });
-        successCount++;
-
-        logger.debug(`[BatchTagAll] Tagged file ${compositeHash} (${successCount}/${compositeHashes.length})`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         results.push({ composite_hash: compositeHash, success: false, error: message });
@@ -507,8 +519,8 @@ router.post('/batch-tag-all', asyncHandler(async (req: Request, res: Response) =
         total: compositeHashes.length,
         success_count: successCount,
         fail_count: failCount,
-        results
-      }
+        results,
+      },
     });
     return;
   } catch (error) {
