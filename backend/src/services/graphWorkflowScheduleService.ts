@@ -35,6 +35,21 @@ function parseDailyTime(dailyTime?: string | null) {
   return { hour, minute }
 }
 
+function buildDailyNextRunAt(dailyTime: string | null | undefined, now: Date) {
+  const parsedDailyTime = parseDailyTime(dailyTime)
+  if (!parsedDailyTime) {
+    return null
+  }
+
+  const next = new Date(now)
+  next.setHours(parsedDailyTime.hour, parsedDailyTime.minute, 0, 0)
+  if (next.getTime() <= now.getTime()) {
+    next.setDate(next.getDate() + 1)
+  }
+
+  return next.toISOString()
+}
+
 /** Build the next due timestamp for one schedule after a trigger is consumed. */
 function buildNextRunAt(schedule: GraphWorkflowScheduleRecord, now: Date) {
   if (schedule.schedule_type === 'once') {
@@ -51,18 +66,7 @@ function buildNextRunAt(schedule: GraphWorkflowScheduleRecord, now: Date) {
     return new Date(baseTime.getTime() + intervalMinutes * 60_000).toISOString()
   }
 
-  const parsedDailyTime = parseDailyTime(schedule.daily_time)
-  if (!parsedDailyTime) {
-    return null
-  }
-
-  const next = new Date(now)
-  next.setHours(parsedDailyTime.hour, parsedDailyTime.minute, 0, 0)
-  if (next.getTime() <= now.getTime()) {
-    next.setDate(next.getDate() + 1)
-  }
-
-  return next.toISOString()
+  return buildDailyNextRunAt(schedule.daily_time, now)
 }
 
 function normalizeRunEnqueueCount(value?: number | null) {
@@ -105,18 +109,7 @@ export class GraphWorkflowScheduleService {
       return new Date(now.getTime() + params.intervalMinutes * 60_000).toISOString()
     }
 
-    const parsedDailyTime = parseDailyTime(params.dailyTime)
-    if (!parsedDailyTime) {
-      return null
-    }
-
-    const next = new Date(now)
-    next.setHours(parsedDailyTime.hour, parsedDailyTime.minute, 0, 0)
-    if (next.getTime() <= now.getTime()) {
-      next.setDate(next.getDate() + 1)
-    }
-
-    return next.toISOString()
+    return buildDailyNextRunAt(params.dailyTime, now)
   }
 
   /** Start the schedule polling loop once per process. */
