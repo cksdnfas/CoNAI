@@ -24,6 +24,21 @@ export interface CleanupReport {
   };
 }
 
+function cleanupDetailForRecord(
+  record: GenerationHistoryRecord,
+  reason: CleanupDetail['reason'],
+  extra: Partial<CleanupDetail> = {},
+): CleanupDetail {
+  return {
+    id: record.id!,
+    reason,
+    service_type: record.service_type,
+    created_at: record.created_at!,
+    generation_status: record.generation_status,
+    ...extra,
+  };
+}
+
 /**
  * CleanupService
  * Manages automatic cleanup of generation history records:
@@ -114,14 +129,9 @@ export class CleanupService {
     // 1. Clean failed records (>24 hours old)
     const failedRecords = this.findFailedRecords(24);
     for (const record of failedRecords) {
-      details.push({
-        id: record.id!,
-        reason: 'failed',
-        service_type: record.service_type,
-        created_at: record.created_at!,
-        generation_status: record.generation_status,
+      details.push(cleanupDetailForRecord(record, 'failed', {
         error_message: record.error_message
-      });
+      }));
 
       if (!dryRun) {
         GenerationHistoryModel.delete(record.id!);
@@ -132,14 +142,9 @@ export class CleanupService {
     // 2. Clean orphaned records (main DB hash linkage missing)
     const orphanedRecords = await this.findOrphanedRecords();
     for (const record of orphanedRecords) {
-      details.push({
-        id: record.id!,
-        reason: 'orphaned',
-        service_type: record.service_type,
-        created_at: record.created_at!,
-        generation_status: record.generation_status,
+      details.push(cleanupDetailForRecord(record, 'orphaned', {
         composite_hash: record.composite_hash
-      });
+      }));
 
       if (!dryRun) {
         GenerationHistoryModel.delete(record.id!);
@@ -150,13 +155,7 @@ export class CleanupService {
     // 3. Clean completed records without hash (>24 hours old)
     const noHashRecords = this.findRecordsWithoutHash(24);
     for (const record of noHashRecords) {
-      details.push({
-        id: record.id!,
-        reason: 'no_hash',
-        service_type: record.service_type,
-        created_at: record.created_at!,
-        generation_status: record.generation_status
-      });
+      details.push(cleanupDetailForRecord(record, 'no_hash'));
 
       if (!dryRun) {
         GenerationHistoryModel.delete(record.id!);
@@ -167,13 +166,7 @@ export class CleanupService {
     // 4. Update stale pending/processing records to failed
     const staleRecords = this.findStaleRecords(1);
     for (const record of staleRecords) {
-      details.push({
-        id: record.id!,
-        reason: 'stale',
-        service_type: record.service_type,
-        created_at: record.created_at!,
-        generation_status: record.generation_status
-      });
+      details.push(cleanupDetailForRecord(record, 'stale'));
 
       if (!dryRun) {
         GenerationHistoryModel.recordError(
@@ -238,14 +231,9 @@ export class CleanupService {
     // Get ALL failed records (no time restriction)
     const failedRecords = this.findFailedRecords(0); // 0 hours = get all failed records
     for (const record of failedRecords) {
-      details.push({
-        id: record.id!,
-        reason: 'failed',
-        service_type: record.service_type,
-        created_at: record.created_at!,
-        generation_status: record.generation_status,
+      details.push(cleanupDetailForRecord(record, 'failed', {
         error_message: record.error_message
-      });
+      }));
 
       if (!dryRun) {
         GenerationHistoryModel.delete(record.id!);
