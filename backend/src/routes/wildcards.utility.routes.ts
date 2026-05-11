@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
-import { WildcardCreateData } from '../models/Wildcard';
+import { getUserSettingsDb } from '../database/userSettingsDb';
+import { WildcardCreateData, WildcardModel } from '../models/Wildcard';
 import { WildcardService } from '../services/wildcardService';
 import { requirePermission } from '../middleware/authMiddleware';
 
@@ -51,8 +52,7 @@ router.post('/scan-lora-folder', requirePermission('wildcards.lora.scan'), async
       return res.status(400).json({ success: false, error: 'Invalid duplicate handling method' });
     }
 
-    const db = (await import('../database/userSettingsDb')).getUserSettingsDb();
-    const { WildcardModel } = await import('../models/Wildcard');
+    const db = getUserSettingsDb();
     db.prepare('DELETE FROM wildcards WHERE is_auto_collected = 1').run();
 
     interface LoraFileData {

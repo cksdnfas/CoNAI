@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/errorHandler';
+import { getUserSettingsDb } from '../database/userSettingsDb';
 import { WildcardModel } from '../models/Wildcard';
 import { requirePermission } from '../middleware/authMiddleware';
 
@@ -37,7 +38,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
 router.get('/last-scan-log', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const db = (await import('../database/userSettingsDb')).getUserSettingsDb();
+    const db = getUserSettingsDb();
     const result = db.prepare('SELECT value FROM user_preferences WHERE key = ?').get('last_lora_scan_log') as any;
 
     if (!result) {
