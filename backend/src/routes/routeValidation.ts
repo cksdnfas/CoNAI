@@ -18,6 +18,10 @@ export function validateBooleanIfDefined(res: Response, value: unknown, error: s
   return true
 }
 
+function parseNumberIfDefined(value: unknown) {
+  return value === undefined ? undefined : Number(value)
+}
+
 /** Validate an integer range only when the caller provided the field. */
 export function validateIntegerInRangeIfDefined(
   res: Response,
@@ -26,11 +30,9 @@ export function validateIntegerInRangeIfDefined(
   max: number,
   error: string,
 ) {
-  if (value !== undefined) {
-    const numericValue = Number(value)
-    if (!Number.isInteger(numericValue) || numericValue < min || numericValue > max) {
-      return sendRouteBadRequest(res, error)
-    }
+  const numericValue = parseNumberIfDefined(value)
+  if (numericValue !== undefined && (!Number.isInteger(numericValue) || numericValue < min || numericValue > max)) {
+    return sendRouteBadRequest(res, error)
   }
 
   return true
@@ -44,11 +46,9 @@ export function validateNumberInRangeIfDefined(
   max: number,
   error: string,
 ) {
-  if (value !== undefined) {
-    const numericValue = Number(value)
-    if (!Number.isFinite(numericValue) || numericValue < min || numericValue > max) {
-      return sendRouteBadRequest(res, error)
-    }
+  const numericValue = parseNumberIfDefined(value)
+  if (numericValue !== undefined && (!Number.isFinite(numericValue) || numericValue < min || numericValue > max)) {
+    return sendRouteBadRequest(res, error)
   }
 
   return true
@@ -61,11 +61,9 @@ export function validateNumberGreaterThanIfDefined(
   minExclusive: number,
   error: string,
 ) {
-  if (value !== undefined) {
-    const numericValue = Number(value)
-    if (!Number.isFinite(numericValue) || numericValue <= minExclusive) {
-      return sendRouteBadRequest(res, error)
-    }
+  const numericValue = parseNumberIfDefined(value)
+  if (numericValue !== undefined && (!Number.isFinite(numericValue) || numericValue <= minExclusive)) {
+    return sendRouteBadRequest(res, error)
   }
 
   return true
