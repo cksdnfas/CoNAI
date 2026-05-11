@@ -11,6 +11,8 @@ export { getRequesterAccountId } from '../requester-session-helpers'
 
 export const ACTIVE_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['queued', 'dispatching', 'running']
 export const TERMINAL_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['completed', 'failed', 'cancelled']
+const ALL_QUEUE_STATUSES: GenerationQueueJobStatus[] = [...ACTIVE_QUEUE_STATUSES, ...TERMINAL_QUEUE_STATUSES]
+const ALL_QUEUE_STATUS_SET = new Set<GenerationQueueJobStatus>(ALL_QUEUE_STATUSES)
 
 export function parseQueueDebugMeta(job: GenerationQueueJobRecord) {
   try {
@@ -28,13 +30,12 @@ export function parseStatusList(value: unknown): GenerationQueueJobStatus[] | un
     return undefined
   }
 
-  const accepted = new Set<GenerationQueueJobStatus>(['queued', 'dispatching', 'running', 'completed', 'failed', 'cancelled'])
   const entries = value
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0)
 
-  const invalid = entries.filter((entry) => !accepted.has(entry as GenerationQueueJobStatus))
+  const invalid = entries.filter((entry) => !ALL_QUEUE_STATUS_SET.has(entry as GenerationQueueJobStatus))
   if (invalid.length > 0) {
     throw new Error(`Invalid queue status filter: ${invalid.join(', ')}`)
   }
