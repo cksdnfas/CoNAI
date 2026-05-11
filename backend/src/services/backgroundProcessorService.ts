@@ -109,6 +109,28 @@ function shouldBackfillDuplicateMetadata(existing: ExistingMediaMetadataSummary)
   ].some(hasMeaningfulMetadataValue);
 }
 
+function findExistingMediaMetadataSummary(compositeHash: string): ExistingMediaMetadataSummary | undefined {
+  return db
+    .prepare(
+      `
+        SELECT
+          composite_hash, ai_tool, model_name, lora_models, model_references,
+          steps, cfg_scale, sampler, seed, scheduler,
+          prompt, negative_prompt, character_prompt_text, raw_nai_parameters
+        FROM media_metadata
+        WHERE composite_hash = ?
+      `
+    )
+    .get(compositeHash) as ExistingMediaMetadataSummary | undefined;
+}
+
+function linkImageFileToHash(fileId: number, compositeHash: string): void {
+  db.prepare(`UPDATE image_files SET composite_hash = ? WHERE id = ?`).run(
+    compositeHash,
+    fileId
+  );
+}
+
 function determineFileType(mimeType: string, filePath: string): FileType {
   if (mimeType.startsWith('video/')) {
     return 'video';
@@ -439,25 +461,11 @@ export class BackgroundProcessorService {
       );
 
     // Check if this hash already exists (duplicate detection)
-    const existing = db
-      .prepare(
-        `
-        SELECT
-          composite_hash, ai_tool, model_name, lora_models, model_references,
-          steps, cfg_scale, sampler, seed, scheduler,
-          prompt, negative_prompt, character_prompt_text, raw_nai_parameters
-        FROM media_metadata
-        WHERE composite_hash = ?
-      `
-      )
-      .get(hashes.compositeHash) as ExistingMediaMetadataSummary | undefined;
+    const existing = findExistingMediaMetadataSummary(hashes.compositeHash);
 
     if (existing) {
       // Duplicate found - link to existing hash without creating new metadata
-      db.prepare(`UPDATE image_files SET composite_hash = ? WHERE id = ?`).run(
-        hashes.compositeHash,
-        file.id
-      );
+      linkImageFileToHash(file.id, hashes.compositeHash);
 
       if (shouldBackfillDuplicateMetadata(existing)) {
         await this.extractMetadataNowOrQueue(
@@ -503,10 +511,7 @@ export class BackgroundProcessorService {
     );
 
     // Update image_files record with composite_hash
-    db.prepare(`UPDATE image_files SET composite_hash = ? WHERE id = ?`).run(
-      hashes.compositeHash,
-      file.id
-    );
+    linkImageFileToHash(file.id, hashes.compositeHash);
 
     // Run auto-collection immediately after hash generation (Option A)
     try {
@@ -556,10 +561,7 @@ export class BackgroundProcessorService {
 
     if (existing) {
       // Metadata already exists - just link file
-      db.prepare(`UPDATE image_files SET composite_hash = ? WHERE id = ?`).run(
-        fileHash,
-        file.id
-      );
+      linkImageFileToHash(file.id, fileHash);
       await this.processApiGenerationGroupAssignment(fileHash);
       console.log(`  ♻️  Video/Animated already processed: ${fileName}`);
       return;
@@ -603,10 +605,7 @@ export class BackgroundProcessorService {
     ).run(fileHash, duration, fps, width, height, videoCodec, audioCodec, bitrate);
 
     // Update image_files record with composite_hash (MD5 해시 값)
-    db.prepare(`UPDATE image_files SET composite_hash = ? WHERE id = ?`).run(
-      fileHash,
-      file.id
-    );
+    linkImageFileToHash(file.id, fileHash);
 
     // Run auto-collection for video/animated files (Option A)
     try {
