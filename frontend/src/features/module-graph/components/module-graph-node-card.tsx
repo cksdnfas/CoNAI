@@ -197,6 +197,28 @@ function getCompactValuePreview(value: unknown) {
   return ''
 }
 
+type InputPortState = {
+  connected: boolean
+  satisfied: boolean
+  requiredMissing: boolean
+}
+
+/** Resolve reusable input-port status flags for node rows and card-level missing-state badges. */
+function getInputPortState(
+  data: ModuleGraphNode['data'],
+  port: ModulePortDefinition | undefined,
+  connectedInputKeys: Set<string>,
+): InputPortState {
+  const connected = Boolean(port && connectedInputKeys.has(port.key))
+  const satisfied = Boolean(port && (connected || hasMeaningfulValue(data.inputValues?.[port.key]) || hasMeaningfulValue(port.default_value)))
+
+  return {
+    connected,
+    satisfied,
+    requiredMissing: Boolean(port && port.required && !satisfied),
+  }
+}
+
 /** Render one standard minimal socket row for outputs and simple port-only surfaces. */
 function PortCell({ nodeId, port, side, accentColor, connected, satisfied, requiredMissing, requiredMissingLabel, onDisconnectInput }: PortCellProps) {
   const { t } = useI18n()
@@ -718,6 +740,7 @@ function TextTransformNodeLayout({
 }) {
   const inputPort = data.module.exposed_inputs[0]
   const outputPort = data.module.output_ports[0]
+  const inputPortState = getInputPortState(data, inputPort, connectedInputKeys)
   const uiFields = data.module.ui_schema ?? []
   const modeField = uiFields.find((field) => field.key === 'mode')
   const patternField = uiFields.find((field) => field.key === 'pattern')
@@ -744,9 +767,9 @@ function TextTransformNodeLayout({
           data={data}
           port={inputPort}
           accentColor={accentColor}
-          connected={Boolean(inputPort && connectedInputKeys.has(inputPort.key))}
-          satisfied={Boolean(inputPort && (connectedInputKeys.has(inputPort.key) || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))}
-          requiredMissing={Boolean(inputPort?.required && !connectedInputKeys.has(inputPort.key) && !hasMeaningfulValue(data.inputValues?.[inputPort.key]) && !hasMeaningfulValue(inputPort.default_value))}
+          connected={inputPortState.connected}
+          satisfied={inputPortState.satisfied}
+          requiredMissing={inputPortState.requiredMissing}
         />
         <PortCell
           nodeId={id}
@@ -820,9 +843,7 @@ function IfBranchNodeLayout({
         {Array.from({ length: portRowCount }, (_, index) => {
           const inputPort = inputPorts[index]
           const outputPort = outputPorts[index]
-          const inputConnected = Boolean(inputPort && connectedInputKeys.has(inputPort.key))
-          const inputSatisfied = Boolean(inputPort && (inputConnected || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))
-          const inputRequiredMissing = Boolean(inputPort && inputPort.required && !inputSatisfied)
+          const inputPortState = getInputPortState(data, inputPort, connectedInputKeys)
           const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
 
           return (
@@ -832,9 +853,9 @@ function IfBranchNodeLayout({
                 data={data}
                 port={inputPort}
                 accentColor={accentColor}
-                connected={inputConnected}
-                satisfied={inputSatisfied}
-                requiredMissing={inputRequiredMissing}
+                connected={inputPortState.connected}
+                satisfied={inputPortState.satisfied}
+                requiredMissing={inputPortState.requiredMissing}
               />
               <PortCell
                 nodeId={id}
@@ -876,12 +897,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const connectedOutputKeys = new Set(data.connectedOutputKeys ?? [])
   const isWorkflowInputSource = isWorkflowInputSourceModule(module)
   const sourceOutputPorts = isWorkflowInputSource ? outputPorts : []
-  const missingRequiredInputCount = inputPorts.filter((port) => {
-    const connected = connectedInputKeys.has(port.key)
-    const explicitValue = hasMeaningfulValue(data.inputValues?.[port.key])
-    const defaultValue = hasMeaningfulValue(port.default_value)
-    return port.required && !connected && !explicitValue && !defaultValue
-  }).length
+  const missingRequiredInputCount = inputPorts.filter((port) => getInputPortState(data, port, connectedInputKeys).requiredMissing).length
 
   const nodeDisplayLabel = getModuleNodeDisplayLabelFromData(data)
   const moduleBaseLabel = getModuleBaseDisplayName(module)
@@ -1366,9 +1382,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             {Array.from({ length: portRowCount }, (_, index) => {
               const inputPort = visibleInputPorts[index]
               const outputPort = visibleOutputPorts[index]
-              const inputConnected = Boolean(inputPort && connectedInputKeys.has(inputPort.key))
-              const inputSatisfied = Boolean(inputPort && (inputConnected || hasMeaningfulValue(data.inputValues?.[inputPort.key]) || hasMeaningfulValue(inputPort.default_value)))
-              const inputRequiredMissing = Boolean(inputPort && inputPort.required && !inputSatisfied)
+              const inputPortState = getInputPortState(data, inputPort, connectedInputKeys)
               const outputConnected = Boolean(outputPort && connectedOutputKeys.has(outputPort.key))
 
               return (
@@ -1378,9 +1392,9 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                     data={data}
                     port={inputPort}
                     accentColor={accentColor}
-                    connected={inputConnected}
-                    satisfied={inputSatisfied}
-                    requiredMissing={inputRequiredMissing}
+                    connected={inputPortState.connected}
+                    satisfied={inputPortState.satisfied}
+                    requiredMissing={inputPortState.requiredMissing}
                     selectOptionsOverride={undefined}
                   />
                   <PortCell
