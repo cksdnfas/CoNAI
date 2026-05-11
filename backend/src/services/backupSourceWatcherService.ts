@@ -6,7 +6,7 @@ import { runtimePaths } from '../config/runtimePaths';
 import { settingsService } from './settingsService';
 import { VideoOptimizationService } from './videoOptimizationService';
 import { WebPConversionService } from './webpConversionService';
-import { BackupSource, BackupSourceService, ensureBackupTargetDirectory } from './backupSourceService';
+import { BackupSource, BackupSourceService, ensureBackupTargetDirectory, normalizeBackupComparePath } from './backupSourceService';
 import { sleep, waitForChokidarReady } from './watcherLifecycleUtils';
 
 const isVerboseBackupWatcherLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
@@ -29,10 +29,6 @@ interface InitialImportSummary {
   imported: number;
   skipped: number;
   failed: number;
-}
-
-function normalizeComparePath(inputPath: string): string {
-  return path.resolve(inputPath).replace(/[\\/]+$/, '').toLowerCase();
 }
 
 /** Build a unique target path without overwriting an existing file. */
@@ -186,8 +182,8 @@ export class BackupSourceWatcherService {
     ensureBackupTargetDirectory(source.target_folder_name);
     fs.accessSync(source.source_path, fs.constants.R_OK);
 
-    const normalizedUploads = normalizeComparePath(runtimePaths.uploadsDir);
-    const normalizedSource = normalizeComparePath(source.source_path);
+    const normalizedUploads = normalizeBackupComparePath(runtimePaths.uploadsDir);
+    const normalizedSource = normalizeBackupComparePath(source.source_path);
     if (normalizedUploads === normalizedSource) {
       throw new Error('source_path는 uploads와 동일할 수 없습니다');
     }
@@ -264,7 +260,7 @@ export class BackupSourceWatcherService {
   }
 
   private static buildPendingImportKey(sourceId: number, filePath: string): string {
-    return `${sourceId}:${normalizeComparePath(filePath)}`;
+    return `${sourceId}:${normalizeBackupComparePath(filePath)}`;
   }
 
   /** Scan the current source tree once so existing files are imported too. */

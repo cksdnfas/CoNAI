@@ -14,7 +14,7 @@ function createServiceError(message: string, statusCode: number): ServiceError {
   return error;
 }
 
-function normalizeComparePath(inputPath: string): string {
+export function normalizeBackupComparePath(inputPath: string): string {
   return path.resolve(normalizeUnicode(inputPath)).replace(/[\\/]+$/, '').toLowerCase();
 }
 
@@ -86,8 +86,8 @@ function normalizeTargetFolderName(targetFolderName: string): string {
 
 /** Check whether two paths overlap and could create a watcher loop. */
 function assertSafeSourcePath(sourcePath: string): void {
-  const normalizedSource = normalizeComparePath(sourcePath);
-  const normalizedUploads = normalizeComparePath(runtimePaths.uploadsDir);
+  const normalizedSource = normalizeBackupComparePath(sourcePath);
+  const normalizedUploads = normalizeBackupComparePath(runtimePaths.uploadsDir);
 
   const sourceToUploads = path.relative(normalizedSource, normalizedUploads);
   const uploadsToSource = path.relative(normalizedUploads, normalizedSource);
