@@ -7,9 +7,12 @@ import {
   ModuleGraphResponse,
   ModuleDefinitionCreateData,
   ModuleDefinitionUpdateData,
+  ModuleDefinitionRecord,
   ModulePortDefinition,
   ModuleUiFieldDefinition,
   ModulePortDataType,
+  ModuleEngineType,
+  ModuleAuthoringSource,
 } from '../types/moduleGraph'
 import { asyncHandler } from '../middleware/errorHandler'
 
@@ -382,6 +385,102 @@ function buildUiSchemaFromPorts(ports: ModulePortDefinition[]): ModuleUiFieldDef
   })) as ModuleUiFieldDefinition[]
 }
 
+type TargetModuleValidation = {
+  engineType: ModuleEngineType
+  authoringSource: ModuleAuthoringSource
+  invalidTypeError: string
+  sourceWorkflowId?: number
+}
+
+type TargetModuleResolution =
+  | { targetModule: ModuleDefinitionRecord | null }
+  | { status: number; error: string }
+
+function parseOptionalTargetModuleId(value: unknown): number | null {
+  return value !== undefined && value !== null ? Number(value) : null
+}
+
+function resolveTargetModule(
+  targetModuleId: number | null,
+  validation: TargetModuleValidation,
+): TargetModuleResolution {
+  const targetModule = targetModuleId ? ModuleDefinitionModel.findById(targetModuleId) : null
+  if (targetModuleId && !targetModule) {
+    return { status: 404, error: 'Target module definition not found' }
+  }
+
+  if (targetModule && (
+    targetModule.engine_type !== validation.engineType
+    || targetModule.authoring_source !== validation.authoringSource
+  )) {
+    return { status: 400, error: validation.invalidTypeError }
+  }
+
+  if (
+    targetModule
+    && validation.sourceWorkflowId !== undefined
+    && targetModule.source_workflow_id !== validation.sourceWorkflowId
+  ) {
+    return { status: 400, error: 'Target module belongs to a different ComfyUI workflow' }
+  }
+
+  return { targetModule }
+}
+
+function sendModuleGraphError(res: Response, status: number, error: string) {
+  return res.status(status).json({ success: false, error } as ModuleGraphResponse)
+}
+
+function persistModuleDefinitionUpsert(
+  targetModule: ModuleDefinitionRecord | null,
+  createData: ModuleDefinitionCreateData,
+  messages: { created: string; updated: string; noChanges: string },
+) {
+  if (targetModule) {
+    const updated = ModuleDefinitionModel.update(targetModule.id, {
+      ...createData,
+      version: (targetModule.version ?? 1) + 1,
+    })
+
+    return {
+      status: 200,
+      body: {
+        success: updated,
+        data: {
+          id: targetModule.id,
+          message: updated ? messages.updated : messages.noChanges,
+        },
+      } as ModuleGraphResponse,
+    }
+  }
+
+  const id = ModuleDefinitionModel.create(createData)
+  return {
+    status: 201,
+    body: {
+      success: true,
+      data: {
+        id,
+        message: messages.created,
+      },
+    } as ModuleGraphResponse,
+  }
+}
+
+function sendModuleDefinitionUpsert(
+  res: Response,
+  targetModule: ModuleDefinitionRecord | null,
+  createData: ModuleDefinitionCreateData,
+  messages: { created: string; updated: string; noChanges?: string },
+) {
+  const result = persistModuleDefinitionUpsert(targetModule, createData, {
+    ...messages,
+    noChanges: messages.noChanges ?? 'No changes applied',
+  })
+
+  return res.status(result.status).json(result.body)
+}
+
 function splitFixedValues(snapshot: Record<string, unknown>, exposedPorts: ModulePortDefinition[]) {
   const exposedKeys = new Set(exposedPorts.map((port) => port.key))
   return Object.fromEntries(Object.entries(snapshot).filter(([key]) => !exposedKeys.has(key)))
@@ -486,14 +585,16 @@ router.post('/from-nai-snapshot', asyncHandler(async (req: Request, res: Respons
   }
 
   try {
-    const targetModuleId = target_module_id !== undefined && target_module_id !== null ? Number(target_module_id) : null
-    const targetModule = targetModuleId ? ModuleDefinitionModel.findById(targetModuleId) : null
-    if (targetModuleId && !targetModule) {
-      return res.status(404).json({ success: false, error: 'Target module definition not found' } as ModuleGraphResponse)
+    const targetModuleId = parseOptionalTargetModuleId(target_module_id)
+    const targetResult = resolveTargetModule(targetModuleId, {
+      engineType: 'nai',
+      authoringSource: 'nai_form_snapshot',
+      invalidTypeError: 'Target module is not a NAI snapshot module',
+    })
+    if ('error' in targetResult) {
+      return sendModuleGraphError(res, targetResult.status, targetResult.error)
     }
-    if (targetModule && (targetModule.engine_type !== 'nai' || targetModule.authoring_source !== 'nai_form_snapshot')) {
-      return res.status(400).json({ success: false, error: 'Target module is not a NAI snapshot module' } as ModuleGraphResponse)
-    }
+    const { targetModule } = targetResult
 
     const exists = ModuleDefinitionModel.existsByName(name, targetModuleId ?? undefined)
     if (exists) {
@@ -517,28 +618,10 @@ router.post('/from-nai-snapshot', asyncHandler(async (req: Request, res: Respons
       color,
     }
 
-    if (targetModule) {
-      const updated = ModuleDefinitionModel.update(targetModule.id, {
-        ...createData,
-        version: (targetModule.version ?? 1) + 1,
-      })
-      return res.json({
-        success: updated,
-        data: {
-          id: targetModule.id,
-          message: updated ? 'NAI snapshot module updated successfully' : 'No changes applied',
-        },
-      } as ModuleGraphResponse)
-    }
-
-    const id = ModuleDefinitionModel.create(createData)
-    return res.status(201).json({
-      success: true,
-      data: {
-        id,
-        message: 'NAI snapshot module created successfully',
-      },
-    } as ModuleGraphResponse)
+    return sendModuleDefinitionUpsert(res, targetModule, createData, {
+      created: 'NAI snapshot module created successfully',
+      updated: 'NAI snapshot module updated successfully',
+    })
   } catch (error) {
     console.error('Error creating NAI snapshot module:', error)
     return res.status(500).json({ success: false, error: 'Failed to create NAI snapshot module' } as ModuleGraphResponse)
@@ -567,14 +650,16 @@ router.post('/from-codex-snapshot', asyncHandler(async (req: Request, res: Respo
   }
 
   try {
-    const targetModuleId = target_module_id !== undefined && target_module_id !== null ? Number(target_module_id) : null
-    const targetModule = targetModuleId ? ModuleDefinitionModel.findById(targetModuleId) : null
-    if (targetModuleId && !targetModule) {
-      return res.status(404).json({ success: false, error: 'Target module definition not found' } as ModuleGraphResponse)
+    const targetModuleId = parseOptionalTargetModuleId(target_module_id)
+    const targetResult = resolveTargetModule(targetModuleId, {
+      engineType: 'codex',
+      authoringSource: 'codex_form_snapshot',
+      invalidTypeError: 'Target module is not a Codex snapshot module',
+    })
+    if ('error' in targetResult) {
+      return sendModuleGraphError(res, targetResult.status, targetResult.error)
     }
-    if (targetModule && (targetModule.engine_type !== 'codex' || targetModule.authoring_source !== 'codex_form_snapshot')) {
-      return res.status(400).json({ success: false, error: 'Target module is not a Codex snapshot module' } as ModuleGraphResponse)
-    }
+    const { targetModule } = targetResult
 
     const exists = ModuleDefinitionModel.existsByName(name, targetModuleId ?? undefined)
     if (exists) {
@@ -598,28 +683,10 @@ router.post('/from-codex-snapshot', asyncHandler(async (req: Request, res: Respo
       color,
     }
 
-    if (targetModule) {
-      const updated = ModuleDefinitionModel.update(targetModule.id, {
-        ...createData,
-        version: (targetModule.version ?? 1) + 1,
-      })
-      return res.json({
-        success: updated,
-        data: {
-          id: targetModule.id,
-          message: updated ? 'Codex snapshot module updated successfully' : 'No changes applied',
-        },
-      } as ModuleGraphResponse)
-    }
-
-    const id = ModuleDefinitionModel.create(createData)
-    return res.status(201).json({
-      success: true,
-      data: {
-        id,
-        message: 'Codex snapshot module created successfully',
-      },
-    } as ModuleGraphResponse)
+    return sendModuleDefinitionUpsert(res, targetModule, createData, {
+      created: 'Codex snapshot module created successfully',
+      updated: 'Codex snapshot module updated successfully',
+    })
   } catch (error) {
     console.error('Error creating Codex snapshot module:', error)
     return res.status(500).json({ success: false, error: 'Failed to create Codex snapshot module' } as ModuleGraphResponse)
@@ -650,17 +717,17 @@ router.post('/from-comfy-workflow/:workflowId', asyncHandler(async (req: Request
       return res.status(404).json({ success: false, error: 'Workflow not found' } as ModuleGraphResponse)
     }
 
-    const targetModuleId = target_module_id !== undefined && target_module_id !== null ? Number(target_module_id) : null
-    const targetModule = targetModuleId ? ModuleDefinitionModel.findById(targetModuleId) : null
-    if (targetModuleId && !targetModule) {
-      return res.status(404).json({ success: false, error: 'Target module definition not found' } as ModuleGraphResponse)
+    const targetModuleId = parseOptionalTargetModuleId(target_module_id)
+    const targetResult = resolveTargetModule(targetModuleId, {
+      engineType: 'comfyui',
+      authoringSource: 'comfyui_workflow_wrap',
+      invalidTypeError: 'Target module is not a ComfyUI workflow module',
+      sourceWorkflowId: workflow.id,
+    })
+    if ('error' in targetResult) {
+      return sendModuleGraphError(res, targetResult.status, targetResult.error)
     }
-    if (targetModule && (targetModule.engine_type !== 'comfyui' || targetModule.authoring_source !== 'comfyui_workflow_wrap')) {
-      return res.status(400).json({ success: false, error: 'Target module is not a ComfyUI workflow module' } as ModuleGraphResponse)
-    }
-    if (targetModule && targetModule.source_workflow_id !== workflow.id) {
-      return res.status(400).json({ success: false, error: 'Target module belongs to a different ComfyUI workflow' } as ModuleGraphResponse)
-    }
+    const { targetModule } = targetResult
 
     const moduleName = name || `${workflow.name} 모듈`
     if (ModuleDefinitionModel.existsByName(moduleName, targetModuleId ?? undefined)) {
@@ -694,28 +761,10 @@ router.post('/from-comfy-workflow/:workflowId', asyncHandler(async (req: Request
       color: color || workflow.color,
     }
 
-    if (targetModule) {
-      const updated = ModuleDefinitionModel.update(targetModule.id, {
-        ...createData,
-        version: (targetModule.version ?? 1) + 1,
-      })
-      return res.json({
-        success: updated,
-        data: {
-          id: targetModule.id,
-          message: updated ? 'ComfyUI workflow module updated successfully' : 'No changes applied',
-        },
-      } as ModuleGraphResponse)
-    }
-
-    const id = ModuleDefinitionModel.create(createData)
-    return res.status(201).json({
-      success: true,
-      data: {
-        id,
-        message: 'ComfyUI workflow module created successfully',
-      },
-    } as ModuleGraphResponse)
+    return sendModuleDefinitionUpsert(res, targetModule, createData, {
+      created: 'ComfyUI workflow module created successfully',
+      updated: 'ComfyUI workflow module updated successfully',
+    })
   } catch (error) {
     console.error('Error creating ComfyUI workflow module:', error)
     return res.status(500).json({ success: false, error: 'Failed to create ComfyUI workflow module' } as ModuleGraphResponse)
