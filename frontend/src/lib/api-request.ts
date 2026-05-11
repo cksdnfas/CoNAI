@@ -4,6 +4,27 @@ interface RequestJsonOptions {
   defaultCache?: RequestCache
 }
 
+type ResponsePayload = unknown
+
+async function readResponsePayload(response: Response): Promise<ResponsePayload> {
+  const contentType = response.headers.get('content-type') ?? ''
+  return contentType.includes('application/json') ? await response.json() : await response.text()
+}
+
+function errorMessageFromPayload(payload: ResponsePayload) {
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim()
+    return trimmed.length > 0 ? trimmed : undefined
+  }
+
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return undefined
+  }
+
+  const { error, details } = payload as Record<string, unknown>
+  return (typeof error === 'string' && error) || (typeof details === 'string' && details) || undefined
+}
+
 /** Execute a JSON API request and surface backend error messages. */
 export async function requestJson<T>(path: string, init?: RequestInit, options: RequestJsonOptions = {}): Promise<T> {
   const response = await fetch(buildApiUrl(path), {
@@ -16,25 +37,10 @@ export async function requestJson<T>(path: string, init?: RequestInit, options: 
     },
   })
 
-  const contentType = response.headers.get('content-type') ?? ''
-  const payload = contentType.includes('application/json') ? await response.json() : await response.text()
+  const payload = await readResponsePayload(response)
 
   if (!response.ok) {
-    if (typeof payload === 'string' && payload.trim().length > 0) {
-      throw new Error(payload)
-    }
-
-    if (payload && typeof payload === 'object') {
-      const errorMessage =
-        ('error' in payload && typeof payload.error === 'string' && payload.error) ||
-        ('details' in payload && typeof payload.details === 'string' && payload.details)
-
-      if (errorMessage) {
-        throw new Error(errorMessage)
-      }
-    }
-
-    throw new Error(`Request failed: ${response.status}`)
+    throw new Error(errorMessageFromPayload(payload) ?? `Request failed: ${response.status}`)
   }
 
   return payload as T
