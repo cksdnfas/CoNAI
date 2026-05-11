@@ -1,12 +1,73 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { ComplexFilterService } from '../../services/complexFilterService';
-import { ComplexSearchRequest,
-ComplexSearchResponse,
-ComplexFilter } from '@conai/shared';
+import {
+  ComplexSearchRequest,
+  ComplexSearchResponse,
+  ComplexFilter,
+} from '@conai/shared';
 import { enrichImageRecord } from './utils';
 
 const router = Router();
+
+type SearchScope = {
+  ai_tool?: string;
+  model_name?: string;
+  start_date?: string;
+  end_date?: string;
+};
+
+function buildSimpleSearchFilter(searchText: string): ComplexFilter {
+  return {
+    or_group: [
+      {
+        category: 'positive_prompt',
+        type: 'prompt_contains',
+        value: searchText,
+      },
+      {
+        category: 'auto_tag',
+        type: 'auto_tag_general',
+        value: searchText,
+        min_score: 0,
+        max_score: 1,
+      },
+      {
+        category: 'auto_tag',
+        type: 'auto_tag_character',
+        value: searchText,
+        min_score: 0,
+        max_score: 1,
+      },
+    ],
+  };
+}
+
+function buildSearchScope(requestBody: ComplexSearchRequest): SearchScope {
+  return {
+    ai_tool: requestBody.ai_tool,
+    model_name: requestBody.model_name,
+    start_date: requestBody.start_date,
+    end_date: requestBody.end_date,
+  };
+}
+
+function resolveSearchFilter(requestBody: ComplexSearchRequest): { filter?: ComplexFilter; error?: string } {
+  if (requestBody.simple_search?.text) {
+    return { filter: buildSimpleSearchFilter(requestBody.simple_search.text) };
+  }
+
+  if (requestBody.complex_filter) {
+    const validation = ComplexFilterService.validateFilter(requestBody.complex_filter);
+    if (!validation.valid) {
+      return { error: `Invalid filter: ${validation.errors.join(', ')}` };
+    }
+
+    return { filter: requestBody.complex_filter };
+  }
+
+  return { error: 'Either simple_search or complex_filter must be provided' };
+}
 
 /**
  * Complex search with AND/OR/NOT filtering
@@ -40,79 +101,19 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const sortOrder = requestBody.sortOrder || 'DESC';
 
   try {
-    let result: { images: any[]; total: number };
-
-    // Simple search mode (quick text search)
-    if (requestBody.simple_search?.text) {
-      // Simple search: search in positive prompt + auto_tags only (no negative prompt, no weight filtering)
-      const searchText = requestBody.simple_search.text;
-
-      // Use basic search with text matching in positive prompt and auto_tags
-      // This is a simplified version - we'll use complex filter with OR logic
-      const simpleFilter: ComplexFilter = {
-        or_group: [
-          {
-            category: 'positive_prompt',
-            type: 'prompt_contains',
-            value: searchText
-          },
-          {
-            category: 'auto_tag',
-            type: 'auto_tag_general',
-            value: searchText,
-            min_score: 0,
-            max_score: 1
-          },
-          {
-            category: 'auto_tag',
-            type: 'auto_tag_character',
-            value: searchText,
-            min_score: 0,
-            max_score: 1
-          }
-        ]
-      };
-
-      result = await ComplexFilterService.executeComplexSearch(
-        simpleFilter,
-        {
-          ai_tool: requestBody.ai_tool,
-          model_name: requestBody.model_name,
-          start_date: requestBody.start_date,
-          end_date: requestBody.end_date
-        },
-        { page, limit, sortBy, sortOrder }
-      );
-    }
-    // Complex filter mode (advanced search)
-    else if (requestBody.complex_filter) {
-      // Validate filter
-      const validation = ComplexFilterService.validateFilter(requestBody.complex_filter);
-      if (!validation.valid) {
-        return res.status(400).json({
-          success: false,
-          error: `Invalid filter: ${validation.errors.join(', ')}`
-        } as ComplexSearchResponse);
-      }
-
-      result = await ComplexFilterService.executeComplexSearch(
-        requestBody.complex_filter,
-        {
-          ai_tool: requestBody.ai_tool,
-          model_name: requestBody.model_name,
-          start_date: requestBody.start_date,
-          end_date: requestBody.end_date
-        },
-        { page, limit, sortBy, sortOrder }
-      );
-    }
-    // No filter specified - return error
-    else {
+    const { filter, error } = resolveSearchFilter(requestBody);
+    if (!filter) {
       return res.status(400).json({
         success: false,
-        error: 'Either simple_search or complex_filter must be provided'
+        error,
       } as ComplexSearchResponse);
     }
+
+    const result = await ComplexFilterService.executeComplexSearch(
+      filter,
+      buildSearchScope(requestBody),
+      { page, limit, sortBy, sortOrder }
+    );
 
     // Enrich images with URLs and structured metadata
     const enrichedImages = result.images.map(enrichImageRecord);
@@ -148,74 +149,18 @@ router.post('/ids', asyncHandler(async (req: Request, res: Response) => {
   const requestBody = req.body as ComplexSearchRequest;
 
   try {
-    let ids: string[]; // composite_hash[]
-
-    // Simple search mode
-    if (requestBody.simple_search?.text) {
-      const searchText = requestBody.simple_search.text;
-
-      const simpleFilter: ComplexFilter = {
-        or_group: [
-          {
-            category: 'positive_prompt',
-            type: 'prompt_contains',
-            value: searchText
-          },
-          {
-            category: 'auto_tag',
-            type: 'auto_tag_general',
-            value: searchText,
-            min_score: 0,
-            max_score: 1
-          },
-          {
-            category: 'auto_tag',
-            type: 'auto_tag_character',
-            value: searchText,
-            min_score: 0,
-            max_score: 1
-          }
-        ]
-      };
-
-      ids = await ComplexFilterService.executeComplexSearchIds(
-        simpleFilter,
-        {
-          ai_tool: requestBody.ai_tool,
-          model_name: requestBody.model_name,
-          start_date: requestBody.start_date,
-          end_date: requestBody.end_date
-        }
-      );
-    }
-    // Complex filter mode
-    else if (requestBody.complex_filter) {
-      // Validate filter
-      const validation = ComplexFilterService.validateFilter(requestBody.complex_filter);
-      if (!validation.valid) {
-        return res.status(400).json({
-          success: false,
-          error: `Invalid filter: ${validation.errors.join(', ')}`
-        });
-      }
-
-      ids = await ComplexFilterService.executeComplexSearchIds(
-        requestBody.complex_filter,
-        {
-          ai_tool: requestBody.ai_tool,
-          model_name: requestBody.model_name,
-          start_date: requestBody.start_date,
-          end_date: requestBody.end_date
-        }
-      );
-    }
-    // No filter specified
-    else {
+    const { filter, error } = resolveSearchFilter(requestBody);
+    if (!filter) {
       return res.status(400).json({
         success: false,
-        error: 'Either simple_search or complex_filter must be provided'
+        error,
       });
     }
+
+    const ids = await ComplexFilterService.executeComplexSearchIds(
+      filter,
+      buildSearchScope(requestBody)
+    );
 
     return res.json({
       success: true,
