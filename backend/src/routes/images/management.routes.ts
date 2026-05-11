@@ -17,6 +17,18 @@ function handleMetadataEditError(res: Response, error: unknown, fallbackMessage:
   return res.status(500).json(errorResponse(error instanceof Error ? error.message : fallbackMessage));
 }
 
+function sendMetadataDownload(res: Response, result: Awaited<ReturnType<typeof ImageMetadataEditService.prepareMetadataDownload>>) {
+  const encodedName = encodeURIComponent(result.downloadName);
+
+  res.setHeader('Content-Type', result.contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${result.downloadName}"; filename*=UTF-8''${encodedName}`);
+  res.setHeader('X-CoNAI-Metadata-Rewrite', result.metadataRewriteState);
+  res.setHeader('X-CoNAI-Metadata-XMP', result.xmpApplied ? 'applied' : 'empty');
+  res.setHeader('X-CoNAI-Metadata-EXIF', result.exifApplied ? 'applied' : 'empty');
+
+  return res.send(result.buffer);
+}
+
 /**
  * 기존 이미지 메타를 수정한 파일을 즉시 다운로드
  */
@@ -33,15 +45,7 @@ router.post('/:compositeHash/rewrite-metadata/download', asyncHandler(async (req
       format: req.body?.format,
     });
 
-    const encodedName = encodeURIComponent(result.downloadName);
-
-    res.setHeader('Content-Type', result.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${result.downloadName}"; filename*=UTF-8''${encodedName}`);
-    res.setHeader('X-CoNAI-Metadata-Rewrite', result.metadataRewriteState);
-    res.setHeader('X-CoNAI-Metadata-XMP', result.xmpApplied ? 'applied' : 'empty');
-    res.setHeader('X-CoNAI-Metadata-EXIF', result.exifApplied ? 'applied' : 'empty');
-
-    return res.send(result.buffer);
+    return sendMetadataDownload(res, result);
   } catch (error) {
     console.error('❌ Existing image metadata download error:', error);
     return handleMetadataEditError(res, error, 'Metadata rewrite download failed');

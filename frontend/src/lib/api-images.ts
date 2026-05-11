@@ -58,6 +58,23 @@ export async function getImage(compositeHash: string) {
   return response.data
 }
 
+async function readDownloadBlob(response: Response, fallbackMessage: string) {
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(text || fallbackMessage || `Request failed: ${response.status}`)
+  }
+
+  return response.blob()
+}
+
+function metadataRewriteHeaders(response: Response) {
+  return {
+    rewriteState: (response.headers.get('X-CoNAI-Metadata-Rewrite') as RewriteMetadataDownloadResult['rewriteState'] | null) ?? 'unknown',
+    xmpState: (response.headers.get('X-CoNAI-Metadata-XMP') as RewriteMetadataDownloadResult['xmpState'] | null) ?? 'unknown',
+    exifState: (response.headers.get('X-CoNAI-Metadata-EXIF') as RewriteMetadataDownloadResult['exifState'] | null) ?? 'unknown',
+  }
+}
+
 export async function deleteImagesBulk(compositeHashes: string[]) {
   const response = await fetchJson<ApiResponse<{
     message: string
@@ -461,18 +478,11 @@ export async function downloadRewrittenImage(
     body: formData,
   })
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(text || `Request failed: ${response.status}`)
-  }
-
-  const blob = await response.blob()
+  const blob = await readDownloadBlob(response, `Request failed: ${response.status}`)
   const extension = options.format === 'jpeg' ? 'jpg' : options.format
   const fallbackFileName = `${file.name.replace(/\.[^.]+$/, '') || 'rewritten-image'}.${extension}`
   const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
-  const rewriteState = (response.headers.get('X-CoNAI-Metadata-Rewrite') as RewriteMetadataDownloadResult['rewriteState'] | null) ?? 'unknown'
-  const xmpState = (response.headers.get('X-CoNAI-Metadata-XMP') as RewriteMetadataDownloadResult['xmpState'] | null) ?? 'unknown'
-  const exifState = (response.headers.get('X-CoNAI-Metadata-EXIF') as RewriteMetadataDownloadResult['exifState'] | null) ?? 'unknown'
+  const { rewriteState, xmpState, exifState } = metadataRewriteHeaders(response)
 
   triggerBlobDownload(blob, fileName)
 
@@ -507,17 +517,10 @@ export async function downloadExistingImageWithRewrittenMetadata(
     }),
   })
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(text || `Request failed: ${response.status}`)
-  }
-
-  const blob = await response.blob()
+  const blob = await readDownloadBlob(response, `Request failed: ${response.status}`)
   const fallbackFileName = `${compositeHash}.${options.format === 'jpeg' ? 'jpg' : options.format}`
   const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
-  const rewriteState = (response.headers.get('X-CoNAI-Metadata-Rewrite') as RewriteMetadataDownloadResult['rewriteState'] | null) ?? 'unknown'
-  const xmpState = (response.headers.get('X-CoNAI-Metadata-XMP') as RewriteMetadataDownloadResult['xmpState'] | null) ?? 'unknown'
-  const exifState = (response.headers.get('X-CoNAI-Metadata-EXIF') as RewriteMetadataDownloadResult['exifState'] | null) ?? 'unknown'
+  const { rewriteState, xmpState, exifState } = metadataRewriteHeaders(response)
 
   triggerBlobDownload(blob, fileName)
 
