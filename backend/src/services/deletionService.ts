@@ -7,7 +7,6 @@ import { PromptCollectionService } from './promptCollectionService';
 import { settingsService } from './settingsService';
 import { deleteFile as recycleBinDeleteFile } from '../utils/recycleBin';
 import { runtimePaths } from '../config/runtimePaths';
-import { db } from '../database/init';
 
 /**
  * 통합 삭제 서비스
@@ -74,6 +73,17 @@ export class DeletionService {
     }
   }
 
+  /** Remove generation-history rows linked to a hash and keep log wording consistent. */
+  private static cleanupGenerationHistoryForHash(compositeHash: string, orphaned = false): number {
+    const deletedHistoryCount = GenerationHistoryModel.deleteByCompositeHash(compositeHash);
+    if (deletedHistoryCount > 0) {
+      const label = orphaned ? 'orphaned generation history record(s) for' : 'generation history record(s) linked to';
+      console.log(`🧹 Removed ${deletedHistoryCount} ${label} ${compositeHash}`);
+    }
+
+    return deletedHistoryCount;
+  }
+
   /**
    * 이미지/비디오 삭제
    *
@@ -96,10 +106,7 @@ export class DeletionService {
     if (!metadata) {
       // ✅ Idempotent: Already deleted images return success instead of error
       console.warn(`⚠️ Image already deleted or not found: ${compositeHash}`);
-      const deletedHistoryCount = GenerationHistoryModel.deleteByCompositeHash(compositeHash);
-      if (deletedHistoryCount > 0) {
-        console.log(`🧹 Removed ${deletedHistoryCount} orphaned generation history record(s) for ${compositeHash}`);
-      }
+      this.cleanupGenerationHistoryForHash(compositeHash, true);
       return true;
     }
 
@@ -152,10 +159,7 @@ export class DeletionService {
       throw new Error('Failed to delete image from database');
     }
 
-    const deletedHistoryCount = GenerationHistoryModel.deleteByCompositeHash(compositeHash);
-    if (deletedHistoryCount > 0) {
-      console.log(`🧹 Removed ${deletedHistoryCount} generation history record(s) linked to ${compositeHash}`);
-    }
+    this.cleanupGenerationHistoryForHash(compositeHash);
 
     console.log(`✅ Image ${compositeHash} deleted successfully`);
     return true;
@@ -206,7 +210,7 @@ export class DeletionService {
     }
 
     // 4. image_files 테이블에서 삭제
-    db.prepare('DELETE FROM image_files WHERE id = ?').run(fileId);
+    ImageFileModel.delete(fileId);
     console.log(`✅ Deleted image_file record: ${fileId}`);
 
     // 5. 같은 composite_hash의 남은 파일 확인
@@ -238,11 +242,8 @@ export class DeletionService {
 
           // 메타데이터 삭제
           MediaMetadataModel.delete(composite_hash);
-          const deletedHistoryCount = GenerationHistoryModel.deleteByCompositeHash(composite_hash);
+          this.cleanupGenerationHistoryForHash(composite_hash);
           console.log(`✅ Metadata cleaned up for ${composite_hash}`);
-          if (deletedHistoryCount > 0) {
-            console.log(`🧹 Removed ${deletedHistoryCount} generation history record(s) linked to ${composite_hash}`);
-          }
         }
       } else {
         console.log(`📋 ${remainingFiles.length} file(s) remaining with same hash - keeping metadata`);
