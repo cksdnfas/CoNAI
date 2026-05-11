@@ -162,10 +162,11 @@ export class PromptCollectionQueryService {
       let groupInfo: any = null;
 
       if (groupId !== undefined) {
-        // @ts-ignore
+        const groupType = type as 'positive' | 'negative' | 'auto';
+
         result = await PromptGroupService.getPromptsInGroup(
           groupId,
-          type as 'positive' | 'negative' | 'auto',
+          groupType,
           page,
           limit,
           normalizedQuery,
@@ -174,8 +175,7 @@ export class PromptCollectionQueryService {
         );
 
         if (groupId !== null) {
-          // @ts-ignore
-          groupInfo = await PromptGroupService.getGroupById(groupId, type as 'positive' | 'negative' | 'auto');
+          groupInfo = await PromptGroupService.getGroupById(groupId, groupType);
         } else {
           groupInfo = { id: 0, group_name: 'Unclassified' };
         }

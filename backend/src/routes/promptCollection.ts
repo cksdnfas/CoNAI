@@ -11,6 +11,23 @@ import {
 
 const router = Router();
 
+type PromptCollectionType = 'positive' | 'negative' | 'auto';
+type PromptCollectionSearchType = PromptCollectionType | 'both';
+type PromptCollectionSortBy = 'usage_count' | 'created_at' | 'prompt';
+type PromptCollectionSortOrder = 'ASC' | 'DESC';
+
+function parseRouteId(value: string | string[] | undefined, label: string): number {
+  return validateId(routeParam(value), label);
+}
+
+function parseOptionalGroupId(value: unknown): number | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return value === '0' || value === 'null' ? null : parseInt(value as string);
+}
+
 /**
  * 프롬프트 검색 (그룹 정보 포함)
  * GET /api/prompt-collection/search
@@ -27,18 +44,15 @@ router.get('/search', async (req: Request, res: Response) => {
       group_id
     } = req.query;
 
-    let groupId: number | null | undefined = undefined;
-    if (group_id !== undefined) {
-      groupId = group_id === '0' || group_id === 'null' ? null : parseInt(group_id as string);
-    }
+    const groupId = parseOptionalGroupId(group_id);
 
     const result = await PromptCollectionService.searchPromptsWithGroups(
       query as string,
-      type as 'positive' | 'negative' | 'both',
+      type as PromptCollectionSearchType,
       parseInt(page as string),
       parseInt(limit as string),
-      sortBy as 'usage_count' | 'created_at' | 'prompt',
-      sortOrder as 'ASC' | 'DESC',
+      sortBy as PromptCollectionSortBy,
+      sortOrder as PromptCollectionSortOrder,
       groupId
     );
 
@@ -72,7 +86,7 @@ router.get('/search-synonyms', async (req: Request, res: Response) => {
 
     const result = await PromptCollectionService.searchInSynonymGroup(
       query as string,
-      type as 'positive' | 'negative'
+      type as PromptCollectionType
     );
 
     return res.json(successResponse(result));
@@ -109,7 +123,7 @@ router.get('/top', async (req: Request, res: Response) => {
 
     const result = await PromptCollectionService.getTopPrompts(
       parseInt(limit as string),
-      type as 'positive' | 'negative' | 'both'
+      type as PromptCollectionSearchType
     );
 
     return res.json(successResponse(result));
@@ -125,12 +139,12 @@ router.get('/top', async (req: Request, res: Response) => {
  */
 router.get('/group/:groupId', async (req: Request, res: Response) => {
   try {
-    const groupId = validateId(routeParam(routeParam(req.params.groupId)), 'Group ID');
+    const groupId = parseRouteId(req.params.groupId, 'Group ID');
     const { type = 'positive' } = req.query;
 
     const result = await PromptCollectionService.getGroupPrompts(
       groupId,
-      type as 'positive' | 'negative'
+      type as PromptCollectionType
     );
 
     return res.json(successResponse(result));
@@ -177,7 +191,7 @@ router.post('/synonyms', async (req: Request, res: Response) => {
  */
 router.delete('/synonyms/:promptId', async (req: Request, res: Response) => {
   try {
-    const promptId = validateId(routeParam(routeParam(req.params.promptId)), 'Prompt ID');
+    const promptId = parseRouteId(req.params.promptId, 'Prompt ID');
     const { synonym, type = 'positive' } = req.body;
 
     if (!synonym) {
@@ -216,7 +230,7 @@ router.post('/resolve-groups', async (req: Request, res: Response) => {
 
     const result = await PromptCollectionService.resolvePromptsWithGroups(
       prompts.map((value) => String(value ?? '')),
-      type as 'positive' | 'negative' | 'auto'
+      type as PromptCollectionType
     );
 
     return res.json(successResponse(result));
@@ -266,12 +280,12 @@ router.post('/danbooru-grouping/apply', async (req: Request, res: Response) => {
  */
 router.delete('/:promptId', async (req: Request, res: Response) => {
   try {
-    const promptId = validateId(routeParam(routeParam(req.params.promptId)), 'Prompt ID');
+    const promptId = parseRouteId(req.params.promptId, 'Prompt ID');
     const { type = 'positive' } = req.query;
 
     const result = await PromptCollectionService.deletePrompt(
       promptId,
-      type as 'positive' | 'negative'
+      type as PromptCollectionType
     );
 
     return res.json(successResponse({
@@ -369,7 +383,7 @@ router.get('/group-statistics', async (req: Request, res: Response) => {
   try {
     const { type = 'positive' } = req.query;
 
-    const statistics = await PromptCollectionService.getGroupStatistics(type as 'positive' | 'negative');
+    const statistics = await PromptCollectionService.getGroupStatistics(type as PromptCollectionType);
 
     return res.json(successResponse(statistics));
   } catch (error) {
