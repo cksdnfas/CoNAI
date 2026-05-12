@@ -45,6 +45,7 @@
     "verify:user-db-smoke": "cd backend && npm run verify:user-db-smoke",
     "verify:builtin-system-modules": "cd backend && npm run verify:builtin-system-modules",
     "verify:queue-routing-smoke": "cd backend && npm run verify:queue-routing-smoke",
+    "verify:queue-wakeup-smoke": "cd backend && npm run verify:queue-wakeup-smoke",
     "verify:graph-comfy-artifacts": "cd backend && npm run verify:graph-comfy-artifacts",
     "verify:graph-artifact-runtime": "cd backend && npm run verify:graph-artifact-runtime",
     "verify:video-optimization": "cd backend && npm run verify:video-optimization",
