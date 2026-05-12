@@ -4,7 +4,6 @@ import type {
   GraphExecutionRecord,
   GraphWorkflowBrowseContentRecord,
 } from '@/lib/api-module-graph'
-import { buildApiUrl } from '@/lib/api-client'
 import type { ImageRecord } from '@/types/image'
 import { buildArtifactTextPreview, getArtifactPreviewUrl, parseArtifactMetadataRecord, resolveGraphArtifactMimeType } from '../module-graph-shared'
 
@@ -22,22 +21,6 @@ export type ModuleWorkflowGeneratedOutputItem = {
   storagePath: string | null
   label: string
   status?: GraphExecutionRecord['status']
-}
-
-function buildSourcePreviewUrl(path?: string | null) {
-  // Convert a stored execution-relative file path into a temp preview URL.
-  if (!path) {
-    return null
-  }
-
-  const normalized = path.replace(/\\/g, '/')
-  const marker = '/graph-executions/'
-  const markerIndex = normalized.lastIndexOf(marker)
-  if (markerIndex === -1) {
-    return null
-  }
-
-  return buildApiUrl(`/temp${normalized.slice(markerIndex)}`)
 }
 
 function buildDownloadName(path: string | null | undefined, fallbackLabel: string, executionId: number) {
@@ -136,7 +119,7 @@ export function buildModuleWorkflowOutputCollections({
   const outputItems: ModuleWorkflowGeneratedOutputItem[] = [
     ...visualFinalResults.map((result) => {
       const { execution, workflowName } = getWorkflowNameForExecution(result.execution_id, executionById, workflowNameById)
-      const downloadUrl = buildSourcePreviewUrl(result.source_storage_path)
+      const downloadUrl = getArtifactPreviewUrl(result)
       const label = getArtifactLabel(result)
       return {
         id: `final-${result.id}`,

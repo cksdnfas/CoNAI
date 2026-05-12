@@ -15,11 +15,13 @@
 - [ ] Verify with `npm run build:backend`.
 
 ## Parallel Lane B, Frontend module-graph visual rendering
-- [ ] Audit every module-graph surface that currently treats only `image|mask` as visual media.
-- [ ] Replace hard-coded image-only checks with one shared media-visibility helper based on preview URL plus MIME/path detection.
-- [ ] Ensure final-result cards, execution summaries, and compact artifact cards render videos through `InlineMediaPreview`.
-- [ ] Keep non-visual text/json artifacts unchanged.
-- [ ] Verify with `npm run build:frontend`.
+- [x] Audit every module-graph surface that currently treats only `image|mask` as visual media.
+- [x] Replace hard-coded image-only checks with one shared media-visibility helper based on preview URL plus MIME/path detection.
+- [x] Ensure final-result cards, execution summaries, and compact artifact cards render videos through `InlineMediaPreview`.
+- [x] Keep non-visual text/json artifacts unchanged.
+- [x] Verify with `npm run build:frontend`.
+
+2026-05-12 note: the shared preview URL resolver now supports graph temp artifacts, media-record composite hashes, and upload-path references, so queue-backed video/file artifacts can render in execution, final-result, and output-management surfaces instead of disappearing when they are not materialized into `/temp/graph-executions`.
 
 ## Serial Gate, Contract alignment
 - [ ] Re-check backend artifact metadata shape after Lane A lands.

@@ -531,28 +531,49 @@ export function getGraphWorkflowStopReasonLabel(stopReasonCode?: string | null, 
   return localizeGraphWorkflowErrorMessage(stopReasonMessage, '예약작업이 중지됐어.')
 }
 
-/** Map a stored temp artifact path back into a backend-served /temp URL. */
-export function getArtifactPreviewUrl(artifact: GraphExecutionArtifactRecord) {
-  if (!artifact.storage_path) {
-    return null
-  }
-
-  const normalized = artifact.storage_path.replace(/\\/g, '/')
-  const marker = '/graph-executions/'
-  const markerIndex = normalized.lastIndexOf(marker)
-  if (markerIndex === -1) {
-    return null
-  }
-
-  return buildApiUrl(`/temp${normalized.slice(markerIndex)}`)
-}
-
 type GraphArtifactPreviewLike = {
   artifact_type: string
   storage_path?: string | null
   metadata?: string | null
   source_storage_path?: string | null
   source_metadata?: string | null
+}
+
+function getArtifactCompositeHash(metadata?: Record<string, unknown> | null) {
+  const compositeHash = metadata?.compositeHash ?? metadata?.composite_hash
+  return typeof compositeHash === 'string' && compositeHash.trim().length > 0
+    ? compositeHash.trim()
+    : null
+}
+
+/** Map a stored artifact path or media record reference back into a backend-served preview URL. */
+export function getArtifactPreviewUrl(artifact: GraphArtifactPreviewLike) {
+  const storagePath = artifact.source_storage_path ?? artifact.storage_path
+  const metadata = parseArtifactMetadataRecord(artifact.source_metadata ?? artifact.metadata)
+  const compositeHash = getArtifactCompositeHash(metadata)
+
+  if (compositeHash) {
+    return buildApiUrl(`/api/images/${encodeURIComponent(compositeHash)}/file`)
+  }
+
+  if (!storagePath) {
+    return null
+  }
+
+  const normalized = storagePath.replace(/\\/g, '/')
+  const graphExecutionMarker = '/graph-executions/'
+  const graphExecutionMarkerIndex = normalized.lastIndexOf(graphExecutionMarker)
+  if (graphExecutionMarkerIndex !== -1) {
+    return buildApiUrl(`/temp${normalized.slice(graphExecutionMarkerIndex)}`)
+  }
+
+  const uploadsMarker = '/uploads/'
+  const uploadsMarkerIndex = normalized.lastIndexOf(uploadsMarker)
+  if (uploadsMarkerIndex !== -1) {
+    return buildApiUrl(`/uploads/${normalized.slice(uploadsMarkerIndex + uploadsMarker.length)}`)
+  }
+
+  return null
 }
 
 const GRAPH_ARTIFACT_MEDIA_EXTENSION_MIME_MAP: Record<string, string> = {
