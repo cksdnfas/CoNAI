@@ -14,6 +14,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { SettingsField, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
+import { useI18n } from '@/i18n'
 import { buildPromptPresetInsertionText, createPromptPreset, deletePromptPreset, getPromptPresets, updatePromptPreset, type PromptPresetMutationInput, type PromptPresetRecord } from '@/lib/api-prompt-presets'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -91,6 +92,7 @@ function PromptPresetEditorModal({
   onClose: () => void
   onSubmit: (input: PromptPresetMutationInput) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [parentId, setParentId] = useState<number | null>(null)
@@ -136,20 +138,20 @@ function PromptPresetEditorModal({
   }
 
   return (
-    <SettingsModal open={open} title={mode === 'create' ? '프리셋 추가' : '프리셋 편집'} widthClassName="max-w-5xl" onClose={onClose}>
+    <SettingsModal open={open} title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')} widthClassName="max-w-5xl" onClose={onClose}>
       <form onSubmit={(event) => void handleSubmit(event)}>
         <SettingsModalBody className="space-y-5">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="space-y-4">
-              <SettingsField label="이름">
-                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="프리셋 이름" required />
+              <SettingsField label={t('prompts.components.prompt.preset.panel.name')}>
+                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('prompts.components.prompt.preset.panel.preset.name')} required />
               </SettingsField>
-              <SettingsField label="설명">
-                <Textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder="선택 사항" />
+              <SettingsField label={t('prompts.components.prompt.preset.panel.description')}>
+                <Textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder={t('prompts.components.prompt.preset.panel.optional')} />
               </SettingsField>
             </div>
 
-            <SettingsField label="상위 프리셋">
+            <SettingsField label={t('prompts.components.prompt.preset.panel.parent.preset')}>
               <HierarchyPicker
                 items={selectableParents}
                 selectedId={parentId}
@@ -159,19 +161,24 @@ function PromptPresetEditorModal({
                 getParentId={(item) => item.parent_id}
                 getLabel={(item) => <span className="truncate">{item.name}</span>}
                 sortItems={(left, right) => left.name.localeCompare(right.name)}
-                rootLabel="루트"
+                rootLabel={t('prompts.components.prompt.preset.panel.root')}
               />
             </SettingsField>
           </div>
 
           <SettingsSegmentedTable
             value="items"
-            items={[{ value: 'items', label: '설명 / 값' }]}
+            items={[{ value: 'items', label: t('prompts.components.prompt.preset.panel.description.value') }]}
             onChange={() => undefined}
             gridClassName="grid-cols-[3rem_minmax(9rem,0.55fr)_minmax(12rem,1fr)_3rem] gap-x-3"
-            headers={['번호', '설명', '값', '삭제']}
+            headers={[
+              t('prompts.components.prompt.preset.panel.number'),
+              t('prompts.components.prompt.preset.panel.description'),
+              t('prompts.components.prompt.preset.panel.value'),
+              t('prompts.components.prompt.preset.panel.delete'),
+            ]}
             actions={(
-              <Button type="button" size="icon-sm" variant="outline" onClick={handleAddDraft} aria-label="프리셋 값 추가" title="값 추가">
+              <Button type="button" size="icon-sm" variant="outline" onClick={handleAddDraft} aria-label={t('prompts.components.prompt.preset.panel.add.preset.value')} title={t('prompts.components.prompt.preset.panel.add.value')}>
                 <Plus className="h-4 w-4" />
               </Button>
             )}
@@ -180,10 +187,10 @@ function PromptPresetEditorModal({
             {drafts.map((draft, index) => (
               <div key={draft.id} className="grid grid-cols-[3rem_minmax(9rem,0.55fr)_minmax(12rem,1fr)_3rem] items-start gap-x-3 px-4 py-3 transition-colors hover:bg-surface-high/60">
                 <div className="pt-2.5 text-center text-sm font-medium tabular-nums text-muted-foreground">{index + 1}</div>
-                <Input variant="settings" className="self-start" value={draft.description} onChange={(event) => handleChangeDraft(draft.id, 'description', event.target.value)} placeholder="헤어스타일" />
-                <Textarea className="self-start" value={draft.value} onChange={(event) => handleChangeDraft(draft.id, 'value', event.target.value)} rows={2} placeholder="++헤어++" />
+                <Input variant="settings" className="self-start" value={draft.description} onChange={(event) => handleChangeDraft(draft.id, 'description', event.target.value)} placeholder={t('prompts.components.prompt.preset.panel.hair.style')} />
+                <Textarea className="self-start" value={draft.value} onChange={(event) => handleChangeDraft(draft.id, 'value', event.target.value)} rows={2} placeholder={t('prompts.components.prompt.preset.panel.hair.token.example')} />
                 <div className="flex justify-center pt-0.5">
-                  <Button type="button" size="icon-sm" variant="ghost" onClick={() => handleRemoveDraft(draft.id)} aria-label={`프리셋 값 ${index + 1} 삭제`} title="삭제">
+                  <Button type="button" size="icon-sm" variant="ghost" onClick={() => handleRemoveDraft(draft.id)} aria-label={t('prompts.components.prompt.preset.panel.delete.preset.value.index', { index: index + 1 })} title={t('prompts.components.prompt.preset.panel.delete')}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -193,18 +200,19 @@ function PromptPresetEditorModal({
         </SettingsModalBody>
 
         <SettingsModalFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>취소</Button>
-          <Button type="submit" disabled={isSubmitting}>{isSubmitting ? '저장 중…' : '저장'}</Button>
+          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{t('prompts.components.prompt.preset.panel.cancel')}</Button>
+          <Button type="submit" disabled={isSubmitting}>{isSubmitting ? t('prompts.components.prompt.preset.panel.saving') : t('prompts.components.prompt.preset.panel.save')}</Button>
         </SettingsModalFooter>
       </form>
     </SettingsModal>
   )
 }
 
-/** Render the prompt preset management workspace under Prompts > 프리셋. */
+/** Render the prompt preset management workspace under Prompts > Presets. */
 export function PromptPresetPanel() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const { t, formatNumber } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const isWideLayout = useDesktopPageLayout()
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
@@ -229,10 +237,10 @@ export function PromptPresetPanel() {
     onSuccess: async (result) => {
       setEditorState(null)
       setSelectedPresetId(result.id)
-      showSnackbar({ message: '프리셋을 만들었어.', tone: 'info' })
+      showSnackbar({ message: t('prompts.components.prompt.preset.panel.created.preset'), tone: 'info' })
       await queryClient.invalidateQueries({ queryKey: ['prompt-presets'] })
     },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, '프리셋 생성에 실패했어.'), tone: 'error' }),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t('prompts.components.prompt.preset.panel.failed.to.create.preset')), tone: 'error' }),
   })
 
   const updateMutation = useMutation({
@@ -240,20 +248,20 @@ export function PromptPresetPanel() {
     onSuccess: async (result) => {
       setEditorState(null)
       setSelectedPresetId(result.id)
-      showSnackbar({ message: '프리셋을 저장했어.', tone: 'info' })
+      showSnackbar({ message: t('prompts.components.prompt.preset.panel.saved.preset'), tone: 'info' })
       await queryClient.invalidateQueries({ queryKey: ['prompt-presets'] })
     },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, '프리셋 저장에 실패했어.'), tone: 'error' }),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t('prompts.components.prompt.preset.panel.failed.to.save.preset')), tone: 'error' }),
   })
 
   const deleteMutation = useMutation({
     mutationFn: ({ presetId, cascade }: { presetId: number; cascade: boolean }) => deletePromptPreset(presetId, { cascade }),
     onSuccess: async () => {
       setSelectedPresetId(null)
-      showSnackbar({ message: '프리셋을 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t('prompts.components.prompt.preset.panel.deleted.preset'), tone: 'info' })
       await queryClient.invalidateQueries({ queryKey: ['prompt-presets'] })
     },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, '프리셋 삭제에 실패했어.'), tone: 'error' }),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t('prompts.components.prompt.preset.panel.failed.to.delete.preset')), tone: 'error' }),
   })
 
   const handleCopyInsertion = async () => {
@@ -263,9 +271,9 @@ export function PromptPresetPanel() {
 
     try {
       await copyTextToClipboard(insertionPreview)
-      showSnackbar({ message: '프리셋 삽입 텍스트를 복사했어.', tone: 'info' })
+      showSnackbar({ message: t('prompts.components.prompt.preset.panel.copied.preset.insertion.text'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '복사에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('prompts.components.prompt.preset.panel.copy.failed')), tone: 'error' })
     }
   }
 
@@ -276,8 +284,8 @@ export function PromptPresetPanel() {
 
     const hasChildren = entries.some((entry) => entry.preset.parent_id === selectedPreset.id)
     const confirmed = window.confirm(hasChildren
-      ? `${selectedPreset.name} 프리셋과 하위 프리셋까지 삭제할까?`
-      : `${selectedPreset.name} 프리셋을 삭제할까?`)
+      ? t('prompts.components.prompt.preset.panel.confirm.delete.with.children', { name: selectedPreset.name })
+      : t('prompts.components.prompt.preset.panel.confirm.delete', { name: selectedPreset.name }))
     if (!confirmed) {
       return
     }
@@ -289,9 +297,9 @@ export function PromptPresetPanel() {
     <div className={cn('grid gap-6', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
       <aside className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-semibold text-foreground">프리셋</div>
+          <div className="text-sm font-semibold text-foreground">{t('prompts.components.prompt.preset.panel.presets')}</div>
           {canCreatePresets ? (
-            <Button type="button" size="icon-sm" variant="outline" onClick={() => setEditorState({ mode: 'create', defaultParentId: selectedPresetId })} aria-label="프리셋 추가" title="프리셋 추가">
+            <Button type="button" size="icon-sm" variant="outline" onClick={() => setEditorState({ mode: 'create', defaultParentId: selectedPresetId })} aria-label={t('prompts.components.prompt.preset.panel.add.preset')} title={t('prompts.components.prompt.preset.panel.add.preset')}>
               <Plus className="h-4 w-4" />
             </Button>
           ) : null}
@@ -299,7 +307,7 @@ export function PromptPresetPanel() {
 
         <div className="rounded-sm border border-border/80 bg-surface-lowest p-2">
           {presetsQuery.isLoading ? (
-            <div className="px-3 py-4 text-sm text-muted-foreground">프리셋 불러오는 중…</div>
+            <div className="px-3 py-4 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.loading.presets')}</div>
           ) : entries.length > 0 ? (
             <HierarchyNav
               items={entries.map((entry) => entry.preset)}
@@ -313,7 +321,7 @@ export function PromptPresetPanel() {
               renderIcon={(_, state) => (state.hasChildren || state.isSelected ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
             />
           ) : (
-            <div className="px-3 py-4 text-sm text-muted-foreground">아직 프리셋이 없어.</div>
+            <div className="px-3 py-4 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.no.presets.yet')}</div>
           )}
         </div>
       </aside>
@@ -322,16 +330,16 @@ export function PromptPresetPanel() {
         <SectionHeading
           variant="inside"
           className="border-b border-border/70 pb-4"
-          heading={selectedPreset ? selectedPreset.name : '프리셋 선택'}
+          heading={selectedPreset ? selectedPreset.name : t('prompts.components.prompt.preset.panel.select.preset')}
           actions={selectedPreset ? (
             <div className="flex items-center gap-2">
               {canUpdatePresets ? (
-                <Button type="button" size="icon-sm" variant="outline" onClick={() => setEditorState({ mode: 'edit', preset: selectedPreset })} aria-label="프리셋 편집" title="편집">
+                <Button type="button" size="icon-sm" variant="outline" onClick={() => setEditorState({ mode: 'edit', preset: selectedPreset })} aria-label={t('prompts.components.prompt.preset.panel.edit.preset')} title={t('prompts.components.prompt.preset.panel.edit')}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               ) : null}
               {canDeletePresets ? (
-                <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleDeleteSelected()} aria-label="프리셋 삭제" title="삭제">
+                <Button type="button" size="icon-sm" variant="outline" onClick={() => void handleDeleteSelected()} aria-label={t('prompts.components.prompt.preset.panel.delete.preset')} title={t('prompts.components.prompt.preset.panel.delete')}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               ) : null}
@@ -343,7 +351,7 @@ export function PromptPresetPanel() {
           <div className="space-y-4">
             <div className="space-y-2 text-sm text-muted-foreground">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">값 {selectedPreset.items?.length ?? 0}개</Badge>
+                <Badge variant="outline">{t('prompts.components.prompt.preset.panel.value.count', { count: formatNumber(selectedPreset.items?.length ?? 0) })}</Badge>
                 <Badge variant="outline">{selectedEntry?.path.join(' / ') ?? selectedPreset.name}</Badge>
               </div>
               {selectedPreset.description ? <div>{selectedPreset.description}</div> : null}
@@ -351,11 +359,15 @@ export function PromptPresetPanel() {
 
             <SettingsSegmentedTable
               value="items"
-              items={[{ value: 'items', label: '설명 / 값' }]}
+              items={[{ value: 'items', label: t('prompts.components.prompt.preset.panel.description.value') }]}
               onChange={() => undefined}
               gridClassName="grid-cols-[3rem_minmax(9rem,0.45fr)_minmax(12rem,1fr)] gap-x-3"
-              headers={['번호', '설명', '값']}
-              count={<Badge variant="outline">{selectedPreset.items?.length ?? 0}</Badge>}
+              headers={[
+                t('prompts.components.prompt.preset.panel.number'),
+                t('prompts.components.prompt.preset.panel.description'),
+                t('prompts.components.prompt.preset.panel.value'),
+              ]}
+              count={<Badge variant="outline">{formatNumber(selectedPreset.items?.length ?? 0)}</Badge>}
               minWidthClassName="min-w-[620px]"
             >
               {(selectedPreset.items ?? []).map((item, index) => (
@@ -369,14 +381,14 @@ export function PromptPresetPanel() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-medium text-foreground">삽입 미리보기</div>
-                <Button type="button" size="sm" variant="outline" onClick={() => void handleCopyInsertion()} disabled={!insertionPreview}>복사</Button>
+                <div className="text-sm font-medium text-foreground">{t('prompts.components.prompt.preset.panel.insertion.preview')}</div>
+                <Button type="button" size="sm" variant="outline" onClick={() => void handleCopyInsertion()} disabled={!insertionPreview}>{t('prompts.components.prompt.preset.panel.copy')}</Button>
               </div>
-              <pre className="max-h-64 overflow-auto rounded-sm border border-border bg-surface-container px-3 py-3 text-xs leading-5 text-foreground/90 whitespace-pre-wrap">{insertionPreview || '삽입할 값이 없어.'}</pre>
+              <pre className="max-h-64 overflow-auto rounded-sm border border-border bg-surface-container px-3 py-3 text-xs leading-5 text-foreground/90 whitespace-pre-wrap">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</pre>
             </div>
           </div>
         ) : (
-          <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">프리셋을 선택하면 세부 정보를 보여줄게.</div>
+          <div className="rounded-sm border border-dashed border-border bg-surface-container px-4 py-6 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.select.a.preset.to.view.details')}</div>
         )}
       </section>
 
@@ -390,11 +402,11 @@ export function PromptPresetPanel() {
         onClose={() => setEditorState(null)}
         onSubmit={async (input) => {
           if (!input.name) {
-            showSnackbar({ message: '프리셋 이름을 넣어줘.', tone: 'error' })
+            showSnackbar({ message: t('prompts.components.prompt.preset.panel.enter.preset.name'), tone: 'error' })
             return
           }
           if (input.items.length === 0) {
-            showSnackbar({ message: '설명/값 세트를 하나 이상 넣어줘.', tone: 'error' })
+            showSnackbar({ message: t('prompts.components.prompt.preset.panel.enter.at.least.one.description.value.set'), tone: 'error' })
             return
           }
 
