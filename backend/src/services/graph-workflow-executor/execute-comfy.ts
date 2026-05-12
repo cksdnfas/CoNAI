@@ -15,6 +15,7 @@ import { normalizeGenerationQueueRoutingTag } from '../generationQueueRouting'
 import { GenerationQueueService } from '../generationQueueService'
 import { ImageUploadService } from '../imageUploadService'
 import { saveArtifactBuffer, saveArtifactFileReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
+import { resolveComfyGraphOutputDescriptor, resolveComfyOutputMimeType } from './comfyArtifactOutput'
 import {
   bufferToDataUrl,
   normalizeOptionalString,
@@ -33,15 +34,6 @@ const GRAPH_COMFY_TARGET_TAG_KEY = 'execution_target_tag'
 const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
 const QUEUE_POLL_INTERVAL_MS = 1500
 const QUEUE_TERMINAL_WAIT_TIMEOUT_MS = 15000
-
-function resolveComfyOutputMimeType(output: { format?: string; filename: string; tempPath: string }) {
-  const normalizedFormat = typeof output.format === 'string' ? output.format.trim().toLowerCase() : ''
-  if (normalizedFormat.includes('/')) {
-    return normalizedFormat
-  }
-
-  return FileDiscoveryService.getMimeType(output.filename || output.tempPath)
-}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -289,10 +281,15 @@ async function resolveQueueBackedOutput(params: {
   }
 
   const absoluteOriginalPath = path.isAbsolute(originalPath) ? originalPath : resolveUploadsPath(originalPath)
+  const originalFileName = path.basename(absoluteOriginalPath)
   const resolvedMimeType = normalizeOptionalString(debug.result_mime_type)
     ?? FileDiscoveryService.getMimeType(absoluteOriginalPath)
-  const artifactType: 'file' | 'image' = resolvedMimeType.startsWith('video/') ? 'file' : 'image'
-  const originalFileName = path.basename(absoluteOriginalPath)
+  const outputDescriptor = resolveComfyGraphOutputDescriptor({
+    mimeType: resolvedMimeType,
+    filePath: absoluteOriginalPath,
+    fileName: originalFileName,
+  })
+  const artifactType = outputDescriptor.artifactType
   const shouldMaterializeValue = shouldMaterializeRuntimeArtifactValue(params.context, params.node.id, params.outputPortKey, artifactType)
 
   let outputValue: unknown = {
@@ -332,7 +329,7 @@ async function resolveQueueBackedOutput(params: {
         mimeType: resolvedMimeType,
         metadata: {
           module: params.moduleDefinition.name,
-          outputKind: artifactType === 'file' ? 'video' : 'image',
+          outputKind: outputDescriptor.outputKind,
           originalFileName,
           queueJobId: completedJob.id,
           historyId,
@@ -355,9 +352,9 @@ async function resolveQueueBackedOutput(params: {
     assigned_server_id: completedJob.assigned_server_id ?? null,
     execution_target_mode: params.target.mode,
     composite_hash: compositeHash,
-    output_mime_type: resolvedMimeType,
+    output_mime_type: outputDescriptor.mimeType,
     output_file_name: originalFileName,
-    output_kind: artifactType === 'file' ? 'video' : 'image',
+    output_kind: outputDescriptor.outputKind,
   }
 
   const nodeArtifacts: Record<string, RuntimeArtifact> = {
@@ -368,8 +365,8 @@ async function resolveQueueBackedOutput(params: {
       artifactRecordId,
       metadata: {
         module: params.moduleDefinition.name,
-        mimeType: resolvedMimeType,
-        outputKind: artifactType === 'file' ? 'video' : 'image',
+        mimeType: outputDescriptor.mimeType,
+        outputKind: outputDescriptor.outputKind,
         originalFileName,
         queueJobId: completedJob.id,
         historyId,
@@ -493,10 +490,16 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
     key: 'image',
     data_type: 'image' as const,
   }
-  const artifactType: 'file' | 'image' = primaryOutput.kind === 'video' ? 'file' : 'image'
   const mimeType = resolveComfyOutputMimeType(primaryOutput)
   const outputBuffer = await fs.promises.readFile(primaryOutput.tempPath)
   const originalFileName = path.basename(primaryOutput.filename || primaryOutput.tempPath)
+  const outputDescriptor = resolveComfyGraphOutputDescriptor({
+    mimeType,
+    filePath: primaryOutput.tempPath,
+    fileName: originalFileName,
+    explicitKind: primaryOutput.kind,
+  })
+  const artifactType = outputDescriptor.artifactType
   const { storagePath, artifactRecordId } = await saveArtifactBuffer(
     context.executionId,
     node.id,
@@ -532,8 +535,8 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
     workflow_name: templateDefaults.workflow_name,
     api_endpoint: apiEndpoint,
     prompt_id: promptId,
-    output_kind: primaryOutput.kind,
-    output_mime_type: mimeType,
+    output_kind: outputDescriptor.outputKind,
+    output_mime_type: outputDescriptor.mimeType,
     output_file_name: originalFileName,
   }
 
@@ -545,8 +548,8 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
       artifactRecordId,
       metadata: {
         module: moduleDefinition.name,
-        mimeType,
-        outputKind: primaryOutput.kind,
+        mimeType: outputDescriptor.mimeType,
+        outputKind: outputDescriptor.outputKind,
         originalFileName,
       },
     },
