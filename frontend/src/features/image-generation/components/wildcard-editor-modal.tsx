@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
-import { useI18n } from '@/i18n'
+import { useI18n, type TranslationParams } from '@/i18n'
 import type { WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
 
 export interface WildcardEditorModalInput {
@@ -58,6 +58,23 @@ const wildcardToolLabels: Record<WildcardTool, string> = {
   comfyui: 'ComfyUI',
 }
 
+const wildcardEditorI18nPrefix = 'image-generation.components.wildcard.editor.modal'
+
+function wildcardEditorKey(suffix: string) {
+  return `${wildcardEditorI18nPrefix}.${suffix}`
+}
+
+type Translate = (input: string, params?: TranslationParams) => string
+
+type WildcardJsonParseMessages = {
+  emptyItemContent: (label: string) => string
+  invalidItem: (label: string) => string
+  invalidItemList: (label: string) => string
+  invalidRoot: string
+  missingToolArray: string
+  itemIndexLabel: (label: string, index: number) => string
+}
+
 let wildcardItemDraftSequence = 0
 
 /** Create one editable wildcard item row. */
@@ -98,23 +115,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function parseWildcardJsonItem(value: unknown, label: string): WildcardJsonItem {
+function parseWildcardJsonItem(value: unknown, label: string, messages: WildcardJsonParseMessages): WildcardJsonItem {
   if (typeof value === 'string') {
     const content = value.trim()
     if (!content) {
-      throw new Error(`${label} 항목 내용이 비어 있어.`)
+      throw new Error(messages.emptyItemContent(label))
     }
 
     return { content, weight: 1 }
   }
 
   if (!isRecord(value) || typeof value.content !== 'string') {
-    throw new Error(`${label} 항목은 문자열이거나 { content, weight } 형태여야 해.`)
+    throw new Error(messages.invalidItem(label))
   }
 
   const content = value.content.trim()
   if (!content) {
-    throw new Error(`${label} 항목 내용이 비어 있어.`)
+    throw new Error(messages.emptyItemContent(label))
   }
 
   const weight = Number(value.weight ?? 1)
@@ -124,15 +141,15 @@ function parseWildcardJsonItem(value: unknown, label: string): WildcardJsonItem 
   }
 }
 
-function parseWildcardJsonItems(value: unknown, label: string) {
+function parseWildcardJsonItems(value: unknown, label: string, messages: WildcardJsonParseMessages) {
   if (!Array.isArray(value)) {
-    throw new Error(`${label} 항목 목록은 배열이어야 해.`)
+    throw new Error(messages.invalidItemList(label))
   }
 
-  return value.map((item, index) => parseWildcardJsonItem(item, `${label} ${index + 1}번`))
+  return value.map((item, index) => parseWildcardJsonItem(item, messages.itemIndexLabel(label, index + 1), messages))
 }
 
-function parseWildcardJsonPayload(value: unknown, activeTool: WildcardTool): Record<WildcardTool, WildcardJsonItem[]> {
+function parseWildcardJsonPayload(value: unknown, activeTool: WildcardTool, messages: WildcardJsonParseMessages): Record<WildcardTool, WildcardJsonItem[]> {
   const nextItems: Record<WildcardTool, WildcardJsonItem[]> = {
     general: [],
     nai: [],
@@ -140,13 +157,13 @@ function parseWildcardJsonPayload(value: unknown, activeTool: WildcardTool): Rec
   }
 
   if (Array.isArray(value)) {
-    nextItems[activeTool] = parseWildcardJsonItems(value, wildcardToolLabels[activeTool])
+    nextItems[activeTool] = parseWildcardJsonItems(value, wildcardToolLabels[activeTool], messages)
     return nextItems
   }
 
   const source = isRecord(value) && isRecord(value.items) ? value.items : value
   if (!isRecord(source)) {
-    throw new Error('JSON은 배열이거나 { general, nai, comfyui } 객체여야 해.')
+    throw new Error(messages.invalidRoot)
   }
 
   let hasSupportedTool = false
@@ -155,11 +172,11 @@ function parseWildcardJsonPayload(value: unknown, activeTool: WildcardTool): Rec
       continue
     }
     hasSupportedTool = true
-    nextItems[tool] = parseWildcardJsonItems(source[tool], wildcardToolLabels[tool])
+    nextItems[tool] = parseWildcardJsonItems(source[tool], wildcardToolLabels[tool], messages)
   }
 
   if (!hasSupportedTool) {
-    throw new Error('general, nai, comfyui 중 하나 이상의 항목 배열이 필요해.')
+    throw new Error(messages.missingToolArray)
   }
 
   return nextItems
@@ -185,11 +202,15 @@ function appendImportedWildcardDrafts(
   return nextDrafts
 }
 
-function summarizeWildcardItemCounts(items: Record<WildcardTool, WildcardJsonItem[]>, formatNumber: (value: number) => string) {
+function summarizeWildcardItemCounts(
+  items: Record<WildcardTool, WildcardJsonItem[]>,
+  formatNumber: (value: number) => string,
+  formatToolCount: (toolLabel: string, count: string) => string,
+) {
   return wildcardTools
     .map((tool) => ({ label: wildcardToolLabels[tool], count: items[tool].length }))
     .filter((item) => item.count > 0)
-    .map((item) => `${item.label} ${formatNumber(item.count)}개`)
+    .map((item) => formatToolCount(item.label, formatNumber(item.count)))
     .join(', ')
 }
 
@@ -214,7 +235,7 @@ function createSafeFilenamePart(value: string, fallback: string) {
   return safe || fallback
 }
 
-function buildWildcardTemplatePayload(format: WildcardJsonFormat, activeTool: WildcardTool) {
+function buildWildcardTemplatePayload(format: WildcardJsonFormat, activeTool: WildcardTool, t: Translate) {
   if (format === 'simple') {
     return ['first item', { content: 'weighted item', weight: 1.2 }]
   }
@@ -223,7 +244,7 @@ function buildWildcardTemplatePayload(format: WildcardJsonFormat, activeTool: Wi
     general: [{ content: 'general item', weight: 1 }],
     nai: [{ content: 'nai item', weight: 1 }],
     comfyui: [{ content: 'comfyui item', weight: 1 }],
-    note: `간편 배열 양식은 현재 선택한 ${wildcardToolLabels[activeTool]} 탭으로 가져와져.`,
+    note: t(wildcardEditorKey('simple.array.format.imports.to.current.tool.tab'), { tool: wildcardToolLabels[activeTool] }),
   }
 }
 
@@ -270,6 +291,7 @@ function WildcardItemDraftEditor({
   onExportJson: (format: WildcardJsonFormat) => void
   onImportJsonFile: (file: File) => Promise<void>
 }) {
+  const { t, formatNumber } = useI18n()
   const activeDrafts = drafts[activeTool]
   const activeToolLabel = wildcardToolLabels[activeTool]
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -331,11 +353,23 @@ function WildcardItemDraftEditor({
       ]}
       onChange={(value) => onChangeTool(value as WildcardTool)}
       gridClassName="grid-cols-[3rem_minmax(0,1fr)_5.5rem_3rem] gap-x-3"
-      headers={['번호', '내용', '가중치', '삭제']}
+      headers={[
+        t(wildcardEditorKey('no')),
+        t(wildcardEditorKey('content')),
+        t(wildcardEditorKey('weight')),
+        t(wildcardEditorKey('delete')),
+      ]}
       actions={
         <div className="flex items-center gap-1.5">
           <input ref={fileInputRef} type="file" accept=".json,application/json" className="hidden" onChange={handleFileChange} />
-          <Button type="button" size="icon-sm" variant="outline" onClick={() => fileInputRef.current?.click()} aria-label="JSON 파일 가져오기" title="JSON 파일 가져오기">
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label={t(wildcardEditorKey('import.json.file'))}
+            title={t(wildcardEditorKey('import.json.file'))}
+          >
             <FileUp className="h-4 w-4" />
           </Button>
 
@@ -345,8 +379,8 @@ function WildcardItemDraftEditor({
               size="icon-sm"
               variant="outline"
               onClick={() => setTemplateMenuOpen((current) => !current)}
-              aria-label="JSON 양식 다운로드"
-              title="JSON 양식 다운로드"
+              aria-label={t(wildcardEditorKey('download.json.template'))}
+              title={t(wildcardEditorKey('download.json.template'))}
             >
               <Download className="h-4 w-4" />
             </Button>
@@ -359,23 +393,34 @@ function WildcardItemDraftEditor({
               variant="outline"
               onClick={() => setExportMenuOpen((current) => !current)}
               disabled={exportDisabled}
-              aria-label="JSON 내보내기"
-              title="JSON 내보내기"
+              aria-label={t(wildcardEditorKey('export.json'))}
+              title={t(wildcardEditorKey('export.json'))}
             >
               <FileDown className="h-4 w-4" />
             </Button>
           </span>
 
-          <Button type="button" size="icon-sm" variant="outline" onClick={handleAddDraft} aria-label={`${activeToolLabel} 항목 추가`} title="항목 추가">
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="outline"
+            onClick={handleAddDraft}
+            aria-label={t(wildcardEditorKey('add.tool.item'), { tool: activeToolLabel })}
+            title={t(wildcardEditorKey('add.item'))}
+          >
             <Plus className="h-4 w-4" />
           </Button>
 
           <AnchoredPopup open={templateMenuOpen} anchorRef={templateMenuAnchorRef} onClose={() => setTemplateMenuOpen(false)} align="end" side="bottom" className="z-[7000]" closeOnBack>
-            <WildcardJsonFormatMenu simpleLabel="간편 양식" fullLabel="일반 양식" onSelect={handleDownloadTemplate} />
+            <WildcardJsonFormatMenu simpleLabel={t(wildcardEditorKey('simple.format'))} fullLabel={t(wildcardEditorKey('full.format'))} onSelect={handleDownloadTemplate} />
           </AnchoredPopup>
 
           <AnchoredPopup open={exportMenuOpen} anchorRef={exportMenuAnchorRef} onClose={() => setExportMenuOpen(false)} align="end" side="bottom" className="z-[7000]" closeOnBack>
-            <WildcardJsonFormatMenu simpleLabel={`${activeToolLabel} 내보내기`} fullLabel="전체 내보내기" onSelect={handleExportJson} />
+            <WildcardJsonFormatMenu
+              simpleLabel={t(wildcardEditorKey('export.tool'), { tool: activeToolLabel })}
+              fullLabel={t(wildcardEditorKey('export.all'))}
+              onSelect={handleExportJson}
+            />
           </AnchoredPopup>
         </div>
       }
@@ -388,7 +433,7 @@ function WildcardItemDraftEditor({
             variant="settings"
             value={draft.content}
             onChange={(event) => handleChangeDraft(draft.id, 'content', event.target.value)}
-            placeholder="항목 내용"
+            placeholder={t(wildcardEditorKey('item.content'))}
           />
           <ScrubbableNumberInput
             variant="settings"
@@ -400,7 +445,7 @@ function WildcardItemDraftEditor({
             onChange={(value) => handleChangeDraft(draft.id, 'weight', value)}
             placeholder="1"
             inputMode="decimal"
-            aria-label={`${activeToolLabel} 항목 ${index + 1} 가중치`}
+            aria-label={t(wildcardEditorKey('tool.item.weight'), { tool: activeToolLabel, index: formatNumber(index + 1) })}
           />
           <div className="flex justify-center">
             <Button
@@ -408,8 +453,8 @@ function WildcardItemDraftEditor({
               size="icon-sm"
               variant="ghost"
               onClick={() => handleRemoveDraft(draft.id)}
-              aria-label={`${activeToolLabel} 항목 ${index + 1} 삭제`}
-              title="삭제"
+              aria-label={t(wildcardEditorKey('delete.tool.item'), { tool: activeToolLabel, index: formatNumber(index + 1) })}
+              title={t(wildcardEditorKey('delete'))}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -432,7 +477,7 @@ export function WildcardEditorModal({
   onClose,
   onSubmit,
 }: WildcardEditorModalProps) {
-  const { formatNumber } = useI18n()
+  const { t, formatNumber } = useI18n()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [parentValue, setParentValue] = useState('root')
@@ -497,15 +542,19 @@ export function WildcardEditorModal({
       ? `wildcard-template-${activeItemTool}-simple.json`
       : 'wildcard-template-full.json'
 
-    downloadJsonFile(filename, buildWildcardTemplatePayload(format, activeItemTool))
+    downloadJsonFile(filename, buildWildcardTemplatePayload(format, activeItemTool, t))
     setFormError(null)
-    setFormNotice(format === 'simple' ? `${wildcardToolLabels[activeItemTool]} 간편 양식을 내려받았어.` : '일반 양식을 내려받았어.')
+    setFormNotice(
+      format === 'simple'
+        ? t(wildcardEditorKey('tool.simple.template.downloaded'), { tool: wildcardToolLabels[activeItemTool] })
+        : t(wildcardEditorKey('full.template.downloaded')),
+    )
   }
 
   const handleExportJson = (format: WildcardJsonFormat) => {
     if (!hasExportableItems) {
       setFormNotice(null)
-      setFormError('내보낼 항목이 없어.')
+      setFormError(t(wildcardEditorKey('no.items.to.export')))
       return
     }
 
@@ -514,34 +563,46 @@ export function WildcardEditorModal({
       const simpleItems = createSimpleJsonItems(exportItems[activeItemTool])
       if (simpleItems.length === 0) {
         setFormNotice(null)
-        setFormError(`${wildcardToolLabels[activeItemTool]} 탭에 내보낼 항목이 없어.`)
+        setFormError(t(wildcardEditorKey('no.items.to.export.for.tool'), { tool: wildcardToolLabels[activeItemTool] }))
         return
       }
 
       downloadJsonFile(`${filenameBase}-${activeItemTool}.json`, simpleItems)
       setFormError(null)
-      setFormNotice(`${wildcardToolLabels[activeItemTool]} 항목을 내보냈어.`)
+      setFormNotice(t(wildcardEditorKey('tool.items.exported'), { tool: wildcardToolLabels[activeItemTool] }))
       return
     }
 
     downloadJsonFile(`${filenameBase}-full.json`, exportItems)
     setFormError(null)
-    setFormNotice('전체 도구 항목을 내보냈어.')
+    setFormNotice(t(wildcardEditorKey('all.tool.items.exported')))
   }
 
   const handleImportJsonFile = async (file: File) => {
     if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json') {
       setFormNotice(null)
-      setFormError('JSON 파일만 가져올 수 있어.')
+      setFormError(t(wildcardEditorKey('only.json.files.can.be.imported')))
       return
     }
 
     try {
-      const importedItems = parseWildcardJsonPayload(JSON.parse(await file.text()) as unknown, activeItemTool)
-      const importedCountSummary = summarizeWildcardItemCounts(importedItems, formatNumber)
+      const parseMessages: WildcardJsonParseMessages = {
+        emptyItemContent: (label) => t(wildcardEditorKey('item.content.is.empty'), { label }),
+        invalidItem: (label) => t(wildcardEditorKey('item.must.be.a.string.or.content.weight.object'), { label }),
+        invalidItemList: (label) => t(wildcardEditorKey('item.list.must.be.an.array'), { label }),
+        invalidRoot: t(wildcardEditorKey('json.must.be.an.array.or.a')),
+        missingToolArray: t(wildcardEditorKey('at.least.one.item.array.under.general')),
+        itemIndexLabel: (label, index) => t(wildcardEditorKey('item.index.label'), { label, index: formatNumber(index) }),
+      }
+      const importedItems = parseWildcardJsonPayload(JSON.parse(await file.text()) as unknown, activeItemTool, parseMessages)
+      const importedCountSummary = summarizeWildcardItemCounts(
+        importedItems,
+        formatNumber,
+        (tool, count) => t(wildcardEditorKey('tool.count.items'), { tool, count }),
+      )
       if (!importedCountSummary) {
         setFormNotice(null)
-        setFormError('가져올 수 있는 항목이 없어.')
+        setFormError(t(wildcardEditorKey('no.importable.items.found')))
         return
       }
 
@@ -551,10 +612,10 @@ export function WildcardEditorModal({
         setActiveItemTool(firstImportedTool)
       }
       setFormError(null)
-      setFormNotice(`${importedCountSummary}를 가져왔어. 저장을 눌러야 반영돼.`)
+      setFormNotice(t(wildcardEditorKey('imported.items.save.to.apply'), { summary: importedCountSummary }))
     } catch (error) {
       setFormNotice(null)
-      setFormError(error instanceof Error ? error.message : 'JSON 파일을 읽지 못했어.')
+      setFormError(error instanceof Error ? error.message : t(wildcardEditorKey('could.not.read.the.json.file')))
     }
   }
 
@@ -563,7 +624,7 @@ export function WildcardEditorModal({
 
     const trimmedName = name.trim()
     if (!trimmedName) {
-      setFormError('이름은 꼭 필요해.')
+      setFormError(t(wildcardEditorKey('name.is.required')))
       return
     }
 
@@ -571,7 +632,7 @@ export function WildcardEditorModal({
     const naiItems = normalizeWildcardItemDrafts(itemDrafts.nai)
     const comfyuiItems = normalizeWildcardItemDrafts(itemDrafts.comfyui)
     if (generalItems.length === 0 && naiItems.length === 0 && comfyuiItems.length === 0) {
-      setFormError('General, NAI, ComfyUI 항목 중 하나는 있어야 해.')
+      setFormError(t(wildcardEditorKey('at.least.one.general.nai.or.comfyui')))
       return
     }
 
@@ -595,30 +656,32 @@ export function WildcardEditorModal({
     <SettingsModal
       open={open}
       onClose={onClose}
-      title={mode === 'create' ? `${tabLabel} 항목 만들기` : `${tabLabel} 항목 편집`}
+      title={mode === 'create'
+        ? t(wildcardEditorKey('create.tab.item'), { tab: tabLabel })
+        : t(wildcardEditorKey('edit.tab.item'), { tab: tabLabel })}
       widthClassName="max-w-4xl"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
-            <AlertTitle>입력 확인이 필요해</AlertTitle>
+            <AlertTitle>{t(wildcardEditorKey('input.review.needed'))}</AlertTitle>
             <AlertDescription>{formError}</AlertDescription>
           </Alert>
         ) : formNotice ? (
           <Alert>
-            <AlertTitle>처리 완료</AlertTitle>
+            <AlertTitle>{t(wildcardEditorKey('done'))}</AlertTitle>
             <AlertDescription>{formNotice}</AlertDescription>
           </Alert>
         ) : null}
 
         <SettingsModalBody className="space-y-5">
           <div className={isChainTab ? 'grid gap-4 md:grid-cols-2' : 'space-y-2'}>
-            <SettingsField label="이름">
-              <Input variant="settings" value={name} onChange={(event) => setName(event.target.value)} placeholder="예: character_pose" />
+            <SettingsField label={t(wildcardEditorKey('name'))}>
+              <Input variant="settings" value={name} onChange={(event) => setName(event.target.value)} placeholder={t(wildcardEditorKey('e.g.character.pose'))} />
             </SettingsField>
 
             {isChainTab ? (
-              <SettingsField label="chain 동작">
+              <SettingsField label={t(wildcardEditorKey('chain.behavior'))}>
                 <Select variant="settings" value={chainOption} onChange={(event) => setChainOption(event.target.value as 'replace' | 'append')}>
                   <option value="replace">replace</option>
                   <option value="append">append</option>
@@ -627,12 +690,12 @@ export function WildcardEditorModal({
             ) : null}
           </div>
 
-          <SettingsField label="설명">
-            <Textarea variant="settings" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder="선택 사항" />
+          <SettingsField label={t(wildcardEditorKey('description'))}>
+            <Textarea variant="settings" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder={t(wildcardEditorKey('optional'))} />
           </SettingsField>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">부모 항목</p>
+            <p className="text-sm font-medium text-foreground">{t(wildcardEditorKey('parent.item'))}</p>
             <HierarchyPicker
               items={parentCandidates}
               selectedId={parentValue === 'root' ? null : Number(parentValue)}
@@ -643,17 +706,17 @@ export function WildcardEditorModal({
               getLabel={(candidate) => candidate.name}
               sortItems={(left, right) => left.name.localeCompare(right.name)}
               renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-              rootLabel="루트"
+              rootLabel={t(wildcardEditorKey('root'))}
             />
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             <SettingsToggleRow className="justify-between">
-              <span className="font-medium text-foreground">하위 자동 포함</span>
+              <span className="font-medium text-foreground">{t(wildcardEditorKey('auto.include.children'))}</span>
               <input type="checkbox" checked={includeChildren} onChange={(event) => setIncludeChildren(event.target.checked)} />
             </SettingsToggleRow>
             <SettingsToggleRow className="justify-between">
-              <span className="font-medium text-foreground">자식만 사용</span>
+              <span className="font-medium text-foreground">{t(wildcardEditorKey('children.only'))}</span>
               <input type="checkbox" checked={onlyChildren} onChange={(event) => setOnlyChildren(event.target.checked)} />
             </SettingsToggleRow>
           </div>
@@ -676,10 +739,14 @@ export function WildcardEditorModal({
 
           <SettingsModalFooter>
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              취소
+              {t(wildcardEditorKey('cancel'))}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? '저장 중…' : mode === 'create' ? '항목 만들기' : '변경 저장'}
+              {isSubmitting
+                ? t(wildcardEditorKey('saving'))
+                : mode === 'create'
+                  ? t(wildcardEditorKey('create.item'))
+                  : t(wildcardEditorKey('save.changes'))}
             </Button>
           </SettingsModalFooter>
         </SettingsModalBody>
