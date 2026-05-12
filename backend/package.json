@@ -14,6 +14,7 @@
     "verify:queue-wakeup-smoke": "tsx src/scripts/verifyGenerationQueueWakeup.ts",
     "verify:queue-routing-smoke": "tsx src/scripts/verifyGenerationQueueRouting.ts",
     "verify:graph-comfy-artifacts": "tsx src/scripts/verifyGraphComfyArtifactDescriptors.ts",
+    "verify:graph-artifact-runtime": "tsx src/scripts/verifyGraphArtifactRuntime.ts",
     "verify:builtin-system-modules": "tsx src/scripts/verifyBuiltinSystemModuleDefinitions.ts"
   },
   "dependencies": {

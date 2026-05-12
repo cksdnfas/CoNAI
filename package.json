@@ -46,6 +46,7 @@
     "verify:builtin-system-modules": "cd backend && npm run verify:builtin-system-modules",
     "verify:queue-routing-smoke": "cd backend && npm run verify:queue-routing-smoke",
     "verify:graph-comfy-artifacts": "cd backend && npm run verify:graph-comfy-artifacts",
+    "verify:graph-artifact-runtime": "cd backend && npm run verify:graph-artifact-runtime",
     "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
     "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
     "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",
