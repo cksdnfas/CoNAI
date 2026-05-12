@@ -248,6 +248,7 @@ export const wallpaperResources = {
   "wallpaper.wallpaper.easing.picker.preview.pressed": "Pressed",
   "wallpaper.wallpaper.easing.picker.preview.time": "Time",
   "wallpaper.wallpaper.easing.picker.preview.start": "Start",
+  "wallpaper.wallpaper.easing.picker.preview.pvalue": "End",
   "wallpaper.wallpaper.easing.picker.my.presets": "My presets",
   "wallpaper.wallpaper.easing.picker.preset.import": "Preset Import",
   "wallpaper.wallpaper.easing.picker.preset.export": "Preset Export",

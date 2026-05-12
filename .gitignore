@@ -141,3 +141,7 @@ shared/tsconfig.tsbuildinfo
 /.graphify_detect.json
 /.graphifyignore
 /AGENTS.md
+
+# Generated verification reports
+/docs/i18n-gap-report.json
+/docs/i18n-gap-report.md

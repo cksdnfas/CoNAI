@@ -3,39 +3,75 @@ import fs from 'fs'
 import path from 'path'
 
 const ROOT = process.cwd()
-const LOCALES_DIR = path.join(ROOT, 'frontend', 'src', 'i18n', 'locales')
+const I18N_RESOURCES_DIR = path.join(ROOT, 'frontend', 'src', 'i18n', 'resources')
 const FRONTEND_FEATURES_DIR = path.join(ROOT, 'frontend', 'src', 'features')
 const OUTPUT_MD = path.join(ROOT, 'docs', 'i18n-gap-report.md')
 const OUTPUT_JSON = path.join(ROOT, 'docs', 'i18n-gap-report.json')
 
-const BASE_LANG = 'en'
-const TARGET_LANGS = ['ko', 'ja', 'zh-CN', 'zh-TW']
+const BASE_LANG = 'ko'
+const TARGET_LANGS = ['en']
+const RESOURCE_FILE_EXCLUDES = new Set(['index.ts', 'types.ts'])
 
-function readJson(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+function listResourceFiles() {
+  if (!fs.existsSync(I18N_RESOURCES_DIR)) return []
+  return fs
+    .readdirSync(I18N_RESOURCES_DIR)
+    .filter((f) => f.endsWith('.ts') && !RESOURCE_FILE_EXCLUDES.has(f))
+    .sort()
 }
 
-function flatten(obj, prefix = '') {
-  const out = {}
-  if (obj == null || typeof obj !== 'object' || Array.isArray(obj)) {
-    if (prefix) out[prefix] = obj
-    return out
-  }
-  for (const [k, v] of Object.entries(obj)) {
-    const key = prefix ? `${prefix}.${k}` : k
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
-      Object.assign(out, flatten(v, key))
-    } else {
-      out[key] = v
+function extractLocaleBlock(code, lang) {
+  const marker = new RegExp(`\\b${lang}:\\s*{`, 'm')
+  const match = marker.exec(code)
+  if (!match) return null
+
+  let i = match.index + match[0].length - 1
+  let depth = 0
+  let inString = false
+  let quote = ''
+  let escaped = false
+  for (; i < code.length; i += 1) {
+    const ch = code[i]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (ch === '\\') {
+        escaped = true
+      } else if (ch === quote) {
+        inString = false
+      }
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      inString = true
+      quote = ch
+      continue
+    }
+    if (ch === '{') depth += 1
+    if (ch === '}') {
+      depth -= 1
+      if (depth === 0) return code.slice(match.index + match[0].length, i)
     }
   }
-  return out
+  return null
 }
 
-function listNamespaceFiles(lang) {
-  const dir = path.join(LOCALES_DIR, lang)
-  if (!fs.existsSync(dir)) return []
-  return fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort()
+function extractResourceKeys(filePath) {
+  const code = fs.readFileSync(filePath, 'utf8')
+  const byLang = {}
+  for (const lang of [BASE_LANG, ...TARGET_LANGS]) {
+    const block = extractLocaleBlock(code, lang)
+    if (block == null) {
+      byLang[lang] = null
+      continue
+    }
+    const keys = []
+    const keyRegex = /^\s*"([^"]+)"\s*:/gm
+    let m
+    while ((m = keyRegex.exec(block)) !== null) keys.push(m[1])
+    byLang[lang] = keys
+  }
+  return byLang
 }
 
 function walkFiles(dir, exts, out = []) {
@@ -52,17 +88,26 @@ function walkFiles(dir, exts, out = []) {
   return out
 }
 
+function shouldIgnoreHardcodedCandidate(txt) {
+  if (/^[0-9_.,:;|\-+/%()\[\]{}#@!?*\s]+$/.test(txt)) return true
+  if (/^https?:\/\//i.test(txt)) return true
+  if (/^[a-z][a-z0-9-]*$/.test(txt)) return true
+  if (txt.includes('{') || txt.includes('}')) return true
+  if (/^(Promise|void \| Promise|void|Extract|NonNullable|ReturnType|Dispatch|SetStateAction)$/.test(txt)) return true
+  if (/\b(state|record|event|candidate|groups|filter|map|get|set)[A-Z.([]/i.test(txt)) return true
+  if (/[()]/.test(txt) && /[?:=>]/.test(txt)) return true
+  if (/^[A-Za-z_$][\w$]*(\.[\w$]+|\([^)]*\)|\[[^\]]+\])/.test(txt)) return true
+  return false
+}
+
 function detectHardcodedStrings(code) {
   const results = []
-  const textRegex = />\s*([^<>{}\n][^<>{}]*)\s*</g
+  const textRegex = />[ \t\r]*([^<>{}\r\n][^<>{}\r\n]*)[ \t\r]*</g
   let m
   while ((m = textRegex.exec(code)) !== null) {
     const txt = m[1].trim()
     if (!txt || txt.length < 3) continue
-    if (/^[0-9_.,:;|\-+/%()\[\]{}#@!?*\s]+$/.test(txt)) continue
-    if (/^https?:\/\//i.test(txt)) continue
-    if (/^[a-z][a-z0-9-]*$/.test(txt)) continue
-    if (txt.includes('{') || txt.includes('}')) continue
+    if (shouldIgnoreHardcodedCandidate(txt)) continue
     results.push({ type: 'jsx-text', text: txt })
   }
 
@@ -70,8 +115,7 @@ function detectHardcodedStrings(code) {
   while ((m = attrRegex.exec(code)) !== null) {
     const txt = m[1].trim()
     if (!txt) continue
-    if (/^[0-9_.,:;|\-+/%()\[\]{}#@!?*\s]+$/.test(txt)) continue
-    if (/^https?:\/\//i.test(txt)) continue
+    if (shouldIgnoreHardcodedCandidate(txt)) continue
     results.push({ type: 'attr', text: txt })
   }
 
@@ -95,35 +139,45 @@ function featureFromPath(filePath) {
 }
 
 function main() {
-  const baseFiles = listNamespaceFiles(BASE_LANG)
+  const resourceFiles = listResourceFiles()
   const missingByLang = {}
   const missingNamespacesByLang = {}
   const statsByLang = {}
+  const resourceKeyCountsByNamespace = {}
 
   for (const lang of TARGET_LANGS) {
     missingByLang[lang] = {}
     missingNamespacesByLang[lang] = []
-
-    for (const nsFile of baseFiles) {
-      const basePath = path.join(LOCALES_DIR, BASE_LANG, nsFile)
-      const targetPath = path.join(LOCALES_DIR, lang, nsFile)
-      if (!fs.existsSync(targetPath)) {
-        missingNamespacesByLang[lang].push(nsFile)
-        continue
-      }
-      const baseFlat = flatten(readJson(basePath))
-      const targetFlat = flatten(readJson(targetPath))
-      const missing = Object.keys(baseFlat).filter((k) => !(k in targetFlat))
-      if (missing.length > 0) missingByLang[lang][nsFile.replace('.json', '')] = missing
-    }
-
     let total = 0
     let missingCount = 0
-    for (const nsFile of baseFiles) {
-      const baseFlat = flatten(readJson(path.join(LOCALES_DIR, BASE_LANG, nsFile)))
-      total += Object.keys(baseFlat).length
+
+    for (const resourceFile of resourceFiles) {
+      const ns = resourceFile.replace(/\.ts$/, '')
+      const byLang = extractResourceKeys(path.join(I18N_RESOURCES_DIR, resourceFile))
+      const baseKeys = byLang[BASE_LANG]
+      const targetKeys = byLang[lang]
+
+      if (!baseKeys) {
+        missingNamespacesByLang[BASE_LANG] = missingNamespacesByLang[BASE_LANG] || []
+        missingNamespacesByLang[BASE_LANG].push(resourceFile)
+        continue
+      }
+
+      resourceKeyCountsByNamespace[ns] = baseKeys.length
+      total += baseKeys.length
+
+      if (!targetKeys) {
+        missingNamespacesByLang[lang].push(resourceFile)
+        missingByLang[lang][ns] = baseKeys
+        missingCount += baseKeys.length
+        continue
+      }
+
+      const targetKeySet = new Set(targetKeys)
+      const missing = baseKeys.filter((k) => !targetKeySet.has(k))
+      if (missing.length > 0) missingByLang[lang][ns] = missing
+      missingCount += missing.length
     }
-    for (const misses of Object.values(missingByLang[lang])) missingCount += misses.length
 
     statsByLang[lang] = {
       totalKeysCompared: total,
@@ -133,7 +187,7 @@ function main() {
     }
   }
 
-  const files = walkFiles(FRONTEND_FEATURES_DIR, ['.tsx', '.ts'])
+  const files = walkFiles(FRONTEND_FEATURES_DIR, ['.tsx'])
   const hardcodedFiles = []
   const hardcodedByFeature = {}
 
@@ -158,6 +212,7 @@ function main() {
     missingNamespacesByLang,
     missingByLang,
     statsByLang,
+    resourceKeyCountsByNamespace,
     hardcodedSummary: {
       filesWithFindings: hardcodedFiles.length,
       totalFindings: hardcodedFiles.reduce((acc, cur) => acc + cur.findings.length, 0),
@@ -174,6 +229,11 @@ function main() {
   lines.push('')
   lines.push(`Generated: ${output.generatedAt}`)
   lines.push(`Base locale: ${BASE_LANG}`)
+  lines.push('')
+  lines.push('## Resource Namespace Summary')
+  lines.push('')
+  lines.push(`- Resource files checked: ${resourceFiles.length}`)
+  lines.push(`- Base keys checked: ${Object.values(resourceKeyCountsByNamespace).reduce((acc, count) => acc + count, 0)}`)
   lines.push('')
   lines.push('## Locale Missing Summary')
   lines.push('')
@@ -216,16 +276,23 @@ function main() {
   lines.push('')
   lines.push('## Priority TODO (Actionable Units)')
   lines.push('')
-  lines.push('1. P0: Fill missing keys in locales where missing count > 0 (keep en schema lockstep).')
-  lines.push('2. P0: Replace hardcoded strings in feature pages with t() calls (start from top hardcoded features).')
+  lines.push('1. P0: Fill missing keys in locales where missing count > 0 (keep ko/en resource files lockstep).')
+  lines.push('2. P0: Replace confirmed user-visible hardcoded strings in feature pages with t() calls (start from top hardcoded features).')
   lines.push('3. P1: Add CI step npm run i18n:check and fail on missing keys.')
   lines.push('4. P1: Add component-level lint rule/codemod for hardcoded JSX text patterns.')
-  lines.push('5. P2: Expand check script with AST parsing to reduce false positives.')
+  lines.push('5. P2: Expand check script with AST parsing to reduce false positives further.')
 
   fs.writeFileSync(OUTPUT_MD, lines.join('\n') + '\n', 'utf8')
   console.log(`[i18n-check] Wrote ${path.relative(ROOT, OUTPUT_JSON)}`)
   console.log(`[i18n-check] Wrote ${path.relative(ROOT, OUTPUT_MD)}`)
   console.log(`[i18n-check] Missing key summary: ${JSON.stringify(statsByLang)}`)
+
+  const totalMissingKeys = Object.values(statsByLang).reduce((acc, stats) => acc + stats.missingKeys, 0)
+  const totalMissingNamespaces = Object.values(statsByLang).reduce((acc, stats) => acc + stats.missingNamespaces, 0)
+  if (totalMissingKeys > 0 || totalMissingNamespaces > 0) {
+    console.error(`[i18n-check] Missing translation resources found: ${totalMissingKeys} keys, ${totalMissingNamespaces} namespaces`)
+    process.exitCode = 1
+  }
 }
 
 main()
