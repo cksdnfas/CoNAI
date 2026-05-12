@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { FLOATING_DROPDOWN_MENU_CLASS } from './floating-dropdown-utils'
 import {
@@ -220,6 +221,8 @@ export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter
   onMouseEnter: () => void
   onMouseLeave: () => void
 }) {
+  const { t } = useI18n()
+
   if (typeof document === 'undefined') {
     return null
   }
@@ -242,7 +245,7 @@ export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter
         <div className="space-y-1">
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{getPromptSyntaxKindLabel(token.kind)}</div>
           <div className="break-all text-sm font-medium text-foreground">{token.name}</div>
-          {token.loraWeight ? <div className="text-[12px] text-muted-foreground">가중치 {token.loraWeight}</div> : null}
+          {token.loraWeight ? <div className="text-[12px] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.weight.token.loraweight', { weight: token.loraWeight })}</div> : null}
         </div>
 
         {token.previewItems.length > 0 ? (
@@ -309,6 +312,7 @@ export function PromptAutocompletePopup({
   onSelect: (suggestion: PromptAutocompleteSuggestion) => void
   onSelectRelatedTag: (tagName: string) => void
 }) {
+  const { t } = useI18n()
   const [suggestionPage, setSuggestionPage] = useState(0)
   const [relatedTagTab, setRelatedTagTab] = useState<PromptRelatedTagTab>('general')
   const [relatedTagPage, setRelatedTagPage] = useState(0)
@@ -344,8 +348,8 @@ export function PromptAutocompletePopup({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            aria-label="이전 추천 페이지"
-            title="이전"
+            aria-label={t('image-generation.components.wildcard.inline.picker.autocomplete.previous.suggestion.page')}
+            title={t('image-generation.components.wildcard.inline.picker.autocomplete.previous')}
             disabled={page <= 0}
             onMouseDown={(event) => {
               event.preventDefault()
@@ -357,8 +361,8 @@ export function PromptAutocompletePopup({
           </button>
           <button
             type="button"
-            aria-label="다음 추천 페이지"
-            title="다음"
+            aria-label={t('image-generation.components.wildcard.inline.picker.autocomplete.next.suggestion.page')}
+            title={t('image-generation.components.wildcard.inline.picker.autocomplete.next')}
             disabled={page >= pageCount - 1}
             onMouseDown={(event) => {
               event.preventDefault()
@@ -379,7 +383,7 @@ export function PromptAutocompletePopup({
         <>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <div className="space-y-2">
-              <div className="truncate px-1 text-[11px] text-muted-foreground">{activeCharacter.label} 연관 태그</div>
+              <div className="truncate px-1 text-[11px] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.autocomplete.related.tags.for', { label: activeCharacter.label })}</div>
               <div className="flex flex-wrap gap-1">
                 {PROMPT_RELATED_TAG_TABS.map((tab) => (
                   <button
@@ -416,7 +420,7 @@ export function PromptAutocompletePopup({
                   ))}
                 </div>
               ) : (
-                <div className="px-1 py-1 text-xs text-muted-foreground">이 분류에는 연관 태그가 없어.</div>
+                <div className="px-1 py-1 text-xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.autocomplete.no.related.tags.in.category')}</div>
               )}
             </div>
           </div>
@@ -426,7 +430,7 @@ export function PromptAutocompletePopup({
         <>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {isLoading ? (
-              <div className="px-2 py-2 text-xs text-muted-foreground">불러오는 중…</div>
+              <div className="px-2 py-2 text-xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.autocomplete.loading')}</div>
             ) : visibleSuggestions.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {visibleSuggestions.map((suggestion) => (
@@ -445,7 +449,7 @@ export function PromptAutocompletePopup({
                 ))}
               </div>
             ) : (
-              <div className="px-2 py-2 text-xs text-muted-foreground">추천 없음</div>
+              <div className="px-2 py-2 text-xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.autocomplete.no.suggestions')}</div>
             )}
           </div>
           {!isLoading && visibleSuggestions.length > 0 ? renderPager(suggestionPage, suggestionPageCount, setSuggestionPage) : null}

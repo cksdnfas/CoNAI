@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { inputVariants } from '@/components/ui/input'
 import { textareaVariants } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
 import { getWildcards } from '@/lib/api-wildcards'
 import { cn } from '@/lib/utils'
 import type { PromptTypeFilter } from '@/types/prompt'
@@ -79,6 +80,7 @@ export function WildcardInlinePickerField({
   showDetectedSyntax = true,
   autocompletePromptType = 'positive',
 }: WildcardInlinePickerFieldProps) {
+  const { t } = useI18n()
   const rootRef = useRef<HTMLDivElement | null>(null)
   const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
   const closeTimerRef = useRef<number | null>(null)
@@ -615,8 +617,8 @@ export function WildcardInlinePickerField({
             <span className="truncate text-sm font-medium text-foreground">{renderHighlightedText(record.name, normalizedActiveQuery)}</span>
             <Badge variant={record.type === 'chain' ? 'secondary' : 'outline'}>{record.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
             {record.isAutoCollected ? <Badge variant="outline">Auto LoRA</Badge> : null}
-            {Number.isFinite(recentIndex) ? <Badge variant="secondary">최근 사용</Badge> : null}
-            {toolItemCount === 0 ? <Badge variant="outline">현재 툴 비어있음</Badge> : null}
+            {Number.isFinite(recentIndex) ? <Badge variant="secondary">{t('image-generation.components.wildcard.inline.picker.field.recent')}</Badge> : null}
+            {toolItemCount === 0 ? <Badge variant="outline">{t('image-generation.components.wildcard.inline.picker.field.current.tool.is.empty')}</Badge> : null}
           </div>
           <div className="mt-1 truncate text-xs text-muted-foreground">{renderHighlightedText(record.path.join(' / '), normalizedActiveQuery)}</div>
         </div>
@@ -678,7 +680,7 @@ export function WildcardInlinePickerField({
 
       {showDetectedSyntax && detectedTokenSummaries.length > 0 ? (
         <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 text-[11px] text-muted-foreground">
-          <span>감지됨</span>
+          <span>{t('image-generation.components.wildcard.inline.picker.field.detected')}</span>
           {detectedTokenSummaries.map((token) => {
             const isActive = token.key === activeDetectedTokenKey
             return (
@@ -708,7 +710,7 @@ export function WildcardInlinePickerField({
                   setActiveDetectedTokenKey((current) => current === token.key ? null : token.key)
                 }}
               >
-                <span className="max-w-[12rem] truncate">{token.kind === 'comment' ? `주석 ${token.count}개 항목` : token.rawText}</span>
+                <span className="max-w-[12rem] truncate">{token.kind === 'comment' ? t('image-generation.components.wildcard.inline.picker.field.comment.items', { count: token.count }) : token.rawText}</span>
                 <span className="text-muted-foreground">{getPromptSyntaxKindLabel(token.kind)}</span>
                 {token.count > 1 ? <Badge variant="secondary">{token.count}</Badge> : null}
               </button>
@@ -760,7 +762,7 @@ export function WildcardInlinePickerField({
                     filterMode === 'available-only' ? 'border-primary bg-surface-high text-foreground' : 'border-border bg-surface-lowest hover:bg-surface-high',
                   )}
                 >
-                  검색
+                  {t('image-generation.components.wildcard.inline.picker.field.search')}
                 </button>
                 <button
                   type="button"
@@ -775,7 +777,7 @@ export function WildcardInlinePickerField({
                     filterMode === 'all' ? 'border-primary bg-surface-high text-foreground' : 'border-border bg-surface-lowest hover:bg-surface-high',
                   )}
                 >
-                  전체 보기
+                  {t('image-generation.components.wildcard.inline.picker.field.browse.all')}
                 </button>
               </div>
               <Badge variant="outline">{isTreeExplorerMode ? explorerEntries.length : suggestions.length}</Badge>
@@ -783,7 +785,7 @@ export function WildcardInlinePickerField({
           </div>
 
           {wildcardsQuery.isLoading ? (
-            <div className="px-3 py-3 text-sm text-muted-foreground">와일드카드 불러오는 중…</div>
+            <div className="px-3 py-3 text-sm text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.loading.wildcards')}</div>
           ) : isTreeExplorerMode ? (
             <WildcardInlinePickerExplorer
               activeTab={activeExplorerTab}
@@ -800,7 +802,7 @@ export function WildcardInlinePickerField({
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
               {recentSuggestions.length > 0 ? (
                 <div className="space-y-1">
-                  <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">최근 사용</div>
+                  <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.recent')}</div>
                   <div className="space-y-1">
                     {recentSuggestions.map(renderSuggestionButton)}
                   </div>
@@ -809,7 +811,7 @@ export function WildcardInlinePickerField({
 
               {remainingSuggestions.length > 0 ? (
                 <div className="space-y-1">
-                  {recentSuggestions.length > 0 ? <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">전체 결과</div> : null}
+                  {recentSuggestions.length > 0 ? <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.all.results')}</div> : null}
                   <div className="space-y-1">
                     {remainingSuggestions.map(renderSuggestionButton)}
                   </div>
@@ -818,8 +820,8 @@ export function WildcardInlinePickerField({
             </div>
           ) : (
             <div className="space-y-2 px-3 py-3 text-sm text-muted-foreground">
-              <div>검색되는 와일드카드가 없어.</div>
-              {filterMode === 'available-only' ? <div className="text-xs">검색 모드에서는 다른 툴 전용 와일드카드가 숨겨질 수 있어.</div> : null}
+              <div>{t('image-generation.components.wildcard.inline.picker.field.no.matching.wildcards')}</div>
+              {filterMode === 'available-only' ? <div className="text-xs">{t('image-generation.components.wildcard.inline.picker.field.search.mode.may.hide.wildcards.dedicated.to')}</div> : null}
             </div>
           )}
         </WildcardInlinePickerPopup>
