@@ -142,7 +142,13 @@ export function PublicComfyWorkflowPage() {
     }
 
     if (missingRequiredField) {
-      showSnackbar({ message: `필수 필드가 비어 있어: ${missingRequiredField.label}`, tone: 'error' })
+      showSnackbar({
+        message: t(
+          { ko: '필수 필드가 비어 있어: {label}', en: 'Required field is empty: {label}' },
+          { label: missingRequiredField.label },
+        ),
+        tone: 'error',
+      })
       return
     }
 

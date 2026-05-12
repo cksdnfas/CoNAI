@@ -100,24 +100,52 @@ function shouldIgnoreHardcodedCandidate(txt) {
   return false
 }
 
+function hasHangul(txt) {
+  return /[\u3131-\u318E\uAC00-\uD7A3]/.test(txt)
+}
+
+function pushHardcodedCandidate(results, type, text) {
+  const txt = text.trim()
+  if (!txt || txt.length < 3) return
+  if (!hasHangul(txt)) return
+  if (shouldIgnoreHardcodedCandidate(txt)) return
+  results.push({ type, text: txt })
+}
+
+function unescapeStringLiteral(raw) {
+  return raw
+    .replace(/\\`/g, '`')
+    .replace(/\\'/g, "'")
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+}
+
+function detectHardcodedMessageLiterals(code) {
+  const results = []
+  const literalRegex = /\b(?:message|title|description|placeholder|label|aria-label|alt)\s*:\s*([`"'])([\s\S]*?)(?<!\\)\1/g
+  let m
+  while ((m = literalRegex.exec(code)) !== null) {
+    pushHardcodedCandidate(results, 'literal', unescapeStringLiteral(m[2]))
+  }
+  return results
+}
+
 function detectHardcodedStrings(code) {
   const results = []
   const textRegex = />[ \t\r]*([^<>{}\r\n][^<>{}\r\n]*)[ \t\r]*</g
   let m
   while ((m = textRegex.exec(code)) !== null) {
-    const txt = m[1].trim()
-    if (!txt || txt.length < 3) continue
-    if (shouldIgnoreHardcodedCandidate(txt)) continue
-    results.push({ type: 'jsx-text', text: txt })
+    pushHardcodedCandidate(results, 'jsx-text', m[1])
   }
 
   const attrRegex = /(?:title|placeholder|aria-label|label|alt)=\"([^\"]{3,})\"/g
   while ((m = attrRegex.exec(code)) !== null) {
-    const txt = m[1].trim()
-    if (!txt) continue
-    if (shouldIgnoreHardcodedCandidate(txt)) continue
-    results.push({ type: 'attr', text: txt })
+    pushHardcodedCandidate(results, 'attr', m[1])
   }
+
+  results.push(...detectHardcodedMessageLiterals(code))
 
   const seen = new Set()
   const uniq = []
@@ -260,7 +288,7 @@ function main() {
     lines.push('')
   }
 
-  lines.push('## Hardcoded String Findings (Heuristic)')
+  lines.push('## Hardcoded Hangul String Findings (Heuristic)')
   lines.push('')
   lines.push(`- Files with findings: ${output.hardcodedSummary.filesWithFindings}`)
   lines.push(`- Total findings: ${output.hardcodedSummary.totalFindings}`)
@@ -277,9 +305,9 @@ function main() {
   lines.push('## Priority TODO (Actionable Units)')
   lines.push('')
   lines.push('1. P0: Fill missing keys in locales where missing count > 0 (keep ko/en resource files lockstep).')
-  lines.push('2. P0: Replace confirmed user-visible hardcoded strings in feature pages with t() calls (start from top hardcoded features).')
+  lines.push('2. P0: Replace confirmed user-visible hardcoded Hangul strings in feature pages with t() calls (start from top hardcoded features).')
   lines.push('3. P1: Add CI step npm run i18n:check and fail on missing keys.')
-  lines.push('4. P1: Add component-level lint rule/codemod for hardcoded JSX text patterns.')
+  lines.push('4. P1: Add component-level lint rule/codemod for hardcoded JSX text and common message-literal patterns.')
   lines.push('5. P2: Expand check script with AST parsing to reduce false positives further.')
 
   fs.writeFileSync(OUTPUT_MD, lines.join('\n') + '\n', 'utf8')
