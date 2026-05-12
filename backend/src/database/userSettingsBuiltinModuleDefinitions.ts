@@ -735,7 +735,7 @@ export function seedBuiltinSystemModuleDefinitions(upsertBuiltinModule: UpsertBu
       {
         key: 'include_prompt',
         label: '프롬프트 포함',
-        data_type: 'checkbox',
+        data_type: 'boolean',
         default_value: true,
       },
     ],

@@ -87,6 +87,11 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.final_result': executeFinalResultNode,
 }
 
+/** List the built-in system operation keys that the workflow executor can run. */
+export function getSupportedSystemOperationKeys() {
+  return Object.keys(SYSTEM_OPERATION_HANDLERS)
+}
+
 /** Resolve the stable system operation key from module defaults. */
 function resolveSystemOperationKey(moduleDefinition: ParsedModuleDefinition) {
   if (typeof moduleDefinition.template_defaults?.operation_key === 'string') {

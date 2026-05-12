@@ -11,7 +11,8 @@
     "db:migrate": "tsx src/database/migrate.ts",
     "validate:metadata": "tsx src/scripts/validateMetadataExtraction.ts",
     "verify:user-db-smoke": "tsx src/scripts/verifyUserSettingsSchemaSmoke.ts",
-    "verify:queue-wakeup-smoke": "tsx src/scripts/verifyGenerationQueueWakeup.ts"
+    "verify:queue-wakeup-smoke": "tsx src/scripts/verifyGenerationQueueWakeup.ts",
+    "verify:builtin-system-modules": "tsx src/scripts/verifyBuiltinSystemModuleDefinitions.ts"
   },
   "dependencies": {
     "@conai/shared": "file:../shared",
