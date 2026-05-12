@@ -14,11 +14,11 @@
 - [ ] Verify with `npm run build:frontend`.
 
 ## Track 2, Backend auth routes
-- [ ] Review `auth.routes.ts` and separate router registration from reusable auth/session payload helpers.
-- [ ] Extract current-session payload shaping into a helper module.
-- [ ] Extract handler helpers only where they reduce repetition and scrolling.
-- [ ] Keep route paths and API responses stable.
-- [ ] Verify with `npm run build:backend`.
+- [x] Review `auth.routes.ts` and separate router registration from reusable auth/session payload helpers.
+- [x] Extract current-session payload shaping into a helper module.
+- [x] Extract handler helpers only where they reduce repetition and scrolling.
+- [x] Keep route paths and API responses stable.
+- [x] Verify with `npm run build:backend`.
 
 ## Track 3, Backend auth DB bootstrap
 - [ ] Review `authDb.ts` and identify the simplest split between schema setup, seed/default setup, and bootstrap orchestration.

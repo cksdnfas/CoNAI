@@ -7,7 +7,13 @@ import { AuthPermissionGroup } from '../models/AuthPermissionGroup';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAdmin, requireAuth } from '../middleware/authMiddleware';
 import { getAuthDbPath, syncLegacyAuthCredentialToAccessControl } from '../database/authDb';
-import { buildAuthStatusPayload, hasConfiguredAuth, invalidateConfiguredAuthCache, setAuthenticatedSession } from './auth-route-helpers';
+import {
+  buildAuthStatusPayload,
+  buildSessionAccountResponse,
+  hasConfiguredAuth,
+  invalidateConfiguredAuthCache,
+  setAuthenticatedSession,
+} from './auth-route-helpers';
 
 const router = Router();
 
@@ -19,12 +25,6 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: true,
 });
-
-type SessionResponseAccount = {
-  id: number | null;
-  username: string;
-  account_type: 'admin' | 'guest';
-};
 
 /** Send the auth route's legacy 400 payload shape without changing response contracts. */
 function sendAuthBadRequest(res: Response, error: string) {
@@ -71,20 +71,6 @@ function formatSqliteUtcTimestamp(value: string | null | undefined) {
   return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
     ? `${value.replace(' ', 'T')}Z`
     : value;
-}
-
-/** Build the shared authenticated-session response payload. */
-function buildSessionAccountResponse(req: Request, message: string, account: SessionResponseAccount) {
-  return {
-    success: true,
-    message,
-    username: account.username,
-    accountId: account.id,
-    accountType: account.account_type,
-    isAdmin: account.account_type === 'admin',
-    groupKeys: req.session.groupKeys ?? [],
-    permissionKeys: req.session.permissionKeys ?? [],
-  };
 }
 
 /** Format one editable built-in permission into the current UI label shape. */

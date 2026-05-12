@@ -7,6 +7,12 @@ let configuredAuthCache: boolean | null = null;
 
 export type SessionAuthAccount = Pick<AuthAccountRecord, 'id' | 'username' | 'account_type'>;
 
+export type SessionResponseAccount = {
+  id: number | null;
+  username: string;
+  account_type: 'admin' | 'guest';
+};
+
 export interface AuthStatusPayload {
   hasCredentials: boolean;
   authenticated: boolean;
@@ -68,5 +74,23 @@ export function buildAuthStatusPayload(req: Request): AuthStatusPayload {
     isAdmin: req.session?.accountType === 'admin',
     groupKeys: resolvedAccess.groupKeys,
     permissionKeys: resolvedAccess.permissionKeys,
+  };
+}
+
+/** Build the shared authenticated-session response payload for login/setup/update flows. */
+export function buildSessionAccountResponse(
+  req: Request,
+  message: string,
+  account: SessionResponseAccount,
+) {
+  return {
+    success: true,
+    message,
+    username: account.username,
+    accountId: account.id,
+    accountType: account.account_type,
+    isAdmin: account.account_type === 'admin',
+    groupKeys: req.session.groupKeys ?? [],
+    permissionKeys: req.session.permissionKeys ?? [],
   };
 }
