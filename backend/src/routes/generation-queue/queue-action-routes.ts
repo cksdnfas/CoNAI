@@ -4,6 +4,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer'
 import { WorkflowModel } from '../../models/Workflow'
 import { GenerationQueueService } from '../../services/generationQueueService'
+import { hasGenerationQueueServerRoutingTag } from '../../services/generationQueueRouting'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 import {
   getRequesterAccountId,
@@ -220,7 +221,7 @@ export function createGenerationQueueActionRoutes() {
 
       const tagCandidateServers = workflowHasServerLinks ? workflowLinkedServers : ComfyUIServerModel.findActiveServers()
 
-      if (!tagCandidateServers.some((linkedServer) => (linkedServer.routing_tags ?? []).includes(parsedRequestedServerTag))) {
+      if (!tagCandidateServers.some((linkedServer) => hasGenerationQueueServerRoutingTag(linkedServer, parsedRequestedServerTag))) {
 
         sendRouteBadRequest(res, workflowHasServerLinks ? 'requested_server_tag does not match any linked workflow server' : 'requested_server_tag does not match any active ComfyUI server')
 

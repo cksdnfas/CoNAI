@@ -22,6 +22,17 @@ export function getGenerationQueueServerRoutingTags(server: ComfyUIServerRecord)
   return new Set((server.routing_tags ?? []).map((tag) => normalizeGenerationQueueRoutingTag(tag)).filter((tag) => tag.length > 0))
 }
 
+/** Check whether one server exposes a requested routing tag after normalization. */
+export function hasGenerationQueueServerRoutingTag(server: Pick<ComfyUIServerRecord, 'routing_tags'>, requestedTag: string) {
+  const normalizedRequestedTag = normalizeGenerationQueueRoutingTag(requestedTag)
+  if (normalizedRequestedTag.length === 0) {
+    return false
+  }
+
+  return (server.routing_tags ?? [])
+    .some((tag) => normalizeGenerationQueueRoutingTag(tag) === normalizedRequestedTag)
+}
+
 /** Resolve the active ComfyUI servers a workflow is allowed to use. */
 export function getGenerationQueueWorkflowAllowedServerIds(workflowId: number | null | undefined, activeServers: ComfyUIServerRecord[]) {
   if (!workflowId) {
