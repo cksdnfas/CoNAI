@@ -15,6 +15,7 @@
     "verify:queue-routing-smoke": "tsx src/scripts/verifyGenerationQueueRouting.ts",
     "verify:graph-comfy-artifacts": "tsx src/scripts/verifyGraphComfyArtifactDescriptors.ts",
     "verify:graph-artifact-runtime": "tsx src/scripts/verifyGraphArtifactRuntime.ts",
+    "verify:video-optimization": "tsx src/scripts/verifyVideoOptimizationContracts.ts",
     "verify:builtin-system-modules": "tsx src/scripts/verifyBuiltinSystemModuleDefinitions.ts"
   },
   "dependencies": {

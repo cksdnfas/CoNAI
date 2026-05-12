@@ -37,7 +37,14 @@
 - [x] Normalize optimized backup videos to `.mp4` target paths.
 
 ## Final verification
+- [x] Run `npm run verify:video-optimization`.
 - [x] Run `npm run build:backend`.
 - [x] Run `npm run build:frontend`.
-- [ ] Run `python -m graphify update .`.
-- [ ] Summarize what landed and what still remains.
+- [x] Run `python -m graphify update .`.
+- [x] Summarize what landed and what still remains.
+
+## Completion Summary, 2026-05-12
+- Landed one shared H.264 MP4 optimization path for uploads, generated video outputs, and backup-source imported videos.
+- Settings now persist dedicated video optimization controls with balanced defaults and per-ingress toggles.
+- Added a contract smoke verifier for settings defaults/merge/update behavior, optimizable extension gates, optimized MP4 persistence, and fallback-to-original behavior when transcoding fails or does not reduce size.
+- Remaining work is intentionally deferred: original/optimized dual retention, GIF optimization, H.265, async/distributed transcoding, and broader download UX for variants.
