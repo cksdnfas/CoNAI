@@ -5,6 +5,7 @@ import path from 'path'
 const ROOT = process.cwd()
 const I18N_RESOURCES_DIR = path.join(ROOT, 'frontend', 'src', 'i18n', 'resources')
 const FRONTEND_FEATURES_DIR = path.join(ROOT, 'frontend', 'src', 'features')
+const FRONTEND_LIB_DIR = path.join(ROOT, 'frontend', 'src', 'lib')
 const OUTPUT_MD = path.join(ROOT, 'docs', 'i18n-gap-report.md')
 const OUTPUT_JSON = path.join(ROOT, 'docs', 'i18n-gap-report.json')
 
@@ -158,6 +159,50 @@ function detectHardcodedStrings(code) {
   return uniq.slice(0, 40)
 }
 
+function lineNumberAt(code, index) {
+  let line = 1
+  for (let i = 0; i < index; i += 1) {
+    if (code.charCodeAt(i) === 10) line += 1
+  }
+  return line
+}
+
+function classifyReviewOnlyLiteralContext(context) {
+  if (/new\s+Error\s*\([^)]*$/s.test(context) || /throw\s+new\s+Error\s*\([^)]*$/s.test(context)) return 'error-fallback'
+  if (/\bdescription\s*:\s*$/s.test(context)) return 'data-description'
+  if (/\btitle\s*:\s*$/s.test(context)) return 'data-title'
+  if (/\blabel\s*:\s*$/s.test(context)) return 'data-label'
+  if (/translate\s*\(\s*\{[^}]*$/s.test(context)) return 'inline-translation-helper'
+  if (/\breturn\s*$/s.test(context)) return 'return-fallback'
+  return 'string-literal'
+}
+
+function detectReviewOnlyHangulLiterals(code) {
+  const results = []
+  const literalRegex = /([`"'])([\s\S]*?)(?<!\\)\1/g
+  let m
+  while ((m = literalRegex.exec(code)) !== null) {
+    const text = unescapeStringLiteral(m[2]).trim()
+    if (!text || !hasHangul(text) || shouldIgnoreHardcodedCandidate(text)) continue
+    const context = code.slice(Math.max(0, m.index - 120), m.index)
+    results.push({
+      type: classifyReviewOnlyLiteralContext(context),
+      line: lineNumberAt(code, m.index),
+      text,
+    })
+  }
+
+  const seen = new Set()
+  const uniq = []
+  for (const r of results) {
+    const k = `${r.type}::${r.line}::${r.text}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    uniq.push(r)
+  }
+  return uniq.slice(0, 80)
+}
+
 function featureFromPath(filePath) {
   const norm = filePath.split(path.sep).join('/')
   const idx = norm.indexOf('/features/')
@@ -233,6 +278,23 @@ function main() {
     .slice(0, 20)
     .map(([feature, count]) => ({ feature, count }))
 
+  const reviewOnlyFiles = []
+  const reviewOnlyByType = {}
+  const libFiles = walkFiles(FRONTEND_LIB_DIR, ['.ts', '.tsx'])
+  for (const f of libFiles) {
+    const code = fs.readFileSync(f, 'utf8')
+    const findings = detectReviewOnlyHangulLiterals(code)
+    if (!findings.length) continue
+    reviewOnlyFiles.push({ file: path.relative(ROOT, f).split(path.sep).join('/'), findings })
+    for (const finding of findings) {
+      reviewOnlyByType[finding.type] = (reviewOnlyByType[finding.type] || 0) + 1
+    }
+  }
+
+  const reviewOnlySummaryByType = Object.entries(reviewOnlyByType)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => ({ type, count }))
+
   const output = {
     generatedAt: new Date().toISOString(),
     baseLocale: BASE_LANG,
@@ -247,6 +309,12 @@ function main() {
       byFeature,
     },
     hardcodedFiles,
+    reviewOnlyHelperFallbackSummary: {
+      filesWithFindings: reviewOnlyFiles.length,
+      totalFindings: reviewOnlyFiles.reduce((acc, cur) => acc + cur.findings.length, 0),
+      byType: reviewOnlySummaryByType,
+    },
+    reviewOnlyHelperFallbackFiles: reviewOnlyFiles,
   }
 
   fs.mkdirSync(path.dirname(OUTPUT_JSON), { recursive: true })
@@ -302,18 +370,51 @@ function main() {
     for (const f of fileEntry.findings.slice(0, 8)) lines.push(`  - [${f.type}] ${f.text}`)
   }
   lines.push('')
+  lines.push('## Review-only Helper/Fallback Hangul Findings')
+  lines.push('')
+  lines.push('These findings are intentionally non-blocking. They catch low-priority helper/API fallback strings that are not JSX UI copy and may need a separate localization design instead of direct catalog replacement.')
+  lines.push('')
+  lines.push(`- Files with findings: ${output.reviewOnlyHelperFallbackSummary.filesWithFindings}`)
+  lines.push(`- Total findings: ${output.reviewOnlyHelperFallbackSummary.totalFindings}`)
+  lines.push('')
+  lines.push('### By Type')
+  if (reviewOnlySummaryByType.length === 0) {
+    lines.push('- No review-only findings')
+  } else {
+    for (const item of reviewOnlySummaryByType) lines.push(`- ${item.type}: ${item.count}`)
+  }
+  lines.push('')
+  lines.push('### File Details (Top 40)')
+  for (const fileEntry of reviewOnlyFiles.slice(0, 40)) {
+    lines.push(`- ${fileEntry.file} (${fileEntry.findings.length})`)
+    for (const f of fileEntry.findings.slice(0, 8)) lines.push(`  - [${f.type}:${f.line}] ${f.text}`)
+  }
+  lines.push('')
   lines.push('## Priority TODO (Actionable Units)')
   lines.push('')
-  lines.push('1. P0: Fill missing keys in locales where missing count > 0 (keep ko/en resource files lockstep).')
-  lines.push('2. P0: Replace confirmed user-visible hardcoded Hangul strings in feature pages with t() calls (start from top hardcoded features).')
-  lines.push('3. P1: Add CI step npm run i18n:check and fail on missing keys.')
-  lines.push('4. P1: Add component-level lint rule/codemod for hardcoded JSX text and common message-literal patterns.')
-  lines.push('5. P2: Expand check script with AST parsing to reduce false positives further.')
+  if (Object.values(statsByLang).some((stats) => stats.missingKeys > 0 || stats.missingNamespaces > 0)) {
+    lines.push('1. P0: Fill missing keys in locales where missing count > 0 (keep ko/en resource files lockstep).')
+  } else {
+    lines.push('1. P0: Translation resource lockstep is currently satisfied.')
+  }
+  if (output.hardcodedSummary.totalFindings > 0) {
+    lines.push('2. P0: Replace confirmed user-visible hardcoded Hangul strings in feature pages with t() calls (start from top hardcoded features).')
+  } else {
+    lines.push('2. P0: User-visible feature JSX/message-literal Hangul scan is currently clear.')
+  }
+  lines.push('3. P1: Keep npm run i18n:check in the regular verification path and fail on missing keys.')
+  lines.push('4. P1: Add component-level lint rule/codemod for hardcoded JSX text and common message-literal patterns if the heuristic scan regresses.')
+  if (output.reviewOnlyHelperFallbackSummary.totalFindings > 0) {
+    lines.push('5. P2: Review helper/API fallback Hangul strings with a dedicated localization strategy; do not block the current English-support phase on these non-JSX fallbacks.')
+  } else {
+    lines.push('5. P2: Review-only helper/API fallback scan is currently clear.')
+  }
 
   fs.writeFileSync(OUTPUT_MD, lines.join('\n') + '\n', 'utf8')
   console.log(`[i18n-check] Wrote ${path.relative(ROOT, OUTPUT_JSON)}`)
   console.log(`[i18n-check] Wrote ${path.relative(ROOT, OUTPUT_MD)}`)
   console.log(`[i18n-check] Missing key summary: ${JSON.stringify(statsByLang)}`)
+  console.log(`[i18n-check] Review-only helper/fallback findings: ${output.reviewOnlyHelperFallbackSummary.totalFindings}`)
 
   const totalMissingKeys = Object.values(statsByLang).reduce((acc, stats) => acc + stats.missingKeys, 0)
   const totalMissingNamespaces = Object.values(statsByLang).reduce((acc, stats) => acc + stats.missingNamespaces, 0)
