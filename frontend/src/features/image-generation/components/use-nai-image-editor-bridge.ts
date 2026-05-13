@@ -1,4 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
+import { useI18n } from '@/i18n'
 import { DEFAULT_IMAGE_SAVE_SETTINGS, buildImageSaveOutput, buildImageSaveOutputFileName, loadImageSaveSourceInfo, type ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageSaveSettings } from '@/types/settings'
 import { buildSelectedImageDraftFromDataUrl, type NAIFormDraft } from '../image-generation-shared'
@@ -16,6 +17,7 @@ export function useNaiImageEditorBridge({
   imageSaveSettings: ImageSaveSettings
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
   const [isImageEditorOpen, setIsImageEditorOpen] = useState(false)
   const [pendingImageEditorSave, setPendingImageEditorSave] = useState<{ sourceImageDataUrl: string; maskImageDataUrl?: string } | null>(null)
   const [pendingImageEditorSaveInfo, setPendingImageEditorSaveInfo] = useState<ImageSaveSourceInfo | null>(null)
@@ -24,7 +26,7 @@ export function useNaiImageEditorBridge({
   /** Open the image editor only when a source image already exists. */
   const handleOpenImageEditor = () => {
     if (!naiForm.sourceImage) {
-      showSnackbar({ message: '먼저 소스 이미지를 선택해.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.image.editor.bridge.select.a.source.image.first'), tone: 'error' })
       return
     }
 

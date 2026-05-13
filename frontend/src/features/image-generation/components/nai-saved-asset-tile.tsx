@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
@@ -25,6 +26,9 @@ export function NaiSavedAssetTile({
   onEdit,
   onDelete,
 }: NaiSavedAssetTileProps) {
+  const { t } = useI18n()
+  const editLabel = t('image-generation.components.nai.saved.asset.tile.edit')
+  const deleteLabel = t('image-generation.components.nai.saved.asset.tile.delete')
   const previewImage = buildPreviewImageRecord({
     src: imageUrl,
     mimeType,
@@ -88,8 +92,8 @@ export function NaiSavedAssetTile({
             event.stopPropagation()
             onEdit()
           }}
-          aria-label="수정"
-          title="수정"
+          aria-label={editLabel}
+          title={editLabel}
         >
           <Pencil className="h-4 w-4" />
         </Button>
@@ -102,8 +106,8 @@ export function NaiSavedAssetTile({
             event.stopPropagation()
             onDelete()
           }}
-          aria-label="삭제"
-          title="삭제"
+          aria-label={deleteLabel}
+          title={deleteLabel}
         >
           <Trash2 className="h-4 w-4" />
         </Button>

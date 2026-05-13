@@ -2,6 +2,7 @@ import { Plus, Save, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { useI18n } from '@/i18n'
 import type { StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { FormField, type NAIVibeDraft, type SelectedImageDraft } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
@@ -46,6 +47,8 @@ export function NaiVibesSection({
   onEditVibeFromStore,
   onDeleteVibeFromStore,
 }: NaiVibesSectionProps) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-0">
       <NaiControllerSection
@@ -54,7 +57,7 @@ export function NaiVibesSection({
         actions={(
           <>
             <Badge variant="outline">{vibes.length}</Badge>
-            <Button type="button" size="icon-sm" variant="outline" onClick={onAddVibe} aria-label="Vibe 추가" title="Vibe 추가">
+            <Button type="button" size="icon-sm" variant="outline" onClick={onAddVibe} aria-label={t('image-generation.components.nai.vibes.section.add.vibe')} title={t('image-generation.components.nai.vibes.section.add.vibe')}>
               <Plus className="h-4 w-4" />
             </Button>
           </>
@@ -68,18 +71,25 @@ export function NaiVibesSection({
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-sm font-medium text-foreground">Vibe {index + 1}</div>
                     {vibe.encoded ? (
-                      <Badge variant="secondary">준비됨</Badge>
+                      <Badge variant="secondary">{t('image-generation.components.nai.vibes.section.ready')}</Badge>
                     ) : vibe.image ? (
-                      <Badge variant="outline">자동 인코딩</Badge>
+                      <Badge variant="outline">{t('image-generation.components.nai.vibes.section.auto.encode')}</Badge>
                     ) : (
-                      <Badge variant="outline">이미지 필요</Badge>
+                      <Badge variant="outline">{t('image-generation.components.nai.vibes.section.image.required')}</Badge>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <ImageAttachmentPickerButton label={vibe.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Vibe ${index + 1} 이미지 선택`} allowSaveDialog={false} onSelect={(image) => onVibeImageChange(index, image)} />
+                    <ImageAttachmentPickerButton
+                      label={vibe.image
+                        ? t('image-generation.components.nai.vibes.section.change.reference.image')
+                        : t('image-generation.components.nai.vibes.section.select.reference.image')}
+                      modalTitle={t('image-generation.components.nai.vibes.section.select.vibe.image.with.index', { index: index + 1 })}
+                      allowSaveDialog={false}
+                      onSelect={(image) => onVibeImageChange(index, image)}
+                    />
                     <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveVibe(index)}>
                       <Trash2 className="h-4 w-4" />
-                      제거
+                      {t('image-generation.components.nai.common.remove')}
                     </Button>
                   </div>
                 </div>
@@ -96,9 +106,9 @@ export function NaiVibesSection({
                 </div>
 
                 <div className="flex justify-end border-t border-border/70 pt-3">
-                  <Button type="button" variant="outline" onClick={() => onOpenVibeSaveModal(index)} disabled={!vibe.image || encodingVibeIndex === index || !naiConnected} title={!naiConnected ? 'Vibe 저장은 NovelAI 로그인 상태가 필요해.' : undefined}>
+                  <Button type="button" variant="outline" onClick={() => onOpenVibeSaveModal(index)} disabled={!vibe.image || encodingVibeIndex === index || !naiConnected} title={!naiConnected ? t('image-generation.components.nai.vibes.section.saving.vibes.requires.novelai.login') : undefined}>
                     <Save className="h-4 w-4" />
-                    {encodingVibeIndex === index ? '인코딩 중…' : '저장'}
+                    {encodingVibeIndex === index ? t('image-generation.components.nai.vibes.section.encoding') : t('image-generation.components.nai.vibes.section.save')}
                   </Button>
                 </div>
               </div>
@@ -111,7 +121,9 @@ export function NaiVibesSection({
         count={savedVibes.length}
         searchValue={savedVibeSearch}
         isLoading={savedVibesLoading}
-        emptyMessage={naiConnected ? '검색 결과가 없거나 저장된 vibe가 없어.' : '저장된 Vibe를 보거나 저장하려면 NovelAI 로그인이 필요해.'}
+        emptyMessage={naiConnected
+          ? t('image-generation.components.nai.vibes.section.no.search.results.or.saved.vibes')
+          : t('image-generation.components.nai.vibes.section.log.in.to.novelai.to.view.or')}
         className="rounded-t-none"
         onSearchChange={onSavedVibeSearchChange}
       >

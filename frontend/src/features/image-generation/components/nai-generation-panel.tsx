@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { getNaiCostEstimate, getNaiUserData } from '@/lib/api-image-generation-nai'
@@ -44,6 +45,7 @@ export function NaiGenerationPanel({
   headerPortalTargetId,
   compactActionBarContentTargetId,
 }: NaiGenerationPanelProps) {
+  const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
   const [naiOverwriteModuleId, setNaiOverwriteModuleId] = useState<number | null>(null)
@@ -251,16 +253,16 @@ export function NaiGenerationPanel({
   }, [refreshNonce, refetchNaiUserData])
 
   const naiGenerateButtonLabel = isNaiGenerating
-    ? '생성 요청 중…'
+    ? t('image-generation.components.nai.generation.panel.submitting.generation')
     : !connected
-      ? '로그인 후 생성'
+      ? t('image-generation.components.nai.generation.panel.log.in.to.generate')
       : naiCostQuery.isSuccess
         ? naiCostQuery.data.isOpusFree
-          ? '생성 (무료)'
-          : `생성 (${naiCostQuery.data.estimatedCost} Anlas)`
+          ? t('image-generation.components.nai.generation.panel.generate.free')
+          : t('image-generation.components.nai.generation.panel.generate.with.cost', { cost: naiCostQuery.data.estimatedCost })
         : naiCostQuery.isPending
-          ? '생성 (계산 중…)'
-          : '생성'
+          ? t('image-generation.components.nai.generation.panel.generate.calculating')
+          : t('image-generation.components.nai.generation.panel.generate')
   const useInlineActionBar = splitPaneScroll || compactActionBar
   const useDrawerCompactChrome = compactActionBar && !splitPaneScroll
   const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null)
@@ -289,7 +291,7 @@ export function NaiGenerationPanel({
     isGenerating: isNaiGenerating,
     canGenerate: naiForm.prompt.trim().length > 0,
     generateButtonLabel: naiGenerateButtonLabel,
-    costErrorMessage: naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, '예상 비용 계산에 실패했어.') : null,
+    costErrorMessage: naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, t('image-generation.components.nai.generation.panel.failed.to.estimate.the.cost')) : null,
     onOpenModuleSave: () => setIsModuleSaveModalOpen(true),
     onUpscale: handleUpscale,
     onReset: resetNaiForm,
@@ -475,7 +477,7 @@ export function NaiGenerationPanel({
 
       <ImageSaveOptionsModal
         open={pendingImageEditorSave !== null}
-        title="이미지 저장"
+        title={t('image-generation.components.nai.generation.panel.save.image')}
         options={imageEditorSaveOptions}
         sourceInfo={pendingImageEditorSaveInfo}
         isSaving={false}

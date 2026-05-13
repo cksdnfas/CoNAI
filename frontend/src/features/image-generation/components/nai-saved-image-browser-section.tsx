@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useI18n } from '@/i18n'
 import { NaiControllerSection } from './nai-generation-panel-sections'
 
 interface NaiSavedImageBrowserSectionProps {
@@ -23,7 +24,7 @@ export function NaiSavedImageBrowserSection({
   title = 'Save Image',
   count,
   searchValue,
-  searchPlaceholder = '이름 / 설명 검색',
+  searchPlaceholder,
   emptyMessage,
   isLoading,
   defaultExpanded = false,
@@ -31,7 +32,12 @@ export function NaiSavedImageBrowserSection({
   onSearchChange,
   children,
 }: NaiSavedImageBrowserSectionProps) {
+  const { t } = useI18n()
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const effectiveSearchPlaceholder = searchPlaceholder ?? t('image-generation.components.nai.saved.image.browser.section.search.name.description')
+  const toggleLabel = isExpanded
+    ? t('image-generation.components.nai.saved.image.browser.section.collapse', { title })
+    : t('image-generation.components.nai.saved.image.browser.section.expand', { title })
 
   return (
     <NaiControllerSection
@@ -42,15 +48,15 @@ export function NaiSavedImageBrowserSection({
         <>
           <Badge variant="outline">{count}</Badge>
           <div className="w-[9.5rem] sm:w-44 md:w-52">
-            <Input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder={searchPlaceholder} />
+            <Input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder={effectiveSearchPlaceholder} />
           </div>
           <Button
             type="button"
             size="icon-sm"
             variant="ghost"
             onClick={() => setIsExpanded((current) => !current)}
-            aria-label={isExpanded ? `${title} 접기` : `${title} 펼치기`}
-            title={isExpanded ? `${title} 접기` : `${title} 펼치기`}
+            aria-label={toggleLabel}
+            title={toggleLabel}
           >
             {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </Button>
@@ -59,7 +65,7 @@ export function NaiSavedImageBrowserSection({
     >
       {isExpanded ? (
         isLoading ? (
-          <div className="text-sm text-muted-foreground">불러오는 중…</div>
+          <div className="text-sm text-muted-foreground">{t('image-generation.components.nai.saved.image.browser.section.loading')}</div>
         ) : count > 0 ? (
           children
         ) : (

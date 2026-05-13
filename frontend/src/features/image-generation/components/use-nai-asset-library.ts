@@ -1,5 +1,6 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useI18n } from '@/i18n'
 import {
   deleteNaiCharacterReferenceAsset,
   deleteNaiVibeAsset,
@@ -50,6 +51,7 @@ export function useNaiAssetLibrary({
   refetchUserData: () => Promise<unknown>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
   const [isSavingAsset, setIsSavingAsset] = useState(false)
   const [assetSaveTarget, setAssetSaveTarget] = useState<AssetSaveTarget | null>(null)
   const [assetSaveName, setAssetSaveName] = useState('')
@@ -90,13 +92,15 @@ export function useNaiAssetLibrary({
 
   const assetSaveModalTitle = assetSaveTarget?.mode === 'edit'
     ? assetSaveTarget.kind === 'vibe'
-      ? 'Vibe 수정'
-      : 'Character Reference 수정'
+      ? t('image-generation.components.use.nai.asset.library.edit.vibe')
+      : t('image-generation.components.use.nai.asset.library.edit.character.reference')
     : assetSaveTarget?.kind === 'vibe'
-      ? 'Vibe 저장'
-      : 'Character Reference 저장'
+      ? t('image-generation.components.use.nai.asset.library.save.vibe')
+      : t('image-generation.components.use.nai.asset.library.save.character.reference')
 
-  const assetSaveSubmitLabel = assetSaveTarget?.mode === 'edit' ? '수정' : '저장'
+  const assetSaveSubmitLabel = assetSaveTarget?.mode === 'edit'
+    ? t('image-generation.components.use.nai.asset.library.edit')
+    : t('image-generation.components.use.nai.asset.library.save')
 
   /** Encode one vibe image into the payload required by the NAI API and stored vibe assets. */
   const handleEncodeVibe = async (
@@ -133,15 +137,18 @@ export function useNaiAssetLibrary({
         await refetchUserData()
       }
       if (!options?.silentSuccess) {
-        showSnackbar({ message: `Vibe ${index + 1} 인코딩 완료. 이 결과를 재사용하면 돼.`, tone: 'info' })
+        showSnackbar({
+          message: t('image-generation.components.use.nai.asset.library.vibe.encoded.complete', { index: index + 1 }),
+          tone: 'info',
+        })
       }
       return response.encoded
     } catch (error) {
       if (isUnauthorizedAssetRequestError(error)) {
         await refetchUserData().catch(() => undefined)
-        showSnackbar({ message: 'Vibe 저장 전에 NovelAI 로그인을 다시 해줘. 토큰이 없거나 만료됐어.', tone: 'error' })
+        showSnackbar({ message: t('image-generation.components.use.nai.asset.library.log.in.to.novelai.again.before.saving'), tone: 'error' })
       } else {
-        showSnackbar({ message: getErrorMessage(error, 'Vibe 인코딩에 실패했어.'), tone: 'error' })
+        showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.asset.library.vibe.encoding.failed')), tone: 'error' })
       }
       return null
     } finally {
@@ -177,7 +184,10 @@ export function useNaiAssetLibrary({
 
     if (encodedCount > 0) {
       await refetchUserData()
-      showSnackbar({ message: `Vibe ${encodedCount}개 자동 인코딩 완료.`, tone: 'info' })
+      showSnackbar({
+        message: t('image-generation.components.use.nai.asset.library.vibes.auto.encoded.complete', { count: encodedCount }),
+        tone: 'info',
+      })
     }
 
     return nextVibes
@@ -201,12 +211,12 @@ export function useNaiAssetLibrary({
   const handleOpenVibeSaveModal = (index: number) => {
     const vibe = naiForm.vibes[index]
     if (!vibe?.image) {
-      showSnackbar({ message: '저장하려면 먼저 Vibe 이미지를 넣어줘.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.asset.library.add.a.vibe.image.before.saving'), tone: 'error' })
       return
     }
 
     if (!naiUserEnabled) {
-      showSnackbar({ message: 'Vibe 저장은 NovelAI 로그인 상태가 필요해.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.asset.library.saving.vibes.requires.novelai.login'), tone: 'error' })
       return
     }
 
@@ -240,7 +250,7 @@ export function useNaiAssetLibrary({
 
       const encoded = detailedAsset.encoded
       if (!encoded) {
-        throw new Error('저장된 Vibe payload가 없어.')
+        throw new Error(t('image-generation.components.use.nai.asset.library.saved.vibe.payload.is.missing'))
       }
 
       setNaiForm((current) => ({
@@ -252,9 +262,9 @@ export function useNaiAssetLibrary({
           informationExtracted: String(detailedAsset.information_extracted),
         }],
       }))
-      showSnackbar({ message: `${asset.label} 불러왔어.`, tone: 'info' })
+      showSnackbar({ message: t('image-generation.components.use.nai.asset.library.asset.loaded', { label: asset.label }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '저장된 Vibe 이미지를 불러오지 못했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.asset.library.could.not.load.the.saved.vibe.image')), tone: 'error' })
     }
   }
 
@@ -263,9 +273,9 @@ export function useNaiAssetLibrary({
     try {
       await deleteNaiVibeAsset(assetId)
       await savedVibesQuery.refetch()
-      showSnackbar({ message: '저장된 Vibe를 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t('image-generation.components.use.nai.asset.library.saved.vibe.deleted'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '저장된 Vibe 삭제에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.asset.library.failed.to.delete.the.saved.vibe')), tone: 'error' })
     }
   }
 
@@ -273,7 +283,7 @@ export function useNaiAssetLibrary({
   const handleOpenCharacterReferenceSaveModal = (index: number) => {
     const reference = naiForm.characterReferences[index]
     if (!reference?.image) {
-      showSnackbar({ message: '저장하려면 Character Reference 이미지가 필요해.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.asset.library.a.character.reference.image.is.required.before'), tone: 'error' })
       return
     }
 
@@ -305,7 +315,7 @@ export function useNaiAssetLibrary({
           : undefined
 
       if (!image) {
-        throw new Error('저장된 Character Reference 이미지가 없어.')
+        throw new Error(t('image-generation.components.use.nai.asset.library.saved.character.reference.image.is.missing'))
       }
 
       setNaiForm((current) => ({
@@ -317,9 +327,9 @@ export function useNaiAssetLibrary({
           fidelity: String(asset.fidelity),
         }],
       }))
-      showSnackbar({ message: `${asset.label} 불러왔어.`, tone: 'info' })
+      showSnackbar({ message: t('image-generation.components.use.nai.asset.library.asset.loaded', { label: asset.label }), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '저장된 Character Reference 이미지를 불러오지 못했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.asset.library.could.not.load.the.saved.character.reference')), tone: 'error' })
     }
   }
 
@@ -328,9 +338,9 @@ export function useNaiAssetLibrary({
     try {
       await deleteNaiCharacterReferenceAsset(assetId)
       await savedCharacterReferencesQuery.refetch()
-      showSnackbar({ message: '저장된 Character Reference를 삭제했어.', tone: 'info' })
+      showSnackbar({ message: t('image-generation.components.use.nai.asset.library.saved.character.reference.deleted'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, '저장된 Character Reference 삭제에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.asset.library.failed.to.delete.the.saved.character.reference')), tone: 'error' })
     }
   }
 
@@ -342,7 +352,7 @@ export function useNaiAssetLibrary({
 
     const trimmedName = assetSaveName.trim()
     if (!trimmedName) {
-      showSnackbar({ message: '저장 이름을 입력해줘.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.asset.library.enter.a.save.name'), tone: 'error' })
       return
     }
 
@@ -356,11 +366,11 @@ export function useNaiAssetLibrary({
             description: assetSaveDescription.trim() || undefined,
           })
           await savedVibesQuery.refetch()
-          showSnackbar({ message: '저장된 Vibe를 수정했어.', tone: 'info' })
+          showSnackbar({ message: t('image-generation.components.use.nai.asset.library.saved.vibe.updated'), tone: 'info' })
         } else {
           const vibe = naiForm.vibes[assetSaveTarget.index]
           if (!vibe?.image) {
-            throw new Error('저장할 Vibe 이미지를 찾지 못했어.')
+            throw new Error(t('image-generation.components.use.nai.asset.library.could.not.find.the.vibe.image.to'))
           }
 
           const encoded = vibe.encoded || await handleEncodeVibe(assetSaveTarget.index, {
@@ -380,7 +390,10 @@ export function useNaiAssetLibrary({
             information_extracted: parseNumberInput(vibe.informationExtracted, 1),
           })
           await savedVibesQuery.refetch()
-          showSnackbar({ message: `Vibe ${assetSaveTarget.index + 1} 저장 완료.`, tone: 'info' })
+          showSnackbar({
+            message: t('image-generation.components.use.nai.asset.library.vibe.save.complete', { index: assetSaveTarget.index + 1 }),
+            tone: 'info',
+          })
         }
       } else if (assetSaveTarget.mode === 'edit') {
         await updateNaiCharacterReferenceAsset(assetSaveTarget.assetId, {
@@ -388,11 +401,11 @@ export function useNaiAssetLibrary({
           description: assetSaveDescription.trim() || undefined,
         })
         await savedCharacterReferencesQuery.refetch()
-        showSnackbar({ message: '저장된 Character Reference를 수정했어.', tone: 'info' })
+        showSnackbar({ message: t('image-generation.components.use.nai.asset.library.saved.character.reference.updated'), tone: 'info' })
       } else {
         const reference = naiForm.characterReferences[assetSaveTarget.index]
         if (!reference?.image) {
-          throw new Error('저장할 Character Reference 이미지를 찾지 못했어.')
+          throw new Error(t('image-generation.components.use.nai.asset.library.could.not.find.the.character.reference.image'))
         }
 
         await saveNaiCharacterReferenceAsset({
@@ -404,7 +417,10 @@ export function useNaiAssetLibrary({
           fidelity: parseNumberInput(reference.fidelity, 1),
         })
         await savedCharacterReferencesQuery.refetch()
-        showSnackbar({ message: `Reference ${assetSaveTarget.index + 1} 저장 완료.`, tone: 'info' })
+        showSnackbar({
+          message: t('image-generation.components.use.nai.asset.library.reference.save.complete', { index: assetSaveTarget.index + 1 }),
+          tone: 'info',
+        })
       }
 
       closeAssetSaveModal()
@@ -413,12 +429,12 @@ export function useNaiAssetLibrary({
         await refetchUserData().catch(() => undefined)
         showSnackbar({
           message: assetSaveTarget.kind === 'vibe'
-            ? 'Vibe 저장 전에 NovelAI 로그인을 다시 해줘. 토큰이 없거나 만료됐어.'
-            : '저장 권한을 다시 확인해줘. 로그인 세션이 끊겼을 수도 있어.',
+            ? t('image-generation.components.use.nai.asset.library.log.in.to.novelai.again.before.saving')
+            : t('image-generation.components.use.nai.asset.library.check.save.permission.again.the.login.session'),
           tone: 'error',
         })
       } else {
-        showSnackbar({ message: getErrorMessage(error, '저장에 실패했어.'), tone: 'error' })
+        showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.asset.library.save.failed')), tone: 'error' })
       }
     } finally {
       setIsSavingAsset(false)

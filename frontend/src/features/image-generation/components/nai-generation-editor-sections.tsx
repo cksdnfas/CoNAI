@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { ToggleRow } from '@/components/ui/toggle-row'
+import { useI18n } from '@/i18n'
 import {
   FormField,
   NAI_ACTION_OPTIONS,
@@ -117,6 +118,8 @@ export function NaiGenerationEditorSections({
   actionSection: ReactNode
   showActionSection: boolean
 }) {
+  const { t } = useI18n()
+
   return (
     <>
       <NaiPromptSection
@@ -137,8 +140,8 @@ export function NaiGenerationEditorSections({
               variant="outline"
               onClick={handleAddCharacterPrompt}
               disabled={!supportsCharacterPrompts}
-              aria-label="캐릭터 추가"
-              title="캐릭터 추가"
+              aria-label={t('image-generation.components.nai.generation.editor.sections.add.character')}
+              title={t('image-generation.components.nai.generation.editor.sections.add.character')}
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -146,7 +149,7 @@ export function NaiGenerationEditorSections({
         )}
       >
         {!supportsCharacterPrompts ? (
-          <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Prompt를 사용할 수 없어.</div>
+          <div className="text-xs text-[#ffb4ab]">{t('image-generation.components.nai.generation.editor.sections.character.prompt.is.not.available.for.the')}</div>
         ) : (
           <>
             <ToggleRow variant="detail" className="justify-between px-3 py-2.5">
@@ -204,7 +207,7 @@ export function NaiGenerationEditorSections({
                       }}
                     >
                       <Trash2 className="h-4 w-4" />
-                      제거
+                      {t('image-generation.components.nai.common.remove')}
                     </Button>
                   </div>
 
@@ -314,7 +317,7 @@ export function NaiGenerationEditorSections({
                 <div className="space-y-2">
                   <div className="text-sm font-medium text-foreground">Variety+</div>
                   <ToggleRow variant="detail" className="justify-between px-3 py-2.5">
-                    <div className="text-sm text-foreground">사용</div>
+                    <div className="text-sm text-foreground">{t('image-generation.components.nai.generation.editor.sections.use')}</div>
                     <input type="checkbox" checked={naiForm.varietyPlus} onChange={(event) => setNaiForm((current) => ({ ...current, varietyPlus: event.target.checked }))} />
                   </ToggleRow>
                 </div>
@@ -330,13 +333,22 @@ export function NaiGenerationEditorSections({
             <FormField label="Source Image">
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  <ImageAttachmentPickerButton label={naiForm.sourceImage ? '소스 이미지 변경' : '소스 이미지 선택'} modalTitle="소스 이미지 선택" allowSaveDialog={false} onSelect={(image) => handleNaiImageChange('sourceImage', image)} />
+                  <ImageAttachmentPickerButton
+                    label={naiForm.sourceImage
+                      ? t('image-generation.components.nai.generation.editor.sections.change.source.image')
+                      : t('image-generation.components.nai.generation.editor.sections.select.source.image')}
+                    modalTitle={t('image-generation.components.nai.generation.editor.sections.select.source.image')}
+                    allowSaveDialog={false}
+                    onSelect={(image) => handleNaiImageChange('sourceImage', image)}
+                  />
                   <Button type="button" variant="secondary" onClick={handleOpenImageEditor} disabled={!naiForm.sourceImage}>
-                    {naiForm.action === 'infill' ? '소스/마스크 편집' : '소스 편집'}
+                    {naiForm.action === 'infill'
+                      ? t('image-generation.components.nai.generation.editor.sections.edit.source.mask')
+                      : t('image-generation.components.nai.generation.editor.sections.edit.source')}
                   </Button>
                   {naiForm.sourceImage ? (
                     <Button type="button" variant="ghost" onClick={() => void handleNaiImageChange('sourceImage')}>
-                      제거
+                      {t('image-generation.components.nai.common.remove')}
                     </Button>
                   ) : null}
                 </div>
@@ -347,12 +359,19 @@ export function NaiGenerationEditorSections({
             {naiForm.action === 'infill' ? (
               <FormField label="Mask Image">
                 <div className="space-y-3">
-                  <div className="text-xs text-muted-foreground">소스 편집기에서 마스크를 같이 만들 수 있어. 필요하면 외부 마스크를 따로 붙여도 돼.</div>
+                  <div className="text-xs text-muted-foreground">{t('image-generation.components.nai.generation.editor.sections.you.can.create.the.mask.in.the')}</div>
                   <div className="flex flex-wrap gap-2">
-                    <ImageAttachmentPickerButton label={naiForm.maskImage ? '마스크 이미지 변경' : '마스크 이미지 선택'} modalTitle="마스크 이미지 선택" allowSaveDialog={false} onSelect={(image) => handleNaiImageChange('maskImage', image)} />
+                    <ImageAttachmentPickerButton
+                      label={naiForm.maskImage
+                        ? t('image-generation.components.nai.generation.editor.sections.change.mask.image')
+                        : t('image-generation.components.nai.generation.editor.sections.select.mask.image')}
+                      modalTitle={t('image-generation.components.nai.generation.editor.sections.select.mask.image')}
+                      allowSaveDialog={false}
+                      onSelect={(image) => handleNaiImageChange('maskImage', image)}
+                    />
                     {naiForm.maskImage ? (
                       <Button type="button" variant="ghost" onClick={() => void handleNaiImageChange('maskImage')}>
-                        제거
+                        {t('image-generation.components.nai.common.remove')}
                       </Button>
                     ) : null}
                   </div>

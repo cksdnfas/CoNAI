@@ -4,6 +4,7 @@ import { SectionHeading } from '@/components/common/section-heading'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { CompactGenerationActionSurface } from './shared-generation-controller'
 import { PromptToggleField } from './prompt-toggle-field'
@@ -19,23 +20,28 @@ interface NaiConnectionHeaderProps {
 
 /** Render the NovelAI connection header with auth status and external link. */
 export function NaiConnectionHeader({ connected, tierName, anlasBalance, onOpenAuth, compact = false }: NaiConnectionHeaderProps) {
+  const { t } = useI18n()
+  const novelAiHomeLabel = t('image-generation.components.nai.generation.panel.sections.open.novelai.homepage')
+
   return (
     <section className={compact ? 'space-y-0' : 'space-y-3'}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="truncate text-base font-semibold text-foreground">NovelAI</div>
-          {connected ? <Badge variant="secondary">연결됨</Badge> : <Badge variant="outline">미연결</Badge>}
+          {connected
+            ? <Badge variant="secondary">{t('image-generation.components.nai.generation.panel.sections.connected')}</Badge>
+            : <Badge variant="outline">{t('image-generation.components.nai.generation.panel.sections.disconnected')}</Badge>}
           {connected && tierName ? <Badge variant="outline">{tierName}</Badge> : null}
           {connected && anlasBalance !== undefined ? <Badge variant="outline">Anlas {anlasBalance}</Badge> : null}
         </div>
         <div className="flex items-center gap-2">
           {!connected ? (
             <Button type="button" variant="outline" size="sm" onClick={onOpenAuth}>
-              로그인
+              {t('image-generation.components.nai.auth.modal.log.in')}
             </Button>
           ) : null}
           <Button type="button" variant="outline" size="icon-sm" asChild>
-            <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label="NovelAI 홈페이지 열기" title="NovelAI 홈페이지 열기">
+            <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label={novelAiHomeLabel} title={novelAiHomeLabel}>
               <ExternalLink className="h-4 w-4" />
             </a>
           </Button>
@@ -134,6 +140,13 @@ export function NaiActionSection({
   onReset,
   onGenerate,
 }: NaiActionSectionProps) {
+  const { t } = useI18n()
+  const saveModuleLabel = t('image-generation.components.nai.generation.panel.sections.save.module')
+  const upscaleLabel = isUpscaling
+    ? t('image-generation.components.nai.generation.panel.sections.upscaling')
+    : t('image-generation.components.nai.generation.panel.sections.source.2x.upscale')
+  const resetLabel = t('image-generation.components.nai.generation.panel.sections.reset')
+
   const actionContent = (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -144,8 +157,8 @@ export function NaiActionSection({
             size="icon-sm"
             onClick={onOpenModuleSave}
             disabled={isGenerating || isUpscaling}
-            aria-label="모듈 저장"
-            title="모듈 저장"
+            aria-label={saveModuleLabel}
+            title={saveModuleLabel}
           >
             <Save className="h-4 w-4" />
           </Button>
@@ -156,8 +169,8 @@ export function NaiActionSection({
               size="icon-sm"
               onClick={onUpscale}
               disabled={isUpscaling || isGenerating}
-              aria-label={isUpscaling ? '업스케일 중' : '소스 2x 업스케일'}
-              title={isUpscaling ? '업스케일 중' : '소스 2x 업스케일'}
+              aria-label={upscaleLabel}
+              title={upscaleLabel}
             >
               <ArrowUp className="h-4 w-4" />
             </Button>
@@ -168,8 +181,8 @@ export function NaiActionSection({
             size="icon-sm"
             onClick={onReset}
             disabled={isGenerating || isUpscaling}
-            aria-label="초기화"
-            title="초기화"
+            aria-label={resetLabel}
+            title={resetLabel}
           >
             <RotateCcw className="h-4 w-4" />
           </Button>
@@ -203,8 +216,8 @@ export function NaiActionSection({
           size="icon-sm"
           onClick={onOpenModuleSave}
           disabled={isGenerating || isUpscaling}
-          aria-label="모듈 저장"
-          title="모듈 저장"
+          aria-label={saveModuleLabel}
+          title={saveModuleLabel}
           className="rounded-none border-r border-border/70 shadow-none"
         >
           <Save className="h-4 w-4" />
@@ -217,8 +230,8 @@ export function NaiActionSection({
             size="icon-sm"
             onClick={onUpscale}
             disabled={isUpscaling || isGenerating}
-            aria-label={isUpscaling ? '업스케일 중' : '소스 2x 업스케일'}
-            title={isUpscaling ? '업스케일 중' : '소스 2x 업스케일'}
+            aria-label={upscaleLabel}
+            title={upscaleLabel}
             className="rounded-none border-r border-border/70 shadow-none"
           >
             <ArrowUp className="h-4 w-4" />
@@ -231,8 +244,8 @@ export function NaiActionSection({
           size="icon-sm"
           onClick={onReset}
           disabled={isGenerating || isUpscaling}
-          aria-label="초기화"
-          title="초기화"
+          aria-label={resetLabel}
+          title={resetLabel}
           className="rounded-none shadow-none"
         >
           <RotateCcw className="h-4 w-4" />

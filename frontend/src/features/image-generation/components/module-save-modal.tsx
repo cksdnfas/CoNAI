@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { toggleSelectionItem, type ModuleFieldOption } from '../image-generation-shared'
 
@@ -43,6 +44,7 @@ export function ModuleSaveModal({
   onOverwriteModuleIdChange,
   onSave,
 }: ModuleSaveModalProps) {
+  const { t } = useI18n()
   const selectedOverwriteModule = overwriteCandidates.find((module) => module.id === overwriteModuleId) ?? null
   return (
     <SettingsModal
@@ -53,32 +55,32 @@ export function ModuleSaveModal({
     >
       <SettingsModalBody className="space-y-5">
         <div className="grid gap-4 md:grid-cols-2">
-          <SettingsField label="저장 방식">
+          <SettingsField label={t('image-generation.components.module.save.modal.save.mode')}>
             <Select value={overwriteModuleId ? String(overwriteModuleId) : ''} onChange={(event) => onOverwriteModuleIdChange?.(event.target.value ? Number(event.target.value) : null)}>
-              <option value="">새 모듈 생성</option>
+              <option value="">{t('image-generation.components.module.save.modal.create.new.module')}</option>
               {overwriteCandidates.map((module) => (
                 <option key={module.id} value={module.id}>#{module.id} {module.name}</option>
               ))}
             </Select>
           </SettingsField>
 
-          <SettingsField label="모듈 이름">
+          <SettingsField label={t('image-generation.components.module.save.modal.module.name')}>
             <Input value={moduleName} onChange={(event) => onModuleNameChange(event.target.value)} placeholder={moduleNamePlaceholder} />
           </SettingsField>
 
-          <SettingsField label="설명">
-            <Input value={moduleDescription} onChange={(event) => onModuleDescriptionChange(event.target.value)} placeholder="선택" />
+          <SettingsField label={t('image-generation.components.module.save.modal.description')}>
+            <Input value={moduleDescription} onChange={(event) => onModuleDescriptionChange(event.target.value)} placeholder={t('image-generation.components.module.save.modal.optional')} />
           </SettingsField>
 
           {selectedOverwriteModule ? (
             <div className="rounded-sm border border-warning/35 bg-warning/10 px-3 py-2 text-xs text-warning-foreground md:col-span-2">
-              #{selectedOverwriteModule.id} 모듈을 같은 ID로 덮어써. 기존 그래프 연결은 포트 key가 유지되는 항목만 그대로 살아남아.
+              {t('image-generation.components.module.save.modal.overwrite.warning', { id: selectedOverwriteModule.id })}
             </div>
           ) : null}
         </div>
 
         <div className="space-y-3">
-          <div className="text-sm font-medium text-foreground">노출 입력</div>
+          <div className="text-sm font-medium text-foreground">{t('image-generation.components.module.save.modal.exposed.inputs')}</div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {fieldOptions.map((field) => {
               const checked = exposedFieldKeys.includes(field.key)
@@ -98,10 +100,10 @@ export function ModuleSaveModal({
 
         <SettingsModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
-            취소
+            {t('image-generation.components.module.save.modal.cancel')}
           </Button>
           <Button type="button" onClick={onSave} disabled={isSaving || moduleName.trim().length === 0}>
-            {isSaving ? '저장 중…' : '저장'}
+            {isSaving ? t('image-generation.components.module.save.modal.saving') : t('image-generation.components.module.save.modal.save')}
           </Button>
         </SettingsModalFooter>
       </SettingsModalBody>

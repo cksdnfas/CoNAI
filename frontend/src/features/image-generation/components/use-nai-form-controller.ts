@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useI18n } from '@/i18n'
 import {
   buildNaiModuleFieldOptions,
   canUseNaiCharacterPositions,
@@ -28,6 +29,7 @@ export function useNaiFormController({
 }: {
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
   const [persistedDraft] = useState(() => loadPersistedNaiFormDraft())
   const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(persistedDraft.selectedCharacterIndex)
   const [naiForm, setNaiForm] = useState<NAIFormDraft>(persistedDraft.form)
@@ -105,9 +107,18 @@ export function useNaiFormController({
 
       const clampedValue = clampNaiSampleCount(parsedValue)
       if (parsedValue > NAI_SAMPLE_COUNT_MAX) {
-        showSnackbar({ message: `Samples는 최대 ${NAI_SAMPLE_COUNT_MAX}개까지 가능해. ${NAI_SAMPLE_COUNT_MAX}로 맞출게.`, tone: 'info' })
+        showSnackbar({
+          message: t('image-generation.components.use.nai.form.controller.samples.max.clamped', { max: NAI_SAMPLE_COUNT_MAX }),
+          tone: 'info',
+        })
       } else if (parsedValue < NAI_SAMPLE_COUNT_MIN) {
-        showSnackbar({ message: `Samples는 ${NAI_SAMPLE_COUNT_MIN}~${NAI_SAMPLE_COUNT_MAX}만 가능해.`, tone: 'info' })
+        showSnackbar({
+          message: t('image-generation.components.use.nai.form.controller.samples.range', {
+            min: NAI_SAMPLE_COUNT_MIN,
+            max: NAI_SAMPLE_COUNT_MAX,
+          }),
+          tone: 'info',
+        })
       }
 
       value = String(clampedValue)

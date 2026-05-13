@@ -2,6 +2,7 @@ import { Plus, Save, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { useI18n } from '@/i18n'
 import { Select } from '@/components/ui/select'
 import type { StoredNaiCharacterReferenceAsset } from '@/lib/api-image-generation-types'
 import { FormField, type NAICharacterReferenceDraft, type SelectedImageDraft } from '../image-generation-shared'
@@ -45,6 +46,8 @@ export function NaiReferencesSection({
   onEditReferenceFromStore,
   onDeleteReferenceFromStore,
 }: NaiReferencesSectionProps) {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-0">
       <NaiControllerSection
@@ -59,15 +62,15 @@ export function NaiReferencesSection({
               variant="outline"
               onClick={onAddReference}
               disabled={!supportsCharacterReference}
-              aria-label="Reference 추가"
-              title="Reference 추가"
+              aria-label={t('image-generation.components.nai.references.section.add.reference')}
+              title={t('image-generation.components.nai.references.section.add.reference')}
             >
               <Plus className="h-4 w-4" />
             </Button>
           </>
         )}
       >
-        {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">현재 모델에서는 Character Reference를 사용할 수 없어.</div> : null}
+        {!supportsCharacterReference ? <div className="text-xs text-[#ffb4ab]">{t('image-generation.components.nai.references.section.character.reference.is.not.available.for.the')}</div> : null}
 
         {references.length > 0 ? (
           <div className="overflow-hidden rounded-sm border border-border/85 divide-y divide-border/85 bg-surface-low/40">
@@ -76,10 +79,17 @@ export function NaiReferencesSection({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="text-sm font-medium text-foreground">Reference {index + 1}</div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <ImageAttachmentPickerButton label={reference.image ? '참조 이미지 변경' : '참조 이미지 선택'} modalTitle={`Reference ${index + 1} 이미지 선택`} allowSaveDialog={false} onSelect={(image) => onReferenceImageChange(index, image)} />
+                    <ImageAttachmentPickerButton
+                      label={reference.image
+                        ? t('image-generation.components.nai.references.section.change.reference.image')
+                        : t('image-generation.components.nai.references.section.select.reference.image')}
+                      modalTitle={t('image-generation.components.nai.references.section.select.reference.image.with.index', { index: index + 1 })}
+                      allowSaveDialog={false}
+                      onSelect={(image) => onReferenceImageChange(index, image)}
+                    />
                     <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveReference(index)}>
                       <Trash2 className="h-4 w-4" />
-                      제거
+                      {t('image-generation.components.nai.common.remove')}
                     </Button>
                   </div>
                 </div>
@@ -105,7 +115,7 @@ export function NaiReferencesSection({
                 <div className="flex justify-end border-t border-border/70 pt-3">
                   <Button type="button" variant="outline" onClick={() => onOpenReferenceSaveModal(index)} disabled={!reference.image}>
                     <Save className="h-4 w-4" />
-                    저장
+                    {t('image-generation.components.nai.common.save')}
                   </Button>
                 </div>
               </div>
@@ -118,7 +128,7 @@ export function NaiReferencesSection({
         count={savedReferences.length}
         searchValue={savedReferenceSearch}
         isLoading={savedReferencesLoading}
-        emptyMessage="검색 결과가 없거나 저장된 reference가 없어."
+        emptyMessage={t('image-generation.components.nai.references.section.no.search.results.or.saved.references')}
         className="rounded-t-none"
         onSearchChange={onSavedReferenceSearchChange}
       >

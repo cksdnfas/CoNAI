@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useI18n } from '@/i18n'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import { upscaleNaiImage } from '@/lib/api-image-generation-nai'
@@ -57,6 +58,7 @@ export function useNaiGenerationActions({
   closeModuleSaveModal: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
   const queryClient = useQueryClient()
   const [isNaiGenerating, setIsNaiGenerating] = useState(false)
   const [isSavingNaiModule, setIsSavingNaiModule] = useState(false)
@@ -69,7 +71,7 @@ export function useNaiGenerationActions({
     }
 
     if (!connected) {
-      showSnackbar({ message: 'NAI 생성 전에 먼저 로그인해줘. 상단 로그인 버튼을 눌러줘.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.log.in.before.nai.generation.use.the'), tone: 'error' })
       return
     }
 
@@ -77,22 +79,22 @@ export function useNaiGenerationActions({
     const negativePrompt = normalizeTextSegmentSpreadsheetText(naiForm.negativePrompt).trim()
 
     if (prompt.length === 0) {
-      showSnackbar({ message: 'NAI 프롬프트를 먼저 넣어줘.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.enter.an.nai.prompt.first'), tone: 'error' })
       return
     }
 
     if ((naiForm.action === 'img2img' || naiForm.action === 'infill') && !naiForm.sourceImage) {
-      showSnackbar({ message: 'img2img / infill에는 소스 이미지가 필요해.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.img2img.infill.requires.a.source.image'), tone: 'error' })
       return
     }
 
     if (naiForm.action === 'infill' && !naiForm.maskImage) {
-      showSnackbar({ message: 'infill에는 마스크 이미지도 필요해.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.infill.also.requires.a.mask.image'), tone: 'error' })
       return
     }
 
     if (!supportsCharacterReference && naiForm.characterReferences.length > 0) {
-      showSnackbar({ message: 'Character Reference는 NAI Diffusion 4.5 모델에서만 쓸 수 있어.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.character.reference.is.only.available.with.nai'), tone: 'error' })
       return
     }
 
@@ -136,9 +138,9 @@ export function useNaiGenerationActions({
       })
 
       void refreshGenerationQueueViews(queryClient, onHistoryRefresh)
-      showSnackbar({ message: response.message || 'NAI 큐에 생성 작업을 넣었어.', tone: 'info' })
+      showSnackbar({ message: response.message || t('image-generation.components.use.nai.generation.actions.added.a.generation.job.to.the.nai'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'NAI 이미지 생성에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.generation.actions.nai.image.generation.failed')), tone: 'error' })
     } finally {
       setIsNaiGenerating(false)
     }
@@ -158,9 +160,9 @@ export function useNaiGenerationActions({
       })
       triggerBlobDownload(decodeNaiBase64Png(response.image), response.filename)
       await refetchUserData()
-      showSnackbar({ message: 'NovelAI 업스케일 완료. PNG 다운로드를 시작할게.', tone: 'info' })
+      showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.novelai.upscale.complete.starting.png.download'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'NovelAI 업스케일에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.generation.actions.novelai.upscale.failed')), tone: 'error' })
     } finally {
       setIsUpscaling(false)
     }
@@ -175,7 +177,7 @@ export function useNaiGenerationActions({
     }
 
     if (naiExposedFieldKeys.length === 0) {
-      showSnackbar({ message: '최소 1개는 입력 가능 필드로 열어줘.', tone: 'error' })
+      showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.expose.at.least.one.editable.field'), tone: 'error' })
       return
     }
 
@@ -203,9 +205,14 @@ export function useNaiGenerationActions({
       })
 
       closeModuleSaveModal()
-      showSnackbar({ message: targetModuleId ? '현재 NAI 설정으로 기존 모듈을 덮어썼어.' : '현재 NAI 설정을 모듈로 저장했어.', tone: 'info' })
+      showSnackbar({
+        message: targetModuleId
+          ? t('image-generation.components.use.nai.generation.actions.existing.module.overwritten.with.the.current.nai')
+          : t('image-generation.components.use.nai.generation.actions.current.nai.settings.saved.as.a.module'),
+        tone: 'info',
+      })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'NAI 모듈 저장에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.generation.actions.failed.to.save.the.nai.module')), tone: 'error' })
     } finally {
       setIsSavingNaiModule(false)
     }

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { loginNai, loginNaiWithToken } from '@/lib/api-image-generation-nai'
+import { useI18n } from '@/i18n'
 import { getErrorMessage } from '../image-generation-shared'
 
 export type NaiLoginMode = 'account' | 'token'
@@ -12,6 +13,7 @@ export function useNaiAuthController({
   refetchUserData: () => Promise<unknown>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
   const [loginMode, setLoginMode] = useState<NaiLoginMode>('account')
   const [usernameInput, setUsernameInput] = useState('')
   const [passwordInput, setPasswordInput] = useState('')
@@ -21,9 +23,9 @@ export function useNaiAuthController({
 
   const connectionHint = useMemo(
     () => loginMode === 'account'
-      ? 'NovelAI 인증이 필요합니다. 계정으로 로그인하세요.'
-      : 'NovelAI 인증이 필요합니다. access token을 입력해 연결하세요.',
-    [loginMode],
+      ? t('image-generation.components.use.nai.auth.controller.novelai.authentication.is.required.log.in.with')
+      : t('image-generation.components.use.nai.auth.controller.novelai.authentication.is.required.enter.an.access'),
+    [loginMode, t],
   )
 
   /** Submit one account login flow and refresh server-side user state on success. */
@@ -40,9 +42,9 @@ export function useNaiAuthController({
       await refetchUserData()
       setPasswordInput('')
       setIsAuthModalOpen(false)
-      showSnackbar({ message: 'NovelAI 로그인 완료.', tone: 'info' })
+      showSnackbar({ message: t('image-generation.components.use.nai.auth.controller.novelai.login.complete'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'NovelAI 로그인에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.auth.controller.novelai.login.failed')), tone: 'error' })
     } finally {
       setIsLoggingIn(false)
     }
@@ -61,9 +63,9 @@ export function useNaiAuthController({
       await refetchUserData()
       setTokenInput('')
       setIsAuthModalOpen(false)
-      showSnackbar({ message: 'NovelAI 토큰 연결 완료.', tone: 'info' })
+      showSnackbar({ message: t('image-generation.components.use.nai.auth.controller.novelai.token.connected'), tone: 'info' })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, 'NovelAI 토큰 로그인에 실패했어.'), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.auth.controller.novelai.token.login.failed')), tone: 'error' })
     } finally {
       setIsLoggingIn(false)
     }

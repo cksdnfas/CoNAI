@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsModalBody, SettingsModalFooter } from '@/features/settings/components/settings-primitives'
+import { useI18n } from '@/i18n'
 import { FormField } from '../image-generation-shared'
 import type { NaiLoginMode } from './use-nai-auth-controller'
 
@@ -40,22 +41,23 @@ export function NaiAuthModal({
   onTokenChange,
   onSubmit,
 }: NaiAuthModalProps) {
+  const { t } = useI18n()
   const submitDisabled = isSubmitting || (loginMode === 'account' ? username.trim().length === 0 || password.length === 0 : token.trim().length === 0)
 
   return (
     <SettingsModal
       open={open}
       onClose={onClose}
-      title="NovelAI 로그인"
-      description="계정 로그인 또는 access token 저장으로 연결할 수 있어. 토큰은 서버에 저장돼."
+      title={t('image-generation.components.nai.auth.modal.novelai.login')}
+      description={t('image-generation.components.nai.auth.modal.connect.with.account.login.or.by.saving')}
       widthClassName="max-w-2xl"
     >
       <SettingsModalBody>
         <SegmentedTabBar
           value={loginMode}
           items={[
-            { value: 'account', label: '로그인' },
-            { value: 'token', label: '토큰' },
+            { value: 'account', label: t('image-generation.components.nai.auth.modal.log.in') },
+            { value: 'token', label: t('image-generation.components.nai.auth.modal.token') },
           ]}
           onChange={(nextMode) => onLoginModeChange(nextMode as NaiLoginMode)}
           fullWidth
@@ -86,10 +88,14 @@ export function NaiAuthModal({
 
         <SettingsModalFooter className="justify-between">
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-            취소
+            {t('image-generation.components.nai.auth.modal.cancel')}
           </Button>
           <Button type="button" onClick={onSubmit} disabled={submitDisabled}>
-            {isSubmitting ? '연결 중…' : loginMode === 'account' ? '로그인' : '토큰 저장'}
+            {isSubmitting
+              ? t('image-generation.components.nai.auth.modal.connecting')
+              : loginMode === 'account'
+                ? t('image-generation.components.nai.auth.modal.log.in')
+                : t('image-generation.components.nai.auth.modal.save.token')}
           </Button>
         </SettingsModalFooter>
       </SettingsModalBody>
