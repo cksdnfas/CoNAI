@@ -19,7 +19,8 @@
     "verify:builtin-system-modules": "tsx src/scripts/verifyBuiltinSystemModuleDefinitions.ts",
     "verify:wildcard-chain-parsing": "tsx src/scripts/verifyWildcardChainParsing.ts",
     "verify:complex-filter-search-stats": "tsx src/scripts/verifyComplexFilterSearchStats.ts",
-    "verify:route-validation-foundation": "tsx src/scripts/verifyRouteValidationFoundation.ts"
+    "verify:route-validation-foundation": "tsx src/scripts/verifyRouteValidationFoundation.ts",
+    "verify:auth-db-bootstrap": "tsx src/scripts/verifyAuthDbBootstrap.ts"
   },
   "dependencies": {
     "@conai/shared": "file:../shared",
