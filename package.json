@@ -54,6 +54,7 @@
     "verify:route-validation-foundation": "cd backend && npm run verify:route-validation-foundation",
     "verify:auth-db-bootstrap": "cd backend && npm run verify:auth-db-bootstrap",
     "verify:codex-generation-contracts": "cd backend && npm run verify:codex-generation-contracts",
+    "verify:module-library-grouping": "cd frontend && npm run verify:module-library-grouping",
     "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
     "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
     "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",

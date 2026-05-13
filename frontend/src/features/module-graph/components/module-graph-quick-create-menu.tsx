@@ -9,7 +9,7 @@ import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getModuleBaseDisplayName } from '../module-graph-shared'
-import { CUSTOM_NODE_GROUP_ORDER, SAVED_MODULE_GROUP_ORDER, getCustomNodeGroup, getSavedModuleGroup, getSystemModuleGroup, isCustomNodeModule, isGenerationModule, localizeModuleGroupLabel, shouldHideFromModuleLibrary, SYSTEM_GROUP_ORDER } from './module-library-panel'
+import { CUSTOM_NODE_GROUP_ORDER, SAVED_MODULE_GROUP_ORDER, SYSTEM_GROUP_ORDER, getCustomNodeGroup, getSavedModuleGroup, getSystemModuleGroup, isCustomNodeModule, isGenerationModule, localizeModuleGroupLabel, shouldHideFromModuleLibrary } from './module-library-groups'
 import type { RecommendedModuleMatch } from './module-graph-canvas'
 
 type QuickCreateTab = 'recommended' | 'system' | 'generation' | 'custom-nodes'
