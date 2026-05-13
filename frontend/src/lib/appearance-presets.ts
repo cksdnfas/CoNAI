@@ -1,3 +1,4 @@
+import type { SettingsResourceKey } from '@/i18n/resources/settings'
 import type {
   AppearancePreset,
   AppearancePresetSlot,
@@ -14,7 +15,7 @@ import type {
 
 interface AccentPresetDefinition {
   label: string
-  description: string
+  description: SettingsResourceKey
   primary: string
   secondary: string
 }
@@ -40,19 +41,19 @@ export interface SurfacePalette {
 
 interface SurfacePresetDefinition {
   label: string
-  description: string
+  description: SettingsResourceKey
   modes: Record<Exclude<ThemeMode, 'system'>, SurfacePalette>
 }
 
 interface RadiusPresetDefinition {
   label: string
-  description: string
+  description: SettingsResourceKey
   radius: string
 }
 
 interface GlassPresetDefinition {
   label: string
-  description: string
+  description: SettingsResourceKey
   blur: number
   headerAlpha: number
   floatingAlpha: number
@@ -60,7 +61,7 @@ interface GlassPresetDefinition {
 
 interface ShadowPresetDefinition {
   label: string
-  description: string
+  description: SettingsResourceKey
   cardBlur: number
   cardOpacity: number
   listBlur: number
@@ -71,7 +72,7 @@ interface ShadowPresetDefinition {
 
 interface DensityPresetDefinition {
   label: string
-  description: string
+  description: SettingsResourceKey
   shellHeaderHeight: string
   shellInlinePadding: string
   shellMainPaddingBottom: string
@@ -93,7 +94,7 @@ interface DensityPresetDefinition {
 
 interface FontPresetDefinition {
   label: string
-  description: string
+  description: SettingsResourceKey
   fontFamily: string
   monoFamily: string
 }
@@ -101,19 +102,19 @@ interface FontPresetDefinition {
 export const APPEARANCE_PRESETS: Record<Exclude<AppearancePreset, 'custom'>, AccentPresetDefinition> = {
   conai: {
     label: 'CoNAI',
-    description: '기본 오렌지 아이덴티티',
+    description: 'appearancePresets.accent.conai.description',
     primary: '#f95e14',
     secondary: '#ffb59a',
   },
   ocean: {
     label: 'Ocean',
-    description: '시원한 블루-민트 조합',
+    description: 'appearancePresets.accent.ocean.description',
     primary: '#2f7cf6',
     secondary: '#8de3df',
   },
   forest: {
     label: 'Forest',
-    description: '차분한 그린-세이지 조합',
+    description: 'appearancePresets.accent.forest.description',
     primary: '#2f8f5b',
     secondary: '#b7e3c5',
   },
@@ -122,7 +123,7 @@ export const APPEARANCE_PRESETS: Record<Exclude<AppearancePreset, 'custom'>, Acc
 export const SURFACE_PRESETS: Record<Exclude<SurfacePreset, 'custom'>, SurfacePresetDefinition> = {
   studio: {
     label: 'Studio',
-    description: '기본 CoNAI 무드에 가장 가까운 중립 다크/라이트 밸런스',
+    description: 'appearancePresets.surface.studio.description',
     modes: {
       dark: {
         background: '#131313',
@@ -164,7 +165,7 @@ export const SURFACE_PRESETS: Record<Exclude<SurfacePreset, 'custom'>, SurfacePr
   },
   midnight: {
     label: 'Midnight',
-    description: '차갑고 또렷한 블루 슬레이트 계열',
+    description: 'appearancePresets.surface.midnight.description',
     modes: {
       dark: {
         background: '#0b1220',
@@ -206,7 +207,7 @@ export const SURFACE_PRESETS: Record<Exclude<SurfacePreset, 'custom'>, SurfacePr
   },
   paper: {
     label: 'Paper',
-    description: '조금 더 에디토리얼한 웜 톤 페이퍼 무드',
+    description: 'appearancePresets.surface.paper.description',
     modes: {
       dark: {
         background: '#17120f',
@@ -251,17 +252,17 @@ export const SURFACE_PRESETS: Record<Exclude<SurfacePreset, 'custom'>, SurfacePr
 export const RADIUS_PRESETS: Record<RadiusPreset, RadiusPresetDefinition> = {
   sharp: {
     label: 'Sharp',
-    description: '도구형 UI에 가까운 각진 모서리',
+    description: 'appearancePresets.radius.sharp.description',
     radius: '0.22rem',
   },
   balanced: {
     label: 'Balanced',
-    description: '현재 CoNAI와 가장 비슷한 균형형',
+    description: 'appearancePresets.radius.balanced.description',
     radius: '0.5rem',
   },
   soft: {
     label: 'Soft',
-    description: '조금 더 둥글고 부드러운 느낌',
+    description: 'appearancePresets.radius.soft.description',
     radius: '0.95rem',
   },
 }
@@ -269,21 +270,21 @@ export const RADIUS_PRESETS: Record<RadiusPreset, RadiusPresetDefinition> = {
 export const GLASS_PRESETS: Record<GlassPreset, GlassPresetDefinition> = {
   subtle: {
     label: 'Subtle',
-    description: '블러를 줄이고 또렷하게',
+    description: 'appearancePresets.glass.subtle.description',
     blur: 10,
     headerAlpha: 0.84,
     floatingAlpha: 0.9,
   },
   balanced: {
     label: 'Balanced',
-    description: '지금 CoNAI 톤과 가장 잘 맞는 기본값',
+    description: 'appearancePresets.glass.balanced.description',
     blur: 18,
     headerAlpha: 0.72,
     floatingAlpha: 0.88,
   },
   immersive: {
     label: 'Immersive',
-    description: '더 유리 같은 오버레이와 강한 블러',
+    description: 'appearancePresets.glass.immersive.description',
     blur: 28,
     headerAlpha: 0.62,
     floatingAlpha: 0.82,
@@ -293,7 +294,7 @@ export const GLASS_PRESETS: Record<GlassPreset, GlassPresetDefinition> = {
 export const SHADOW_PRESETS: Record<ShadowPreset, ShadowPresetDefinition> = {
   soft: {
     label: 'Soft',
-    description: '깊이감이 얕고 조용한 그림자',
+    description: 'appearancePresets.shadow.soft.description',
     cardBlur: 28,
     cardOpacity: 0.14,
     listBlur: 32,
@@ -303,7 +304,7 @@ export const SHADOW_PRESETS: Record<ShadowPreset, ShadowPresetDefinition> = {
   },
   balanced: {
     label: 'Balanced',
-    description: '기본 CoNAI 무드에 가까운 깊이감',
+    description: 'appearancePresets.shadow.balanced.description',
     cardBlur: 40,
     cardOpacity: 0.18,
     listBlur: 40,
@@ -313,7 +314,7 @@ export const SHADOW_PRESETS: Record<ShadowPreset, ShadowPresetDefinition> = {
   },
   dramatic: {
     label: 'Dramatic',
-    description: '오버레이와 카드의 존재감을 더 강하게',
+    description: 'appearancePresets.shadow.dramatic.description',
     cardBlur: 56,
     cardOpacity: 0.24,
     listBlur: 52,
@@ -326,7 +327,7 @@ export const SHADOW_PRESETS: Record<ShadowPreset, ShadowPresetDefinition> = {
 export const DENSITY_PRESETS: Record<DensityPreset, DensityPresetDefinition> = {
   'ultra-compact': {
     label: 'Ultra Compact',
-    description: '정보량을 더 우선해서 여백과 컨트롤 높이를 한 단계 더 줄인다',
+    description: 'appearancePresets.density.ultraCompact.description',
     shellHeaderHeight: '3rem',
     shellInlinePadding: '0.9rem',
     shellMainPaddingBottom: '2.25rem',
@@ -347,7 +348,7 @@ export const DENSITY_PRESETS: Record<DensityPreset, DensityPresetDefinition> = {
   },
   compact: {
     label: 'Compact',
-    description: '패널과 컨트롤 높이를 줄여 더 촘촘하게 본다',
+    description: 'appearancePresets.density.compact.description',
     shellHeaderHeight: '3.5rem',
     shellInlinePadding: '1.25rem',
     shellMainPaddingBottom: '3rem',
@@ -368,7 +369,7 @@ export const DENSITY_PRESETS: Record<DensityPreset, DensityPresetDefinition> = {
   },
   comfortable: {
     label: 'Comfortable',
-    description: '기본 CoNAI 밸런스에 가까운 밀도',
+    description: 'appearancePresets.density.comfortable.description',
     shellHeaderHeight: '4rem',
     shellInlinePadding: '1.5rem',
     shellMainPaddingBottom: '4rem',
@@ -389,7 +390,7 @@ export const DENSITY_PRESETS: Record<DensityPreset, DensityPresetDefinition> = {
   },
   spacious: {
     label: 'Spacious',
-    description: '패널 간 여백과 컨트롤 높이를 넉넉하게 확보한다',
+    description: 'appearancePresets.density.spacious.description',
     shellHeaderHeight: '4.5rem',
     shellInlinePadding: '1.9rem',
     shellMainPaddingBottom: '5rem',
@@ -413,19 +414,19 @@ export const DENSITY_PRESETS: Record<DensityPreset, DensityPresetDefinition> = {
 export const FONT_PRESETS: Record<FontPreset, FontPresetDefinition> = {
   manrope: {
     label: 'Manrope',
-    description: '현재 CoNAI 기본 산세리프 톤',
+    description: 'appearancePresets.font.manrope.description',
     fontFamily: "'Manrope', ui-sans-serif, system-ui, sans-serif",
     monoFamily: "'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace",
   },
   system: {
     label: 'System',
-    description: '운영체제 기본 UI 폰트 우선',
+    description: 'appearancePresets.font.system.description',
     fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     monoFamily: "ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace",
   },
   custom: {
     label: 'Custom',
-    description: '직접 입력한 폰트 패밀리 문자열 사용',
+    description: 'appearancePresets.font.custom.description',
     fontFamily: 'ui-sans-serif, system-ui, sans-serif',
     monoFamily: "ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace",
   },

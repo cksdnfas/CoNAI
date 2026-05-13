@@ -1,4 +1,5 @@
-import type { TranslationInput } from '@/i18n'
+import { shellCatalog } from '@/i18n/resources'
+import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { ImageAiRawNaiParameters, ImageRecord } from '@/types/image'
 import type { PromptGroupResolveItem } from '@/types/prompt'
 
@@ -37,27 +38,57 @@ interface ExtractedPromptCardLabels {
   processedBadge: string
 }
 
-const DEFAULT_EXTRACTED_PROMPT_CARD_LABELS: ExtractedPromptCardLabels = {
-  positivePrompt: '긍정 프롬프트',
-  negativePrompt: '부정 프롬프트',
-  character: '캐릭터',
-  characterIndexed: (index) => `캐릭터 ${index}`,
-  processedBadge: '가공됨',
+type TranslateText = (input: TranslationInput, variables?: TranslationParams) => string
+
+const EXTRACTED_PROMPT_LABEL_KEYS = {
+  positivePrompt: 'extractedPromptLabels.positivePrompt',
+  negativePrompt: 'extractedPromptLabels.negativePrompt',
+  character: 'extractedPromptLabels.character',
+  characterIndexed: 'extractedPromptLabels.characterIndexed',
+  processedBadge: 'extractedPromptLabels.processedBadge',
+  unclassified: 'extractedPromptLabels.unclassified',
+} as const
+
+function formatStaticCatalogText(template: string, variables?: TranslationParams) {
+  if (!variables) {
+    return template
+  }
+
+  return template.replace(/\{(\w+)\}/g, (match, key) => {
+    const value = variables[key]
+    return value === undefined || value === null ? match : String(value)
+  })
 }
 
-function resolveExtractedPromptCardLabels(
-  translate?: (input: TranslationInput, variables?: Record<string, string | number>) => string,
-): ExtractedPromptCardLabels {
+function getStaticCatalogText(key: string, variables?: TranslationParams) {
+  const catalog = shellCatalog as Record<string, Partial<Record<'ko' | 'en', string>>>
+  const template = catalog[key]?.ko ?? catalog[key]?.en ?? key
+  return formatStaticCatalogText(template, variables)
+}
+
+function translateOrFallback(translate: TranslateText | undefined, key: string, variables?: TranslationParams) {
+  return translate ? translate(key, variables) : getStaticCatalogText(key, variables)
+}
+
+const DEFAULT_EXTRACTED_PROMPT_CARD_LABELS: ExtractedPromptCardLabels = {
+  positivePrompt: getStaticCatalogText(EXTRACTED_PROMPT_LABEL_KEYS.positivePrompt),
+  negativePrompt: getStaticCatalogText(EXTRACTED_PROMPT_LABEL_KEYS.negativePrompt),
+  character: getStaticCatalogText(EXTRACTED_PROMPT_LABEL_KEYS.character),
+  characterIndexed: (index) => getStaticCatalogText(EXTRACTED_PROMPT_LABEL_KEYS.characterIndexed, { index }),
+  processedBadge: getStaticCatalogText(EXTRACTED_PROMPT_LABEL_KEYS.processedBadge),
+}
+
+function resolveExtractedPromptCardLabels(translate?: TranslateText): ExtractedPromptCardLabels {
   if (!translate) {
     return DEFAULT_EXTRACTED_PROMPT_CARD_LABELS
   }
 
   return {
-    positivePrompt: translate({ ko: '긍정 프롬프트', en: 'Positive prompt' }),
-    negativePrompt: translate({ ko: '부정 프롬프트', en: 'Negative prompt' }),
-    character: translate({ ko: '캐릭터', en: 'Character' }),
-    characterIndexed: (index) => translate({ ko: '캐릭터 {index}', en: 'Character {index}' }, { index }),
-    processedBadge: translate({ ko: '가공됨', en: 'Processed' }),
+    positivePrompt: translateOrFallback(translate, EXTRACTED_PROMPT_LABEL_KEYS.positivePrompt),
+    negativePrompt: translateOrFallback(translate, EXTRACTED_PROMPT_LABEL_KEYS.negativePrompt),
+    character: translateOrFallback(translate, EXTRACTED_PROMPT_LABEL_KEYS.character),
+    characterIndexed: (index) => translateOrFallback(translate, EXTRACTED_PROMPT_LABEL_KEYS.characterIndexed, { index }),
+    processedBadge: translateOrFallback(translate, EXTRACTED_PROMPT_LABEL_KEYS.processedBadge),
   }
 }
 
@@ -204,10 +235,14 @@ function dedupePreservingOrder(values: string[]) {
   return items
 }
 
-function getPromptGroupingLabel(groupInfo?: PromptGroupResolveItem['group_info']) {
+function getPromptGroupingUnclassifiedLabel(translate?: TranslateText) {
+  return translateOrFallback(translate, EXTRACTED_PROMPT_LABEL_KEYS.unclassified)
+}
+
+function getPromptGroupingLabel(groupInfo?: PromptGroupResolveItem['group_info'], translate?: TranslateText) {
   const name = groupInfo?.group_name?.trim()
   if (!name || name === 'Unclassified') {
-    return '미분류'
+    return getPromptGroupingUnclassifiedLabel(translate)
   }
 
   return name
@@ -223,14 +258,14 @@ function getPromptGroupingOrder(groupInfo?: PromptGroupResolveItem['group_info']
     : Number.MAX_SAFE_INTEGER - 1
 }
 
-function getPromptGroupingPath(groupInfo?: PromptGroupResolveItem['group_info']) {
+function getPromptGroupingPath(groupInfo?: PromptGroupResolveItem['group_info'], translate?: TranslateText) {
   const path = Array.isArray(groupInfo?.group_path) ? groupInfo.group_path.filter(Boolean) : []
   if (path.length > 0) {
     return path
   }
 
   if (!groupInfo?.group_name || groupInfo.group_name === 'Unclassified') {
-    return ['미분류']
+    return [getPromptGroupingUnclassifiedLabel(translate)]
   }
 
   return [groupInfo.group_name]
@@ -238,7 +273,7 @@ function getPromptGroupingPath(groupInfo?: PromptGroupResolveItem['group_info'])
 
 function isDanbooruRootGroupName(value?: string | null) {
   const normalized = value?.trim().toLowerCase()
-  return normalized === 'danbooru' || normalized === '단부루'
+  return normalized === 'danbooru' || normalized === '\uB2E8\uBD80\uB8E8'
 }
 
 function normalizePromptGroupingDisplayOptions(options?: Partial<PromptGroupingDisplayOptions>): PromptGroupingDisplayOptions {
@@ -249,18 +284,22 @@ function normalizePromptGroupingDisplayOptions(options?: Partial<PromptGroupingD
   }
 }
 
-function getVisiblePromptGroupingPath(groupInfo: PromptGroupResolveItem['group_info'] | undefined, options: PromptGroupingDisplayOptions) {
-  const sourcePath = getPromptGroupingPath(groupInfo)
+function getVisiblePromptGroupingPath(groupInfo: PromptGroupResolveItem['group_info'] | undefined, options: PromptGroupingDisplayOptions, translate?: TranslateText) {
+  const sourcePath = getPromptGroupingPath(groupInfo, translate)
   const shiftedPath = !options.treatDanbooruAsRoot && isDanbooruRootGroupName(sourcePath[0])
     ? sourcePath.slice(1)
     : sourcePath
   const visiblePath = (shiftedPath.length > 0 ? shiftedPath : sourcePath).slice(0, options.classificationDepth)
 
-  return visiblePath.length > 0 ? visiblePath : ['미분류']
+  return visiblePath.length > 0 ? visiblePath : [getPromptGroupingUnclassifiedLabel(translate)]
 }
 
-function getPromptGroupingKind(groupInfo: PromptGroupResolveItem['group_info'] | undefined, visiblePath: string[]): ExtractedPromptGroupedSection['kind'] {
-  if (!groupInfo || groupInfo.group_name === 'Unclassified' || visiblePath[0] === '미분류') {
+function getPromptGroupingKind(
+  groupInfo: PromptGroupResolveItem['group_info'] | undefined,
+  visiblePath: string[],
+  unclassifiedLabel: string,
+): ExtractedPromptGroupedSection['kind'] {
+  if (!groupInfo || groupInfo.group_name === 'Unclassified' || visiblePath[0] === unclassifiedLabel) {
     return 'unclassified'
   }
 
@@ -300,12 +339,14 @@ export function buildGroupedPromptSections(
   terms: string[],
   resolvedItems: PromptGroupResolveItem[],
   options?: Partial<PromptGroupingDisplayOptions>,
+  translate?: TranslateText,
 ) {
   if (terms.length === 0) {
     return [] as ExtractedPromptGroupedSection[]
   }
 
   const displayOptions = normalizePromptGroupingDisplayOptions(options)
+  const unclassifiedLabel = getPromptGroupingUnclassifiedLabel(translate)
   const resolvedByKey = new Map(
     resolvedItems.map((item) => [item.query.trim().toLowerCase(), item] as const),
   )
@@ -314,11 +355,11 @@ export function buildGroupedPromptSections(
 
   terms.forEach((term) => {
     const resolvedItem = resolvedByKey.get(term.trim().toLowerCase())
-    const visiblePath = getVisiblePromptGroupingPath(resolvedItem?.group_info, displayOptions)
-    const label = visiblePath.join(' > ') || getPromptGroupingLabel(resolvedItem?.group_info)
+    const visiblePath = getVisiblePromptGroupingPath(resolvedItem?.group_info, displayOptions, translate)
+    const label = visiblePath.join(' > ') || getPromptGroupingLabel(resolvedItem?.group_info, translate)
     const order = getPromptGroupingOrder(resolvedItem?.group_info)
-    const hierarchyPath = getPromptGroupingPath(resolvedItem?.group_info)
-    const kind = getPromptGroupingKind(resolvedItem?.group_info, visiblePath)
+    const hierarchyPath = getPromptGroupingPath(resolvedItem?.group_info, translate)
+    const kind = getPromptGroupingKind(resolvedItem?.group_info, visiblePath, unclassifiedLabel)
     const existing = grouped.get(label)
 
     if (existing) {
@@ -360,7 +401,7 @@ export function formatGroupedPromptText(sections: ExtractedPromptGroupedSection[
 /** Build reusable extracted prompt card data from an image record. */
 export function getImageExtractedPromptCards(
   image: ImageRecord,
-  translate?: (input: TranslationInput, variables?: Record<string, string | number>) => string,
+  translate?: TranslateText,
 ) {
   const rawNaiParameters = image.ai_metadata?.raw_nai_parameters
   const { positivePrompt: positiveText, negativePrompt: negativeText, characterPrompts: characterTexts } = getImageExtractedPromptSummary(image)

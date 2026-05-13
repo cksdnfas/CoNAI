@@ -1,3 +1,4 @@
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { buildApiUrl } from '@/lib/api-client'
 
 export interface AuthStatusRecord {
@@ -120,7 +121,7 @@ async function requestAuthJson<T>(path: string, init?: RequestInit): Promise<T> 
   }
 
   if (!payload) {
-    throw new Error('빈 응답을 받았어.')
+    throw createApiFallbackError(null, 'auth.emptyResponse')
   }
 
   return payload

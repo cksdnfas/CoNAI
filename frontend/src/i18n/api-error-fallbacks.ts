@@ -1,4 +1,8 @@
 export const API_ERROR_FALLBACKS = {
+  'auth.emptyResponse': {
+    ko: '빈 응답을 받았어.',
+    en: 'Received an empty response.',
+  },
   'groups.hierarchy.load': {
     ko: '그룹 계층을 불러오지 못했어.',
     en: 'Failed to load the group hierarchy.',

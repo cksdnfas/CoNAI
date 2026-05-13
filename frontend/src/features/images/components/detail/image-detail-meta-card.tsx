@@ -219,7 +219,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         }
 
         if (positivePromptGroupQuery.data) {
-          const groupedSections = buildGroupedPromptSections(positivePromptTerms, positivePromptGroupQuery.data, promptGroupingOptions)
+          const groupedSections = buildGroupedPromptSections(positivePromptTerms, positivePromptGroupQuery.data, promptGroupingOptions, t)
           const groupedText = formatGroupedPromptText(groupedSections)
           return { ...item, text: groupedText || item.text, groupedSections }
         }
@@ -231,7 +231,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
         }
 
         if (negativePromptGroupQuery.data) {
-          const groupedSections = buildGroupedPromptSections(negativePromptTerms, negativePromptGroupQuery.data, promptGroupingOptions)
+          const groupedSections = buildGroupedPromptSections(negativePromptTerms, negativePromptGroupQuery.data, promptGroupingOptions, t)
           const groupedText = formatGroupedPromptText(groupedSections)
           return { ...item, text: groupedText || item.text, groupedSections }
         }
