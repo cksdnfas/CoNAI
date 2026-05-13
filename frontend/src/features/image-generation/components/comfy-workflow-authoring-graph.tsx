@@ -1,6 +1,7 @@
 import { Check, GripVertical, Plus } from 'lucide-react'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { useI18n } from '@/i18n'
 import { buildPowerLoraNodeItemsFromInputs } from './power-lora-loader-input'
 
 type WorkflowJsonNodeRecord = {
@@ -119,7 +120,7 @@ export function parseWorkflowDefinition(workflowJson: string): WorkflowJsonRecor
   const parsed = JSON.parse(workflowJson) as unknown
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('워크플로우 JSON 루트는 객체여야 해.')
+    throw new Error('Workflow JSON root must be an object.')
   }
 
   return parsed as WorkflowJsonRecord
@@ -393,6 +394,8 @@ export function findAuthoringGraphMatches(nodes: AuthoringNode[], query: string)
 
 /** Render one clickable workflow node card inside the authoring graph. */
 function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
+  const { t } = useI18n()
+
   return (
     <div
       className={data.searchCurrent
@@ -436,7 +439,7 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
           })}
         </div>
       ) : (
-        <div className="mt-3 text-xs text-muted-foreground">직접 입력 가능한 항목 없음</div>
+        <div className="mt-3 text-xs text-muted-foreground">{t('image-generation.components.comfy.workflow.authoring.graph.no.direct.inputs')}</div>
       )}
     </div>
   )

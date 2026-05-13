@@ -1,4 +1,5 @@
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 export type PowerLoraLoaderEntryValue = {
@@ -79,12 +80,14 @@ function PowerLoraRowToggle({
   onPressedChange: (pressed: boolean) => void
   compact?: boolean
 }) {
+  const { t } = useI18n()
+
   return (
     <button
       type="button"
       role="switch"
       aria-checked={pressed}
-      aria-label={pressed ? '로라 사용 끄기' : '로라 사용 켜기'}
+      aria-label={pressed ? t('image-generation.components.power.lora.loader.input.disable.lora') : t('image-generation.components.power.lora.loader.input.enable.lora')}
       onClick={() => onPressedChange(!pressed)}
       className={cn(
         'inline-flex shrink-0 items-center rounded-full border transition-colors',
@@ -110,6 +113,7 @@ function PowerLoraRowToggle({
 
 /** Render rgthree Power Lora Loader values as editable LoRA rows instead of raw JSON. */
 export function PowerLoraLoaderInput({ field, value, onChange, variant = 'default', useValueFallback = true }: PowerLoraLoaderInputProps) {
+  const { t } = useI18n()
   const nodeValue = isPowerLoraLoaderNodeValue(value) ? value : {}
   const configuredNodeItems = field?.node_items ?? []
   const nodeItems = configuredNodeItems.length > 0
@@ -121,7 +125,7 @@ export function PowerLoraLoaderInput({ field, value, onChange, variant = 'defaul
   const isCompact = variant === 'compact'
 
   if (nodeItems.length === 0) {
-    return <div className={cn('rounded-sm border border-dashed border-border/80 text-muted-foreground', isCompact ? 'px-2 py-1.5 text-[11px]' : 'px-3 py-4 text-sm')}>노출할 lora_* 항목이 없어.</div>
+    return <div className={cn('rounded-sm border border-dashed border-border/80 text-muted-foreground', isCompact ? 'px-2 py-1.5 text-[11px]' : 'px-3 py-4 text-sm')}>{t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')}</div>
   }
 
   return (
@@ -164,7 +168,7 @@ export function PowerLoraLoaderInput({ field, value, onChange, variant = 'defaul
             <ScrubbableNumberInput
               step={0.05}
               value={typeof entry.strength === 'number' ? String(entry.strength) : ''}
-              aria-label={`${item.label} 가중치`}
+              aria-label={t('image-generation.components.power.lora.loader.input.value.weight', { label: item.label })}
               className={cn('text-left', isCompact ? 'h-6 w-11 px-1.5 text-[11px]' : 'h-8 w-[72px] px-2')}
               onChange={(nextValue) => {
                 const parsedStrength = Number(nextValue)

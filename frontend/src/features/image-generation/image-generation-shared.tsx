@@ -124,6 +124,34 @@ export type ModuleFieldOption = {
   options?: string[]
 }
 
+type TranslateResource = (input: string) => string
+
+const NAI_MODULE_FIELD_LABEL_KEYS = {
+  prompt: 'image-generation.image.generation.shared.prompt',
+  negativePrompt: 'image-generation.image.generation.shared.negative.prompt',
+  model: 'image-generation.image.generation.shared.model',
+  action: 'image-generation.image.generation.shared.action',
+  sampler: 'image-generation.image.generation.shared.sampler',
+  scheduler: 'image-generation.image.generation.shared.scheduler',
+  width: 'image-generation.image.generation.shared.width',
+  height: 'image-generation.image.generation.shared.height',
+  steps: 'image-generation.image.generation.shared.steps',
+  scale: 'image-generation.image.generation.shared.cfg.scale',
+  samples: 'image-generation.image.generation.shared.sample.count',
+  seed: 'image-generation.image.generation.shared.seed',
+  varietyPlus: 'image-generation.image.generation.shared.variety',
+  characters: 'image-generation.image.generation.shared.character.prompt',
+  vibes: 'image-generation.image.generation.shared.send.vibe',
+  characterRefs: 'image-generation.image.generation.shared.character.reference',
+  image: 'image-generation.image.generation.shared.original.image',
+  strength: 'image-generation.image.generation.shared.strength',
+  noise: 'image-generation.image.generation.shared.noise',
+  mask: 'image-generation.image.generation.shared.mask.image',
+  addOriginalImage: 'image-generation.image.generation.shared.add.original.image',
+} as const
+
+type NaiModuleFieldLabelKey = keyof typeof NAI_MODULE_FIELD_LABEL_KEYS
+
 export const NAI_MODEL_OPTIONS = [
   { value: 'nai-diffusion-4-5-curated', label: 'NAI Diffusion 4.5 Curated' },
   { value: 'nai-diffusion-4-5-full', label: 'NAI Diffusion 4.5 Full' },
@@ -814,45 +842,46 @@ export function buildNaiModuleSnapshot(form: NAIFormDraft) {
 }
 
 /** Build candidate module inputs from the current NAI form mode. */
-export function buildNaiModuleFieldOptions(form: NAIFormDraft): ModuleFieldOption[] {
+export function buildNaiModuleFieldOptions(form: NAIFormDraft, t: TranslateResource): ModuleFieldOption[] {
+  const label = (key: NaiModuleFieldLabelKey) => t(NAI_MODULE_FIELD_LABEL_KEYS[key])
   const options: ModuleFieldOption[] = [
-    { key: 'prompt', label: '프롬프트', dataType: 'prompt' },
-    { key: 'negative_prompt', label: '네거티브 프롬프트', dataType: 'prompt' },
-    { key: 'model', label: '모델', dataType: 'text', options: NAI_MODEL_OPTIONS.map((option) => option.value) },
-    { key: 'action', label: '동작', dataType: 'text', options: NAI_ACTION_OPTIONS.map((option) => option.value) },
-    { key: 'sampler', label: '샘플러', dataType: 'text', options: NAI_SAMPLER_OPTIONS.map((option) => option.value) },
-    { key: 'noise_schedule', label: '스케줄러', dataType: 'text', options: NAI_SCHEDULER_OPTIONS.map((option) => option.value) },
-    { key: 'width', label: '너비', dataType: 'number' },
-    { key: 'height', label: '높이', dataType: 'number' },
-    { key: 'steps', label: '스텝', dataType: 'number' },
-    { key: 'scale', label: 'CFG 스케일', dataType: 'number' },
-    { key: 'n_samples', label: '샘플 수', dataType: 'number' },
-    { key: 'seed', label: '시드', dataType: 'number' },
-    { key: 'variety_plus', label: '버라이어티+', dataType: 'boolean' },
+    { key: 'prompt', label: label('prompt'), dataType: 'prompt' },
+    { key: 'negative_prompt', label: label('negativePrompt'), dataType: 'prompt' },
+    { key: 'model', label: label('model'), dataType: 'text', options: NAI_MODEL_OPTIONS.map((option) => option.value) },
+    { key: 'action', label: label('action'), dataType: 'text', options: NAI_ACTION_OPTIONS.map((option) => option.value) },
+    { key: 'sampler', label: label('sampler'), dataType: 'text', options: NAI_SAMPLER_OPTIONS.map((option) => option.value) },
+    { key: 'noise_schedule', label: label('scheduler'), dataType: 'text', options: NAI_SCHEDULER_OPTIONS.map((option) => option.value) },
+    { key: 'width', label: label('width'), dataType: 'number' },
+    { key: 'height', label: label('height'), dataType: 'number' },
+    { key: 'steps', label: label('steps'), dataType: 'number' },
+    { key: 'scale', label: label('scale'), dataType: 'number' },
+    { key: 'n_samples', label: label('samples'), dataType: 'number' },
+    { key: 'seed', label: label('seed'), dataType: 'number' },
+    { key: 'variety_plus', label: label('varietyPlus'), dataType: 'boolean' },
   ]
 
   if (supportsNaiCharacterPrompts(form.model)) {
-    options.push({ key: 'characters', label: '캐릭터 프롬프트', dataType: 'json' })
+    options.push({ key: 'characters', label: label('characters'), dataType: 'json' })
   }
 
-  options.push({ key: 'vibes', label: '바이브 전송', dataType: 'json' })
+  options.push({ key: 'vibes', label: label('vibes'), dataType: 'json' })
 
   if (supportsNaiCharacterReferences(form.model)) {
-    options.push({ key: 'character_refs', label: '캐릭터 레퍼런스', dataType: 'json' })
+    options.push({ key: 'character_refs', label: label('characterRefs'), dataType: 'json' })
   }
 
   if (form.action !== 'generate') {
     options.push(
-      { key: 'image', label: '원본 이미지', dataType: 'image' },
-      { key: 'strength', label: '강도', dataType: 'number' },
-      { key: 'noise', label: '노이즈', dataType: 'number' },
+      { key: 'image', label: label('image'), dataType: 'image' },
+      { key: 'strength', label: label('strength'), dataType: 'number' },
+      { key: 'noise', label: label('noise'), dataType: 'number' },
     )
   }
 
   if (form.action === 'infill') {
     options.push(
-      { key: 'mask', label: '마스크 이미지', dataType: 'mask' },
-      { key: 'add_original_image', label: '원본 이미지 추가', dataType: 'boolean' },
+      { key: 'mask', label: label('mask'), dataType: 'mask' },
+      { key: 'add_original_image', label: label('addOriginalImage'), dataType: 'boolean' },
     )
   }
 

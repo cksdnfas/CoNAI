@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName, AnchoredPopup } from '@/components/ui/anchored-popup'
 import { buildPromptPresetInsertionText, getPromptPresets, type PromptPresetRecord } from '@/lib/api-prompt-presets'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 import type { RefObject } from 'react'
 
 type PromptPresetTreeEntry = {
@@ -36,6 +37,7 @@ export function PromptPresetInlinePicker({
   onClose: () => void
   onInsert: (text: string) => void
 }) {
+  const { t } = useI18n()
   const presetsQuery = useQuery({
     queryKey: ['prompt-presets', 'inline-picker'],
     queryFn: () => getPromptPresets({ hierarchical: true, withItems: true }),
@@ -59,15 +61,15 @@ export function PromptPresetInlinePicker({
     <AnchoredPopup open={open} anchorRef={anchorRef} onClose={onClose} align="end" side="bottom" className="z-[170] w-[min(28rem,calc(100vw-1.5rem))] overflow-hidden p-0" closeOnBack>
       <div className={cn(anchoredPopupHeaderClassName, 'flex items-center justify-between gap-3')}>
         <div>
-          <div className={anchoredPopupLabelClassName}>프리셋</div>
-          <div className="mt-0.5 text-sm font-medium text-foreground">프롬프트에 삽입</div>
+          <div className={anchoredPopupLabelClassName}>{t('image-generation.components.prompt.preset.inline.picker.preset')}</div>
+          <div className="mt-0.5 text-sm font-medium text-foreground">{t('image-generation.components.prompt.preset.inline.picker.insert.into.prompt')}</div>
         </div>
         <Badge variant="outline">{insertableCount}</Badge>
       </div>
 
       <div className={cn(anchoredPopupBodyClassName, 'max-h-[24rem] overflow-y-auto')}>
         {presetsQuery.isLoading ? (
-          <div className="px-2 py-3 text-sm text-muted-foreground">프리셋 불러오는 중…</div>
+          <div className="px-2 py-3 text-sm text-muted-foreground">{t('image-generation.components.prompt.preset.inline.picker.loading.presets')}</div>
         ) : entries.length > 0 ? (
           <HierarchyNav
             items={entries.map((entry) => entry.preset)}
@@ -90,17 +92,17 @@ export function PromptPresetInlinePicker({
           />
         ) : (
           <div className="space-y-2 px-2 py-3 text-sm text-muted-foreground">
-            <div>저장된 프리셋이 없어.</div>
-            <div className="text-xs">Prompts &gt; 프리셋에서 먼저 만들어줘.</div>
+            <div>{t('image-generation.components.prompt.preset.inline.picker.no.saved.presets')}</div>
+            <div className="text-xs">{t('image-generation.components.prompt.preset.inline.picker.create.first.in.prompts.presets')}</div>
           </div>
         )}
 
         <div className="mt-3 border-t border-border/70 pt-3 text-xs leading-5 text-muted-foreground">
-          삽입 시 설명은 <code>//설명//</code> 주석으로 들어가고, 생성 요청 전에는 자동 제거돼.
+          {t('image-generation.components.prompt.preset.inline.picker.description.comment.prefix')} <code>{t('image-generation.components.prompt.preset.inline.picker.description.comment.token')}</code> {t('image-generation.components.prompt.preset.inline.picker.description.comment.suffix')}
         </div>
 
         <div className="mt-3 flex justify-end">
-          <Button type="button" size="sm" variant="ghost" onClick={onClose}>닫기</Button>
+          <Button type="button" size="sm" variant="ghost" onClick={onClose}>{t('image-generation.components.prompt.preset.inline.picker.close')}</Button>
         </div>
       </div>
     </AnchoredPopup>

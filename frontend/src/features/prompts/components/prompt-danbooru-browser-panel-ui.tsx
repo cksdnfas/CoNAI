@@ -418,6 +418,7 @@ export function CharacterImageCell({ item }: { item: DanbooruBrowserCharacterRec
 }
 
 export function RelatedTagsTranslationModal({ item, onClose }: { item: DanbooruBrowserCharacterRecord; onClose: () => void }) {
+  const { t } = useI18n()
   const originalText = item.relatedTags.map((tag) => tag.displayName).join(', ')
   const translatedText = item.relatedTags.map((tag) => tag.translatedName || '—').join(', ')
 
@@ -436,7 +437,7 @@ export function RelatedTagsTranslationModal({ item, onClose }: { item: DanbooruB
             <div className="whitespace-pre-wrap break-words rounded-sm border border-border/70 bg-surface-container/40 p-3 text-foreground">{originalText || '—'}</div>
           </section>
           <section>
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">한국어</div>
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t({ ko: '한국어', en: 'Korean' })}</div>
             <div className="whitespace-pre-wrap break-words rounded-sm border border-border/70 bg-surface-container/40 p-3 text-foreground">{translatedText || '—'}</div>
           </section>
         </div>
@@ -447,6 +448,7 @@ export function RelatedTagsTranslationModal({ item, onClose }: { item: DanbooruB
 }
 
 export function CharactersTable({ items, language }: { items: DanbooruBrowserCharacterRecord[]; language: string }) {
+  const { t } = useI18n()
   const [translationTarget, setTranslationTarget] = useState<DanbooruBrowserCharacterRecord | null>(null)
   const showTranslationActions = language === 'ko'
   if (items.length === 0) return <EmptyTable />
@@ -474,7 +476,7 @@ export function CharactersTable({ items, language }: { items: DanbooruBrowserCha
             </div>
             <div className="flex justify-center gap-1">
               {showTranslationActions && item.relatedTags.length > 0 ? (
-                <Button type="button" size="icon-sm" variant="outline" onClick={() => setTranslationTarget(item)} title="Related tags 번역" aria-label="Related tags 번역">
+                <Button type="button" size="icon-sm" variant="outline" onClick={() => setTranslationTarget(item)} title={t({ ko: 'Related tags 번역', en: 'Translate related tags' })} aria-label={t({ ko: 'Related tags 번역', en: 'Translate related tags' })}>
                   <Languages className="h-4 w-4" />
                 </Button>
               ) : null}

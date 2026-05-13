@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { BookmarkPlus, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { getTextSegmentSpreadsheetRows, type TextSegmentSpreadsheetValue } from './prompt-text-segment-helpers'
 import { PromptPresetInlinePicker } from './prompt-preset-inline-picker'
@@ -32,6 +33,7 @@ export function TextSegmentSpreadsheetInput({
   autocompletePromptType = 'positive',
   onChange,
 }: TextSegmentSpreadsheetInputProps) {
+  const { t } = useI18n()
   const rows = getTextSegmentSpreadsheetRows(value)
   const presetButtonRefs = useRef(new Map<number, HTMLButtonElement | null>())
   const [presetPickerRowIndex, setPresetPickerRowIndex] = useState<number | null>(null)
@@ -86,8 +88,8 @@ export function TextSegmentSpreadsheetInput({
               size="icon-sm"
               variant="ghost"
               onClick={() => setPresetPickerRowIndex((current) => current === index ? null : index)}
-              aria-label={`프롬프트 행 ${index + 1}에 프리셋 삽입`}
-              title="프리셋"
+              aria-label={t('image-generation.components.text.segment.spreadsheet.input.insert.preset.into.prompt.row', { row: index + 1 })}
+              title={t('image-generation.components.text.segment.spreadsheet.input.preset')}
               className="min-h-0 flex-[7] rounded-none px-2 text-muted-foreground"
             >
               <BookmarkPlus className="h-4 w-4" />
@@ -97,8 +99,8 @@ export function TextSegmentSpreadsheetInput({
               size="icon-sm"
               variant="ghost"
               onClick={() => handleRemoveRow(index)}
-              aria-label={`프롬프트 행 ${index + 1} 삭제`}
-              title="삭제"
+              aria-label={t('image-generation.components.text.segment.spreadsheet.input.delete.prompt.row', { row: index + 1 })}
+              title={t('image-generation.components.text.segment.spreadsheet.input.delete')}
               className="min-h-0 flex-[3] rounded-none border-t border-border/75 px-2 text-muted-foreground"
             >
               <Trash2 className="h-4 w-4" />
@@ -120,8 +122,8 @@ export function TextSegmentSpreadsheetInput({
           size="icon-sm"
           variant="ghost"
           onClick={handleAddRow}
-          aria-label="프롬프트 행 추가"
-          title="입력 행 추가"
+          aria-label={t('image-generation.components.text.segment.spreadsheet.input.add.prompt.row')}
+          title={t('image-generation.components.text.segment.spreadsheet.input.add.input.row')}
           className="h-9 w-full rounded-none"
         >
           <Plus className="h-4 w-4" />

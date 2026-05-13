@@ -12,6 +12,7 @@ import { useModuleGraphWorkspaceSync } from './use-module-graph-workspace-sync'
 import { useModuleGraphEditorShell } from './use-module-graph-editor-shell'
 import { useModuleGraphPageEditorPanels } from './use-module-graph-page-editor-panels'
 import { useModuleGraphPageActions } from './use-module-graph-page-actions'
+import { useI18n } from '@/i18n'
 
 const ModuleGraphWorkflowBrowseContentLazy = lazy(async () => {
   const module = await import('./components/module-graph-workflow-content')
@@ -32,16 +33,16 @@ type ModuleWorkflowWorkspaceProps = {
   embedded?: boolean
 }
 
-const UNSAVED_CHANGES_CONFIRM_MESSAGE = '저장하지 않은 변경사항이 있어. 이 작업을 진행하면 현재 편집 내용이 사라질 수 있어. 계속할까?'
-
 function WorkflowPageFallback() {
   return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
 }
 
 function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorkspaceProps) {
+  const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const reactFlow = useReactFlow()
   const isDesktopPageLayout = useDesktopPageLayout()
+  const unsavedChangesConfirmMessage = t('module-graph.module.graph.page.you.have.unsaved.changes.continuing.may.discard')
   const {
     workflowName,
     setWorkflowName,
@@ -178,7 +179,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     workflowView,
     shouldBlockGraphExit,
     reactFlow,
-    confirmMessage: UNSAVED_CHANGES_CONFIRM_MESSAGE,
+    confirmMessage: unsavedChangesConfirmMessage,
     setWorkflowView,
     setIsEditorSupportOpen,
     setActiveEditorSupportSection,
@@ -231,7 +232,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     handleCancelSelectedExecution,
     handleRetrySelectedExecution,
   } = useModuleGraphPageActions({
-    confirmMessage: UNSAVED_CHANGES_CONFIRM_MESSAGE,
+    confirmMessage: unsavedChangesConfirmMessage,
     reactFlow,
     isDirty,
     workflowView,
@@ -284,10 +285,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
   })
 
   const browseManageModalTitle = selectedGraphRecord
-    ? '워크플로우 설정'
+    ? t('module-graph.module.graph.page.workflow.settings')
     : selectedFolderRecord
-      ? '폴더 설정'
-      : '폴더 생성'
+      ? t('module-graph.module.graph.page.folder.settings')
+      : t('module-graph.module.graph.page.create.folder')
 
   const workflowListSidebar = (
     <ModuleGraphWorkflowListSidebar
@@ -361,10 +362,10 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     isSavingGraph,
     cancellingExecutionId,
     executionList,
-    executionListError: graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.',
+    executionListError: graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : t('module-graph.module.graph.page.failed.to.load.the.execution.list'),
     executionListIsError: graphExecutionsQuery.isError,
     executionDetail: executionDetailQuery.data,
-    executionDetailError: executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.',
+    executionDetailError: executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : t('module-graph.module.graph.page.failed.to.load.execution.details'),
     executionDetailIsError: executionDetailQuery.isError,
     selectedExecutionStatus: selectedExecution?.status ?? null,
     reactFlowColorMode,
@@ -467,13 +468,13 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             selectedExecutionId={selectedExecutionId}
             selectedExecutionStatus={selectedExecution?.status ?? null}
             executionList={executionList}
-            executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : '실행 목록을 불러오지 못했어.'}
+            executionListError={graphExecutionsQuery.error instanceof Error ? graphExecutionsQuery.error.message : t('module-graph.module.graph.page.failed.to.load.the.execution.list')}
             executionListIsError={graphExecutionsQuery.isError}
             executionDetail={executionDetailQuery.data}
-            executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : '실행 상세를 불러오지 못했어.'}
+            executionDetailError={executionDetailQuery.error instanceof Error ? executionDetailQuery.error.message : t('module-graph.module.graph.page.failed.to.load.execution.details')}
             executionDetailIsError={executionDetailQuery.isError}
             browseContent={browseContentQuery.data}
-            browseContentError={browseContentQuery.error instanceof Error ? browseContentQuery.error.message : '생성물 관리 콘텐츠를 불러오지 못했어.'}
+            browseContentError={browseContentQuery.error instanceof Error ? browseContentQuery.error.message : t('module-graph.module.graph.page.failed.to.load.output.management.content')}
             browseContentIsError={browseContentQuery.isError}
             onRefreshBrowseContent={() => browseContentQuery.refetch()}
             executingGraphId={executingGraphId}
@@ -526,7 +527,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
           isModuleLibraryOpen={isModuleLibraryOpen}
           isCustomNodeManagerOpen={isCustomNodeManagerOpen}
           modules={modules}
-          modulesErrorMessage={modulesQuery.error instanceof Error ? modulesQuery.error.message : '모듈 목록을 불러오지 못했어.'}
+          modulesErrorMessage={modulesQuery.error instanceof Error ? modulesQuery.error.message : t('module-graph.module.graph.page.failed.to.load.the.module.list')}
           modulesIsError={modulesQuery.isError}
           onCloseBrowseManage={() => setIsBrowseManageModalOpen(false)}
           onAssignWorkflowFolder={(folderId) => handleAssignSelectedWorkflowFolder(folderId)}

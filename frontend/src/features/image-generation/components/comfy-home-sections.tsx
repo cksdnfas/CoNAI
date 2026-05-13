@@ -190,7 +190,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                       <span className="font-medium text-foreground">{server.name}</span>
                       {isModalServer ? <Badge variant="outline">Modal</Badge> : null}
                       {isModalServer ? (
-                        <Badge variant="outline">자동 확인 안 함</Badge>
+                        <Badge variant="outline">{t('image-generation.components.comfy.home.sections.modal.server.auto.check.skipped')}</Badge>
                       ) : connectionStatus ? (
                         <Badge variant={connectionStatus.is_connected ? 'secondary' : 'outline'}>
                           {connectionStatus.is_connected ? t({ ko: '연결됨', en: 'Connected' }) : t({ ko: '실패', en: 'Failed' })}

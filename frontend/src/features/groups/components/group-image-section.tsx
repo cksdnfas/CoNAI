@@ -33,9 +33,9 @@ interface GroupImageSectionProps {
 }
 
 const COLLECTION_FILTER_OPTIONS = [
-  { value: 'all', icon: Images, label: '전체 이미지' },
-  { value: 'manual', icon: Pencil, label: '수동 추가만' },
-  { value: 'auto', icon: Bot, label: '자동 수집만' },
+  { value: 'all', icon: Images, labelKey: 'groups.components.group.image.section.all.images' },
+  { value: 'manual', icon: Pencil, labelKey: 'groups.components.group.image.section.manual.only' },
+  { value: 'auto', icon: Bot, labelKey: 'groups.components.group.image.section.auto.collected.only' },
 ] as const
 
 export function GroupImageSection({
@@ -84,8 +84,8 @@ export function GroupImageSection({
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {typeof onCollectionFilterChange === 'function' ? (
               <div className="flex flex-wrap items-center gap-2">
-                {COLLECTION_FILTER_OPTIONS.map(({ value, icon: Icon, label }) => {
-                  const translatedLabel = t({ ko: label, en: value === 'all' ? 'All images' : value === 'manual' ? 'Manual only' : 'Auto-collected only' })
+                {COLLECTION_FILTER_OPTIONS.map(({ value, icon: Icon, labelKey }) => {
+                  const translatedLabel = t(labelKey)
                   return (
                   <Button
                     key={value}

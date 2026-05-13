@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SettingsField, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 import { ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react'
 
 type ComfyWorkflowMarkedFieldsEditorProps = {
@@ -58,6 +59,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
   onFieldExpandToggle,
   onReorderMarkedField,
 }: ComfyWorkflowMarkedFieldsEditorProps) {
+  const { t } = useI18n()
   const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null)
   const [dragOverFieldId, setDragOverFieldId] = useState<string | null>(null)
 
@@ -115,8 +117,8 @@ export function ComfyWorkflowMarkedFieldsEditor({
                     onDragStart={handleFieldDragStart(field.id)}
                     onDragEnd={handleFieldDragEnd}
                     className="mt-0.5 inline-flex shrink-0 cursor-grab items-center justify-center rounded-sm border border-border/70 bg-background/60 p-1 text-muted-foreground hover:bg-surface-high hover:text-foreground"
-                    aria-label="드래그해서 순서 바꾸기"
-                    title="드래그해서 순서 바꾸기"
+                    aria-label={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.to.reorder')}
+                    title={t('image-generation.components.comfy.workflow.marked.fields.editor.drag.to.reorder')}
                   >
                     <GripVertical className="h-4 w-4" />
                   </button>
@@ -134,14 +136,14 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         <span className="truncate text-sm font-medium text-foreground">{field.label || field.id}</span>
                         <Badge variant="outline">{formatMarkedFieldTypeLabel(field)}</Badge>
                         {field.required ? <Badge variant="outline">required</Badge> : null}
-                        {field.default_collapsed ? <Badge variant="secondary">기본 접기</Badge> : null}
+                        {field.default_collapsed ? <Badge variant="secondary">{t('image-generation.components.comfy.workflow.marked.fields.editor.collapsed.by.default')}</Badge> : null}
                       </div>
                       <div className="truncate text-[11px] text-muted-foreground">{field.jsonPath}</div>
                     </div>
                   </button>
 
                   <div className="flex items-center gap-2">
-                    <Button type="button" size="icon-sm" variant="outline" onClick={() => onFieldRemove(field.id)} aria-label="필드 제거" title="필드 제거">
+                    <Button type="button" size="icon-sm" variant="outline" onClick={() => onFieldRemove(field.id)} aria-label={t('image-generation.components.comfy.workflow.marked.fields.editor.remove.field')} title={t('image-generation.components.comfy.workflow.marked.fields.editor.remove.field')}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -150,11 +152,11 @@ export function ComfyWorkflowMarkedFieldsEditor({
                 {isExpanded ? (
                   <div className="space-y-4 border-t border-border/70 bg-background/35 px-3 py-3">
                     <div className="grid gap-3 md:grid-cols-2">
-                      <SettingsField label="라벨">
+                      <SettingsField label={t('image-generation.components.comfy.workflow.marked.fields.editor.label')}>
                         <Input variant="settings" value={field.label} onChange={(event) => onFieldPatch(field.id, { label: event.target.value })} />
                       </SettingsField>
 
-                      <SettingsField label="타입">
+                      <SettingsField label={t('image-generation.components.comfy.workflow.marked.fields.editor.type')}>
                         <Select
                           variant="settings"
                           value={field.type}
@@ -170,7 +172,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                         </Select>
                       </SettingsField>
 
-                      <SettingsField label="설명" className="md:col-span-2">
+                      <SettingsField label={t('image-generation.components.comfy.workflow.marked.fields.editor.description')} className="md:col-span-2">
                         <Input variant="settings" value={field.description ?? ''} onChange={(event) => onFieldPatch(field.id, { description: event.target.value })} />
                       </SettingsField>
 
@@ -227,7 +229,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                           checked={field.default_collapsed === true}
                           onChange={(event) => onFieldPatch(field.id, { default_collapsed: event.target.checked })}
                         />
-                        생성 화면 기본 접기
+                        {t('image-generation.components.comfy.workflow.marked.fields.editor.collapsed.on.generation.screen')}
                       </SettingsToggleRow>
 
                       {field.type === 'image' ? (
@@ -237,7 +239,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             checked={field.simple_upload_only === true}
                             onChange={(event) => onFieldPatch(field.id, { simple_upload_only: event.target.checked })}
                           />
-                          심플 업로드 모드
+                          {t('image-generation.components.comfy.workflow.marked.fields.editor.simple.upload.mode')}
                         </SettingsToggleRow>
                       ) : null}
                     </div>
@@ -250,7 +252,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             type="number"
                             value={field.min ?? ''}
                             onChange={(event) => onFieldPatch(field.id, { min: parseOptionalNumberInput(event.target.value) })}
-                            placeholder="없음"
+                            placeholder={t('image-generation.components.comfy.workflow.marked.fields.editor.none')}
                           />
                         </SettingsField>
 
@@ -260,7 +262,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             type="number"
                             value={field.max ?? ''}
                             onChange={(event) => onFieldPatch(field.id, { max: parseOptionalNumberInput(event.target.value) })}
-                            placeholder="없음"
+                            placeholder={t('image-generation.components.comfy.workflow.marked.fields.editor.none')}
                           />
                         </SettingsField>
 
@@ -286,7 +288,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                             value={field.dropdown_list_name ?? ''}
                             onChange={(event) => onFieldPatch(field.id, { dropdown_list_name: event.target.value || undefined })}
                           >
-                            <option value="">없음</option>
+                            <option value="">{t('image-generation.components.comfy.workflow.marked.fields.editor.none')}</option>
                             {dropdownListNames.map((name) => (
                               <option key={name} value={name}>
                                 {name}
@@ -295,7 +297,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
                           </Select>
                         </SettingsField>
 
-                        <SettingsField label="직접 옵션">
+                        <SettingsField label={t('image-generation.components.comfy.workflow.marked.fields.editor.manual.options')}>
                           <Input
                             variant="settings"
                             value={(field.options ?? []).join(', ')}
@@ -312,7 +314,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
           })}
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">아직 추가된 Marked Field가 없어.</div>
+        <div className="text-sm text-muted-foreground">{t('image-generation.components.comfy.workflow.marked.fields.editor.no.marked.fields.have.been.added.yet')}</div>
       )}
     </SettingsSection>
   )
