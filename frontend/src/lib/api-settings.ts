@@ -1,4 +1,5 @@
 import { buildApiUrl, fetchJson } from '@/lib/api-client'
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import type { ApiResponse } from '@/types/image'
 import type {
   AppearanceSettings,
@@ -121,7 +122,7 @@ export interface MetadataReextractAllResult {
 export async function getAppSettings() {
   const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings')
   if (!response.success) {
-    throw new Error(response.error || '설정을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.app.load')
   }
   return response.data
 }
@@ -129,7 +130,7 @@ export async function getAppSettings() {
 export async function getPublicAppearanceSettings() {
   const response = await fetchJson<ApiResponse<AppearanceSettings>>('/api/settings/appearance-public')
   if (!response.success) {
-    throw new Error(response.error || '공용 화면 설정을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.appearancePublic.load')
   }
   return response.data
 }
@@ -137,7 +138,7 @@ export async function getPublicAppearanceSettings() {
 export async function getRuntimeSimilaritySettings() {
   const response = await fetchJson<ApiResponse<SimilaritySettings>>('/api/runtime-media-settings/similarity')
   if (!response.success) {
-    throw new Error(response.error || '런타임 유사도 설정을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.runtimeSimilarity.load')
   }
   return response.data
 }
@@ -145,7 +146,7 @@ export async function getRuntimeSimilaritySettings() {
 export async function getWallpaperRuntimeSettings() {
   const response = await fetchJson<ApiResponse<WallpaperRuntimeSettings>>('/api/wallpaper-runtime/settings')
   if (!response.success) {
-    throw new Error(response.error || '월페이퍼 라이브 설정을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.wallpaperRuntime.load')
   }
   return response.data
 }
@@ -156,7 +157,7 @@ export async function runFileVerification() {
   })
 
   if (!response.success || !response.result) {
-    throw new Error(response.error || '파일 검증을 실행하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.fileVerification.run')
   }
 
   return response.result
@@ -172,7 +173,7 @@ export async function updateGeneralSettings(settings: Partial<GeneralSettings>) 
   })
 
   if (!response.success) {
-    throw new Error(response.error || '일반 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.general.update')
   }
 
   return response.data
@@ -188,7 +189,7 @@ export async function updateMetadataSettings(settings: Partial<MetadataExtractio
   })
 
   if (!response.success) {
-    throw new Error(response.error || '메타데이터 추출 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.metadata.update')
   }
 
   return response.data
@@ -200,7 +201,7 @@ export async function reextractAllImageMetadata() {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '전체 메타데이터 재추출을 시작하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.metadata.reextractAll')
   }
 
   return response.data
@@ -216,7 +217,7 @@ export async function updateAppearanceSettings(settings: Partial<AppearanceSetti
   })
 
   if (!response.success) {
-    throw new Error(response.error || '화면 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.appearance.update')
   }
 
   return response.data
@@ -232,7 +233,7 @@ export async function updateImageSaveSettings(settings: Partial<ImageSaveSetting
   })
 
   if (!response.success) {
-    throw new Error(response.error || '이미지 저장 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.imageSave.update')
   }
 
   return response.data
@@ -248,7 +249,7 @@ export async function updateGenerationThrottleSettings(settings: Partial<Generat
   })
 
   if (!response.success) {
-    throw new Error(response.error || '생성 텀 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.generationThrottle.update')
   }
 
   return response.data
@@ -264,7 +265,7 @@ export async function updateVideoOptimizationSettings(settings: Partial<VideoOpt
   })
 
   if (!response.success) {
-    throw new Error(response.error || '비디오 최적화 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.videoOptimization.update')
   }
 
   return response.data
@@ -280,7 +281,7 @@ export async function updateLlmSettings(settings: Partial<LlmSettings>) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || 'LLM 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.llm.update')
   }
 
   return response.data
@@ -289,7 +290,7 @@ export async function updateLlmSettings(settings: Partial<LlmSettings>) {
 export async function getLlmPresetOptions() {
   const response = await fetchJson<ApiResponse<LlmPresetOptionCollections>>('/api/settings/llm-presets/options')
   if (!response.success) {
-    throw new Error(response.error || 'LLM 프리셋 목록을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.llmPresets.load')
   }
   return response.data
 }
@@ -310,7 +311,7 @@ export async function uploadAppearanceFont(file: File, target: 'sans' | 'mono') 
 
   const payload = (await response.json()) as ApiResponse<AppearanceFontUploadResult>
   if (!response.ok || !payload.success) {
-    throw new Error(payload.error || '커스텀 폰트 업로드에 실패했어.')
+    throw createApiFallbackError(payload.error, 'settings.appearanceFont.upload')
   }
 
   return payload.data
@@ -326,7 +327,7 @@ export async function updateTaggerSettings(settings: Partial<TaggerSettings>) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '태거 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.tagger.update')
   }
 
   return response.data
@@ -335,7 +336,7 @@ export async function updateTaggerSettings(settings: Partial<TaggerSettings>) {
 export async function getTaggerModels() {
   const response = await fetchJson<ApiResponse<TaggerModelInfo[]>>('/api/settings/tagger/models')
   if (!response.success) {
-    throw new Error(response.error || '태거 모델 목록을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.taggerModels.load')
   }
   return response.data
 }
@@ -343,7 +344,7 @@ export async function getTaggerModels() {
 export async function getTaggerStatus() {
   const response = await fetchJson<ApiResponse<TaggerServerStatus>>('/api/settings/tagger/status')
   if (!response.success) {
-    throw new Error(response.error || '태거 상태를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.taggerStatus.load')
   }
   return response.data
 }
@@ -353,7 +354,7 @@ export async function checkTaggerDependencies() {
     method: 'POST',
   })
   if (!response.success) {
-    throw new Error(response.error || '태거 의존성을 확인하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.taggerDependencies.check')
   }
   return response.data
 }
@@ -368,7 +369,7 @@ export async function updateKaloscopeSettings(settings: Partial<KaloscopeSetting
   })
 
   if (!response.success) {
-    throw new Error(response.error || 'Kaloscope 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.kaloscope.update')
   }
 
   return response.data
@@ -377,7 +378,7 @@ export async function updateKaloscopeSettings(settings: Partial<KaloscopeSetting
 export async function getRatingWeights() {
   const response = await fetchJson<ApiResponse<RatingWeightsRecord>>('/api/settings/rating/weights')
   if (!response.success || !response.data) {
-    throw new Error(response.error || '평가 가중치를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.ratingWeights.load')
   }
   return response.data
 }
@@ -392,7 +393,7 @@ export async function updateRatingWeights(weights: Partial<Pick<RatingWeightsRec
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '평가 가중치를 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.ratingWeights.update')
   }
 
   return response.data
@@ -408,7 +409,7 @@ export async function updateRatingTiers(tiers: RatingTierUpdateInput[]) {
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '평가 등급 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.ratingTiers.update')
   }
 
   return response.data
@@ -417,7 +418,7 @@ export async function updateRatingTiers(tiers: RatingTierUpdateInput[]) {
 export async function getKaloscopeStatus() {
   const response = await fetchJson<ApiResponse<KaloscopeServerStatus>>('/api/settings/kaloscope/status')
   if (!response.success) {
-    throw new Error(response.error || 'Kaloscope 상태를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.kaloscopeStatus.load')
   }
   return response.data
 }
@@ -425,7 +426,7 @@ export async function getKaloscopeStatus() {
 export async function resolveAutoTestMedia(imageId: string) {
   const response = await fetchJson<ApiResponse<AutoTestMediaRecord>>(`/api/settings/auto-test/media/${encodeURIComponent(imageId)}`)
   if (!response.success) {
-    throw new Error(response.error || '테스트 대상을 찾지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.autoTestMedia.resolve')
   }
   return response.data
 }
@@ -433,7 +434,7 @@ export async function resolveAutoTestMedia(imageId: string) {
 export async function getRandomAutoTestMedia() {
   const response = await fetchJson<ApiResponse<AutoTestMediaRecord>>('/api/settings/auto-test/random')
   if (!response.success) {
-    throw new Error(response.error || '랜덤 테스트 대상을 고르지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.autoTestMedia.random')
   }
   return response.data
 }
@@ -447,7 +448,7 @@ export async function runTaggerAutoTest(imageId: string) {
     body: JSON.stringify({ imageId }),
   })
   if (!response.success) {
-    throw new Error(response.error || '태거 테스트에 실패했어.')
+    throw createApiFallbackError(response.error, 'settings.taggerAutoTest.run')
   }
   return response.data
 }
@@ -461,7 +462,7 @@ export async function runKaloscopeAutoTest(imageId: string) {
     body: JSON.stringify({ imageId }),
   })
   if (!response.success) {
-    throw new Error(response.error || 'Kaloscope 테스트에 실패했어.')
+    throw createApiFallbackError(response.error, 'settings.kaloscopeAutoTest.run')
   }
   return response.data
 }
@@ -480,7 +481,7 @@ export async function updateSimilaritySettings(settings: SimilaritySettingsUpdat
   })
 
   if (!response.success) {
-    throw new Error(response.error || '유사도 설정을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'settings.similarity.update')
   }
 
   return response.data

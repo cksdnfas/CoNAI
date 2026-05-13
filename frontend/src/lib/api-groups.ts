@@ -1,4 +1,5 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
 import type { ApiResponse, ImageRecord } from '@/types/image'
 import type {
@@ -48,7 +49,7 @@ function normalizeGroupFileCounts(counts: GroupFileCounts): GroupFileCounts {
 export async function getGroupsHierarchyAll() {
   const response = await fetchJson<ApiResponse<GroupWithHierarchy[]>>('/api/groups/hierarchy/all')
   if (!response.success) {
-    throw new Error(response.error || '그룹 계층을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.hierarchy.load')
   }
   return response.data.map(normalizeGroupWithHierarchy)
 }
@@ -56,7 +57,7 @@ export async function getGroupsHierarchyAll() {
 export async function getGroup(groupId: number) {
   const response = await fetchJson<ApiResponse<GroupRecord>>(`/api/groups/${groupId}`)
   if (!response.success) {
-    throw new Error(response.error || '그룹 정보를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.detail.load')
   }
   return normalizeGroupRecord(response.data)
 }
@@ -64,7 +65,7 @@ export async function getGroup(groupId: number) {
 export async function getGroupBreadcrumb(groupId: number) {
   const response = await fetchJson<ApiResponse<GroupBreadcrumbItem[]>>(`/api/groups/${groupId}/breadcrumb`)
   if (!response.success) {
-    throw new Error(response.error || '그룹 경로를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.breadcrumb.load')
   }
   return response.data
 }
@@ -79,7 +80,7 @@ export async function getGroupImages(groupId: number, params?: { page?: number; 
 
   const response = await fetchJson<ApiResponse<GroupImagesPayload>>(`/api/groups/${groupId}/images?${searchParams.toString()}`)
   if (!response.success) {
-    throw new Error(response.error || '그룹 이미지를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.images.load')
   }
   return response.data
 }
@@ -94,7 +95,7 @@ export async function createGroup(input: GroupMutationInput) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '그룹을 만들지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.create')
   }
 
   return response.data
@@ -110,7 +111,7 @@ export async function updateGroup(groupId: number, input: Partial<GroupMutationI
   })
 
   if (!response.success) {
-    throw new Error(response.error || '그룹을 수정하지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.update')
   }
 
   return response.data
@@ -128,7 +129,7 @@ export async function deleteGroup(groupId: number, options?: { cascade?: boolean
   })
 
   if (!response.success) {
-    throw new Error(response.error || '그룹을 삭제하지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.delete')
   }
 
   return response.data
@@ -144,7 +145,7 @@ export async function addImageToGroup(groupId: number, compositeHash: string) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '이미지를 그룹에 추가하지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.image.add')
   }
 
   return response.data
@@ -160,7 +161,7 @@ export async function addImagesToGroup(groupId: number, compositeHashes: string[
   })
 
   if (!response.success) {
-    throw new Error(response.error || '이미지를 그룹에 추가하지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.image.add')
   }
 
   return response.data
@@ -176,7 +177,7 @@ export async function removeImagesFromGroup(groupId: number, compositeHashes: st
   })
 
   if (!response.success) {
-    throw new Error(response.error || '이미지를 그룹에서 제거하지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.images.remove')
   }
 
   return response.data
@@ -188,7 +189,7 @@ export async function runGroupAutoCollect(groupId: number) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '자동수집을 실행하지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.autoCollect.run')
   }
 
   return response.data
@@ -200,7 +201,7 @@ export async function runAllGroupsAutoCollect() {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '전체 자동수집을 실행하지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.autoCollectAll.run')
   }
 
   return response.data
@@ -210,7 +211,7 @@ export async function getGroupFileCounts(groupId: number) {
   const response = await fetchJson<ApiResponse<GroupFileCounts>>(`/api/groups/${groupId}/file-counts`)
 
   if (!response.success) {
-    throw new Error(response.error || '그룹 다운로드 가능 파일 수를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.fileCounts.load')
   }
 
   return normalizeGroupFileCounts(response.data)
@@ -224,7 +225,7 @@ export async function getGroupPreviewImages(groupId: number, params?: { includeC
   const response = await fetchJson<ApiResponse<ImageRecord[]>>(`/api/groups/${groupId}/preview-images?${searchParams.toString()}`)
 
   if (!response.success) {
-    throw new Error(response.error || '그룹 미리보기를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'groups.preview.load')
   }
 
   return response.data

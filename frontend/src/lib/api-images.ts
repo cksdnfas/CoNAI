@@ -1,4 +1,5 @@
 import { buildApiUrl, fetchJson, triggerBlobDownload, triggerBrowserDownload } from '@/lib/api-client'
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { getDownloadFileName } from '@/lib/download-utils'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@/types/settings'
@@ -26,7 +27,7 @@ export async function getImages(params?: { page?: number; limit?: number }) {
 
   const response = await fetchJson<ApiResponse<ImageListPayload>>(`/api/images?${searchParams.toString()}`)
   if (!response.success) {
-    throw new Error(response.error || '이미지 목록을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'images.list.load')
   }
   return response.data
 }
@@ -41,7 +42,7 @@ export async function searchImagesComplex(input: ComplexImageSearchRequest) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '검색 결과를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'images.search.load')
   }
 
   return {
@@ -53,7 +54,7 @@ export async function searchImagesComplex(input: ComplexImageSearchRequest) {
 export async function getImage(compositeHash: string) {
   const response = await fetchJson<ApiResponse<ImageRecord>>(`/api/images/${compositeHash}`)
   if (!response.success) {
-    throw new Error(response.error || '이미지를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'images.detail.load')
   }
   return response.data
 }
@@ -92,7 +93,7 @@ export async function deleteImagesBulk(compositeHashes: string[]) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '이미지 삭제에 실패했어.')
+    throw createApiFallbackError(response.error, 'images.bulkDelete')
   }
 
   return response.data
@@ -101,7 +102,7 @@ export async function deleteImagesBulk(compositeHashes: string[]) {
 export async function getImageDuplicates(compositeHash: string, threshold = 5) {
   const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/duplicates?threshold=${threshold}`)
   if (!response.success) {
-    throw new Error(response.error || '중복 이미지를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'images.duplicates.load')
   }
   return response.data
 }
@@ -143,7 +144,7 @@ export async function getSimilarImages(
 
   const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/similar?${searchParams.toString()}`)
   if (!response.success) {
-    throw new Error(response.error || '유사 이미지를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'images.similar.load')
   }
   return response.data
 }
@@ -157,7 +158,7 @@ export async function getPromptSimilarImages(compositeHash: string, limit?: numb
   const query = searchParams.toString()
   const response = await fetchJson<ApiResponse<PromptSimilarityQueryResult>>(`/api/images/prompt-similarity/by-image/${compositeHash}${query ? `?${query}` : ''}`)
   if (!response.success) {
-    throw new Error(response.error || '텍스트 기반 유사 이미지를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'images.promptSimilar.load')
   }
   return response.data
 }
@@ -195,7 +196,7 @@ export async function saveEditedImageToCanvas(
   })
 
   if (!response.success) {
-    throw new Error(response.error || '편집 이미지를 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'images.edit.save')
   }
 
   const normalizedPath = response.data.filePath.replace(/\\/g, '/')

@@ -1,0 +1,257 @@
+export const API_ERROR_FALLBACKS = {
+  'groups.hierarchy.load': {
+    ko: '그룹 계층을 불러오지 못했어.',
+    en: 'Failed to load the group hierarchy.',
+  },
+  'groups.detail.load': {
+    ko: '그룹 정보를 불러오지 못했어.',
+    en: 'Failed to load the group details.',
+  },
+  'groups.breadcrumb.load': {
+    ko: '그룹 경로를 불러오지 못했어.',
+    en: 'Failed to load the group path.',
+  },
+  'groups.images.load': {
+    ko: '그룹 이미지를 불러오지 못했어.',
+    en: 'Failed to load group images.',
+  },
+  'groups.create': {
+    ko: '그룹을 만들지 못했어.',
+    en: 'Failed to create the group.',
+  },
+  'groups.update': {
+    ko: '그룹을 수정하지 못했어.',
+    en: 'Failed to update the group.',
+  },
+  'groups.delete': {
+    ko: '그룹을 삭제하지 못했어.',
+    en: 'Failed to delete the group.',
+  },
+  'groups.image.add': {
+    ko: '이미지를 그룹에 추가하지 못했어.',
+    en: 'Failed to add the image to the group.',
+  },
+  'groups.images.remove': {
+    ko: '이미지를 그룹에서 제거하지 못했어.',
+    en: 'Failed to remove images from the group.',
+  },
+  'groups.autoCollect.run': {
+    ko: '자동수집을 실행하지 못했어.',
+    en: 'Failed to run auto-collect.',
+  },
+  'groups.autoCollectAll.run': {
+    ko: '전체 자동수집을 실행하지 못했어.',
+    en: 'Failed to run auto-collect for all groups.',
+  },
+  'groups.fileCounts.load': {
+    ko: '그룹 다운로드 가능 파일 수를 불러오지 못했어.',
+    en: 'Failed to load the downloadable file count for the group.',
+  },
+  'groups.preview.load': {
+    ko: '그룹 미리보기를 불러오지 못했어.',
+    en: 'Failed to load the group preview.',
+  },
+  'images.list.load': {
+    ko: '이미지 목록을 불러오지 못했어.',
+    en: 'Failed to load the image list.',
+  },
+  'images.search.load': {
+    ko: '검색 결과를 불러오지 못했어.',
+    en: 'Failed to load search results.',
+  },
+  'images.detail.load': {
+    ko: '이미지를 불러오지 못했어.',
+    en: 'Failed to load the image.',
+  },
+  'images.bulkDelete': {
+    ko: '이미지 삭제에 실패했어.',
+    en: 'Failed to delete images.',
+  },
+  'images.duplicates.load': {
+    ko: '중복 이미지를 불러오지 못했어.',
+    en: 'Failed to load duplicate images.',
+  },
+  'images.similar.load': {
+    ko: '유사 이미지를 불러오지 못했어.',
+    en: 'Failed to load similar images.',
+  },
+  'images.promptSimilar.load': {
+    ko: '텍스트 기반 유사 이미지를 불러오지 못했어.',
+    en: 'Failed to load text-based similar images.',
+  },
+  'images.edit.save': {
+    ko: '편집 이미지를 저장하지 못했어.',
+    en: 'Failed to save the edited image.',
+  },
+  'settings.app.load': {
+    ko: '설정을 불러오지 못했어.',
+    en: 'Failed to load settings.',
+  },
+  'settings.appearancePublic.load': {
+    ko: '공용 화면 설정을 불러오지 못했어.',
+    en: 'Failed to load public appearance settings.',
+  },
+  'settings.runtimeSimilarity.load': {
+    ko: '런타임 유사도 설정을 불러오지 못했어.',
+    en: 'Failed to load runtime similarity settings.',
+  },
+  'settings.wallpaperRuntime.load': {
+    ko: '월페이퍼 라이브 설정을 불러오지 못했어.',
+    en: 'Failed to load wallpaper live settings.',
+  },
+  'settings.fileVerification.run': {
+    ko: '파일 검증을 실행하지 못했어.',
+    en: 'Failed to run file verification.',
+  },
+  'settings.general.update': {
+    ko: '일반 설정을 저장하지 못했어.',
+    en: 'Failed to save general settings.',
+  },
+  'settings.metadata.update': {
+    ko: '메타데이터 추출 설정을 저장하지 못했어.',
+    en: 'Failed to save metadata extraction settings.',
+  },
+  'settings.metadata.reextractAll': {
+    ko: '전체 메타데이터 재추출을 시작하지 못했어.',
+    en: 'Failed to start metadata re-extraction for all images.',
+  },
+  'settings.appearance.update': {
+    ko: '화면 설정을 저장하지 못했어.',
+    en: 'Failed to save appearance settings.',
+  },
+  'settings.imageSave.update': {
+    ko: '이미지 저장 설정을 저장하지 못했어.',
+    en: 'Failed to save image save settings.',
+  },
+  'settings.generationThrottle.update': {
+    ko: '생성 텀 설정을 저장하지 못했어.',
+    en: 'Failed to save generation throttle settings.',
+  },
+  'settings.videoOptimization.update': {
+    ko: '비디오 최적화 설정을 저장하지 못했어.',
+    en: 'Failed to save video optimization settings.',
+  },
+  'settings.llm.update': {
+    ko: 'LLM 설정을 저장하지 못했어.',
+    en: 'Failed to save LLM settings.',
+  },
+  'settings.llmPresets.load': {
+    ko: 'LLM 프리셋 목록을 불러오지 못했어.',
+    en: 'Failed to load LLM presets.',
+  },
+  'settings.appearanceFont.upload': {
+    ko: '커스텀 폰트 업로드에 실패했어.',
+    en: 'Failed to upload the custom font.',
+  },
+  'settings.tagger.update': {
+    ko: '태거 설정을 저장하지 못했어.',
+    en: 'Failed to save tagger settings.',
+  },
+  'settings.taggerModels.load': {
+    ko: '태거 모델 목록을 불러오지 못했어.',
+    en: 'Failed to load tagger models.',
+  },
+  'settings.taggerStatus.load': {
+    ko: '태거 상태를 불러오지 못했어.',
+    en: 'Failed to load tagger status.',
+  },
+  'settings.taggerDependencies.check': {
+    ko: '태거 의존성을 확인하지 못했어.',
+    en: 'Failed to check tagger dependencies.',
+  },
+  'settings.kaloscope.update': {
+    ko: 'Kaloscope 설정을 저장하지 못했어.',
+    en: 'Failed to save Kaloscope settings.',
+  },
+  'settings.ratingWeights.load': {
+    ko: '평가 가중치를 불러오지 못했어.',
+    en: 'Failed to load rating weights.',
+  },
+  'settings.ratingWeights.update': {
+    ko: '평가 가중치를 저장하지 못했어.',
+    en: 'Failed to save rating weights.',
+  },
+  'settings.ratingTiers.update': {
+    ko: '평가 등급 설정을 저장하지 못했어.',
+    en: 'Failed to save rating tier settings.',
+  },
+  'settings.kaloscopeStatus.load': {
+    ko: 'Kaloscope 상태를 불러오지 못했어.',
+    en: 'Failed to load Kaloscope status.',
+  },
+  'settings.autoTestMedia.resolve': {
+    ko: '테스트 대상을 찾지 못했어.',
+    en: 'Could not find the test target.',
+  },
+  'settings.autoTestMedia.random': {
+    ko: '랜덤 테스트 대상을 고르지 못했어.',
+    en: 'Could not choose a random test target.',
+  },
+  'settings.taggerAutoTest.run': {
+    ko: '태거 테스트에 실패했어.',
+    en: 'Tagger test failed.',
+  },
+  'settings.kaloscopeAutoTest.run': {
+    ko: 'Kaloscope 테스트에 실패했어.',
+    en: 'Kaloscope test failed.',
+  },
+  'settings.similarity.update': {
+    ko: '유사도 설정을 저장하지 못했어.',
+    en: 'Failed to save similarity settings.',
+  },
+} as const
+
+export type ApiErrorFallbackKey = keyof typeof API_ERROR_FALLBACKS
+export type ApiErrorFallbackLanguage = keyof (typeof API_ERROR_FALLBACKS)[ApiErrorFallbackKey]
+
+const FALLBACK_LANGUAGE: ApiErrorFallbackLanguage = 'ko'
+const LANGUAGE_STORAGE_KEY = 'conai.language'
+
+function normalizeApiErrorFallbackLanguage(value: unknown): ApiErrorFallbackLanguage | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = value.trim().toLowerCase()
+  if (normalized.startsWith('en')) {
+    return 'en'
+  }
+  if (normalized.startsWith('ko')) {
+    return 'ko'
+  }
+  return null
+}
+
+function readStoredApiErrorFallbackLanguage(): ApiErrorFallbackLanguage {
+  if (typeof window === 'undefined') {
+    return FALLBACK_LANGUAGE
+  }
+
+  try {
+    return normalizeApiErrorFallbackLanguage(window.localStorage.getItem(LANGUAGE_STORAGE_KEY)) ?? FALLBACK_LANGUAGE
+  } catch {
+    return FALLBACK_LANGUAGE
+  }
+}
+
+export function getApiErrorFallbackMessage(fallbackKey: ApiErrorFallbackKey, language = readStoredApiErrorFallbackLanguage()) {
+  const fallback = API_ERROR_FALLBACKS[fallbackKey]
+  return fallback[language] ?? fallback[FALLBACK_LANGUAGE]
+}
+
+export class ApiFallbackError extends Error {
+  readonly fallbackKey: ApiErrorFallbackKey
+  readonly backendMessage: string | null
+
+  constructor(backendMessage: unknown, fallbackKey: ApiErrorFallbackKey) {
+    const normalizedBackendMessage = typeof backendMessage === 'string' && backendMessage.trim().length > 0 ? backendMessage : null
+    super(normalizedBackendMessage ?? getApiErrorFallbackMessage(fallbackKey))
+    this.name = 'ApiFallbackError'
+    this.fallbackKey = fallbackKey
+    this.backendMessage = normalizedBackendMessage
+  }
+}
+
+export function createApiFallbackError(backendMessage: unknown, fallbackKey: ApiErrorFallbackKey) {
+  return new ApiFallbackError(backendMessage, fallbackKey)
+}
