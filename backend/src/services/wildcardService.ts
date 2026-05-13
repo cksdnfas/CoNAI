@@ -43,14 +43,65 @@ export class WildcardService {
    * @param tool 사용할 도구
    * @returns 파싱된 텍스트
    */
+  private static splitChainTokens(text: string): string[] {
+    const tokens: string[] = [];
+    let current = '';
+    const bracketStack: string[] = [];
+    let isEscaped = false;
+
+    const openToClose: Record<string, string> = {
+      '(': ')',
+      '[': ']',
+      '{': '}'
+    };
+    const closingBrackets = new Set(Object.values(openToClose));
+
+    for (const character of text) {
+      if (isEscaped) {
+        current += character;
+        isEscaped = false;
+        continue;
+      }
+
+      if (character === '\\') {
+        current += character;
+        isEscaped = true;
+        continue;
+      }
+
+      if (character in openToClose) {
+        bracketStack.push(openToClose[character]);
+        current += character;
+        continue;
+      }
+
+      if (closingBrackets.has(character)) {
+        if (bracketStack[bracketStack.length - 1] === character) {
+          bracketStack.pop();
+        }
+        current += character;
+        continue;
+      }
+
+      if (character === ',' && bracketStack.length === 0) {
+        tokens.push(current.trim());
+        current = '';
+        continue;
+      }
+
+      current += character;
+    }
+
+    tokens.push(current.trim());
+    return tokens;
+  }
+
   private static parseChains(
     text: string,
     wildcardMap: Map<string, WildcardWithItems>,
     tool: WildcardResolutionTool
   ): string {
-    // 쉼표로 분리 (이스케이프된 쉼표는 처리하지 않음 - 단순 구현)
-    // TODO: 복잡한 프롬프트(괄호 내부 쉼표 등)에 대한 정교한 처리가 필요할 수 있음
-    const tokens = text.split(',').map(t => t.trim());
+    const tokens = this.splitChainTokens(text);
     const processedTokens = tokens.map(token => {
       // 해당 이름의 체인이 있는지 확인
       const chain = wildcardMap.get(token);
