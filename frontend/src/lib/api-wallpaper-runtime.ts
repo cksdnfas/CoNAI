@@ -1,3 +1,4 @@
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { fetchJson } from '@/lib/api-client'
 import type { GraphWorkflowBrowseContentRecord } from '@/lib/api-module-graph'
 import type { ImageRecord } from '@/types/image'
@@ -12,7 +13,7 @@ export async function getWallpaperRuntimeBrowseContent(folderId?: number | null)
 
   const response = await fetchJson<ApiResponse<GraphWorkflowBrowseContentRecord>>(`/api/wallpaper-runtime/browse-content${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
   if (!response.success) {
-    throw new Error(response.error || '월페이퍼 라이브 데이터를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'wallpaperRuntime.browseContent.load')
   }
   return response.data
 }
@@ -25,7 +26,7 @@ export async function getWallpaperRuntimeGroupPreviewImages(groupId: number, par
 
   const response = await fetchJson<ApiResponse<ImageRecord[]>>(`/api/wallpaper-runtime/groups/${groupId}/preview-images?${searchParams.toString()}`)
   if (!response.success) {
-    throw new Error(response.error || '월페이퍼 라이브 그룹 미리보기를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'wallpaperRuntime.groupPreview.load')
   }
   return response.data
 }

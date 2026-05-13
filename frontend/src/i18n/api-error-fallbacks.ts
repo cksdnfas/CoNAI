@@ -339,6 +339,150 @@ export const API_ERROR_FALLBACKS = {
     ko: '와일드카드 프리뷰 생성에 실패했어.',
     en: 'Failed to generate the wildcard preview.',
   },
+  'autoFolderGroups.hierarchy.load': {
+    ko: '감시폴더 그룹을 불러오지 못했어.',
+    en: 'Failed to load auto-folder groups.',
+  },
+  'autoFolderGroups.detail.load': {
+    ko: '감시폴더 그룹 정보를 불러오지 못했어.',
+    en: 'Failed to load auto-folder group details.',
+  },
+  'autoFolderGroups.breadcrumb.load': {
+    ko: '감시폴더 그룹 경로를 불러오지 못했어.',
+    en: 'Failed to load the auto-folder group path.',
+  },
+  'autoFolderGroups.images.load': {
+    ko: '감시폴더 그룹 이미지를 불러오지 못했어.',
+    en: 'Failed to load auto-folder group images.',
+  },
+  'autoFolderGroups.fileCounts.load': {
+    ko: '감시폴더 그룹 다운로드 가능 파일 수를 불러오지 못했어.',
+    en: 'Failed to load the downloadable file count for the auto-folder group.',
+  },
+  'autoFolderGroups.rebuild': {
+    ko: '감시폴더 그룹 재구축에 실패했어.',
+    en: 'Failed to rebuild auto-folder groups.',
+  },
+  'autoFolderGroups.preview.load': {
+    ko: '감시폴더 그룹 미리보기를 불러오지 못했어.',
+    en: 'Failed to load the auto-folder group preview.',
+  },
+  'backupSources.list.load': {
+    ko: '백업 소스를 불러오지 못했어.',
+    en: 'Failed to load backup sources.',
+  },
+  'backupSources.create': {
+    ko: '백업 소스를 추가하지 못했어.',
+    en: 'Failed to add the backup source.',
+  },
+  'backupSources.update': {
+    ko: '백업 소스를 저장하지 못했어.',
+    en: 'Failed to save the backup source.',
+  },
+  'backupSources.delete': {
+    ko: '백업 소스를 삭제하지 못했어.',
+    en: 'Failed to delete the backup source.',
+  },
+  'backupSources.path.validate': {
+    ko: '백업 source 경로를 검증하지 못했어.',
+    en: 'Failed to validate the backup source path.',
+  },
+  'backupSources.watcher.start': {
+    ko: '백업 source watcher를 시작하지 못했어.',
+    en: 'Failed to start the backup source watcher.',
+  },
+  'backupSources.watcher.stop': {
+    ko: '백업 source watcher를 중지하지 못했어.',
+    en: 'Failed to stop the backup source watcher.',
+  },
+  'backupSources.watcher.restart': {
+    ko: '백업 source watcher를 재시작하지 못했어.',
+    en: 'Failed to restart the backup source watcher.',
+  },
+  'customNodes.list.load': {
+    ko: '커스텀 노드 목록을 불러오지 못했어.',
+    en: 'Failed to load custom nodes.',
+  },
+  'customNodes.rescan': {
+    ko: '커스텀 노드를 다시 스캔하지 못했어.',
+    en: 'Failed to rescan custom nodes.',
+  },
+  'customNodes.scaffold': {
+    ko: '커스텀 노드 스캐폴드를 만들지 못했어.',
+    en: 'Failed to create the custom node scaffold.',
+  },
+  'customNodes.source.load': {
+    ko: '커스텀 노드 소스를 불러오지 못했어.',
+    en: 'Failed to load the custom node source.',
+  },
+  'customNodes.folder.open': {
+    ko: '커스텀 노드 폴더를 열지 못했어.',
+    en: 'Failed to open the custom node folder.',
+  },
+  'customNodes.dependencies.install': {
+    ko: '커스텀 노드 의존성 설치에 실패했어.',
+    en: 'Failed to install custom node dependencies.',
+  },
+  'customNodes.test.run': {
+    ko: '커스텀 노드 테스트 실행에 실패했어.',
+    en: 'Failed to run the custom node test.',
+  },
+  'folders.list.load': {
+    ko: '감시 폴더를 불러오지 못했어.',
+    en: 'Failed to load watched folders.',
+  },
+  'folders.create': {
+    ko: '감시 폴더를 추가하지 못했어.',
+    en: 'Failed to add the watched folder.',
+  },
+  'folders.update': {
+    ko: '감시 폴더를 저장하지 못했어.',
+    en: 'Failed to save the watched folder.',
+  },
+  'folders.delete': {
+    ko: '감시 폴더를 삭제하지 못했어.',
+    en: 'Failed to delete the watched folder.',
+  },
+  'folders.path.validate': {
+    ko: '폴더 경로를 검증하지 못했어.',
+    en: 'Failed to validate the folder path.',
+  },
+  'folders.scan.run': {
+    ko: '폴더 스캔을 실행하지 못했어.',
+    en: 'Failed to run the folder scan.',
+  },
+  'folders.scanAll.run': {
+    ko: '전체 폴더 스캔을 실행하지 못했어.',
+    en: 'Failed to run the scan for all folders.',
+  },
+  'folders.scanLogs.load': {
+    ko: '최근 스캔 로그를 불러오지 못했어.',
+    en: 'Failed to load recent scan logs.',
+  },
+  'folders.watchersHealth.load': {
+    ko: '워처 상태를 불러오지 못했어.',
+    en: 'Failed to load watcher health.',
+  },
+  'folders.watcher.start': {
+    ko: '워처를 시작하지 못했어.',
+    en: 'Failed to start the watcher.',
+  },
+  'folders.watcher.stop': {
+    ko: '워처를 중지하지 못했어.',
+    en: 'Failed to stop the watcher.',
+  },
+  'folders.watcher.restart': {
+    ko: '워처를 재시작하지 못했어.',
+    en: 'Failed to restart the watcher.',
+  },
+  'wallpaperRuntime.browseContent.load': {
+    ko: '월페이퍼 라이브 데이터를 불러오지 못했어.',
+    en: 'Failed to load wallpaper live data.',
+  },
+  'wallpaperRuntime.groupPreview.load': {
+    ko: '월페이퍼 라이브 그룹 미리보기를 불러오지 못했어.',
+    en: 'Failed to load the wallpaper live group preview.',
+  },
 } as const
 
 export type ApiErrorFallbackKey = keyof typeof API_ERROR_FALLBACKS

@@ -1,3 +1,4 @@
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { fetchJson } from '@/lib/api-client'
 import type { ApiResponse } from '@/types/image'
 import type { BackupSource, BackupSourceInput, BackupSourceUpdateInput } from '@/types/folder'
@@ -10,7 +11,7 @@ export async function getBackupSources(activeOnly = false) {
 
   const response = await fetchJson<ApiResponse<BackupSource[]>>(`/api/backup-sources?${searchParams.toString()}`)
   if (!response.success) {
-    throw new Error(response.error || '백업 소스를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'backupSources.list.load')
   }
   return response.data
 }
@@ -25,7 +26,7 @@ export async function addBackupSource(input: BackupSourceInput) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '백업 소스를 추가하지 못했어.')
+    throw createApiFallbackError(response.error, 'backupSources.create')
   }
 
   return response.data
@@ -41,7 +42,7 @@ export async function updateBackupSource(sourceId: number, updates: BackupSource
   })
 
   if (!response.success) {
-    throw new Error(response.error || '백업 소스를 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'backupSources.update')
   }
 
   return response.data
@@ -53,7 +54,7 @@ export async function deleteBackupSource(sourceId: number) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '백업 소스를 삭제하지 못했어.')
+    throw createApiFallbackError(response.error, 'backupSources.delete')
   }
 
   return response.data
@@ -69,7 +70,7 @@ export async function validateBackupSourcePath(sourcePath: string) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '백업 source 경로를 검증하지 못했어.')
+    throw createApiFallbackError(response.error, 'backupSources.path.validate')
   }
 
   return response.data
@@ -81,7 +82,7 @@ export async function startBackupSourceWatcher(sourceId: number) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '백업 source watcher를 시작하지 못했어.')
+    throw createApiFallbackError(response.error, 'backupSources.watcher.start')
   }
 
   return response.data
@@ -93,7 +94,7 @@ export async function stopBackupSourceWatcher(sourceId: number) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '백업 source watcher를 중지하지 못했어.')
+    throw createApiFallbackError(response.error, 'backupSources.watcher.stop')
   }
 
   return response.data
@@ -105,7 +106,7 @@ export async function restartBackupSourceWatcher(sourceId: number) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '백업 source watcher를 재시작하지 못했어.')
+    throw createApiFallbackError(response.error, 'backupSources.watcher.restart')
   }
 
   return response.data

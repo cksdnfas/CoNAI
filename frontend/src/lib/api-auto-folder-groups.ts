@@ -1,3 +1,4 @@
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
 import type { ApiResponse, ImageRecord } from '@/types/image'
@@ -71,7 +72,7 @@ function normalizeGroupFileCounts(counts: GroupFileCounts): GroupFileCounts {
 export async function getAutoFolderGroupsHierarchyAll() {
   const response = await fetchJson<ApiResponse<AutoFolderGroupApiRecord[]>>('/api/auto-folder-groups')
   if (!response.success) {
-    throw new Error(response.error || '감시폴더 그룹을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'autoFolderGroups.hierarchy.load')
   }
   return response.data.map(normalizeAutoFolderGroup)
 }
@@ -79,7 +80,7 @@ export async function getAutoFolderGroupsHierarchyAll() {
 export async function getAutoFolderGroup(groupId: number) {
   const response = await fetchJson<ApiResponse<AutoFolderGroupApiRecord>>(`/api/auto-folder-groups/${groupId}`)
   if (!response.success) {
-    throw new Error(response.error || '감시폴더 그룹 정보를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'autoFolderGroups.detail.load')
   }
   return normalizeAutoFolderGroupDetail(response.data)
 }
@@ -87,7 +88,7 @@ export async function getAutoFolderGroup(groupId: number) {
 export async function getAutoFolderGroupBreadcrumb(groupId: number) {
   const response = await fetchJson<ApiResponse<AutoFolderGroupBreadcrumbItem[]>>(`/api/auto-folder-groups/${groupId}/breadcrumb`)
   if (!response.success) {
-    throw new Error(response.error || '감시폴더 그룹 경로를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'autoFolderGroups.breadcrumb.load')
   }
   return response.data.map((item): GroupBreadcrumbItem => ({
     id: item.id,
@@ -102,7 +103,7 @@ export async function getAutoFolderGroupImages(groupId: number, params?: { page?
 
   const response = await fetchJson<ApiResponse<AutoFolderGroupImagesApiPayload>>(`/api/auto-folder-groups/${groupId}/images?${searchParams.toString()}`)
   if (!response.success) {
-    throw new Error(response.error || '감시폴더 그룹 이미지를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'autoFolderGroups.images.load')
   }
 
   return {
@@ -119,7 +120,7 @@ export async function getAutoFolderGroupImages(groupId: number, params?: { page?
 export async function getAutoFolderGroupFileCounts(groupId: number) {
   const response = await fetchJson<ApiResponse<GroupFileCounts>>(`/api/auto-folder-groups/${groupId}/file-counts`)
   if (!response.success) {
-    throw new Error(response.error || '감시폴더 그룹 다운로드 가능 파일 수를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'autoFolderGroups.fileCounts.load')
   }
   return normalizeGroupFileCounts(response.data)
 }
@@ -130,7 +131,7 @@ export async function rebuildAutoFolderGroups() {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '감시폴더 그룹 재구축에 실패했어.')
+    throw createApiFallbackError(response.error, 'autoFolderGroups.rebuild')
   }
 
   return response.data
@@ -144,7 +145,7 @@ export async function getAutoFolderGroupPreviewImage(groupId: number, params?: {
   const response = await fetchJson<ApiResponse<ImageRecord[]>>(`/api/auto-folder-groups/${groupId}/preview-images?${searchParams.toString()}`)
 
   if (!response.success) {
-    throw new Error(response.error || '감시폴더 그룹 미리보기를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'autoFolderGroups.preview.load')
   }
 
   return response.data[0] ?? null

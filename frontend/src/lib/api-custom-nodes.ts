@@ -1,3 +1,4 @@
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { fetchJson } from '@/lib/api-client'
 import type { ApiResponse } from '@/types/image'
 
@@ -125,7 +126,7 @@ export interface CustomNodeTestResult {
 export async function listCustomNodes() {
   const response = await fetchJson<ApiResponse<CustomNodeScanResult>>('/api/custom-nodes')
   if (!response.success) {
-    throw new Error(response.error || '커스텀 노드 목록을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'customNodes.list.load')
   }
   return response.data
 }
@@ -135,7 +136,7 @@ export async function rescanCustomNodes() {
     method: 'POST',
   })
   if (!response.success) {
-    throw new Error(response.error || '커스텀 노드를 다시 스캔하지 못했어.')
+    throw createApiFallbackError(response.error, 'customNodes.rescan')
   }
   return response.data
 }
@@ -149,7 +150,7 @@ export async function scaffoldCustomNode(input: CustomNodeScaffoldInput) {
     body: JSON.stringify(input),
   })
   if (!response.success) {
-    throw new Error(response.error || '커스텀 노드 스캐폴드를 만들지 못했어.')
+    throw createApiFallbackError(response.error, 'customNodes.scaffold')
   }
   return response.data
 }
@@ -157,7 +158,7 @@ export async function scaffoldCustomNode(input: CustomNodeScaffoldInput) {
 export async function getCustomNodeSource(key: string) {
   const response = await fetchJson<ApiResponse<CustomNodeSourceResult>>(`/api/custom-nodes/${encodeURIComponent(key)}/source`)
   if (!response.success) {
-    throw new Error(response.error || '커스텀 노드 소스를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'customNodes.source.load')
   }
   return response.data
 }
@@ -167,7 +168,7 @@ export async function openCustomNodeFolder(key: string) {
     method: 'POST',
   })
   if (!response.success) {
-    throw new Error(response.error || '커스텀 노드 폴더를 열지 못했어.')
+    throw createApiFallbackError(response.error, 'customNodes.folder.open')
   }
   return response.data
 }
@@ -177,7 +178,7 @@ export async function installCustomNodeDependencies(key: string) {
     method: 'POST',
   })
   if (!response.success) {
-    throw new Error(response.error || '커스텀 노드 의존성 설치에 실패했어.')
+    throw createApiFallbackError(response.error, 'customNodes.dependencies.install')
   }
   return response.data
 }
@@ -191,7 +192,7 @@ export async function testCustomNode(key: string, inputs?: Record<string, unknow
     body: JSON.stringify({ inputs: inputs ?? {} }),
   })
   if (!response.success) {
-    throw new Error(response.error || '커스텀 노드 테스트 실행에 실패했어.')
+    throw createApiFallbackError(response.error, 'customNodes.test.run')
   }
   return response.data
 }
