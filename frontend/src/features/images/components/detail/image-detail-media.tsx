@@ -17,10 +17,9 @@ import {
   type ImageDetailRenderMode,
 } from './image-detail-utils'
 import { EnhancedVideoPlayer } from './enhanced-video-player'
+import { createPixelPreviewWorkerTask } from './image-detail-pixel-preview-worker-client'
 import {
   IMAGE_PIXEL_PREVIEW_PRESETS,
-  applyImageToPixelStylePalette,
-  boostPixelPreviewEdges,
   getPixelPreviewProfile,
   loadImagePixelPreviewMode,
   loadImagePixelPreviewSettings,
@@ -28,7 +27,6 @@ import {
   normalizePixelPreviewSettings,
   persistImagePixelPreviewMode,
   persistImagePixelPreviewSettings,
-  sharpenPixelPreview,
   type PixelPreviewMode,
   type PixelPreviewSettings,
 } from './image-detail-pixel-preview-utils'
@@ -399,17 +397,13 @@ function InteractiveImageDetailMedia({
       return
     }
 
-    const canvas = canvasRef.current
-    if (!canvas) {
-      setIsPixelPreviewReady(false)
-      return
-    }
-
     let cancelled = false
+    let pixelPreviewTask: ReturnType<typeof createPixelPreviewWorkerTask> | null = null
     setIsPixelPreviewReady(false)
     const sourceImage = new Image()
+    sourceImage.decoding = 'async'
 
-    sourceImage.onload = async () => {
+    sourceImage.onload = () => {
       if (cancelled) {
         return
       }
@@ -429,8 +423,7 @@ function InteractiveImageDetailMedia({
       sampleCanvas.height = pixelHeight
 
       const sampleContext = sampleCanvas.getContext('2d')
-      const canvasContext = canvas.getContext('2d')
-      if (!sampleContext || !canvasContext) {
+      if (!sampleContext) {
         setHasRenderError(true)
         return
       }
@@ -443,39 +436,55 @@ function InteractiveImageDetailMedia({
       sampleContext.clearRect(0, 0, pixelWidth, pixelHeight)
       sampleContext.drawImage(sourceImage, 0, 0, pixelWidth, pixelHeight)
 
-      try {
-        const iq = await import('image-q')
-        if (cancelled) {
-          return
-        }
-        const sourceImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
-        const sourceContainer = iq.utils.PointContainer.fromImageData(sourceImageData)
-        const palette = iq.buildPaletteSync([sourceContainer], {
-          colors: pixelPreviewProfile.colorCount,
-          colorDistanceFormula: 'euclidean-bt709-noalpha',
-          paletteQuantization: 'wuquant',
-        })
-        const quantizedImageData = applyImageToPixelStylePalette(sourceImageData, palette.getPointContainer().getPointArray().map((point) => ({ r: point.r, g: point.g, b: point.b })), pixelPreviewProfile.ditherStrength)
-        sampleContext.putImageData(sharpenPixelPreview(boostPixelPreviewEdges(quantizedImageData, pixelPreviewProfile.edgeBoost), pixelPreviewProfile.sharpness), 0, 0)
-      } catch (error) {
-        if (cancelled) {
-          return
-        }
-        const fallbackImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
-        sampleContext.putImageData(sharpenPixelPreview(boostPixelPreviewEdges(fallbackImageData, pixelPreviewProfile.edgeBoost), pixelPreviewProfile.sharpness), 0, 0)
-        console.warn('Failed to apply image-q pixel preview; falling back to plain pixel sampling.', error)
-      }
+      const sourceImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
+      pixelPreviewTask = createPixelPreviewWorkerTask(sourceImageData, pixelPreviewProfile)
+      pixelPreviewTask.promise
+        .then((result) => {
+          if (cancelled) {
+            return
+          }
 
-      if (cancelled) {
-        return
-      }
-      canvas.width = sourceWidth
-      canvas.height = sourceHeight
-      canvasContext.imageSmoothingEnabled = false
-      canvasContext.clearRect(0, 0, sourceWidth, sourceHeight)
-      canvasContext.drawImage(sampleCanvas, 0, 0, pixelWidth, pixelHeight, 0, 0, sourceWidth, sourceHeight)
-      setIsPixelPreviewReady(true)
-      onPrimaryLoad?.()
+          const canvas = canvasRef.current
+          const canvasContext = canvas?.getContext('2d')
+          if (!canvas || !canvasContext) {
+            setHasRenderError(true)
+            return
+          }
+
+          if (result.warning) {
+            console.warn('Failed to apply image-q pixel preview; falling back to plain pixel sampling.', result.warning)
+          }
+
+          const { imageData } = result
+          canvas.width = imageData.width
+          canvas.height = imageData.height
+          canvasContext.imageSmoothingEnabled = false
+          canvasContext.clearRect(0, 0, imageData.width, imageData.height)
+          canvasContext.putImageData(imageData, 0, 0)
+          setIsPixelPreviewReady(true)
+          onPrimaryLoad?.()
+          pixelPreviewTask = null
+        })
+        .catch((error) => {
+          if (cancelled) {
+            return
+          }
+          console.warn('Failed to run pixel preview worker; falling back to plain pixel sampling.', error)
+          const canvas = canvasRef.current
+          const canvasContext = canvas?.getContext('2d')
+          if (!canvas || !canvasContext) {
+            setHasRenderError(true)
+            return
+          }
+          canvas.width = pixelWidth
+          canvas.height = pixelHeight
+          canvasContext.imageSmoothingEnabled = false
+          canvasContext.clearRect(0, 0, pixelWidth, pixelHeight)
+          canvasContext.drawImage(sampleCanvas, 0, 0)
+          setIsPixelPreviewReady(true)
+          onPrimaryLoad?.()
+          pixelPreviewTask = null
+        })
     }
 
     sourceImage.onerror = () => {
@@ -488,6 +497,9 @@ function InteractiveImageDetailMedia({
 
     return () => {
       cancelled = true
+      sourceImage.onload = null
+      sourceImage.onerror = null
+      pixelPreviewTask?.cancel()
     }
   }, [onPrimaryLoad, pixelPreviewProfile, renderUrl, shouldRenderPixelPreview])
 
@@ -807,11 +819,11 @@ function InteractiveImageDetailMedia({
           }}
         >
           {shouldRenderPixelPreview ? (
-            <div className="relative inline-flex max-h-full max-w-full items-center justify-center">
+            <div className="relative grid max-h-full max-w-full place-items-center">
               <img
                 src={renderUrl}
                 alt={altText}
-                className={cn('block h-auto w-auto pointer-events-none select-none transition-opacity duration-150', className, isPixelPreviewReady && 'opacity-0')}
+                className={cn('col-start-1 row-start-1 block h-auto w-auto pointer-events-none select-none transition-opacity duration-150', className, isPixelPreviewReady && 'opacity-0')}
                 draggable={false}
                 onLoad={onPrimaryLoad}
                 onError={() => setHasRenderError(true)}
@@ -820,7 +832,7 @@ function InteractiveImageDetailMedia({
                 ref={canvasRef}
                 role="img"
                 aria-label={altText}
-                className={cn('absolute inset-0 h-full w-full pointer-events-none select-none transition-opacity duration-150', isPixelPreviewReady ? 'opacity-100' : 'opacity-0')}
+                className={cn('absolute inset-0 h-full w-full pointer-events-none select-none object-contain transition-opacity duration-150', isPixelPreviewReady ? 'opacity-100' : 'opacity-0')}
                 style={{ imageRendering: 'pixelated' }}
               />
               {!isPixelPreviewReady ? (

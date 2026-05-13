@@ -1,3 +1,5 @@
+import { createPixelPreviewWorkerTask } from './image-detail-pixel-preview-worker-client'
+
 export type PixelPreviewMode = 'off' | 'soft' | 'medium' | 'strong' | 'custom'
 
 export type PixelPreviewSettings = {
@@ -31,8 +33,6 @@ const DEFAULT_PIXEL_PREVIEW_SETTINGS: PixelPreviewSettings = IMAGE_PIXEL_PREVIEW
 
 const IMAGE_PIXEL_PREVIEW_MODE_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-enabled'
 const IMAGE_PIXEL_PREVIEW_SETTINGS_STORAGE_KEY = 'conai:image-detail-media:pixel-preview-settings'
-
-type PixelPreviewPaletteColor = { r: number; g: number; b: number }
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -108,58 +108,6 @@ function applyLuminanceScale(data: Uint8ClampedArray, index: number, currentLumi
   data[index] = Math.round(clamp(data[index] * scale, 0, 255))
   data[index + 1] = Math.round(clamp(data[index + 1] * scale, 0, 255))
   data[index + 2] = Math.round(clamp(data[index + 2] * scale, 0, 255))
-}
-
-function getClosestPaletteColor(red: number, green: number, blue: number, palette: PixelPreviewPaletteColor[]) {
-  let closest = palette[0] ?? { r: red, g: green, b: blue }
-  let closestDistance = Number.POSITIVE_INFINITY
-
-  for (const color of palette) {
-    const redDistance = red - color.r
-    const greenDistance = green - color.g
-    const blueDistance = blue - color.b
-    const distance = redDistance * redDistance * 0.2126 + greenDistance * greenDistance * 0.7152 + blueDistance * blueDistance * 0.0722
-    if (distance < closestDistance) {
-      closest = color
-      closestDistance = distance
-    }
-  }
-
-  return closest
-}
-
-function applyImageToPixelStylePalette(imageData: ImageData, palette: PixelPreviewPaletteColor[], strength: number) {
-  if (palette.length === 0) {
-    return imageData
-  }
-
-  const { data, width, height } = imageData
-  const source = new Uint8ClampedArray(data)
-  const bayer4 = [
-    [0, 8, 2, 10],
-    [12, 4, 14, 6],
-    [3, 11, 1, 9],
-    [15, 7, 13, 5],
-  ]
-  const thresholdScale = strength * 64
-
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const index = (y * width + x) * 4
-      const threshold = (((bayer4[y % 4]?.[x % 4] ?? 0) + 0.5) / 16 - 0.5) * thresholdScale
-      const closest = getClosestPaletteColor(
-        clamp(source[index] + threshold, 0, 255),
-        clamp(source[index + 1] + threshold, 0, 255),
-        clamp(source[index + 2] + threshold, 0, 255),
-        palette,
-      )
-      data[index] = closest.r
-      data[index + 1] = closest.g
-      data[index + 2] = closest.b
-    }
-  }
-
-  return imageData
 }
 
 function boostPixelPreviewEdges(imageData: ImageData, strength: number) {
@@ -269,20 +217,16 @@ export async function renderPixelPreviewCanvas(sourceUrl: string, profile: Pixel
   sampleContext.drawImage(sourceImage, 0, 0, pixelWidth, pixelHeight)
 
   try {
-    const iq = await import('image-q')
     const sourceImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
-    const sourceContainer = iq.utils.PointContainer.fromImageData(sourceImageData)
-    const palette = iq.buildPaletteSync([sourceContainer], {
-      colors: profile.colorCount,
-      colorDistanceFormula: 'euclidean-bt709-noalpha',
-      paletteQuantization: 'wuquant',
-    })
-    const quantizedImageData = applyImageToPixelStylePalette(sourceImageData, palette.getPointContainer().getPointArray().map((point) => ({ r: point.r, g: point.g, b: point.b })), profile.ditherStrength)
-    sampleContext.putImageData(sharpenPixelPreview(boostPixelPreviewEdges(quantizedImageData, profile.edgeBoost), profile.sharpness), 0, 0)
+    const result = await createPixelPreviewWorkerTask(sourceImageData, profile).promise
+    if (result.warning) {
+      console.warn('Failed to apply image-q pixel preview during export; falling back to plain pixel sampling.', result.warning)
+    }
+    sampleContext.putImageData(result.imageData, 0, 0)
   } catch (error) {
     const fallbackImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
     sampleContext.putImageData(sharpenPixelPreview(boostPixelPreviewEdges(fallbackImageData, profile.edgeBoost), profile.sharpness), 0, 0)
-    console.warn('Failed to apply image-q pixel preview during export; falling back to plain pixel sampling.', error)
+    console.warn('Failed to run pixel preview worker during export; falling back to plain pixel sampling.', error)
   }
 
   const canvas = document.createElement('canvas')
