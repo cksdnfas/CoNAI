@@ -100,3 +100,8 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
     },
   })
 }
+
+/** Execute the fixed built-in NovelAI image-generation system node. */
+export async function executeNaiImageGenerationNode(context: ExecutionContext, node: GraphWorkflowNode, moduleDefinition: ParsedModuleDefinition, resolvedInputs: Record<string, any>) {
+  return executeNaiModule(context, node, moduleDefinition, resolvedInputs)
+}

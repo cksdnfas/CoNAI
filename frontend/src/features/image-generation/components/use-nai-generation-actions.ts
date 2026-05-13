@@ -4,27 +4,22 @@ import { useI18n } from '@/i18n'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import { upscaleNaiImage } from '@/lib/api-image-generation-nai'
-import { createNaiModuleFromSnapshot } from '@/lib/api-module-graph'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import type { GenerationImageSaveOptions } from '@/lib/api-image-generation'
 import {
   buildNaiCharacterPromptPayload,
   buildNaiCharacterReferencePayload,
-  buildModuleExposedFields,
-  buildModuleUiSchema,
-  buildNaiModuleSnapshot,
   buildNaiVibePayload,
   clampNaiSampleCount,
   getErrorMessage,
   shouldUseNaiCharacterPositions,
-  type ModuleFieldOption,
   type NAIFormDraft,
   type NAIVibeDraft,
 } from '../image-generation-shared'
 import { decodeNaiBase64Png } from './nai-generation-panel-helpers'
 
-/** Manage generation, upscale, and module-save actions for the NAI generation panel. */
+/** Manage generation and upscale actions for the NAI generation panel. */
 export function useNaiGenerationActions({
   connected,
   naiForm,
@@ -33,13 +28,7 @@ export function useNaiGenerationActions({
   ensureEncodedVibes,
   refetchUserData,
   onHistoryRefresh,
-  naiModuleName,
-  naiModuleDescription,
-  naiExposedFieldKeys,
-  naiModuleFieldOptions,
-  targetModuleId,
   imageSaveOptions,
-  closeModuleSaveModal,
   showSnackbar,
 }: {
   connected: boolean
@@ -49,19 +38,12 @@ export function useNaiGenerationActions({
   ensureEncodedVibes: () => Promise<NAIVibeDraft[] | null>
   refetchUserData: () => Promise<unknown>
   onHistoryRefresh: () => void
-  naiModuleName: string
-  naiModuleDescription: string
-  naiExposedFieldKeys: string[]
-  naiModuleFieldOptions: ModuleFieldOption[]
-  targetModuleId?: number | null
   imageSaveOptions?: GenerationImageSaveOptions
-  closeModuleSaveModal: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const [isNaiGenerating, setIsNaiGenerating] = useState(false)
-  const [isSavingNaiModule, setIsSavingNaiModule] = useState(false)
   const [isUpscaling, setIsUpscaling] = useState(false)
 
   /** Submit one NAI image-generation request from the current form state. */
@@ -168,62 +150,10 @@ export function useNaiGenerationActions({
     }
   }
 
-  /** Save the current NAI setup as one reusable module snapshot. */
-  const handleCreateNaiModule = async () => {
-    const moduleName = naiModuleName.trim()
-
-    if (moduleName.length === 0 || isSavingNaiModule) {
-      return
-    }
-
-    if (naiExposedFieldKeys.length === 0) {
-      showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.expose.at.least.one.editable.field'), tone: 'error' })
-      return
-    }
-
-    try {
-      const encodedVibes = await ensureEncodedVibes()
-      if (!encodedVibes) {
-        return
-      }
-
-      setIsSavingNaiModule(true)
-      const snapshot = buildNaiModuleSnapshot({
-        ...naiForm,
-        vibes: encodedVibes,
-      })
-      const exposedFields = buildModuleExposedFields(naiModuleFieldOptions, naiExposedFieldKeys)
-      const uiSchema = buildModuleUiSchema(naiModuleFieldOptions, snapshot, naiExposedFieldKeys)
-
-      await createNaiModuleFromSnapshot({
-        name: moduleName,
-        description: naiModuleDescription.trim() || undefined,
-        snapshot,
-        exposed_fields: exposedFields,
-        ui_schema: uiSchema,
-        target_module_id: targetModuleId ?? undefined,
-      })
-
-      closeModuleSaveModal()
-      showSnackbar({
-        message: targetModuleId
-          ? t('image-generation.components.use.nai.generation.actions.existing.module.overwritten.with.the.current.nai')
-          : t('image-generation.components.use.nai.generation.actions.current.nai.settings.saved.as.a.module'),
-        tone: 'info',
-      })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.generation.actions.failed.to.save.the.nai.module')), tone: 'error' })
-    } finally {
-      setIsSavingNaiModule(false)
-    }
-  }
-
   return {
     isNaiGenerating,
-    isSavingNaiModule,
     isUpscaling,
     handleNaiGenerate,
     handleUpscale,
-    handleCreateNaiModule,
   }
 }

@@ -120,13 +120,13 @@ interface NaiActionSectionProps {
   canGenerate: boolean
   generateButtonLabel: string
   costErrorMessage?: string | null
-  onOpenModuleSave: () => void
+  onOpenModuleSave?: () => void
   onUpscale: () => void
   onReset: () => void
   onGenerate: () => void
 }
 
-/** Render the bottom action bar for module save, reset, generate, and upscale flows. */
+/** Render the bottom action bar for reset, generate, and upscale flows. */
 export function NaiActionSection({
   variant = 'card',
   canUpscale,
@@ -142,6 +142,7 @@ export function NaiActionSection({
 }: NaiActionSectionProps) {
   const { t } = useI18n()
   const saveModuleLabel = t('image-generation.components.nai.generation.panel.sections.save.module')
+  const canSaveModule = Boolean(onOpenModuleSave)
   const upscaleLabel = isUpscaling
     ? t('image-generation.components.nai.generation.panel.sections.upscaling')
     : t('image-generation.components.nai.generation.panel.sections.source.2x.upscale')
@@ -151,17 +152,19 @@ export function NaiActionSection({
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            onClick={onOpenModuleSave}
-            disabled={isGenerating || isUpscaling}
-            aria-label={saveModuleLabel}
-            title={saveModuleLabel}
-          >
-            <Save className="h-4 w-4" />
-          </Button>
+          {canSaveModule ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={onOpenModuleSave}
+              disabled={isGenerating || isUpscaling}
+              aria-label={saveModuleLabel}
+              title={saveModuleLabel}
+            >
+              <Save className="h-4 w-4" />
+            </Button>
+          ) : null}
           {canUpscale ? (
             <Button
               type="button"
@@ -210,18 +213,20 @@ export function NaiActionSection({
   if (variant === 'compact') {
     return (
       <CompactGenerationActionSurface className="max-w-full">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onOpenModuleSave}
-          disabled={isGenerating || isUpscaling}
-          aria-label={saveModuleLabel}
-          title={saveModuleLabel}
-          className="rounded-none border-r border-border/70 shadow-none"
-        >
-          <Save className="h-4 w-4" />
-        </Button>
+        {canSaveModule ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onOpenModuleSave}
+            disabled={isGenerating || isUpscaling}
+            aria-label={saveModuleLabel}
+            title={saveModuleLabel}
+            className="rounded-none border-r border-border/70 shadow-none"
+          >
+            <Save className="h-4 w-4" />
+          </Button>
+        ) : null}
 
         {canUpscale ? (
           <Button

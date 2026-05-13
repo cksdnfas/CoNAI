@@ -1,22 +1,19 @@
 import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, RotateCcw, Save, Sparkles, X } from 'lucide-react'
+import { RefreshCw, RotateCcw, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { getModuleDefinitions } from '@/lib/api-module-graph'
 import { getAppSettings } from '@/lib/api-settings'
 import { createGenerationQueueJob, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
-import { createCodexModuleFromSnapshot } from '@/lib/api-module-graph'
 import { useI18n } from '@/i18n'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
-import { buildModuleExposedFields, buildModuleUiSchema, FormField, getErrorMessage, type ModuleFieldOption, type SelectedImageDraft } from '../image-generation-shared'
+import { FormField, getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
-import { CodexModuleSaveModal } from './codex-module-save-modal'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
 import { NaiControllerSection, NaiPromptSection } from './nai-generation-panel-sections'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
@@ -68,20 +65,7 @@ const DEFAULT_CODEX_FORM: CodexFormDraft = {
   resolution: '1024',
 }
 
-const DEFAULT_CODEX_MODULE_FIELD_KEYS = ['prompt', 'negative_prompt', 'aspect_ratio', 'resolution']
-
 type PersistedCodexFormDraft = Pick<CodexFormDraft, 'prompt' | 'negativePrompt' | 'count' | 'aspectRatio' | 'resolution'>
-
-function buildCodexModuleSnapshot(form: CodexFormDraft) {
-  return {
-    prompt: normalizeTextSegmentSpreadsheetText(form.prompt).trim(),
-    negative_prompt: normalizeTextSegmentSpreadsheetText(form.negativePrompt).trim(),
-    aspect_ratio: form.aspectRatio,
-    resolution: form.resolution,
-    image: form.referenceImage?.dataUrl || null,
-    mask: form.maskImage?.dataUrl || null,
-  }
-}
 
 function loadPersistedCodexFormDraft(): CodexFormDraft {
   if (typeof window === 'undefined') {
@@ -190,12 +174,6 @@ export function CodexGenerationPanel({
   const { t } = useI18n()
   const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft())
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
-  const [codexModuleName, setCodexModuleName] = useState(() => t({ ko: 'Codex 모듈', en: 'Codex module' }))
-  const [codexModuleDescription, setCodexModuleDescription] = useState('')
-  const [codexExposedFieldKeys, setCodexExposedFieldKeys] = useState<string[]>(DEFAULT_CODEX_MODULE_FIELD_KEYS)
-  const [codexOverwriteModuleId, setCodexOverwriteModuleId] = useState<number | null>(null)
-  const [isSavingCodexModule, setIsSavingCodexModule] = useState(false)
   const [, setPortalRevision] = useState(0)
 
   const appSettingsQuery = useQuery({
@@ -208,25 +186,6 @@ export function CodexGenerationPanel({
     queryFn: getCodexGenerationStatus,
     retry: false,
   })
-
-  const moduleDefinitionsQuery = useQuery({
-    queryKey: ['module-definitions', 'codex-overwrite-candidates'],
-    queryFn: () => getModuleDefinitions(false),
-  })
-
-  const codexOverwriteCandidates = useMemo(
-    () => (moduleDefinitionsQuery.data ?? []).filter((module) => module.engine_type === 'codex' && module.authoring_source === 'codex_form_snapshot'),
-    [moduleDefinitionsQuery.data],
-  )
-
-  const codexModuleFieldOptions = useMemo<ModuleFieldOption[]>(() => [
-    { key: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), dataType: 'prompt' },
-    { key: 'negative_prompt', label: t({ ko: '네거티브 프롬프트', en: 'Negative prompt' }), dataType: 'prompt' },
-    { key: 'aspect_ratio', label: t({ ko: '비율', en: 'Aspect ratio' }), dataType: 'text', options: CODEX_ASPECT_RATIO_OPTIONS.map((option) => option.value) },
-    { key: 'resolution', label: t({ ko: '해상도', en: 'Resolution' }), dataType: 'text', options: CODEX_RESOLUTION_OPTIONS.map((option) => option.value) },
-    { key: 'image', label: t({ ko: '참조 이미지', en: 'Reference image' }), dataType: 'image' },
-    { key: 'mask', label: t({ ko: '마스크 이미지', en: 'Mask image' }), dataType: 'mask' },
-  ], [t])
 
   const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
 
@@ -308,49 +267,6 @@ export function CodexGenerationPanel({
     setCodexForm(DEFAULT_CODEX_FORM)
   }
 
-  const handleOpenModuleSave = () => {
-    setCodexModuleName((current) => current.trim().length > 0 ? current : t({ ko: 'Codex 모듈', en: 'Codex module' }))
-    setIsModuleSaveModalOpen(true)
-  }
-
-  const handleCreateCodexModule = async () => {
-    const moduleName = codexModuleName.trim()
-
-    if (moduleName.length === 0 || isSavingCodexModule) {
-      return
-    }
-
-    if (codexExposedFieldKeys.length === 0) {
-      showSnackbar({ message: t({ ko: '최소 1개는 입력 가능 필드로 열어줘.', en: 'Expose at least one editable field.' }), tone: 'error' })
-      return
-    }
-
-    try {
-      setIsSavingCodexModule(true)
-      const snapshot = buildCodexModuleSnapshot(codexForm)
-      const exposedFields = buildModuleExposedFields(codexModuleFieldOptions, codexExposedFieldKeys)
-      const uiSchema = buildModuleUiSchema(codexModuleFieldOptions, snapshot, codexExposedFieldKeys)
-
-      await createCodexModuleFromSnapshot({
-        name: moduleName,
-        description: codexModuleDescription.trim() || undefined,
-        snapshot,
-        exposed_fields: exposedFields,
-        ui_schema: uiSchema,
-        target_module_id: codexOverwriteModuleId ?? undefined,
-      })
-
-      setIsModuleSaveModalOpen(false)
-      setCodexOverwriteModuleId(null)
-      void moduleDefinitionsQuery.refetch()
-      showSnackbar({ message: codexOverwriteModuleId ? t({ ko: '현재 Codex 설정으로 기존 모듈을 덮어썼어.', en: 'Overwrote the existing module with the current Codex settings.' }) : t({ ko: '현재 Codex 설정을 모듈로 저장했어.', en: 'Saved the current Codex settings as a module.' }), tone: 'info' })
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: 'Codex 모듈 저장에 실패했어.', en: 'Failed to save the Codex module.' })), tone: 'error' })
-    } finally {
-      setIsSavingCodexModule(false)
-    }
-  }
-
   const handleGenerate = async () => {
     if (isSubmitting) {
       return
@@ -415,17 +331,6 @@ export function CodexGenerationPanel({
         <div className="truncate text-base font-semibold text-foreground">Codex</div>
       </div>
       <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-sm"
-          onClick={handleOpenModuleSave}
-          disabled={isSubmitting || isSavingCodexModule}
-          aria-label={t({ ko: '모듈 저장', en: 'Save module' })}
-          title={t({ ko: '모듈 저장', en: 'Save module' })}
-        >
-          <Save className="h-4 w-4" />
-        </Button>
         {showStatusRecovery ? (
           <Button
             type="button"
@@ -476,19 +381,6 @@ export function CodexGenerationPanel({
         inputMode="numeric"
       />
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        onClick={handleOpenModuleSave}
-        disabled={isSubmitting || isSavingCodexModule}
-        aria-label={t({ ko: '모듈 저장', en: 'Save module' })}
-        title={t({ ko: '모듈 저장', en: 'Save module' })}
-        className="rounded-none border-r border-border/70 shadow-none"
-      >
-        <Save className="h-4 w-4" />
-      </Button>
-
       {showStatusRecovery ? (
         <Button
           type="button"
@@ -535,17 +427,6 @@ export function CodexGenerationPanel({
 
   const actionContent = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="icon-sm"
-        onClick={handleOpenModuleSave}
-        disabled={isSubmitting || isSavingCodexModule}
-        aria-label={t({ ko: '모듈 저장', en: 'Save module' })}
-        title={t({ ko: '모듈 저장', en: 'Save module' })}
-      >
-        <Save className="h-4 w-4" />
-      </Button>
       <ScrubbableNumberInput
         min={CODEX_COUNT_MIN}
         max={CODEX_COUNT_MAX}
@@ -702,32 +583,6 @@ export function CodexGenerationPanel({
         </div>
       </div>
 
-      <CodexModuleSaveModal
-        open={isModuleSaveModalOpen}
-        moduleName={codexModuleName}
-        moduleDescription={codexModuleDescription}
-        fieldOptions={codexModuleFieldOptions}
-        exposedFieldKeys={codexExposedFieldKeys}
-        isSaving={isSavingCodexModule}
-        overwriteCandidates={codexOverwriteCandidates}
-        overwriteModuleId={codexOverwriteModuleId}
-        onClose={() => {
-          setIsModuleSaveModalOpen(false)
-          setCodexOverwriteModuleId(null)
-        }}
-        onModuleNameChange={setCodexModuleName}
-        onModuleDescriptionChange={setCodexModuleDescription}
-        onExposedFieldKeysChange={setCodexExposedFieldKeys}
-        onOverwriteModuleIdChange={(moduleId) => {
-          setCodexOverwriteModuleId(moduleId)
-          const module = codexOverwriteCandidates.find((item) => item.id === moduleId)
-          if (module) {
-            setCodexModuleName(module.name)
-            setCodexModuleDescription(module.description ?? '')
-          }
-        }}
-        onSave={() => void handleCreateCodexModule()}
-      />
     </>
   )
 }

@@ -7,7 +7,6 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { getNaiCostEstimate, getNaiUserData } from '@/lib/api-image-generation-nai'
-import { getModuleDefinitions } from '@/lib/api-module-graph'
 import { getAppSettings } from '@/lib/api-settings'
 import {
   clampNaiSampleCount,
@@ -17,7 +16,6 @@ import {
 import { NaiAuthModal } from './nai-auth-modal'
 import { NaiAssetSaveModal } from './nai-asset-save-modal'
 import { NaiGenerationEditorSections } from './nai-generation-editor-sections'
-import { NaiModuleSaveModal } from './nai-module-save-modal'
 import { NaiActionSection, NaiConnectionHeader } from './nai-generation-panel-sections'
 import { useNaiAssetLibrary } from './use-nai-asset-library'
 import { useNaiAuthController } from './use-nai-auth-controller'
@@ -36,7 +34,7 @@ type NaiGenerationPanelProps = {
   compactActionBarContentTargetId?: string
 }
 
-/** Render the NAI login, generation, and module-authoring workflow. */
+/** Render the NAI login, generation, and image-editing workflow. */
 export function NaiGenerationPanel({
   refreshNonce,
   onHistoryRefresh,
@@ -47,21 +45,12 @@ export function NaiGenerationPanel({
 }: NaiGenerationPanelProps) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
-  const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
-  const [naiOverwriteModuleId, setNaiOverwriteModuleId] = useState<number | null>(null)
 
   const {
     selectedCharacterIndex,
     setSelectedCharacterIndex,
     naiForm,
     setNaiForm,
-    naiModuleName,
-    setNaiModuleName,
-    naiModuleDescription,
-    setNaiModuleDescription,
-    naiExposedFieldKeys,
-    setNaiExposedFieldKeys,
-    naiModuleFieldOptions,
     supportsCharacterPrompts,
     supportsCharacterReference,
     canUseCharacterPositions,
@@ -93,16 +82,6 @@ export function NaiGenerationPanel({
     queryKey: ['app-settings'],
     queryFn: getAppSettings,
   })
-
-  const moduleDefinitionsQuery = useQuery({
-    queryKey: ['module-definitions', 'nai-overwrite-candidates'],
-    queryFn: () => getModuleDefinitions(false),
-  })
-
-  const naiOverwriteCandidates = useMemo(
-    () => (moduleDefinitionsQuery.data ?? []).filter((module) => module.engine_type === 'nai' && module.authoring_source === 'nai_form_snapshot'),
-    [moduleDefinitionsQuery.data],
-  )
 
   const connected = naiUserQuery.isSuccess
   const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
@@ -209,11 +188,9 @@ export function NaiGenerationPanel({
 
   const {
     isNaiGenerating,
-    isSavingNaiModule,
     isUpscaling,
     handleNaiGenerate,
     handleUpscale,
-    handleCreateNaiModule,
   } = useNaiGenerationActions({
     connected,
     naiForm,
@@ -222,22 +199,12 @@ export function NaiGenerationPanel({
     ensureEncodedVibes,
     refetchUserData: naiUserQuery.refetch,
     onHistoryRefresh,
-    naiModuleName,
-    naiModuleDescription,
-    naiExposedFieldKeys,
-    naiModuleFieldOptions,
-    targetModuleId: naiOverwriteModuleId,
     imageSaveOptions: {
       format: generationSaveSettings.defaultFormat,
       quality: generationSaveSettings.quality,
       resizeEnabled: generationSaveSettings.resizeEnabled,
       maxWidth: generationSaveSettings.maxWidth,
       maxHeight: generationSaveSettings.maxHeight,
-    },
-    closeModuleSaveModal: () => {
-      setIsModuleSaveModalOpen(false)
-      setNaiOverwriteModuleId(null)
-      void moduleDefinitionsQuery.refetch()
     },
     showSnackbar,
   })
@@ -292,7 +259,6 @@ export function NaiGenerationPanel({
     canGenerate: naiForm.prompt.trim().length > 0,
     generateButtonLabel: naiGenerateButtonLabel,
     costErrorMessage: naiCostQuery.isError ? getErrorMessage(naiCostQuery.error, t('image-generation.components.nai.generation.panel.failed.to.estimate.the.cost')) : null,
-    onOpenModuleSave: () => setIsModuleSaveModalOpen(true),
     onUpscale: handleUpscale,
     onReset: resetNaiForm,
     onGenerate: handleNaiGenerate,
@@ -431,33 +397,6 @@ export function NaiGenerationPanel({
         onNameChange={setAssetSaveName}
         onDescriptionChange={setAssetSaveDescription}
         onSave={() => void handleConfirmAssetSave()}
-      />
-
-      <NaiModuleSaveModal
-        open={isModuleSaveModalOpen}
-        moduleName={naiModuleName}
-        moduleDescription={naiModuleDescription}
-        fieldOptions={naiModuleFieldOptions}
-        exposedFieldKeys={naiExposedFieldKeys}
-        isSaving={isSavingNaiModule}
-        overwriteCandidates={naiOverwriteCandidates}
-        overwriteModuleId={naiOverwriteModuleId}
-        onClose={() => {
-          setIsModuleSaveModalOpen(false)
-          setNaiOverwriteModuleId(null)
-        }}
-        onModuleNameChange={setNaiModuleName}
-        onModuleDescriptionChange={setNaiModuleDescription}
-        onExposedFieldKeysChange={setNaiExposedFieldKeys}
-        onOverwriteModuleIdChange={(moduleId) => {
-          setNaiOverwriteModuleId(moduleId)
-          const module = naiOverwriteCandidates.find((item) => item.id === moduleId)
-          if (module) {
-            setNaiModuleName(module.name)
-            setNaiModuleDescription(module.description ?? '')
-          }
-        }}
-        onSave={() => void handleCreateNaiModule()}
       />
 
       {isImageEditorOpen ? (

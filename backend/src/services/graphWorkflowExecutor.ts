@@ -221,7 +221,12 @@ function isExternalGenerationModule(moduleDefinition: { engine_type: string; int
     return true
   }
 
-  return moduleDefinition.engine_type === 'system' && getSystemOperationKey(moduleDefinition) === 'system.generate_image_codex'
+  if (moduleDefinition.engine_type !== 'system') {
+    return false
+  }
+
+  const operationKey = getSystemOperationKey(moduleDefinition)
+  return operationKey === 'system.generate_image_nai' || operationKey === 'system.generate_image_codex'
 }
 
 function getNodeThrottleLane(moduleDefinition: { engine_type: string; internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }): GraphNodeThrottleLane | null {

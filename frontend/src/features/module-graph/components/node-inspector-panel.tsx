@@ -305,9 +305,8 @@ export function NodeInspectorPanel({
     const isCodexModelPort = isSystemCallCodexMessageNode && port.key === 'model'
 
     if (selectOptions.length > 0) {
-      const effectiveSelectValue = isCodexModelPort
-        ? (rawValue ?? port.default_value ?? uiField?.default_value ?? selectOptions[0] ?? '')
-        : rawValue
+      const defaultSelectValue = port.default_value ?? uiField?.default_value
+      const effectiveSelectValue = rawValue ?? defaultSelectValue ?? (isCodexModelPort ? selectOptions[0] : '')
 
       return (
         <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>

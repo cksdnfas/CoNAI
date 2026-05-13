@@ -9,10 +9,10 @@ import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getModuleBaseDisplayName } from '../module-graph-shared'
-import { CUSTOM_GROUP_ORDER, getCustomModuleGroup, getSystemModuleGroup, shouldHideFromModuleLibrary, SYSTEM_GROUP_ORDER } from './module-library-panel'
+import { CUSTOM_NODE_GROUP_ORDER, SAVED_MODULE_GROUP_ORDER, getCustomNodeGroup, getSavedModuleGroup, getSystemModuleGroup, isCustomNodeModule, isGenerationModule, localizeModuleGroupLabel, shouldHideFromModuleLibrary, SYSTEM_GROUP_ORDER } from './module-library-panel'
 import type { RecommendedModuleMatch } from './module-graph-canvas'
 
-type QuickCreateTab = 'recommended' | 'system' | 'other'
+type QuickCreateTab = 'recommended' | 'system' | 'generation' | 'custom-nodes'
 
 type ModuleListItem = {
   module: ModuleDefinitionRecord
@@ -46,11 +46,13 @@ export function ModuleGraphQuickCreateMenu({
     ? ([
         { key: 'recommended', label: t({ ko: '추천 노드', en: 'Recommended' }) },
         { key: 'system', label: t({ ko: '시스템', en: 'System' }) },
-        { key: 'other', label: t({ ko: '기타', en: 'Other' }) },
+        { key: 'generation', label: t({ ko: '생성', en: 'Generation' }) },
+        { key: 'custom-nodes', label: t({ ko: '커스텀 노드', en: 'Custom nodes' }) },
       ] as const)
     : ([
         { key: 'system', label: t({ ko: '시스템', en: 'System' }) },
-        { key: 'other', label: t({ ko: '기타', en: 'Other' }) },
+        { key: 'generation', label: t({ ko: '생성', en: 'Generation' }) },
+        { key: 'custom-nodes', label: t({ ko: '커스텀 노드', en: 'Custom nodes' }) },
       ] as const)
   const [activeTab, setActiveTab] = useState<QuickCreateTab>(mode === 'connect' ? 'recommended' : 'system')
   const [searchQuery, setSearchQuery] = useState('')
@@ -74,8 +76,14 @@ export function ModuleGraphQuickCreateMenu({
         .map((module) => ({ module }))
     }
 
+    if (activeTab === 'generation') {
+      return modules
+        .filter((module) => isGenerationModule(module) && !isCustomNodeModule(module) && !shouldHideFromModuleLibrary(module))
+        .map((module) => ({ module }))
+    }
+
     return modules
-      .filter((module) => module.engine_type !== 'system' && !shouldHideFromModuleLibrary(module))
+      .filter((module) => isCustomNodeModule(module) && !shouldHideFromModuleLibrary(module))
       .map((module) => ({ module }))
   }, [activeTab, modules, recommendedModules])
 
@@ -104,7 +112,13 @@ export function ModuleGraphQuickCreateMenu({
 
     const groupMap = new Map<string, ModuleGroup>()
     for (const item of filteredModules) {
-      const group = activeTab === 'system' ? getSystemModuleGroup(item.module) : getCustomModuleGroup(item.module)
+      const group = activeTab === 'system'
+        ? getSystemModuleGroup(item.module)
+        : activeTab === 'custom-nodes'
+          ? getCustomNodeGroup(item.module)
+          : item.module.engine_type === 'system'
+            ? getSystemModuleGroup(item.module)
+            : getSavedModuleGroup(item.module)
       const existing = groupMap.get(group.key)
       if (existing) {
         existing.modules.push(item)
@@ -118,7 +132,11 @@ export function ModuleGraphQuickCreateMenu({
       })
     }
 
-    const groupOrder = activeTab === 'system' ? SYSTEM_GROUP_ORDER : CUSTOM_GROUP_ORDER
+    const groupOrder = activeTab === 'system'
+      ? SYSTEM_GROUP_ORDER
+      : activeTab === 'custom-nodes'
+        ? CUSTOM_NODE_GROUP_ORDER
+        : SAVED_MODULE_GROUP_ORDER
     return [...groupMap.values()].sort((left, right) => {
       const leftIndex = groupOrder.indexOf(left.key)
       const rightIndex = groupOrder.indexOf(right.key)
@@ -224,7 +242,7 @@ export function ModuleGraphQuickCreateMenu({
             ) : groupedModules.map((group) => (
               <div key={group.key} className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">{group.label}</div>
+                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">{activeTab === 'recommended' ? group.label : localizeModuleGroupLabel(group.label, t)}</div>
                   <Badge variant="outline">{group.modules.length}</Badge>
                 </div>
 

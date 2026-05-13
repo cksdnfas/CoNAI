@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { useI18n } from '@/i18n'
 import {
-  buildNaiModuleFieldOptions,
   canUseNaiCharacterPositions,
   clampNaiSampleCount,
   DEFAULT_NAI_FORM,
@@ -33,20 +32,10 @@ export function useNaiFormController({
   const [persistedDraft] = useState(() => loadPersistedNaiFormDraft())
   const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(persistedDraft.selectedCharacterIndex)
   const [naiForm, setNaiForm] = useState<NAIFormDraft>(persistedDraft.form)
-  const [naiModuleName, setNaiModuleName] = useState('NAI Module')
-  const [naiModuleDescription, setNaiModuleDescription] = useState('')
-  const [naiExposedFieldKeys, setNaiExposedFieldKeys] = useState<string[]>(['prompt', 'negative_prompt', 'characters', 'vibes', 'character_refs', 'seed'])
-
-  const naiModuleFieldOptions = useMemo(() => buildNaiModuleFieldOptions(naiForm, t), [naiForm, t])
   const supportsCharacterPrompts = useMemo(() => supportsNaiCharacterPrompts(naiForm.model), [naiForm.model])
   const supportsCharacterReference = useMemo(() => supportsNaiCharacterReferences(naiForm.model), [naiForm.model])
   const canUseCharacterPositions = useMemo(() => canUseNaiCharacterPositions(naiForm.characters.length), [naiForm.characters.length])
   const useCharacterPositions = useMemo(() => shouldUseNaiCharacterPositions(naiForm), [naiForm])
-
-  useEffect(() => {
-    const allowedKeys = new Set(naiModuleFieldOptions.map((field) => field.key))
-    setNaiExposedFieldKeys((current) => current.filter((key) => allowedKeys.has(key)))
-  }, [naiModuleFieldOptions])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -311,13 +300,6 @@ export function useNaiFormController({
     setSelectedCharacterIndex,
     naiForm,
     setNaiForm: setNaiForm as Dispatch<SetStateAction<NAIFormDraft>>,
-    naiModuleName,
-    setNaiModuleName,
-    naiModuleDescription,
-    setNaiModuleDescription,
-    naiExposedFieldKeys,
-    setNaiExposedFieldKeys,
-    naiModuleFieldOptions,
     supportsCharacterPrompts,
     supportsCharacterReference,
     canUseCharacterPositions,

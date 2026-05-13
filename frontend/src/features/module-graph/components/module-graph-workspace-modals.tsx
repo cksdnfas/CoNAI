@@ -144,7 +144,7 @@ export function ModuleGraphWorkspaceModals({
       <SettingsModal
         open={isModuleLibraryOpen}
         title={t({ ko: '모듈 추가', en: 'Add module' })}
-        description={t({ ko: '사용자 모듈과 시스템 모듈을 나눠 보고, 필요한 항목을 바로 그래프에 추가해.', en: 'Browse custom and system modules separately, then add what you need directly to the graph.' })}
+        description={t({ ko: '저장된 모듈, 시스템 모듈, 커스텀 노드를 나눠 보고 필요한 항목을 바로 그래프에 추가해.', en: 'Browse saved modules, system modules, and custom nodes separately, then add what you need directly to the graph.' })}
         onClose={onCloseModuleLibrary}
         widthClassName="max-w-6xl"
       >

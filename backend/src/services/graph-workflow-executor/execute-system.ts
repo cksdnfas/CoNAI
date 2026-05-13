@@ -29,6 +29,7 @@ import {
   executeRandomVideoFromLibrary,
 } from './system-reference-operations'
 import { executeCodexImageGenerationNode } from './system-codex-operations'
+import { executeNaiImageGenerationNode } from './execute-nai'
 import { executeCallCodexMessageNode } from './system-codex-message-operations'
 import { executeJsonExtractNode } from './system-json-operations'
 import {
@@ -65,6 +66,7 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.load_llm_preset': executeLoadLlmPresetNode,
   'system.call_llm': executeCallLlmNode,
   'system.call_codex_message': executeCallCodexMessageNode,
+  'system.generate_image_nai': executeNaiImageGenerationNode,
   'system.generate_image_codex': executeCodexImageGenerationNode,
   'system.find_similar_images': executeFindSimilarImages,
   'system.load_prompt_from_reference': executeLoadPromptFromReference,

@@ -32,6 +32,8 @@ const CODEX_RANDOM_ASPECT_CHOICES = [
 ] as const
 const CODEX_DEFAULT_ASPECT_RATIO = '1:1'
 const CODEX_DEFAULT_RESOLUTION = 1024
+const CODEX_DEFAULT_COUNT = 1
+const CODEX_MAX_COUNT = 4
 
 function roundCodexDimension(value: number) {
   return Math.max(64, Math.round(value / 64) * 64)
@@ -419,6 +421,7 @@ export async function executeCodexImageGenerationNode(
 
   const operation = inputImage ? (maskImage ? 'infill' : 'edit') : 'generate'
   const requestedSize = resolveCodexRequestedSize(resolvedInputs)
+  const count = Math.min(CODEX_MAX_COUNT, Math.max(CODEX_DEFAULT_COUNT, parsePositiveIntegerish(resolvedInputs.count) ?? CODEX_DEFAULT_COUNT))
   const imageSaveOptions = buildQueueImageSaveOptions()
 
   await assertCodexAvailable('Codex 이미지 생성')
@@ -438,6 +441,7 @@ export async function executeCodexImageGenerationNode(
       operation,
       hasImageInput: Boolean(inputImage),
       hasMaskInput: Boolean(maskImage),
+      count,
       hasImageSaveOptions: Boolean(imageSaveOptions),
     },
   })
@@ -450,7 +454,7 @@ export async function executeCodexImageGenerationNode(
         prompt,
         negative_prompt: negativePrompt ?? undefined,
         size: requestedSize.size,
-        count: 1,
+        count,
         operation,
         image: inputImage ?? undefined,
         mask: maskImage ?? undefined,
@@ -476,6 +480,7 @@ export async function executeCodexImageGenerationNode(
         requestedAspectRatio: requestedSize.aspectRatio,
         requestedResolution: requestedSize.resolution,
         operation,
+        count,
         hasImageSaveOptions: Boolean(imageSaveOptions),
       },
     })
