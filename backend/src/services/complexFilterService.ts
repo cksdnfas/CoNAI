@@ -14,6 +14,27 @@ import {
 import { normalizeAutoTagSearchTerm } from './autoTagSearch/autoTagSearchTerms';
 import { ImageMetadataRecord } from '../types/image';
 
+type ComplexSearchScope = {
+  ai_tool?: string;
+  model_name?: string;
+  start_date?: string;
+  end_date?: string;
+};
+
+type ComplexQueryStatsSources = {
+  excluded: boolean;
+  orResults: boolean;
+  andResults: boolean;
+};
+
+type ComplexQueryBuildResult = {
+  query: string;
+  params: any[];
+  cteClause: string;
+  cteParams: any[];
+  statsSources: ComplexQueryStatsSources;
+};
+
 /**
  * Complex Filter Service
  * PoE-style advanced filtering with AND/OR/NOT logic
@@ -42,103 +63,84 @@ export class ComplexFilterService {
   static buildComplexQuery(
     filter: ComplexFilter,
     weights: RatingWeights | null,
-    basicParams?: {
-      ai_tool?: string;
-      model_name?: string;
-      start_date?: string;
-      end_date?: string;
-    }
-  ): { query: string; params: any[] } {
-    const params: any[] = [];
+    basicParams?: ComplexSearchScope
+  ): ComplexQueryBuildResult {
+    const cteParams: any[] = [];
     const ctes: string[] = [];
+    const statsSources: ComplexQueryStatsSources = {
+      excluded: false,
+      orResults: false,
+      andResults: false,
+    };
+    const basicScope = this.buildBasicScopeConditions(basicParams);
 
-    // Build basic filter conditions (applies to all groups)
-    const basicConditions: string[] = [];
-    if (basicParams?.ai_tool) {
-      basicConditions.push('im.ai_tool = ?');
-      params.push(basicParams.ai_tool);
-    }
-    if (basicParams?.model_name) {
-      basicConditions.push('im.model_name LIKE ?');
-      params.push(`%${basicParams.model_name}%`);
-    }
-    if (basicParams?.start_date) {
-      basicConditions.push('DATE(im.first_seen_date) >= DATE(?)');
-      params.push(basicParams.start_date);
-    }
-    if (basicParams?.end_date) {
-      basicConditions.push('DATE(im.first_seen_date) <= DATE(?)');
-      params.push(basicParams.end_date);
-    }
+    const buildScopedWhere = (groupConditions: string[], operator: 'OR' | 'AND') => {
+      const scopedConditions = [...basicScope.conditions];
+      if (groupConditions.length > 0) {
+        scopedConditions.push(`(${groupConditions.join(` ${operator} `)})`);
+      }
 
-    const basicWhere = basicConditions.length > 0
-      ? `WHERE ${basicConditions.join(' AND ')}`
-      : '';
+      return scopedConditions.length > 0
+        ? `WHERE ${scopedConditions.join(' AND ')}`
+        : '';
+    };
+
+    const addGroupCte = (
+      cteName: 'excluded' | 'or_results' | 'and_results',
+      conditions: FilterCondition[],
+      operator: 'OR' | 'AND',
+      includeEmptyGroup = false
+    ) => {
+      const groupParams: any[] = [];
+      const groupResult = this.buildGroupQuery(conditions, operator, groupParams, weights);
+
+      if (!includeEmptyGroup && groupResult.conditions.length === 0) {
+        return false;
+      }
+
+      ctes.push(`
+        ${cteName} AS (
+          SELECT DISTINCT im.composite_hash
+          FROM media_metadata im
+          ${buildScopedWhere(groupResult.conditions, operator)}
+        )
+      `);
+      cteParams.push(...basicScope.params, ...groupResult.params);
+      return true;
+    };
 
     // 1. Build EXCLUDE (NOT) CTE - highest priority
     if (filter.exclude_group && filter.exclude_group.length > 0) {
-      const excludeResult = this.buildGroupQuery(filter.exclude_group, 'OR', params, weights);
-      ctes.push(`
-        excluded AS (
-          SELECT DISTINCT im.composite_hash
-          FROM media_metadata im
-          ${basicWhere}
-          ${excludeResult.conditions.length > 0 ? (basicWhere ? 'AND' : 'WHERE') + ' (' + excludeResult.conditions.join(' OR ') + ')' : ''}
-        )
-      `);
+      statsSources.excluded = addGroupCte('excluded', filter.exclude_group, 'OR', true);
     }
 
     // 2. Build OR CTE
-    let hasOrGroup = false;
     if (filter.or_group && filter.or_group.length > 0) {
-      const orResult = this.buildGroupQuery(filter.or_group, 'OR', params, weights);
-      if (orResult.conditions.length > 0) {
-        hasOrGroup = true;
-        ctes.push(`
-          or_results AS (
-            SELECT DISTINCT im.composite_hash
-            FROM media_metadata im
-            ${basicWhere}
-            ${(basicWhere ? 'AND' : 'WHERE') + ' (' + orResult.conditions.join(' OR ') + ')'}
-          )
-        `);
-      }
+      statsSources.orResults = addGroupCte('or_results', filter.or_group, 'OR');
     }
 
     // 3. Build AND CTE
-    let hasAndGroup = false;
     if (filter.and_group && filter.and_group.length > 0) {
-      const andResult = this.buildGroupQuery(filter.and_group, 'AND', params, weights);
-      if (andResult.conditions.length > 0) {
-        hasAndGroup = true;
-        ctes.push(`
-          and_results AS (
-            SELECT DISTINCT im.composite_hash
-            FROM media_metadata im
-            ${basicWhere}
-            ${(basicWhere ? 'AND' : 'WHERE') + ' (' + andResult.conditions.join(' AND ') + ')'}
-          )
-        `);
-      }
+      statsSources.andResults = addGroupCte('and_results', filter.and_group, 'AND');
     }
 
-    // Build final query
-    const finalConditions: string[] = [getVisibleImageCondition()];
+    // Build final query. Basic search scope must apply to the final selection too:
+    // OR/AND CTEs narrow matching sets, while exclude-only and no-group searches
+    // still need the requested ai_tool/model/date constraints.
+    const finalConditions: string[] = [getVisibleImageCondition(), ...basicScope.conditions];
+    const finalParams = [...basicScope.params];
 
-    if (hasOrGroup) {
+    if (statsSources.orResults) {
       finalConditions.push('im.composite_hash IN (SELECT composite_hash FROM or_results)');
     }
-    if (hasAndGroup) {
+    if (statsSources.andResults) {
       finalConditions.push('im.composite_hash IN (SELECT composite_hash FROM and_results)');
     }
-    if (filter.exclude_group && filter.exclude_group.length > 0) {
+    if (statsSources.excluded) {
       finalConditions.push('im.composite_hash NOT IN (SELECT composite_hash FROM excluded)');
     }
 
-    // If no groups specified, return all images (with basic filters)
-    const finalWhere = finalConditions.length > 0
-      ? `WHERE ${finalConditions.join(' AND ')}`
-      : basicWhere;
+    const finalWhere = `WHERE ${finalConditions.join(' AND ')}`;
 
     // ✅ image_files JOIN 추가하여 id 필드 포함
     const selectClause = `
@@ -154,11 +156,43 @@ export class ComplexFilterService {
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
     `;
 
-    const query = ctes.length > 0
-      ? `WITH ${ctes.join(', ')} ${selectClause} ${finalWhere}`
+    const cteClause = ctes.length > 0 ? `WITH ${ctes.join(', ')}` : '';
+    const query = cteClause.length > 0
+      ? `${cteClause} ${selectClause} ${finalWhere}`
       : `${selectClause} ${finalWhere}`;
 
-    return { query, params };
+    return {
+      query,
+      params: [...cteParams, ...finalParams],
+      cteClause,
+      cteParams,
+      statsSources,
+    };
+  }
+
+  /** Build reusable basic search-scope conditions and parameters. */
+  private static buildBasicScopeConditions(basicParams?: ComplexSearchScope): { conditions: string[]; params: any[] } {
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (basicParams?.ai_tool) {
+      conditions.push('im.ai_tool = ?');
+      params.push(basicParams.ai_tool);
+    }
+    if (basicParams?.model_name) {
+      conditions.push('im.model_name LIKE ?');
+      params.push(`%${basicParams.model_name}%`);
+    }
+    if (basicParams?.start_date) {
+      conditions.push('DATE(im.first_seen_date) >= DATE(?)');
+      params.push(basicParams.start_date);
+    }
+    if (basicParams?.end_date) {
+      conditions.push('DATE(im.first_seen_date) <= DATE(?)');
+      params.push(basicParams.end_date);
+    }
+
+    return { conditions, params };
   }
 
   /**
@@ -331,12 +365,7 @@ export class ComplexFilterService {
    */
   static async executeComplexSearch(
     filter: ComplexFilter,
-    basicParams?: {
-      ai_tool?: string;
-      model_name?: string;
-      start_date?: string;
-      end_date?: string;
-    },
+    basicParams?: ComplexSearchScope,
     pagination?: {
       page: number;
       limit: number;
@@ -350,7 +379,13 @@ export class ComplexFilterService {
     const weights = await RatingScoreService.getWeights();
 
     // Build query
-    const { query: baseQuery, params } = this.buildComplexQuery(filter, weights, basicParams);
+    const {
+      query: baseQuery,
+      params,
+      cteClause,
+      cteParams,
+      statsSources,
+    } = this.buildComplexQuery(filter, weights, basicParams);
 
     // Count total results (composite_hash 기반)
     // Replace the main SELECT clause (im.*) with COUNT, handling whitespace and multi-line
@@ -381,17 +416,34 @@ export class ComplexFilterService {
 
     const rows = db.prepare(dataQuery).all(...params, limit, offset) as any[];
 
-    // Calculate stats (simplified)
+    const excludedCount = statsSources.excluded ? this.countCteRows(cteClause, cteParams, 'excluded') : 0;
+    const orMatchedCount = statsSources.orResults ? this.countCteRows(cteClause, cteParams, 'or_results') : 0;
+    const andMatchedCount = statsSources.andResults ? this.countCteRows(cteClause, cteParams, 'and_results') : 0;
     const executionTime = Date.now() - startTime;
     const stats: FilterExecutionStats = {
-      excluded_count: 0,  // TODO: Calculate from CTE
-      or_matched_count: 0,
-      and_matched_count: 0,
+      excluded_count: excludedCount,
+      or_matched_count: orMatchedCount,
+      and_matched_count: andMatchedCount,
       final_result_count: total,
       execution_time_ms: executionTime
     };
 
     return { images: rows, total, stats };
+  }
+
+  /** Count one generated CTE using the same scoped parameters as the search query. */
+  private static countCteRows(cteClause: string, cteParams: any[], cteName: 'excluded' | 'or_results' | 'and_results'): number {
+    if (cteClause.length === 0) {
+      return 0;
+    }
+
+    const row = db.prepare(`
+      ${cteClause}
+      SELECT COUNT(DISTINCT composite_hash) as total
+      FROM ${cteName}
+    `).get(...cteParams) as { total?: number } | undefined;
+
+    return row?.total || 0;
   }
 
   /**
@@ -816,12 +868,7 @@ export class ComplexFilterService {
    */
   static async executeComplexSearchIds(
     filter: ComplexFilter,
-    basicParams?: {
-      ai_tool?: string;
-      model_name?: string;
-      start_date?: string;
-      end_date?: string;
-    }
+    basicParams?: ComplexSearchScope
   ): Promise<string[]> {
     // Fetch rating weights
     const weights = await RatingScoreService.getWeights();
