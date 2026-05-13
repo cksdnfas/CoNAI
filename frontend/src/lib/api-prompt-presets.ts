@@ -1,3 +1,4 @@
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { fetchJson } from '@/lib/api-client'
 
 interface ApiResponse<T> {
@@ -53,7 +54,7 @@ export async function getPromptPresets(params?: { hierarchical?: boolean; rootsO
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
   const response = await fetchJson<ApiResponse<PromptPresetRecord[]>>(`/api/prompt-presets${suffix}`)
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프리셋 목록을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'promptPresets.list.load')
   }
 
   return response.data
@@ -67,7 +68,7 @@ export async function createPromptPreset(input: PromptPresetMutationInput) {
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프리셋을 만들지 못했어.')
+    throw createApiFallbackError(response.error, 'promptPresets.create')
   }
 
   return response.data
@@ -81,7 +82,7 @@ export async function updatePromptPreset(presetId: number, input: PromptPresetMu
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프리셋을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'promptPresets.update')
   }
 
   return response.data
@@ -99,7 +100,7 @@ export async function deletePromptPreset(presetId: number, options?: { cascade?:
   })
 
   if (!response.success) {
-    throw new Error(response.error || '프리셋을 삭제하지 못했어.')
+    throw createApiFallbackError(response.error, 'promptPresets.delete')
   }
 
   return response

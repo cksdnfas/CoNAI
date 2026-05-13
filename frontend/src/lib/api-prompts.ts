@@ -1,3 +1,4 @@
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import type { ApiResponse } from '@/types/image'
 import type {
@@ -28,7 +29,7 @@ export async function getPromptGroups(type: PromptTypeFilter = 'positive') {
   const route = type === 'negative' ? '/api/negative-prompt-groups' : `/api/prompt-groups?type=${type}`
   const response = await fetchJson<{ success: boolean; data?: PromptGroupRecord[]; error?: string }>(route)
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프롬프트 그룹을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'prompts.groups.load')
   }
   return response.data
 }
@@ -62,7 +63,7 @@ export async function searchPromptCollection(params?: {
   }>(`/api/prompt-collection/search?${searchParams.toString()}`)
 
   if (!response.success || !response.data || !response.pagination) {
-    throw new Error(response.error || '프롬프트 목록을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'prompts.collection.search')
   }
 
   const payload: PromptSearchPayload = {
@@ -77,7 +78,7 @@ export async function searchPromptCollection(params?: {
 export async function getPromptStatistics() {
   const response = await fetchJson<ApiResponse<PromptStatistics>>('/api/prompt-collection/statistics')
   if (!response.success) {
-    throw new Error(response.error || '프롬프트 통계를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'prompts.statistics.load')
   }
   return response.data
 }
@@ -93,7 +94,7 @@ export async function getDanbooruPromptGroupingPreview(options?: { mode?: Danboo
   }
   const response = await fetchJson<ApiResponse<DanbooruPromptGroupingResult>>(`/api/prompt-collection/danbooru-grouping/preview?${searchParams.toString()}`)
   if (!response.success) {
-    throw new Error(response.error || '단부루 기반 그룹 미리보기를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'prompts.danbooruGrouping.preview')
   }
   return response.data
 }
@@ -111,7 +112,7 @@ export async function applyDanbooruPromptGrouping(options?: { mode?: DanbooruPro
     }),
   })
   if (!response.success) {
-    throw new Error(response.error || '단부루 기반 그룹 자동 구성을 적용하지 못했어.')
+    throw createApiFallbackError(response.error, 'prompts.danbooruGrouping.apply')
   }
   return response.data
 }
@@ -129,7 +130,7 @@ export async function resolvePromptGroups(prompts: string[], type: PromptTypeFil
   })
 
   if (!response.success) {
-    throw new Error(response.error || '프롬프트 그룹 정렬 정보를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'prompts.groups.resolve')
   }
 
   return response.data
@@ -142,7 +143,7 @@ export async function getTopPrompts(params?: { type?: PromptTypeFilter; limit?: 
 
   const response = await fetchJson<ApiResponse<PromptCollectionItem[]>>(`/api/prompt-collection/top?${searchParams.toString()}`)
   if (!response.success) {
-    throw new Error(response.error || '상위 프롬프트를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'prompts.top.load')
   }
   return response.data.map((item) => normalizePromptItem(item as PromptCollectionItem & { synonyms?: string[] | null; type?: string | null }))
 }
@@ -161,7 +162,7 @@ export async function assignPromptToGroup(promptId: number, groupId: number | nu
   })
 
   if (!response.success) {
-    throw new Error(response.error || '프롬프트 그룹 지정에 실패했어.')
+    throw createApiFallbackError(response.error, 'prompts.group.assign')
   }
 
   return response.data
@@ -181,7 +182,7 @@ export async function batchAssignPromptsToGroup(prompts: string[], groupId: numb
   })
 
   if (!response.success) {
-    throw new Error(response.error || '프롬프트 일괄 그룹 지정에 실패했어.')
+    throw createApiFallbackError(response.error, 'prompts.group.batchAssign')
   }
 
   return response.data
@@ -198,7 +199,7 @@ export async function createPromptGroup(input: { group_name: string; display_ord
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프롬프트 그룹 생성에 실패했어.')
+    throw createApiFallbackError(response.error, 'prompts.groups.create')
   }
 
   return response.data
@@ -215,7 +216,7 @@ export async function updatePromptGroup(groupId: number, input: { group_name?: s
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프롬프트 그룹 수정에 실패했어.')
+    throw createApiFallbackError(response.error, 'prompts.groups.update')
   }
 
   return response.data
@@ -228,7 +229,7 @@ export async function deletePromptGroup(groupId: number, type: PromptTypeFilter 
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프롬프트 그룹 삭제에 실패했어.')
+    throw createApiFallbackError(response.error, 'prompts.groups.delete')
   }
 
   return response.data
@@ -245,7 +246,7 @@ export async function reorderPromptGroups(groupOrders: Array<{ id: number; displ
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프롬프트 그룹 순서 변경에 실패했어.')
+    throw createApiFallbackError(response.error, 'prompts.groups.reorder')
   }
 
   return response.data
@@ -254,7 +255,7 @@ export async function reorderPromptGroups(groupOrders: Array<{ id: number; displ
 export async function getPromptGroupStatistics(type: PromptTypeFilter = 'positive') {
   const response = await fetchJson<ApiResponse<PromptGroupRecord[]>>(`/api/prompt-collection/group-statistics?type=${type}`)
   if (!response.success) {
-    throw new Error(response.error || '프롬프트 그룹 통계를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'prompts.groupStatistics.load')
   }
   return response.data
 }
@@ -279,7 +280,7 @@ export async function importPromptGroups(payload: PromptGroupExportData, type: P
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프롬프트 그룹 가져오기에 실패했어.')
+    throw createApiFallbackError(response.error, 'prompts.groups.import')
   }
 
   return response.data
@@ -291,7 +292,7 @@ export async function deletePrompt(promptId: number, type: PromptTypeFilter = 'p
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프롬프트 삭제에 실패했어.')
+    throw createApiFallbackError(response.error, 'prompts.item.delete')
   }
 
   return response.data
@@ -307,7 +308,7 @@ export async function collectPrompts(input: { prompt?: string; negativePrompt?: 
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '프롬프트 수집 실행에 실패했어.')
+    throw createApiFallbackError(response.error, 'prompts.collect.run')
   }
 
   return response.data

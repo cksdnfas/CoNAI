@@ -1,3 +1,4 @@
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { fetchJson } from '@/lib/api-client'
 
 interface ApiResponse<T> {
@@ -113,7 +114,7 @@ export async function getWildcards(params?: { hierarchical?: boolean; rootsOnly?
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
   const response = await fetchJson<ApiResponse<WildcardRecord[]>>(`/api/wildcards${suffix}`)
   if (!response.success || !response.data) {
-    throw new Error(response.error || '와일드카드 목록을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'wildcards.list.load')
   }
 
   return response.data
@@ -130,7 +131,7 @@ export async function createWildcard(input: WildcardMutationInput) {
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '항목을 만들지 못했어.')
+    throw createApiFallbackError(response.error, 'wildcards.create')
   }
 
   return response.data
@@ -147,7 +148,7 @@ export async function updateWildcard(wildcardId: number, input: WildcardMutation
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '항목을 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'wildcards.update')
   }
 
   return response.data
@@ -166,7 +167,7 @@ export async function deleteWildcard(wildcardId: number, options?: { cascade?: b
   })
 
   if (!response.success) {
-    throw new Error(response.error || '항목을 삭제하지 못했어.')
+    throw createApiFallbackError(response.error, 'wildcards.delete')
   }
 
   return response
@@ -176,7 +177,7 @@ export async function deleteWildcard(wildcardId: number, options?: { cascade?: b
 export async function getWildcardLastScanLog() {
   const response = await fetchJson<ApiResponse<WildcardScanLog | null>>('/api/wildcards/last-scan-log')
   if (!response.success) {
-    throw new Error(response.error || '최근 LoRA 스캔 로그를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'wildcards.lastScanLog.load')
   }
 
   return response.data ?? null
@@ -193,7 +194,7 @@ export async function scanWildcardLoraFolder(input: LoraScanRequest) {
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || 'LoRA 자동 수집에 실패했어.')
+    throw createApiFallbackError(response.error, 'wildcards.loraScan.run')
   }
 
   return response.data
@@ -214,7 +215,7 @@ export async function parseWildcards(input: { text: string; tool: WildcardTool |
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '와일드카드 프리뷰 생성에 실패했어.')
+    throw createApiFallbackError(response.error, 'wildcards.preview.parse')
   }
 
   return response.data

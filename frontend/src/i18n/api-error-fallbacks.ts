@@ -199,6 +199,146 @@ export const API_ERROR_FALLBACKS = {
     ko: '유사도 설정을 저장하지 못했어.',
     en: 'Failed to save similarity settings.',
   },
+  'prompts.groups.load': {
+    ko: '프롬프트 그룹을 불러오지 못했어.',
+    en: 'Failed to load prompt groups.',
+  },
+  'prompts.collection.search': {
+    ko: '프롬프트 목록을 불러오지 못했어.',
+    en: 'Failed to load prompts.',
+  },
+  'prompts.statistics.load': {
+    ko: '프롬프트 통계를 불러오지 못했어.',
+    en: 'Failed to load prompt statistics.',
+  },
+  'prompts.danbooruGrouping.preview': {
+    ko: '단부루 기반 그룹 미리보기를 불러오지 못했어.',
+    en: 'Failed to load the Danbooru-based group preview.',
+  },
+  'prompts.danbooruGrouping.apply': {
+    ko: '단부루 기반 그룹 자동 구성을 적용하지 못했어.',
+    en: 'Failed to apply Danbooru-based group auto-organization.',
+  },
+  'prompts.groups.resolve': {
+    ko: '프롬프트 그룹 정렬 정보를 불러오지 못했어.',
+    en: 'Failed to load prompt group assignment information.',
+  },
+  'prompts.top.load': {
+    ko: '상위 프롬프트를 불러오지 못했어.',
+    en: 'Failed to load top prompts.',
+  },
+  'prompts.group.assign': {
+    ko: '프롬프트 그룹 지정에 실패했어.',
+    en: 'Failed to assign the prompt group.',
+  },
+  'prompts.group.batchAssign': {
+    ko: '프롬프트 일괄 그룹 지정에 실패했어.',
+    en: 'Failed to assign prompt groups in bulk.',
+  },
+  'prompts.groups.create': {
+    ko: '프롬프트 그룹 생성에 실패했어.',
+    en: 'Failed to create the prompt group.',
+  },
+  'prompts.groups.update': {
+    ko: '프롬프트 그룹 수정에 실패했어.',
+    en: 'Failed to update the prompt group.',
+  },
+  'prompts.groups.delete': {
+    ko: '프롬프트 그룹 삭제에 실패했어.',
+    en: 'Failed to delete the prompt group.',
+  },
+  'prompts.groups.reorder': {
+    ko: '프롬프트 그룹 순서 변경에 실패했어.',
+    en: 'Failed to reorder prompt groups.',
+  },
+  'prompts.groupStatistics.load': {
+    ko: '프롬프트 그룹 통계를 불러오지 못했어.',
+    en: 'Failed to load prompt group statistics.',
+  },
+  'prompts.groups.import': {
+    ko: '프롬프트 그룹 가져오기에 실패했어.',
+    en: 'Failed to import prompt groups.',
+  },
+  'prompts.item.delete': {
+    ko: '프롬프트 삭제에 실패했어.',
+    en: 'Failed to delete the prompt.',
+  },
+  'prompts.collect.run': {
+    ko: '프롬프트 수집 실행에 실패했어.',
+    en: 'Failed to run prompt collection.',
+  },
+  'promptPresets.list.load': {
+    ko: '프리셋 목록을 불러오지 못했어.',
+    en: 'Failed to load prompt presets.',
+  },
+  'promptPresets.create': {
+    ko: '프리셋을 만들지 못했어.',
+    en: 'Failed to create the prompt preset.',
+  },
+  'promptPresets.update': {
+    ko: '프리셋을 저장하지 못했어.',
+    en: 'Failed to save the prompt preset.',
+  },
+  'promptPresets.delete': {
+    ko: '프리셋을 삭제하지 못했어.',
+    en: 'Failed to delete the prompt preset.',
+  },
+  'search.history.load': {
+    ko: '검색 히스토리를 불러오지 못했어.',
+    en: 'Failed to load search history.',
+  },
+  'search.history.save': {
+    ko: '검색 히스토리를 저장하지 못했어.',
+    en: 'Failed to save search history.',
+  },
+  'search.history.delete': {
+    ko: '검색 히스토리 삭제에 실패했어.',
+    en: 'Failed to delete the search history entry.',
+  },
+  'search.history.clear': {
+    ko: '검색 히스토리를 비우지 못했어.',
+    en: 'Failed to clear search history.',
+  },
+  'search.ratingTiers.load': {
+    ko: '평가 티어를 불러오지 못했어.',
+    en: 'Failed to load rating tiers.',
+  },
+  'search.modelSuggestions.load': {
+    ko: '모델 추천 목록을 불러오지 못했어.',
+    en: 'Failed to load model suggestions.',
+  },
+  'search.loraSuggestions.load': {
+    ko: 'LoRA 추천 목록을 불러오지 못했어.',
+    en: 'Failed to load LoRA suggestions.',
+  },
+  'wildcards.list.load': {
+    ko: '와일드카드 목록을 불러오지 못했어.',
+    en: 'Failed to load wildcards.',
+  },
+  'wildcards.create': {
+    ko: '항목을 만들지 못했어.',
+    en: 'Failed to create the wildcard item.',
+  },
+  'wildcards.update': {
+    ko: '항목을 저장하지 못했어.',
+    en: 'Failed to save the wildcard item.',
+  },
+  'wildcards.delete': {
+    ko: '항목을 삭제하지 못했어.',
+    en: 'Failed to delete the wildcard item.',
+  },
+  'wildcards.lastScanLog.load': {
+    ko: '최근 LoRA 스캔 로그를 불러오지 못했어.',
+    en: 'Failed to load the latest LoRA scan log.',
+  },
+  'wildcards.loraScan.run': {
+    ko: 'LoRA 자동 수집에 실패했어.',
+    en: 'Failed to run LoRA auto-collection.',
+  },
+  'wildcards.preview.parse': {
+    ko: '와일드카드 프리뷰 생성에 실패했어.',
+    en: 'Failed to generate the wildcard preview.',
+  },
 } as const
 
 export type ApiErrorFallbackKey = keyof typeof API_ERROR_FALLBACKS

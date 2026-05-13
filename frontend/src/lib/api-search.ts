@@ -1,3 +1,4 @@
+import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { fetchJson } from '@/lib/api-client'
 import type { RatingTierRecord, SearchChip, SearchHistoryEntry, SearchMetadataSuggestion } from '@/features/search/search-types'
 
@@ -11,7 +12,7 @@ interface ApiResponse<T> {
 export async function getSearchHistory() {
   const response = await fetchJson<ApiResponse<SearchHistoryEntry[]>>('/api/search-history')
   if (!response.success || !response.data) {
-    throw new Error(response.error || '검색 히스토리를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'search.history.load')
   }
   return response.data
 }
@@ -27,7 +28,7 @@ export async function saveSearchHistory(input: { label: string; chips: SearchChi
   })
 
   if (!response.success || !response.data) {
-    throw new Error(response.error || '검색 히스토리를 저장하지 못했어.')
+    throw createApiFallbackError(response.error, 'search.history.save')
   }
 
   return response.data
@@ -40,7 +41,7 @@ export async function deleteSearchHistory(entryId: string) {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '검색 히스토리 삭제에 실패했어.')
+    throw createApiFallbackError(response.error, 'search.history.delete')
   }
 }
 
@@ -51,7 +52,7 @@ export async function clearSearchHistory() {
   })
 
   if (!response.success) {
-    throw new Error(response.error || '검색 히스토리를 비우지 못했어.')
+    throw createApiFallbackError(response.error, 'search.history.clear')
   }
 }
 
@@ -59,7 +60,7 @@ export async function clearSearchHistory() {
 export async function getRatingTiers() {
   const response = await fetchJson<ApiResponse<RatingTierRecord[]>>('/api/runtime-media-settings/rating-tiers')
   if (!response.success || !response.data) {
-    throw new Error(response.error || '평가 티어를 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'search.ratingTiers.load')
   }
   return response.data
 }
@@ -72,7 +73,7 @@ export async function getSearchModelSuggestions(params?: { query?: string; limit
 
   const response = await fetchJson<ApiResponse<SearchMetadataSuggestion[]>>(`/api/search-options/models?${searchParams.toString()}`)
   if (!response.success || !response.data) {
-    throw new Error(response.error || '모델 추천 목록을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'search.modelSuggestions.load')
   }
   return response.data
 }
@@ -85,7 +86,7 @@ export async function getSearchLoraSuggestions(params?: { query?: string; limit?
 
   const response = await fetchJson<ApiResponse<SearchMetadataSuggestion[]>>(`/api/search-options/loras?${searchParams.toString()}`)
   if (!response.success || !response.data) {
-    throw new Error(response.error || 'LoRA 추천 목록을 불러오지 못했어.')
+    throw createApiFallbackError(response.error, 'search.loraSuggestions.load')
   }
   return response.data
 }
