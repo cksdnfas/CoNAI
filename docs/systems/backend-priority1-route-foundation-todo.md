@@ -49,6 +49,7 @@
 - [x] backend build succeeds
 - [x] touched backend tests succeed, or equivalent verification succeeds
   - 2026-05-14: added and ran `npm run verify:route-validation-foundation` for route-validation helper payloads, parser fallbacks, and legacy route integer parsing semantics.
+  - 2026-05-14: added and ran `npm run verify:upload-metadata-utilities` for upload metadata helper contracts covering multipart quality/save-option parsing, output format resolution, metadata patch validation, extracted preview shaping, and download headers.
 - [x] no route path changes
 - [x] no response payload shape changes
 - [x] no frontend code changes required for Priority 1 slice
@@ -66,6 +67,6 @@ Stop and return to serial mode if any of the following happens:
 
 - checked `graphWorkflows.ts`, `generation-queue.routes.ts`, `auth.routes.ts`, `images/tagging.mutation.routes.ts`: keep route paths and legacy response envelopes unchanged
 - next safe candidates after this batch:
-  - `backend/src/routes/settings/rating.routes.ts`
-  - `backend/src/routes/images/uploadMetadataUtilityRoutes.ts`
-  - `backend/src/routes/image-editor.routes.ts`
+  - `backend/src/routes/settings/rating.routes.ts` — covered by `npm run verify:route-validation-foundation`
+  - `backend/src/routes/images/uploadMetadataUtilityRoutes.ts` — helper contracts covered by `npm run verify:upload-metadata-utilities`
+  - `backend/src/routes/image-editor.routes.ts` — covered by `npm run verify:route-validation-foundation`

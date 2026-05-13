@@ -20,6 +20,7 @@
     "verify:wildcard-chain-parsing": "tsx src/scripts/verifyWildcardChainParsing.ts",
     "verify:complex-filter-search-stats": "tsx src/scripts/verifyComplexFilterSearchStats.ts",
     "verify:route-validation-foundation": "tsx src/scripts/verifyRouteValidationFoundation.ts",
+    "verify:upload-metadata-utilities": "tsx src/scripts/verifyUploadMetadataUtilityContracts.ts",
     "verify:auth-db-bootstrap": "tsx src/scripts/verifyAuthDbBootstrap.ts",
     "verify:codex-generation-contracts": "tsx src/scripts/verifyCodexGenerationContracts.ts"
   },

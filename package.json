@@ -52,6 +52,7 @@
     "verify:wildcard-chain-parsing": "cd backend && npm run verify:wildcard-chain-parsing",
     "verify:complex-filter-search-stats": "cd backend && npm run verify:complex-filter-search-stats",
     "verify:route-validation-foundation": "cd backend && npm run verify:route-validation-foundation",
+    "verify:upload-metadata-utilities": "cd backend && npm run verify:upload-metadata-utilities",
     "verify:auth-db-bootstrap": "cd backend && npm run verify:auth-db-bootstrap",
     "verify:codex-generation-contracts": "cd backend && npm run verify:codex-generation-contracts",
     "verify:module-library-grouping": "cd frontend && npm run verify:module-library-grouping",
