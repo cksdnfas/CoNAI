@@ -1,4 +1,5 @@
 import type { Response } from 'express'
+import { routeParam } from './routeParam'
 
 /** Send the standard 400 validation payload without changing route response shape. */
 export function sendRouteBadRequest(res: Response, error: string) {
@@ -91,6 +92,12 @@ export function parsePositiveInteger(value: unknown): number | null {
 
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+/** Parse one route parameter as an integer while preserving legacy parseInt behavior. */
+export function parseRouteIntegerParam(value: string | string[] | undefined, radix?: number): number {
+  const normalized = routeParam(value)
+  return radix === undefined ? Number.parseInt(normalized) : Number.parseInt(normalized, radix)
 }
 
 /** Parse an integer query value while keeping the provided fallback for invalid input. */

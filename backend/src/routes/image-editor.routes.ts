@@ -12,7 +12,7 @@ import fs from 'fs';
 import sharp from 'sharp';
 import { WebPConversionService } from '../services/webpConversionService';
 import { buildImageEditorResultData, listSaveBrowserImages } from './imageEditorRouteHelpers';
-import { sendRouteBadRequest } from './routeValidation';
+import { parseRouteIntegerParam, sendRouteBadRequest } from './routeValidation';
 
 const router = Router();
 const INVALID_IMAGE_ID_ERROR = 'Invalid image ID';
@@ -20,7 +20,7 @@ const IMAGE_DATA_REQUIRED_ERROR = 'Image data is required';
 
 /** Parse one image-editor route id and keep the legacy numeric behavior. */
 function parseImageEditorRouteId(value: string | string[] | undefined) {
-  return parseInt(routeParam(value));
+  return parseRouteIntegerParam(value);
 }
 
 /** Require one valid image-editor route id before continuing with the handler. */

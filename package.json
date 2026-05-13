@@ -51,6 +51,7 @@
     "verify:video-optimization": "cd backend && npm run verify:video-optimization",
     "verify:wildcard-chain-parsing": "cd backend && npm run verify:wildcard-chain-parsing",
     "verify:complex-filter-search-stats": "cd backend && npm run verify:complex-filter-search-stats",
+    "verify:route-validation-foundation": "cd backend && npm run verify:route-validation-foundation",
     "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
     "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
     "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",

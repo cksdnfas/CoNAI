@@ -1,15 +1,14 @@
 import { Router, Request, Response } from 'express';
-import { routeParam } from '../routeParam';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { RatingScoreService } from '../../services/ratingScoreService';
 import { RatingData, RatingTierInput, RatingWeightsUpdate } from '../../types/rating';
-import { sendRouteBadRequest } from '../routeValidation';
+import { parseRouteIntegerParam, sendRouteBadRequest } from '../routeValidation';
 
 const router = Router();
 
 /** Parse the tier route id without changing current route-param behavior. */
 function parseTierRouteId(value: string | string[] | undefined) {
-  return parseInt(routeParam(routeParam(value)), 10);
+  return parseRouteIntegerParam(value, 10);
 }
 
 router.get(

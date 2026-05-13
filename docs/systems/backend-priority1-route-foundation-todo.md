@@ -47,7 +47,8 @@
 ## Verification Checklist
 
 - [x] backend build succeeds
-- [ ] touched backend tests succeed, or equivalent verification succeeds
+- [x] touched backend tests succeed, or equivalent verification succeeds
+  - 2026-05-14: added and ran `npm run verify:route-validation-foundation` for route-validation helper payloads, parser fallbacks, and legacy route integer parsing semantics.
 - [x] no route path changes
 - [x] no response payload shape changes
 - [x] no frontend code changes required for Priority 1 slice
