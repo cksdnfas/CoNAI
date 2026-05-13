@@ -67,6 +67,18 @@ function resolveOutputExtension(format: 'png' | 'jpeg' | 'webp') {
   return format === 'jpeg' ? 'jpg' : format
 }
 
+function buildRequestedOutputFileNames(count: number | undefined, outputFormat: string | undefined) {
+  const requestedCount = Math.max(1, Math.min(count ?? 1, 4))
+  const resolvedFormat = resolveOutputFormat(outputFormat)
+  const outputExtension = resolveOutputExtension(resolvedFormat)
+
+  return Array.from({ length: requestedCount }, (_, index) => `codex-output-${String(index + 1).padStart(2, '0')}.${outputExtension}`)
+}
+
+export function resolveCodexJobRoot() {
+  return path.join(runtimePaths.tempDir, 'codex-jobs')
+}
+
 function resolveImageMimeType(extension: string) {
   switch (extension.toLowerCase()) {
     case '.jpg':
@@ -423,9 +435,7 @@ export async function executeCodexGeneration(payload: CodexGenerationPayload): P
   }
 
   const requestedCount = Math.max(1, Math.min(payload.count ?? 1, 4))
-  const outputFormat = resolveOutputFormat(payload.output_format)
-  const outputExtension = resolveOutputExtension(outputFormat)
-  const jobRoot = path.join(runtimePaths.tempDir, 'codex-jobs')
+  const jobRoot = resolveCodexJobRoot()
   const jobDirectory = path.join(jobRoot, `${Date.now()}-${randomUUID()}`)
 
   await fs.promises.mkdir(jobDirectory, { recursive: true })
@@ -445,7 +455,7 @@ export async function executeCodexGeneration(payload: CodexGenerationPayload): P
     ignoredBasenames.add(path.basename(maskPath))
   }
 
-  const requestedFileNames = Array.from({ length: requestedCount }, (_, index) => `codex-output-${String(index + 1).padStart(2, '0')}.${outputExtension}`)
+  const requestedFileNames = buildRequestedOutputFileNames(requestedCount, payload.output_format)
   const prompt = buildCodexPrompt(payload, requestedFileNames)
   await fs.promises.writeFile(path.join(jobDirectory, 'request-prompt.txt'), `${prompt}\n`, 'utf8')
 
@@ -463,4 +473,16 @@ export async function executeCodexGeneration(payload: CodexGenerationPayload): P
     stdoutPath: runResult.stdoutPath,
     stderrPath: runResult.stderrPath,
   }
+}
+
+export const codexGenerationExecutorTestHooks = {
+  buildCodexPrompt,
+  buildRequestedOutputFileNames,
+  discoverOutputFiles,
+  parseCodexAvailabilityOutput,
+  parseSize,
+  resolveCodexJobRoot,
+  resolveImageMimeType,
+  resolveOutputExtension,
+  resolveOutputFormat,
 }
