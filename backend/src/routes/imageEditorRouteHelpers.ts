@@ -15,6 +15,24 @@ export type SaveBrowserImageListItem = {
   modified_at: string;
 };
 
+/** Resolve a child path only when it stays below the given directory. */
+export function resolveChildPathWithinDirectory(directoryPath: string, childPath: string) {
+  const resolvedDirectory = path.resolve(directoryPath);
+  const resolvedChild = path.resolve(resolvedDirectory, childPath);
+  const relativePath = path.relative(resolvedDirectory, resolvedChild);
+
+  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return null;
+  }
+
+  return resolvedChild;
+}
+
+/** Resolve a canvas file path and reject sibling-prefix traversal. */
+export function resolveCanvasFilePath(filename: string) {
+  return resolveChildPathWithinDirectory(runtimePaths.canvasDir, filename);
+}
+
 /** Normalize one relative save-path segment for browser-safe URL generation. */
 function toSaveBrowserRelativePath(filePath: string) {
   return path.relative(runtimePaths.saveDir, filePath).replace(/\\/g, '/');

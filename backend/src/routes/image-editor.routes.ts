@@ -11,7 +11,7 @@ import path from 'path';
 import fs from 'fs';
 import sharp from 'sharp';
 import { WebPConversionService } from '../services/webpConversionService';
-import { buildImageEditorResultData, listSaveBrowserImages } from './imageEditorRouteHelpers';
+import { buildImageEditorResultData, listSaveBrowserImages, resolveCanvasFilePath } from './imageEditorRouteHelpers';
 import { parseRouteIntegerParam, sendRouteBadRequest } from './routeValidation';
 
 const router = Router();
@@ -45,12 +45,9 @@ function requireImageData(res: Response, imageData: unknown) {
 
 /** Resolve one canvas file path and block traversal attempts with the legacy payload. */
 function getCanvasFilePathOrBlock(filename: string, res: Response) {
-  const canvasDir = runtimePaths.canvasDir;
-  const filePath = path.join(canvasDir, filename);
-  const resolvedPath = path.resolve(filePath);
-  const resolvedCanvasDir = path.resolve(canvasDir);
+  const filePath = resolveCanvasFilePath(filename);
 
-  if (!resolvedPath.startsWith(resolvedCanvasDir)) {
+  if (!filePath) {
     res.status(403).json({
       success: false,
       error: 'Access denied'
