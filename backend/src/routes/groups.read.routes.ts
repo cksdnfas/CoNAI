@@ -7,6 +7,16 @@ import { GroupDownloadService, DownloadType, CaptionMode } from '../services/gro
 import { PAGINATION, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/errorHandler';
 import { enrichCompactImageWithFileView, enrichImageRecord, enrichImageWithFileView } from './images/utils';
+import { parsePositiveIntegerQuery } from './routeValidation';
+
+const GROUP_PREVIEW_IMAGE_COUNT_MAX = 20;
+const GROUP_PREVIEW_COUNT_ERROR = 'count must be an integer between 1 and 20';
+const GROUP_IMAGE_PAGE_ERROR = 'page must be a positive integer';
+const GROUP_IMAGE_LIMIT_ERROR = `limit must be an integer between 1 and ${PAGINATION.MAX_LIMIT}`;
+
+function sendGroupReadBadRequest(res: Response, error: string) {
+  return res.status(400).json(errorResponse(error));
+}
 
 const router = Router();
 
@@ -45,11 +55,17 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
 router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
-    const count = parseInt(req.query.count as string) || 8;
-    const includeChildren = req.query.includeChildren !== 'false';
-    const limitedCount = Math.min(Math.max(count, 1), 20);
+    const countResult = parsePositiveIntegerQuery(req.query.count, 8, {
+      max: GROUP_PREVIEW_IMAGE_COUNT_MAX,
+      error: GROUP_PREVIEW_COUNT_ERROR,
+    });
+    if (countResult.ok === false) {
+      return sendGroupReadBadRequest(res, countResult.error);
+    }
 
-    const images = await ImageGroupModel.findPreviewImages(id, limitedCount, includeChildren);
+    const includeChildren = req.query.includeChildren !== 'false';
+
+    const images = await ImageGroupModel.findPreviewImages(id, countResult.value, includeChildren);
     const enrichedImages = images.map(img => enrichCompactImageWithFileView(img));
 
     return res.json(successResponse(enrichedImages));
@@ -95,8 +111,23 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
 router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
-    const page = parseInt(req.query.page as string) || PAGINATION.DEFAULT_PAGE;
-    const limit = parseInt(req.query.limit as string) || PAGINATION.GROUP_IMAGES_LIMIT;
+    const pageResult = parsePositiveIntegerQuery(req.query.page, PAGINATION.DEFAULT_PAGE, {
+      error: GROUP_IMAGE_PAGE_ERROR,
+    });
+    if (pageResult.ok === false) {
+      return sendGroupReadBadRequest(res, pageResult.error);
+    }
+
+    const limitResult = parsePositiveIntegerQuery(req.query.limit, PAGINATION.GROUP_IMAGES_LIMIT, {
+      max: PAGINATION.MAX_LIMIT,
+      error: GROUP_IMAGE_LIMIT_ERROR,
+    });
+    if (limitResult.ok === false) {
+      return sendGroupReadBadRequest(res, limitResult.error);
+    }
+
+    const page = pageResult.value;
+    const limit = limitResult.value;
     const collectionType = req.query.collection_type as 'manual' | 'auto';
 
     const result = await ImageGroupModel.findImagesByGroup(id, page, limit, collectionType);

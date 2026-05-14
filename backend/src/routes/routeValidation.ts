@@ -94,6 +94,43 @@ export function parsePositiveInteger(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
+type PositiveIntegerQueryOptions = {
+  min?: number
+  max?: number
+  error: string
+}
+
+export type PositiveIntegerQueryResult =
+  | { ok: true; value: number }
+  | { ok: false; error: string }
+
+/** Parse one HTTP query integer without parseInt coercion. Missing input keeps the fallback. */
+export function parsePositiveIntegerQuery(
+  value: unknown,
+  fallback: number,
+  { min = 1, max, error }: PositiveIntegerQueryOptions,
+): PositiveIntegerQueryResult {
+  if (value === undefined) {
+    return { ok: true, value: fallback }
+  }
+
+  if (Array.isArray(value) || typeof value === 'boolean' || value === null) {
+    return { ok: false, error }
+  }
+
+  const text = String(value).trim()
+  if (!/^\d+$/.test(text)) {
+    return { ok: false, error }
+  }
+
+  const parsed = Number(text)
+  if (!Number.isSafeInteger(parsed) || parsed < min || (max !== undefined && parsed > max)) {
+    return { ok: false, error }
+  }
+
+  return { ok: true, value: parsed }
+}
+
 /** Parse one route parameter as an integer while preserving legacy parseInt behavior. */
 export function parseRouteIntegerParam(value: string | string[] | undefined, radix?: number): number {
   const normalized = routeParam(value)

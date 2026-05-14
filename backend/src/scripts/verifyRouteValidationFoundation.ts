@@ -4,6 +4,7 @@ import {
   parseIntegerWithFallback,
   parseNumberWithFallback,
   parsePositiveInteger,
+  parsePositiveIntegerQuery,
   parseRouteIntegerParam,
   sendRouteBadRequest,
   validateBooleanIfDefined,
@@ -75,6 +76,15 @@ function verifyIntegerParsers() {
   assert.equal(parsePositiveInteger('0'), null)
   assert.equal(parsePositiveInteger('-1'), null)
   assert.equal(parsePositiveInteger('1.5'), null)
+
+  assert.deepEqual(parsePositiveIntegerQuery(undefined, 25, { max: 100, error: 'limit invalid' }), { ok: true, value: 25 })
+  assert.deepEqual(parsePositiveIntegerQuery('20', 25, { max: 100, error: 'limit invalid' }), { ok: true, value: 20 })
+  assert.deepEqual(parsePositiveIntegerQuery(' 20 ', 25, { max: 100, error: 'limit invalid' }), { ok: true, value: 20 })
+  assert.deepEqual(parsePositiveIntegerQuery('1.5', 25, { max: 100, error: 'limit invalid' }), { ok: false, error: 'limit invalid' })
+  assert.deepEqual(parsePositiveIntegerQuery('20px', 25, { max: 100, error: 'limit invalid' }), { ok: false, error: 'limit invalid' })
+  assert.deepEqual(parsePositiveIntegerQuery(['20', '30'], 25, { max: 100, error: 'limit invalid' }), { ok: false, error: 'limit invalid' })
+  assert.deepEqual(parsePositiveIntegerQuery('0', 25, { max: 100, error: 'limit invalid' }), { ok: false, error: 'limit invalid' })
+  assert.deepEqual(parsePositiveIntegerQuery('101', 25, { max: 100, error: 'limit invalid' }), { ok: false, error: 'limit invalid' })
 
   assert.equal(parseIntegerWithFallback('12px', 5), 12)
   assert.equal(parseIntegerWithFallback(undefined, 5), 5)

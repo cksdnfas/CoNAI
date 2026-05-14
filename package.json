@@ -73,6 +73,7 @@
     "verify:like-search-literal-contracts": "cd backend && npm run verify:like-search-literal-contracts",
     "verify:search-option-suggestion-contracts": "cd backend && npm run verify:search-option-suggestion-contracts",
     "verify:danbooru-browser-locale-contracts": "cd backend && npm run verify:danbooru-browser-locale-contracts",
+    "verify:group-image-route-contracts": "cd backend && npm run verify:group-image-route-contracts",
     "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
     "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
     "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",

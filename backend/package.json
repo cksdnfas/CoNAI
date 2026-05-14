@@ -35,7 +35,8 @@
     "verify:backup-source-contracts": "tsx src/scripts/verifyBackupSourceContracts.ts",
     "verify:like-search-literal-contracts": "tsx src/scripts/verifyLikeSearchLiteralContracts.ts",
     "verify:search-option-suggestion-contracts": "tsx src/scripts/verifySearchOptionSuggestionContracts.ts",
-    "verify:danbooru-browser-locale-contracts": "tsx src/scripts/verifyDanbooruBrowserLocaleContracts.ts"
+    "verify:danbooru-browser-locale-contracts": "tsx src/scripts/verifyDanbooruBrowserLocaleContracts.ts",
+    "verify:group-image-route-contracts": "tsx src/scripts/verifyGroupImageRouteContracts.ts"
   },
   "dependencies": {
     "@conai/shared": "file:../shared",

@@ -1,6 +1,7 @@
 import { db } from '../database/init';
 import { ImageSafetyService } from '../services/imageSafetyService';
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
+import { PAGINATION } from '@conai/shared';
 
 type GroupImageCollectionType = 'manual' | 'auto';
 type GroupImageListResult = { images: ImageWithFileView[]; total: number };
@@ -9,6 +10,24 @@ type FindChildGroups = (groupId: number) => GroupChildRecord[];
 
 function getVisibleGroupImageCondition() {
   return ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+}
+
+export function normalizeGroupImagePositiveInteger(
+  value: unknown,
+  fallback: number,
+  max: number = PAGINATION.MAX_LIMIT
+): number {
+  if (typeof value === 'boolean' || value === null || value === '') {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  const floored = Math.floor(parsed);
+  return Math.min(Math.max(floored, 1), max);
 }
 
 /** Build the shared WHERE clause for group image list queries. */
@@ -34,7 +53,9 @@ export function findImagesByGroupQuery(
   limit: number = 20,
   collectionType?: GroupImageCollectionType
 ): GroupImageListResult {
-  const offset = (page - 1) * limit;
+  const normalizedPage = normalizeGroupImagePositiveInteger(page, 1);
+  const normalizedLimit = normalizeGroupImagePositiveInteger(limit, 20);
+  const offset = (normalizedPage - 1) * normalizedLimit;
   const { whereClause, queryParams } = buildGroupImageWhereClause(groupId, collectionType);
 
   const countRow = db.prepare(
@@ -75,7 +96,7 @@ export function findImagesByGroupQuery(
     LIMIT ? OFFSET ?
   `;
 
-  const rows = db.prepare(query).all(...queryParams, limit, offset) as ImageWithFileView[];
+  const rows = db.prepare(query).all(...queryParams, normalizedLimit, offset) as ImageWithFileView[];
 
   return { images: rows, total };
 }
@@ -87,7 +108,9 @@ export function findImagesByGroupWithFilesQuery(
   limit: number = 20,
   collectionType?: GroupImageCollectionType
 ): GroupImageListResult {
-  const offset = (page - 1) * limit;
+  const normalizedPage = normalizeGroupImagePositiveInteger(page, 1);
+  const normalizedLimit = normalizeGroupImagePositiveInteger(limit, 20);
+  const offset = (normalizedPage - 1) * normalizedLimit;
   const { whereClause, queryParams } = buildGroupImageWhereClause(groupId, collectionType);
 
   const countRow = db.prepare(
@@ -115,7 +138,7 @@ export function findImagesByGroupWithFilesQuery(
     LIMIT ? OFFSET ?
   `;
 
-  const rows = db.prepare(query).all(...queryParams, limit, offset) as ImageWithFileView[];
+  const rows = db.prepare(query).all(...queryParams, normalizedLimit, offset) as ImageWithFileView[];
 
   return { images: rows, total };
 }
@@ -176,6 +199,7 @@ export function findPreviewImagesQuery(
   includeChildren: boolean = true,
   findChildGroups: FindChildGroups
 ): ImageWithFileView[] {
+  const normalizedCount = normalizeGroupImagePositiveInteger(count, 8, 20);
   const query = `
     WITH sampled_hashes AS (
       SELECT ig.composite_hash
@@ -238,7 +262,7 @@ export function findPreviewImagesQuery(
     LEFT JOIN watched_folders f ON if.folder_id = f.id
   `;
 
-  const rows = db.prepare(query).all(groupId, count) as ImageWithFileView[];
+  const rows = db.prepare(query).all(groupId, normalizedCount) as ImageWithFileView[];
 
   if (rows.length > 0 || !includeChildren) {
     return rows;
@@ -250,7 +274,7 @@ export function findPreviewImagesQuery(
   }
 
   for (const child of children) {
-    const childImages = findPreviewImagesQuery(child.id, count, true, findChildGroups);
+    const childImages = findPreviewImagesQuery(child.id, normalizedCount, true, findChildGroups);
     if (childImages.length > 0) {
       return childImages;
     }
