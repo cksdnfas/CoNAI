@@ -26,7 +26,8 @@
     "verify:watched-folder-route-contracts": "tsx src/scripts/verifyWatchedFolderRouteContracts.ts",
     "verify:graph-workflow-route-contracts": "tsx src/scripts/verifyGraphWorkflowRouteContracts.ts",
     "verify:queue-eta-contracts": "tsx src/scripts/verifyGenerationQueueEtaContracts.ts",
-    "verify:graph-queue-wait-contracts": "tsx src/scripts/verifyGraphQueueWaitContracts.ts"
+    "verify:graph-queue-wait-contracts": "tsx src/scripts/verifyGraphQueueWaitContracts.ts",
+    "verify:image-similarity-contracts": "tsx src/scripts/verifyImageSimilarityContracts.ts"
   },
   "dependencies": {
     "@conai/shared": "file:../shared",
