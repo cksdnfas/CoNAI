@@ -3,7 +3,6 @@ import path from 'path'
 import { resolveUploadsPath } from '../../config/runtimePaths'
 import { GenerationHistoryModel } from '../../models/GenerationHistory'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
-import { type GenerationQueueJobRecord } from '../../types/generationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { ImageUploadService } from '../imageUploadService'
 import { settingsService } from '../settingsService'
@@ -19,10 +18,8 @@ import {
 } from './shared'
 import { GenerationQueueService } from '../generationQueueService'
 import { assertCodexAvailable } from '../codexGenerationExecutor'
+import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
 
-const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
-const QUEUE_POLL_INTERVAL_MS = 1500
-const QUEUE_TERMINAL_WAIT_TIMEOUT_MS = 15000
 const CODEX_RANDOM_ASPECT_CHOICES = [
   { value: '1:1', width: 1, height: 1 },
   { value: '4:3', width: 4, height: 3 },
@@ -106,10 +103,6 @@ function resolveMimeTypeFromPath(filePath: string) {
   return 'image/png'
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 function parseStoredQueuePayload(record: { request_payload: string }) {
   try {
     const parsed = JSON.parse(record.request_payload) as unknown
@@ -178,60 +171,6 @@ function resolveHistoryOriginalPath(historyRecords: Array<{ metadata?: string | 
   }
 
   return null
-}
-
-async function requestQueueCancellation(jobId: number) {
-  const latest = GenerationQueueModel.findById(jobId)
-  if (!latest || latest.status === 'completed' || latest.status === 'failed' || latest.status === 'cancelled') {
-    return
-  }
-
-  await GenerationQueueService.requestCancellation(jobId)
-}
-
-async function waitForQueueCompletion(context: ExecutionContext, nodeId: string, jobId: number) {
-  let terminalWait: Promise<GenerationQueueJobRecord | null> | null = null
-
-  while (true) {
-    if (context.shouldCancel?.()) {
-      await requestQueueCancellation(jobId)
-      writeExecutionLog({
-        executionId: context.executionId,
-        nodeId,
-        level: 'warn',
-        eventType: 'node_queue_cancel_requested',
-        message: `Queue cancellation requested for Codex node job ${jobId}`,
-      })
-      throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
-    }
-
-    terminalWait ??= GenerationQueueService.waitForTerminalJob(jobId, { timeoutMs: QUEUE_TERMINAL_WAIT_TIMEOUT_MS })
-    const job = await Promise.race([
-      terminalWait,
-      sleep(QUEUE_POLL_INTERVAL_MS).then(() => undefined),
-    ])
-
-    if (job === undefined) {
-      continue
-    }
-
-    terminalWait = null
-    if (!job) {
-      continue
-    }
-
-    if (job.status === 'completed') {
-      return job
-    }
-
-    if (job.status === 'failed') {
-      throw new Error(job.failure_message || `Queue job ${jobId} failed`)
-    }
-
-    if (job.status === 'cancelled') {
-      throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
-    }
-  }
 }
 
 async function resolveQueueBackedCodexOutput(params: {
@@ -485,7 +424,12 @@ export async function executeCodexImageGenerationNode(
       },
     })
 
-    const completedJob = await waitForQueueCompletion(context, node.id, jobId)
+    const completedJob = await waitForGraphQueueCompletion({
+      context,
+      nodeId: node.id,
+      jobId,
+      cancellationMessage: `Queue cancellation requested for Codex node job ${jobId}`,
+    })
     await resolveQueueBackedCodexOutput({
       context,
       node,

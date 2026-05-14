@@ -25,19 +25,12 @@ import {
   type ParsedModuleDefinition,
   type RuntimeArtifact,
 } from './shared'
-import { type GenerationQueueJobRecord } from '../../types/generationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
+import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
 
-const GRAPH_EXECUTION_CANCELLED_MESSAGE = '__GRAPH_EXECUTION_CANCELLED__'
 const GRAPH_COMFY_TARGET_MODE_KEY = 'execution_target_mode'
 const GRAPH_COMFY_TARGET_TAG_KEY = 'execution_target_tag'
 const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
-const QUEUE_POLL_INTERVAL_MS = 1500
-const QUEUE_TERMINAL_WAIT_TIMEOUT_MS = 15000
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 function parseStoredQueuePayload(record: { request_payload: string }) {
   try {
@@ -195,60 +188,6 @@ function validateQueueTarget(workflowId: number, target: GraphComfyExecutionTarg
   }
 
   return workflow
-}
-
-async function requestQueueCancellation(jobId: number) {
-  const latest = GenerationQueueModel.findById(jobId)
-  if (!latest || latest.status === 'completed' || latest.status === 'failed' || latest.status === 'cancelled') {
-    return
-  }
-
-  await GenerationQueueService.requestCancellation(jobId)
-}
-
-async function waitForQueueCompletion(context: ExecutionContext, nodeId: string, jobId: number) {
-  let terminalWait: Promise<GenerationQueueJobRecord | null> | null = null
-
-  while (true) {
-    if (context.shouldCancel?.()) {
-      await requestQueueCancellation(jobId)
-      writeExecutionLog({
-        executionId: context.executionId,
-        nodeId,
-        level: 'warn',
-        eventType: 'node_queue_cancel_requested',
-        message: `Queue cancellation requested for graph node job ${jobId}`,
-      })
-      throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
-    }
-
-    terminalWait ??= GenerationQueueService.waitForTerminalJob(jobId, { timeoutMs: QUEUE_TERMINAL_WAIT_TIMEOUT_MS })
-    const job = await Promise.race([
-      terminalWait,
-      sleep(QUEUE_POLL_INTERVAL_MS).then(() => undefined),
-    ])
-
-    if (job === undefined) {
-      continue
-    }
-
-    terminalWait = null
-    if (!job) {
-      continue
-    }
-
-    if (job.status === 'completed') {
-      return job
-    }
-
-    if (job.status === 'failed') {
-      throw new Error(job.failure_message || `Queue job ${jobId} failed`)
-    }
-
-    if (job.status === 'cancelled') {
-      throw new Error(GRAPH_EXECUTION_CANCELLED_MESSAGE)
-    }
-  }
 }
 
 async function resolveQueueBackedOutput(params: {
@@ -445,7 +384,12 @@ async function executeQueueBackedComfyModule(context: ExecutionContext, node: Gr
     },
   })
 
-  const completedJob = await waitForQueueCompletion(context, node.id, jobId)
+  const completedJob = await waitForGraphQueueCompletion({
+    context,
+    nodeId: node.id,
+    jobId,
+    cancellationMessage: `Queue cancellation requested for graph node job ${jobId}`,
+  })
   await resolveQueueBackedOutput({
     context,
     node,

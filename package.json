@@ -61,6 +61,7 @@
     "verify:graph-workflow-route-contracts": "cd backend && npm run verify:graph-workflow-route-contracts",
     "verify:queue-eta-contracts": "cd backend && npm run verify:queue-eta-contracts",
     "verify:generation-queue-ui-contracts": "cd frontend && npm run verify:generation-queue-ui-contracts",
+    "verify:graph-queue-wait-contracts": "cd backend && npm run verify:graph-queue-wait-contracts",
     "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
     "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
     "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",
