@@ -1,6 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
-import path from 'path';
+import {
+  buildCivitaiRescanProgressResponse,
+  collectCivitaiRescanModelReferences,
+  getCivitaiPostIntentImageError,
+  getCivitaiTempImageContentType,
+  resolveCivitaiModelPagination,
+  type CivitaiRescanProgressState,
+} from './civitai-route-helpers';
 import fs from 'fs';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { optionalAuth } from '../middleware/authMiddleware';
@@ -87,8 +94,7 @@ router.post('/stats/reset', asyncHandler(async (req: Request, res: Response) => 
  * GET /api/civitai/models
  */
 router.get('/models', asyncHandler(async (req: Request, res: Response) => {
-  const limit = parseInt(req.query.limit as string) || 100;
-  const offset = parseInt(req.query.offset as string) || 0;
+  const { limit, offset } = resolveCivitaiModelPagination(req.query);
 
   const models = ModelInfo.findAll(limit, offset);
   res.json({
@@ -211,18 +217,11 @@ router.delete('/models', asyncHandler(async (req: Request, res: Response) => {
 router.post('/create-intent', asyncHandler(async (req: Request, res: Response) => {
   const { compositeHashes, includeMetadata, title, description, tags } = req.body;
 
-  if (!compositeHashes || !Array.isArray(compositeHashes) || compositeHashes.length === 0) {
+  const compositeHashesError = getCivitaiPostIntentImageError(compositeHashes);
+  if (compositeHashesError) {
     res.status(400).json({
       success: false,
-      error: 'compositeHashes array is required'
-    });
-    return;
-  }
-
-  if (compositeHashes.length > 20) {
-    res.status(400).json({
-      success: false,
-      error: 'Maximum 20 images allowed per post'
+      error: compositeHashesError
     });
     return;
   }
@@ -305,17 +304,7 @@ router.get('/temp-image/:token', asyncHandler(async (req: Request, res: Response
     return;
   }
 
-  // Determine content type
-  const ext = path.extname(imagePath).toLowerCase();
-  const contentTypes: Record<string, string> = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.webp': 'image/webp',
-    '.gif': 'image/gif'
-  };
-
-  const contentType = contentTypes[ext] || 'application/octet-stream';
+  const contentType = getCivitaiTempImageContentType(imagePath);
 
   // Send file
   res.setHeader('Content-Type', contentType);
@@ -340,12 +329,12 @@ router.post('/cleanup-temp-urls', asyncHandler(async (req: Request, res: Respons
 // ============================================
 
 // 재스캔 진행 상태 (메모리 내 관리)
-let rescanProgress = {
+let rescanProgress: CivitaiRescanProgressState = {
   isRunning: false,
   total: 0,
   processed: 0,
   added: 0,
-  startedAt: null as string | null
+  startedAt: null
 };
 
 /**
@@ -407,24 +396,22 @@ router.post('/rescan-all', asyncHandler(async (req: Request, res: Response) => {
 
     for (const image of imagesWithRefs) {
       try {
-        const modelRefs = JSON.parse(image.model_references);
+        const modelRefs = collectCivitaiRescanModelReferences(JSON.parse(image.model_references));
 
         for (const ref of modelRefs) {
-          if (!ref.hash) continue;
-
           // 이미 존재하는지 확인
           const existing = db.prepare(`
             SELECT 1 FROM image_models
             WHERE composite_hash = ? AND model_hash = ? AND model_role = ?
             LIMIT 1
-          `).get(image.composite_hash, ref.hash, ref.type);
+          `).get(image.composite_hash, ref.model_hash, ref.model_role);
 
           if (!existing) {
             // image_models에 추가
             ImageModel.create({
               composite_hash: image.composite_hash,
-              model_hash: ref.hash,
-              model_role: ref.type as any,
+              model_hash: ref.model_hash,
+              model_role: ref.model_role,
               weight: ref.weight
             });
             addedCount++;
@@ -456,12 +443,7 @@ router.post('/rescan-all', asyncHandler(async (req: Request, res: Response) => {
 router.get('/rescan-progress', asyncHandler(async (req: Request, res: Response) => {
   res.json({
     success: true,
-    data: {
-      ...rescanProgress,
-      percentage: rescanProgress.total > 0
-        ? Math.round((rescanProgress.processed / rescanProgress.total) * 100)
-        : 0
-    }
+    data: buildCivitaiRescanProgressResponse(rescanProgress)
   });
 }));
 
