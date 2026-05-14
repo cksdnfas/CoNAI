@@ -1,3 +1,5 @@
+import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
+
 /** Shared search input shape used by ImageSearchModel query builders. */
 export interface ImageSearchParamsInput {
   search_text?: string;
@@ -22,17 +24,17 @@ export function appendPositivePromptSearchCondition(
   searchText: string,
   tableAlias: string = 'im',
 ): void {
-  const pattern = `%${searchText}%`;
+  const pattern = buildSqlContainsPattern(searchText);
 
   conditions.push(`(
-    ${tableAlias}.prompt LIKE ?
-    OR ${tableAlias}.character_prompt_text LIKE ?
+    ${tableAlias}.prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}
+    OR ${tableAlias}.character_prompt_text LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}
     OR (
       json_valid(${tableAlias}.raw_nai_parameters) = 1
       AND EXISTS (
         SELECT 1
         FROM json_each(${tableAlias}.raw_nai_parameters, '$.v4_prompt.caption.char_captions') AS char_item
-        WHERE COALESCE(json_extract(char_item.value, '$.char_caption'), '') LIKE ?
+        WHERE COALESCE(json_extract(char_item.value, '$.char_caption'), '') LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}
       )
     )
   )`);
@@ -63,16 +65,16 @@ export function buildImageSearchFilterParts(
     appendPositivePromptSearchCondition(conditions, params, searchParams.search_text, 'im');
   }
   if (searchParams.negative_text) {
-    conditions.push('im.negative_prompt LIKE ?');
-    params.push(`%${searchParams.negative_text}%`);
+    conditions.push(`im.negative_prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`);
+    params.push(buildSqlContainsPattern(searchParams.negative_text));
   }
   if (searchParams.ai_tool) {
     conditions.push('im.ai_tool = ?');
     params.push(searchParams.ai_tool);
   }
   if (searchParams.model_name) {
-    conditions.push('im.model_name LIKE ?');
-    params.push(`%${searchParams.model_name}%`);
+    conditions.push(`im.model_name LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`);
+    params.push(buildSqlContainsPattern(searchParams.model_name));
   }
   if (searchParams.min_width) {
     conditions.push('im.width >= ?');

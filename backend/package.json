@@ -32,7 +32,8 @@
     "verify:file-verification-route-contracts": "tsx src/scripts/verifyFileVerificationRouteContracts.ts",
     "verify:civitai-route-contracts": "tsx src/scripts/verifyCivitaiRouteContracts.ts",
     "verify:image-file-route-contracts": "tsx src/scripts/verifyImageFileRouteContracts.ts",
-    "verify:backup-source-contracts": "tsx src/scripts/verifyBackupSourceContracts.ts"
+    "verify:backup-source-contracts": "tsx src/scripts/verifyBackupSourceContracts.ts",
+    "verify:like-search-literal-contracts": "tsx src/scripts/verifyLikeSearchLiteralContracts.ts"
   },
   "dependencies": {
     "@conai/shared": "file:../shared",

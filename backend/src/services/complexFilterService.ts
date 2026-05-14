@@ -13,6 +13,7 @@ import {
 } from './autoTagSqlShared';
 import { normalizeAutoTagSearchTerm } from './autoTagSearch/autoTagSearchTerms';
 import { ImageMetadataRecord } from '../types/image';
+import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
 
 type ComplexSearchScope = {
   ai_tool?: string;
@@ -180,8 +181,8 @@ export class ComplexFilterService {
       params.push(basicParams.ai_tool);
     }
     if (basicParams?.model_name) {
-      conditions.push('im.model_name LIKE ?');
-      params.push(`%${basicParams.model_name}%`);
+      conditions.push(`im.model_name LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`);
+      params.push(buildSqlContainsPattern(basicParams.model_name));
     }
     if (basicParams?.start_date) {
       conditions.push('DATE(im.first_seen_date) >= DATE(?)');
@@ -258,12 +259,12 @@ export class ComplexFilterService {
       return null;
     }
     if (condition.type === 'model_name') {
-      params.push(`%${condition.value}%`);
-      return 'im.model_name LIKE ?';
+      params.push(buildSqlContainsPattern(String(condition.value)));
+      return `im.model_name LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
     }
     if (condition.type === 'lora_model') {
-      params.push(`%${String(condition.value).toLowerCase()}%`);
-      return `LOWER(COALESCE(im.lora_models, '')) LIKE ?`;
+      params.push(buildSqlContainsPattern(String(condition.value).toLowerCase()));
+      return `LOWER(COALESCE(im.lora_models, '')) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
     }
     return null;
   }
@@ -282,8 +283,8 @@ export class ComplexFilterService {
     if (condition.type === 'prompt_contains' || condition.type === 'negative_prompt_contains') {
       const value = String(condition.value);
       const pattern = condition.case_sensitive
-        ? `%${value}%`
-        : `%${value.toLowerCase()}%`;
+        ? buildSqlContainsPattern(value)
+        : buildSqlContainsPattern(value.toLowerCase());
 
       // Positive prompt 검색은 NAI character prompt까지 포함
       if (!isNegative) {
@@ -292,8 +293,8 @@ export class ComplexFilterService {
 
       params.push(pattern);
       return condition.case_sensitive
-        ? `${column} LIKE ?`
-        : `LOWER(${column}) LIKE ?`;
+        ? `${column} LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`
+        : `LOWER(${column}) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
     }
 
     if (condition.type === 'prompt_regex' || condition.type === 'negative_prompt_regex') {
@@ -324,16 +325,16 @@ export class ComplexFilterService {
     caseSensitive: boolean
   ): string {
     const basePromptCondition = caseSensitive
-      ? 'im.prompt LIKE ?'
-      : 'LOWER(im.prompt) LIKE ?';
+      ? `im.prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`
+      : `LOWER(im.prompt) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
 
     const characterTextCondition = caseSensitive
-      ? 'im.character_prompt_text LIKE ?'
-      : 'LOWER(im.character_prompt_text) LIKE ?';
+      ? `im.character_prompt_text LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`
+      : `LOWER(im.character_prompt_text) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
 
     const charCaptionCondition = caseSensitive
-      ? `COALESCE(json_extract(char_item.value, '$.char_caption'), '') LIKE ?`
-      : `LOWER(COALESCE(json_extract(char_item.value, '$.char_caption'), '')) LIKE ?`;
+      ? `COALESCE(json_extract(char_item.value, '$.char_caption'), '') LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`
+      : `LOWER(COALESCE(json_extract(char_item.value, '$.char_caption'), '')) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
 
     params.push(pattern, pattern, pattern);
 
