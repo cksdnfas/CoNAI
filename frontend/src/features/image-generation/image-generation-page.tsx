@@ -10,7 +10,7 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
-import { getImageGenerationTabs, parseImageGenerationTab, type ImageGenerationTab } from './image-generation-tabs'
+import { getImageGenerationTabLabel, getImageGenerationTabs, parseImageGenerationTab, type ImageGenerationTab } from './image-generation-tabs'
 import { loadPersistedSelectedComfyWorkflowId, persistSelectedComfyWorkflowId } from './image-generation-shared'
 
 const NaiGenerationPanelLazy = lazy(async () => {
@@ -110,15 +110,7 @@ export function ImageGenerationPage() {
     }
   }, [searchParams, setSearchParams, visibleTabs])
 
-  const controllerLabel = activeTab === 'nai'
-    ? 'NAI'
-    : activeTab === 'codex'
-      ? 'Codex'
-      : activeTab === 'workflows'
-        ? t({ ko: '워크플로우', en: 'Workflow' })
-        : activeTab === 'reservations'
-          ? t({ ko: '예약 작업', en: 'Reservations' })
-          : 'ComfyUI'
+  const controllerLabel = getImageGenerationTabLabel(activeTab, t)
   const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || activeTab === 'codex' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))
   const useCompactNaiActionBar = activeTab === 'nai' && (useWideSplitPaneScroll || shouldUseControllerDrawer)
   const naiDrawerHeaderContentId = activeTab === 'nai' && shouldUseControllerDrawer ? 'nai-controller-drawer-header-content' : undefined

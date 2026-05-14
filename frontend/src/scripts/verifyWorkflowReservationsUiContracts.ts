@@ -1,6 +1,6 @@
 import type { TranslationInput, TranslationParams } from '../i18n'
 import type { GraphExecutionRecord, GraphWorkflowScheduleRecord } from '../lib/api-module-graph'
-import { getImageGenerationTabs, parseImageGenerationTab } from '../features/image-generation/image-generation-tabs'
+import { getImageGenerationTabLabel, getImageGenerationTabs, parseImageGenerationTab } from '../features/image-generation/image-generation-tabs'
 import {
   formatReservationTimestamp,
   getActiveWorkflowReservationScheduleCount,
@@ -21,16 +21,21 @@ const translationTemplates: Record<string, string> = {
   'image-generation.components.generation.queue.header.widget.value.daily': 'Daily {time}',
 }
 
-function translate(input: TranslationInput, params?: TranslationParams) {
-  const template = typeof input === 'string'
-    ? translationTemplates[input] ?? input
-    : input.en ?? input.ko ?? ''
+function createTranslate(language: 'ko' | 'en') {
+  return function translate(input: TranslationInput, params?: TranslationParams) {
+    const template = typeof input === 'string'
+      ? translationTemplates[input] ?? input
+      : input[language] ?? input.en ?? input.ko ?? ''
 
-  return template.replace(/\{([^}]+)\}/g, (match, key: string) => {
-    const value = params?.[key]
-    return value === undefined || value === null ? match : String(value)
-  })
+    return template.replace(/\{([^}]+)\}/g, (match, key: string) => {
+      const value = params?.[key]
+      return value === undefined || value === null ? match : String(value)
+    })
+  }
 }
+
+const translate = createTranslate('en')
+const translateKo = createTranslate('ko')
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -79,12 +84,22 @@ function makeSchedule(overrides: Partial<GraphWorkflowScheduleRecord> = {}): Gra
 
 function assertImageGenerationTabs() {
   const tabs = getImageGenerationTabs(translate)
+  const koTabs = getImageGenerationTabs(translateKo)
   assertEqual(
     tabs.map((tab) => tab.value).join(','),
     'nai,codex,comfyui,workflows,reservations',
     'image generation tabs should keep the established order with reservations last',
   )
   assertEqual(tabs.find((tab) => tab.value === 'reservations')?.label, 'Reservations', 'reservation tab should use the shared translation helper')
+  assertEqual(koTabs.find((tab) => tab.value === 'reservations')?.label, '예약작업', 'Korean reservation tab label should match the documented no-space naming rule')
+
+  for (const tab of tabs) {
+    assertEqual(getImageGenerationTabLabel(tab.value, translate), tab.label, `${tab.value} controller label should match its tab label in English`)
+  }
+  for (const tab of koTabs) {
+    assertEqual(getImageGenerationTabLabel(tab.value, translateKo), tab.label, `${tab.value} controller label should match its tab label in Korean`)
+  }
+
   assertEqual(parseImageGenerationTab('nai'), 'nai', 'NAI tab should parse directly')
   assertEqual(parseImageGenerationTab('workflow'), 'workflows', 'legacy singular workflow tab should resolve to workflows')
   assertEqual(parseImageGenerationTab('workflows'), 'workflows', 'workflows tab should parse directly')

@@ -6,14 +6,25 @@ type Translate = (input: TranslationInput, params?: TranslationParams) => string
 
 export const IMAGE_GENERATION_TAB_ORDER: ImageGenerationTab[] = ['nai', 'codex', 'comfyui', 'workflows', 'reservations']
 
+export function getImageGenerationTabLabel(tab: ImageGenerationTab, t: Translate) {
+  if (tab === 'nai') {
+    return 'NAI'
+  }
+  if (tab === 'codex') {
+    return 'Codex'
+  }
+  if (tab === 'comfyui') {
+    return 'ComfyUI'
+  }
+  if (tab === 'workflows') {
+    return t({ ko: '워크플로우', en: 'Workflow' })
+  }
+
+  return t({ ko: '예약작업', en: 'Reservations' })
+}
+
 export function getImageGenerationTabs(t: Translate): Array<{ value: ImageGenerationTab; label: string }> {
-  return [
-    { value: 'nai', label: 'NAI' },
-    { value: 'codex', label: 'Codex' },
-    { value: 'comfyui', label: 'ComfyUI' },
-    { value: 'workflows', label: t({ ko: '워크플로우', en: 'Workflow' }) },
-    { value: 'reservations', label: t({ ko: '예약 작업', en: 'Reservations' }) },
-  ]
+  return IMAGE_GENERATION_TAB_ORDER.map((value) => ({ value, label: getImageGenerationTabLabel(value, t) }))
 }
 
 export function parseImageGenerationTab(value?: string | null): ImageGenerationTab {
