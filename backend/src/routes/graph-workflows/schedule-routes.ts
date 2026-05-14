@@ -14,37 +14,17 @@ import {
   findGraphWorkflowOrRespond,
   findGraphWorkflowScheduleOrRespond,
   findScheduleWorkflowContextOrRespond,
+  MAX_BULK_SCHEDULE_ENQUEUE_COUNT,
   parseOptionalTrimmedString,
   parseRequiredGraphRouteId,
+  parseScheduleEnqueueCount,
   parseScheduleFailurePolicy,
   parseScheduleInputValues,
   parseScheduleMaxRunCount,
+  parseScheduleRunEnqueueCount,
   parseScheduleStatus,
   parseScheduleType,
 } from './route-helpers'
-
-const MAX_BULK_SCHEDULE_ENQUEUE_COUNT = 100
-
-function parseBoundedScheduleEnqueueCount(value: unknown, defaultValue: number, minValue: number) {
-  if (value === undefined || value === null || value === '') {
-    return defaultValue
-  }
-
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed)) {
-    return null
-  }
-
-  return parsed >= minValue && parsed <= MAX_BULK_SCHEDULE_ENQUEUE_COUNT ? parsed : null
-}
-
-function parseScheduleEnqueueCount(value: unknown) {
-  return parseBoundedScheduleEnqueueCount(value, 0, 0)
-}
-
-function parseScheduleRunEnqueueCount(value: unknown) {
-  return parseBoundedScheduleEnqueueCount(value, 1, 1)
-}
 
 function parseStoredScheduleInputValues(value?: string | null) {
   if (!value) {

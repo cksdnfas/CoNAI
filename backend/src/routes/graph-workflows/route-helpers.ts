@@ -2,8 +2,7 @@ import type { Response } from 'express'
 import { GraphWorkflowModel } from '../../models/GraphWorkflow'
 import { GraphWorkflowFolderModel } from '../../models/GraphWorkflowFolder'
 import { GraphWorkflowScheduleModel } from '../../models/GraphWorkflowSchedule'
-import { routeParam } from '../routeParam'
-import { sendRouteBadRequest } from '../routeValidation'
+import { parseRouteIntegerParam, sendRouteBadRequest } from '../routeValidation'
 import type {
   GraphWorkflowScheduleFailurePolicy,
   GraphWorkflowScheduleStatus,
@@ -51,7 +50,30 @@ export function parseScheduleMaxRunCount(value: unknown) {
 }
 
 export function parseGraphRouteInteger(value: string | string[] | undefined) {
-  return parseInt(routeParam(routeParam(value)))
+  return parseRouteIntegerParam(value)
+}
+
+export const MAX_BULK_SCHEDULE_ENQUEUE_COUNT = 100
+
+export function parseBoundedScheduleEnqueueCount(value: unknown, defaultValue: number, minValue: number) {
+  if (value === undefined || value === null || value === '') {
+    return defaultValue
+  }
+
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed)) {
+    return null
+  }
+
+  return parsed >= minValue && parsed <= MAX_BULK_SCHEDULE_ENQUEUE_COUNT ? parsed : null
+}
+
+export function parseScheduleEnqueueCount(value: unknown) {
+  return parseBoundedScheduleEnqueueCount(value, 0, 0)
+}
+
+export function parseScheduleRunEnqueueCount(value: unknown) {
+  return parseBoundedScheduleEnqueueCount(value, 1, 1)
 }
 
 export function parseGraphExecutionInputValues(value: unknown) {

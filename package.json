@@ -58,6 +58,7 @@
     "verify:module-library-grouping": "cd frontend && npm run verify:module-library-grouping",
     "verify:wallpaper-layout-contracts": "cd frontend && npm run verify:wallpaper-layout-contracts",
     "verify:watched-folder-route-contracts": "cd backend && npm run verify:watched-folder-route-contracts",
+    "verify:graph-workflow-route-contracts": "cd backend && npm run verify:graph-workflow-route-contracts",
     "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
     "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
     "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",
