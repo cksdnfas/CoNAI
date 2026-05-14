@@ -30,7 +30,8 @@
     "verify:image-similarity-contracts": "tsx src/scripts/verifyImageSimilarityContracts.ts",
     "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts",
     "verify:file-verification-route-contracts": "tsx src/scripts/verifyFileVerificationRouteContracts.ts",
-    "verify:civitai-route-contracts": "tsx src/scripts/verifyCivitaiRouteContracts.ts"
+    "verify:civitai-route-contracts": "tsx src/scripts/verifyCivitaiRouteContracts.ts",
+    "verify:image-file-route-contracts": "tsx src/scripts/verifyImageFileRouteContracts.ts"
   },
   "dependencies": {
     "@conai/shared": "file:../shared",
