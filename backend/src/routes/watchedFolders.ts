@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import {
   isInvalidWatchedFolderRouteId,
+  normalizeWatchedFolderWatcherEnabledUpdate,
   parseWatchedFolderLimit,
   parseWatchedFolderRouteId,
   sendWatchedFolderBadRequest,
@@ -177,6 +178,7 @@ router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const updates = req.body;
+  const watcherEnabledUpdate = normalizeWatchedFolderWatcherEnabledUpdate(updates.watcher_enabled);
 
   // 워처 관련 설정이 변경되었는지 확인
   const watcherConfigChanged = !!(
@@ -197,7 +199,7 @@ router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
   if (watcherConfigChanged) {
     const watcherStatus = FileWatcherService.getWatcherStatus(id);
 
-    if (updates.watcher_enabled === 1) {
+    if (watcherEnabledUpdate === true) {
       // 워처 활성화 요청
       try {
         if (watcherStatus && watcherStatus.state === 'watching') {
@@ -212,7 +214,7 @@ router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
       } catch (error) {
         console.error(`  ❌ 워처 시작/재시작 실패: folderId=${id}`, error);
       }
-    } else if (updates.watcher_enabled === 0) {
+    } else if (watcherEnabledUpdate === false) {
       // 워처 비활성화 요청
       try {
         if (watcherStatus) {

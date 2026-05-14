@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import type { Response } from 'express'
 import {
   isInvalidWatchedFolderRouteId,
+  normalizeWatchedFolderWatcherEnabledUpdate,
   parseWatchedFolderLimit,
   parseWatchedFolderRouteId,
   sendWatchedFolderBadRequest,
@@ -74,6 +75,16 @@ function verifyNotFoundResponseShape() {
   })
 }
 
+function verifyWatcherEnabledUpdateNormalization() {
+  assert.equal(normalizeWatchedFolderWatcherEnabledUpdate(true), true)
+  assert.equal(normalizeWatchedFolderWatcherEnabledUpdate(1), true)
+  assert.equal(normalizeWatchedFolderWatcherEnabledUpdate(false), false)
+  assert.equal(normalizeWatchedFolderWatcherEnabledUpdate(0), false)
+  assert.equal(normalizeWatchedFolderWatcherEnabledUpdate(undefined), undefined)
+  assert.equal(normalizeWatchedFolderWatcherEnabledUpdate(null), undefined)
+  assert.equal(normalizeWatchedFolderWatcherEnabledUpdate('1'), undefined)
+}
+
 function verifySharedMessages() {
   assert.deepEqual(WATCHED_FOLDER_ROUTE_MESSAGES, {
     invalidFolderId: '유효하지 않은 폴더 ID입니다',
@@ -86,6 +97,7 @@ verifyRouteIdParsing()
 verifyScanLogLimitParsing()
 verifyBadRequestResponseShape()
 verifyNotFoundResponseShape()
+verifyWatcherEnabledUpdateNormalization()
 verifySharedMessages()
 
 console.log('✅ Watched-folder route contracts verified')

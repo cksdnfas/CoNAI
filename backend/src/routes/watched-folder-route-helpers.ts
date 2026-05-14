@@ -29,3 +29,15 @@ export function parseWatchedFolderLimit(value: unknown, fallback: number) {
 export function isInvalidWatchedFolderRouteId(id: number) {
   return Number.isNaN(id)
 }
+
+export function normalizeWatchedFolderWatcherEnabledUpdate(value: unknown) {
+  if (value === true || value === 1) {
+    return true
+  }
+
+  if (value === false || value === 0) {
+    return false
+  }
+
+  return undefined
+}
