@@ -3,6 +3,10 @@ import path from 'path';
 import { db } from '../database/init';
 import { runtimePaths } from '../config/runtimePaths';
 import { normalizeUnicode } from '../utils/pathResolver';
+import {
+  getBackupSourceUpdateValidationPlan,
+  normalizeOptionalBackupSourceFlag,
+} from './backupSourceValueHelpers';
 
 type BackupImportMode = 'copy_original' | 'convert_webp';
 
@@ -148,8 +152,8 @@ export interface BackupSourceCreate {
   source_path: string;
   display_name?: string;
   target_folder_name: string;
-  recursive?: boolean;
-  watcher_enabled?: boolean;
+  recursive?: boolean | number;
+  watcher_enabled?: boolean | number;
   watcher_polling_interval?: number | null;
   import_mode?: BackupImportMode;
   webp_quality?: number;
@@ -159,12 +163,12 @@ export interface BackupSourceUpdate {
   source_path?: string;
   display_name?: string;
   target_folder_name?: string;
-  recursive?: boolean;
-  watcher_enabled?: boolean;
+  recursive?: boolean | number;
+  watcher_enabled?: boolean | number;
   watcher_polling_interval?: number | null;
   import_mode?: BackupImportMode;
   webp_quality?: number;
-  is_active?: boolean;
+  is_active?: boolean | number;
 }
 
 export class BackupSourceService {
@@ -215,8 +219,8 @@ export class BackupSourceService {
       sourcePath,
       input.display_name?.trim() || path.basename(sourcePath),
       targetFolderName,
-      input.recursive === false ? 0 : 1,
-      input.watcher_enabled === false ? 0 : 1,
+      normalizeOptionalBackupSourceFlag(input.recursive, true) ? 1 : 0,
+      normalizeOptionalBackupSourceFlag(input.watcher_enabled, true) ? 1 : 0,
       input.watcher_polling_interval ?? null,
       importMode,
       webpQuality,
@@ -236,14 +240,22 @@ export class BackupSourceService {
 
     const nextSourcePath = updates.source_path !== undefined ? normalizeSourcePath(updates.source_path) : current.source_path;
     const nextTargetFolderName = updates.target_folder_name !== undefined ? normalizeTargetFolderName(updates.target_folder_name) : current.target_folder_name;
+    const validationPlan = getBackupSourceUpdateValidationPlan(updates);
 
-    assertExistingDirectory(nextSourcePath);
-    assertSafeSourcePath(nextSourcePath);
-    ensureBackupTargetDirectory(nextTargetFolderName);
+    if (validationPlan.validateSourcePath) {
+      assertExistingDirectory(nextSourcePath);
+      assertSafeSourcePath(nextSourcePath);
+    }
 
-    const duplicate = db.prepare('SELECT id FROM backup_sources WHERE source_path = ? AND id != ?').get(nextSourcePath, id) as { id: number } | undefined;
-    if (duplicate) {
-      throw createServiceError('이미 등록된 source_path입니다', 400);
+    if (validationPlan.ensureTargetDirectory) {
+      ensureBackupTargetDirectory(nextTargetFolderName);
+    }
+
+    if (validationPlan.checkDuplicateSourcePath) {
+      const duplicate = db.prepare('SELECT id FROM backup_sources WHERE source_path = ? AND id != ?').get(nextSourcePath, id) as { id: number } | undefined;
+      if (duplicate) {
+        throw createServiceError('이미 등록된 source_path입니다', 400);
+      }
     }
 
     const fields: string[] = [];
@@ -266,12 +278,12 @@ export class BackupSourceService {
 
     if (updates.recursive !== undefined) {
       fields.push('recursive = ?');
-      values.push(updates.recursive ? 1 : 0);
+      values.push(normalizeOptionalBackupSourceFlag(updates.recursive, current.recursive === 1) ? 1 : 0);
     }
 
     if (updates.watcher_enabled !== undefined) {
       fields.push('watcher_enabled = ?');
-      values.push(updates.watcher_enabled ? 1 : 0);
+      values.push(normalizeOptionalBackupSourceFlag(updates.watcher_enabled, current.watcher_enabled === 1) ? 1 : 0);
     }
 
     if (updates.watcher_polling_interval !== undefined) {
@@ -291,7 +303,7 @@ export class BackupSourceService {
 
     if (updates.is_active !== undefined) {
       fields.push('is_active = ?');
-      values.push(updates.is_active ? 1 : 0);
+      values.push(normalizeOptionalBackupSourceFlag(updates.is_active, current.is_active === 1) ? 1 : 0);
     }
 
     if (fields.length === 0) {

@@ -69,6 +69,7 @@
     "verify:civitai-route-contracts": "cd backend && npm run verify:civitai-route-contracts",
     "verify:image-editor-tool-contracts": "cd frontend && npm run verify:image-editor-tool-contracts",
     "verify:image-file-route-contracts": "cd backend && npm run verify:image-file-route-contracts",
+    "verify:backup-source-contracts": "cd backend && npm run verify:backup-source-contracts",
     "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
     "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
     "verify:no-ui-signatures:full": "node scripts/verify-no-ui-signatures.mjs --scope=full",

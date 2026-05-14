@@ -3,6 +3,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { routeParam } from './routeParam';
 import { errorResponse, successResponse } from '@conai/shared';
 import { BackupSourceService } from '../services/backupSourceService';
+import { normalizeOptionalBackupSourceFlag } from '../services/backupSourceValueHelpers';
 import { BackupSourceWatcherService } from '../services/backupSourceWatcherService';
 
 const router = Router();
@@ -76,7 +77,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       webp_quality,
     });
 
-    if (watcher_enabled !== false) {
+    if (normalizeOptionalBackupSourceFlag(watcher_enabled, true)) {
       try {
         await BackupSourceWatcherService.startWatcher(id);
       } catch (error) {
@@ -119,7 +120,10 @@ router.patch('/:id', asyncHandler(async (req: Request, res: Response) => {
     const source = await BackupSourceService.getSource(id);
 
     if (watcherConfigChanged && source) {
-      if (source.watcher_enabled === 1 && source.is_active === 1) {
+      const watcherEnabled = normalizeOptionalBackupSourceFlag(source.watcher_enabled, false);
+      const sourceActive = normalizeOptionalBackupSourceFlag(source.is_active, false);
+
+      if (watcherEnabled && sourceActive) {
         await BackupSourceWatcherService.restartWatcher(id);
       } else {
         await BackupSourceWatcherService.stopWatcher(id);
