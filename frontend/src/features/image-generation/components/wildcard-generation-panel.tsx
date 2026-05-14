@@ -17,7 +17,6 @@ import {
   type WildcardRecord,
   type WildcardTool,
 } from '@/lib/api-wildcards'
-import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
@@ -32,6 +31,7 @@ import {
   copyWildcardText,
   getWildcardPromptSyntax,
   getWildcardPromptSyntaxLabel,
+  getWildcardWorkspacePermissions,
   getWorkspaceTabRecordType,
   isReadonlyWorkspaceTab,
   type WildcardWorkspaceTab,
@@ -176,9 +176,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     : t('image-generation.components.wildcard.generation.panel.item.syntax')
   const activeTabLabel = workspaceTabs.find((tab) => tab.value === activeWorkspaceTab)?.label ?? t('image-generation.components.wildcard.generation.panel.wildcard')
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
-  const canEditWildcardEntries = hasAuthPermission(permissionKeys, 'wildcards.edit')
-  const canDeleteWildcardEntries = hasAuthPermission(permissionKeys, 'wildcards.delete')
-  const canScanLora = hasAuthPermission(permissionKeys, 'wildcards.lora.scan')
+  const { canEditWildcardEntries, canDeleteWildcardEntries, canScanLora } = getWildcardWorkspacePermissions(permissionKeys)
   const canCreateInActiveTab = canCreateWorkspaceTabItem(activeWorkspaceTab) && canEditWildcardEntries
   const isReadonlyActiveTab = isReadonlyWorkspaceTab(activeWorkspaceTab)
 

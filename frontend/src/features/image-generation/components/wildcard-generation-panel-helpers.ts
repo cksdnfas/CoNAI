@@ -1,7 +1,23 @@
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import type { WildcardRecord } from '@/lib/api-wildcards'
 import { copyTextToClipboard } from '@/lib/clipboard'
 
 export type WildcardWorkspaceTab = 'wildcards' | 'preprocess' | 'lora'
+
+export interface WildcardWorkspacePermissionState {
+  canEditWildcardEntries: boolean
+  canDeleteWildcardEntries: boolean
+  canScanLora: boolean
+}
+
+/** Resolve wildcard workspace action permissions from the current auth status payload. */
+export function getWildcardWorkspacePermissions(permissionKeys: string[]): WildcardWorkspacePermissionState {
+  return {
+    canEditWildcardEntries: hasAuthPermission(permissionKeys, 'wildcards.edit'),
+    canDeleteWildcardEntries: hasAuthPermission(permissionKeys, 'wildcards.delete'),
+    canScanLora: hasAuthPermission(permissionKeys, 'wildcards.lora.scan'),
+  }
+}
 
 /** Build the prompt syntax text used for each wildcard workspace tab. */
 export function getWildcardPromptSyntax(

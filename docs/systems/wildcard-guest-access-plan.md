@@ -90,3 +90,7 @@
 - Builds:
   - `npm run build:frontend`
   - `npm run build:backend`
+
+## Verification Evidence
+
+- 2026-05-14: added `npm run verify:wildcard-guest-access-contracts` to lock the existing guest-access split across backend auth permissions/route guards and frontend route/catalog/action-permission helpers.
