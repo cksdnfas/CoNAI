@@ -3,7 +3,15 @@ import { settingsService } from '../../services/settingsService';
 import { PromptSimilarityService } from '../../services/promptSimilarityService';
 import { ImageMetadataRecord } from '../../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../../utils/dynamicUpdate';
+import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
 import { MediaMetadataFileQueries } from './MediaMetadataFileQueries';
+
+function normalizeSuggestionLimit(limit: number, fallback = 16, max = 50): number {
+  if (!Number.isFinite(limit) || limit <= 0) {
+    return fallback;
+  }
+  return Math.min(Math.floor(limit), max);
+}
 
 /**
  * 미디어 메타데이터 모델
@@ -359,18 +367,19 @@ export class MediaMetadataModel {
    */
   static searchModelSuggestions(query = '', limit = 16): Array<{ value: string; count: number }> {
     const normalizedQuery = query.trim().toLowerCase();
-    const likePattern = `%${normalizedQuery}%`;
+    const likePattern = buildSqlContainsPattern(normalizedQuery);
+    const normalizedLimit = normalizeSuggestionLimit(limit);
 
     return db.prepare(`
       SELECT model_name as value, COUNT(*) as count
       FROM media_metadata
       WHERE model_name IS NOT NULL
         AND TRIM(model_name) != ''
-        AND (? = '' OR LOWER(model_name) LIKE ?)
+        AND (? = '' OR LOWER(model_name) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE})
       GROUP BY model_name
       ORDER BY count DESC, model_name ASC
       LIMIT ?
-    `).all(normalizedQuery, likePattern, limit) as Array<{ value: string; count: number }>;
+    `).all(normalizedQuery, likePattern, normalizedLimit) as Array<{ value: string; count: number }>;
   }
 
   /**
@@ -378,7 +387,8 @@ export class MediaMetadataModel {
    */
   static searchLoraSuggestions(query = '', limit = 16): Array<{ value: string; count: number }> {
     const normalizedQuery = query.trim().toLowerCase();
-    const likePattern = `%${normalizedQuery}%`;
+    const likePattern = buildSqlContainsPattern(normalizedQuery);
+    const normalizedLimit = normalizeSuggestionLimit(limit);
 
     return db.prepare(`
       SELECT TRIM(CAST(lora_item.value AS TEXT)) as value, COUNT(*) as count
@@ -386,11 +396,11 @@ export class MediaMetadataModel {
       JOIN json_each(CASE WHEN json_valid(metadata.lora_models) = 1 THEN metadata.lora_models ELSE '[]' END) AS lora_item
       WHERE metadata.lora_models IS NOT NULL
         AND TRIM(CAST(lora_item.value AS TEXT)) != ''
-        AND (? = '' OR LOWER(CAST(lora_item.value AS TEXT)) LIKE ?)
+        AND (? = '' OR LOWER(CAST(lora_item.value AS TEXT)) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE})
       GROUP BY TRIM(CAST(lora_item.value AS TEXT))
       ORDER BY count DESC, value ASC
       LIMIT ?
-    `).all(normalizedQuery, likePattern, limit) as Array<{ value: string; count: number }>;
+    `).all(normalizedQuery, likePattern, normalizedLimit) as Array<{ value: string; count: number }>;
   }
 
   /**
