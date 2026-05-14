@@ -57,6 +57,7 @@ export interface DanbooruBrowserArtistRecord {
   tagId: number
   name: string
   displayName: string
+  translatedName?: string | null
   normalizedName: string
   worksCount: number
   danbooruUrl: string
@@ -76,6 +77,7 @@ export interface DanbooruBrowserCopyrightRecord {
   tagId: number
   name: string
   displayName: string
+  translatedName?: string | null
   confidence: number
   isPrimary: boolean
 }

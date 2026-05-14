@@ -307,7 +307,7 @@ export function PromptDanbooruBrowserPanel() {
         {isDanbooruDbAvailable && activeQuery.isLoading ? <TableLoading columns={activeSection === 'characters' ? 6 : activeSection === 'artists' ? 3 : 2} /> : null}
 
         {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'tags' ? <TagsTable items={tagsQuery.data?.items ?? []} language={language} /> : null}
-        {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'artists' ? <ArtistsTable items={artistsQuery.data?.items ?? []} /> : null}
+        {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'artists' ? <ArtistsTable items={artistsQuery.data?.items ?? []} language={language} /> : null}
         {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'characters' ? <CharactersTable items={charactersQuery.data?.items ?? []} language={language} /> : null}
 
         {isDanbooruDbAvailable ? <PaginationControls pagination={pagination} onPageChange={setPage} /> : null}

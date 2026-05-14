@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import type {
   DanbooruBrowserArtistRecord,
   DanbooruBrowserCharacterRecord,
+  DanbooruBrowserCopyrightRecord,
   DanbooruBrowserDatabaseInfo,
   DanbooruBrowserPagination,
   DanbooruBrowserRelatedTagCategory,
@@ -129,7 +130,9 @@ export function getSectionTitle(node: DanbooruBrowserSelectedNode, language: str
   return getLocalizedTreeLabel(node, language)
 }
 
-export function getLocalizedGeneralTagLabel(tag: Pick<DanbooruBrowserTagRecord | DanbooruBrowserRelatedTagRecord, 'displayName' | 'translatedName'>, language: string) {
+type LocalizedDanbooruName = Pick<DanbooruBrowserTagRecord | DanbooruBrowserRelatedTagRecord | DanbooruBrowserArtistRecord | DanbooruBrowserCharacterRecord | DanbooruBrowserCopyrightRecord, 'displayName' | 'translatedName'>
+
+export function getLocalizedGeneralTagLabel(tag: LocalizedDanbooruName, language: string) {
   return language === 'ko' && tag.translatedName ? `${tag.displayName} [${tag.translatedName}]` : tag.displayName
 }
 
@@ -237,14 +240,14 @@ export function TagsTable({ items, language }: { items: DanbooruBrowserTagRecord
   )
 }
 
-export function ArtistsTable({ items }: { items: DanbooruBrowserArtistRecord[] }) {
+export function ArtistsTable({ items, language }: { items: DanbooruBrowserArtistRecord[]; language: string }) {
   if (items.length === 0) return <EmptyTable />
 
   return (
     <SettingsResourceTable gridClassName="grid-cols-[minmax(0,1fr)_120px_64px] gap-4" minWidthClassName="min-w-0" headers={['Artist', <span className="block text-right" key="works">Works</span>, 'Link']}>
       {items.map((item) => (
         <div key={item.tagId} className="grid grid-cols-[minmax(0,1fr)_120px_64px] items-center gap-4 px-4 py-3 text-sm transition-colors hover:bg-surface-high/60">
-          <div className="min-w-0 font-medium text-foreground break-words" title={item.name}>{item.displayName}</div>
+          <div className="min-w-0 font-medium text-foreground break-words" title={item.name}>{getLocalizedGeneralTagLabel(item, language)}</div>
           <div className="text-right font-mono text-muted-foreground tabular-nums" title={String(item.worksCount)}>{formatCompactK(item.worksCount)}</div>
           <div className="flex justify-center"><DanbooruLinkButton href={item.danbooruUrl} label={`Open ${item.name} on Danbooru`} /></div>
         </div>
@@ -466,10 +469,10 @@ export function CharactersTable({ items, language }: { items: DanbooruBrowserCha
             className="grid grid-cols-[88px_minmax(150px,0.85fr)_110px_minmax(140px,0.85fr)_minmax(220px,1.8fr)_72px] items-start gap-4 px-4 py-3 text-sm transition-colors hover:bg-surface-high/60"
           >
             <CharacterImageCell item={item} />
-            <div className="min-w-0 font-medium text-foreground break-words" title={item.name}>{item.displayName}</div>
+            <div className="min-w-0 font-medium text-foreground break-words" title={item.name}>{getLocalizedGeneralTagLabel(item, language)}</div>
             <div className="pt-0.5 text-left font-mono text-muted-foreground tabular-nums" title={String(item.worksCount)}>{formatCompactK(item.worksCount)}</div>
             <div className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">
-              {item.copyrights.length > 0 ? item.copyrights.map((copyright) => copyright.displayName).join('\n') : '—'}
+              {item.copyrights.length > 0 ? item.copyrights.map((copyright) => getLocalizedGeneralTagLabel(copyright, language)).join('\n') : '—'}
             </div>
             <div className="min-w-0 whitespace-pre-wrap break-words leading-6 text-foreground/90">
               {item.relatedTags.length > 0 ? item.relatedTags.map((tag) => getRelatedTagLabel(tag)).join(', ') : '—'}
