@@ -22,6 +22,11 @@ export function getGenerationQueueServerRoutingTags(server: ComfyUIServerRecord)
   return new Set((server.routing_tags ?? []).map((tag) => normalizeGenerationQueueRoutingTag(tag)).filter((tag) => tag.length > 0))
 }
 
+/** Resolve the worker-slot capacity used by generation queue dispatch and ETA calculations. */
+export function getGenerationQueueServerCapacity(server: Pick<ComfyUIServerRecord, 'backend_type' | 'capacity'>) {
+  return Math.max(1, Math.floor(server.capacity ?? (server.backend_type === 'modal' ? 10 : 1)))
+}
+
 /** Check whether one server exposes a requested routing tag after normalization. */
 export function hasGenerationQueueServerRoutingTag(server: Pick<ComfyUIServerRecord, 'routing_tags'>, requestedTag: string) {
   const normalizedRequestedTag = normalizeGenerationQueueRoutingTag(requestedTag)

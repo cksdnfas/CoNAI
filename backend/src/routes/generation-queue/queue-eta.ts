@@ -1,5 +1,5 @@
 import { ComfyUIServerModel } from '../../models/ComfyUIServer'
-import { resolveGenerationQueueLaneMeta } from '../../services/generationQueueRouting'
+import { getGenerationQueueServerCapacity, resolveGenerationQueueLaneMeta } from '../../services/generationQueueRouting'
 import { settingsService } from '../../services/settingsService'
 import type { GenerationQueueJobRecord } from '../../types/generationQueue'
 
@@ -157,7 +157,16 @@ function getRunningLaneRecords(record: GenerationQueueJobRecord, queuePosition: 
   })
 }
 
-function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeComfyServerCount: number) {
+function getComfyServerCapacitySum(activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>, serverIds?: number[]) {
+  const serverIdSet = serverIds && serverIds.length > 0 ? new Set(serverIds) : null
+  const capacity = activeComfyServers
+    .filter((server) => serverIdSet === null || serverIdSet.has(server.id))
+    .reduce((sum, server) => sum + getGenerationQueueServerCapacity(server), 0)
+
+  return Math.max(capacity, 1)
+}
+
+function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>) {
   if (record.service_type === 'novelai' || record.service_type === 'codex') {
     const generationThrottle = settingsService.loadSettings().generationThrottle
     return record.service_type === 'novelai'
@@ -166,18 +175,18 @@ function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueueP
   }
 
   if (!queuePosition) {
-    return Math.max(activeComfyServerCount, 1)
+    return getComfyServerCapacitySum(activeComfyServers)
   }
 
-  if (queuePosition.scope === 'server') {
-    return 1
+  if (queuePosition.scope === 'server' && queuePosition.serverId !== null) {
+    return getComfyServerCapacitySum(activeComfyServers, [queuePosition.serverId])
   }
 
   if (queuePosition.eligibleServerIds.length > 0) {
-    return Math.max(queuePosition.eligibleServerIds.length, 1)
+    return getComfyServerCapacitySum(activeComfyServers, queuePosition.eligibleServerIds)
   }
 
-  return Math.max(activeComfyServerCount, 1)
+  return getComfyServerCapacitySum(activeComfyServers)
 }
 
 function getEstimatedRunningRemainingSeconds(record: GenerationQueueJobRecord, durationSeconds: number) {
@@ -205,7 +214,7 @@ function estimateQueueEta(
   activeRecords: GenerationQueueJobRecord[],
   queuePositions: Map<number, QueuePositionEntry>,
   referenceDurationById: Map<number, number | null>,
-  activeComfyServerCount: number,
+  activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>,
 ): QueueEtaEntry {
   const durationSeconds = referenceDurationById.get(record.id) ?? null
   if (durationSeconds === null) {
@@ -228,7 +237,7 @@ function estimateQueueEta(
     return { waitSeconds: null, totalSeconds: null, durationSeconds }
   }
 
-  const capacity = getLaneCapacity(record, queuePosition, activeComfyServerCount)
+  const capacity = getLaneCapacity(record, queuePosition, activeComfyServers)
   const slotAvailabilitySeconds = getRunningLaneRecords(record, queuePosition, activeRecords)
     .map((candidate) => {
       const candidateDurationSeconds = referenceDurationById.get(candidate.id) ?? durationSeconds
@@ -275,7 +284,7 @@ export function computeQueueEtas(
   activeRecords: GenerationQueueJobRecord[],
   queuePositions: Map<number, QueuePositionEntry>,
   completedRecords: GenerationQueueJobRecord[],
-  activeComfyServerCount: number,
+  activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>,
 ) {
   const etaById = new Map<number, QueueEtaEntry>()
   const referenceDurationById = new Map<number, number | null>()
@@ -287,7 +296,7 @@ export function computeQueueEtas(
   for (const record of activeRecords) {
     etaById.set(
       record.id,
-      estimateQueueEta(record, queuePositions.get(record.id), activeRecords, queuePositions, referenceDurationById, activeComfyServerCount),
+      estimateQueueEta(record, queuePositions.get(record.id), activeRecords, queuePositions, referenceDurationById, activeComfyServers),
     )
   }
 

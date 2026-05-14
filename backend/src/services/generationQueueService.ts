@@ -3,7 +3,7 @@ import { WorkflowModel } from '../models/Workflow'
 import { GenerationQueueModel } from '../models/GenerationQueue'
 import { ComfyUIServerModel } from '../models/ComfyUIServer'
 import { createComfyUIService, getComfyUIServerRuntimeStatuses } from './comfyuiService'
-import { isGenerationQueueComfyJobCompatibleWithServer } from './generationQueueRouting'
+import { getGenerationQueueServerCapacity, isGenerationQueueComfyJobCompatibleWithServer } from './generationQueueRouting'
 import { settingsService } from './settingsService'
 import { updateQueueRequestDebugMeta } from './generation-queue/queueDebugMeta'
 import { executeGenerationQueueJob, isGenerationQueueCancellationError } from './generation-queue/queueJobExecutors'
@@ -648,10 +648,6 @@ export class GenerationQueueService {
     this.tryStartThrottledServiceWorkers('codex', CODEX_WORKER_KEY, 'Codex')
   }
 
-  private static getComfyServerCapacity(server: ComfyUIServerRecord) {
-    return Math.max(1, Math.floor(server.capacity ?? (server.backend_type === 'modal' ? 10 : 1)))
-  }
-
   private static getActiveComfyWorkerCount(serverId: number) {
     return this.getActiveWorkerCountForPrefix(`comfyui:${serverId}`)
   }
@@ -684,7 +680,7 @@ export class GenerationQueueService {
       return
     }
 
-    const serversWithLocalCapacity = activeServers.filter((server) => this.getActiveComfyWorkerCount(server.id) < this.getComfyServerCapacity(server))
+    const serversWithLocalCapacity = activeServers.filter((server) => this.getActiveComfyWorkerCount(server.id) < getGenerationQueueServerCapacity(server))
     if (serversWithLocalCapacity.length === 0) {
       return
     }
@@ -703,7 +699,7 @@ export class GenerationQueueService {
         continue
       }
 
-      const capacity = this.getComfyServerCapacity(server)
+      const capacity = getGenerationQueueServerCapacity(server)
       const localRunning = this.getActiveComfyWorkerCount(server.id)
       const availableLocalSlots = Math.max(0, capacity - localRunning)
       if (availableLocalSlots === 0) {

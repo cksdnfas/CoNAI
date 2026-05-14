@@ -193,11 +193,9 @@ export function createGenerationQueueReadRoutes() {
 
     const activeComfyServers = hasActiveRelevantRecords ? ComfyUIServerModel.findActiveServers() : []
 
-    const activeComfyServerCount = activeComfyServers.length
-
     const queuePositions = computeQueuePositions(activeRelevantRecords, activeComfyServers)
 
-    const queueEtas = computeQueueEtas(activeRelevantRecords, queuePositions, completedRelevantRecords, activeComfyServerCount)
+    const queueEtas = computeQueueEtas(activeRelevantRecords, queuePositions, completedRelevantRecords, activeComfyServers)
 
     const requesterUsernames = buildQueueRequesterUsernameMap(records)
 
