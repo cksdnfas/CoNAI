@@ -4,6 +4,11 @@ import { SystemSettingsService } from '../services/systemSettingsService';
 import { AutoScanScheduler } from '../services/autoScanScheduler';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { successResponse } from '@conai/shared';
+import {
+  applyFileVerificationSettingsUpdate,
+  parseFileVerificationLogLimit,
+  readFileVerificationSettings,
+} from './file-verification-route-helpers';
 
 const router = Router();
 
@@ -53,7 +58,7 @@ router.post(
 router.get(
   '/logs',
   asyncHandler(async (req: Request, res: Response) => {
-    const limit = parseInt(req.query.limit as string) || 50;
+    const limit = parseFileVerificationLogLimit(req.query.limit);
     const logs = FileVerificationService.getRecentLogs(limit);
     return res.json(successResponse(logs));
   })
@@ -66,10 +71,10 @@ router.get(
 router.get(
   '/settings',
   asyncHandler(async (req: Request, res: Response) => {
-    const settings = {
-      enabled: SystemSettingsService.isFileVerificationEnabled(),
-      interval: SystemSettingsService.getFileVerificationInterval(),
-    };
+    const settings = readFileVerificationSettings({
+      isFileVerificationEnabled: () => SystemSettingsService.isFileVerificationEnabled(),
+      getFileVerificationInterval: () => SystemSettingsService.getFileVerificationInterval(),
+    });
     return res.json(successResponse(settings));
   })
 );
@@ -81,28 +86,13 @@ router.get(
 router.put(
   '/settings',
   asyncHandler(async (req: Request, res: Response) => {
-    const { enabled, interval } = req.body;
-
-    let settingsChanged = false;
-
-    if (typeof enabled === 'boolean') {
-      SystemSettingsService.updateFileVerificationEnabled(enabled);
-      settingsChanged = true;
-    }
-
-    if (typeof interval === 'number') {
-      SystemSettingsService.updateFileVerificationInterval(interval);
-      settingsChanged = true;
-    }
-
-    if (settingsChanged) {
-      AutoScanScheduler.restart();
-    }
-
-    const updatedSettings = {
-      enabled: SystemSettingsService.isFileVerificationEnabled(),
-      interval: SystemSettingsService.getFileVerificationInterval(),
-    };
+    const { settings: updatedSettings } = applyFileVerificationSettingsUpdate(req.body, {
+      isFileVerificationEnabled: () => SystemSettingsService.isFileVerificationEnabled(),
+      getFileVerificationInterval: () => SystemSettingsService.getFileVerificationInterval(),
+      updateFileVerificationEnabled: (enabled) => SystemSettingsService.updateFileVerificationEnabled(enabled),
+      updateFileVerificationInterval: (interval) => SystemSettingsService.updateFileVerificationInterval(interval),
+      restartScheduler: () => AutoScanScheduler.restart(),
+    });
 
     return res.json({
       success: true,

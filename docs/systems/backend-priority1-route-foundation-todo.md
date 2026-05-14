@@ -51,6 +51,7 @@
   - 2026-05-14: added and ran `npm run verify:route-validation-foundation` for route-validation helper payloads, parser fallbacks, and legacy route integer parsing semantics.
   - 2026-05-14: added and ran `npm run verify:upload-metadata-utilities` for upload metadata helper contracts covering multipart quality/save-option parsing, output format resolution, metadata patch validation, extracted preview shaping, and download headers.
   - 2026-05-14: added and ran `npm run verify:graph-workflow-route-contracts` for graph workflow route helper contracts covering legacy ID parsing, 400/404 response payloads, schedule parser values, max-run parsing, and enqueue count bounds.
+  - 2026-05-14: added and ran `npm run verify:file-verification-route-contracts` for file verification route helper contracts covering legacy log-limit parsing and settings restart decisions without invoking real verification/deletion.
 - [x] no route path changes
 - [x] no response payload shape changes
 - [x] no frontend code changes required for Priority 1 slice
@@ -72,3 +73,4 @@ Stop and return to serial mode if any of the following happens:
   - `backend/src/routes/settings/rating.routes.ts` — covered by `npm run verify:route-validation-foundation`
   - `backend/src/routes/images/uploadMetadataUtilityRoutes.ts` — helper contracts covered by `npm run verify:upload-metadata-utilities`
   - `backend/src/routes/image-editor.routes.ts` — covered by `npm run verify:route-validation-foundation`
+  - `backend/src/routes/fileVerification.ts` — covered by `npm run verify:file-verification-route-contracts`
