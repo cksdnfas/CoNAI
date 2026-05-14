@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "verify:module-library-grouping": "tsx src/scripts/verifyModuleLibraryGrouping.ts",
-    "verify:wallpaper-layout-contracts": "tsx src/scripts/verifyWallpaperLayoutContracts.ts"
+    "verify:wallpaper-layout-contracts": "tsx src/scripts/verifyWallpaperLayoutContracts.ts",
+    "verify:generation-queue-ui-contracts": "tsx src/scripts/verifyGenerationQueueUiContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",
