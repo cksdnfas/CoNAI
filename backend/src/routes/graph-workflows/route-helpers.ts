@@ -53,6 +53,21 @@ export function parseGraphRouteInteger(value: string | string[] | undefined) {
   return parseRouteIntegerParam(value)
 }
 
+export function parseOptionalGraphFolderId(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return { ok: true, value: null } as const
+  }
+
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return { ok: false, value: null } as const
+  }
+
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0
+    ? { ok: true, value: parsed } as const
+    : { ok: false, value: null } as const
+}
+
 export const MAX_BULK_SCHEDULE_ENQUEUE_COUNT = 100
 
 export function parseBoundedScheduleEnqueueCount(value: unknown, defaultValue: number, minValue: number) {

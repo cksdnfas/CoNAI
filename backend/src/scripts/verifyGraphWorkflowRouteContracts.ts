@@ -5,6 +5,7 @@ import {
   parseBoundedScheduleEnqueueCount,
   parseGraphExecutionInputValues,
   parseGraphRouteInteger,
+  parseOptionalGraphFolderId,
   parseOptionalTrimmedString,
   parseRequiredGraphRouteId,
   parseScheduleEnqueueCount,
@@ -44,6 +45,20 @@ function verifyGraphRouteIntegerParsing() {
   assert.equal(Number.isNaN(parseGraphRouteInteger('not-a-number')), true)
   assert.throws(() => parseGraphRouteInteger(undefined), /Route parameter is required/)
   assert.throws(() => parseGraphRouteInteger([]), /Route parameter is required/)
+}
+
+function verifyOptionalGraphFolderIdParsing() {
+  assert.deepEqual(parseOptionalGraphFolderId(undefined), { ok: true, value: null })
+  assert.deepEqual(parseOptionalGraphFolderId(null), { ok: true, value: null })
+  assert.deepEqual(parseOptionalGraphFolderId(''), { ok: true, value: null })
+  assert.deepEqual(parseOptionalGraphFolderId('7'), { ok: true, value: 7 })
+  assert.deepEqual(parseOptionalGraphFolderId(7), { ok: true, value: 7 })
+  assert.deepEqual(parseOptionalGraphFolderId('1.5'), { ok: false, value: null })
+  assert.deepEqual(parseOptionalGraphFolderId('0'), { ok: false, value: null })
+  assert.deepEqual(parseOptionalGraphFolderId('-1'), { ok: false, value: null })
+  assert.deepEqual(parseOptionalGraphFolderId('not-a-number'), { ok: false, value: null })
+  assert.deepEqual(parseOptionalGraphFolderId(['7']), { ok: false, value: null })
+  assert.deepEqual(parseOptionalGraphFolderId(true), { ok: false, value: null })
 }
 
 function verifyRequiredIdBadRequestShape() {
@@ -141,6 +156,7 @@ function verifyScheduleEnqueueCountParsers() {
 }
 
 verifyGraphRouteIntegerParsing()
+verifyOptionalGraphFolderIdParsing()
 verifyRequiredIdBadRequestShape()
 verifyNotFoundShape()
 verifyScheduleEnumParsers()

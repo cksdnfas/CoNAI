@@ -15,6 +15,7 @@ import {
   findGraphWorkflowScheduleOrRespond,
   findScheduleWorkflowContextOrRespond,
   MAX_BULK_SCHEDULE_ENQUEUE_COUNT,
+  parseOptionalGraphFolderId,
   parseOptionalTrimmedString,
   parseRequiredGraphRouteId,
   parseScheduleEnqueueCount,
@@ -80,15 +81,20 @@ export function createGraphWorkflowScheduleRoutes() {
 
   router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
     const workflowIdParam = typeof req.query.workflow_id === 'string' ? Number(req.query.workflow_id) : null
-    const folderIdParam = typeof req.query.folder_id === 'string' ? Number(req.query.folder_id) : null
+    const folderIdResult = parseOptionalGraphFolderId(req.query.folder_id)
+    if (!folderIdResult.ok) {
+      return sendRouteBadRequest(res, 'Invalid graph workflow folder ID')
+    }
+
+    const folderId = folderIdResult.value
 
     try {
       if (workflowIdParam !== null && Number.isFinite(workflowIdParam)) {
         return res.json({ success: true, data: decorateGraphWorkflowScheduleRecords(GraphWorkflowScheduleModel.findByWorkflowId(workflowIdParam)) } as ModuleGraphResponse)
       }
 
-      if (folderIdParam !== null && Number.isFinite(folderIdParam)) {
-        const folder = findGraphWorkflowFolderOrRespond(res, folderIdParam)
+      if (folderId !== null) {
+        const folder = findGraphWorkflowFolderOrRespond(res, folderId)
         if (!folder) {
           return
         }

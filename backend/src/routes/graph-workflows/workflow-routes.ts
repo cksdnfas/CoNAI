@@ -15,6 +15,7 @@ import type {
 import {
   findGraphWorkflowFolderOrRespond,
   parseGraphRouteInteger,
+  parseOptionalGraphFolderId,
 } from './route-helpers'
 
 export function createGraphWorkflowCrudRoutes() {
@@ -32,8 +33,12 @@ export function createGraphWorkflowCrudRoutes() {
   }))
 
   router.get('/browse-content', asyncHandler(async (req: Request, res: Response) => {
-    const folderIdParam = typeof req.query.folder_id === 'string' ? Number(req.query.folder_id) : null
-    const folderId = folderIdParam !== null && Number.isFinite(folderIdParam) ? folderIdParam : null
+    const folderIdResult = parseOptionalGraphFolderId(req.query.folder_id)
+    if (!folderIdResult.ok) {
+      return sendRouteBadRequest(res, 'Invalid graph workflow folder ID')
+    }
+
+    const folderId = folderIdResult.value
 
     if (folderId !== null && !findGraphWorkflowFolderOrRespond(res, folderId)) {
       return

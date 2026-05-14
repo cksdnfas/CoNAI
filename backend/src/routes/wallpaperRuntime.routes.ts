@@ -6,6 +6,7 @@ import { GraphWorkflowFolderModel } from '../models/GraphWorkflowFolder';
 import { ImageGroupModel } from '../models/Group';
 import { enrichCompactImageWithFileView } from './images/utils';
 import { routeParam } from './routeParam';
+import { parseOptionalGraphFolderId } from './graph-workflows/route-helpers';
 import { errorResponse, successResponse, validateId } from '@conai/shared';
 
 const router = Router();
@@ -21,8 +22,12 @@ router.get('/settings', asyncHandler(async (_req: Request, res: Response) => {
 
 /** Return one read-only workflow browse snapshot for wallpaper live widgets. */
 router.get('/browse-content', asyncHandler(async (req: Request, res: Response) => {
-  const folderIdParam = typeof req.query.folder_id === 'string' ? Number(req.query.folder_id) : null;
-  const folderId = folderIdParam !== null && Number.isFinite(folderIdParam) ? folderIdParam : null;
+  const folderIdResult = parseOptionalGraphFolderId(req.query.folder_id);
+  if (!folderIdResult.ok) {
+    return res.status(400).json(errorResponse('Invalid graph workflow folder ID'));
+  }
+
+  const folderId = folderIdResult.value;
 
   if (folderId !== null && !GraphWorkflowFolderModel.findById(folderId)) {
     return res.status(404).json(errorResponse('Graph workflow folder not found'));
