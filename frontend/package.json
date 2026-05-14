@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "verify:module-library-grouping": "tsx src/scripts/verifyModuleLibraryGrouping.ts",
     "verify:wallpaper-layout-contracts": "tsx src/scripts/verifyWallpaperLayoutContracts.ts",
-    "verify:generation-queue-ui-contracts": "tsx src/scripts/verifyGenerationQueueUiContracts.ts"
+    "verify:generation-queue-ui-contracts": "tsx src/scripts/verifyGenerationQueueUiContracts.ts",
+    "verify:workflow-reservations-ui-contracts": "tsx src/scripts/verifyWorkflowReservationsUiContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",

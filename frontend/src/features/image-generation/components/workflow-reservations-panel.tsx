@@ -19,13 +19,10 @@ import {
   updateGraphWorkflowSchedule,
   cancelGraphExecution,
 } from '@/lib/api-module-graph'
-import type { GraphExecutionRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
+import type { GraphWorkflowRecord } from '@/lib/api-module-graph'
 import { getErrorMessage } from '../image-generation-shared'
 import { ModuleWorkflowEmptyRunsTab } from '@/features/module-graph/components/module-workflow-empty-runs-tab'
-
-function isActiveReservationExecution(status: GraphExecutionRecord['status']) {
-  return status === 'queued' || status === 'running'
-}
+import { isActiveReservationExecution } from './workflow-reservations-ui'
 
 /** Render the dedicated workflow reservation page inside image generation. */
 export function WorkflowReservationsPanel() {

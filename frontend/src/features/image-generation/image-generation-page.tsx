@@ -10,6 +10,7 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
+import { getImageGenerationTabs, parseImageGenerationTab, type ImageGenerationTab } from './image-generation-tabs'
 import { loadPersistedSelectedComfyWorkflowId, persistSelectedComfyWorkflowId } from './image-generation-shared'
 
 const NaiGenerationPanelLazy = lazy(async () => {
@@ -47,28 +48,8 @@ const WorkflowReservationsPanelLazy = lazy(async () => {
   return { default: module.WorkflowReservationsPanel }
 })
 
-type ImageGenerationTab = 'nai' | 'codex' | 'comfyui' | 'workflows' | 'reservations'
-
 function PanelFallback() {
   return <div className="min-h-[16rem] rounded-sm border border-border bg-surface-low animate-pulse" />
-}
-
-function getImageGenerationTabs(t: (dictionary: { ko: string; en: string }) => string): Array<{ value: ImageGenerationTab; label: string }> {
-  return [
-    { value: 'nai', label: 'NAI' },
-    { value: 'codex', label: 'Codex' },
-    { value: 'comfyui', label: 'ComfyUI' },
-    { value: 'workflows', label: t({ ko: '워크플로우', en: 'Workflow' }) },
-    { value: 'reservations', label: t({ ko: '예약 작업', en: 'Reservations' }) },
-  ]
-}
-
-function parseImageGenerationTab(value?: string | null): ImageGenerationTab {
-  if (value === 'nai' || value === 'codex' || value === 'comfyui' || value === 'workflows' || value === 'workflow' || value === 'reservations') {
-    return value === 'workflow' ? 'workflows' : value
-  }
-
-  return 'nai'
 }
 
 export function ImageGenerationPage() {
