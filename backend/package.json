@@ -22,7 +22,8 @@
     "verify:route-validation-foundation": "tsx src/scripts/verifyRouteValidationFoundation.ts",
     "verify:upload-metadata-utilities": "tsx src/scripts/verifyUploadMetadataUtilityContracts.ts",
     "verify:auth-db-bootstrap": "tsx src/scripts/verifyAuthDbBootstrap.ts",
-    "verify:codex-generation-contracts": "tsx src/scripts/verifyCodexGenerationContracts.ts"
+    "verify:codex-generation-contracts": "tsx src/scripts/verifyCodexGenerationContracts.ts",
+    "verify:watched-folder-route-contracts": "tsx src/scripts/verifyWatchedFolderRouteContracts.ts"
   },
   "dependencies": {
     "@conai/shared": "file:../shared",
