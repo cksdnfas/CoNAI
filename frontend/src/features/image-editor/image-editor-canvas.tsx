@@ -1,7 +1,13 @@
 import { useEffect, useState, type RefObject, type WheelEvent } from 'react'
 import type Konva from 'konva'
 import { Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text } from 'react-konva'
-import { useI18n, type TranslationDictionary } from '@/i18n'
+import { useI18n } from '@/i18n'
+import {
+  getImageEditorBrushOpacityLabel,
+  getImageEditorBrushSizeLabel,
+  getImageEditorToolLabel,
+  isImageEditorBrushTool,
+} from './image-editor-tool-metadata'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import { loadEditorImage } from './image-editor-utils'
 
@@ -33,27 +39,6 @@ interface ImageEditorCanvasProps {
   onStagePointerMove: () => void
   onStagePointerUp: () => void
   onMovePasteLayer: (layerId: string, nextX: number, nextY: number) => void
-}
-
-function getImageEditorToolLabel(tool: ImageEditorTool): TranslationDictionary {
-  switch (tool) {
-    case 'pan':
-      return { ko: '이동', en: 'Pan' }
-    case 'select':
-      return { ko: '선택', en: 'Select' }
-    case 'brush':
-      return { ko: '브러시', en: 'Brush' }
-    case 'eraser':
-      return { ko: '지우개', en: 'Eraser' }
-    case 'mask-brush':
-      return { ko: '마스크 브러시', en: 'Mask Brush' }
-    case 'mask-eraser':
-      return { ko: '마스크 지우개', en: 'Mask Eraser' }
-    case 'crop':
-      return { ko: '자르기', en: 'Crop' }
-    default:
-      return { ko: tool, en: tool }
-  }
 }
 
 type LoadedPasteImageProps = {
@@ -139,11 +124,12 @@ export function ImageEditorCanvas({
 }: ImageEditorCanvasProps) {
   const { t } = useI18n()
   const isMaskTool = tool === 'mask-brush' || tool === 'mask-eraser'
+  const isBrushTool = isImageEditorBrushTool(tool)
   const canvasCursorClassName = tool === 'pan'
     ? 'cursor-grab'
     : tool === 'select' || tool === 'crop'
       ? 'cursor-crosshair'
-      : tool === 'brush' || tool === 'eraser' || isMaskTool
+      : isBrushTool
         ? 'cursor-none'
         : 'cursor-default'
 
@@ -157,12 +143,12 @@ export function ImageEditorCanvas({
         <span className="font-medium text-white/90">{t(getImageEditorToolLabel(tool))}</span>
         <span className="text-white/50">•</span>
         <span>{t({ ko: '확대 {value}%', en: 'Zoom {value}%' }, { value: Math.round(zoom * 100) })}</span>
-        {(tool === 'brush' || tool === 'eraser' || tool === 'mask-brush' || tool === 'mask-eraser') ? (
+        {isBrushTool ? (
           <>
             <span className="text-white/50">•</span>
-            <span>{t({ ko: '브러시 {value}px', en: 'Brush {value}px' }, { value: brushSize })}</span>
+            <span>{getImageEditorBrushSizeLabel(brushSize, t)}</span>
             <span className="text-white/50">•</span>
-            <span>{t({ ko: '불투명도 {value}%', en: 'Opacity {value}%' }, { value: brushOpacity })}</span>
+            <span>{getImageEditorBrushOpacityLabel(brushOpacity, t)}</span>
           </>
         ) : null}
         {normalizedSelectionRect ? (
@@ -238,7 +224,7 @@ export function ImageEditorCanvas({
                     </Group>
                   ) : null}
 
-                  {brushPreviewPoint && (tool === 'brush' || tool === 'eraser' || tool === 'mask-brush' || tool === 'mask-eraser') ? (
+                  {brushPreviewPoint && isBrushTool ? (
                     <Group listening={false}>
                       <Rect
                         x={brushPreviewPoint.x - 1 / zoom}

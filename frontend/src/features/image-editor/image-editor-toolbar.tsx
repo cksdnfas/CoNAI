@@ -3,7 +3,15 @@ import { Brush, ClipboardPaste, Crop, Eraser, FlipHorizontal, Hand, RotateCw, Sq
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useI18n, type TranslationDictionary } from '@/i18n'
+import { useI18n } from '@/i18n'
+import {
+  getImageEditorBrushColorLabel,
+  getImageEditorBrushOpacityLabel,
+  getImageEditorBrushSizeLabel,
+  getImageEditorToolHint,
+  getImageEditorToolLabel,
+  getImageEditorToolShortcut,
+} from './image-editor-tool-metadata'
 import type { ImageEditorTool } from './image-editor-types'
 
 interface ImageEditorToolbarProps {
@@ -59,69 +67,6 @@ function ToolbarSection({ label, children }: { label: string; children: ReactNod
   )
 }
 
-function getImageEditorToolShortcut(tool: ImageEditorTool) {
-  switch (tool) {
-    case 'pan':
-      return 'H'
-    case 'select':
-      return 'S'
-    case 'brush':
-      return 'B'
-    case 'eraser':
-      return 'E'
-    case 'mask-brush':
-      return 'M'
-    case 'mask-eraser':
-      return 'Shift+M'
-    case 'crop':
-      return 'C'
-    default:
-      return '-'
-  }
-}
-
-function getImageEditorToolLabel(tool: ImageEditorTool): TranslationDictionary {
-  switch (tool) {
-    case 'pan':
-      return { ko: '이동', en: 'Pan' }
-    case 'select':
-      return { ko: '선택', en: 'Select' }
-    case 'brush':
-      return { ko: '브러시', en: 'Brush' }
-    case 'eraser':
-      return { ko: '지우개', en: 'Eraser' }
-    case 'mask-brush':
-      return { ko: '마스크', en: 'Mask' }
-    case 'mask-eraser':
-      return { ko: '마스크 지우기', en: 'Mask erase' }
-    case 'crop':
-      return { ko: '자르기', en: 'Crop' }
-    default:
-      return { ko: '-', en: '-' }
-  }
-}
-
-function getImageEditorToolHint(tool: ImageEditorTool): TranslationDictionary {
-  switch (tool) {
-    case 'pan':
-      return { ko: '보기를 드래그해서 세부 영역을 확인해.', en: 'Drag the view to inspect details.' }
-    case 'select':
-      return { ko: '선택 영역을 만들고, 이동하거나 크기를 조절해.', en: 'Create, move, or resize a selection rectangle.' }
-    case 'brush':
-      return { ko: '현재 드로우 레이어에 칠해.', en: 'Paint on the active draw layer.' }
-    case 'eraser':
-      return { ko: '현재 드로우 레이어의 내용을 지워.', en: 'Erase content from the active draw layer.' }
-    case 'mask-brush':
-      return { ko: '마스크에 흰색 편집 가능 영역을 칠해.', en: 'Paint white editable infill regions into the mask.' }
-    case 'mask-eraser':
-      return { ko: '마스크의 흰색 영역을 지워.', en: 'Remove white regions from the mask.' }
-    case 'crop':
-      return { ko: '자르기 영역을 드래그한 다음 적용해.', en: 'Drag a crop area, then apply it.' }
-    default:
-      return { ko: '', en: '' }
-  }
-}
-
 /** Render the main editor toolbar with tools, history, transform, and selection actions. */
 export function ImageEditorToolbar({
   tool,
@@ -175,10 +120,10 @@ export function ImageEditorToolbar({
         </ToolButton>
         {enableMaskEditing ? (
           <>
-            <ToolButton active={tool === 'mask-brush'} onClick={() => onToolChange('mask-brush')} title={t({ ko: '마스크 브러시', en: 'Mask brush' })}>
+            <ToolButton active={tool === 'mask-brush'} onClick={() => onToolChange('mask-brush')} title={t(getImageEditorToolLabel('mask-brush'))}>
               <Brush className="h-4 w-4" /> {t(getImageEditorToolLabel('mask-brush'))}
             </ToolButton>
-            <ToolButton active={tool === 'mask-eraser'} onClick={() => onToolChange('mask-eraser')} title={t({ ko: '마스크 지우개', en: 'Mask eraser' })}>
+            <ToolButton active={tool === 'mask-eraser'} onClick={() => onToolChange('mask-eraser')} title={t(getImageEditorToolLabel('mask-eraser'))}>
               <Eraser className="h-4 w-4" /> {t(getImageEditorToolLabel('mask-eraser'))}
             </ToolButton>
           </>
@@ -274,9 +219,11 @@ export function ImageEditorToolbar({
         <span>•</span>
         <span>{t(getImageEditorToolHint(tool))}</span>
         <span>•</span>
-        <span>{t({ ko: '브러시', en: 'Brush' })} [ ]</span>
+        <span>{getImageEditorBrushSizeLabel(brushSize, t)}</span>
         <span>•</span>
-        <span>{t({ ko: '불투명도', en: 'Opacity' })} {brushOpacity}%</span>
+        <span>{getImageEditorBrushColorLabel(brushColor, t)}</span>
+        <span>•</span>
+        <span>{getImageEditorBrushOpacityLabel(brushOpacity, t)}</span>
         {(tool === 'mask-brush' || tool === 'mask-eraser') ? (
           <>
             <span>•</span>

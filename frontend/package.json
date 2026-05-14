@@ -12,7 +12,8 @@
     "verify:wallpaper-layout-contracts": "tsx src/scripts/verifyWallpaperLayoutContracts.ts",
     "verify:generation-queue-ui-contracts": "tsx src/scripts/verifyGenerationQueueUiContracts.ts",
     "verify:workflow-reservations-ui-contracts": "tsx src/scripts/verifyWorkflowReservationsUiContracts.ts",
-    "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts"
+    "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts",
+    "verify:image-editor-tool-contracts": "tsx src/scripts/verifyImageEditorToolContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",
