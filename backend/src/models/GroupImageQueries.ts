@@ -77,16 +77,6 @@ export function findImagesByGroupQuery(
 
   const rows = db.prepare(query).all(...queryParams, limit, offset) as ImageWithFileView[];
 
-  if (rows.length > 0) {
-    console.log('[DEBUG Group.ts:findImagesByGroup] First row from DB:', {
-      composite_hash: rows[0].composite_hash,
-      id: rows[0].id,
-      file_type: rows[0].file_type,
-      mime_type: rows[0].mime_type,
-      file_size: rows[0].file_size
-    });
-  }
-
   return { images: rows, total };
 }
 

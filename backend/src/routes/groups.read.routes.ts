@@ -113,16 +113,6 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
       return enriched;
     });
 
-    if (enrichedImages.length > 0) {
-      console.log('[DEBUG] First enriched image:', {
-        composite_hash: enrichedImages[0].composite_hash,
-        id: enrichedImages[0].id,
-        file_type: enrichedImages[0].file_type,
-        mime_type: enrichedImages[0].mime_type,
-        file_size: enrichedImages[0].file_size
-      });
-    }
-
     return res.json(
       successResponse({
         images: enrichedImages,
