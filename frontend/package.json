@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "verify:module-library-grouping": "tsx src/scripts/verifyModuleLibraryGrouping.ts"
+    "verify:module-library-grouping": "tsx src/scripts/verifyModuleLibraryGrouping.ts",
+    "verify:wallpaper-layout-contracts": "tsx src/scripts/verifyWallpaperLayoutContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",

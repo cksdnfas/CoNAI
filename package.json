@@ -56,6 +56,7 @@
     "verify:auth-db-bootstrap": "cd backend && npm run verify:auth-db-bootstrap",
     "verify:codex-generation-contracts": "cd backend && npm run verify:codex-generation-contracts",
     "verify:module-library-grouping": "cd frontend && npm run verify:module-library-grouping",
+    "verify:wallpaper-layout-contracts": "cd frontend && npm run verify:wallpaper-layout-contracts",
     "verify:watched-folder-route-contracts": "cd backend && npm run verify:watched-folder-route-contracts",
     "verify:no-ui-signatures:active": "node scripts/verify-no-ui-signatures.mjs --scope=active",
     "verify:no-ui-signatures:generated": "node scripts/verify-no-ui-signatures.mjs --scope=generated",
