@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
 import { getGraphWorkflowSchedules, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord } from '@/lib/api-module-graph'
+import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 import { WorkflowInputFields } from './workflow-input-fields'
@@ -21,6 +22,7 @@ type WorkflowRunnerPanelProps = {
   latestExecution?: GraphExecutionRecord | null
   latestExecutionArtifacts?: GraphExecutionArtifactRecord[] | null
   latestExecutionFinalResults?: GraphExecutionFinalResultRecord[] | null
+  graphSummary?: SavedGraphWorkflowSummary | null
   onInputValueChange: (inputId: string, value: unknown) => void
   onInputValueClear: (inputId: string) => void
   onInputImageChange: (inputId: string, image?: SelectedImageDraft) => Promise<void> | void
@@ -43,6 +45,7 @@ export function WorkflowRunnerPanel({
   latestExecution,
   latestExecutionArtifacts,
   latestExecutionFinalResults,
+  graphSummary,
   onInputValueChange,
   onInputValueClear,
   onInputImageChange,
@@ -67,6 +70,14 @@ export function WorkflowRunnerPanel({
     () => (scheduleQuery.data ?? []).filter((schedule) => schedule.stop_reason_code === 'workflow_changed'),
     [scheduleQuery.data],
   )
+  const graphSummaryLine = graphSummary
+    ? [
+        t({ ko: '노드 {count}', en: 'Nodes {count}' }, { count: formatNumber(graphSummary.nodeCount) }),
+        t({ ko: '연결 {count}', en: 'Edges {count}' }, { count: formatNumber(graphSummary.edgeCount) }),
+        t({ ko: '결과 {count}', en: 'Results {count}' }, { count: formatNumber(graphSummary.finalResultNodeCount) }),
+      ].join(' · ')
+    : null
+  const latestExecutionStatus = latestExecution?.status ?? null
 
   return (
     <Card>
@@ -90,9 +101,10 @@ export function WorkflowRunnerPanel({
                 <div className="min-w-0 space-y-2">
                   <div className="truncate text-base font-semibold text-foreground">{selectedGraph.name}</div>
                   {selectedGraph.description ? <div className="text-sm text-muted-foreground">{selectedGraph.description}</div> : null}
-                  {latestExecution ? (
-                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>{latestExecution.status}</Badge>
+                  {graphSummaryLine || latestExecutionStatus ? (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                      {graphSummaryLine ? <span title={graphSummaryLine}>{graphSummaryLine}</span> : null}
+                      {latestExecutionStatus ? <Badge variant={latestExecutionStatus === 'completed' ? 'secondary' : 'outline'}>{latestExecutionStatus}</Badge> : null}
                     </div>
                   ) : null}
                 </div>
@@ -117,9 +129,10 @@ export function WorkflowRunnerPanel({
               <div className="space-y-2">
                 <div className="text-base font-semibold text-foreground">{selectedGraph.name}</div>
                 {selectedGraph.description ? <div className="text-sm text-muted-foreground">{selectedGraph.description}</div> : null}
-                {latestExecution ? (
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>{latestExecution.status}</Badge>
+                {graphSummaryLine || latestExecutionStatus ? (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                    {graphSummaryLine ? <span title={graphSummaryLine}>{graphSummaryLine}</span> : null}
+                    {latestExecutionStatus ? <Badge variant={latestExecutionStatus === 'completed' ? 'secondary' : 'outline'}>{latestExecutionStatus}</Badge> : null}
                   </div>
                 ) : null}
               </div>

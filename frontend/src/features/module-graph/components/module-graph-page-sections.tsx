@@ -2,7 +2,7 @@ import { Folder, FolderOpen, Plus } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord } from '@/lib/api-module-graph'
+import { getGraphExecution, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import type { EditorSupportSectionKey } from './module-workflow-editor-support-panel'
 import { GraphExecutionPanel } from './graph-execution-panel'
@@ -11,7 +11,8 @@ import { NodeInspectorPanel } from './node-inspector-panel'
 import { WorkflowRunnerPanel } from './workflow-runner-panel'
 import { type WorkflowValidationIssue } from './workflow-validation-panel'
 import { useI18n } from '@/i18n'
-import { getModuleNodeDisplayLabel, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { getModuleNodeDisplayLabel, isFinalResultModule, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { countGraphWorkflowFinalResultNodes, resolveSavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 
 export { ModuleGraphWorkflowListSidebar } from './module-graph-workflow-list-sidebar'
 export { ModuleGraphWorkflowBrowseContent, ModuleGraphWorkflowEditorContent } from './module-graph-workflow-content'
@@ -75,6 +76,7 @@ export function ModuleGraphWorkflowSetupFolderPanel({
 /** Render the browse-mode runner side panel when one workflow is selected. */
 export function ModuleGraphWorkflowBrowseSidePanel({
   selectedGraphRecord,
+  moduleDefinitionById,
   inputDefinitions,
   workflowRunInputValues,
   isExecuting,
@@ -92,6 +94,7 @@ export function ModuleGraphWorkflowBrowseSidePanel({
   onValidationIssueSelect,
 }: {
   selectedGraphRecord: GraphWorkflowRecord | null
+  moduleDefinitionById: Map<number, ModuleDefinitionRecord>
   inputDefinitions: GraphWorkflowExposedInput[]
   workflowRunInputValues: Record<string, unknown>
   isExecuting: boolean
@@ -112,10 +115,14 @@ export function ModuleGraphWorkflowBrowseSidePanel({
     return null
   }
 
+  const finalResultNodeCount = countGraphWorkflowFinalResultNodes(selectedGraphRecord, moduleDefinitionById, isFinalResultModule)
+  const graphSummary = resolveSavedGraphWorkflowSummary(selectedGraphRecord, finalResultNodeCount)
+
   return (
     <WorkflowRunnerPanel
       showHeader={false}
       selectedGraph={selectedGraphRecord}
+      graphSummary={graphSummary}
       inputDefinitions={inputDefinitions}
       inputValues={workflowRunInputValues}
       isExecuting={isExecuting}

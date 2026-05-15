@@ -1,4 +1,4 @@
-import type { GraphWorkflowRecord } from '../../lib/api-module-graph'
+import type { GraphWorkflowRecord, ModuleDefinitionRecord } from '../../lib/api-module-graph'
 
 export type SavedGraphWorkflowSummary = {
   nodeCount: number
@@ -16,6 +16,17 @@ export function resolveGraphStructureSummary(nodeCount: number, edgeCount: numbe
 
 export function resolveSavedGraphWorkflowSummary(graph: GraphWorkflowRecord, finalResultNodeCount: number): SavedGraphWorkflowSummary {
   return resolveGraphStructureSummary(graph.graph.nodes.length, graph.graph.edges.length, finalResultNodeCount)
+}
+
+export function countGraphWorkflowFinalResultNodes(
+  graph: GraphWorkflowRecord,
+  moduleDefinitionById: Map<number, ModuleDefinitionRecord>,
+  isFinalResult: (module: ModuleDefinitionRecord) => boolean,
+) {
+  return graph.graph.nodes.reduce((count, node) => {
+    const module = moduleDefinitionById.get(node.module_id)
+    return count + (module && isFinalResult(module) ? 1 : 0)
+  }, 0)
 }
 
 export function hasAssignedFinalResult(summary: SavedGraphWorkflowSummary) {

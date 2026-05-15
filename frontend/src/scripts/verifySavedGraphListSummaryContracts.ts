@@ -1,6 +1,6 @@
 import { deepEqual, equal } from 'node:assert/strict'
-import type { GraphWorkflowRecord } from '../lib/api-module-graph'
-import { hasAssignedFinalResult, resolveGraphStructureSummary, resolveSavedGraphWorkflowSummary } from '../features/module-graph/saved-graph-list-summary'
+import type { GraphWorkflowRecord, ModuleDefinitionRecord } from '../lib/api-module-graph'
+import { countGraphWorkflowFinalResultNodes, hasAssignedFinalResult, resolveGraphStructureSummary, resolveSavedGraphWorkflowSummary } from '../features/module-graph/saved-graph-list-summary'
 
 function makeWorkflow(nodeCount: number, edgeCount: number): GraphWorkflowRecord {
   return {
@@ -77,5 +77,19 @@ deepEqual(emptyDraftSummary, {
   finalResultNodeCount: 0,
 })
 equal(hasAssignedFinalResult(emptyDraftSummary), false)
+
+const moduleDefinitionById = new Map<number, ModuleDefinitionRecord>([
+  [1, { id: 1, engine_type: 'system', name: 'final_result' } as unknown as ModuleDefinitionRecord],
+  [2, { id: 2, engine_type: 'comfy', name: 'Sampler' } as unknown as ModuleDefinitionRecord],
+])
+const workflowWithFinalNodes = makeWorkflow(4, 2)
+workflowWithFinalNodes.graph.nodes[0].module_id = 1
+workflowWithFinalNodes.graph.nodes[1].module_id = 2
+workflowWithFinalNodes.graph.nodes[2].module_id = 1
+workflowWithFinalNodes.graph.nodes[3].module_id = 999
+equal(
+  countGraphWorkflowFinalResultNodes(workflowWithFinalNodes, moduleDefinitionById, (module) => module.name === 'final_result'),
+  2,
+)
 
 console.log('Saved graph list summary contracts verified')

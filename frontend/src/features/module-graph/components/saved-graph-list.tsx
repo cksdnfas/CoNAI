@@ -10,7 +10,7 @@ import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { isFinalResultModule } from '../module-graph-shared'
-import { hasAssignedFinalResult, resolveSavedGraphWorkflowSummary } from '../saved-graph-list-summary'
+import { countGraphWorkflowFinalResultNodes, hasAssignedFinalResult, resolveSavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 
 const WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY = 'conai:module-graph:workflow-sidebar-locked'
 
@@ -98,10 +98,7 @@ export function SavedGraphList({
     const nextMap = new Map<number, number>()
 
     for (const graph of graphs) {
-      const finalResultCount = graph.graph.nodes.reduce((count, node) => {
-        const module = moduleDefinitionById.get(node.module_id)
-        return count + (module && isFinalResultModule(module) ? 1 : 0)
-      }, 0)
+      const finalResultCount = countGraphWorkflowFinalResultNodes(graph, moduleDefinitionById, isFinalResultModule)
 
       nextMap.set(graph.id, finalResultCount)
     }

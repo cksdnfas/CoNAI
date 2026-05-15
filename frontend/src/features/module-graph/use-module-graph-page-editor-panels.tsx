@@ -208,6 +208,7 @@ export function useModuleGraphPageEditorPanels({
   )
 
   const editorSupportSubtitle = null
+  const moduleDefinitionById = useMemo(() => new Map(modules.map((module) => [module.id, module])), [modules])
 
   const workflowSetupFolderPanel = (
     <ModuleGraphWorkflowSetupFolderPanel
@@ -258,6 +259,7 @@ export function useModuleGraphPageEditorPanels({
   const workflowBrowseSidePanel = workflowView === 'browse' ? (
     <ModuleGraphWorkflowBrowseSidePanel
       selectedGraphRecord={selectedGraphRecord}
+      moduleDefinitionById={moduleDefinitionById}
       inputDefinitions={workflowExposedInputs}
       workflowRunInputValues={workflowRunInputValues}
       isExecuting={executingGraphId !== null}
