@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { ArrowLeft, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, Loader2, RefreshCw, Trash2 } from 'lucide-react'
+import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,6 +33,7 @@ import {
   resolveHistoryDisplayStatus,
   resolveHistoryImageSource,
 } from '../image-generation-shared'
+import { getGenerationHistoryFeedProgressSummary } from '../generation-history-feed-progress'
 
 type GenerationHistoryPanelProps = {
   refreshNonce: number
@@ -213,6 +215,11 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     [historyRecords],
   )
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
+  const feedProgress = getGenerationHistoryFeedProgressSummary({
+    loadedCount: historyRecords.length,
+    visibleCount: historyImages.length,
+    totalCount: historyQuery.data?.pages[0]?.total,
+  })
   const historyListLayoutKey = useMemo(
     () => historyRecords
       .map((record) => `${record.id}:${getHistoryMediaVersion(record)}`)
@@ -406,62 +413,113 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         ) : null}
 
         {!isHistoryLoading && historyImages.length > 0 ? (
-          <ImageList
-            key={historyListLayoutKey}
-            items={historyImages}
-            layout="masonry"
-            activationMode="modal"
-            getItemHref={getHistoryImageHref}
-            getItemId={(image) => String(image.id)}
-            selectable
-            modalAccessOptions={isPublicView ? {
-              allowDetailNavigation: false,
-              allowEditAction: false,
-              allowGroupAssignAction: false,
-            } : undefined}
-            selectedIds={selectedHistoryIds}
-            onSelectedIdsChange={setSelectedHistoryIds}
-            minColumnWidth={220}
-            preferredColumnCount={historyColumnCount}
-            columnGap={splitPaneScroll ? 12 : 16}
-            rowGap={splitPaneScroll ? 12 : 16}
-            className={cn(splitPaneScroll && 'min-h-0 flex-1 overflow-hidden pr-3 pb-1')}
-            scrollMode={splitPaneScroll ? 'container' : 'window'}
-            hasMore={Boolean(historyQuery.hasNextPage)}
-            isLoadingMore={historyQuery.isFetchingNextPage}
-            onLoadMore={historyQuery.fetchNextPage}
-            renderItemOverlay={(image) => {
-              const imageSelectionId = String(image?.id ?? '')
-              if (!imageSelectionId) {
-                return null
-              }
+          <>
+            <PageInset className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>
+                  {t(
+                    { ko: '표시 {visible} / 로드 {loaded}', en: 'Showing {visible} / loaded {loaded}' },
+                    { visible: formatNumber(feedProgress.visibleCount), loaded: formatNumber(feedProgress.loadedCount) },
+                  )}
+                </span>
+                <span>
+                  {t(
+                    { ko: '전체 {total}', en: '{total} total' },
+                    { total: formatNumber(feedProgress.totalCount) },
+                  )}
+                </span>
+                {feedProgress.hiddenCount > 0 ? (
+                  <span>
+                    {t(
+                      { ko: '숨김 {count}', en: '{count} hidden' },
+                      { count: formatNumber(feedProgress.hiddenCount) },
+                    )}
+                  </span>
+                ) : null}
+              </div>
+              {historyQuery.isRefetching && !historyQuery.isFetchingNextPage ? (
+                <span>{t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span>
+              ) : null}
+            </PageInset>
 
-              const record = historyRecordMap.get(String(imageSelectionId))
-              if (!record) {
-                return null
-              }
+            <ImageList
+              key={historyListLayoutKey}
+              items={historyImages}
+              layout="masonry"
+              activationMode="modal"
+              getItemHref={getHistoryImageHref}
+              getItemId={(image) => String(image.id)}
+              selectable
+              modalAccessOptions={isPublicView ? {
+                allowDetailNavigation: false,
+                allowEditAction: false,
+                allowGroupAssignAction: false,
+              } : undefined}
+              selectedIds={selectedHistoryIds}
+              onSelectedIdsChange={setSelectedHistoryIds}
+              minColumnWidth={220}
+              preferredColumnCount={historyColumnCount}
+              columnGap={splitPaneScroll ? 12 : 16}
+              rowGap={splitPaneScroll ? 12 : 16}
+              className={cn(splitPaneScroll && 'min-h-0 flex-1 overflow-hidden pr-3 pb-1')}
+              scrollMode={splitPaneScroll ? 'container' : 'window'}
+              hasMore={Boolean(historyQuery.hasNextPage)}
+              isLoadingMore={historyQuery.isFetchingNextPage}
+              onLoadMore={historyQuery.fetchNextPage}
+              renderItemOverlay={(image) => {
+                const imageSelectionId = String(image?.id ?? '')
+                if (!imageSelectionId) {
+                  return null
+                }
 
-              const displayStatus = resolveHistoryDisplayStatus(record)
-              if (displayStatus === 'completed') {
-                return null
-              }
+                const record = historyRecordMap.get(String(imageSelectionId))
+                if (!record) {
+                  return null
+                }
 
-              return (
-                <div className="flex flex-col items-end gap-1">
-                  <Badge variant="outline">
-                    {getHistoryStatusLabel(displayStatus)}
-                  </Badge>
-                  {getHistoryCancellationBadgeLabel(record) ? (
-                    <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
-                      {getHistoryCancellationBadgeLabel(record)}
+                const displayStatus = resolveHistoryDisplayStatus(record)
+                if (displayStatus === 'completed') {
+                  return null
+                }
+
+                return (
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge variant="outline">
+                      {getHistoryStatusLabel(displayStatus)}
                     </Badge>
-                  ) : null}
-                </div>
-              )
-            }}
-            renderItemPersistentOverlay={renderHistoryPersistentOverlay}
-            shouldBlurItemPreview={shouldBlurItemPreview}
-          />
+                    {getHistoryCancellationBadgeLabel(record) ? (
+                      <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
+                        {getHistoryCancellationBadgeLabel(record)}
+                      </Badge>
+                    ) : null}
+                  </div>
+                )
+              }}
+              renderItemPersistentOverlay={renderHistoryPersistentOverlay}
+              shouldBlurItemPreview={shouldBlurItemPreview}
+            />
+
+            <div className="flex shrink-0 flex-col items-center gap-3 pb-2">
+              {historyQuery.isFetchingNextPage ? (
+                <PageInset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>{t({ ko: '기록 더 불러오는 중…', en: 'Loading more history…' })}</span>
+                </PageInset>
+              ) : null}
+
+              {Boolean(historyQuery.hasNextPage) && !historyQuery.isFetchingNextPage && !historyQuery.isFetchNextPageError ? (
+                <Button size="sm" variant="outline" onClick={() => void historyQuery.fetchNextPage()}>
+                  {t({ ko: '더 보기', en: 'Load more' })}
+                </Button>
+              ) : null}
+
+              {historyQuery.isFetchNextPageError ? (
+                <Button size="sm" variant="outline" onClick={() => void historyQuery.fetchNextPage()}>
+                  {t({ ko: '다음 기록 다시 시도', en: 'Retry next history batch' })}
+                </Button>
+              ) : null}
+            </div>
+          </>
         ) : null}
       </div>
 
