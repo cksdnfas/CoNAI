@@ -15,6 +15,7 @@
     "verify:workflow-reservations-ui-contracts": "tsx src/scripts/verifyWorkflowReservationsUiContracts.ts",
     "verify:home-feed-progress-ui-contracts": "tsx src/scripts/verifyHomeFeedProgressUiContracts.ts",
     "verify:upload-result-links": "tsx src/scripts/verifyUploadResultLinks.ts",
+    "verify:prompt-tag-links": "tsx src/scripts/verifyPromptTagLinks.ts",
     "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts",
     "verify:image-editor-tool-contracts": "tsx src/scripts/verifyImageEditorToolContracts.ts"
   },

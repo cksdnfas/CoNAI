@@ -39,6 +39,8 @@ export function GeneralPromptSection({
   accentClassName = 'bg-primary/80',
   collapsibleScores = true,
   tagsHeaderAction,
+  getTagHref,
+  onTagClick,
 }: {
   tags: string[]
   entries: PromptScoreEntries
@@ -46,12 +48,14 @@ export function GeneralPromptSection({
   accentClassName?: string
   collapsibleScores?: boolean
   tagsHeaderAction?: ReactNode
+  getTagHref?: (tag: string) => string | null
+  onTagClick?: (tag: string, href: string) => void
 }) {
   if (tags.length === 0 && entries.length === 0) return null
 
   return (
     <div className="space-y-3">
-      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} headerAction={tagsHeaderAction} /> : null}
+      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} getTagHref={getTagHref} onTagClick={onTagClick} headerAction={tagsHeaderAction} /> : null}
       {entries.length > 0
         ? collapsibleScores
           ? <CollapsibleScoreMeterList title={label} entries={entries} accentClassName={accentClassName} />

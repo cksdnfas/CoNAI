@@ -5,6 +5,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import type { AutoTestTaggerResult } from '@/lib/api-settings'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
 import { CharacterPromptSection, GeneralPromptSection, RatingPromptSection } from './prompt-result-sections'
 import { formatPromptTagCopyText, getSortedEntries, parseTaglistTokens } from './tag-result-utils'
 
@@ -61,6 +62,7 @@ export function WDTaggerResultBlock({ result, title }: WDTaggerResultBlockProps)
               tags={displayedGeneralTags}
               entries={generalEntries}
               collapsibleScores
+              getTagHref={buildDanbooruTagUrl}
               tagsHeaderAction={generalCopyText ? (
                 <Button
                   type="button"

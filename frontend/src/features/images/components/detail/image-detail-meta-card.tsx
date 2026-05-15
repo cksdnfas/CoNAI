@@ -19,6 +19,7 @@ import { resolvePromptGroups } from '@/lib/api-prompts'
 import { getAppSettings, updateKaloscopeSettings } from '@/lib/api-settings'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
 import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms, type PromptGroupingDisplayOptions } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
@@ -364,6 +365,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
                 tags={autoPromptContent.generalTags}
                 entries={autoPromptContent.generalEntries}
                 collapsibleScores
+                getTagHref={buildDanbooruTagUrl}
                 tagsHeaderAction={(
                   <Button
                     type="button"
