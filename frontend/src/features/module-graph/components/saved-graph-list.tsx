@@ -10,6 +10,7 @@ import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { isFinalResultModule } from '../module-graph-shared'
+import { hasAssignedFinalResult, resolveSavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 
 const WORKFLOW_SIDEBAR_LOCK_STORAGE_KEY = 'conai:module-graph:workflow-sidebar-locked'
 
@@ -57,7 +58,7 @@ export function SavedGraphList({
   leftToolbar,
   rightToolbar,
 }: SavedGraphListProps) {
-  const { t, locale } = useI18n()
+  const { t, locale, formatNumber } = useI18n()
   const [searchQuery, setSearchQuery] = useState('')
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<number[]>([])
 
@@ -162,9 +163,16 @@ export function SavedGraphList({
 
   const renderWorkflowRow = (graph: GraphWorkflowRecord, depth: number) => {
     const finalResultNodeCount = finalResultNodeCountByWorkflowId.get(graph.id) ?? 0
+    const summary = resolveSavedGraphWorkflowSummary(graph, finalResultNodeCount)
+    const summaryLine = [
+      t({ ko: '노드 {count}', en: 'Nodes {count}' }, { count: formatNumber(summary.nodeCount) }),
+      t({ ko: '연결 {count}', en: 'Edges {count}' }, { count: formatNumber(summary.edgeCount) }),
+      t({ ko: '결과 {count}', en: 'Results {count}' }, { count: formatNumber(summary.finalResultNodeCount) }),
+    ].join(' · ')
     const issueMessages = [
-      finalResultNodeCount === 0 ? t({ ko: '최종 결과가 아직 지정되지 않았어.', en: 'No final result has been assigned yet.' }) : null,
+      !hasAssignedFinalResult(summary) ? t({ ko: '최종 결과가 아직 지정되지 않았어.', en: 'No final result has been assigned yet.' }) : null,
     ].filter((message): message is string => Boolean(message))
+    const titleLines = [graph.name, graph.description?.trim() || null, summaryLine].filter((line): line is string => Boolean(line))
 
     return (
       <button
@@ -176,7 +184,7 @@ export function SavedGraphList({
           className: 'block w-full px-3 py-2 text-left',
         })}
         style={{ paddingLeft: `${12 + depth * 18}px` }}
-        title={graph.description?.trim() ? `${graph.name}\n${graph.description}` : graph.name}
+        title={titleLines.join('\n')}
       >
         <div className="flex min-w-0 items-center gap-2">
           <FileCode2 className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -188,6 +196,11 @@ export function SavedGraphList({
               !
             </Badge>
           ) : null}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-[11px] leading-tight text-muted-foreground">
+          <span>{t({ ko: '노드 {count}', en: 'Nodes {count}' }, { count: formatNumber(summary.nodeCount) })}</span>
+          <span>{t({ ko: '연결 {count}', en: 'Edges {count}' }, { count: formatNumber(summary.edgeCount) })}</span>
+          <span>{t({ ko: '결과 {count}', en: 'Results {count}' }, { count: formatNumber(summary.finalResultNodeCount) })}</span>
         </div>
       </button>
     )
