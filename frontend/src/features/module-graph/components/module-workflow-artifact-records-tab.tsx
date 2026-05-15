@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/select'
 import { useImageListSelection } from '@/features/images/components/image-list/use-image-list-selection'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord, GraphExecutionRecord } from '@/lib/api-module-graph'
+import { resolveModuleWorkflowOutputProgress } from '../module-workflow-output-progress'
 import { buildArtifactTextPreview } from '../module-graph-shared'
 
 /** Render non-media and intermediate workflow artifacts for cleanup-oriented management. */
@@ -56,7 +57,23 @@ export function ModuleWorkflowArtifactRecordsTab({
   onSetSelectedArtifactIds: (artifactIds: number[]) => void
   onDeleteSingle: (artifactId: number) => void
 }) {
-  const { t, formatDateTime } = useI18n()
+  const { t, formatDateTime, formatNumber } = useI18n()
+  const artifactProgress = resolveModuleWorkflowOutputProgress({
+    page,
+    pageSize: 50,
+    visibleCount: artifacts.length,
+    totalCount: totalArtifactCount,
+  })
+  const artifactProgressLabel = artifactProgress.visibleCount > 0
+    ? t(
+      { ko: '표시 {start}-{end} / 전체 {total}', en: 'showing {start}-{end} / total {total}' },
+      {
+        start: formatNumber(artifactProgress.start),
+        end: formatNumber(artifactProgress.end),
+        total: formatNumber(artifactProgress.totalCount),
+      },
+    )
+    : formatNumber(artifactProgress.totalCount)
   const [artifactSelectionContainer, setArtifactSelectionContainer] = useState<HTMLDivElement | null>(null)
   const { shouldSuppressClick } = useImageListSelection({
     containerElement: artifactSelectionContainer,
@@ -71,7 +88,7 @@ export function ModuleWorkflowArtifactRecordsTab({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="min-w-0 flex-1 text-base">{t('module-graph.components.module.workflow.artifact.records.tab.text.and.intermediate.artifacts')}</CardTitle>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge variant="outline">{totalArtifactCount}</Badge>
+            <Badge variant="outline">{artifactProgressLabel}</Badge>
             <Button
               type="button"
               size="sm"
@@ -122,7 +139,7 @@ export function ModuleWorkflowArtifactRecordsTab({
           </div>
         ) : (
           <div ref={setArtifactSelectionContainer} className="space-y-3">
-            <WorkflowArtifactPagination page={page} totalPages={totalPages} totalCount={totalArtifactCount} onPageChange={onPageChange} />
+            <WorkflowArtifactPagination page={page} totalPages={totalPages} visibleCount={artifacts.length} totalCount={totalArtifactCount} onPageChange={onPageChange} />
             {artifacts.map((artifact) => {
               const execution = executionById.get(artifact.execution_id)
               const workflowName = execution
@@ -202,7 +219,7 @@ export function ModuleWorkflowArtifactRecordsTab({
                 </div>
               )
             })}
-            <WorkflowArtifactPagination page={page} totalPages={totalPages} totalCount={totalArtifactCount} onPageChange={onPageChange} />
+            <WorkflowArtifactPagination page={page} totalPages={totalPages} visibleCount={artifacts.length} totalCount={totalArtifactCount} onPageChange={onPageChange} />
           </div>
         )}
       </CardContent>
@@ -213,15 +230,28 @@ export function ModuleWorkflowArtifactRecordsTab({
 function WorkflowArtifactPagination({
   page,
   totalPages,
+  visibleCount,
   totalCount,
   onPageChange,
 }: {
   page: number
   totalPages: number
+  visibleCount: number
   totalCount: number
   onPageChange: (page: number) => void
 }) {
   const { t, formatNumber } = useI18n()
+  const progress = resolveModuleWorkflowOutputProgress({ page, pageSize: 50, visibleCount, totalCount })
+  const progressLabel = progress.visibleCount > 0
+    ? t(
+      { ko: '표시 {start}-{end} / 전체 {total}', en: 'showing {start}-{end} / total {total}' },
+      {
+        start: formatNumber(progress.start),
+        end: formatNumber(progress.end),
+        total: formatNumber(progress.totalCount),
+      },
+    )
+    : t({ ko: '전체 {total}', en: 'total {total}' }, { total: formatNumber(progress.totalCount) })
 
   if (totalPages <= 1) {
     return null
@@ -229,7 +259,7 @@ function WorkflowArtifactPagination({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
-      <span>{t({ ko: '페이지 {page} / {totalPages} · 전체 {totalCount} · 페이지당 50개', en: 'page {page} / {totalPages} · total {totalCount} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), totalCount: formatNumber(totalCount) })}</span>
+      <span>{t({ ko: '페이지 {page} / {totalPages} · {progress} · 페이지당 50개', en: 'page {page} / {totalPages} · {progress} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), progress: progressLabel })}</span>
       <div className="flex items-center gap-2">
         <Button type="button" size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
           {t({ ko: '이전', en: 'Previous' })}

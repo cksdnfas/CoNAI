@@ -8,6 +8,7 @@ import { useI18n } from '@/i18n'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import type { WatchedFolder } from '@/types/folder'
 import type { ImageRecord } from '@/types/image'
+import { resolveModuleWorkflowOutputProgress } from '../module-workflow-output-progress'
 import type { ModuleWorkflowGeneratedOutputItem } from './module-workflow-output-management-panel-helpers'
 
 /** Render the generated-output tab using the shared CoNAI image list surface. */
@@ -60,7 +61,23 @@ export function ModuleWorkflowGeneratedOutputsTab({
   onCopySelected: () => void
   onDownloadItems: (items: ModuleWorkflowGeneratedOutputItem[]) => void
 }) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
+  const outputProgress = resolveModuleWorkflowOutputProgress({
+    page,
+    pageSize: 50,
+    visibleCount: outputItems.length,
+    totalCount: totalOutputCount,
+  })
+  const outputProgressLabel = outputProgress.visibleCount > 0
+    ? t(
+      { ko: '표시 {start}-{end} / 전체 {total}', en: 'showing {start}-{end} / total {total}' },
+      {
+        start: formatNumber(outputProgress.start),
+        end: formatNumber(outputProgress.end),
+        total: formatNumber(outputProgress.totalCount),
+      },
+    )
+    : formatNumber(outputProgress.totalCount)
   const outputItemById = useMemo(
     () => new Map(outputItems.map((item) => [item.id, item])),
     [outputItems],
@@ -72,7 +89,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="min-w-0 flex-1 text-base">{t('module-graph.components.module.workflow.generated.outputs.tab.generated.outputs')}</CardTitle>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Badge variant="outline">{totalOutputCount}</Badge>
+            <Badge variant="outline">{outputProgressLabel}</Badge>
             <Button
               type="button"
               size="sm"
@@ -140,7 +157,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
           </div>
         ) : (
           <div className="space-y-3">
-            <WorkflowOutputPagination page={page} totalPages={totalPages} totalCount={totalOutputCount} onPageChange={onPageChange} />
+            <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />
             <ImageList
               items={imageItems}
               layout="grid"
@@ -180,7 +197,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
                 )
               }}
             />
-            <WorkflowOutputPagination page={page} totalPages={totalPages} totalCount={totalOutputCount} onPageChange={onPageChange} />
+            <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />
           </div>
         )}
       </CardContent>
@@ -191,15 +208,28 @@ export function ModuleWorkflowGeneratedOutputsTab({
 function WorkflowOutputPagination({
   page,
   totalPages,
+  visibleCount,
   totalCount,
   onPageChange,
 }: {
   page: number
   totalPages: number
+  visibleCount: number
   totalCount: number
   onPageChange: (page: number) => void
 }) {
   const { t, formatNumber } = useI18n()
+  const progress = resolveModuleWorkflowOutputProgress({ page, pageSize: 50, visibleCount, totalCount })
+  const progressLabel = progress.visibleCount > 0
+    ? t(
+      { ko: '표시 {start}-{end} / 전체 {total}', en: 'showing {start}-{end} / total {total}' },
+      {
+        start: formatNumber(progress.start),
+        end: formatNumber(progress.end),
+        total: formatNumber(progress.totalCount),
+      },
+    )
+    : t({ ko: '전체 {total}', en: 'total {total}' }, { total: formatNumber(progress.totalCount) })
 
   if (totalPages <= 1) {
     return null
@@ -207,7 +237,7 @@ function WorkflowOutputPagination({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border bg-surface-low px-3 py-2 text-xs text-muted-foreground">
-      <span>{t({ ko: '페이지 {page} / {totalPages} · 전체 {totalCount} · 페이지당 50개', en: 'page {page} / {totalPages} · total {totalCount} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), totalCount: formatNumber(totalCount) })}</span>
+      <span>{t({ ko: '페이지 {page} / {totalPages} · {progress} · 페이지당 50개', en: 'page {page} / {totalPages} · {progress} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), progress: progressLabel })}</span>
       <div className="flex items-center gap-2">
         <Button type="button" size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
           {t({ ko: '이전', en: 'Previous' })}

@@ -18,6 +18,7 @@
     "verify:group-image-feed-progress-ui-contracts": "tsx src/scripts/verifyGroupImageFeedProgressUiContracts.ts",
     "verify:prompt-list-progress-contracts": "tsx src/scripts/verifyPromptListProgressContracts.ts",
     "verify:danbooru-browser-progress-contracts": "tsx src/scripts/verifyDanbooruBrowserProgressContracts.ts",
+    "verify:module-workflow-output-progress-contracts": "tsx src/scripts/verifyModuleWorkflowOutputProgressContracts.ts",
     "verify:upload-result-links": "tsx src/scripts/verifyUploadResultLinks.ts",
     "verify:prompt-tag-links": "tsx src/scripts/verifyPromptTagLinks.ts",
     "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts",
