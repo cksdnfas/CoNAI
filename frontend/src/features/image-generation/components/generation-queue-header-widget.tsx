@@ -18,6 +18,7 @@ import { getErrorMessage } from '../image-generation-shared'
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '@/features/module-graph/module-graph-shared'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
+  getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
@@ -385,7 +386,13 @@ export function GenerationQueueHeaderWidget() {
                     const canManageRecord = !isCancelRequested && (authStatusQuery.data?.isAdmin === true || record.is_mine === true)
                     const isRunning = record.status === 'running'
                     const startTimeLabel = formatQueueCompactStartTime(record.started_at ?? record.queued_at, locale)
+                    const elapsedLabel = getGenerationQueueElapsedLabel(record, t, formatNumber)
                     const statusLabel = isCancelRequested ? t('image-generation.components.generation.queue.header.widget.cancel.requested') : getGenerationQueueStatusLabel(record, t)
+                    const idTimingLabel = [
+                      `#${record.id}`,
+                      startTimeLabel,
+                      elapsedLabel,
+                    ].filter(Boolean).join(' · ')
 
                     return (
                       <div key={record.id} className="rounded-sm border border-border bg-surface-low px-3 py-3">
@@ -427,7 +434,7 @@ export function GenerationQueueHeaderWidget() {
                           </div>
 
                           <div className="flex items-center justify-between gap-3 text-[10px] text-muted-foreground">
-                            <span>{startTimeLabel ? `#${record.id} · ${startTimeLabel}` : `#${record.id}`}</span>
+                            <span>{idTimingLabel}</span>
                             <span className="truncate">{record.is_mine ? t('image-generation.components.generation.queue.header.widget.value.me', { creatorLabel }) : creatorLabel}</span>
                           </div>
                         </div>

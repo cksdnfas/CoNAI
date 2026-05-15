@@ -1,6 +1,7 @@
 import type { TranslationInput, TranslationParams } from '../i18n'
 import type { GenerationQueueJobRecord } from '../lib/api-image-generation-types'
 import {
+  getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
@@ -152,6 +153,39 @@ function assertRemainingLabels() {
   assertEqual(getGenerationQueueRemainingLabel(makeQueueRecord({ estimated_total_seconds: 3660 }), translate, formatNumber), '1h 1m', 'hour ETA should include remaining minutes when present')
 }
 
+function assertElapsedLabels() {
+  const nowMs = Date.parse('2026-05-14T11:04:00.000Z')
+  const queuedNinetySecondsAgo = new Date(nowMs - 90_000).toISOString()
+  const dispatchingThirtySecondsAgo = new Date(nowMs - 30_000).toISOString()
+  const runningSixtyOneMinutesAgo = new Date(nowMs - 3_660_000).toISOString()
+
+  assertEqual(
+    getGenerationQueueElapsedLabel(makeQueueRecord({ status: 'queued', queued_at: queuedNinetySecondsAgo }), translate, formatNumber, nowMs),
+    '대기 1m',
+    'queued jobs should expose compact elapsed queue age',
+  )
+  assertEqual(
+    getGenerationQueueElapsedLabel(makeQueueRecord({ status: 'dispatching', queued_at: dispatchingThirtySecondsAgo }), translate, formatNumber, nowMs),
+    '전송 30s',
+    'dispatching jobs should expose compact dispatch age from queue time',
+  )
+  assertEqual(
+    getGenerationQueueElapsedLabel(makeQueueRecord({ status: 'running', started_at: runningSixtyOneMinutesAgo }), translate, formatNumber, nowMs),
+    '실행 1h 1m',
+    'running jobs should expose compact elapsed runtime from start time',
+  )
+  assertEqual(
+    getGenerationQueueElapsedLabel(makeQueueRecord({ status: 'running', started_at: null }), translate, formatNumber, nowMs),
+    null,
+    'running jobs without a valid start timestamp should hide elapsed runtime',
+  )
+  assertEqual(
+    getGenerationQueueElapsedLabel(makeQueueRecord({ status: 'queued', queued_at: new Date(nowMs + 1000).toISOString() }), translate, formatNumber, nowMs),
+    null,
+    'future queue timestamps should hide elapsed age',
+  )
+}
+
 function assertProgressPercent() {
   const nowMs = Date.parse('2026-05-14T11:04:00.000Z')
   const startedThirtySecondsAgo = new Date(nowMs - 30_000).toISOString()
@@ -220,6 +254,7 @@ assertStatusLabels()
 assertWorkflowLabels()
 assertRequesterLabels()
 assertRemainingLabels()
+assertElapsedLabels()
 assertProgressPercent()
 assertHeaderQuerySnapshotSelection()
 

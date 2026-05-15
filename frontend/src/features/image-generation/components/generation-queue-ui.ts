@@ -73,6 +73,27 @@ function formatGenerationQueueEtaSeconds(value: number | null | undefined, t: Tr
     : t('image-generation.components.generation.queue.ui.valuetime', { hours: formatNumber(hours) })
 }
 
+function formatGenerationQueueElapsedSeconds(value: number, t: Translate, formatNumber: FormatNumber) {
+  if (!Number.isFinite(value) || value < 0) {
+    return null
+  }
+
+  if (value < 60) {
+    return t('image-generation.components.generation.queue.ui.values', { seconds: formatNumber(Math.max(1, Math.round(value))) })
+  }
+
+  const minutes = Math.floor(value / 60)
+  if (minutes < 60) {
+    return t('image-generation.components.generation.queue.ui.valuemin', { minutes: formatNumber(Math.max(1, minutes)) })
+  }
+
+  const hours = Math.floor(minutes / 60)
+  const remainMinutes = minutes % 60
+  return remainMinutes > 0
+    ? t('image-generation.components.generation.queue.ui.valuetime.valuemin', { hours: formatNumber(hours), minutes: formatNumber(remainMinutes) })
+    : t('image-generation.components.generation.queue.ui.valuetime', { hours: formatNumber(hours) })
+}
+
 function parseQueueTimestampMs(value?: string | null) {
   if (!value) {
     return null
@@ -119,6 +140,30 @@ export function getGenerationQueueRequesterLabel(record: GenerationQueueJobRecor
 /** Render the short remaining-time label used beside the progress gauge. */
 export function getGenerationQueueRemainingLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber) {
   return formatGenerationQueueEtaSeconds(record.estimated_total_seconds, t, formatNumber)
+}
+
+/** Render active job age beside the compact queue timestamp. */
+export function getGenerationQueueElapsedLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber, nowMs = Date.now()) {
+  const anchorValue = record.status === 'running' ? record.started_at : record.queued_at
+  const anchorMs = parseQueueTimestampMs(anchorValue)
+  if (anchorMs == null || anchorMs > nowMs) {
+    return null
+  }
+
+  const elapsedLabel = formatGenerationQueueElapsedSeconds((nowMs - anchorMs) / 1000, t, formatNumber)
+  if (!elapsedLabel) {
+    return null
+  }
+
+  if (record.status === 'running') {
+    return t({ ko: '실행 {elapsedLabel}', en: 'Running {elapsedLabel}' }, { elapsedLabel })
+  }
+
+  if (record.status === 'dispatching') {
+    return t({ ko: '전송 {elapsedLabel}', en: 'Dispatching {elapsedLabel}' }, { elapsedLabel })
+  }
+
+  return t({ ko: '대기 {elapsedLabel}', en: 'Queued {elapsedLabel}' }, { elapsedLabel })
 }
 
 /** Render progress only for jobs that actually started upstream execution. */
