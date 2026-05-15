@@ -18,6 +18,7 @@ import { getErrorMessage } from '../image-generation-shared'
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '@/features/module-graph/module-graph-shared'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
+  getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
   getGenerationQueueRequesterLabel,
@@ -188,7 +189,22 @@ export function GenerationQueueHeaderWidget() {
   })
 
   const globalRecords = useMemo(() => globalQueueQuery.data?.records ?? [], [globalQueueQuery.data?.records])
-  const records = useMemo(() => (isFilteredQueueView ? filteredQueueQuery.data?.records : globalQueueQuery.data?.records) ?? [], [globalQueueQuery.data?.records, filteredQueueQuery.data?.records, isFilteredQueueView])
+  const activeQueueQuery = getGenerationQueueHeaderQuerySnapshot({
+    isFilteredQueueView,
+    globalQueue: {
+      records: globalQueueQuery.data?.records,
+      isPending: globalQueueQuery.isPending,
+      isError: globalQueueQuery.isError,
+      error: globalQueueQuery.error,
+    },
+    filteredQueue: {
+      records: filteredQueueQuery.data?.records,
+      isPending: filteredQueueQuery.isPending,
+      isError: filteredQueueQuery.isError,
+      error: filteredQueueQuery.error,
+    },
+  })
+  const records = useMemo(() => activeQueueQuery.records ?? [], [activeQueueQuery.records])
   const globalActiveCount = globalRecords.length
   const filteredActiveCount = records.length
   const latestQueueJobId = useMemo(() => globalRecords.reduce((maxId, record) => Math.max(maxId, record.id), 0), [globalRecords])
@@ -342,15 +358,15 @@ export function GenerationQueueHeaderWidget() {
             </div>
 
             <div className="max-h-[min(24rem,calc(100vh-var(--theme-shell-header-height)-5rem))] space-y-3 overflow-y-auto px-3 py-3 sm:max-h-[min(28rem,calc(100vh-var(--theme-shell-header-height)-2rem))] sm:px-4">
-              {filteredQueueQuery.isError ? (
+              {activeQueueQuery.isError ? (
                 <div className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-3 text-sm text-danger">
-                  {getErrorMessage(filteredQueueQuery.error, t('image-generation.components.generation.queue.header.widget.could.not.load.the.queue'))}
+                  {getErrorMessage(activeQueueQuery.error, t('image-generation.components.generation.queue.header.widget.could.not.load.the.queue'))}
                 </div>
               ) : null}
 
-              {!filteredQueueQuery.isError && filteredQueueQuery.isPending ? <div className="text-sm text-muted-foreground">{t('image-generation.components.generation.queue.header.widget.loading.queue')}</div> : null}
+              {!activeQueueQuery.isError && activeQueueQuery.isPending ? <div className="text-sm text-muted-foreground">{t('image-generation.components.generation.queue.header.widget.loading.queue')}</div> : null}
 
-              {!filteredQueueQuery.isPending && !filteredQueueQuery.isError && records.length === 0 ? (
+              {!activeQueueQuery.isPending && !activeQueueQuery.isError && records.length === 0 ? (
                 <div className="rounded-sm border border-dashed border-border bg-surface-low px-3 py-4 text-sm text-muted-foreground">
                   {t({ ko: '지금 진행 중인 큐 작업이 없어.', en: 'No queue jobs are currently running.' })}
                 </div>

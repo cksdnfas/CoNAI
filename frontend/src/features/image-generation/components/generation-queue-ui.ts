@@ -4,6 +4,25 @@ import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 type Translate = (input: TranslationInput, params?: TranslationParams) => string
 type FormatNumber = (value: number) => string
 
+type GenerationQueueHeaderQuerySnapshot<TRecord = GenerationQueueJobRecord> = {
+  records?: readonly TRecord[] | null
+  isPending: boolean
+  isError: boolean
+  error?: unknown
+}
+
+export function getGenerationQueueHeaderQuerySnapshot<TRecord>({
+  isFilteredQueueView,
+  globalQueue,
+  filteredQueue,
+}: {
+  isFilteredQueueView: boolean
+  globalQueue: GenerationQueueHeaderQuerySnapshot<TRecord>
+  filteredQueue: GenerationQueueHeaderQuerySnapshot<TRecord>
+}) {
+  return isFilteredQueueView ? filteredQueue : globalQueue
+}
+
 /** Render the shared localized status label for queue rows and widgets. */
 export function getGenerationQueueStatusLabel(record: GenerationQueueJobRecord, t: Translate) {
   if (record.cancel_requested > 0 && record.status === 'completed') {

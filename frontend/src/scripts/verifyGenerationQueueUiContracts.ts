@@ -1,6 +1,7 @@
 import type { TranslationInput, TranslationParams } from '../i18n'
 import type { GenerationQueueJobRecord } from '../lib/api-image-generation-types'
 import {
+  getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
   getGenerationQueueRequesterLabel,
@@ -180,10 +181,46 @@ function assertProgressPercent() {
   )
 }
 
+function assertHeaderQuerySnapshotSelection() {
+  const globalSnapshot = {
+    records: [makeQueueRecord({ id: 1 })],
+    isPending: false,
+    isError: false,
+    error: null,
+  }
+  const disabledFilteredSnapshot = {
+    records: undefined,
+    isPending: true,
+    isError: false,
+    error: null,
+  }
+
+  assertEqual(
+    getGenerationQueueHeaderQuerySnapshot({
+      isFilteredQueueView: false,
+      globalQueue: globalSnapshot,
+      filteredQueue: disabledFilteredSnapshot,
+    }),
+    globalSnapshot,
+    'all queue scope should use the global query state instead of disabled filtered query state',
+  )
+
+  assertEqual(
+    getGenerationQueueHeaderQuerySnapshot({
+      isFilteredQueueView: true,
+      globalQueue: globalSnapshot,
+      filteredQueue: disabledFilteredSnapshot,
+    }),
+    disabledFilteredSnapshot,
+    'filtered queue scope should use filtered query state',
+  )
+}
+
 assertStatusLabels()
 assertWorkflowLabels()
 assertRequesterLabels()
 assertRemainingLabels()
 assertProgressPercent()
+assertHeaderQuerySnapshotSelection()
 
 console.log('Generation queue UI contracts verified.')
