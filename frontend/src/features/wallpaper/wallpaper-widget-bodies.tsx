@@ -11,6 +11,7 @@ import type { WallpaperWidgetInstance } from './wallpaper-types'
 import type { WallpaperWidgetPreviewImage } from './wallpaper-widget-preview-surface'
 
 export type { WallpaperWidgetPreviewImage } from './wallpaper-widget-preview-surface'
+import { getWallpaperQueueAgeLabel } from './wallpaper-queue-status-utils'
 import { useWallpaperBrowseContentQuery } from './wallpaper-widget-data'
 import {
   getWallpaperMotionStrengthMultiplier,
@@ -159,11 +160,13 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
     return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t('wallpaper.wallpaper.widget.bodies.workflow.status.failed.to.load')}</div>
   }
 
+  const executions = queueQuery.data?.executions ?? []
+  const nowMs = Date.now()
   const queueItems = [
-    { id: 'queued', label: t('wallpaper.wallpaper.widget.bodies.queued'), value: queueSummary.queued, tone: 'var(--secondary)', short: 'Q' },
-    { id: 'running', label: t('wallpaper.wallpaper.widget.bodies.running'), value: queueSummary.running, tone: '#3ddc97', short: 'R' },
-    { id: 'failed', label: t('wallpaper.wallpaper.widget.bodies.failed'), value: queueSummary.failed, tone: '#ff6b6b', short: 'F' },
-    { id: 'workflow', label: t('wallpaper.wallpaper.widget.bodies.workflow'), value: queueSummary.workflows, tone: 'var(--primary)', short: 'W' },
+    { id: 'queued', label: t('wallpaper.wallpaper.widget.bodies.queued'), value: queueSummary.queued, tone: 'var(--secondary)', short: 'Q', ageLabel: getWallpaperQueueAgeLabel(executions, 'queued', t, formatNumber, nowMs) },
+    { id: 'running', label: t('wallpaper.wallpaper.widget.bodies.running'), value: queueSummary.running, tone: '#3ddc97', short: 'R', ageLabel: getWallpaperQueueAgeLabel(executions, 'running', t, formatNumber, nowMs) },
+    { id: 'failed', label: t('wallpaper.wallpaper.widget.bodies.failed'), value: queueSummary.failed, tone: '#ff6b6b', short: 'F', ageLabel: null },
+    { id: 'workflow', label: t('wallpaper.wallpaper.widget.bodies.workflow'), value: queueSummary.workflows, tone: 'var(--primary)', short: 'W', ageLabel: null },
   ]
   const maxValue = Math.max(...queueItems.map((item) => item.value), 1)
   const totalActive = queueSummary.queued + queueSummary.running
@@ -190,7 +193,10 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
                   <span className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-background" style={{ backgroundColor: item.tone }}>
                     {item.short}
                   </span>
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
+                    {item.ageLabel ? <div className="mt-0.5 text-[10px] text-muted-foreground/85">{item.ageLabel}</div> : null}
+                  </div>
                 </div>
                 <div className={cn('text-sm font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
                   {formatNumber(item.value)}
@@ -234,6 +240,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
                 </div>
               </div>
               <div className="relative mt-2 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</div>
+              {item.ageLabel ? <div className="relative mt-1 text-[10px] text-muted-foreground/85">{item.ageLabel}</div> : null}
             </div>
           )
         })}
@@ -250,6 +257,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
           <div className={cn('mt-1 text-lg font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
             {formatNumber(item.value)}
           </div>
+          {item.ageLabel ? <div className="mt-1 text-[10px] text-muted-foreground/85">{item.ageLabel}</div> : null}
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-lowest/90">
             <div
               className="h-full rounded-full transition-[width] duration-700 ease-out"

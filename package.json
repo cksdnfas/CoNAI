@@ -57,6 +57,7 @@
     "verify:codex-generation-contracts": "cd backend && npm run verify:codex-generation-contracts",
     "verify:module-library-grouping": "cd frontend && npm run verify:module-library-grouping",
     "verify:wallpaper-layout-contracts": "cd frontend && npm run verify:wallpaper-layout-contracts",
+    "verify:wallpaper-queue-status-contracts": "cd frontend && npm run verify:wallpaper-queue-status-contracts",
     "verify:watched-folder-route-contracts": "cd backend && npm run verify:watched-folder-route-contracts",
     "verify:graph-workflow-route-contracts": "cd backend && npm run verify:graph-workflow-route-contracts",
     "verify:queue-eta-contracts": "cd backend && npm run verify:queue-eta-contracts",
