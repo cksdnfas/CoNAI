@@ -20,6 +20,7 @@ import { PromptSummaryModal } from './components/prompt-summary-modal'
 import { PromptToolbar } from './components/prompt-toolbar'
 import { usePromptListSelection } from './components/use-prompt-list-selection'
 import { canDeletePromptItem, isDanbooruPromptGroup, isLockedPromptGroup, isLockedPromptItem, isProtectedLoRAPromptGroup } from './prompt-page-utils'
+import { resolvePromptListProgress } from './prompt-list-progress'
 import { usePromptPageMutations } from './use-prompt-page-mutations'
 import { usePromptPageQueries } from './use-prompt-page-queries'
 import { useI18n } from '@/i18n'
@@ -134,6 +135,22 @@ export function PromptPage() {
   const currentSectionTitle = selectedGroup?.group_name ?? 'All prompts'
   const currentSectionCount = pagination?.total ?? 0
   const sidebarTotalCount = selectedGroupId == null && currentSectionCount > 0 ? currentSectionCount : totalCount
+  const promptListProgress = resolvePromptListProgress({
+    page: pagination?.page ?? page,
+    pageSize: pagination?.limit ?? 40,
+    visibleCount: items.length,
+    totalCount: currentSectionCount,
+  })
+  const promptListProgressLabel = promptListProgress.visibleCount > 0
+    ? t(
+      { ko: '표시 {start}-{end} / 전체 {total}', en: 'Showing {start}-{end} / {total}' },
+      {
+        start: formatNumber(promptListProgress.start),
+        end: formatNumber(promptListProgress.end),
+        total: formatNumber(promptListProgress.totalCount),
+      },
+    )
+    : t({ ko: '전체 {total}', en: '{total} total' }, { total: formatNumber(currentSectionCount) })
 
   const {
     assignSinglePromptMutation,
@@ -435,7 +452,7 @@ export function PromptPage() {
               <div className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-xl font-semibold tracking-tight text-foreground">{currentSectionTitle}</h2>
-                  <div className="mt-1 text-sm text-muted-foreground">{t({ ko: '{count}개 표시됨', en: '{count} shown' }, { count: formatNumber(currentSectionCount) })}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">{promptListProgressLabel}</div>
                 </div>
 
                 <PromptToolbar
@@ -466,6 +483,7 @@ export function PromptPage() {
                 isDraggingSelection={isDraggingSelection}
                 totalPages={pagination?.totalPages ?? 0}
                 page={pagination?.page ?? 1}
+                limit={pagination?.limit ?? 40}
                 total={pagination?.total ?? 0}
                 promptListRef={promptListRef}
                 onPageChange={setPage}

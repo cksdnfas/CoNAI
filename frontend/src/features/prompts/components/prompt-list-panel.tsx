@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PromptCollectionItem } from '@/types/prompt'
 import { useI18n } from '@/i18n'
+import { resolvePromptListProgress } from '../prompt-list-progress'
 import { PromptListItem } from './prompt-list-item'
 
 interface PromptListPanelProps {
@@ -16,6 +17,7 @@ interface PromptListPanelProps {
   isDraggingSelection?: boolean
   totalPages?: number
   page?: number
+  limit?: number
   total?: number
   promptListRef: RefObject<HTMLDivElement | null>
   onPageChange: (page: number) => void
@@ -37,6 +39,7 @@ export function PromptListPanel({
   isDraggingSelection = false,
   totalPages = 0,
   page = 1,
+  limit = 40,
   total = 0,
   promptListRef,
   onPageChange,
@@ -49,6 +52,17 @@ export function PromptListPanel({
   canDeletePromptItem,
 }: PromptListPanelProps) {
   const { t, formatNumber } = useI18n()
+  const progress = resolvePromptListProgress({ page, pageSize: limit, visibleCount: items.length, totalCount: total })
+  const progressLabel = progress.visibleCount > 0
+    ? t(
+      { ko: '표시 {start}-{end} / 전체 {total}', en: 'showing {start}-{end} / {total}' },
+      {
+        start: formatNumber(progress.start),
+        end: formatNumber(progress.end),
+        total: formatNumber(progress.totalCount),
+      },
+    )
+    : t({ ko: '전체 {total}', en: 'total {total}' }, { total: formatNumber(progress.totalCount) })
 
   return (
     <section className="space-y-4">
@@ -105,7 +119,10 @@ export function PromptListPanel({
       {totalPages > 0 ? (
         <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-4 text-sm text-muted-foreground">
           <span>
-            {t({ ko: '페이지 {page} / {totalPages} · 전체 {total}', en: 'page {page} / {totalPages} · total {total}' }, { page, totalPages, total: formatNumber(total) })}
+            {t(
+              { ko: '페이지 {page} / {totalPages} · {progress}', en: 'page {page} / {totalPages} · {progress}' },
+              { page, totalPages, progress: progressLabel },
+            )}
           </span>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>
