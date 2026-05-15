@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { resolveDanbooruBrowserProgress } from '../danbooru-browser-progress'
 import type {
   DanbooruBrowserArtistRecord,
   DanbooruBrowserCharacterRecord,
@@ -140,17 +141,34 @@ export function getRelatedTagLabel(tag: DanbooruBrowserRelatedTagRecord) {
   return tag.displayName
 }
 
-export function PaginationControls({ pagination, onPageChange }: { pagination?: DanbooruBrowserPagination; onPageChange: (page: number) => void }) {
+export function PaginationControls({ pagination, visibleCount, onPageChange }: { pagination?: DanbooruBrowserPagination; visibleCount: number; onPageChange: (page: number) => void }) {
   const { t } = useI18n()
   if (!pagination || pagination.totalPages <= 1) return null
+
+  const progress = resolveDanbooruBrowserProgress({
+    page: pagination.page,
+    pageSize: pagination.limit,
+    visibleCount,
+    totalCount: pagination.total,
+  })
+  const progressLabel = progress.visibleCount > 0
+    ? t(
+      { ko: '표시 {start}-{end} / 전체 {total}', en: 'showing {start}-{end} / {total}' },
+      {
+        start: formatCompactK(progress.start),
+        end: formatCompactK(progress.end),
+        total: formatCompactK(progress.totalCount),
+      },
+    )
+    : t({ ko: '전체 {total}', en: 'total {total}' }, { total: formatCompactK(progress.totalCount) })
 
   return (
     <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-4 text-sm text-muted-foreground">
       <span>
-        {t({ ko: '페이지 {page} / {totalPages} · 전체 {total}', en: 'page {page} / {totalPages} · total {total}' }, {
+        {t({ ko: '페이지 {page} / {totalPages} · {progress}', en: 'page {page} / {totalPages} · {progress}' }, {
           page: pagination.page,
           totalPages: pagination.totalPages,
-          total: formatCompactK(pagination.total),
+          progress: progressLabel,
         })}
       </span>
       <div className="flex gap-2">

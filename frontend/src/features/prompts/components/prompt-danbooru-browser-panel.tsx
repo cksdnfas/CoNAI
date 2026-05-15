@@ -18,6 +18,7 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import type { DanbooruBrowserRelatedTagCategory } from '@/types/danbooru-browser'
 import { useI18n } from '@/i18n'
+import { resolveDanbooruBrowserProgress } from '../danbooru-browser-progress'
 import {
   CHARACTER_PAGE_SIZE,
   DEFAULT_PAGE_SIZE,
@@ -136,7 +137,28 @@ export function PromptDanbooruBrowserPanel() {
 
   const activeQuery = activeSection === 'tags' ? tagsQuery : activeSection === 'artists' ? artistsQuery : charactersQuery
   const pagination = activeQuery.data?.pagination
+  const activeItemCount = activeSection === 'tags'
+    ? (tagsQuery.data?.items.length ?? 0)
+    : activeSection === 'artists'
+      ? (artistsQuery.data?.items.length ?? 0)
+      : (charactersQuery.data?.items.length ?? 0)
   const currentCount = pagination?.total ?? selectedNode.count
+  const pageProgress = resolveDanbooruBrowserProgress({
+    page: pagination?.page ?? page,
+    pageSize: pagination?.limit ?? currentLimit,
+    visibleCount: activeItemCount,
+    totalCount: currentCount,
+  })
+  const progressLabel = pageProgress.visibleCount > 0
+    ? t(
+      { ko: '표시 {start}-{end} / 전체 {total}', en: 'Showing {start}-{end} / {total}' },
+      {
+        start: formatCompactK(pageProgress.start),
+        end: formatCompactK(pageProgress.end),
+        total: formatCompactK(pageProgress.totalCount),
+      },
+    )
+    : t({ ko: '{count}개 표시 가능', en: '{count} available' }, { count: formatCompactK(currentCount) })
 
   const handleApplySearch = () => {
     setSearchQuery(searchInput.trim())
@@ -239,7 +261,7 @@ export function PromptDanbooruBrowserPanel() {
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-semibold tracking-tight text-foreground">{getSectionTitle(selectedNode, language)}</h2>
             <div className="mt-1 text-sm text-muted-foreground">
-              {t({ ko: '{count}개 표시 가능', en: '{count} available' }, { count: formatCompactK(currentCount) })}
+              {progressLabel}
               {activeSection === 'characters' ? <span> · {t({ ko: '페이지당 30개', en: '30 per page' })}</span> : null}
             </div>
           </div>
@@ -310,7 +332,7 @@ export function PromptDanbooruBrowserPanel() {
         {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'artists' ? <ArtistsTable items={artistsQuery.data?.items ?? []} language={language} /> : null}
         {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'characters' ? <CharactersTable items={charactersQuery.data?.items ?? []} language={language} /> : null}
 
-        {isDanbooruDbAvailable ? <PaginationControls pagination={pagination} onPageChange={setPage} /> : null}
+        {isDanbooruDbAvailable ? <PaginationControls pagination={pagination} visibleCount={activeItemCount} onPageChange={setPage} /> : null}
       </section>
     </div>
   )
