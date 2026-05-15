@@ -1,5 +1,5 @@
 import { getUploadResultDetailPath } from '../features/upload/upload-result-links'
-import { getVisibleUploadResultItems } from '../features/upload/upload-result-list'
+import { getVisibleUploadResultItems, getVisibleUploadResultLists } from '../features/upload/upload-result-list'
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -32,9 +32,25 @@ function assertInvalidVisibleLimitShowsNoRows() {
   assertEqual(result.hiddenCount, 2, 'invalid upload result visible limit should count hidden rows')
 }
 
+function assertSuccessfulAndFailedRowsAreCappedTogether() {
+  const result = getVisibleUploadResultLists(
+    {
+      uploaded: ['s1', 's2', 's3'],
+      failed: ['f1', 'f2', 'f3', 'f4'],
+    },
+    2,
+  )
+
+  assertEqual(result.uploaded.visible.join(','), 's1,s2', 'upload result summary should cap successful rows')
+  assertEqual(result.uploaded.hiddenCount, 1, 'upload result summary should count hidden successful rows')
+  assertEqual(result.failed.visible.join(','), 'f1,f2', 'upload result summary should cap failed rows')
+  assertEqual(result.failed.hiddenCount, 2, 'upload result summary should count hidden failed rows')
+}
+
 assertCompositeHashBuildsDetailPath()
 assertMissingCompositeHashHasNoDetailPath()
 assertHiddenUploadResultsAreCounted()
 assertInvalidVisibleLimitShowsNoRows()
+assertSuccessfulAndFailedRowsAreCappedTogether()
 
 console.log('Upload result link contracts verified.')
