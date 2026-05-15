@@ -13,6 +13,7 @@ import {
   parseUploadImageSaveOptions,
   processImageUploadWithSettings,
 } from './uploadRouteHelpers';
+import { buildUploadResponseData } from './uploadResponseHelpers';
 import { registerUploadMetadataUtilityRoutes } from './uploadMetadataUtilityRoutes';
 
 const router = Router();
@@ -71,17 +72,12 @@ async function buildUploadResult(file: Express.Multer.File, imageSaveOptions: Re
   const mimeType = processedData.mimeType || file.mimetype;
   const mediaProcessing = await processSavedUploadMedia(processedData.originalPath, mimeType);
 
-  return {
-    id: mediaProcessing.fileId,
-    filename: processedData.filename,
-    original_name: file.originalname,
-    thumbnail_url: '',
-    file_size: processedData.fileSize,
-    mime_type: mimeType,
-    width: processedData.width,
-    height: processedData.height,
-    upload_date: new Date().toISOString(),
-  };
+  return buildUploadResponseData({
+    file,
+    processedData,
+    mediaProcessing,
+    mimeType,
+  });
 }
 
 /**

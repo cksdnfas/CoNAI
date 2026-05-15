@@ -216,6 +216,7 @@ export interface UploadResponse {
   success: boolean;
   data?: {
     id: number;
+    composite_hash: string | null;
     filename: string;
     original_name: string;
     thumbnail_url: string;

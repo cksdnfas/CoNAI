@@ -21,6 +21,7 @@
     "verify:complex-filter-search-stats": "tsx src/scripts/verifyComplexFilterSearchStats.ts",
     "verify:route-validation-foundation": "tsx src/scripts/verifyRouteValidationFoundation.ts",
     "verify:upload-metadata-utilities": "tsx src/scripts/verifyUploadMetadataUtilityContracts.ts",
+    "verify:upload-response-contracts": "tsx src/scripts/verifyUploadResponseContracts.ts",
     "verify:auth-db-bootstrap": "tsx src/scripts/verifyAuthDbBootstrap.ts",
     "verify:codex-generation-contracts": "tsx src/scripts/verifyCodexGenerationContracts.ts",
     "verify:watched-folder-route-contracts": "tsx src/scripts/verifyWatchedFolderRouteContracts.ts",

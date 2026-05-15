@@ -264,6 +264,7 @@ export async function downloadImageSelection(compositeHashes: string[], type: Im
 
 export interface UploadBatchResultItem {
   id: number | string
+  composite_hash: string | null
   filename: string
   original_name: string
   thumbnail_url: string

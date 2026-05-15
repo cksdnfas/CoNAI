@@ -1,5 +1,6 @@
 import type { ChangeEvent, DragEvent, RefObject } from 'react'
-import { Copy, Download, Image as ImageIcon } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Copy, Download, ExternalLink, Image as ImageIcon } from 'lucide-react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { PageInset, PageSection } from '@/components/common/page-surface'
@@ -17,6 +18,7 @@ import { formatBytes } from '@/features/images/components/detail/image-detail-ut
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
+import { getUploadResultDetailPath } from '../upload-result-links'
 import type { UploadBatchResult, UploadTransferProgress } from '@/lib/api-images'
 import type { AutoTestKaloscopeResult, AutoTestTaggerResult } from '@/lib/api-settings'
 import type { ExtractedPromptCardItem } from '@/lib/image-extracted-prompts'
@@ -243,12 +245,25 @@ export function UploadPageUploadSection({
 
           {uploadResult.uploaded.length > 0 ? (
             <div className="space-y-2 text-sm text-muted-foreground">
-              {uploadResult.uploaded.slice(0, MAX_VISIBLE_FILES).map((file) => (
-                <div key={`${file.filename}:${file.upload_date}`} className="rounded-sm border border-border/70 bg-background/50 px-3 py-3">
-                  <div className="break-all text-foreground">{file.original_name}</div>
-                  <div className="mt-1 text-xs">{formatDimensions(file.width, file.height)} · {formatBytes(file.file_size)}</div>
-                </div>
-              ))}
+              {uploadResult.uploaded.slice(0, MAX_VISIBLE_FILES).map((file) => {
+                const detailPath = getUploadResultDetailPath(file)
+
+                return (
+                  <div key={`${file.filename}:${file.upload_date}`} className="rounded-sm border border-border/70 bg-background/50 px-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 break-all text-foreground">{file.original_name}</div>
+                      {detailPath ? (
+                        <Button asChild variant="ghost" size="icon-xs" aria-label={t({ ko: '상세 열기', en: 'Open details' })} title={t({ ko: '상세 열기', en: 'Open details' })}>
+                          <Link to={detailPath}>
+                            <ExternalLink />
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                    <div className="mt-1 text-xs">{formatDimensions(file.width, file.height)} · {formatBytes(file.file_size)}</div>
+                  </div>
+                )
+              })}
             </div>
           ) : null}
 
