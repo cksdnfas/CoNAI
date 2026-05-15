@@ -23,6 +23,41 @@ type UseWildcardWorkspaceBrowserResult = {
   setSelectedWildcardId: (wildcardId: number | null) => void
 }
 
+type ResolveWildcardWorkspaceSelectionOptions = {
+  entries: WildcardTreeEntry[]
+  filteredEntries: WildcardTreeEntry[]
+  selectedWildcardId: number | null
+  hasSearch: boolean
+}
+
+type ResolveWildcardWorkspaceSelectionResult = {
+  nextSelectedWildcardId: number | null
+  selectedEntry: WildcardTreeEntry | null
+}
+
+export function resolveWildcardWorkspaceSelection({
+  entries,
+  filteredEntries,
+  selectedWildcardId,
+  hasSearch,
+}: ResolveWildcardWorkspaceSelectionOptions): ResolveWildcardWorkspaceSelectionResult {
+  const selectableEntries = hasSearch ? filteredEntries : entries
+
+  if (selectableEntries.length === 0) {
+    return {
+      nextSelectedWildcardId: null,
+      selectedEntry: null,
+    }
+  }
+
+  const selectedEntry = selectableEntries.find((entry) => entry.wildcard.id === selectedWildcardId) ?? selectableEntries[0]
+
+  return {
+    nextSelectedWildcardId: selectedEntry.wildcard.id,
+    selectedEntry,
+  }
+}
+
 /** Share wildcard workspace tree filtering, optional search, and resilient default selection across browser surfaces. */
 export function useWildcardWorkspaceBrowser({
   records,
@@ -49,27 +84,29 @@ export function useWildcardWorkspaceBrowser({
     })
   }, [entries, searchQuery])
 
-  const selectedEntry = useMemo(
-    () => entries.find((entry) => entry.wildcard.id === selectedWildcardId) ?? null,
-    [entries, selectedWildcardId],
+  const hasSearch = searchQuery.trim().length > 0
+  const selection = useMemo(
+    () => resolveWildcardWorkspaceSelection({
+      entries,
+      filteredEntries,
+      selectedWildcardId,
+      hasSearch,
+    }),
+    [entries, filteredEntries, selectedWildcardId, hasSearch],
   )
+  const selectedEntry = selection.selectedEntry
 
   useEffect(() => {
-    if (entries.length === 0) {
-      setSelectedWildcardId(null)
-      return
+    if (selectedWildcardId !== selection.nextSelectedWildcardId) {
+      setSelectedWildcardId(selection.nextSelectedWildcardId)
     }
-
-    if (selectedWildcardId === null || !entries.some((entry) => entry.wildcard.id === selectedWildcardId)) {
-      setSelectedWildcardId(entries[0].wildcard.id)
-    }
-  }, [entries, selectedWildcardId])
+  }, [selectedWildcardId, selection.nextSelectedWildcardId])
 
   return {
     treeNodes,
     entries,
     filteredEntries,
-    selectedWildcardId,
+    selectedWildcardId: selection.nextSelectedWildcardId,
     selectedEntry,
     setSelectedWildcardId,
   }

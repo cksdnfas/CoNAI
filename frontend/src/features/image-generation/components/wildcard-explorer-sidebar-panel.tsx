@@ -67,12 +67,16 @@ export function WildcardExplorerSidebarPanel({
   onDeleteSelected,
   onSelectWildcard,
 }: WildcardExplorerSidebarPanelProps) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
+  const hasSearch = searchInput.trim().length > 0
+  const resultBadgeLabel = hasSearch
+    ? t({ ko: '{visible} / {total}', en: '{visible} / {total}' }, { visible: formatNumber(filteredEntries.length), total: formatNumber(browserEntries.length) })
+    : formatNumber(browserEntries.length)
 
   return (
     <ExplorerSidebar
       title={t({ ko: '탐색기', en: 'Explorer' })}
-      badge={<Badge variant="outline">{browserEntries.length}</Badge>}
+      badge={<Badge variant="outline">{resultBadgeLabel}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:wildcards:sidebar-locked"
       className={cn(isWideLayout && 'sticky top-24 z-30 isolate flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] self-start flex-col')}
