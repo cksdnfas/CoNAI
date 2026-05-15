@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ScanSearch } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -84,6 +86,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const useSplitPaneScroll = presentation === 'modal' && canUseSplitPaneScroll
   const usesDesktopRelatedImageColumns = useMinWidth(768)
   const [isPrimaryMediaReady, setIsPrimaryMediaReady] = useState(false)
+  const [isSimilarityInspectionRequested, setIsSimilarityInspectionRequested] = useState(false)
   const queryClient = useQueryClient()
 
   const cachedInitialImage = useMemo(() => {
@@ -112,6 +115,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
 
   useEffect(() => {
     setIsPrimaryMediaReady(false)
+    setIsSimilarityInspectionRequested(false)
   }, [compositeHash])
 
   const authStatusQuery = useAuthStatusQuery()
@@ -120,6 +124,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const runtimeSimilarityQuery = useQuery({
     queryKey: ['runtime-similarity-settings'],
     queryFn: getRuntimeSimilaritySettings,
+    enabled: isSimilarityInspectionRequested,
   })
 
   const effectiveSimilaritySettings = runtimeSimilarityQuery.data
@@ -147,9 +152,14 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const mediaKind = image ? getImageListMediaKind(image) : null
   const canLoadRelatedImages = mediaKind === 'image'
   const isSecondaryContentReady = Boolean(image) && canLoadRelatedImages && isPrimaryMediaReady
+  const canRunSimilarityInspection = isSimilarityInspectionRequested && Boolean(compositeHash) && isSecondaryContentReady
 
   const handlePrimaryMediaReady = useCallback(() => {
     setIsPrimaryMediaReady(true)
+  }, [])
+
+  const handleRequestSimilarityInspection = useCallback(() => {
+    setIsSimilarityInspectionRequested(true)
   }, [])
 
   useEffect(() => {
@@ -170,7 +180,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const duplicatesQuery = useQuery({
     queryKey: ['image-duplicates', compositeHash],
     queryFn: () => getImageDuplicates(compositeHash, 5),
-    enabled: Boolean(compositeHash) && Boolean(image) && canLoadRelatedImages && isSecondaryContentReady,
+    enabled: canRunSimilarityInspection,
   })
 
   const similarQuery = useQuery({
@@ -210,7 +220,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
         sortBy: 'similarity',
         sortOrder: 'DESC',
       }),
-    enabled: Boolean(compositeHash) && Boolean(image) && canLoadRelatedImages && Boolean(effectiveSimilaritySettings) && isSecondaryContentReady,
+    enabled: canRunSimilarityInspection && Boolean(effectiveSimilaritySettings),
   })
 
   const promptSimilarQuery = useQuery({
@@ -230,7 +240,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.auto ?? 50,
     ],
     queryFn: () => getPromptSimilarImages(compositeHash, promptSimilarLimit),
-    enabled: Boolean(compositeHash) && Boolean(image) && canLoadRelatedImages && Boolean(effectiveSimilaritySettings) && isSecondaryContentReady,
+    enabled: canRunSimilarityInspection && Boolean(effectiveSimilaritySettings),
   })
 
   const renderUrl = getImageDetailRenderUrl(image)
@@ -351,38 +361,47 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
             {!canUseSplitPaneScroll ? <ImageDetailMetaCard image={image as ImageRecord} /> : null}
 
             {isSecondaryContentReady ? (
-              <>
-                {duplicateImages.length > 0 ? (
-                  <RelatedImageGallerySection
-                    title={t('images.image.detail.view.duplicate.images')}
-                    items={duplicateImages}
-                    isLoading={false}
-                    errorMessage={null}
-                    emptyMessage={t('images.image.detail.view.there.are.no.duplicate.images.right.now')}
-                    activationMode={presentation === 'modal' ? 'modal' : 'navigate'}
+              isSimilarityInspectionRequested ? (
+                <>
+                  {duplicateImages.length > 0 ? (
+                    <RelatedImageGallerySection
+                      title={t('images.image.detail.view.duplicate.images')}
+                      items={duplicateImages}
+                      isLoading={false}
+                      errorMessage={null}
+                      emptyMessage={t('images.image.detail.view.there.are.no.duplicate.images.right.now')}
+                      activationMode={presentation === 'modal' ? 'modal' : 'navigate'}
+                      mobileCardColumns={relatedImageMobileColumns}
+                      desktopCardColumns={relatedImageDesktopColumns}
+                      cardAspectRatio={relatedImageAspectRatio}
+                      renderItemPersistentOverlay={renderDuplicateImageOverlay}
+                    />
+                  ) : null}
+
+                  <ImageDetailSimilaritySection
+                    presentation={presentation}
+                    currentSimilaritySettings={effectiveSimilaritySettings}
+                    canEditSettings={canManageSimilaritySettings}
+                    similarImageItems={similarImageItems}
+                    similarImagesLoading={similarQuery.isLoading || runtimeSimilarityQuery.isLoading}
+                    similarImagesError={similarQuery.isError ? similarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null}
+                    promptSimilarImageItems={promptSimilarImageItems}
+                    promptSimilarImages={promptSimilarImages}
+                    promptSimilarImagesLoading={promptSimilarQuery.isLoading || runtimeSimilarityQuery.isLoading}
+                    promptSimilarImagesError={promptSimilarQuery.isError ? promptSimilarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null}
                     mobileCardColumns={relatedImageMobileColumns}
                     desktopCardColumns={relatedImageDesktopColumns}
                     cardAspectRatio={relatedImageAspectRatio}
-                    renderItemPersistentOverlay={renderDuplicateImageOverlay}
                   />
-                ) : null}
-
-                <ImageDetailSimilaritySection
-                  presentation={presentation}
-                  currentSimilaritySettings={effectiveSimilaritySettings}
-                  canEditSettings={canManageSimilaritySettings}
-                  similarImageItems={similarImageItems}
-                  similarImagesLoading={similarQuery.isLoading || runtimeSimilarityQuery.isLoading}
-                  similarImagesError={similarQuery.isError ? similarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null}
-                  promptSimilarImageItems={promptSimilarImageItems}
-                  promptSimilarImages={promptSimilarImages}
-                  promptSimilarImagesLoading={promptSimilarQuery.isLoading || runtimeSimilarityQuery.isLoading}
-                  promptSimilarImagesError={promptSimilarQuery.isError ? promptSimilarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null}
-                  mobileCardColumns={relatedImageMobileColumns}
-                  desktopCardColumns={relatedImageDesktopColumns}
-                  cardAspectRatio={relatedImageAspectRatio}
-                />
-              </>
+                </>
+              ) : (
+                <div className="flex justify-start">
+                  <Button type="button" variant="secondary" size="sm" onClick={handleRequestSimilarityInspection}>
+                    <ScanSearch className="h-4 w-4" />
+                    {t({ ko: '유사/중복 검사', en: 'Check similar/duplicates' })}
+                  </Button>
+                </div>
+              )
             ) : null}
           </div>
 
