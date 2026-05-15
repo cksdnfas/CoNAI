@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { resolveSettingsPagedListProgress } from './settings-searchable-paged-list-progress'
 
 interface SettingsSearchablePagedListProps<T> {
   items: T[]
@@ -75,6 +76,13 @@ export function SettingsSearchablePagedList<T>({
   const countLabel = normalizedQuery
     ? t({ ko: '{filtered} / {total}', en: '{filtered} / {total}' }, { filtered: formatNumber(filteredItems.length), total: formatNumber(items.length) })
     : formatNumber(filteredItems.length)
+  const progress = resolveSettingsPagedListProgress({ page, pageSize, visibleCount: pagedItems.length, totalCount: filteredItems.length })
+  const progressLabel = progress.visibleCount > 0
+    ? t(
+      { ko: '표시 {start}-{end} / 전체 {total}', en: 'Showing {start}-{end} / {total}' },
+      { start: formatNumber(progress.start), end: formatNumber(progress.end), total: formatNumber(progress.totalCount) },
+    )
+    : t({ ko: '전체 {total}', en: '{total} total' }, { total: formatNumber(progress.totalCount) })
 
   return (
     <div className="space-y-3">
@@ -110,7 +118,10 @@ export function SettingsSearchablePagedList<T>({
       {totalPages > 1 ? (
         <div className={cn('flex items-center justify-between gap-3 border-t border-border/70 pt-3 text-sm text-muted-foreground', paginationClassName)}>
           <span>
-            {t({ ko: '페이지 {page} / {totalPages} · 총 {total}', en: 'Page {page} / {totalPages} · total {total}' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), total: formatNumber(filteredItems.length) })}
+            {t(
+              { ko: '페이지 {page} / {totalPages} · {progress}', en: 'Page {page} / {totalPages} · {progress}' },
+              { page: formatNumber(page), totalPages: formatNumber(totalPages), progress: progressLabel },
+            )}
           </span>
           <div className="flex gap-2">
             <Button type="button" size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>

@@ -56,6 +56,7 @@
     "verify:prompt-tag-links": "cd frontend && npm run verify:prompt-tag-links",
     "verify:danbooru-browser-progress-contracts": "cd frontend && npm run verify:danbooru-browser-progress-contracts",
     "verify:module-workflow-output-progress-contracts": "cd frontend && npm run verify:module-workflow-output-progress-contracts",
+    "verify:settings-paged-list-progress-contracts": "cd frontend && npm run verify:settings-paged-list-progress-contracts",
     "verify:auth-db-bootstrap": "cd backend && npm run verify:auth-db-bootstrap",
     "verify:codex-generation-contracts": "cd backend && npm run verify:codex-generation-contracts",
     "verify:module-library-grouping": "cd frontend && npm run verify:module-library-grouping",
