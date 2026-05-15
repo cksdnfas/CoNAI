@@ -5,6 +5,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useHomeSearch } from '@/features/home/home-search-context'
 import { buildComplexFilterPayload } from '@/features/search/search-utils'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
+import { getHomeFeedProgressSummary } from '@/features/home/home-feed-progress'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
 import { useI18n } from '@/i18n'
 import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
@@ -94,6 +95,11 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     isLoadingMore: imagesQuery.isFetchingNextPage,
     onLoadMore: imagesQuery.fetchNextPage,
   })
+
+  const feedProgress = useMemo(
+    () => getHomeFeedProgressSummary(imagesQuery.data?.pages, visibleImages.length),
+    [imagesQuery.data?.pages, visibleImages.length],
+  )
 
   useEffect(() => {
     setSelectedIds([])
@@ -227,6 +233,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     groupsQuery,
     assignToGroupMutation,
     visibleImages,
+    feedProgress,
     renderItemPersistentOverlay,
     shouldBlurItemPreview,
     selectedIds,

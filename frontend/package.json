@@ -12,6 +12,7 @@
     "verify:wallpaper-layout-contracts": "tsx src/scripts/verifyWallpaperLayoutContracts.ts",
     "verify:generation-queue-ui-contracts": "tsx src/scripts/verifyGenerationQueueUiContracts.ts",
     "verify:workflow-reservations-ui-contracts": "tsx src/scripts/verifyWorkflowReservationsUiContracts.ts",
+    "verify:home-feed-progress-ui-contracts": "tsx src/scripts/verifyHomeFeedProgressUiContracts.ts",
     "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts",
     "verify:image-editor-tool-contracts": "tsx src/scripts/verifyImageEditorToolContracts.ts"
   },

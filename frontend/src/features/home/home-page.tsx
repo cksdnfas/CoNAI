@@ -18,7 +18,7 @@ import { useHomePageData } from './use-home-page-data'
 /** Render the Home page with the reusable image list and header-driven search results. */
 export function HomePage() {
   const { showSnackbar } = useSnackbar()
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const {
     columnCount: homeColumnCount,
     setColumnCount: setHomeColumnCount,
@@ -36,6 +36,7 @@ export function HomePage() {
     groupsQuery,
     assignToGroupMutation,
     visibleImages,
+    feedProgress,
     renderItemPersistentOverlay,
     shouldBlurItemPreview,
     selectedIds,
@@ -122,6 +123,34 @@ export function HomePage() {
 
       {!imagesQuery.isPending && !imagesQuery.isError && visibleImages.length > 0 ? (
         <>
+          <PageInset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                {t(
+                  { ko: '표시 {visible} / 로드 {loaded}', en: 'Showing {visible} / loaded {loaded}' },
+                  { visible: formatNumber(feedProgress.visibleCount), loaded: formatNumber(feedProgress.loadedCount) },
+                )}
+              </span>
+              <span>
+                {t(
+                  { ko: '전체 {total}', en: '{total} total' },
+                  { total: formatNumber(feedProgress.totalCount) },
+                )}
+              </span>
+              {feedProgress.hiddenCount > 0 ? (
+                <span>
+                  {t(
+                    { ko: '숨김 {count}', en: '{count} hidden' },
+                    { count: formatNumber(feedProgress.hiddenCount) },
+                  )}
+                </span>
+              ) : null}
+            </div>
+            {imagesQuery.isRefetching && !imagesQuery.isFetchingNextPage ? (
+              <span>{t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span>
+            ) : null}
+          </PageInset>
+
           <ImageList
             items={visibleImages}
             layout="masonry"
@@ -148,6 +177,12 @@ export function HomePage() {
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 <span>{t('homePage.loadingMoreImages')}</span>
               </PageInset>
+            ) : null}
+
+            {Boolean(imagesQuery.hasNextPage) && !imagesQuery.isFetchingNextPage && !imagesQuery.isFetchNextPageError ? (
+              <Button size="sm" variant="outline" onClick={() => void imagesQuery.fetchNextPage()}>
+                {t({ ko: '더 보기', en: 'Load more' })}
+              </Button>
             ) : null}
 
             {imagesQuery.isFetchNextPageError ? (
