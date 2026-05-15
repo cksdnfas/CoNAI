@@ -10,11 +10,13 @@ import { Badge } from '@/components/ui/badge'
 import { SectionHeading } from '@/components/common/section-heading'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 
 interface ModuleWorkflowEditorViewProps {
   isDesktopPageLayout: boolean
   workflowListSidebar: ReactNode
   nodesCount: number
+  graphSummary: SavedGraphWorkflowSummary
   graphCanvas: ReactNode
   workflowEditorSupportPanels: ReactNode
   workflowSaveModal?: ReactNode
@@ -134,6 +136,7 @@ export function ModuleWorkflowEditorView({
   isDesktopPageLayout,
   workflowListSidebar,
   nodesCount,
+  graphSummary,
   graphCanvas,
   workflowEditorSupportPanels,
   workflowSaveModal,
@@ -160,6 +163,11 @@ export function ModuleWorkflowEditorView({
   const [isValidationPopupOpen, setIsValidationPopupOpen] = useState(false)
   const validationPopupRef = useRef<HTMLDivElement | null>(null)
   const validationStatus = useMemo(() => getValidationStatus(validationIssues, t, formatNumber), [formatNumber, t, validationIssues])
+  const graphSummaryLabel = [
+    t({ ko: '노드 {count}', en: 'Nodes {count}' }, { count: formatNumber(graphSummary.nodeCount) }),
+    t({ ko: '연결 {count}', en: 'Edges {count}' }, { count: formatNumber(graphSummary.edgeCount) }),
+    t({ ko: '결과 {count}', en: 'Results {count}' }, { count: formatNumber(graphSummary.finalResultNodeCount) }),
+  ].join(' · ')
 
   return (
     <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
@@ -171,9 +179,14 @@ export function ModuleWorkflowEditorView({
             <SectionHeading
               variant="inside"
               heading={
-                <span className="flex items-center gap-2 text-sm font-semibold">
-                  <Boxes className="h-4 w-4 text-primary" />
-                  {t({ ko: '워크플로우 그래프', en: 'Workflow Graph' })}
+                <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+                  <span className="inline-flex items-center gap-2">
+                    <Boxes className="h-4 w-4 text-primary" />
+                    {t({ ko: '워크플로우 그래프', en: 'Workflow Graph' })}
+                  </span>
+                  <span className="text-xs font-medium text-muted-foreground" title={graphSummaryLabel}>
+                    {graphSummaryLabel}
+                  </span>
                 </span>
               }
               actions={

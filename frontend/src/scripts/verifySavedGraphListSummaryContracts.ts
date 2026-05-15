@@ -1,6 +1,6 @@
 import { deepEqual, equal } from 'node:assert/strict'
 import type { GraphWorkflowRecord } from '../lib/api-module-graph'
-import { hasAssignedFinalResult, resolveSavedGraphWorkflowSummary } from '../features/module-graph/saved-graph-list-summary'
+import { hasAssignedFinalResult, resolveGraphStructureSummary, resolveSavedGraphWorkflowSummary } from '../features/module-graph/saved-graph-list-summary'
 
 function makeWorkflow(nodeCount: number, edgeCount: number): GraphWorkflowRecord {
   return {
@@ -61,5 +61,21 @@ deepEqual(negativeFinal, {
   finalResultNodeCount: 0,
 })
 equal(hasAssignedFinalResult(negativeFinal), false)
+
+const currentDraftSummary = resolveGraphStructureSummary(4.9, 3.2, 1.8)
+deepEqual(currentDraftSummary, {
+  nodeCount: 4,
+  edgeCount: 3,
+  finalResultNodeCount: 1,
+})
+equal(hasAssignedFinalResult(currentDraftSummary), true)
+
+const emptyDraftSummary = resolveGraphStructureSummary(-1, -3, 0)
+deepEqual(emptyDraftSummary, {
+  nodeCount: 0,
+  edgeCount: 0,
+  finalResultNodeCount: 0,
+})
+equal(hasAssignedFinalResult(emptyDraftSummary), false)
 
 console.log('Saved graph list summary contracts verified')

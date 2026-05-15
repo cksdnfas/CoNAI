@@ -6,12 +6,16 @@ export type SavedGraphWorkflowSummary = {
   finalResultNodeCount: number
 }
 
-export function resolveSavedGraphWorkflowSummary(graph: GraphWorkflowRecord, finalResultNodeCount: number): SavedGraphWorkflowSummary {
+export function resolveGraphStructureSummary(nodeCount: number, edgeCount: number, finalResultNodeCount: number): SavedGraphWorkflowSummary {
   return {
-    nodeCount: graph.graph.nodes.length,
-    edgeCount: graph.graph.edges.length,
+    nodeCount: Math.max(0, Math.floor(nodeCount)),
+    edgeCount: Math.max(0, Math.floor(edgeCount)),
     finalResultNodeCount: Math.max(0, Math.floor(finalResultNodeCount)),
   }
+}
+
+export function resolveSavedGraphWorkflowSummary(graph: GraphWorkflowRecord, finalResultNodeCount: number): SavedGraphWorkflowSummary {
+  return resolveGraphStructureSummary(graph.graph.nodes.length, graph.graph.edges.length, finalResultNodeCount)
 }
 
 export function hasAssignedFinalResult(summary: SavedGraphWorkflowSummary) {

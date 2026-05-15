@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useMemo } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { PageHeader } from '@/components/common/page-header'
@@ -13,6 +13,8 @@ import { useModuleGraphEditorShell } from './use-module-graph-editor-shell'
 import { useModuleGraphPageEditorPanels } from './use-module-graph-page-editor-panels'
 import { useModuleGraphPageActions } from './use-module-graph-page-actions'
 import { useI18n } from '@/i18n'
+import { isFinalResultModule } from './module-graph-shared'
+import { resolveGraphStructureSummary } from './saved-graph-list-summary'
 
 const ModuleGraphWorkflowBrowseContentLazy = lazy(async () => {
   const module = await import('./components/module-graph-workflow-content')
@@ -290,6 +292,11 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       ? t('module-graph.module.graph.page.folder.settings')
       : t('module-graph.module.graph.page.create.folder')
 
+  const currentWorkflowGraphSummary = useMemo(() => {
+    const finalResultNodeCount = nodes.reduce((count, node) => count + (isFinalResultModule(node.data.module) ? 1 : 0), 0)
+    return resolveGraphStructureSummary(nodes.length, edges.length, finalResultNodeCount)
+  }, [edges.length, nodes])
+
   const workflowListSidebar = (
     <ModuleGraphWorkflowListSidebar
       graphs={graphWorkflowsQuery.data ?? []}
@@ -491,6 +498,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
             isDesktopPageLayout={isDesktopPageLayout}
             workflowListSidebar={workflowListSidebar}
             nodesCount={nodes.length}
+            graphSummary={currentWorkflowGraphSummary}
             selectedNode={selectedNode}
             selectedEdge={selectedEdge}
             isEditorSupportOpen={isEditorSupportOpen}

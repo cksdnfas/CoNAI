@@ -5,6 +5,7 @@ import type { WorkflowValidationIssue } from './workflow-validation-panel'
 import type { ModuleGraphEdge, ModuleGraphNode } from '../module-graph-shared'
 import { ModuleWorkflowBrowseView } from './module-workflow-browse-view'
 import { ModuleWorkflowEditorView } from './module-workflow-editor-view'
+import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 
 const GraphExecutionPanelLazy = lazy(async () => {
   const module = await import('./graph-execution-panel')
@@ -129,6 +130,7 @@ export function ModuleGraphWorkflowEditorContent({
   isDesktopPageLayout,
   workflowListSidebar,
   nodesCount,
+  graphSummary,
   selectedNode,
   selectedEdge,
   isEditorSupportOpen,
@@ -153,6 +155,7 @@ export function ModuleGraphWorkflowEditorContent({
   isDesktopPageLayout: boolean
   workflowListSidebar: ReactNode
   nodesCount: number
+  graphSummary: SavedGraphWorkflowSummary
   selectedNode: ModuleGraphNode | null
   selectedEdge: ModuleGraphEdge | null
   isEditorSupportOpen: boolean
@@ -179,6 +182,7 @@ export function ModuleGraphWorkflowEditorContent({
       isDesktopPageLayout={isDesktopPageLayout}
       workflowListSidebar={workflowListSidebar}
       nodesCount={nodesCount}
+      graphSummary={graphSummary}
       hasSelectedNode={Boolean(selectedNode)}
       hasSelectedEdge={Boolean(selectedEdge)}
       isEditorSupportOpen={isEditorSupportOpen}
