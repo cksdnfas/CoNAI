@@ -38,7 +38,7 @@ export function GroupExplorerSidebarPanel({
       badge={<Badge variant="outline">{formatNumber(groups.length)}</Badge>}
       floatingFrame
       floatingLockStorageKey="conai:groups:sidebar-locked"
-      className={cn(isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
+      className={cn('z-20 isolate', isWideLayout && 'sticky top-24 self-start flex max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)] flex-col')}
       bodyClassName={cn(isWideLayout && 'min-h-0 flex-1 overflow-y-auto pr-1')}
       headerExtra={headerExtra}
     >
