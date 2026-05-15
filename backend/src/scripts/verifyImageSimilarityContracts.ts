@@ -359,10 +359,48 @@ function verifyQueryBuilderContracts() {
   }
 }
 
+function verifyOptimizedDctContracts() {
+  const matrix = Array.from({ length: 32 }, (_row, i) =>
+    Array.from({ length: 32 }, (_column, j) => (i * 17 + j * 31 + ((i * j) % 251)) % 256)
+  )
+
+  const referenceTopLeft: number[][] = []
+  const size = matrix.length
+  for (let u = 0; u < 8; u += 1) {
+    referenceTopLeft[u] = []
+    for (let v = 0; v < 8; v += 1) {
+      let sum = 0
+      for (let i = 0; i < size; i += 1) {
+        for (let j = 0; j < size; j += 1) {
+          const cu = u === 0 ? 1 / Math.sqrt(2) : 1
+          const cv = v === 0 ? 1 / Math.sqrt(2) : 1
+          sum += cu * cv * matrix[i][j]
+            * Math.cos(((2 * i + 1) * u * Math.PI) / (2 * size))
+            * Math.cos(((2 * j + 1) * v * Math.PI) / (2 * size))
+        }
+      }
+      referenceTopLeft[u][v] = (2 / size) * sum
+    }
+  }
+
+  const optimized = (ImageSimilarityService as unknown as {
+    applyDCT(matrix: number[][]): number[][]
+  }).applyDCT(matrix)
+
+  assert.equal(optimized.length, 8)
+  assert.ok(optimized.every(row => row.length === 8))
+  for (let i = 0; i < 8; i += 1) {
+    for (let j = 0; j < 8; j += 1) {
+      assertClose(optimized[i][j], referenceTopLeft[i][j], 0.0000001)
+    }
+  }
+}
+
 verifyDuplicateMatchContracts()
 verifyHybridSimilarityContracts()
 verifyColorSimilarityContracts()
 verifyResultSortingContracts()
 verifyQueryBuilderContracts()
+verifyOptimizedDctContracts()
 
 console.log('Image similarity contracts verified')

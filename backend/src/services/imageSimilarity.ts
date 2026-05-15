@@ -2,6 +2,19 @@ import sharp from 'sharp';
 import { ColorHistogram } from '../types/similarity';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
 
+const DCT_SIZE = 32;
+const PHASH_LOW_FREQUENCY_SIZE = 8;
+const DCT_NORMALIZATION = 2 / DCT_SIZE;
+const INV_SQRT_2 = 1 / Math.sqrt(2);
+const DCT_COSINES = Array.from({ length: PHASH_LOW_FREQUENCY_SIZE }, (_unused, frequency) =>
+  Array.from({ length: DCT_SIZE }, (_unusedPixel, pixel) =>
+    Math.cos(((2 * pixel + 1) * frequency * Math.PI) / (2 * DCT_SIZE))
+  )
+);
+const DCT_COEFFICIENTS = Array.from({ length: PHASH_LOW_FREQUENCY_SIZE }, (_unused, frequency) =>
+  frequency === 0 ? INV_SQRT_2 : 1
+);
+
 /**
  * 이미지 유사도 검색 서비스
  * Sharp를 활용한 perceptual hash 및 색상 히스토그램 생성
@@ -194,37 +207,36 @@ export class ImageSimilarityService {
    * @returns DCT 변환된 행렬
    */
   private static applyDCT(matrix: number[][]): number[][] {
-    const N = matrix.length;
-    const dct: number[][] = [];
+    const lowFrequencyDct: number[][] = [];
 
-    // 결과 행렬 초기화
-    for (let i = 0; i < N; i++) {
-      dct[i] = new Array(N).fill(0);
-    }
+    // pHash only uses 8x8 low-frequency coefficients. Do not compute the unused
+    // 32x32 matrix; keep the Node event loop free for gallery requests.
+    for (let u = 0; u < PHASH_LOW_FREQUENCY_SIZE; u++) {
+      const row: number[] = [];
+      const uCoefficient = DCT_COEFFICIENTS[u];
+      const uCosines = DCT_COSINES[u];
 
-    // 2D DCT-II 공식 적용
-    for (let u = 0; u < N; u++) {
-      for (let v = 0; v < N; v++) {
+      for (let v = 0; v < PHASH_LOW_FREQUENCY_SIZE; v++) {
         let sum = 0;
+        const vCoefficient = DCT_COEFFICIENTS[v];
+        const vCosines = DCT_COSINES[v];
 
-        for (let i = 0; i < N; i++) {
-          for (let j = 0; j < N; j++) {
-            const cu = u === 0 ? 1 / Math.sqrt(2) : 1;
-            const cv = v === 0 ? 1 / Math.sqrt(2) : 1;
+        for (let i = 0; i < DCT_SIZE; i++) {
+          const pixelRow = matrix[i];
+          const uCosine = uCosines[i];
 
-            sum +=
-              cu * cv *
-              matrix[i][j] *
-              Math.cos(((2 * i + 1) * u * Math.PI) / (2 * N)) *
-              Math.cos(((2 * j + 1) * v * Math.PI) / (2 * N));
+          for (let j = 0; j < DCT_SIZE; j++) {
+            sum += pixelRow[j] * uCosine * vCosines[j];
           }
         }
 
-        dct[u][v] = (2 / N) * sum;
+        row[v] = DCT_NORMALIZATION * uCoefficient * vCoefficient * sum;
       }
+
+      lowFrequencyDct[u] = row;
     }
 
-    return dct;
+    return lowFrequencyDct;
   }
 
   /**

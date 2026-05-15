@@ -150,9 +150,13 @@ function resolveBackgroundMediaConcurrency(): number {
     return Math.min(configured, 8);
   }
 
-  // Hashing, thumbnails, FFprobe, and SQLite writes are all heavy enough that
-  // saturating every CPU core makes the gallery feel stalled while scans run.
-  return Math.max(1, Math.min(3, Math.floor(os.cpus().length / 2) || 1));
+  // This is one Node process: CPU is plentiful, but the event loop is not.
+  // Keep background media work modest so thumbnail/API requests get turns.
+  return Math.max(1, Math.min(2, Math.floor(os.cpus().length / 2) || 1));
+}
+
+function yieldToHttpRequests(): Promise<void> {
+  return new Promise(resolve => setImmediate(resolve));
 }
 
 /**
@@ -369,7 +373,9 @@ export class BackgroundProcessorService {
       const tasks = unhashedFiles.map((file) =>
         limit(async () => {
           try {
+            await yieldToHttpRequests();
             await this.processFile(file);
+            await yieldToHttpRequests();
             result.processed++;
           } catch (error) {
             console.error(
