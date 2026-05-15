@@ -19,6 +19,7 @@ import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import { getUploadResultDetailPath } from '../upload-result-links'
+import { getVisibleUploadResultItems } from '../upload-result-list'
 import type { UploadBatchResult, UploadTransferProgress } from '@/lib/api-images'
 import type { AutoTestKaloscopeResult, AutoTestTaggerResult } from '@/lib/api-settings'
 import type { ExtractedPromptCardItem } from '@/lib/image-extracted-prompts'
@@ -164,6 +165,7 @@ export function UploadPageUploadSection({
   onUpload: () => void
 }) {
   const { t, formatNumber } = useI18n()
+  const uploadedResultItems = uploadResult ? getVisibleUploadResultItems(uploadResult.uploaded, MAX_VISIBLE_FILES) : null
 
   return (
     <PageSection
@@ -245,7 +247,7 @@ export function UploadPageUploadSection({
 
           {uploadResult.uploaded.length > 0 ? (
             <div className="space-y-2 text-sm text-muted-foreground">
-              {uploadResult.uploaded.slice(0, MAX_VISIBLE_FILES).map((file) => {
+              {uploadedResultItems?.visible.map((file) => {
                 const detailPath = getUploadResultDetailPath(file)
 
                 return (
@@ -264,6 +266,9 @@ export function UploadPageUploadSection({
                   </div>
                 )
               })}
+              {uploadedResultItems && uploadedResultItems.hiddenCount > 0 ? (
+                <div className="text-xs">{t({ ko: '…저장 {count}개 더 있음', en: '…{count} more saved' }, { count: formatNumber(uploadedResultItems.hiddenCount) })}</div>
+              ) : null}
             </div>
           ) : null}
 
