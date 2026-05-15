@@ -10,6 +10,34 @@ import { normalizeFilename } from './pathResolver';
 
 // RecycleBin 폴더 경로 (runtimePaths를 통해 중앙 관리)
 const RECYCLE_BIN_PATH = runtimePaths.recycleBinDir;
+const RETRYABLE_UNLINK_ERROR_CODES = new Set(['EBUSY', 'EPERM']);
+const UNLINK_RETRY_DELAYS_MS = [80, 160, 320, 640, 1280];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableUnlinkError(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && RETRYABLE_UNLINK_ERROR_CODES.has(String((error as NodeJS.ErrnoException).code));
+}
+
+async function unlinkWithTransientLockRetry(filePath: string): Promise<void> {
+  for (let attempt = 0; attempt <= UNLINK_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      await fs.promises.unlink(filePath);
+      return;
+    } catch (error) {
+      if (!isRetryableUnlinkError(error) || attempt === UNLINK_RETRY_DELAYS_MS.length) {
+        throw error;
+      }
+
+      await sleep(UNLINK_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+}
 
 /**
  * RecycleBin용 파일명 생성
@@ -62,7 +90,7 @@ async function moveToRecycleBin(filePath: string): Promise<string> {
   const recycleBinFilePath = await copyToRecycleBin(filePath);
 
   try {
-    await fs.promises.unlink(filePath);
+    await unlinkWithTransientLockRetry(filePath);
     console.log(`♻️ Moved to RecycleBin: ${path.basename(filePath)} → ${path.basename(recycleBinFilePath)}`);
     return recycleBinFilePath;
   } catch (error) {
@@ -103,7 +131,7 @@ async function deleteFilePermanently(filePath: string): Promise<void> {
   }
 
   try {
-    await fs.promises.unlink(filePath);
+    await unlinkWithTransientLockRetry(filePath);
     console.log(`🗑️ Permanently deleted: ${path.basename(filePath)}`);
   } catch (error) {
     console.error(`❌ Failed to delete file:`, error);
