@@ -21,6 +21,7 @@
     "verify:module-workflow-output-progress-contracts": "tsx src/scripts/verifyModuleWorkflowOutputProgressContracts.ts",
     "verify:settings-paged-list-progress-contracts": "tsx src/scripts/verifySettingsPagedListProgressContracts.ts",
     "verify:wildcard-search-selection-contracts": "tsx src/scripts/verifyWildcardSearchSelectionContracts.ts",
+    "verify:wallpaper-widget-library-search-contracts": "tsx src/scripts/verifyWallpaperWidgetLibrarySearchContracts.tsx",
     "verify:upload-result-links": "tsx src/scripts/verifyUploadResultLinks.ts",
     "verify:prompt-tag-links": "tsx src/scripts/verifyPromptTagLinks.ts",
     "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts",

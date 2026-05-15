@@ -19,45 +19,16 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { getNavigationItemClassName } from '@/components/common/navigation-item'
-import { useI18n, type TranslationDictionary } from '@/i18n'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { listWallpaperWidgetDefinitions } from './wallpaper-widget-registry'
+import { getWallpaperWidgetLibrarySearchSummary, type WallpaperWidgetLibraryFolderId } from './wallpaper-widget-library-search'
 import type { WallpaperWidgetDefinition, WallpaperWidgetType } from './wallpaper-types'
-
-type WallpaperWidgetLibraryFolderId = 'realtime' | 'images' | 'notes' | 'misc'
 
 interface WallpaperWidgetLibrarySidebarProps {
   selectedWidgetType?: WallpaperWidgetType | null
   onAddWidget: (widgetType: WallpaperWidgetType) => void
 }
-
-interface WallpaperWidgetLibraryFolder {
-  id: WallpaperWidgetLibraryFolderId
-  title: TranslationDictionary
-  widgetTypes: WallpaperWidgetType[]
-}
-
-const WALLPAPER_WIDGET_LIBRARY_FOLDERS: WallpaperWidgetLibraryFolder[] = [
-  {
-    id: 'realtime',
-    title: { ko: '실시간 정보', en: 'Realtime' },
-    widgetTypes: ['clock', 'queue-status', 'activity-pulse'],
-  },
-  {
-    id: 'images',
-    title: { ko: '이미지', en: 'Images' },
-    widgetTypes: ['recent-results', 'group-image-view', 'image-showcase', 'floating-collage'],
-  },
-  {
-    id: 'notes',
-    title: { ko: '텍스트', en: 'Text' },
-    widgetTypes: ['text-note'],
-  },
-]
-
-const WIDGET_FOLDER_TITLE_BY_TYPE = new Map<WallpaperWidgetType, TranslationDictionary>(
-  WALLPAPER_WIDGET_LIBRARY_FOLDERS.flatMap((folder) => folder.widgetTypes.map((widgetType) => [widgetType, folder.title] as const)),
-)
 
 function getWallpaperWidgetIcon(widgetType: WallpaperWidgetType) {
   if (widgetType === 'clock') {
@@ -95,66 +66,22 @@ function sortWallpaperWidgetDefinitions(left: WallpaperWidgetDefinition, right: 
   return left.title.localeCompare(right.title, locale, { numeric: true, sensitivity: 'base' })
 }
 
-function matchesWallpaperWidgetQuery(widget: WallpaperWidgetDefinition, query: string, t: (dictionary: TranslationDictionary) => string) {
-  if (!query) {
-    return true
-  }
-
-  const folderTitle = t(WIDGET_FOLDER_TITLE_BY_TYPE.get(widget.type) ?? { ko: '기타', en: 'Misc' })
-  return [widget.title, widget.description, widget.type, folderTitle]
-    .join(' ')
-    .toLowerCase()
-    .includes(query)
-}
-
 /** Render one explorer-style wallpaper widget library with folder-style grouping. */
 export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget }: WallpaperWidgetLibrarySidebarProps) {
   const { locale, t } = useI18n()
   const [searchQuery, setSearchQuery] = useState('')
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<WallpaperWidgetLibraryFolderId[]>([])
-  const normalizedQuery = searchQuery.trim().toLowerCase()
 
   const widgetDefinitions = useMemo(
     () => [...listWallpaperWidgetDefinitions()].sort((left, right) => sortWallpaperWidgetDefinitions(left, right, locale)),
     [locale],
   )
-
-  const widgetDefinitionByType = useMemo(
-    () => new Map(widgetDefinitions.map((widget) => [widget.type, widget] as const)),
-    [widgetDefinitions],
+  const searchSummary = useMemo(
+    () => getWallpaperWidgetLibrarySearchSummary(widgetDefinitions, searchQuery, t),
+    [searchQuery, t, widgetDefinitions],
   )
 
-  const visibleFolders = useMemo(() => {
-    const knownWidgetTypes = new Set<WallpaperWidgetType>()
-    const folders = WALLPAPER_WIDGET_LIBRARY_FOLDERS.map((folder) => {
-      const widgets = folder.widgetTypes
-        .map((widgetType) => {
-          knownWidgetTypes.add(widgetType)
-          return widgetDefinitionByType.get(widgetType) ?? null
-        })
-        .filter((widget): widget is WallpaperWidgetDefinition => widget !== null)
-        .filter((widget) => matchesWallpaperWidgetQuery(widget, normalizedQuery, t))
-
-      return {
-        ...folder,
-        widgets,
-      }
-    })
-
-    const miscWidgets = widgetDefinitions.filter((widget) => !knownWidgetTypes.has(widget.type) && matchesWallpaperWidgetQuery(widget, normalizedQuery, t))
-    if (miscWidgets.length > 0) {
-      folders.push({
-        id: 'misc',
-        title: { ko: '기타', en: 'Misc' },
-        widgetTypes: miscWidgets.map((widget) => widget.type),
-        widgets: miscWidgets,
-      })
-    }
-
-    return folders.filter((folder) => folder.widgets.length > 0)
-  }, [normalizedQuery, t, widgetDefinitionByType, widgetDefinitions])
-
-  const hasVisibleWidgets = visibleFolders.length > 0
+  const hasVisibleWidgets = searchSummary.visibleFolders.length > 0
 
   const toggleFolder = (folderId: WallpaperWidgetLibraryFolderId) => {
     setCollapsedFolderIds((current) => (
@@ -167,7 +94,16 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
   return (
     <ExplorerSidebar
       title={t({ ko: '위젯 라이브러리', en: 'Widget library' })}
-      badge={<Badge variant="outline">{widgetDefinitions.length}</Badge>}
+      badge={(
+        <Badge
+          variant="outline"
+          title={searchSummary.hasSearch
+            ? t({ ko: `검색 결과 ${searchSummary.visibleWidgetCount} / 전체 ${searchSummary.totalWidgetCount}`, en: `${searchSummary.visibleWidgetCount} / ${searchSummary.totalWidgetCount} matching widgets` })
+            : t({ ko: `전체 ${searchSummary.totalWidgetCount}`, en: `${searchSummary.totalWidgetCount} total widgets` })}
+        >
+          {searchSummary.badgeText}
+        </Badge>
+      )}
       floatingFrame
       floatingLockStorageKey="conai:wallpaper:widget-library-sidebar-locked"
       className="sticky top-24 z-20 isolate self-start max-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem)]"
@@ -186,8 +122,8 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
         </div>
       }
     >
-      {visibleFolders.map((folder) => {
-        const isExpanded = normalizedQuery ? true : !collapsedFolderIds.includes(folder.id)
+      {searchSummary.visibleFolders.map((folder) => {
+        const isExpanded = searchSummary.hasSearch ? true : !collapsedFolderIds.includes(folder.id)
 
         return (
           <div key={folder.id} className="space-y-1">
