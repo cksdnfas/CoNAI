@@ -65,6 +65,7 @@
     "verify:generation-queue-ui-contracts": "cd frontend && npm run verify:generation-queue-ui-contracts",
     "verify:workflow-reservations-ui-contracts": "cd frontend && npm run verify:workflow-reservations-ui-contracts",
     "verify:home-feed-progress-ui-contracts": "cd frontend && npm run verify:home-feed-progress-ui-contracts",
+    "verify:group-image-feed-progress-ui-contracts": "cd frontend && npm run verify:group-image-feed-progress-ui-contracts",
     "verify:graph-queue-wait-contracts": "cd backend && npm run verify:graph-queue-wait-contracts",
     "verify:image-similarity-contracts": "cd backend && npm run verify:image-similarity-contracts",
     "verify:wildcard-guest-access-contracts": "npm run verify:wildcard-guest-access-contracts --workspace conai-backend && npm run verify:wildcard-guest-access-contracts --workspace frontend",

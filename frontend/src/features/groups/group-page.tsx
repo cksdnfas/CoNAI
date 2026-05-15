@@ -99,6 +99,7 @@ export function GroupPage() {
 
   const groupCountMaps = useMemo(() => buildGroupCountMaps(allGroups), [allGroups])
   const selectedGroupCountLabel = selectedGroupHierarchy ? getGroupHierarchyCountLabel(selectedGroupHierarchy, groupCountMaps, formatNumber) : formatNumber(selectedGroupQuery.data?.image_count ?? 0)
+  const selectedGroupImageTotalCount = groupImagesQuery.data?.pages[0]?.pagination.total ?? selectedGroupQuery.data?.image_count ?? 0
 
   const {
     createGroupMutation,
@@ -326,6 +327,7 @@ export function GroupPage() {
                 errorMessage={groupImagesQuery.error instanceof Error ? groupImagesQuery.error.message : null}
                 hasMore={Boolean(groupImagesQuery.hasNextPage)}
                 isLoadingMore={groupImagesQuery.isFetchingNextPage}
+                totalCount={selectedGroupImageTotalCount}
                 onLoadMore={() => void groupImagesQuery.fetchNextPage()}
                 preferredColumnCount={groupColumnCount}
                 selectable={true}

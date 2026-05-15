@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Bot, Images, Pencil } from 'lucide-react'
+import { Bot, Images, Loader2, Pencil } from 'lucide-react'
 import { PageInset } from '@/components/common/page-surface'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
@@ -11,6 +11,7 @@ import { useImageFeedSafety } from '@/features/images/components/image-list/use-
 import type { GroupRecord } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import { useI18n } from '@/i18n'
+import { getGroupImageFeedProgressSummary } from '../group-image-feed-progress'
 
 interface GroupImageSectionProps {
   group: GroupRecord
@@ -20,6 +21,7 @@ interface GroupImageSectionProps {
   errorMessage: string | null
   hasMore: boolean
   isLoadingMore: boolean
+  totalCount?: number
   onLoadMore: () => void
   hideHeader?: boolean
   presentation?: 'page' | 'drawer'
@@ -46,6 +48,7 @@ export function GroupImageSection({
   errorMessage,
   hasMore,
   isLoadingMore,
+  totalCount,
   onLoadMore,
   hideHeader = false,
   presentation = 'page',
@@ -71,6 +74,11 @@ export function GroupImageSection({
     isError,
     isLoadingMore,
     onLoadMore,
+  })
+  const feedProgress = getGroupImageFeedProgressSummary({
+    loadedCount: groupImages.length,
+    visibleCount: visibleGroupImages.length,
+    totalCount,
   })
 
   return (
@@ -127,30 +135,74 @@ export function GroupImageSection({
       ) : null}
 
       {!isLoading && !isError && visibleGroupImages.length > 0 ? (
-        <ImageList
-          items={visibleGroupImages}
-          layout="masonry"
-          activationMode="modal"
-          getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
-          selectable={selectable}
-          selectedIds={selectedIds}
-          onSelectedIdsChange={onSelectedIdsChange}
-          hasMore={hasMore}
-          isLoadingMore={isLoadingMore}
-          onLoadMore={onLoadMore}
-          minColumnWidth={presentation === 'drawer' ? 180 : 280}
-          preferredColumnCount={preferredColumnCount}
-          columnGap={presentation === 'drawer' ? 12 : 20}
-          rowGap={presentation === 'drawer' ? 12 : 20}
-          gridItemHeight={presentation === 'drawer' ? 220 : 260}
-          scrollMode={presentation === 'drawer' ? 'container' : 'window'}
-          viewportHeight={presentation === 'drawer' ? '100%' : undefined}
-          className={presentation === 'drawer' ? 'min-h-0 flex-1' : undefined}
-          selectionAreaClass={presentation === 'drawer' ? 'image-list-selection-area-hidden' : 'image-list-selection-area'}
-          renderItemOverlay={renderItemOverlay}
-          renderItemPersistentOverlay={renderItemPersistentOverlay}
-          shouldBlurItemPreview={shouldBlurItemPreview}
-        />
+        <PageInset className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              {t(
+                { ko: '표시 {visible} / 로드 {loaded}', en: 'Showing {visible} / loaded {loaded}' },
+                { visible: formatNumber(feedProgress.visibleCount), loaded: formatNumber(feedProgress.loadedCount) },
+              )}
+            </span>
+            <span>
+              {t(
+                { ko: '전체 {total}', en: '{total} total' },
+                { total: formatNumber(feedProgress.totalCount) },
+              )}
+            </span>
+            {feedProgress.hiddenCount > 0 ? (
+              <span>
+                {t(
+                  { ko: '숨김 {count}', en: '{count} hidden' },
+                  { count: formatNumber(feedProgress.hiddenCount) },
+                )}
+              </span>
+            ) : null}
+          </div>
+        </PageInset>
+      ) : null}
+
+      {!isLoading && !isError && visibleGroupImages.length > 0 ? (
+        <>
+          <ImageList
+            items={visibleGroupImages}
+            layout="masonry"
+            activationMode="modal"
+            getItemHref={(image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined)}
+            selectable={selectable}
+            selectedIds={selectedIds}
+            onSelectedIdsChange={onSelectedIdsChange}
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={onLoadMore}
+            minColumnWidth={presentation === 'drawer' ? 180 : 280}
+            preferredColumnCount={preferredColumnCount}
+            columnGap={presentation === 'drawer' ? 12 : 20}
+            rowGap={presentation === 'drawer' ? 12 : 20}
+            gridItemHeight={presentation === 'drawer' ? 220 : 260}
+            scrollMode={presentation === 'drawer' ? 'container' : 'window'}
+            viewportHeight={presentation === 'drawer' ? '100%' : undefined}
+            className={presentation === 'drawer' ? 'min-h-0 flex-1' : undefined}
+            selectionAreaClass={presentation === 'drawer' ? 'image-list-selection-area-hidden' : 'image-list-selection-area'}
+            renderItemOverlay={renderItemOverlay}
+            renderItemPersistentOverlay={renderItemPersistentOverlay}
+            shouldBlurItemPreview={shouldBlurItemPreview}
+          />
+
+          <div className="flex flex-col items-center gap-3 pb-3">
+            {isLoadingMore ? (
+              <PageInset className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>{t('homePage.loadingMoreImages')}</span>
+              </PageInset>
+            ) : null}
+
+            {hasMore && !isLoadingMore ? (
+              <Button size="sm" variant="outline" onClick={onLoadMore}>
+                {t({ ko: '더 보기', en: 'Load more' })}
+              </Button>
+            ) : null}
+          </div>
+        </>
       ) : null}
 
       {!isLoading && !isError && visibleGroupImages.length === 0 ? (
