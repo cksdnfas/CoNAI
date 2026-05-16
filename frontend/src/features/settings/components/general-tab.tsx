@@ -69,7 +69,7 @@ export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtecti
                 <SettingsField label={t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })}>
                   <Select
                     variant="settings"
-                    value={generalDraft.imageSimilarityCheckMode ?? 'manual'}
+                    value={generalDraft.imageSimilarityCheckMode ?? 'always'}
                     onChange={(event) => onPatchGeneral({ imageSimilarityCheckMode: event.target.value as GeneralSettings['imageSimilarityCheckMode'] })}
                   >
                     <option value="manual">{t({ ko: '수동 실행', en: 'Manual' })}</option>

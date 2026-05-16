@@ -10,8 +10,8 @@ function source(relativePath: string) {
 function verifyPolicyHelper() {
   equal(shouldAutoRunImageSimilarityChecks({ imageSimilarityCheckMode: 'always' }), true)
   equal(shouldAutoRunImageSimilarityChecks({ imageSimilarityCheckMode: 'manual' }), false)
-  equal(shouldAutoRunImageSimilarityChecks({}), false)
-  equal(shouldAutoRunImageSimilarityChecks(null), false)
+  equal(shouldAutoRunImageSimilarityChecks({}), true)
+  equal(shouldAutoRunImageSimilarityChecks(null), true)
 }
 
 function verifyStaticContracts() {
@@ -24,7 +24,7 @@ function verifyStaticContracts() {
 
   match(settingsTypes, /export type ImageSimilarityCheckMode = 'manual' \| 'always'/, 'frontend settings type should expose manual/always modes')
   match(backendSettingsTypes, /export type ImageSimilarityCheckMode = 'manual' \| 'always'/, 'backend settings type should expose manual/always modes')
-  match(backendDefaults, /imageSimilarityCheckMode: 'manual'/, 'default settings should keep expensive checks manual')
+  match(backendDefaults, /imageSimilarityCheckMode: 'always'/, 'default settings should auto-run similarity checks')
   match(backendSettingsRoutes, /validImageSimilarityCheckModes[\s\S]*\['manual', 'always'\]/, 'settings route should validate policy modes')
   match(generalTab, /유사\/중복 검사/, 'general settings tab should label the policy in Korean')
   match(generalTab, /Similar\/duplicate check/, 'general settings tab should label the policy in English')
