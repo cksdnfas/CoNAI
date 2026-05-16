@@ -55,6 +55,98 @@ export class ImageSimilarityModel {
     ).get(compositeHash) as ImageMetadataRecord | undefined;
   }
 
+  private static buildHydrationKey(image: Partial<SimilarityCandidateRecord>): string | null {
+    const fileId = typeof image.file_id === 'number' && Number.isFinite(image.file_id)
+      ? image.file_id
+      : null;
+    if (fileId !== null) {
+      return `file:${fileId}`;
+    }
+    return image.composite_hash ? `hash:${image.composite_hash}` : null;
+  }
+
+  /** Hydrate only final matches so candidate scans do not pull large metadata blobs. */
+  private static hydrateSimilarityMatches(matches: SimilarImage[]): SimilarImage[] {
+    if (matches.length === 0) {
+      return matches;
+    }
+
+    const fileIds = [...new Set(matches
+      .map(match => match.image as Partial<SimilarityCandidateRecord>)
+      .map(image => image.file_id)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value)))];
+    const compositeHashes = [...new Set(matches
+      .map(match => (match.image as Partial<SimilarityCandidateRecord>).composite_hash)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0))];
+    const hydratedByKey = new Map<string, any>();
+
+    if (fileIds.length > 0) {
+      const placeholders = fileIds.map(() => '?').join(',');
+      const rows = db.prepare(`
+        SELECT
+          im.*,
+          f.id as file_id,
+          f.original_file_path,
+          f.file_size,
+          f.mime_type,
+          f.file_status,
+          f.file_type,
+          f.folder_id,
+          wf.folder_name
+        FROM image_files f
+        JOIN media_metadata im ON f.composite_hash = im.composite_hash
+        LEFT JOIN watched_folders wf ON f.folder_id = wf.id
+        WHERE f.id IN (${placeholders})
+      `).all(...fileIds) as any[];
+
+      for (const row of rows) {
+        hydratedByKey.set(`file:${row.file_id}`, row);
+        hydratedByKey.set(`hash:${row.composite_hash}`, row);
+      }
+    }
+
+    if (compositeHashes.length > 0) {
+      const placeholders = compositeHashes.map(() => '?').join(',');
+      const rows = db.prepare(`
+        SELECT
+          im.*,
+          f.id as file_id,
+          f.original_file_path,
+          f.file_size,
+          f.mime_type,
+          f.file_status,
+          f.file_type,
+          f.folder_id,
+          wf.folder_name
+        FROM media_metadata im
+        LEFT JOIN image_files f ON im.composite_hash = f.composite_hash AND f.file_status = 'active'
+        LEFT JOIN watched_folders wf ON f.folder_id = wf.id
+        WHERE im.composite_hash IN (${placeholders})
+        GROUP BY im.composite_hash
+      `).all(...compositeHashes) as any[];
+
+      for (const row of rows) {
+        if (!hydratedByKey.has(`hash:${row.composite_hash}`)) {
+          hydratedByKey.set(`hash:${row.composite_hash}`, row);
+        }
+      }
+    }
+
+    return matches.map(match => {
+      const image = match.image as Partial<SimilarityCandidateRecord>;
+      const fileKey = this.buildHydrationKey(image);
+      const hashKey = image.composite_hash ? `hash:${image.composite_hash}` : null;
+      const hydratedImage = (fileKey ? hydratedByKey.get(fileKey) : null)
+        ?? (hashKey ? hydratedByKey.get(hashKey) : null)
+        ?? match.image;
+
+      return {
+        ...match,
+        image: hydratedImage,
+      };
+    });
+  }
+
   /** Require a valid media_metadata row before continuing. */
   private static requireImageMetadata(compositeHash: string): ImageMetadataRecord {
     const targetImage = this.loadImageMetadata(compositeHash);
@@ -192,7 +284,7 @@ export class ImageSimilarityModel {
       .map(candidate => buildDuplicateMatch(targetImage, candidate, weights, thresholds))
       .filter((candidate): candidate is SimilarImage => candidate !== null);
 
-    return sortDuplicateResults(results);
+    return this.hydrateSimilarityMatches(sortDuplicateResults(results));
   }
 
   /**
@@ -230,17 +322,17 @@ export class ImageSimilarityModel {
     const thresholds = this.getSimilarityThresholds(options);
     const useMetadataFilter = options.useMetadataFilter ?? false;
     const targetImage = this.requirePerceptualHashImage(compositeHash);
-    const { query, params } = buildSimilarCandidateQuery(targetImage, useMetadataFilter);
+    const includeColorSimilarity = Boolean(options.includeColorSimilarity || weights.color > 0 || thresholds.color > 0);
+    const { query, params } = buildSimilarCandidateQuery(targetImage, useMetadataFilter, includeColorSimilarity);
     const candidates = db.prepare(query).all(...params) as SimilarityCandidateRecord[];
 
-    const includeColorSimilarity = Boolean(options.includeColorSimilarity || weights.color > 0 || thresholds.color > 0);
     const targetHistogram = loadTargetHistogram(targetImage, includeColorSimilarity);
     const results = candidates
       .map(candidate => buildSimilarMatch(targetImage, candidate, weights, thresholds, targetHistogram))
       .filter((candidate): candidate is SimilarImage => candidate !== null);
 
     sortSimilarResults(results, sortBy, sortOrder);
-    return results.slice(0, limit);
+    return this.hydrateSimilarityMatches(results.slice(0, limit));
   }
 
   /**
@@ -411,7 +503,7 @@ export class ImageSimilarityModel {
       .filter((candidate): candidate is SimilarImage => candidate !== null);
 
     sortColorSimilarResults(results);
-    return results.slice(0, limit);
+    return this.hydrateSimilarityMatches(results.slice(0, limit));
   }
 
   /**

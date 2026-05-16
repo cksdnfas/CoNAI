@@ -9,6 +9,35 @@ export type SimilarityCandidateRecord = ImageMetadataRecord & {
   file_status?: string;
 }
 
+const BASE_CANDIDATE_COLUMNS = [
+  'im.composite_hash',
+  'im.perceptual_hash',
+  'im.dhash',
+  'im.ahash',
+  'im.width',
+  'im.height',
+  'im.thumbnail_path',
+  'im.rating_score',
+  'im.first_seen_date',
+  'im.metadata_updated_date',
+  'if.id as file_id',
+  'if.original_file_path',
+  'if.file_type',
+  'if.file_size',
+  'if.mime_type',
+  'if.file_status',
+  'if.folder_id',
+]
+
+/** Select only fields needed for scoring/sorting; hydrate final rows after pruning. */
+function buildCandidateSelect(includeColorHistogram: boolean) {
+  const columns = includeColorHistogram
+    ? [...BASE_CANDIDATE_COLUMNS, 'im.color_histogram']
+    : BASE_CANDIDATE_COLUMNS
+
+  return columns.map((column) => `      ${column}`).join(',\n')
+}
+
 /** Build the shared +/-10% width and height filter when metadata is present. */
 function getMetadataBounds(targetImage: ImageMetadataRecord) {
   if (!targetImage.width || !targetImage.height) {
@@ -27,12 +56,7 @@ function getMetadataBounds(targetImage: ImageMetadataRecord) {
 export function buildDuplicateCandidateQuery(targetImage: ImageMetadataRecord, includeMetadata: boolean) {
   let query = `
     SELECT
-      im.*,
-      if.id as file_id,
-      if.original_file_path,
-      if.file_size,
-      if.mime_type,
-      if.file_status
+${buildCandidateSelect(false)}
     FROM media_metadata im
     LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
     WHERE im.composite_hash != ?
@@ -56,15 +80,10 @@ export function buildDuplicateCandidateQuery(targetImage: ImageMetadataRecord, i
 }
 
 /** Build the hybrid similarity candidate query with the existing metadata filter. */
-export function buildSimilarCandidateQuery(targetImage: ImageMetadataRecord, useMetadataFilter: boolean) {
+export function buildSimilarCandidateQuery(targetImage: ImageMetadataRecord, useMetadataFilter: boolean, includeColorHistogram: boolean = false) {
   let query = `
     SELECT
-      im.*,
-      if.id as file_id,
-      if.original_file_path,
-      if.file_size,
-      if.mime_type,
-      if.file_status
+${buildCandidateSelect(includeColorHistogram)}
     FROM media_metadata im
     LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
     WHERE im.composite_hash != ?
@@ -92,12 +111,7 @@ export function buildColorCandidateQuery(compositeHash: string) {
   return {
     query: `
       SELECT
-        im.*,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_size,
-        if.mime_type,
-        if.file_status
+${buildCandidateSelect(true)}
       FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
       WHERE im.composite_hash != ?

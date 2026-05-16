@@ -136,15 +136,11 @@ export class ImageSimilarityService {
       throw new Error('Hash lengths must be equal');
     }
 
-    // 16진수를 이진수로 변환
-    const binary1 = this.hexToBinary(hash1);
-    const binary2 = this.hexToBinary(hash2);
-
+    let xor = BigInt(`0x${hash1}`) ^ BigInt(`0x${hash2}`);
     let distance = 0;
-    for (let i = 0; i < binary1.length; i++) {
-      if (binary1[i] !== binary2[i]) {
-        distance++;
-      }
+    while (xor > 0n) {
+      xor &= xor - 1n;
+      distance += 1;
     }
 
     return distance;

@@ -167,7 +167,20 @@ export class PromptSimilarityService {
       return [];
     }
     const source = db.prepare(`
-      SELECT *
+      SELECT
+        composite_hash,
+        prompt,
+        negative_prompt,
+        auto_tags,
+        prompt_similarity_algorithm,
+        prompt_similarity_version,
+        pos_prompt_normalized,
+        neg_prompt_normalized,
+        auto_prompt_normalized,
+        pos_prompt_fingerprint,
+        neg_prompt_fingerprint,
+        auto_prompt_fingerprint,
+        prompt_similarity_updated_date
       FROM media_metadata
       WHERE composite_hash = ?
     `).get(compositeHash) as (ImageMetadataRecord & PromptSimilarityStoredFields) | undefined;
@@ -184,7 +197,25 @@ export class PromptSimilarityService {
 
     const rows = db.prepare(`
       SELECT
-        im.*,
+        im.composite_hash,
+        im.prompt,
+        im.negative_prompt,
+        im.auto_tags,
+        im.width,
+        im.height,
+        im.thumbnail_path,
+        im.rating_score,
+        im.first_seen_date,
+        im.metadata_updated_date,
+        im.prompt_similarity_algorithm,
+        im.prompt_similarity_version,
+        im.pos_prompt_normalized,
+        im.neg_prompt_normalized,
+        im.auto_prompt_normalized,
+        im.pos_prompt_fingerprint,
+        im.neg_prompt_fingerprint,
+        im.auto_prompt_fingerprint,
+        im.prompt_similarity_updated_date,
         if.id as file_id,
         if.original_file_path,
         if.file_status,
@@ -232,7 +263,49 @@ export class PromptSimilarityService {
       ? Math.max(1, Math.min(100, Math.round(limitOverride)))
       : settings.resultLimit;
 
-    return matches.slice(0, resultLimit);
+    return this.hydratePromptMatches(matches.slice(0, resultLimit));
+  }
+
+  /** Hydrate only final prompt matches; scoring does not need large image metadata blobs. */
+  private static hydratePromptMatches(matches: PromptSimilarityMatch[]): PromptSimilarityMatch[] {
+    if (matches.length === 0) {
+      return matches;
+    }
+
+    const compositeHashes = [...new Set(matches
+      .map(match => (match.image as any).composite_hash)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0))];
+    if (compositeHashes.length === 0) {
+      return matches;
+    }
+
+    const placeholders = compositeHashes.map(() => '?').join(',');
+    const rows = db.prepare(`
+      SELECT
+        im.*,
+        if.id as file_id,
+        if.original_file_path,
+        if.file_status,
+        if.file_type,
+        if.mime_type,
+        if.file_size,
+        if.folder_id,
+        wf.folder_name
+      FROM media_metadata im
+      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+      LEFT JOIN watched_folders wf ON if.folder_id = wf.id
+      WHERE im.composite_hash IN (${placeholders})
+      GROUP BY im.composite_hash
+    `).all(...compositeHashes) as any[];
+    const hydratedByHash = new Map(rows.map(row => [row.composite_hash, row]));
+
+    return matches.map(match => {
+      const compositeHash = (match.image as any).composite_hash;
+      return {
+        ...match,
+        image: hydratedByHash.get(compositeHash) ?? match.image,
+      };
+    });
   }
 
   /** Rebuild prompt similarity fields for all rows using the active algorithm. */
@@ -414,16 +487,33 @@ export class PromptSimilarityService {
     record: Pick<ImageMetadataRecord, 'prompt' | 'negative_prompt' | 'auto_tags'> & Partial<PromptSimilarityStoredFields>,
     algorithm: PromptSimilarityAlgorithm,
   ): PromptSimilarityPreparedTexts {
-    const sourceTexts = this.buildSourceTexts(record);
     const canReuseStoredFields = record.prompt_similarity_algorithm === algorithm && record.prompt_similarity_version === PROMPT_SIMILARITY_VERSION;
 
+    if (canReuseStoredFields) {
+      // Versioned prepared fields are the source of truth here; do not reparse
+      // auto_tags for every candidate during hot-path scoring.
+      const positiveNormalized = record.pos_prompt_normalized ?? null;
+      const negativeNormalized = record.neg_prompt_normalized ?? null;
+      const autoNormalized = record.auto_prompt_normalized ?? null;
+
+      return {
+        positiveNormalized,
+        negativeNormalized,
+        autoNormalized,
+        positiveFingerprint: record.pos_prompt_fingerprint ?? this.buildFingerprint(positiveNormalized, algorithm),
+        negativeFingerprint: record.neg_prompt_fingerprint ?? this.buildFingerprint(negativeNormalized, algorithm),
+        autoFingerprint: record.auto_prompt_fingerprint ?? this.buildFingerprint(autoNormalized, algorithm),
+      };
+    }
+
+    const sourceTexts = this.buildSourceTexts(record);
     return {
-      positiveNormalized: record.pos_prompt_normalized ?? sourceTexts.positive,
-      negativeNormalized: record.neg_prompt_normalized ?? sourceTexts.negative,
-      autoNormalized: record.auto_prompt_normalized ?? sourceTexts.auto,
-      positiveFingerprint: canReuseStoredFields ? (record.pos_prompt_fingerprint ?? this.buildFingerprint(record.pos_prompt_normalized ?? sourceTexts.positive, algorithm)) : this.buildFingerprint(record.pos_prompt_normalized ?? sourceTexts.positive, algorithm),
-      negativeFingerprint: canReuseStoredFields ? (record.neg_prompt_fingerprint ?? this.buildFingerprint(record.neg_prompt_normalized ?? sourceTexts.negative, algorithm)) : this.buildFingerprint(record.neg_prompt_normalized ?? sourceTexts.negative, algorithm),
-      autoFingerprint: canReuseStoredFields ? (record.auto_prompt_fingerprint ?? this.buildFingerprint(record.auto_prompt_normalized ?? sourceTexts.auto, algorithm)) : this.buildFingerprint(record.auto_prompt_normalized ?? sourceTexts.auto, algorithm),
+      positiveNormalized: sourceTexts.positive,
+      negativeNormalized: sourceTexts.negative,
+      autoNormalized: sourceTexts.auto,
+      positiveFingerprint: this.buildFingerprint(sourceTexts.positive, algorithm),
+      negativeFingerprint: this.buildFingerprint(sourceTexts.negative, algorithm),
+      autoFingerprint: this.buildFingerprint(sourceTexts.auto, algorithm),
     };
   }
 
