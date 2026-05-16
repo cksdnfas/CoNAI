@@ -15,6 +15,7 @@ import { kaloscopeTaggerService } from '../services/kaloscopeTaggerService';
 import {
   DEFAULT_ARTIST_LINK_URL_TEMPLATE,
   GeneralSettings,
+  ImageSimilarityCheckMode,
   KaloscopeSettings,
   LlmPresetRecord,
   LlmSettings,
@@ -31,6 +32,7 @@ import { appearanceSettingsRoutes } from './settings/appearance.routes';
 
 const router = Router();
 const validLanguages: SupportedLanguage[] = ['ko', 'en'];
+const validImageSimilarityCheckModes: ImageSimilarityCheckMode[] = ['manual', 'always'];
 const validKaloscopeDevices = ['auto', 'cpu', 'cuda'] as const;
 const validTaggerModels = ['vit', 'swinv2', 'convnext'] as const;
 const validTaggerDevices = ['auto', 'cpu', 'cuda'] as const;
@@ -206,6 +208,7 @@ router.put(
 
     // Validate language if provided
     if (!validateStringEnumIfDefined(res, generalSettings.language, validLanguages, `Invalid language. Must be one of: ${validLanguages.join(', ')}`)) return;
+    if (!validateStringEnumIfDefined(res, generalSettings.imageSimilarityCheckMode, validImageSimilarityCheckModes, `Invalid image similarity check mode. Must be one of: ${validImageSimilarityCheckModes.join(', ')}`)) return;
 
     if (generalSettings.deleteProtection !== undefined) {
       if (generalSettings.deleteProtection && typeof generalSettings.deleteProtection !== 'object') {

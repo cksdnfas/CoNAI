@@ -66,6 +66,17 @@ export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtecti
                   />
                 </SettingsField>
 
+                <SettingsField label={t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })}>
+                  <Select
+                    variant="settings"
+                    value={generalDraft.imageSimilarityCheckMode ?? 'manual'}
+                    onChange={(event) => onPatchGeneral({ imageSimilarityCheckMode: event.target.value as GeneralSettings['imageSimilarityCheckMode'] })}
+                  >
+                    <option value="manual">{t({ ko: '수동 실행', en: 'Manual' })}</option>
+                    <option value="always">{t({ ko: '상세 열 때 자동 실행', en: 'Auto on detail open' })}</option>
+                  </Select>
+                </SettingsField>
+
                 <SettingsToggleRow className="md:col-span-2">
                   <input
                     type="checkbox"

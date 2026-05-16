@@ -364,7 +364,8 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       },
       enableGallery: true,
       autoCleanupCanvasOnShutdown: false,
-      showRatingBadges: true
+      showRatingBadges: true,
+      imageSimilarityCheckMode: 'manual'
     },
     tagger: {
       enabled: process.env.TAGGER_ENABLED === 'true',

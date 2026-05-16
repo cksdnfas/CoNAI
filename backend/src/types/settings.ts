@@ -11,6 +11,7 @@ export interface GeneralSettings {
   enableGallery?: boolean;
   autoCleanupCanvasOnShutdown?: boolean;
   showRatingBadges?: boolean;
+  imageSimilarityCheckMode?: ImageSimilarityCheckMode;
 }
 
 export type StealthScanMode = 'full' | 'fast' | 'skip';
@@ -29,6 +30,7 @@ export type TaggerDevice = 'auto' | 'cpu' | 'cuda';
 
 export type KaloscopeDevice = 'auto' | 'cpu' | 'cuda';
 export type PromptSimilarityAlgorithm = 'simhash' | 'minhash';
+export type ImageSimilarityCheckMode = 'manual' | 'always';
 
 export const DEFAULT_ARTIST_LINK_URL_TEMPLATE = 'danbooru.donmai.us/posts?tags={key}';
 

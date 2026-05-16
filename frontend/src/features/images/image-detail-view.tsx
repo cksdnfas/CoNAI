@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getImage, getImageDuplicates, getPromptSimilarImages, getSimilarImages } from '@/lib/api-images'
-import { getRuntimeSimilaritySettings } from '@/lib/api-settings'
+import { getAppSettings, getRuntimeSimilaritySettings } from '@/lib/api-settings'
 import { getErrorMessage } from '@/lib/error-message'
 import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
@@ -28,6 +28,7 @@ import {
   normalizeSimilarityResultRows,
   resolveSimilarityResultLimit,
 } from './components/detail/image-detail-utils'
+import { shouldAutoRunImageSimilarityChecks } from './components/detail/image-similarity-policy'
 import { RelatedImageGallerySection } from './components/detail/related-image-gallery-section'
 
 export interface ImageDetailViewHeaderControls {
@@ -120,25 +121,19 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
 
   const authStatusQuery = useAuthStatusQuery()
   const appearanceQuery = useGlobalAppearanceSettingsQuery()
-
-  const runtimeSimilarityQuery = useQuery({
-    queryKey: ['runtime-similarity-settings'],
-    queryFn: getRuntimeSimilaritySettings,
-    enabled: isSimilarityInspectionRequested,
+  const appSettingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+    staleTime: 60_000,
   })
-
-  const effectiveSimilaritySettings = runtimeSimilarityQuery.data
   const effectiveAppearanceSettings = appearanceQuery.data
   const canManageSimilaritySettings = hasAuthPermission(authStatusQuery.data?.permissionKeys, 'page.settings.view')
+  const shouldAutoRunSimilarityInspection = shouldAutoRunImageSimilarityChecks(appSettingsQuery.data?.general)
 
   const relatedImageMobileColumns = effectiveAppearanceSettings?.detailRelatedImageMobileColumns ?? 1
   const relatedImageDesktopColumns = effectiveAppearanceSettings?.detailRelatedImageColumns ?? 3
   const relatedImageAspectRatio = effectiveAppearanceSettings?.detailRelatedImageAspectRatio ?? 'square'
   const activeRelatedImageColumns = usesDesktopRelatedImageColumns ? relatedImageDesktopColumns : relatedImageMobileColumns
-  const detailSimilarRows = normalizeSimilarityResultRows(effectiveSimilaritySettings?.detailSimilarLimit)
-  const promptSimilarRows = normalizeSimilarityResultRows(effectiveSimilaritySettings?.promptSimilarity?.resultLimit)
-  const detailSimilarLimit = resolveSimilarityResultLimit(detailSimilarRows, activeRelatedImageColumns)
-  const promptSimilarLimit = resolveSimilarityResultLimit(promptSimilarRows, activeRelatedImageColumns)
 
   const imageQuery = useQuery({
     queryKey: ['image-detail', compositeHash],
@@ -154,6 +149,18 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const isSecondaryContentReady = Boolean(image) && canLoadRelatedImages && isPrimaryMediaReady
   const canRunSimilarityInspection = isSimilarityInspectionRequested && Boolean(compositeHash) && isSecondaryContentReady
 
+  const runtimeSimilarityQuery = useQuery({
+    queryKey: ['runtime-similarity-settings'],
+    queryFn: getRuntimeSimilaritySettings,
+    enabled: canRunSimilarityInspection,
+  })
+
+  const effectiveSimilaritySettings = runtimeSimilarityQuery.data
+  const detailSimilarRows = normalizeSimilarityResultRows(effectiveSimilaritySettings?.detailSimilarLimit)
+  const promptSimilarRows = normalizeSimilarityResultRows(effectiveSimilaritySettings?.promptSimilarity?.resultLimit)
+  const detailSimilarLimit = resolveSimilarityResultLimit(detailSimilarRows, activeRelatedImageColumns)
+  const promptSimilarLimit = resolveSimilarityResultLimit(promptSimilarRows, activeRelatedImageColumns)
+
   const handlePrimaryMediaReady = useCallback(() => {
     setIsPrimaryMediaReady(true)
   }, [])
@@ -161,6 +168,12 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const handleRequestSimilarityInspection = useCallback(() => {
     setIsSimilarityInspectionRequested(true)
   }, [])
+
+  useEffect(() => {
+    if (shouldAutoRunSimilarityInspection) {
+      setIsSimilarityInspectionRequested(true)
+    }
+  }, [shouldAutoRunSimilarityInspection, compositeHash])
 
   useEffect(() => {
     if (!image || isPrimaryMediaReady) {
