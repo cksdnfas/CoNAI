@@ -365,7 +365,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       enableGallery: true,
       autoCleanupCanvasOnShutdown: false,
       showRatingBadges: true,
-      imageSimilarityCheckMode: 'always'
+      imageSimilarityCheckMode: 'manual'
     },
     tagger: {
       enabled: process.env.TAGGER_ENABLED === 'true',

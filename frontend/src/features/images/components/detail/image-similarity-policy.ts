@@ -1,10 +1,10 @@
 import type { GeneralSettings, ImageSimilarityCheckMode } from '../../../../types/settings'
 
-export const DEFAULT_IMAGE_SIMILARITY_CHECK_MODE: ImageSimilarityCheckMode = 'always'
+export const DEFAULT_IMAGE_SIMILARITY_CHECK_MODE: ImageSimilarityCheckMode = 'manual'
 
-/** Normalize persisted image-similarity policy so missing/unknown values follow the default. */
+/** Normalize persisted image-similarity policy so missing/unknown values stay conservative. */
 export function normalizeImageSimilarityCheckMode(mode: GeneralSettings['imageSimilarityCheckMode']): ImageSimilarityCheckMode {
-  return mode === 'manual' ? 'manual' : DEFAULT_IMAGE_SIMILARITY_CHECK_MODE
+  return mode === 'always' ? 'always' : DEFAULT_IMAGE_SIMILARITY_CHECK_MODE
 }
 
 /** Decide whether detail views should run expensive similarity checks without a user click. */

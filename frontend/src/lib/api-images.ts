@@ -51,8 +51,8 @@ export async function searchImagesComplex(input: ComplexImageSearchRequest) {
   }
 }
 
-export async function getImage(compositeHash: string) {
-  const response = await fetchJson<ApiResponse<ImageRecord>>(`/api/images/${compositeHash}`)
+export async function getImage(compositeHash: string, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<ImageRecord>>(`/api/images/${compositeHash}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.detail.load')
   }
@@ -99,8 +99,8 @@ export async function deleteImagesBulk(compositeHashes: string[]) {
   return response.data
 }
 
-export async function getImageDuplicates(compositeHash: string, threshold = 5) {
-  const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/duplicates?threshold=${threshold}`)
+export async function getImageDuplicates(compositeHash: string, threshold = 5, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/duplicates?threshold=${threshold}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.duplicates.load')
   }
@@ -125,6 +125,7 @@ export async function getSimilarImages(
     sortBy?: SimilaritySortBy
     sortOrder?: SimilaritySortOrder
   },
+  init?: RequestInit,
 ) {
   const searchParams = new URLSearchParams()
   searchParams.set('threshold', String(params?.threshold ?? 15))
@@ -142,21 +143,21 @@ export async function getSimilarImages(
   searchParams.set('sortBy', params?.sortBy ?? 'similarity')
   searchParams.set('sortOrder', params?.sortOrder ?? 'DESC')
 
-  const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/similar?${searchParams.toString()}`)
+  const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/similar?${searchParams.toString()}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.similar.load')
   }
   return response.data
 }
 
-export async function getPromptSimilarImages(compositeHash: string, limit?: number) {
+export async function getPromptSimilarImages(compositeHash: string, limit?: number, init?: RequestInit) {
   const searchParams = new URLSearchParams()
   if (typeof limit === 'number' && Number.isFinite(limit)) {
     searchParams.set('limit', String(Math.max(1, Math.round(limit))))
   }
 
   const query = searchParams.toString()
-  const response = await fetchJson<ApiResponse<PromptSimilarityQueryResult>>(`/api/images/prompt-similarity/by-image/${compositeHash}${query ? `?${query}` : ''}`)
+  const response = await fetchJson<ApiResponse<PromptSimilarityQueryResult>>(`/api/images/prompt-similarity/by-image/${compositeHash}${query ? `?${query}` : ''}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.promptSimilar.load')
   }

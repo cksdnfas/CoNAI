@@ -135,8 +135,8 @@ export async function getPublicAppearanceSettings() {
   return response.data
 }
 
-export async function getRuntimeSimilaritySettings() {
-  const response = await fetchJson<ApiResponse<SimilaritySettings>>('/api/runtime-media-settings/similarity')
+export async function getRuntimeSimilaritySettings(init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<SimilaritySettings>>('/api/runtime-media-settings/similarity', init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'settings.runtimeSimilarity.load')
   }

@@ -31,6 +31,8 @@ import {
 import { shouldAutoRunImageSimilarityChecks } from './components/detail/image-similarity-policy'
 import { RelatedImageGallerySection } from './components/detail/related-image-gallery-section'
 
+const SIMILARITY_INSPECTION_STABLE_DELAY_MS = 350
+
 export interface ImageDetailViewHeaderControls {
   downloadName: string
   downloadUrl: string | null
@@ -88,6 +90,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const usesDesktopRelatedImageColumns = useMinWidth(768)
   const [isPrimaryMediaReady, setIsPrimaryMediaReady] = useState(false)
   const [isSimilarityInspectionRequested, setIsSimilarityInspectionRequested] = useState(false)
+  const [stableSimilarityInspectionCompositeHash, setStableSimilarityInspectionCompositeHash] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   const cachedInitialImage = useMemo(() => {
@@ -117,7 +120,16 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   useEffect(() => {
     setIsPrimaryMediaReady(false)
     setIsSimilarityInspectionRequested(false)
+    setStableSimilarityInspectionCompositeHash(null)
   }, [compositeHash])
+
+  useEffect(() => {
+    return () => {
+      void queryClient.cancelQueries({ queryKey: ['image-duplicates', compositeHash] })
+      void queryClient.cancelQueries({ queryKey: ['image-similar', compositeHash] })
+      void queryClient.cancelQueries({ queryKey: ['image-prompt-similar', compositeHash] })
+    }
+  }, [compositeHash, queryClient])
 
   const authStatusQuery = useAuthStatusQuery()
   const appearanceQuery = useGlobalAppearanceSettingsQuery()
@@ -137,7 +149,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
 
   const imageQuery = useQuery({
     queryKey: ['image-detail', compositeHash],
-    queryFn: () => getImage(compositeHash),
+    queryFn: ({ signal }) => getImage(compositeHash, { signal }),
     enabled: Boolean(compositeHash),
     placeholderData: cachedInitialImage,
     staleTime: 0,
@@ -148,11 +160,13 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const canLoadRelatedImages = mediaKind === 'image'
   const isSecondaryContentReady = Boolean(image) && canLoadRelatedImages && isPrimaryMediaReady
   const canRunSimilarityInspection = isSimilarityInspectionRequested && Boolean(compositeHash) && isSecondaryContentReady
+  const canRunStabilizedSimilarityInspection = canRunSimilarityInspection && stableSimilarityInspectionCompositeHash === compositeHash
+  const isSimilarityInspectionSettling = canRunSimilarityInspection && !canRunStabilizedSimilarityInspection
 
   const runtimeSimilarityQuery = useQuery({
     queryKey: ['runtime-similarity-settings'],
-    queryFn: getRuntimeSimilaritySettings,
-    enabled: canRunSimilarityInspection,
+    queryFn: ({ signal }) => getRuntimeSimilaritySettings({ signal }),
+    enabled: canRunStabilizedSimilarityInspection,
   })
 
   const effectiveSimilaritySettings = runtimeSimilarityQuery.data
@@ -176,6 +190,21 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   }, [shouldAutoRunSimilarityInspection, compositeHash])
 
   useEffect(() => {
+    if (!canRunSimilarityInspection) {
+      setStableSimilarityInspectionCompositeHash(null)
+      return
+    }
+
+    const timerId = window.setTimeout(() => {
+      setStableSimilarityInspectionCompositeHash(compositeHash)
+    }, SIMILARITY_INSPECTION_STABLE_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timerId)
+    }
+  }, [canRunSimilarityInspection, compositeHash])
+
+  useEffect(() => {
     if (!image || isPrimaryMediaReady) {
       return
     }
@@ -192,8 +221,10 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
 
   const duplicatesQuery = useQuery({
     queryKey: ['image-duplicates', compositeHash],
-    queryFn: () => getImageDuplicates(compositeHash, 5),
-    enabled: canRunSimilarityInspection,
+    queryFn: ({ signal }) => getImageDuplicates(compositeHash, 5, { signal }),
+    enabled: canRunStabilizedSimilarityInspection,
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
   })
 
   const similarQuery = useQuery({
@@ -216,24 +247,30 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       'similarity',
       'DESC',
     ],
-    queryFn: () =>
-      getSimilarImages(compositeHash, {
-        threshold: effectiveSimilaritySettings?.detailSimilarThreshold ?? 15,
-        limit: detailSimilarLimit,
-        includeColorSimilarity: effectiveSimilaritySettings?.detailSimilarIncludeColorSimilarity ?? false,
-        perceptualWeight: effectiveSimilaritySettings?.detailSimilarWeights?.perceptualHash ?? 50,
-        dHashWeight: effectiveSimilaritySettings?.detailSimilarWeights?.dHash ?? 30,
-        aHashWeight: effectiveSimilaritySettings?.detailSimilarWeights?.aHash ?? 20,
-        colorWeight: effectiveSimilaritySettings?.detailSimilarWeights?.color ?? 0,
-        perceptualThreshold: effectiveSimilaritySettings?.detailSimilarThresholds?.perceptualHash ?? 15,
-        dHashThreshold: effectiveSimilaritySettings?.detailSimilarThresholds?.dHash ?? 18,
-        aHashThreshold: effectiveSimilaritySettings?.detailSimilarThresholds?.aHash ?? 20,
-        colorThreshold: effectiveSimilaritySettings?.detailSimilarThresholds?.color ?? 0,
-        useMetadataFilter: effectiveSimilaritySettings?.detailSimilarUseMetadataFilter ?? false,
-        sortBy: 'similarity',
-        sortOrder: 'DESC',
-      }),
-    enabled: canRunSimilarityInspection && Boolean(effectiveSimilaritySettings),
+    queryFn: ({ signal }) =>
+      getSimilarImages(
+        compositeHash,
+        {
+          threshold: effectiveSimilaritySettings?.detailSimilarThreshold ?? 15,
+          limit: detailSimilarLimit,
+          includeColorSimilarity: effectiveSimilaritySettings?.detailSimilarIncludeColorSimilarity ?? false,
+          perceptualWeight: effectiveSimilaritySettings?.detailSimilarWeights?.perceptualHash ?? 50,
+          dHashWeight: effectiveSimilaritySettings?.detailSimilarWeights?.dHash ?? 30,
+          aHashWeight: effectiveSimilaritySettings?.detailSimilarWeights?.aHash ?? 20,
+          colorWeight: effectiveSimilaritySettings?.detailSimilarWeights?.color ?? 0,
+          perceptualThreshold: effectiveSimilaritySettings?.detailSimilarThresholds?.perceptualHash ?? 15,
+          dHashThreshold: effectiveSimilaritySettings?.detailSimilarThresholds?.dHash ?? 18,
+          aHashThreshold: effectiveSimilaritySettings?.detailSimilarThresholds?.aHash ?? 20,
+          colorThreshold: effectiveSimilaritySettings?.detailSimilarThresholds?.color ?? 0,
+          useMetadataFilter: effectiveSimilaritySettings?.detailSimilarUseMetadataFilter ?? false,
+          sortBy: 'similarity',
+          sortOrder: 'DESC',
+        },
+        { signal },
+      ),
+    enabled: canRunStabilizedSimilarityInspection && Boolean(effectiveSimilaritySettings),
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
   })
 
   const promptSimilarQuery = useQuery({
@@ -252,8 +289,10 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.negative ?? 50,
       effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.auto ?? 50,
     ],
-    queryFn: () => getPromptSimilarImages(compositeHash, promptSimilarLimit),
-    enabled: canRunSimilarityInspection && Boolean(effectiveSimilaritySettings),
+    queryFn: ({ signal }) => getPromptSimilarImages(compositeHash, promptSimilarLimit, { signal }),
+    enabled: canRunStabilizedSimilarityInspection && Boolean(effectiveSimilaritySettings),
+    staleTime: 5 * 60_000,
+    gcTime: 15 * 60_000,
   })
 
   const renderUrl = getImageDetailRenderUrl(image)
@@ -396,11 +435,11 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
                     currentSimilaritySettings={effectiveSimilaritySettings}
                     canEditSettings={canManageSimilaritySettings}
                     similarImageItems={similarImageItems}
-                    similarImagesLoading={similarQuery.isLoading || runtimeSimilarityQuery.isLoading}
+                    similarImagesLoading={isSimilarityInspectionSettling || similarQuery.isLoading || runtimeSimilarityQuery.isLoading}
                     similarImagesError={similarQuery.isError ? similarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null}
                     promptSimilarImageItems={promptSimilarImageItems}
                     promptSimilarImages={promptSimilarImages}
-                    promptSimilarImagesLoading={promptSimilarQuery.isLoading || runtimeSimilarityQuery.isLoading}
+                    promptSimilarImagesLoading={isSimilarityInspectionSettling || promptSimilarQuery.isLoading || runtimeSimilarityQuery.isLoading}
                     promptSimilarImagesError={promptSimilarQuery.isError ? promptSimilarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null}
                     mobileCardColumns={relatedImageMobileColumns}
                     desktopCardColumns={relatedImageDesktopColumns}
