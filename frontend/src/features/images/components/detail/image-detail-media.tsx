@@ -456,11 +456,12 @@ function InteractiveImageDetailMedia({
           }
 
           const { imageData } = result
-          canvas.width = imageData.width
-          canvas.height = imageData.height
+          sampleContext.putImageData(imageData, 0, 0)
+          canvas.width = sourceWidth
+          canvas.height = sourceHeight
           canvasContext.imageSmoothingEnabled = false
-          canvasContext.clearRect(0, 0, imageData.width, imageData.height)
-          canvasContext.putImageData(imageData, 0, 0)
+          canvasContext.clearRect(0, 0, sourceWidth, sourceHeight)
+          canvasContext.drawImage(sampleCanvas, 0, 0, imageData.width, imageData.height, 0, 0, sourceWidth, sourceHeight)
           setIsPixelPreviewReady(true)
           onPrimaryLoad?.()
           pixelPreviewTask = null
@@ -476,11 +477,11 @@ function InteractiveImageDetailMedia({
             setHasRenderError(true)
             return
           }
-          canvas.width = pixelWidth
-          canvas.height = pixelHeight
+          canvas.width = sourceWidth
+          canvas.height = sourceHeight
           canvasContext.imageSmoothingEnabled = false
-          canvasContext.clearRect(0, 0, pixelWidth, pixelHeight)
-          canvasContext.drawImage(sampleCanvas, 0, 0)
+          canvasContext.clearRect(0, 0, sourceWidth, sourceHeight)
+          canvasContext.drawImage(sampleCanvas, 0, 0, pixelWidth, pixelHeight, 0, 0, sourceWidth, sourceHeight)
           setIsPixelPreviewReady(true)
           onPrimaryLoad?.()
           pixelPreviewTask = null
