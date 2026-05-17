@@ -119,6 +119,14 @@ export const API_ERROR_FALLBACKS = {
     ko: '전체 메타데이터 재추출을 시작하지 못했어.',
     en: 'Failed to start metadata re-extraction for all images.',
   },
+  'settings.dataRematch.status': {
+    ko: '데이터 재매칭 상태를 불러오지 못했어.',
+    en: 'Failed to load data rematch status.',
+  },
+  'settings.dataRematch.start': {
+    ko: '데이터 재매칭을 시작하지 못했어.',
+    en: 'Failed to start data rematch.',
+  },
   'settings.appearance.update': {
     ko: '화면 설정을 저장하지 못했어.',
     en: 'Failed to save appearance settings.',

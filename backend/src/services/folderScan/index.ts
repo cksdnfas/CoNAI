@@ -10,6 +10,7 @@ import { HashGenerationService } from './hashGenerationService';
 import { ThumbnailGenerationService } from './thumbnailGenerationService';
 import { ScanProgressTracker } from './scanProgressTracker';
 import { DuplicateDetectionService } from './duplicateDetectionService';
+import { SystemMaintenanceLockService } from '../systemMaintenanceLockService';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 const isVerboseAutoScanLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
@@ -39,6 +40,10 @@ export class FolderScanService {
     fullRescan: boolean = false,
     options: ScanFolderOptions = {}
   ): Promise<ScanResult> {
+    if (SystemMaintenanceLockService.isExclusiveActive()) {
+      throw new Error('시스템 유지보수 작업 중이라 폴더 스캔을 시작할 수 없습니다.');
+    }
+
     const startTime = Date.now();
     const result: ScanResult = {
       folderId,

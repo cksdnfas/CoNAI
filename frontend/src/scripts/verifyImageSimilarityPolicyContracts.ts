@@ -19,6 +19,7 @@ function verifyStaticContracts() {
   const imageDetailView = source('src/features/images/image-detail-view.tsx')
   const apiImages = source('src/lib/api-images.ts')
   const apiSettings = source('src/lib/api-settings.ts')
+  const scoreOverlay = source('src/features/images/components/detail/similarity-score-overlay.tsx')
   const settingsTypes = source('src/types/settings.ts')
   const backendSettingsTypes = source('../backend/src/types/settings.ts')
   const backendDefaults = source('../backend/src/services/settingsServiceStorage.ts')
@@ -44,6 +45,10 @@ function verifyStaticContracts() {
   match(apiImages, /getSimilarImages\([\s\S]*init\?: RequestInit[\s\S]*fetchJson[\s\S]*, init\)/, 'similar API helper should forward request init for cancellation')
   match(apiImages, /getPromptSimilarImages\(compositeHash: string, limit\?: number, init\?: RequestInit\)/, 'prompt similarity API helper should accept request init for cancellation')
   match(apiSettings, /getRuntimeSimilaritySettings\(init\?: RequestInit\)/, 'runtime similarity settings API helper should accept request init for cancellation')
+  match(scoreOverlay, /\{ ko: '\{similarity\}\s+거리 \{distance\} \(≤\{threshold\}\)\s+비중 \{weight\}'/, 'hash score overlay should use compact distance, threshold, and weight copy')
+  match(scoreOverlay, /\{ ko: '\{similarity\} \(≥\{threshold\}\)\s+비중 \{weight\}'/, 'threshold-only score overlay should use compact threshold and weight copy')
+  match(scoreOverlay, /en: '\{similarity\}\s+dist \{distance\} \(≤\{threshold\}\)\s+w \{weight\}'/, 'English hash score overlay should keep compact weight copy')
+  equal(scoreOverlay.includes('비중 {weight}'), true, 'score overlay should keep weight visible in compact rows')
 }
 
 verifyPolicyHelper()

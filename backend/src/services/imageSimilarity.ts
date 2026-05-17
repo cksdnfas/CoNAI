@@ -1,11 +1,12 @@
 import sharp from 'sharp';
-import { ColorHistogram } from '../types/similarity';
+import { ColorDescriptor, ColorHistogram } from '../types/similarity';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
 
 const DCT_SIZE = 32;
 const PHASH_LOW_FREQUENCY_SIZE = 8;
 const DCT_NORMALIZATION = 2 / DCT_SIZE;
 const INV_SQRT_2 = 1 / Math.sqrt(2);
+const MAX_RGB_DISTANCE = Math.sqrt(3 * 255 * 255);
 const DCT_COSINES = Array.from({ length: PHASH_LOW_FREQUENCY_SIZE }, (_unused, frequency) =>
   Array.from({ length: DCT_SIZE }, (_unusedPixel, pixel) =>
     Math.cos(((2 * pixel + 1) * frequency * Math.PI) / (2 * DCT_SIZE))
@@ -20,6 +21,100 @@ const DCT_COEFFICIENTS = Array.from({ length: PHASH_LOW_FREQUENCY_SIZE }, (_unus
  * Sharp를 활용한 perceptual hash 및 색상 히스토그램 생성
  */
 export class ImageSimilarityService {
+  private static round(value: number, decimals: number = 2): number {
+    const scale = 10 ** decimals;
+    return Math.round(value * scale) / scale;
+  }
+
+  private static weightedAverageChannel(channel: number[]): number {
+    let weightedSum = 0;
+    let total = 0;
+
+    for (let i = 0; i < 256; i++) {
+      const weight = Number(channel[i] ?? 0);
+      weightedSum += i * weight;
+      total += weight;
+    }
+
+    return total > 0 ? weightedSum / total : 0;
+  }
+
+  private static dominantChannelBin(channel: number[]): number {
+    let dominantBin = 0;
+    let dominantWeight = Number.NEGATIVE_INFINITY;
+
+    for (let i = 0; i < 256; i++) {
+      const weight = Number(channel[i] ?? 0);
+      if (weight > dominantWeight) {
+        dominantWeight = weight;
+        dominantBin = i;
+      }
+    }
+
+    return dominantBin;
+  }
+
+  private static buildColorDescriptor(histogram: ColorHistogram): ColorDescriptor {
+    const averageRgb: [number, number, number] = [
+      this.round(this.weightedAverageChannel(histogram.r)),
+      this.round(this.weightedAverageChannel(histogram.g)),
+      this.round(this.weightedAverageChannel(histogram.b)),
+    ];
+    const dominantRgb: [number, number, number] = [
+      this.dominantChannelBin(histogram.r),
+      this.dominantChannelBin(histogram.g),
+      this.dominantChannelBin(histogram.b),
+    ];
+    const normalizedRgb = averageRgb.map(value => value / 255);
+    const maxChannel = Math.max(...normalizedRgb);
+    const minChannel = Math.min(...normalizedRgb);
+
+    return {
+      averageRgb,
+      dominantRgb,
+      luminance: this.round(
+        0.2126 * normalizedRgb[0] + 0.7152 * normalizedRgb[1] + 0.0722 * normalizedRgb[2],
+        4,
+      ),
+      saturation: this.round(maxChannel === 0 ? 0 : (maxChannel - minChannel) / maxChannel, 4),
+    };
+  }
+
+  private static withColorDescriptor(histogram: ColorHistogram): ColorHistogram {
+    histogram.descriptor = this.buildColorDescriptor(histogram);
+    return histogram;
+  }
+
+  private static getColorDescriptor(histogram: ColorHistogram): ColorDescriptor {
+    return histogram.descriptor ?? this.buildColorDescriptor(histogram);
+  }
+
+  private static calculateRgbDistance(rgb1: [number, number, number], rgb2: [number, number, number]): number {
+    const distance = Math.sqrt(
+      Math.pow(rgb1[0] - rgb2[0], 2)
+      + Math.pow(rgb1[1] - rgb2[1], 2)
+      + Math.pow(rgb1[2] - rgb2[2], 2),
+    );
+    return Math.min(1, distance / MAX_RGB_DISTANCE);
+  }
+
+  private static buildDHashFromBuffer(data: Buffer): string {
+    if (data.length !== 72) {
+      throw new Error(`Unexpected dHash buffer length: ${data.length}`);
+    }
+
+    let hash = '';
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const leftPixel = data[row * 9 + col];
+        const rightPixel = data[row * 9 + col + 1];
+        hash += leftPixel < rightPixel ? '1' : '0';
+      }
+    }
+
+    return this.binaryToHex(hash);
+  }
+
   /**
    * Perceptual Hash (pHash) 생성
    * DCT (Discrete Cosine Transform) 기반으로 64비트 해시 생성
@@ -120,7 +215,7 @@ export class ImageSimilarityService {
         histogram.b[i] /= totalPixels;
       }
 
-      return histogram;
+      return this.withColorDescriptor(histogram);
     } catch (error) {
       console.error('Failed to generate color histogram:', error);
       throw new Error(`Color histogram generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -147,29 +242,26 @@ export class ImageSimilarityService {
   }
 
   /**
-   * 색상 히스토그램 유사도 계산 (유클리드 거리)
+   * 색상 descriptor 기반 유사도 계산
    * 반환값: 0-100 (100이 가장 유사)
    */
   static calculateColorSimilarity(hist1: ColorHistogram, hist2: ColorHistogram): number {
     try {
-      let sumSquaredDiff = 0;
+      const descriptor1 = this.getColorDescriptor(hist1);
+      const descriptor2 = this.getColorDescriptor(hist2);
+      const averageDistance = this.calculateRgbDistance(descriptor1.averageRgb, descriptor2.averageRgb);
+      const dominantDistance = this.calculateRgbDistance(descriptor1.dominantRgb, descriptor2.dominantRgb);
+      const luminanceDistance = Math.abs(descriptor1.luminance - descriptor2.luminance);
+      const saturationDistance = Math.abs(descriptor1.saturation - descriptor2.saturation);
+      const descriptorDistance = Math.min(1,
+        averageDistance * 0.55
+        + dominantDistance * 0.3
+        + luminanceDistance * 0.25
+        + saturationDistance * 0.1
+      );
+      const similarity = Math.max(0, 100 * (1 - descriptorDistance));
 
-      // RGB 각 채널에 대해 유클리드 거리 계산
-      for (let i = 0; i < 256; i++) {
-        sumSquaredDiff += Math.pow(hist1.r[i] - hist2.r[i], 2);
-        sumSquaredDiff += Math.pow(hist1.g[i] - hist2.g[i], 2);
-        sumSquaredDiff += Math.pow(hist1.b[i] - hist2.b[i], 2);
-      }
-
-      // 유클리드 거리
-      const distance = Math.sqrt(sumSquaredDiff);
-
-      // 거리를 유사도로 변환 (0-100)
-      // 최대 거리는 sqrt(256 * 3) ≈ 27.7
-      const maxDistance = Math.sqrt(256 * 3);
-      const similarity = Math.max(0, 100 * (1 - distance / maxDistance));
-
-      return Math.round(similarity * 100) / 100; // 소수점 2자리
+      return Math.round(similarity * 100) / 100;
     } catch (error) {
       console.error('Failed to calculate color similarity:', error);
       return 0;
@@ -297,18 +389,7 @@ export class ImageSimilarityService {
         throw new Error(`Unexpected pixel data length: ${data.length}`);
       }
 
-      // 각 행에서 좌->우 비교하여 비트 생성
-      let hash = '';
-      for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-          const leftPixel = data[row * 9 + col];
-          const rightPixel = data[row * 9 + col + 1];
-          hash += leftPixel < rightPixel ? '1' : '0';
-        }
-      }
-
-      // 64비트 이진 문자열을 16진수로 변환
-      return this.binaryToHex(hash);
+      return this.buildDHashFromBuffer(data);
     } catch (error) {
       console.error('Failed to generate dHash:', error);
       throw new Error(`dHash generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -365,11 +446,18 @@ export class ImageSimilarityService {
       const sharpPath = toWindowsLongPathIfNeeded(imagePath);
 
       // 1. 단일 Sharp 파이프라인으로 32x32 그레이스케일 버퍼 생성
-      const buffer32x32 = await sharp(sharpPath)
-        .resize(32, 32, { fit: 'fill' })
-        .greyscale()
-        .raw()
-        .toBuffer();
+      const [buffer32x32, dHashBuffer] = await Promise.all([
+        sharp(sharpPath)
+          .resize(32, 32, { fit: 'fill' })
+          .greyscale()
+          .raw()
+          .toBuffer(),
+        sharp(sharpPath)
+          .resize(9, 8, { fit: 'fill' })
+          .greyscale()
+          .raw()
+          .toBuffer(),
+      ]);
 
       if (buffer32x32.length !== 1024) {
         throw new Error(`Unexpected pixel data length for pHash: ${buffer32x32.length}`);
@@ -401,17 +489,8 @@ export class ImageSimilarityService {
       }
       const perceptualHash = this.binaryToHex(pHashBinary);
 
-      // 3. dHash 계산 (32x32 버퍼 재사용, 9x8 다운샘플링)
-      let dHashBinary = '';
-      for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-          // 32x32에서 9x8로 다운샘플링 (4픽셀 간격)
-          const leftPixel = buffer32x32[row * 4 * 32 + col * 4];
-          const rightPixel = buffer32x32[row * 4 * 32 + (col + 1) * 4];
-          dHashBinary += leftPixel < rightPixel ? '1' : '0';
-        }
-      }
-      const dHash = this.binaryToHex(dHashBinary);
+      // 3. dHash 계산 (canonical 9x8 리사이즈 버퍼)
+      const dHash = this.buildDHashFromBuffer(dHashBuffer);
 
       // 4. aHash 계산 (32x32 버퍼 재사용, 8x8 다운샘플링)
       const samples: number[] = [];
@@ -446,7 +525,7 @@ export class ImageSimilarityService {
 
   /**
    * 복합 해시 및 컬러 히스토그램 동시 생성 - 최적화 버전
-   * 2개의 Sharp 파이프라인으로 모든 데이터 생성 (4x → 2x I/O 절감)
+   * pHash/aHash, dHash, RGB descriptor를 병렬 생성
    */
   static async generateHashAndHistogram(imagePath: string): Promise<{
     hashes: {
@@ -461,14 +540,20 @@ export class ImageSimilarityService {
       const sharpPath = toWindowsLongPathIfNeeded(imagePath);
 
       // 병렬 처리: 그레이스케일 해시 + RGB 히스토그램
-      const [grayBuffer, rgbBuffer] = await Promise.all([
-        // 1. 32x32 그레이스케일 버퍼 (해시용)
+      const [grayBuffer, dHashBuffer, rgbBuffer] = await Promise.all([
+        // 1. 32x32 그레이스케일 버퍼 (pHash/aHash용)
         sharp(sharpPath)
           .resize(32, 32, { fit: 'fill' })
           .greyscale()
           .raw()
           .toBuffer(),
-        // 2. 32x32 RGB 버퍼 (히스토그램용)
+        // 2. canonical 9x8 그레이스케일 버퍼 (dHash용)
+        sharp(sharpPath)
+          .resize(9, 8, { fit: 'fill' })
+          .greyscale()
+          .raw()
+          .toBuffer(),
+        // 3. 32x32 RGB 버퍼 (히스토그램/descriptor용)
         sharp(sharpPath)
           .resize(32, 32, { fit: 'fill' })
           .removeAlpha()  // 알파 채널 제거하여 RGB 강제 변환
@@ -509,15 +594,7 @@ export class ImageSimilarityService {
       const perceptualHash = this.binaryToHex(pHashBinary);
 
       // dHash
-      let dHashBinary = '';
-      for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-          const leftPixel = grayBuffer[row * 4 * 32 + col * 4];
-          const rightPixel = grayBuffer[row * 4 * 32 + (col + 1) * 4];
-          dHashBinary += leftPixel < rightPixel ? '1' : '0';
-        }
-      }
-      const dHash = this.binaryToHex(dHashBinary);
+      const dHash = this.buildDHashFromBuffer(dHashBuffer);
 
       // aHash
       const samples: number[] = [];
@@ -572,7 +649,7 @@ export class ImageSimilarityService {
           dHash,
           aHash
         },
-        colorHistogram: histogram
+        colorHistogram: this.withColorDescriptor(histogram)
       };
     } catch (error) {
       console.error('Failed to generate hash and histogram:', error);

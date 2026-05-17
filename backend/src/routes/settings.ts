@@ -29,6 +29,7 @@ import { mediaSettingsRoutes } from './settings/media-settings.routes';
 import { ratingSettingsRoutes } from './settings/rating.routes';
 import { runtimeSettingsRoutes } from './settings/runtime.routes';
 import { appearanceSettingsRoutes } from './settings/appearance.routes';
+import { dataRematchSettingsRoutes } from './settings/data-rematch.routes';
 
 const router = Router();
 const validLanguages: SupportedLanguage[] = ['ko', 'en'];
@@ -703,6 +704,7 @@ router.post(
 
 router.use('/', appearanceSettingsRoutes);
 router.use('/', mediaSettingsRoutes);
+router.use('/', dataRematchSettingsRoutes);
 router.use('/rating', ratingSettingsRoutes);
 router.use('/', runtimeSettingsRoutes);
 

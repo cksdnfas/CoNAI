@@ -14,6 +14,7 @@ import { autoTagScheduler } from './autoTagScheduler';
 import { FileDiscoveryService } from './folderScan/fileDiscoveryService';
 import { WatchedFolderService } from './watchedFolderService';
 import { checkFileAccess } from '../utils/fileAccess';
+import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 import { MetadataExtractionError } from '../types/errors';
 import type { FileType } from '../types/image';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
@@ -324,6 +325,13 @@ export class BackgroundProcessorService {
    * Runs recursively in batches until all images are processed
    */
   static async processUnhashedImages(options: BackgroundProcessorOptions = {}): Promise<ProcessingResult> {
+    if (SystemMaintenanceLockService.isExclusiveActive()) {
+      if (!options.quietIfIdle) {
+        console.log('⏸️  Background processor paused by system maintenance lock');
+      }
+      return { processed: 0, duplicates: 0, errors: 0, unique: 0 };
+    }
+
     if (this.processing) {
       if (!options.quietIfIdle) {
         console.log('⏭️  Background processor already running, skipping...');
@@ -373,6 +381,9 @@ export class BackgroundProcessorService {
       const tasks = unhashedFiles.map((file) =>
         limit(async () => {
           try {
+            if (SystemMaintenanceLockService.isExclusiveActive()) {
+              return;
+            }
             await yieldToHttpRequests();
             await this.processFile(file);
             await yieldToHttpRequests();
@@ -652,6 +663,10 @@ export class BackgroundProcessorService {
    * Call this after Phase 1 scan completes
    */
   static triggerHashGeneration(options: BackgroundProcessorOptions = {}): void {
+    if (SystemMaintenanceLockService.isExclusiveActive()) {
+      return;
+    }
+
     if (!this.processing) {
       const pendingCount = this.getUnprocessedCount();
 

@@ -8,6 +8,7 @@ import { RatingScoreService } from './ratingScoreService';
 import { PromptCollectionService } from './promptCollectionService';
 import { AutoTagsComposeService } from './autoTagsComposeService';
 import { kaloscopeTaggerService } from './kaloscopeTaggerService';
+import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 import { RatingData } from '../types/autoTag';
 
 interface PendingAutoTagMedia {
@@ -154,6 +155,10 @@ class AutoTagScheduler {
   }
 
   private async processPendingMedia(): Promise<void> {
+    if (SystemMaintenanceLockService.isExclusiveActive()) {
+      return;
+    }
+
     if (this.isProcessing) {
       this.rerunRequested = true;
       return;
@@ -174,6 +179,10 @@ class AutoTagScheduler {
 
       for (let index = 0; index < pendingMedia.length; index += 1) {
         if (!this.isRunning) {
+          break;
+        }
+
+        if (SystemMaintenanceLockService.isExclusiveActive()) {
           break;
         }
 

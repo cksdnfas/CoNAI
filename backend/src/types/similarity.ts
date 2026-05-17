@@ -56,10 +56,18 @@ export interface DuplicateGroup {
 /**
  * 색상 히스토그램 데이터
  */
+export interface ColorDescriptor {
+  averageRgb: [number, number, number];
+  dominantRgb: [number, number, number];
+  luminance: number;
+  saturation: number;
+}
+
 export interface ColorHistogram {
   r: number[];  // Red 채널 분포 (0-255)
   g: number[];  // Green 채널 분포
   b: number[];  // Blue 채널 분포
+  descriptor?: ColorDescriptor;
 }
 
 /**

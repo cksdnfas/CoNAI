@@ -140,11 +140,11 @@ function buildSimilarImageRows(item: SimilarImage, t: Translate): SimilarityOver
         ? t('images.components.detail.similarity.score.overlay.no.data')
         : 'distance' in score
           ? t(
-              { ko: '유사 {similarity} · 거리 {distance}/{threshold} · 비중 {weight}', en: 'Similarity {similarity} · distance {distance}/{threshold} · weight {weight}' },
+              { ko: '{similarity}  거리 {distance} (≤{threshold})  비중 {weight}', en: '{similarity}  dist {distance} (≤{threshold})  w {weight}' },
               { similarity: formatSimilarityValue(score.similarity), distance: score.distance ?? '—', threshold: score.threshold, weight: score.weight },
             )
           : t(
-              { ko: '유사 {similarity} · 기준 {threshold} · 비중 {weight}', en: 'Similarity {similarity} · threshold {threshold} · weight {weight}' },
+              { ko: '{similarity} (≥{threshold})  비중 {weight}', en: '{similarity} (≥{threshold})  w {weight}' },
               { similarity: formatSimilarityValue(score.similarity), threshold: score.threshold, weight: score.weight },
             ),
     })
@@ -160,7 +160,7 @@ function buildSimilarImageRows(item: SimilarImage, t: Translate): SimilarityOver
       key: 'fallback',
       label: 'pHash',
       value: t(
-        { ko: '유사 {similarity} · 거리 {distance}', en: 'Similarity {similarity} · distance {distance}' },
+        { ko: '{similarity}  거리 {distance}', en: '{similarity}  dist {distance}' },
         { similarity: formatSimilarityValue(item.similarity), distance: item.hammingDistance },
       ),
     })
@@ -206,7 +206,7 @@ function buildPromptSimilarImageRows(item: PromptSimilarImage, t: Translate): Si
       value: !score.hasSource || !score.hasTarget
         ? t('images.components.detail.similarity.score.overlay.one.side.has.no.text')
         : t(
-            { ko: '유사 {similarity} · 기준 {threshold}', en: 'Similarity {similarity} · threshold {threshold}' },
+            { ko: '{similarity} (≥{threshold})', en: '{similarity} (≥{threshold})' },
             { similarity: formatSimilarityValue(score.similarity), threshold: score.threshold },
           ),
     }))
@@ -217,7 +217,7 @@ function buildPromptSimilarImageRows(item: PromptSimilarImage, t: Translate): Si
       label: t('images.components.detail.similarity.score.overlay.text'),
       tone: 'default',
       value: t(
-        { ko: '유사 {similarity}', en: 'Similarity {similarity}' },
+        { ko: '{similarity}', en: '{similarity}' },
         { similarity: formatSimilarityValue(item.combinedSimilarity) },
       ),
     })

@@ -119,6 +119,56 @@ export interface MetadataReextractAllResult {
   totalCandidates: number
 }
 
+export type DataRematchPhase =
+  | 'idle'
+  | 'selecting-targets'
+  | 'regenerating-thumbnails'
+  | 'queueing-metadata'
+  | 'rebuilding-hashes'
+  | 'remapping-references'
+  | 'completed'
+  | 'failed'
+
+export type DataRematchJobStatus = 'idle' | 'running' | 'completed' | 'failed'
+
+export interface DataRematchOptions {
+  thumbnail: boolean
+  metadata: boolean
+  hash: boolean
+}
+
+export interface DataRematchStartRequest extends Partial<DataRematchOptions> {
+  confirmHashRegeneration?: boolean
+}
+
+export interface SystemMaintenanceLockSnapshot {
+  active: boolean
+  mode: 'exclusive' | null
+  owner: string | null
+  reason: string | null
+  message: string | null
+  startedAt: string | null
+}
+
+export interface DataRematchJobSnapshot {
+  jobId: string | null
+  status: DataRematchJobStatus
+  phase: DataRematchPhase
+  options: DataRematchOptions
+  total: number
+  processed: number
+  failed: number
+  skipped: number
+  queued: number
+  currentFile: string | null
+  message: string
+  warnings: string[]
+  errors: Array<{ target: string; error: string }>
+  startedAt: string | null
+  completedAt: string | null
+  maintenanceLock: SystemMaintenanceLockSnapshot
+}
+
 export async function getAppSettings() {
   const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings')
   if (!response.success) {
@@ -202,6 +252,30 @@ export async function reextractAllImageMetadata() {
 
   if (!response.success) {
     throw createApiFallbackError(response.error, 'settings.metadata.reextractAll')
+  }
+
+  return response.data
+}
+
+export async function getDataRematchStatus() {
+  const response = await fetchJson<ApiResponse<DataRematchJobSnapshot>>('/api/settings/data-rematch/status')
+  if (!response.success) {
+    throw createApiFallbackError(response.error, 'settings.dataRematch.status')
+  }
+  return response.data
+}
+
+export async function startDataRematchJob(request: DataRematchStartRequest) {
+  const response = await fetchJson<ApiResponse<DataRematchJobSnapshot>>('/api/settings/data-rematch/jobs', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  })
+
+  if (!response.success) {
+    throw createApiFallbackError(response.error, 'settings.dataRematch.start')
   }
 
   return response.data

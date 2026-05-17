@@ -12,6 +12,7 @@ import { ImageModel, ModelRole } from '../models/ImageModel';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { CivitaiSettings } from '../models/CivitaiSettings';
 import type { AIMetadata, ModelReference } from './metadata/types';
+import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 
 function resolveBackgroundQueueBatchSize(): number {
   const configured = Number.parseInt(process.env.CONAI_BACKGROUND_QUEUE_BATCH_SIZE ?? '', 10);
@@ -179,7 +180,7 @@ export class BackgroundQueueService {
    * 큐 처리 (배치 병렬 처리)
    */
   private static async processQueue(): Promise<void> {
-    if (this.processing || this.queue.length === 0) {
+    if (this.processing || this.queue.length === 0 || SystemMaintenanceLockService.isExclusiveActive()) {
       return;
     }
 
@@ -187,6 +188,10 @@ export class BackgroundQueueService {
     logger.info(`\n🔄 백그라운드 큐 처리 시작: ${this.queue.length}개 작업`);
 
     while (this.queue.length > 0) {
+      if (SystemMaintenanceLockService.isExclusiveActive()) {
+        break;
+      }
+
       // 우선순위 정렬
       this.queue.sort((a, b) => a.priority - b.priority);
 
@@ -218,6 +223,15 @@ export class BackgroundQueueService {
     }
 
     this.processing = false;
+
+    if (this.queue.length > 0 && SystemMaintenanceLockService.isExclusiveActive()) {
+      setTimeout(() => {
+        void this.processQueue();
+      }, 5000);
+      logger.info('⏸️  백그라운드 큐 처리 대기: 시스템 유지보수 잠금 활성\n');
+      return;
+    }
+
     logger.info('✅ 백그라운드 큐 처리 완료\n');
   }
 

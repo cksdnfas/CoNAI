@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import sharp from 'sharp'
 import type { ImageMetadataRecord } from '../types/image'
 import type { SimilarImage } from '../types/similarity'
 import { RatingScoreModel } from '../models/RatingScore'
@@ -73,6 +77,18 @@ function createHistogram(activeBin: number) {
   histogram.r[activeBin] = 1
   histogram.g[activeBin] = 1
   histogram.b[activeBin] = 1
+  return histogram
+}
+
+function createSolidColorHistogram(r: number, g: number, b: number) {
+  const histogram = {
+    r: new Array(256).fill(0),
+    g: new Array(256).fill(0),
+    b: new Array(256).fill(0),
+  }
+  histogram.r[r] = 1
+  histogram.g[g] = 1
+  histogram.b[b] = 1
   return histogram
 }
 
@@ -245,6 +261,22 @@ function verifyColorSimilarityContracts() {
   const targetHistogram = createHistogram(0)
   const target = createRecord({ perceptual_hash: ZERO_HASH }) as ImageMetadataRecord
 
+  assert.equal(
+    ImageSimilarityService.calculateColorSimilarity(createHistogram(0), createHistogram(255)),
+    0,
+    'black and white descriptors should be maximally different, not treated as near-color matches',
+  )
+  assert.ok(
+    ImageSimilarityService.calculateColorSimilarity(
+      createSolidColorHistogram(255, 0, 0),
+      createSolidColorHistogram(160, 0, 0),
+    ) > ImageSimilarityService.calculateColorSimilarity(
+      createSolidColorHistogram(255, 0, 0),
+      createSolidColorHistogram(0, 0, 255),
+    ),
+    'descriptor scoring should keep same-hue colors closer than opposite hues',
+  )
+
   const match = buildColorSimilarMatch(target, targetHistogram, createRecord({
     perceptual_hash: '0000000000000003',
     color_histogram: ImageSimilarityService.serializeHistogram(targetHistogram),
@@ -396,11 +428,55 @@ function verifyOptimizedDctContracts() {
   }
 }
 
-verifyDuplicateMatchContracts()
-verifyHybridSimilarityContracts()
-verifyColorSimilarityContracts()
-verifyResultSortingContracts()
-verifyQueryBuilderContracts()
-verifyOptimizedDctContracts()
+async function writeGradientPng(filePath: string) {
+  const width = 17
+  const height = 19
+  const data = Buffer.alloc(width * height * 3)
 
-console.log('Image similarity contracts verified')
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 3
+      data[offset] = (x * 19 + y * 7) % 256
+      data[offset + 1] = (x * 5 + y * 23) % 256
+      data[offset + 2] = (x * 13 + y * 11) % 256
+    }
+  }
+
+  await sharp(data, { raw: { width, height, channels: 3 } }).png().toFile(filePath)
+}
+
+async function verifyGeneratedHashPipelines() {
+  const tempDir = mkdtempSync(join(tmpdir(), 'conai-similarity-'))
+
+  try {
+    const imagePath = join(tempDir, 'gradient.png')
+    await writeGradientPng(imagePath)
+
+    const directDHash = await ImageSimilarityService.generateDHash(imagePath)
+    const composite = await ImageSimilarityService.generateCompositeHash(imagePath)
+    const combined = await ImageSimilarityService.generateHashAndHistogram(imagePath)
+
+    assert.equal(composite.dHash, directDHash, 'composite dHash should match the canonical 9x8 dHash')
+    assert.equal(combined.hashes.dHash, directDHash, 'hash+histogram dHash should match the canonical 9x8 dHash')
+    assert.ok(combined.colorHistogram.descriptor, 'serialized color histograms should include the lightweight color descriptor')
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
+async function main() {
+  verifyDuplicateMatchContracts()
+  verifyHybridSimilarityContracts()
+  verifyColorSimilarityContracts()
+  verifyResultSortingContracts()
+  verifyQueryBuilderContracts()
+  verifyOptimizedDctContracts()
+  await verifyGeneratedHashPipelines()
+
+  console.log('Image similarity contracts verified')
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})
