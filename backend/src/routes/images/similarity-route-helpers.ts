@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { errorResponse } from '@conai/shared';
 import { db } from '../../database/init';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
+import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import type { DuplicateGroup, SimilarImage } from '../../types/similarity';
 import {
   parseIntegerWithFallback as parseIntegerWithFallbackInternal,
@@ -64,6 +65,11 @@ export function ensureImageFieldOrBlock(
     const image = MediaMetadataModel.findByHash(identifier.value);
 
     if (!image) {
+      res.status(404).json(errorResponse(options.hashNotFoundMessage ?? 'Image metadata not found'));
+      return false;
+    }
+
+    if (!MediaPostprocessVisibilityService.isReadyRecord(image)) {
       res.status(404).json(errorResponse(options.hashNotFoundMessage ?? 'Image metadata not found'));
       return false;
     }

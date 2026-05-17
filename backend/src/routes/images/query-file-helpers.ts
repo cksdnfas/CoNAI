@@ -42,18 +42,18 @@ export async function getVisibleMetadataOrBlock(res: Response, compositeHash: st
     return null;
   }
 
-  if (ImageSafetyService.isHidden(metadata.rating_score)) {
-    res.status(403).json({
-      success: false,
-      error: 'This image is hidden by the current safety policy'
-    });
-    return null;
-  }
-
   if (!MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
     res.status(404).json({
       success: false,
       error: 'Metadata not found'
+    });
+    return null;
+  }
+
+  if (ImageSafetyService.isHidden(metadata.rating_score)) {
+    res.status(403).json({
+      success: false,
+      error: 'This image is hidden by the current safety policy'
     });
     return null;
   }

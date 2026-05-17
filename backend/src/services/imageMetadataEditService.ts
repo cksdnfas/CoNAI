@@ -7,6 +7,7 @@ import { ImageMetadataEditRevisionModel } from '../models/Image/ImageMetadataEdi
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { AIMetadata } from './metadata/types';
 import { ImageMetadataWriteService, ImageOutputFormat } from './imageMetadataWriteService';
+import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { QueryCacheService } from './QueryCacheService';
 import { copyToRecycleBin } from '../utils/recycleBin';
 import { ImageFileRecord, ImageMetadataRecord } from '../types/image';
@@ -273,6 +274,10 @@ async function getEditableImageTarget(compositeHash: string): Promise<EditableIm
 
   const metadata = await MediaMetadataModel.findByHash(compositeHash);
   if (!metadata) {
+    throw new ImageMetadataEditError('Metadata not found', 404);
+  }
+
+  if (!MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
     throw new ImageMetadataEditError('Metadata not found', 404);
   }
 

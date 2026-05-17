@@ -4,6 +4,7 @@ import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
 import { AutoTagSearchService } from '../../services/autoTagSearchService';
+import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { AutoTagSearchParams, TagFilter } from '../../types/autoTag';
 
 export function registerImageTools(server: McpServer): void {
@@ -89,7 +90,7 @@ export function registerImageTools(server: McpServer): void {
       try {
         const metadata = MediaMetadataModel.findByHash(composite_hash);
 
-        if (!metadata) {
+        if (!metadata || !MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
           return {
             isError: true,
             content: [{ type: 'text' as const, text: `Image with hash ${composite_hash} not found` }],

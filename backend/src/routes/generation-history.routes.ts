@@ -6,6 +6,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { requireAdmin } from '../middleware/authMiddleware';
 import { GenerationHistoryModel, ServiceType } from '../models/GenerationHistory';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
+import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
 import {
   buildBatchDownloadArchive,
   getActiveFileOrBlock,
@@ -179,6 +180,11 @@ async function getAccessibleHistoryMediaOrBlock(req: Request, res: Response, idV
   const metadata = await MediaMetadataModel.findByHash(compositeHash);
   if (!metadata) {
     res.status(404).json({ success: false, error: 'Metadata not found' });
+    return null;
+  }
+
+  if (!MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
+    res.status(404).json({ success: false, error: 'Generation history image not found' });
     return null;
   }
 

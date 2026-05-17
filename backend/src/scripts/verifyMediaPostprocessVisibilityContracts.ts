@@ -135,7 +135,7 @@ async function main() {
         model_references, character_prompt_text, raw_nai_parameters,
         first_seen_date, metadata_updated_date, postprocess_status, postprocess_completed_at
       ) VALUES (
-        ?, '0000000000000000', '0000000000000000', '0000000000000000', '{}', 64, 64, 'thumb.webp', 'NovelAI', 'model', NULL,
+        ?, '0000000000000000', '0000000000000000', '0000000000000000', '{}', 64, 64, 'thumb.webp', 'NovelAI', 'model', '["shared-lora"]',
         20, 5, 'sampler', 123, 'scheduler', 'shared prompt', '',
         NULL, NULL, NULL, NULL, ?,
         NULL, NULL, NULL, NULL, NULL, 0.1,
@@ -199,6 +199,30 @@ async function main() {
 
     const searchHashes = await ImageSearchModel.searchCompositeHashes({ search_text: 'shared' });
     assert.deepEqual(searchHashes, ['ready-hash'], 'search hash results must hide pending postprocessed media');
+
+    const dateRange = MediaMetadataModel.findByDateRange(
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-31T23:59:59.999Z',
+      1,
+      10
+    );
+    assert.deepEqual(
+      dateRange.items.map((image) => image.composite_hash),
+      ['ready-hash'],
+      'date-range lists must hide pending postprocessed media'
+    );
+    assert.equal(dateRange.total, 1);
+
+    assert.deepEqual(
+      MediaMetadataModel.searchModelSuggestions('model', 10),
+      [{ value: 'model', count: 1 }],
+      'model suggestions must ignore pending postprocessed media'
+    );
+    assert.deepEqual(
+      MediaMetadataModel.searchLoraSuggestions('shared-lora', 10),
+      [{ value: 'shared-lora', count: 1 }],
+      'LoRA suggestions must ignore pending postprocessed media'
+    );
 
     const filter: ComplexFilter = {
       and_group: [

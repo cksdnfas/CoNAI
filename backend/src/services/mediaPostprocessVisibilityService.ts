@@ -41,6 +41,17 @@ function assertSafeSqlAlias(alias: string): void {
 }
 
 export class MediaPostprocessVisibilityService {
+  private static invalidateVisibilityCaches(compositeHash: string): void {
+    try {
+      const { QueryCacheService } = require('./QueryCacheService') as typeof import('./QueryCacheService');
+      QueryCacheService.invalidateMetadataCache(compositeHash);
+      QueryCacheService.invalidateThumbnailCache(compositeHash);
+      QueryCacheService.scheduleGalleryCacheInvalidation();
+    } catch (error) {
+      console.warn('⚠️ Postprocess visibility cache invalidation failed:', error instanceof Error ? error.message : error);
+    }
+  }
+
   static isReadyStatus(status: string | null | undefined): boolean {
     return status === undefined || status === null || status === 'ready';
   }
@@ -90,6 +101,7 @@ export class MediaPostprocessVisibilityService {
           metadata_updated_date = CURRENT_TIMESTAMP
       WHERE composite_hash = ?
     `).run(compositeHash);
+    this.invalidateVisibilityCaches(compositeHash);
   }
 
   static markReady(compositeHash: string): void {
@@ -104,6 +116,7 @@ export class MediaPostprocessVisibilityService {
           metadata_updated_date = CURRENT_TIMESTAMP
       WHERE composite_hash = ?
     `).run(compositeHash);
+    this.invalidateVisibilityCaches(compositeHash);
   }
 
   static markReadyIfNoPendingImmediateWork(compositeHash: string): boolean {

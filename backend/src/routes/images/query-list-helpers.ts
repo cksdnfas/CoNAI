@@ -165,12 +165,12 @@ function buildBatchThumbnailLookupResult(hash: string): BatchThumbnailLookupResu
       return { success: false, error: 'Not found' };
     }
 
-    if (ImageSafetyService.isHidden(metadata.rating_score)) {
-      return { success: false, error: 'Hidden by safety policy' };
-    }
-
     if (!MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
       return { success: false, error: 'Not found' };
+    }
+
+    if (ImageSafetyService.isHidden(metadata.rating_score)) {
+      return { success: false, error: 'Hidden by safety policy' };
     }
 
     const files = ImageFileModel.findActiveByHash(hash);

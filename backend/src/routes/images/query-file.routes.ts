@@ -7,6 +7,7 @@ import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { MediaMetadataFileQueries } from '../../models/Image/MediaMetadataFileQueries';
 import { resolveUploadsPath } from '../../config/runtimePaths';
 import { ImageSafetyService } from '../../services/imageSafetyService';
+import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { enrichImageWithFileView } from './utils';
 import {
   BatchDownloadLimitError,
@@ -86,6 +87,14 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
 
     if (!image) {
       const metadata = await MediaMetadataModel.findByHash(compositeHash);
+      if (metadata && !MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
+        res.status(404).json({
+          success: false,
+          error: 'Metadata not found'
+        });
+        return;
+      }
+
       if (metadata && ImageSafetyService.isHidden(metadata.rating_score)) {
         res.status(403).json({
           success: false,
@@ -283,6 +292,13 @@ router.get('/by-path/:encodedPath', asyncHandler(async (req: Request, res: Respo
 
     if (fileRecord?.file_status === 'active' && fileRecord.composite_hash) {
       const metadata = await MediaMetadataModel.findByHash(fileRecord.composite_hash);
+      if (metadata && !MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
+        return res.status(404).json({
+          success: false,
+          error: 'File not found'
+        });
+      }
+
       if (metadata && ImageSafetyService.isHidden(metadata.rating_score)) {
         return res.status(403).json({
           success: false,

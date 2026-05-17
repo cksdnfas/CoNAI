@@ -47,12 +47,12 @@ router.get('/:composite_hash', asyncHandler(async (req: Request, res: Response) 
       return res.status(404).json(errorResponse('Metadata not found'));
     }
 
-    if (ImageSafetyService.isHidden(metadata.rating_score)) {
-      return res.status(403).json(errorResponse('This image is hidden by the current safety policy'));
-    }
-
     if (!MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
       return res.status(404).json(errorResponse('Metadata not found'));
+    }
+
+    if (ImageSafetyService.isHidden(metadata.rating_score)) {
+      return res.status(403).json(errorResponse('This image is hidden by the current safety policy'));
     }
 
     // ImageRecord 구조로 변환 (실제 file_type 사용)

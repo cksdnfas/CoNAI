@@ -1,6 +1,7 @@
 import { db } from '../../database/init';
 import { settingsService } from '../../services/settingsService';
 import { PromptSimilarityService } from '../../services/promptSimilarityService';
+import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { ImageMetadataRecord } from '../../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../../utils/dynamicUpdate';
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
@@ -11,6 +12,10 @@ function normalizeSuggestionLimit(limit: number, fallback = 16, max = 50): numbe
     return fallback;
   }
   return Math.min(Math.floor(limit), max);
+}
+
+function getReadyMediaMetadataCondition(alias = 'media_metadata'): string {
+  return MediaPostprocessVisibilityService.buildReadyCondition(alias);
 }
 
 /**
@@ -63,10 +68,16 @@ export class MediaMetadataModel {
     const sortOrder = options.sortOrder || 'DESC';
     const offset = (page - 1) * limit;
 
-    const countRow = db.prepare('SELECT COUNT(*) as total FROM media_metadata').get() as { total: number };
+    const readyCondition = getReadyMediaMetadataCondition();
+    const countRow = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM media_metadata
+      WHERE ${readyCondition}
+    `).get() as { total: number };
 
     const items = db.prepare(`
       SELECT * FROM media_metadata
+      WHERE ${readyCondition}
       ORDER BY ${sortBy} ${sortOrder}
       LIMIT ? OFFSET ?
     `).all(limit, offset) as ImageMetadataRecord[];
@@ -221,9 +232,12 @@ export class MediaMetadataModel {
     const limit = options?.limit || 100;
     const offset = options?.offset || 0;
 
+    const readyCondition = getReadyMediaMetadataCondition();
+
     return db.prepare(`
       SELECT * FROM media_metadata
-      WHERE prompt LIKE ? OR negative_prompt LIKE ? OR model_name LIKE ?
+      WHERE (${readyCondition})
+        AND (prompt LIKE ? OR negative_prompt LIKE ? OR model_name LIKE ?)
       ORDER BY first_seen_date DESC
       LIMIT ? OFFSET ?
     `).all(`%${query}%`, `%${query}%`, `%${query}%`, limit, offset) as ImageMetadataRecord[];
@@ -240,13 +254,16 @@ export class MediaMetadataModel {
     const limit = options?.limit || 20;
     const offset = (page - 1) * limit;
 
-    const countRow = db.prepare(
-      'SELECT COUNT(*) as total FROM media_metadata WHERE ai_tool = ?'
-    ).get(aiTool) as { total: number };
+    const readyCondition = getReadyMediaMetadataCondition();
+    const countRow = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM media_metadata
+      WHERE ai_tool = ? AND ${readyCondition}
+    `).get(aiTool) as { total: number };
 
     const items = db.prepare(`
       SELECT * FROM media_metadata
-      WHERE ai_tool = ?
+      WHERE ai_tool = ? AND ${readyCondition}
       ORDER BY first_seen_date DESC
       LIMIT ? OFFSET ?
     `).all(aiTool, limit, offset) as ImageMetadataRecord[];
@@ -265,13 +282,16 @@ export class MediaMetadataModel {
     const limit = options?.limit || 20;
     const offset = (page - 1) * limit;
 
-    const countRow = db.prepare(
-      'SELECT COUNT(*) as total FROM media_metadata WHERE model_name = ?'
-    ).get(modelName) as { total: number };
+    const readyCondition = getReadyMediaMetadataCondition();
+    const countRow = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM media_metadata
+      WHERE model_name = ? AND ${readyCondition}
+    `).get(modelName) as { total: number };
 
     const items = db.prepare(`
       SELECT * FROM media_metadata
-      WHERE model_name = ?
+      WHERE model_name = ? AND ${readyCondition}
       ORDER BY first_seen_date DESC
       LIMIT ? OFFSET ?
     `).all(modelName, limit, offset) as ImageMetadataRecord[];
@@ -292,13 +312,16 @@ export class MediaMetadataModel {
     const _limit = limit || 20;
     const offset = (_page - 1) * _limit;
 
-    const countRow = db.prepare(
-      'SELECT COUNT(*) as total FROM media_metadata WHERE first_seen_date BETWEEN ? AND ?'
-    ).get(startDate, endDate) as { total: number };
+    const readyCondition = getReadyMediaMetadataCondition();
+    const countRow = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM media_metadata
+      WHERE first_seen_date BETWEEN ? AND ? AND ${readyCondition}
+    `).get(startDate, endDate) as { total: number };
 
     const items = db.prepare(`
       SELECT * FROM media_metadata
-      WHERE first_seen_date BETWEEN ? AND ?
+      WHERE first_seen_date BETWEEN ? AND ? AND ${readyCondition}
       ORDER BY first_seen_date DESC
       LIMIT ? OFFSET ?
     `).all(startDate, endDate, _limit, offset) as ImageMetadataRecord[];
@@ -321,13 +344,16 @@ export class MediaMetadataModel {
     const limit = options?.limit || 20;
     const offset = (page - 1) * limit;
 
-    const countRow = db.prepare(
-      'SELECT COUNT(*) as total FROM media_metadata WHERE rating_score BETWEEN ? AND ?'
-    ).get(minRating, maxRating) as { total: number };
+    const readyCondition = getReadyMediaMetadataCondition();
+    const countRow = db.prepare(`
+      SELECT COUNT(*) as total
+      FROM media_metadata
+      WHERE rating_score BETWEEN ? AND ? AND ${readyCondition}
+    `).get(minRating, maxRating) as { total: number };
 
     const items = db.prepare(`
       SELECT * FROM media_metadata
-      WHERE rating_score BETWEEN ? AND ?
+      WHERE rating_score BETWEEN ? AND ? AND ${readyCondition}
       ORDER BY rating_score DESC, first_seen_date DESC
       LIMIT ? OFFSET ?
     `).all(minRating, maxRating, limit, offset) as ImageMetadataRecord[];
@@ -339,10 +365,12 @@ export class MediaMetadataModel {
    * 통계: AI 도구별 개수
    */
   static getAIToolStats(): Array<{ ai_tool: string; count: number }> {
+    const readyCondition = getReadyMediaMetadataCondition();
+
     return db.prepare(`
       SELECT ai_tool, COUNT(*) as count
       FROM media_metadata
-      WHERE ai_tool IS NOT NULL
+      WHERE ai_tool IS NOT NULL AND ${readyCondition}
       GROUP BY ai_tool
       ORDER BY count DESC
     `).all() as Array<{ ai_tool: string; count: number }>;
@@ -352,10 +380,12 @@ export class MediaMetadataModel {
    * 통계: 모델별 개수
    */
   static getModelStats(): Array<{ model_name: string; count: number }> {
+    const readyCondition = getReadyMediaMetadataCondition();
+
     return db.prepare(`
       SELECT model_name, COUNT(*) as count
       FROM media_metadata
-      WHERE model_name IS NOT NULL
+      WHERE model_name IS NOT NULL AND ${readyCondition}
       GROUP BY model_name
       ORDER BY count DESC
       LIMIT 50
@@ -370,11 +400,14 @@ export class MediaMetadataModel {
     const likePattern = buildSqlContainsPattern(normalizedQuery);
     const normalizedLimit = normalizeSuggestionLimit(limit);
 
+    const readyCondition = getReadyMediaMetadataCondition();
+
     return db.prepare(`
       SELECT model_name as value, COUNT(*) as count
       FROM media_metadata
       WHERE model_name IS NOT NULL
         AND TRIM(model_name) != ''
+        AND ${readyCondition}
         AND (? = '' OR LOWER(model_name) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE})
       GROUP BY model_name
       ORDER BY count DESC, model_name ASC
@@ -390,12 +423,15 @@ export class MediaMetadataModel {
     const likePattern = buildSqlContainsPattern(normalizedQuery);
     const normalizedLimit = normalizeSuggestionLimit(limit);
 
+    const readyCondition = getReadyMediaMetadataCondition('metadata');
+
     return db.prepare(`
       SELECT TRIM(CAST(lora_item.value AS TEXT)) as value, COUNT(*) as count
       FROM media_metadata AS metadata
       JOIN json_each(CASE WHEN json_valid(metadata.lora_models) = 1 THEN metadata.lora_models ELSE '[]' END) AS lora_item
       WHERE metadata.lora_models IS NOT NULL
         AND TRIM(CAST(lora_item.value AS TEXT)) != ''
+        AND ${readyCondition}
         AND (? = '' OR LOWER(CAST(lora_item.value AS TEXT)) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE})
       GROUP BY TRIM(CAST(lora_item.value AS TEXT))
       ORDER BY count DESC, value ASC
@@ -407,7 +443,12 @@ export class MediaMetadataModel {
    * 총 개수
    */
   static count(): number {
-    const row = db.prepare('SELECT COUNT(*) as count FROM media_metadata').get() as { count: number };
+    const readyCondition = getReadyMediaMetadataCondition();
+    const row = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM media_metadata
+      WHERE ${readyCondition}
+    `).get() as { count: number };
     return row.count;
   }
 

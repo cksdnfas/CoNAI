@@ -158,6 +158,10 @@ export class QueryCacheService {
 
   static invalidateMetadataCache(compositeHash: string): void {
     try {
+      if (!this.metadataCache) {
+        return;
+      }
+
       const key = `metadata:${compositeHash}`;
       this.metadataCache.delete(key);
     } catch (error) {
@@ -195,6 +199,10 @@ export class QueryCacheService {
 
   static invalidateThumbnailCache(compositeHash: string): void {
     try {
+      if (!this.thumbnailCache) {
+        return;
+      }
+
       const key = `thumbnail:${compositeHash}`;
       this.thumbnailCache.delete(key);
     } catch (error) {

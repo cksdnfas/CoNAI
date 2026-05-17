@@ -6,6 +6,7 @@ import { TempImageService, EditOptions } from '../services/tempImageService';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { ImageSafetyService } from '../services/imageSafetyService';
+import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
 import { runtimePaths } from '../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
@@ -70,6 +71,14 @@ async function getAccessibleImageFileOrBlock(imageId: number, res: Response) {
 
   if (imageFile.composite_hash) {
     const metadata = await MediaMetadataModel.findByHash(imageFile.composite_hash);
+    if (metadata && !MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
+      res.status(404).json({
+        success: false,
+        error: 'Image file not found'
+      });
+      return null;
+    }
+
     if (metadata && ImageSafetyService.isHidden(metadata.rating_score)) {
       res.status(403).json({
         success: false,

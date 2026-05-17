@@ -20,6 +20,7 @@ import { resolveUploadsPath } from '../config/runtimePaths';
 import { CivitaiService } from '../services/civitaiService';
 import { CivitaiTempUrlService } from '../services/civitaiTempUrlService';
 import { ImageSafetyService } from '../services/imageSafetyService';
+import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
 import { db } from '../database/init';
 
 const router = Router();
@@ -265,7 +266,11 @@ router.get('/temp-image/:token', asyncHandler(async (req: Request, res: Response
   }
 
   const metadata = MediaMetadataModel.findByHash(tempUrl.composite_hash);
-  if (!metadata || ImageSafetyService.isHidden(metadata.rating_score)) {
+  if (
+    !metadata ||
+    !MediaPostprocessVisibilityService.isReadyRecord(metadata) ||
+    ImageSafetyService.isHidden(metadata.rating_score)
+  ) {
     res.status(404).json({
       success: false,
       error: 'Image not found or expired'
