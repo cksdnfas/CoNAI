@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Image, ShieldCheck, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ShieldCheck, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -10,6 +10,7 @@ import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import { useI18n } from '@/i18n'
+import { APP_BRAND_TOOLTIP, APP_ICON_SRC, APP_NAME } from '@/lib/app-metadata'
 import { cn } from '@/lib/utils'
 import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
 
@@ -103,14 +104,12 @@ function AppShellLayout() {
               end
               className="flex shrink-0 items-center gap-3 rounded-sm transition-opacity hover:opacity-90"
               aria-label={t({ ko: '홈으로 이동', en: 'Go to Home' })}
-              title={t('pageAccessCatalog.home')}
+              title={APP_BRAND_TOOLTIP}
               onMouseEnter={() => prefetchAppRoute('/')}
               onFocus={() => prefetchAppRoute('/')}
             >
-              <div className="rounded-sm bg-surface-high p-2 text-secondary">
-                <Image className="h-4 w-4" />
-              </div>
-              <span className="hidden text-lg font-bold tracking-[-0.04em] text-foreground sm:inline">CoNAI</span>
+              <img src={APP_ICON_SRC} alt="" className="size-8 shrink-0 rounded-sm object-cover" draggable={false} />
+              <span className="hidden text-lg font-bold tracking-[-0.04em] text-foreground sm:inline">{APP_NAME}</span>
             </NavLink>
 
             <div className="relative min-w-0 flex-1">

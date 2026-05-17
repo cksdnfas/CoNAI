@@ -1,8 +1,12 @@
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import { defineConfig, loadEnv } from 'vite'
 import babel from '@rolldown/plugin-babel'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+
+const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')) as { version?: string }
+const appVersion = typeof packageJson.version === 'string' && packageJson.version.trim().length > 0 ? packageJson.version : '0.0.0'
 
 function resolveFrontendPort(frontendUrl?: string): number {
   if (frontendUrl) {
@@ -63,6 +67,9 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
     ],
     base: './',
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

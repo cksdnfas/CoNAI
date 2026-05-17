@@ -13,6 +13,7 @@ import {
   updateVideoOptimizationSettings,
 } from '@/lib/api-settings'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { APP_BRAND_TOOLTIP, APP_VERSION_LABEL } from '@/lib/app-metadata'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -288,7 +289,14 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t({ ko: '설정', en: 'Settings' })} />
+      <PageHeader
+        title={t({ ko: '설정', en: 'Settings' })}
+        titleAccessory={(
+          <span className="inline-flex items-center rounded-sm border border-border/80 bg-surface-low px-2 py-0.5 text-xs font-medium text-muted-foreground" title={APP_BRAND_TOOLTIP}>
+            {APP_VERSION_LABEL}
+          </span>
+        )}
+      />
 
       <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[248px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />

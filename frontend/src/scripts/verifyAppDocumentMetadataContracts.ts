@@ -1,0 +1,45 @@
+import { equal, ok } from 'node:assert/strict'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const indexHtml = readFileSync(join(process.cwd(), 'index.html'), 'utf8')
+const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as { version?: string }
+const siteManifest = JSON.parse(readFileSync(join(process.cwd(), 'public/site.webmanifest'), 'utf8')) as { name?: string; short_name?: string; icons?: Array<{ src?: string; sizes?: string; type?: string }> }
+const viteConfig = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8')
+const appMetadata = readFileSync(join(process.cwd(), 'src/lib/app-metadata.ts'), 'utf8')
+const appShell = readFileSync(join(process.cwd(), 'src/components/layout/app-shell.tsx'), 'utf8')
+const pageHeader = readFileSync(join(process.cwd(), 'src/components/common/page-header.tsx'), 'utf8')
+const settingsPage = readFileSync(join(process.cwd(), 'src/features/settings/settings-page.tsx'), 'utf8')
+const titleMatch = indexHtml.match(/<title>(.*?)<\/title>/i)
+
+ok(titleMatch, 'index.html should define a document title')
+equal(titleMatch[1].trim(), 'Co-NAI', 'browser/app window title should be Co-NAI')
+ok(!indexHtml.includes('/vite.svg'), 'index.html should not reference the Vite default favicon')
+ok(indexHtml.includes('href="/favicon.ico"'), 'index.html should reference the ICO favicon')
+ok(indexHtml.includes('href="/favicon-32x32.png"'), 'index.html should reference the 32px favicon')
+ok(indexHtml.includes('href="/favicon-16x16.png"'), 'index.html should reference the 16px favicon')
+ok(indexHtml.includes('href="/apple-touch-icon.png"'), 'index.html should reference the Apple touch icon')
+ok(indexHtml.includes('href="/site.webmanifest"'), 'index.html should reference the web app manifest')
+ok(existsSync(join(process.cwd(), 'public/favicon.ico')), 'frontend public assets should include favicon.ico')
+ok(existsSync(join(process.cwd(), 'public/favicon-32x32.png')), 'frontend public assets should include favicon-32x32.png')
+ok(existsSync(join(process.cwd(), 'public/favicon-16x16.png')), 'frontend public assets should include favicon-16x16.png')
+ok(existsSync(join(process.cwd(), 'public/apple-touch-icon.png')), 'frontend public assets should include apple-touch-icon.png')
+ok(existsSync(join(process.cwd(), 'public/android-chrome-192x192.png')), 'frontend public assets should include android-chrome-192x192.png')
+ok(existsSync(join(process.cwd(), 'public/android-chrome-512x512.png')), 'frontend public assets should include android-chrome-512x512.png')
+equal(siteManifest.name, 'CoNAI', 'site webmanifest should use the app name')
+equal(siteManifest.short_name, 'CoNAI', 'site webmanifest should use the app short name')
+ok(siteManifest.icons?.some((icon) => icon.src === '/android-chrome-192x192.png' && icon.sizes === '192x192' && icon.type === 'image/png'), 'site webmanifest should include the 192px Android icon')
+ok(siteManifest.icons?.some((icon) => icon.src === '/android-chrome-512x512.png' && icon.sizes === '512x512' && icon.type === 'image/png'), 'site webmanifest should include the 512px Android icon')
+ok(packageJson.version, 'frontend package.json should define the current app version')
+ok(viteConfig.includes('__APP_VERSION__'), 'Vite should expose the package version as __APP_VERSION__')
+ok(appMetadata.includes('APP_VERSION_LABEL'), 'app metadata should expose a reusable version label')
+ok(appMetadata.includes('APP_ICON_SRC'), 'app metadata should expose a reusable app icon path')
+ok(appMetadata.includes('android-chrome-192x192.png'), 'header brand icon should use a high-resolution app icon asset')
+ok(appShell.includes('APP_BRAND_TOOLTIP'), 'header brand link should show the current version in its tooltip')
+ok(appShell.includes('APP_ICON_SRC'), 'header brand icon should use the app favicon asset')
+ok(!appShell.includes('<Image className="h-4 w-4" />'), 'header brand icon should not use the generic image icon')
+ok(!appShell.includes('bg-surface-high p-2'), 'header brand icon should not double-wrap the favicon in a padded tile')
+ok(pageHeader.includes('titleAccessory'), 'PageHeader should support compact title-adjacent metadata')
+ok(settingsPage.includes('APP_VERSION_LABEL'), 'settings title should display the current version label')
+
+console.log('App document metadata contracts verified.')
