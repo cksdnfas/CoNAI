@@ -819,16 +819,16 @@ function InteractiveImageDetailMedia({
             transformOrigin: 'center center',
           }}
         >
-          {shouldRenderPixelPreview ? (
-            <div className="relative grid max-h-full max-w-full place-items-center">
-              <img
-                src={renderUrl}
-                alt={altText}
-                className={cn('col-start-1 row-start-1 block h-auto w-auto pointer-events-none select-none transition-opacity duration-150', className, isPixelPreviewReady && 'opacity-0')}
-                draggable={false}
-                onLoad={onPrimaryLoad}
-                onError={() => setHasRenderError(true)}
-              />
+          <div className="relative grid max-h-full max-w-full place-items-center">
+            <img
+              src={renderUrl}
+              alt={altText}
+              className={cn('col-start-1 row-start-1 block h-auto w-auto pointer-events-none select-none transition-opacity duration-150', className, shouldRenderPixelPreview && isPixelPreviewReady && 'opacity-0')}
+              draggable={false}
+              onLoad={onPrimaryLoad}
+              onError={() => setHasRenderError(true)}
+            />
+            {shouldRenderPixelPreview ? (
               <canvas
                 ref={canvasRef}
                 role="img"
@@ -836,16 +836,14 @@ function InteractiveImageDetailMedia({
                 className={cn('absolute inset-0 h-full w-full pointer-events-none select-none object-contain transition-opacity duration-150', isPixelPreviewReady ? 'opacity-100' : 'opacity-0')}
                 style={{ imageRendering: 'pixelated' }}
               />
-              {!isPixelPreviewReady ? (
-                <div className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-black/45 px-2 py-1 text-[11px] font-medium text-white/82 shadow-sm backdrop-blur-sm">
-                  <LoaderCircle className="h-3 w-3 animate-spin" />
-                  {t({ ko: '적용 중', en: 'Applying' })}
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <img src={renderUrl} alt={altText} className={cn('block h-auto w-auto pointer-events-none select-none', className)} draggable={false} onLoad={onPrimaryLoad} onError={() => setHasRenderError(true)} />
-          )}
+            ) : null}
+            {shouldRenderPixelPreview && !isPixelPreviewReady ? (
+              <div className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-black/45 px-2 py-1 text-[11px] font-medium text-white/82 shadow-sm backdrop-blur-sm">
+                <LoaderCircle className="h-3 w-3 animate-spin" />
+                {t({ ko: '적용 중', en: 'Applying' })}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

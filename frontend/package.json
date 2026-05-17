@@ -27,7 +27,8 @@
     "verify:prompt-tag-links": "tsx src/scripts/verifyPromptTagLinks.ts",
     "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts",
     "verify:image-editor-tool-contracts": "tsx src/scripts/verifyImageEditorToolContracts.ts",
-    "verify:image-similarity-policy-contracts": "tsx src/scripts/verifyImageSimilarityPolicyContracts.ts"
+    "verify:image-similarity-policy-contracts": "tsx src/scripts/verifyImageSimilarityPolicyContracts.ts",
+    "verify:image-detail-filter-preview-contracts": "tsx src/scripts/verifyImageDetailFilterPreviewContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",
