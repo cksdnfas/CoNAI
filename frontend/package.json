@@ -28,7 +28,8 @@
     "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts",
     "verify:image-editor-tool-contracts": "tsx src/scripts/verifyImageEditorToolContracts.ts",
     "verify:image-similarity-policy-contracts": "tsx src/scripts/verifyImageSimilarityPolicyContracts.ts",
-    "verify:image-detail-filter-preview-contracts": "tsx src/scripts/verifyImageDetailFilterPreviewContracts.ts"
+    "verify:image-detail-filter-preview-contracts": "tsx src/scripts/verifyImageDetailFilterPreviewContracts.ts",
+    "verify:image-download-contracts": "tsx src/scripts/verifyImageDownloadContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",
