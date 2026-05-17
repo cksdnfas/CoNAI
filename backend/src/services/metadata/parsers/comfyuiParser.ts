@@ -140,9 +140,13 @@ export class ComfyUIParser {
       }
     }
 
-    // Prefer the conditioning inputs of the sampler that produced the image.
-    const samplerPositivePrompt = this.resolvePromptFromConditioning(workflow, samplerNode?.inputs?.positive);
-    const samplerNegativePrompt = this.resolvePromptFromConditioning(workflow, samplerNode?.inputs?.negative);
+    const outputSamplerTrace = this.findOutputSamplerTrace(workflow);
+    const selectedSamplerNode = outputSamplerTrace?.samplerNode || samplerNode;
+
+    // Prefer the conditioning inputs of the sampler that produced the saved image.
+    // For ComfyUI PNGs this avoids unrelated prompt nodes from side branches.
+    const samplerPositivePrompt = this.resolvePromptFromConditioning(workflow, selectedSamplerNode?.inputs?.positive);
+    const samplerNegativePrompt = this.resolvePromptFromConditioning(workflow, selectedSamplerNode?.inputs?.negative);
 
     if (samplerPositivePrompt) {
       aiInfo.positive_prompt = samplerPositivePrompt;
@@ -168,8 +172,8 @@ export class ComfyUIParser {
     }
 
     // Process sampler parameters
-    if (samplerNode?.inputs) {
-      const inputs = samplerNode.inputs;
+    if (selectedSamplerNode?.inputs) {
+      const inputs = selectedSamplerNode.inputs;
 
       if (inputs.seed !== undefined) {
         aiInfo.seed = this.resolveNumericValue(workflow, inputs.seed);
@@ -254,24 +258,292 @@ export class ComfyUIParser {
     return workflow?.[String(value[0])] || null;
   }
 
-  private static resolveScalarFromNode(workflow: any, node: any, visited: Set<string>): unknown {
+  private static isSamplerNode(node: any): boolean {
+    return Boolean(node && typeof node === 'object' && (node.class_type === 'KSampler' || node.class_type === 'KSamplerAdvanced'));
+  }
+
+  private static parseNodeOrder(nodeId: string): number {
+    const match = nodeId.match(/^\d+/);
+    return match ? Number(match[0]) : -1;
+  }
+
+  private static isImageOutputNode(node: any): boolean {
+    if (!node || typeof node !== 'object') {
+      return false;
+    }
+
+    const classType = typeof node.class_type === 'string' ? node.class_type : '';
+    const normalizedClassType = classType.toLowerCase();
+    const inputs = node.inputs || {};
+    const hasImageInput = this.isNodeLink(inputs.images) || this.isNodeLink(inputs.image);
+
+    return hasImageInput && (
+      classType === 'SaveImage'
+      || classType === 'PreviewImage'
+      || (normalizedClassType.includes('save') && normalizedClassType.includes('image'))
+    );
+  }
+
+  private static getPreferredSamplerTraceInputKeys(node: any): string[] {
+    const classType = typeof node?.class_type === 'string' ? node.class_type : '';
+    const normalizedClassType = classType.toLowerCase();
+
+    if (classType === 'VAEDecode') {
+      return ['samples'];
+    }
+
+    if (normalizedClassType.includes('upscale')) {
+      return ['image', 'images', 'samples', 'latent', 'latent_image'];
+    }
+
+    return ['samples', 'latent', 'latent_image', 'image', 'images', 'pixels'];
+  }
+
+  private static shouldTraceSamplerInputKey(inputKey: string): boolean {
+    return !['model', 'clip', 'vae', 'control_net', 'style_model', 'upscale_model'].includes(inputKey);
+  }
+
+  private static traceUpstreamForSampler(
+    workflow: any,
+    value: unknown,
+    visited = new Set<string>(),
+    depth = 0,
+  ): { nodeId: string; node: any } | null {
+    if (depth > 48 || !this.isNodeLink(value)) {
+      return null;
+    }
+
+    const nodeId = String(value[0]);
+    if (visited.has(nodeId)) {
+      return null;
+    }
+
+    const node = workflow?.[nodeId];
+    if (!node || typeof node !== 'object') {
+      return null;
+    }
+
+    if (this.isSamplerNode(node)) {
+      return { nodeId, node };
+    }
+
+    const inputs = node.inputs || {};
+    if (!inputs || typeof inputs !== 'object') {
+      return null;
+    }
+
+    const nextVisited = new Set(visited);
+    nextVisited.add(nodeId);
+
+    const preferredKeys = this.getPreferredSamplerTraceInputKeys(node).filter((key) => Object.prototype.hasOwnProperty.call(inputs, key));
+    const remainingKeys = Object.keys(inputs).filter((key) => !preferredKeys.includes(key) && this.shouldTraceSamplerInputKey(key));
+
+    for (const inputKey of [...preferredKeys, ...remainingKeys]) {
+      const traced = this.traceUpstreamForSampler(workflow, inputs[inputKey], nextVisited, depth + 1);
+      if (traced) {
+        return traced;
+      }
+    }
+
+    return null;
+  }
+
+  private static findOutputSamplerTrace(workflow: any): { outputNodeId: string; samplerNodeId: string; samplerNode: any } | null {
+    const candidates: Array<{ outputNodeId: string; samplerNodeId: string; samplerNode: any }> = [];
+    const outputNodes = Object.entries(workflow || {})
+      .filter(([, node]) => this.isImageOutputNode(node))
+      .sort(([leftId], [rightId]) => this.parseNodeOrder(rightId) - this.parseNodeOrder(leftId));
+
+    for (const [outputNodeId, outputNode] of outputNodes) {
+      const inputs = (outputNode as any).inputs || {};
+      for (const inputKey of ['images', 'image']) {
+        const traced = this.traceUpstreamForSampler(workflow, inputs[inputKey]);
+        if (traced) {
+          candidates.push({
+            outputNodeId,
+            samplerNodeId: traced.nodeId,
+            samplerNode: traced.node,
+          });
+          break;
+        }
+      }
+    }
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    candidates.sort((left, right) => {
+      const outputOrder = this.parseNodeOrder(right.outputNodeId) - this.parseNodeOrder(left.outputNodeId);
+      if (outputOrder !== 0) {
+        return outputOrder;
+      }
+      return this.parseNodeOrder(right.samplerNodeId) - this.parseNodeOrder(left.samplerNodeId);
+    });
+
+    return candidates[0];
+  }
+
+  private static getLinkOutputIndex(value: unknown): number {
+    if (!this.isNodeLink(value)) {
+      return 0;
+    }
+
+    const outputIndex = value[1];
+    if (typeof outputIndex === 'number' && Number.isFinite(outputIndex)) {
+      return outputIndex;
+    }
+
+    const parsed = Number(outputIndex);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private static isPresentScalar(value: unknown): boolean {
+    return value !== undefined && value !== null && value !== '';
+  }
+
+  private static normalizePromptPart(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private static joinPromptParts(parts: string[]): string | undefined {
+    const uniqueParts = Array.from(new Set(parts.map((part) => part.trim()).filter((part) => part.length > 0)));
+    return uniqueParts.length > 0 ? uniqueParts.join(', ') : undefined;
+  }
+
+  private static resolveStringFunctionNode(workflow: any, inputs: any, visited: Set<string>): unknown {
+    const textKeys = Object.keys(inputs || {})
+      .filter((key) => key === 'text' || /^text_[a-z0-9]+$/i.test(key))
+      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+    const parts: string[] = [];
+
+    for (const key of textKeys) {
+      const resolved = this.resolveValue(workflow, inputs[key], new Set(visited));
+      const normalized = this.normalizePromptPart(resolved);
+      if (normalized) {
+        parts.push(normalized);
+      }
+    }
+
+    return this.joinPromptParts(parts);
+  }
+
+  private static resolveStringSwitchNode(workflow: any, inputs: any, visited: Set<string>): unknown {
+    const selectedRaw = inputs?.Input ?? inputs?.input ?? inputs?.select ?? inputs?.selected ?? 1;
+    const selected = typeof selectedRaw === 'number' ? selectedRaw : Number(selectedRaw);
+    const selectedKey = Number.isFinite(selected) ? `input${selected}` : undefined;
+
+    if (selectedKey && inputs[selectedKey] !== undefined) {
+      return this.resolveValue(workflow, inputs[selectedKey], new Set(visited));
+    }
+
+    const firstInputKey = Object.keys(inputs || {}).find((key) => /^input\d+$/i.test(key));
+    return firstInputKey ? this.resolveValue(workflow, inputs[firstInputKey], new Set(visited)) : undefined;
+  }
+
+  private static resolveRgthreeSamplerConfigNode(workflow: any, inputs: any, visited: Set<string>, outputIndex: number): unknown {
+    const outputKeyByIndex: Record<number, string> = {
+      0: 'steps_total',
+      1: 'refiner_step',
+      2: 'cfg',
+      3: 'sampler_name',
+      4: 'scheduler',
+    };
+    const key = outputKeyByIndex[outputIndex];
+
+    return key && inputs[key] !== undefined
+      ? this.resolveValue(workflow, inputs[key], new Set(visited))
+      : undefined;
+  }
+
+  private static parseSelectedSizeText(text: unknown): { width: number; height: number } | null {
+    if (typeof text !== 'string') {
+      return null;
+    }
+
+    const match = text.match(/\*(\d{2,5})x(\d{2,5})\*/i) || text.match(/(?:^|\n)(\d{2,5})x(\d{2,5})(?:\n|$)/i);
+    if (!match) {
+      return null;
+    }
+
+    const width = Number(match[1]);
+    const height = Number(match[2]);
+    return Number.isFinite(width) && Number.isFinite(height) ? { width, height } : null;
+  }
+
+  private static resolveJojrRandomSizeNode(inputs: any, outputIndex: number): unknown {
+    const size = this.parseSelectedSizeText(inputs?.display_text_widget);
+    if (!size) {
+      return undefined;
+    }
+
+    if (outputIndex === 0) {
+      return size.width;
+    }
+
+    if (outputIndex === 1) {
+      return size.height;
+    }
+
+    return undefined;
+  }
+
+  private static resolveKnownCustomNodeOutput(workflow: any, node: any, inputs: any, visited: Set<string>, outputIndex: number): unknown {
+    const classType = typeof node?.class_type === 'string' ? node.class_type : '';
+    const normalizedClassType = classType.toLowerCase();
+
+    if (classType === 'StringFunction|pysssss') {
+      return this.resolveStringFunctionNode(workflow, inputs, visited);
+    }
+
+    if (normalizedClassType.includes('string switch')) {
+      return this.resolveStringSwitchNode(workflow, inputs, visited);
+    }
+
+    if (classType === 'KSampler Config (rgthree)') {
+      return this.resolveRgthreeSamplerConfigNode(workflow, inputs, visited, outputIndex);
+    }
+
+    if (classType === 'JOJR_RandomSize') {
+      return this.resolveJojrRandomSizeNode(inputs, outputIndex);
+    }
+
+    if (classType === 'Seed (rgthree)' && outputIndex === 0 && inputs?.seed !== undefined) {
+      return this.resolveValue(workflow, inputs.seed, new Set(visited));
+    }
+
+    return undefined;
+  }
+
+  private static resolveScalarFromNode(workflow: any, node: any, visited: Set<string>, outputIndex = 0): unknown {
     if (!node || typeof node !== 'object') {
       return undefined;
     }
 
     const inputs = node.inputs || {};
-    const resultValue = inputs.result?.__value__;
-    if (Array.isArray(resultValue) && resultValue.length > 0) {
-      return resultValue[0];
+    const customValue = this.resolveKnownCustomNodeOutput(workflow, node, inputs, visited, outputIndex);
+    if (this.isPresentScalar(customValue)) {
+      return customValue;
     }
 
     for (const key of ['populated_text', 'text', 'wildcard_text', 'string', 'value', 'seed', 'number', 'int', 'float']) {
       if (inputs[key] !== undefined) {
-        const resolved = this.resolveValue(workflow, inputs[key], visited);
-        if (resolved !== undefined && resolved !== null && resolved !== '') {
+        const resolved = this.resolveValue(workflow, inputs[key], new Set(visited));
+        if (this.isPresentScalar(resolved)) {
           return resolved;
         }
       }
+    }
+
+    // Cached custom-node output is a last-resort fallback. It can be stale after API export.
+    const resultValue = inputs.result?.__value__;
+    if (Array.isArray(resultValue) && resultValue.length > 0) {
+      return resultValue[outputIndex] ?? resultValue[0];
     }
 
     return undefined;
@@ -287,12 +559,13 @@ export class ComfyUIParser {
       return undefined;
     }
 
-    visited.add(nodeId);
-    return this.resolveScalarFromNode(workflow, this.resolveLinkedNode(workflow, value), visited);
+    const nextVisited = new Set(visited);
+    nextVisited.add(nodeId);
+    return this.resolveScalarFromNode(workflow, this.resolveLinkedNode(workflow, value), nextVisited, this.getLinkOutputIndex(value));
   }
 
-  private static resolveTextValue(workflow: any, value: unknown): string | undefined {
-    const resolved = this.resolveValue(workflow, value);
+  private static resolveTextValue(workflow: any, value: unknown, visited = new Set<string>()): string | undefined {
+    const resolved = this.resolveValue(workflow, value, visited);
     if (typeof resolved === 'string') {
       const trimmed = resolved.trim();
       return trimmed.length > 0 ? trimmed : undefined;
@@ -301,8 +574,8 @@ export class ComfyUIParser {
     return undefined;
   }
 
-  private static resolveStringValue(workflow: any, value: unknown): string | undefined {
-    const resolved = this.resolveValue(workflow, value);
+  private static resolveStringValue(workflow: any, value: unknown, visited = new Set<string>()): string | undefined {
+    const resolved = this.resolveValue(workflow, value, visited);
     if (typeof resolved === 'string') {
       return resolved;
     }
@@ -314,8 +587,8 @@ export class ComfyUIParser {
     return undefined;
   }
 
-  private static resolveNumericValue(workflow: any, value: unknown): number | undefined {
-    const resolved = this.resolveValue(workflow, value);
+  private static resolveNumericValue(workflow: any, value: unknown, visited = new Set<string>()): number | undefined {
+    const resolved = this.resolveValue(workflow, value, visited);
     if (typeof resolved === 'number' && Number.isFinite(resolved)) {
       return resolved;
     }
@@ -328,28 +601,74 @@ export class ComfyUIParser {
     return undefined;
   }
 
-  private static resolvePromptFromConditioning(workflow: any, value: unknown): string | undefined {
+  private static collectPromptTextsFromConditioning(workflow: any, value: unknown, visited = new Set<string>()): string[] {
     if (typeof value === 'string') {
-      return value.trim() || undefined;
+      const trimmed = value.trim();
+      return trimmed ? [trimmed] : [];
     }
 
-    const node = this.resolveLinkedNode(workflow, value);
-    if (!node || typeof node !== 'object') {
-      return undefined;
+    if (!this.isNodeLink(value)) {
+      return [];
     }
+
+    const nodeId = String(value[0]);
+    if (visited.has(nodeId)) {
+      return [];
+    }
+
+    const node = workflow?.[nodeId];
+    if (!node || typeof node !== 'object') {
+      return [];
+    }
+
+    const nextVisited = new Set(visited);
+    nextVisited.add(nodeId);
 
     const inputs = node.inputs || {};
     if (node.class_type === 'CLIPTextEncode') {
-      return this.resolveTextValue(workflow, inputs.text);
+      const text = this.resolveTextValue(workflow, inputs.text);
+      return text ? [text] : [];
     }
 
     for (const key of ['populated_text', 'wildcard_text', 'text', 'prompt', 'positive', 'result']) {
       if (inputs[key] !== undefined) {
         const resolved = this.resolveTextValue(workflow, inputs[key]);
         if (resolved) {
-          return resolved;
+          return [resolved];
         }
       }
+    }
+
+    const preferredConditioningKeys = [
+      'conditioning',
+      'conditioning_1',
+      'conditioning_2',
+      'conditioning_to',
+      'conditioning_from',
+      'positive',
+      'negative',
+    ];
+    const candidateKeys = [
+      ...preferredConditioningKeys.filter((key) => Object.prototype.hasOwnProperty.call(inputs, key)),
+      ...Object.keys(inputs).filter((key) => !preferredConditioningKeys.includes(key) && this.shouldTraceSamplerInputKey(key)),
+    ];
+    const texts: string[] = [];
+
+    for (const key of candidateKeys) {
+      if (!this.isNodeLink(inputs[key])) {
+        continue;
+      }
+      texts.push(...this.collectPromptTextsFromConditioning(workflow, inputs[key], nextVisited));
+    }
+
+    return texts;
+  }
+
+  private static resolvePromptFromConditioning(workflow: any, value: unknown): string | undefined {
+    const texts = this.collectPromptTextsFromConditioning(workflow, value);
+    const uniqueTexts = Array.from(new Set(texts.map((text) => text.trim()).filter((text) => text.length > 0)));
+    if (uniqueTexts.length > 0) {
+      return uniqueTexts.join(', ');
     }
 
     return this.resolveTextValue(workflow, value);

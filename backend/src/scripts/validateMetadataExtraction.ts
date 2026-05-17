@@ -246,6 +246,186 @@ async function createComfyUiPngFixture(filePath: string): Promise<void> {
 }
 
 /**
+ * Create a ComfyUI PNG with an unrelated sampler branch and one saved branch.
+ */
+async function createComfyUiOutputTracePngFixture(filePath: string): Promise<void> {
+  const workflow = {
+    '1': {
+      class_type: 'CLIPTextEncode',
+      inputs: { text: 'stale side branch prompt' }
+    },
+    '2': {
+      class_type: 'CLIPTextEncode',
+      inputs: { text: 'stale side branch negative' }
+    },
+    '3': {
+      class_type: 'KSampler',
+      inputs: {
+        seed: 111,
+        steps: 9,
+        cfg: 3,
+        sampler_name: 'euler',
+        scheduler: 'normal',
+        positive: ['1', 0],
+        negative: ['2', 0],
+        latent_image: ['5', 0]
+      }
+    },
+    '5': {
+      class_type: 'EmptyLatentImage',
+      inputs: { width: 512, height: 512 }
+    },
+    '11': {
+      class_type: 'CLIPTextEncode',
+      inputs: { text: 'actual saved branch prompt, 1girl' }
+    },
+    '12': {
+      class_type: 'CLIPTextEncode',
+      inputs: { text: 'actual saved branch negative' }
+    },
+    '15': {
+      class_type: 'EmptyLatentImage',
+      inputs: { width: 896, height: 1344 }
+    },
+    '20': {
+      class_type: 'KSampler',
+      inputs: {
+        seed: 222,
+        steps: 31,
+        cfg: 7.5,
+        sampler_name: 'dpmpp_2m_sde',
+        scheduler: 'karras',
+        positive: ['11', 0],
+        negative: ['12', 0],
+        latent_image: ['15', 0]
+      }
+    },
+    '21': {
+      class_type: 'VAEDecode',
+      inputs: { samples: ['20', 0] }
+    },
+    '30': {
+      class_type: 'SaveImage',
+      inputs: { images: ['21', 0], filename_prefix: 'ComfyUI' }
+    }
+  };
+
+  const basePng = await sharp({
+    create: {
+      width: 896,
+      height: 1344,
+      channels: 3,
+      background: { r: 40, g: 80, b: 180 }
+    }
+  }).png().toBuffer();
+
+  fs.writeFileSync(filePath, insertTextChunk(basePng, 'prompt', JSON.stringify(workflow)));
+}
+
+/**
+ * Create a ComfyUI PNG whose saved branch uses custom nodes with stale cached outputs.
+ */
+async function createComfyUiCustomNodePngFixture(filePath: string): Promise<void> {
+  const workflow = {
+    '101': {
+      class_type: 'StringFunction|pysssss',
+      inputs: {
+        action: 'append',
+        tidy_tags: 'yes',
+        text_a: 'fresh positive base',
+        text_b: '',
+        text_c: 'fresh positive detail',
+        result: { __value__: ['stale positive cache'] }
+      }
+    },
+    '102': {
+      class_type: 'String Switch [RvTools]',
+      inputs: {
+        Input: 1,
+        input1: ['101', 0],
+        input2: 'wrong switch branch'
+      }
+    },
+    '103': {
+      class_type: 'CLIPTextEncode',
+      inputs: { text: ['102', 0] }
+    },
+    '111': {
+      class_type: 'StringFunction|pysssss',
+      inputs: {
+        action: 'append',
+        tidy_tags: 'yes',
+        text_a: 'fresh negative base',
+        text_b: '',
+        text_c: 'fresh negative detail',
+        result: { __value__: ['stale negative cache'] }
+      }
+    },
+    '112': {
+      class_type: 'CLIPTextEncode',
+      inputs: { text: ['111', 0] }
+    },
+    '120': {
+      class_type: 'Seed (rgthree)',
+      inputs: { seed: 987654321 }
+    },
+    '121': {
+      class_type: 'KSampler Config (rgthree)',
+      inputs: {
+        steps_total: 35,
+        refiner_step: 15,
+        cfg: 2.5,
+        sampler_name: 'euler_ancestral',
+        scheduler: 'sgm_uniform'
+      }
+    },
+    '122': {
+      class_type: 'EmptyLatentImage',
+      inputs: { width: ['123', 0], height: ['123', 1] }
+    },
+    '123': {
+      class_type: 'JOJR_RandomSize',
+      inputs: {
+        display_text_widget: 'Sizes in preset:\n512x1536\n*768x1024*\n1024x768'
+      }
+    },
+    '130': {
+      class_type: 'KSampler',
+      inputs: {
+        seed: ['120', 0],
+        steps: ['121', 0],
+        cfg: ['121', 2],
+        sampler_name: ['121', 3],
+        scheduler: ['121', 4],
+        denoise: 1,
+        positive: ['103', 0],
+        negative: ['112', 0],
+        latent_image: ['122', 0]
+      }
+    },
+    '131': {
+      class_type: 'VAEDecode',
+      inputs: { samples: ['130', 0] }
+    },
+    '140': {
+      class_type: 'SaveImage',
+      inputs: { images: ['131', 0], filename_prefix: 'ComfyUI' }
+    }
+  };
+
+  const basePng = await sharp({
+    create: {
+      width: 768,
+      height: 1024,
+      channels: 3,
+      background: { r: 20, g: 120, b: 160 }
+    }
+  }).png().toBuffer();
+
+  fs.writeFileSync(filePath, insertTextChunk(basePng, 'prompt', JSON.stringify(workflow)));
+}
+
+/**
  * Create a PNG fixture with NovelAI stealth metadata in alpha-channel LSBs.
  */
 async function createStealthPngFixture(filePath: string): Promise<void> {
@@ -291,6 +471,8 @@ async function main(): Promise<void> {
 
   const pngPath = path.join(fixtureDir, 'webui.png');
   const comfyUiPngPath = path.join(fixtureDir, 'comfyui.png');
+  const comfyUiOutputTracePngPath = path.join(fixtureDir, 'comfyui-output-trace.png');
+  const comfyUiCustomNodePngPath = path.join(fixtureDir, 'comfyui-custom-node.png');
   const stealthPngPath = path.join(fixtureDir, 'novelai-stealth.png');
   const jpegPath = path.join(fixtureDir, 'webui-exif.jpg');
   const stealthWebPPath = path.join(fixtureDir, 'novelai-stealth.webp');
@@ -303,6 +485,8 @@ async function main(): Promise<void> {
 
   await createWebUiPngFixture(pngPath);
   await createComfyUiPngFixture(comfyUiPngPath);
+  await createComfyUiOutputTracePngFixture(comfyUiOutputTracePngPath);
+  await createComfyUiCustomNodePngFixture(comfyUiCustomNodePngPath);
   await createStealthPngFixture(stealthPngPath);
   await createExifJpegFixture(jpegPath);
   await createStealthWebPFixture(stealthWebPPath);
@@ -371,6 +555,8 @@ async function main(): Promise<void> {
 
   const pngResult = await MetadataExtractor.extractMetadata(pngPath);
   const comfyUiPngResult = await MetadataExtractor.extractMetadata(comfyUiPngPath);
+  const comfyUiOutputTracePngResult = await MetadataExtractor.extractMetadata(comfyUiOutputTracePngPath);
+  const comfyUiCustomNodePngResult = await MetadataExtractor.extractMetadata(comfyUiCustomNodePngPath);
   const stealthPngResult = await MetadataExtractor.extractMetadata(stealthPngPath);
   const jpegResult = await MetadataExtractor.extractMetadata(jpegPath);
   const standardPngResult = await MetadataExtractor.extractMetadata(standardPngPath);
@@ -401,6 +587,32 @@ async function main(): Promise<void> {
     width: 1024,
     height: 1536,
     model: 'dreamshaper.safetensors'
+  });
+
+  assertMatch('ComfyUI output trace PNG', comfyUiOutputTracePngResult.ai_info, {
+    ai_tool: 'ComfyUI',
+    prompt: 'actual saved branch prompt, 1girl',
+    negative_prompt: 'actual saved branch negative',
+    steps: 31,
+    sampler: 'dpmpp_2m_sde',
+    scheduler: 'karras',
+    cfg_scale: 7.5,
+    seed: 222,
+    width: 896,
+    height: 1344
+  });
+
+  assertMatch('ComfyUI custom node PNG', comfyUiCustomNodePngResult.ai_info, {
+    ai_tool: 'ComfyUI',
+    prompt: 'fresh positive base, fresh positive detail',
+    negative_prompt: 'fresh negative base, fresh negative detail',
+    steps: 35,
+    sampler: 'euler_ancestral',
+    scheduler: 'sgm_uniform',
+    cfg_scale: 2.5,
+    seed: 987654321,
+    width: 768,
+    height: 1024
   });
 
   assertMatch('NovelAI stealth PNG', stealthPngResult.ai_info, {
@@ -485,6 +697,8 @@ async function main(): Promise<void> {
   console.log('✅ Metadata validation passed');
   console.log(`   PNG WebUI fixture: ${pngPath}`);
   console.log(`   PNG ComfyUI fixture: ${comfyUiPngPath}`);
+  console.log(`   PNG ComfyUI output-trace fixture: ${comfyUiOutputTracePngPath}`);
+  console.log(`   PNG ComfyUI custom-node fixture: ${comfyUiCustomNodePngPath}`);
   console.log(`   PNG stealth fixture: ${stealthPngPath}`);
   console.log(`   JPEG EXIF fixture: ${jpegPath}`);
   console.log(`   PNG standard-metadata fixture: ${standardPngPath}`);
