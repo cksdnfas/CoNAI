@@ -13,6 +13,11 @@ export interface KaloscopeResult {
 
 type AutoTagsRecord = Record<string, unknown>;
 
+function normalizeFailureMessage(value: unknown): string {
+  const text = typeof value === 'string' ? value : 'unknown';
+  return text.slice(0, 300);
+}
+
 export class AutoTagsComposeService {
   private static readonly legacyTaggerKeys = [
     'caption',
@@ -64,6 +69,11 @@ export class AutoTagsComposeService {
       return false;
     }
 
+    const status = (kaloscope as AutoTagsRecord).status;
+    if (status === 'success' || status === 'failed') {
+      return true;
+    }
+
     const artists = (kaloscope as AutoTagsRecord).artists ?? (kaloscope as AutoTagsRecord).artist;
     return !!(artists && typeof artists === 'object' && Object.keys(artists as Record<string, unknown>).length > 0);
   }
@@ -78,13 +88,42 @@ export class AutoTagsComposeService {
       character: taggerResult.character || {},
       model: taggerResult.model || 'unknown',
       thresholds: taggerResult.thresholds || { general: 0.35, character: 0.75 },
-      tagged_at: new Date().toISOString()
+      tagged_at: new Date().toISOString(),
+      status: 'success'
     };
 
     const merged: AutoTagsRecord = {
       ...parsed,
       version: 2,
       tagger: taggerPayload
+    };
+
+    for (const key of this.legacyTaggerKeys) {
+      delete merged[key];
+    }
+
+    return JSON.stringify(merged);
+  }
+
+  static mergeTaggerFailure(autoTagsJson: string | null | undefined, error?: string): string {
+    const parsed = this.parse(autoTagsJson);
+    const failedPayload = {
+      caption: '',
+      taglist: '',
+      rating: {},
+      general: {},
+      character: {},
+      model: 'unknown',
+      thresholds: { general: 0.35, character: 0.75 },
+      tagged_at: new Date().toISOString(),
+      status: 'failed',
+      error: normalizeFailureMessage(error),
+    };
+
+    const merged: AutoTagsRecord = {
+      ...parsed,
+      version: 2,
+      tagger: failedPayload,
     };
 
     for (const key of this.legacyTaggerKeys) {
@@ -102,13 +141,37 @@ export class AutoTagsComposeService {
       topk: kaloscopeResult.topk || 0,
       artists: kaloscopeResult.artists || {},
       taglist: kaloscopeResult.taglist || '',
-      tagged_at: kaloscopeResult.tagged_at || new Date().toISOString()
+      tagged_at: kaloscopeResult.tagged_at || new Date().toISOString(),
+      status: 'success'
     };
 
     const merged: AutoTagsRecord = {
       ...parsed,
       version: 2,
       kaloscope: kaloscopePayload
+    };
+
+    return JSON.stringify(merged);
+  }
+
+  static mergeKaloscopeFailure(autoTagsJson: string | null | undefined, error?: string, errorType?: string): string {
+    const parsed = this.parse(autoTagsJson);
+
+    const kaloscopePayload = {
+      model: 'kaloscope-onnx',
+      topk: 0,
+      artists: {},
+      taglist: '',
+      tagged_at: new Date().toISOString(),
+      status: 'failed',
+      error: normalizeFailureMessage(error),
+      error_type: normalizeFailureMessage(errorType),
+    };
+
+    const merged: AutoTagsRecord = {
+      ...parsed,
+      version: 2,
+      kaloscope: kaloscopePayload,
     };
 
     return JSON.stringify(merged);

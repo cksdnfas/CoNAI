@@ -279,7 +279,9 @@ export const up = async (db: Database.Database): Promise<void> => {
       bitrate INTEGER,
       rating_score INTEGER,
       first_seen_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      metadata_updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+      metadata_updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      postprocess_status TEXT NOT NULL DEFAULT 'ready',
+      postprocess_completed_at DATETIME DEFAULT NULL
     )
   `);
 
@@ -294,7 +296,9 @@ export const up = async (db: Database.Database): Promise<void> => {
     // Performance index for composite hash lookup (from migration 002)
     'CREATE INDEX IF NOT EXISTS idx_metadata_composite_lookup ON media_metadata(composite_hash, perceptual_hash, dhash, ahash)',
     // Thumbnail loading index for chronological queries (from migration 005)
-    'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen_desc ON media_metadata(first_seen_date DESC)'
+    'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen_desc ON media_metadata(first_seen_date DESC)',
+    // Hide media that is still in immediate post-processing
+    'CREATE INDEX IF NOT EXISTS idx_metadata_postprocess_status ON media_metadata(postprocess_status)'
   ];
 
   metadataIndexes.forEach(sql => {

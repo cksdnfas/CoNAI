@@ -9,7 +9,6 @@ import { sendRouteBadRequest } from '../routeValidation'
 import {
   ACTIVE_QUEUE_STATUSES,
   buildQueueRequesterUsernameMap,
-  filterQueueRecords,
   getRequesterAccountId,
   parsePositiveIntegerQuery,
   parseQueueDebugMeta,
@@ -53,48 +52,19 @@ export function createGenerationQueueReadRoutes() {
 
     }
 
-    const visibleRecords = filterQueueRecords(GenerationQueueModel.findAll(), {
-
+    const visibleStatusCounts = GenerationQueueModel.getStatusCounts({
       serviceType,
-
       workflowId,
-
     })
-
-    const visibleStatusCounts: Record<GenerationQueueJobStatus, number> = {
-
-      queued: 0,
-
-      dispatching: 0,
-
-      running: 0,
-
-      completed: 0,
-
-      failed: 0,
-
-      cancelled: 0,
-
-    }
-
-    for (const record of visibleRecords) {
-
-      visibleStatusCounts[record.status] += 1
-
-    }
+    const totalVisible = Object.values(visibleStatusCounts).reduce((sum, count) => sum + count, 0)
+    const activeVisible = ACTIVE_QUEUE_STATUSES.reduce((sum, status) => sum + visibleStatusCounts[status], 0)
 
     res.json({
-
       success: true,
-
       global: GenerationQueueModel.getStatusCounts(),
-
       visible: visibleStatusCounts,
-
-      total_visible: visibleRecords.length,
-
-      active_visible: visibleRecords.filter((record) => ACTIVE_QUEUE_STATUSES.includes(record.status)).length,
-
+      total_visible: totalVisible,
+      active_visible: activeVisible,
     })
 
   }))
@@ -145,50 +115,32 @@ export function createGenerationQueueReadRoutes() {
 
     const requesterAccountId = getRequesterAccountId(req)
 
-    const filteredRecords = filterQueueRecords(GenerationQueueModel.findAll(statuses), {
-
+    const filteredRecords = GenerationQueueModel.findAll({
+      statuses,
       serviceType,
-
       workflowId,
-
     })
 
     let records = filteredRecords
-
     if (mineOnly) {
-
       records = requesterAccountId === null
-
         ? []
-
         : records.filter((record) => record.requested_by_account_id === requesterAccountId)
-
     }
 
     const activeRelevantRecords = matchesActiveQueueStatusFilter(statuses)
-
       ? filteredRecords
-
-      : filterQueueRecords(GenerationQueueModel.findAll(ACTIVE_QUEUE_STATUSES), {
-
+      : GenerationQueueModel.findAll({
+        statuses: ACTIVE_QUEUE_STATUSES,
         serviceType,
-
         workflowId,
-
       })
-
     const hasActiveRelevantRecords = activeRelevantRecords.length > 0
-
     const completedRelevantRecords = hasActiveRelevantRecords
-
-      ? filterQueueRecords(GenerationQueueModel.findRecentCompleted(), {
-
+      ? GenerationQueueModel.findRecentCompleted({
         serviceType,
-
         workflowId,
-
       })
-
       : []
 
     const activeComfyServers = hasActiveRelevantRecords ? ComfyUIServerModel.findActiveServers() : []

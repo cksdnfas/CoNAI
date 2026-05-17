@@ -1,7 +1,7 @@
 import { ComfyUIServerModel } from '../../models/ComfyUIServer'
 import { getGenerationQueueServerCapacity, resolveGenerationQueueLaneMeta } from '../../services/generationQueueRouting'
 import { settingsService } from '../../services/settingsService'
-import type { GenerationQueueJobRecord } from '../../types/generationQueue'
+import type { GenerationQueueDurationSample, GenerationQueueJobRecord } from '../../types/generationQueue'
 
 export type QueuePositionScope = 'service' | 'server' | 'tag' | 'auto'
 export type QueuePositionEntry = { laneKey: string; position: number; scope: QueuePositionScope; serverId: number | null; serverTag: string | null; eligibleServerIds: number[] }
@@ -32,7 +32,7 @@ export function computeQueuePositions(records: GenerationQueueJobRecord[], activ
   return positions
 }
 
-function getJobDurationSeconds(record: GenerationQueueJobRecord) {
+function getJobDurationSeconds(record: GenerationQueueDurationSample) {
   if (!record.started_at || !record.completed_at) {
     return null
   }
@@ -71,7 +71,7 @@ function getMedianDurationSeconds(values: number[]) {
   return Math.round((left + right) / 2)
 }
 
-function getRecentCompletedDurations(records: GenerationQueueJobRecord[], predicate: (record: GenerationQueueJobRecord) => boolean) {
+function getRecentCompletedDurations(records: GenerationQueueDurationSample[], predicate: (record: GenerationQueueDurationSample) => boolean) {
   const filtered = records
     .filter(predicate)
     .sort((left, right) => String(right.completed_at ?? '').localeCompare(String(left.completed_at ?? '')))
@@ -90,7 +90,7 @@ function getRecentCompletedDurations(records: GenerationQueueJobRecord[], predic
   return durations
 }
 
-function resolveReferenceDurationSeconds(record: GenerationQueueJobRecord, completedRecords: GenerationQueueJobRecord[], queuePosition: QueuePositionEntry | undefined) {
+function resolveReferenceDurationSeconds(record: GenerationQueueJobRecord, completedRecords: GenerationQueueDurationSample[], queuePosition: QueuePositionEntry | undefined) {
   if (record.service_type === 'novelai' || record.service_type === 'codex') {
     return getMedianDurationSeconds(getRecentCompletedDurations(completedRecords, (candidate) => candidate.service_type === record.service_type))
   }
@@ -283,7 +283,7 @@ function estimateQueueEta(
 export function computeQueueEtas(
   activeRecords: GenerationQueueJobRecord[],
   queuePositions: Map<number, QueuePositionEntry>,
-  completedRecords: GenerationQueueJobRecord[],
+  completedRecords: GenerationQueueDurationSample[],
   activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>,
 ) {
   const etaById = new Map<number, QueueEtaEntry>()

@@ -5,6 +5,7 @@ import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import type { ImageSearchParamsInput } from '../../models/Image/ImageSearchHelpers';
 import { QueryCacheService } from '../../services/QueryCacheService';
 import { ImageSafetyService } from '../../services/imageSafetyService';
+import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import type { ImageFileRecord, ImageListResponse, ImageMetadataRecord } from '../../types/image';
 import { enrichCompactImageWithFileView, enrichImageWithFileView } from './utils';
 
@@ -166,6 +167,10 @@ function buildBatchThumbnailLookupResult(hash: string): BatchThumbnailLookupResu
 
     if (ImageSafetyService.isHidden(metadata.rating_score)) {
       return { success: false, error: 'Hidden by safety policy' };
+    }
+
+    if (!MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
+      return { success: false, error: 'Not found' };
     }
 
     const files = ImageFileModel.findActiveByHash(hash);

@@ -1,5 +1,6 @@
 import { db } from '../database/init';
 import { ImageSafetyService } from '../services/imageSafetyService';
+import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 import { PAGINATION } from '@conai/shared';
 
@@ -10,6 +11,10 @@ type FindChildGroups = (groupId: number) => GroupChildRecord[];
 
 function getVisibleGroupImageCondition() {
   return ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+}
+
+function getReadyGroupImageCondition() {
+  return MediaPostprocessVisibilityService.buildReadyCondition('im');
 }
 
 export function normalizeGroupImagePositiveInteger(
@@ -62,7 +67,7 @@ export function findImagesByGroupQuery(
     `SELECT COUNT(*) as total
      FROM image_groups ig
      LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-     ${whereClause} AND ${getVisibleGroupImageCondition()}`
+     ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}`
   ).get(...queryParams) as { total: number };
   const total = countRow.total;
 
@@ -90,7 +95,7 @@ export function findImagesByGroupQuery(
       ig.collection_type
     FROM image_groups ig
     LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-    ${whereClause} AND ${getVisibleGroupImageCondition()}
+    ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
     GROUP BY ig.composite_hash
     ORDER BY ig.order_index ASC, ig.added_date DESC
     LIMIT ? OFFSET ?
@@ -117,7 +122,7 @@ export function findImagesByGroupWithFilesQuery(
     `SELECT COUNT(*) as total
      FROM image_groups ig
      INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-     ${whereClause} AND ${getVisibleGroupImageCondition()}`
+     ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}`
   ).get(...queryParams) as { total: number };
   const total = countRow.total;
 
@@ -133,7 +138,7 @@ export function findImagesByGroupWithFilesQuery(
     INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
     LEFT JOIN image_files if ON if.composite_hash = im.composite_hash AND if.file_status = 'active'
     LEFT JOIN watched_folders wf ON if.folder_id = wf.id
-    ${whereClause} AND ${getVisibleGroupImageCondition()}
+    ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
     ORDER BY ig.order_index ASC, ig.added_date DESC
     LIMIT ? OFFSET ?
   `;
@@ -183,7 +188,7 @@ export function findRandomImageForGroupQuery(groupId: number): ImageMetadataReco
       im.metadata_updated_date
     FROM image_groups ig
     LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-    WHERE ig.group_id = ? AND ${getVisibleGroupImageCondition()}
+    WHERE ig.group_id = ? AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
     ORDER BY RANDOM()
     LIMIT 1
   `;
@@ -205,7 +210,7 @@ export function findPreviewImagesQuery(
       SELECT ig.composite_hash
       FROM image_groups ig
       LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-      WHERE ig.group_id = ? AND ${getVisibleGroupImageCondition()}
+      WHERE ig.group_id = ? AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
       GROUP BY ig.composite_hash
       ORDER BY RANDOM()
       LIMIT ?

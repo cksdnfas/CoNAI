@@ -1,5 +1,6 @@
 import { ImageMetadataRecord } from '../../types/image'
 import { ImageSafetyService } from '../../services/imageSafetyService'
+import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService'
 
 export type SimilarityCandidateRecord = ImageMetadataRecord & {
   file_id?: number;
@@ -28,6 +29,10 @@ const BASE_CANDIDATE_COLUMNS = [
   'if.file_status',
   'if.folder_id',
 ]
+
+function getReadySimilarityCondition(alias: string) {
+  return MediaPostprocessVisibilityService.buildReadyCondition(alias)
+}
 
 /** Select only fields needed for scoring/sorting; hydrate final rows after pruning. */
 function buildCandidateSelect(includeColorHistogram: boolean) {
@@ -62,6 +67,7 @@ ${buildCandidateSelect(false)}
     WHERE im.composite_hash != ?
       AND im.perceptual_hash IS NOT NULL
       AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
+      AND ${getReadySimilarityCondition('im')}
   `
   const params: any[] = [targetImage.composite_hash]
   const metadataBounds = includeMetadata ? getMetadataBounds(targetImage) : null
@@ -89,6 +95,7 @@ ${buildCandidateSelect(includeColorHistogram)}
     WHERE im.composite_hash != ?
       AND im.perceptual_hash IS NOT NULL
       AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
+      AND ${getReadySimilarityCondition('im')}
   `
   const params: any[] = [targetImage.composite_hash]
   const metadataBounds = useMetadataFilter ? getMetadataBounds(targetImage) : null
@@ -117,6 +124,7 @@ ${buildCandidateSelect(true)}
       WHERE im.composite_hash != ?
         AND im.color_histogram IS NOT NULL
         AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
+        AND ${getReadySimilarityCondition('im')}
     `,
     params: [compositeHash],
   }
@@ -131,6 +139,7 @@ export function buildDuplicateGroupMetadataQuery() {
     WHERE f.file_status = 'active'
       AND m.perceptual_hash IS NOT NULL
       AND ${ImageSafetyService.buildVisibleScoreCondition('m.rating_score')}
+      AND ${getReadySimilarityCondition('m')}
     ORDER BY m.composite_hash
   `
 }
@@ -152,6 +161,7 @@ export function buildDuplicateGroupFilesQuery(compositeHashes: string[]) {
       JOIN media_metadata im ON if.composite_hash = im.composite_hash
       WHERE if.composite_hash IN (${placeholders})
         AND if.file_status = 'active'
+        AND ${getReadySimilarityCondition('im')}
       ORDER BY if.composite_hash, if.id
     `,
     params: compositeHashes,

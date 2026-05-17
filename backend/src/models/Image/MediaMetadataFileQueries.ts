@@ -1,9 +1,14 @@
 import { db } from '../../database/init';
 import { ImageSafetyService } from '../../services/imageSafetyService';
+import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import type { FileType } from '../../types/image';
 
 function getVisibleMediaMetadataCondition() {
   return ImageSafetyService.buildVisibleScoreCondition('mm.rating_score');
+}
+
+function getReadyMediaMetadataCondition() {
+  return MediaPostprocessVisibilityService.buildReadyCondition('mm');
 }
 
 const ACTIVE_FILE_WITH_METADATA_SELECT = `
@@ -67,12 +72,13 @@ export class MediaMetadataFileQueries {
     const sortOrder = options.sortOrder || 'DESC';
     const offset = (page - 1) * limit;
     const visibleCondition = getVisibleMediaMetadataCondition();
+    const readyCondition = getReadyMediaMetadataCondition();
 
     const countRow = db.prepare(`
       SELECT COUNT(*) as total
       FROM image_files if
       LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
-      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition}
+      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}
     `).get() as { total: number };
 
     let orderByClause: string;
@@ -88,7 +94,7 @@ export class MediaMetadataFileQueries {
 
     const query = `
       ${ACTIVE_FILE_WITH_METADATA_SELECT}
-      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition}
+      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}
       ${orderByClause}
       LIMIT ? OFFSET ?
     `;
@@ -109,12 +115,13 @@ export class MediaMetadataFileQueries {
     const cursorDate = options.cursorDate;
     const cursorHash = options.cursorHash;
     const visibleCondition = getVisibleMediaMetadataCondition();
+    const readyCondition = getReadyMediaMetadataCondition();
 
     const countRow = db.prepare(`
       SELECT COUNT(*) as total
       FROM image_files if
       LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
-      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition}
+      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}
     `).get() as { total: number };
 
     let cursorCondition = '';
@@ -131,7 +138,7 @@ export class MediaMetadataFileQueries {
 
     const query = `
       ${ACTIVE_FILE_WITH_METADATA_SELECT}
-      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition}
+      WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}
       ${cursorCondition}
       ORDER BY mm.first_seen_date ${sortOrder}, mm.composite_hash ${sortOrder}
       LIMIT ?
@@ -151,11 +158,13 @@ export class MediaMetadataFileQueries {
   /** Load one active visible image by composite hash with metadata and file columns in a single query. */
   static findByHashWithFile(compositeHash: string): any | null {
     const visibleCondition = getVisibleMediaMetadataCondition();
+    const readyCondition = getReadyMediaMetadataCondition();
     const query = `
       ${ACTIVE_FILE_WITH_METADATA_SELECT}
       WHERE if.file_status = 'active'
         AND if.composite_hash = ?
         AND ${visibleCondition}
+        AND ${readyCondition}
       ORDER BY if.last_verified_date DESC, if.id DESC
       LIMIT 1
     `;
@@ -168,12 +177,14 @@ export class MediaMetadataFileQueries {
     if (compositeHashes.length === 0) return [];
 
     const visibleCondition = getVisibleMediaMetadataCondition();
+    const readyCondition = getReadyMediaMetadataCondition();
     const placeholders = compositeHashes.map(() => '?').join(',');
     const query = `
       ${ACTIVE_FILE_WITH_METADATA_SELECT}
       WHERE if.file_status = 'active'
         AND if.composite_hash IN (${placeholders})
         AND ${visibleCondition}
+        AND ${readyCondition}
     `;
 
     return db.prepare(query).all(...compositeHashes);
@@ -182,11 +193,12 @@ export class MediaMetadataFileQueries {
   /** Pick one random active media row for a specific file type without ORDER BY RANDOM(). */
   static getRandomByFileType(fileType: Extract<FileType, 'image' | 'video'>): any | null {
     const visibleCondition = getVisibleMediaMetadataCondition();
+    const readyCondition = getReadyMediaMetadataCondition();
     const countStmt = db.prepare(`
       SELECT COUNT(*) as total
       FROM image_files if
       LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
-      WHERE if.file_status = 'active' AND if.file_type = ? AND if.composite_hash IS NOT NULL AND ${visibleCondition}
+      WHERE if.file_status = 'active' AND if.file_type = ? AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}
     `);
     const countRow = countStmt.get(fileType) as { total: number };
 
@@ -240,7 +252,7 @@ export class MediaMetadataFileQueries {
         if.file_type
       FROM image_files if
       LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
-      WHERE if.file_status = 'active' AND if.file_type = ? AND if.composite_hash IS NOT NULL AND ${visibleCondition}
+      WHERE if.file_status = 'active' AND if.file_type = ? AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}
       LIMIT 1 OFFSET ?
     `);
 

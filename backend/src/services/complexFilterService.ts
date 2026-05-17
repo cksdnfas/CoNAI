@@ -6,6 +6,7 @@ FilterExecutionStats } from '@conai/shared';
 import { RatingScoreService } from './ratingScoreService';
 import { RatingWeights } from '../types/rating';
 import { ImageSafetyService } from './imageSafetyService';
+import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { buildComplexFilterAutoTagCondition } from './complexFilter/complexFilterAutoTagSql';
 import {
   AUTO_TAG_CHARACTER_JSON_PATHS,
@@ -53,6 +54,10 @@ function getVisibleImageCondition() {
   return ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
 }
 
+function getReadyImageCondition() {
+  return MediaPostprocessVisibilityService.buildReadyCondition('im');
+}
+
 export class ComplexFilterService {
 
   /**
@@ -76,7 +81,7 @@ export class ComplexFilterService {
     const basicScope = this.buildBasicScopeConditions(basicParams);
 
     const buildScopedWhere = (groupConditions: string[], operator: 'OR' | 'AND') => {
-      const scopedConditions = [...basicScope.conditions];
+      const scopedConditions = [getReadyImageCondition(), ...basicScope.conditions];
       if (groupConditions.length > 0) {
         scopedConditions.push(`(${groupConditions.join(` ${operator} `)})`);
       }
@@ -128,7 +133,7 @@ export class ComplexFilterService {
     // Build final query. Basic search scope must apply to the final selection too:
     // OR/AND CTEs narrow matching sets, while exclude-only and no-group searches
     // still need the requested ai_tool/model/date constraints.
-    const finalConditions: string[] = [getVisibleImageCondition(), ...basicScope.conditions];
+    const finalConditions: string[] = [getVisibleImageCondition(), getReadyImageCondition(), ...basicScope.conditions];
     const finalParams = [...basicScope.params];
 
     if (statsSources.orResults) {

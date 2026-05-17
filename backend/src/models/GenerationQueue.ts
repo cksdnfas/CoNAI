@@ -1,5 +1,6 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import type {
+  GenerationQueueDurationSample,
   GenerationQueueJobCreateData,
   GenerationQueueJobRecord,
   GenerationQueueJobStatus,
@@ -22,6 +23,72 @@ function toPersistedQueueUpdates(data: GenerationQueueJobUpdateData) {
     cancel_requested: data.cancel_requested === undefined ? undefined : (data.cancel_requested ? 1 : 0),
     updated_date: sqlLiteral('CURRENT_TIMESTAMP'),
   })
+}
+
+type GenerationQueueFilters = {
+  statuses?: GenerationQueueJobStatus[]
+  serviceType?: GenerationQueueJobRecord['service_type']
+  workflowId?: number
+}
+
+type GenerationQueueFindAllInput = GenerationQueueJobStatus[] | GenerationQueueFilters
+type GenerationQueueStatusCountFilters = Pick<GenerationQueueFilters, 'serviceType' | 'workflowId'>
+type GenerationQueueRecentCompletedFilters = GenerationQueueStatusCountFilters & { limit?: number }
+
+type QueueWhereOptions = {
+  includeStatuses?: boolean
+}
+
+function normalizeFindAllInput(input?: GenerationQueueFindAllInput): GenerationQueueFilters {
+  if (Array.isArray(input)) {
+    return { statuses: input }
+  }
+
+  return input ?? {}
+}
+
+function appendQueueFilterClauses(
+  clauses: string[],
+  values: Array<string | number>,
+  filters: GenerationQueueFilters,
+  options: QueueWhereOptions = {},
+) {
+  if (options.includeStatuses !== false && filters.statuses && filters.statuses.length > 0) {
+    clauses.push(`status IN (${filters.statuses.map(() => '?').join(', ')})`)
+    values.push(...filters.statuses)
+  }
+
+  if (filters.serviceType) {
+    clauses.push('service_type = ?')
+    values.push(filters.serviceType)
+  }
+
+  if (filters.workflowId !== undefined) {
+    clauses.push('workflow_id = ?')
+    values.push(filters.workflowId)
+  }
+}
+
+function buildQueueWhereClause(filters: GenerationQueueFilters, options: QueueWhereOptions = {}) {
+  const clauses: string[] = []
+  const values: Array<string | number> = []
+  appendQueueFilterClauses(clauses, values, filters, options)
+
+  return {
+    whereSql: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '',
+    values,
+  }
+}
+
+function emptyStatusCounts(): Record<GenerationQueueJobStatus, number> {
+  return {
+    queued: 0,
+    dispatching: 0,
+    running: 0,
+    completed: 0,
+    failed: 0,
+    cancelled: 0,
+  }
 }
 
 export class GenerationQueueModel {
@@ -74,12 +141,14 @@ export class GenerationQueueModel {
   }
 
   /** List queue jobs, newest queue entries last within status groups. */
-  static findAll(statuses?: GenerationQueueJobStatus[]) {
+  static findAll(input?: GenerationQueueFindAllInput) {
     const db = getUserSettingsDb()
-
-    if (!statuses || statuses.length === 0) {
-      return db.prepare(`
-        SELECT * FROM generation_queue_jobs
+    const filters = normalizeFindAllInput(input)
+    const { whereSql, values } = buildQueueWhereClause(filters)
+    const hasStatusFilter = Boolean(filters.statuses && filters.statuses.length > 0)
+    const orderSql = hasStatusFilter
+      ? 'ORDER BY priority ASC, queued_at ASC, id ASC'
+      : `
         ORDER BY
           CASE status
             WHEN 'running' THEN 0
@@ -90,15 +159,13 @@ export class GenerationQueueModel {
           priority ASC,
           queued_at ASC,
           id ASC
-      `).all() as GenerationQueueJobRecord[]
-    }
+      `
 
-    const placeholders = statuses.map(() => '?').join(', ')
     return db.prepare(`
       SELECT * FROM generation_queue_jobs
-      WHERE status IN (${placeholders})
-      ORDER BY priority ASC, queued_at ASC, id ASC
-    `).all(...statuses) as GenerationQueueJobRecord[]
+      ${whereSql}
+      ${orderSql}
+    `).all(...values) as GenerationQueueJobRecord[]
   }
 
   /** Check whether a queued ComfyUI job exists without hydrating queue rows. */
@@ -126,15 +193,26 @@ export class GenerationQueueModel {
     `).all() as GenerationQueueJobRecord[]
   }
 
-  /** List recent completed queue jobs for ETA sampling without scanning the whole history. */
-  static findRecentCompleted(limit = 240) {
+  /** List lean recent completed queue jobs for ETA sampling without scanning or hydrating whole history. */
+  static findRecentCompleted(input: number | GenerationQueueRecentCompletedFilters = 240) {
     const db = getUserSettingsDb()
+    const filters: GenerationQueueRecentCompletedFilters = typeof input === 'number'
+      ? { limit: input }
+      : input
+    const limit = Math.max(1, Math.floor(filters.limit ?? 240))
+    const clauses = ['status = ?']
+    const values: Array<string | number> = ['completed']
+    appendQueueFilterClauses(clauses, values, filters, { includeStatuses: false })
+
     return db.prepare(`
-      SELECT * FROM generation_queue_jobs
-      WHERE status = 'completed'
+      SELECT
+        id, service_type, workflow_id, requested_server_id,
+        assigned_server_id, started_at, completed_at
+      FROM generation_queue_jobs
+      WHERE ${clauses.join(' AND ')}
       ORDER BY completed_at DESC, id DESC
       LIMIT ?
-    `).all(Math.max(1, Math.floor(limit))) as GenerationQueueJobRecord[]
+    `).all(...values, limit) as GenerationQueueDurationSample[]
   }
 
   /** Update one queue job row. */
@@ -210,22 +288,17 @@ export class GenerationQueueModel {
   }
 
   /** Summarize queue totals by status. */
-  static getStatusCounts() {
+  static getStatusCounts(filters: GenerationQueueStatusCountFilters = {}) {
     const db = getUserSettingsDb()
+    const { whereSql, values } = buildQueueWhereClause(filters)
     const rows = db.prepare(`
       SELECT status, COUNT(*) as total
       FROM generation_queue_jobs
+      ${whereSql}
       GROUP BY status
-    `).all() as Array<{ status: GenerationQueueJobStatus; total: number }>
+    `).all(...values) as Array<{ status: GenerationQueueJobStatus; total: number }>
 
-    const counts: Record<GenerationQueueJobStatus, number> = {
-      queued: 0,
-      dispatching: 0,
-      running: 0,
-      completed: 0,
-      failed: 0,
-      cancelled: 0,
-    }
+    const counts = emptyStatusCounts()
 
     for (const row of rows) {
       counts[row.status] = row.total

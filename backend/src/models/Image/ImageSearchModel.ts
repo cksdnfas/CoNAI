@@ -9,6 +9,7 @@ import {
   type ImageSearchParamsInput,
 } from './ImageSearchHelpers';
 import { ImageSafetyService } from '../../services/imageSafetyService';
+import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 
 /**
  * 이미지 검색 모델 (새 구조 기반)
@@ -23,6 +24,10 @@ import { ImageSafetyService } from '../../services/imageSafetyService';
  */
 function getVisibleImageCondition() {
   return ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+}
+
+function getReadyImageCondition() {
+  return MediaPostprocessVisibilityService.buildReadyCondition('im');
 }
 
 export class ImageSearchModel {
@@ -48,7 +53,7 @@ export class ImageSearchModel {
       requireActiveFile: true,
     });
 
-    const safeConditions = [...conditions, getVisibleImageCondition()];
+    const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
     const offset = (page - 1) * limit;
 
@@ -124,7 +129,7 @@ export class ImageSearchModel {
       SELECT COUNT(*) as total
       FROM media_metadata im
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
-      WHERE im.composite_hash IS NOT NULL AND if.file_status = 'active'
+      WHERE im.composite_hash IS NOT NULL AND if.file_status = 'active' AND ${getReadyImageCondition()}
     `).get() as any;
     const total = countRow.total;
 
@@ -155,7 +160,7 @@ export class ImageSearchModel {
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
       LEFT JOIN groups g ON ig.group_id = g.id
-      WHERE im.composite_hash IS NOT NULL
+      WHERE im.composite_hash IS NOT NULL AND ${getReadyImageCondition()}
       GROUP BY im.composite_hash
       ORDER BY ${sortColumn} ${sortOrder}
       LIMIT ? OFFSET ?
@@ -200,7 +205,7 @@ export class ImageSearchModel {
         .replace(/\bi\.auto_tags\b/g, 'im.auto_tags');
     });
 
-    const safeConditions = [...conditions, getVisibleImageCondition()];
+    const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
     // 총 개수 조회
@@ -273,7 +278,7 @@ export class ImageSearchModel {
       requireActiveFile: true,
     });
 
-    const safeConditions = [...conditions, getVisibleImageCondition()];
+    const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
     const query = `
@@ -298,7 +303,7 @@ export class ImageSearchModel {
   ): Promise<string[]> {
     const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams);
 
-    const safeConditions = [...conditions, getVisibleImageCondition()];
+    const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
     const query = `
@@ -323,7 +328,7 @@ export class ImageSearchModel {
   ): Promise<any | null> {
     const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams);
 
-    const safeConditions = [...conditions, getVisibleImageCondition()];
+    const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
     // First get the count

@@ -15,6 +15,8 @@ import { FileDiscoveryService } from './folderScan/fileDiscoveryService';
 import { WatchedFolderService } from './watchedFolderService';
 import { checkFileAccess } from '../utils/fileAccess';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
+import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
+import { QueryCacheService } from './QueryCacheService';
 import { MetadataExtractionError } from '../types/errors';
 import type { FileType } from '../types/image';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
@@ -243,6 +245,10 @@ export class BackgroundProcessorService {
 
     if (record.composite_hash) {
       await this.processApiGenerationGroupAssignment(record.composite_hash);
+      const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(record.composite_hash);
+      if (releasedForVisibility) {
+        QueryCacheService.scheduleGalleryCacheInvalidation();
+      }
       this.triggerAutoTagProcessing(record.composite_hash, resolvedPath, options);
       return {
         fileId: record.id,
@@ -316,6 +322,10 @@ export class BackgroundProcessorService {
           `  ⚠️  Failed to queue metadata extraction retry for ${logLabel}:`,
           queueError instanceof Error ? queueError.message : queueError
         );
+        const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
+        if (releasedForVisibility) {
+          QueryCacheService.scheduleGalleryCacheInvalidation();
+        }
       }
     }
   }
@@ -490,6 +500,11 @@ export class BackgroundProcessorService {
           hashes.compositeHash,
           `duplicate backfill ${fileName}`,
         );
+      } else {
+        const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(hashes.compositeHash);
+        if (releasedForVisibility) {
+          QueryCacheService.scheduleGalleryCacheInvalidation();
+        }
       }
 
       await this.processApiGenerationGroupAssignment(hashes.compositeHash);
@@ -513,8 +528,9 @@ export class BackgroundProcessorService {
       `
       INSERT INTO media_metadata (
         composite_hash, perceptual_hash, dhash, ahash,
-        color_histogram, width, height, thumbnail_path
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        color_histogram, width, height, thumbnail_path,
+        postprocess_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     `
     ).run(
       hashes.compositeHash,
@@ -526,6 +542,8 @@ export class BackgroundProcessorService {
       imageInfo.height || null,
       thumbnailPath
     );
+
+    MediaPostprocessVisibilityService.markPending(hashes.compositeHash);
 
     // Update image_files record with composite_hash
     linkImageFileToHash(file.id, hashes.compositeHash);
@@ -580,6 +598,10 @@ export class BackgroundProcessorService {
       // Metadata already exists - just link file
       linkImageFileToHash(file.id, fileHash);
       await this.processApiGenerationGroupAssignment(fileHash);
+      const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(fileHash);
+      if (releasedForVisibility) {
+        QueryCacheService.scheduleGalleryCacheInvalidation();
+      }
       console.log(`  ♻️  Video/Animated already processed: ${fileName}`);
       return;
     }
@@ -616,8 +638,9 @@ export class BackgroundProcessorService {
     db.prepare(
       `
       INSERT INTO media_metadata (
-        composite_hash, duration, fps, width, height, video_codec, audio_codec, bitrate, first_seen_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        composite_hash, duration, fps, width, height, video_codec, audio_codec, bitrate, first_seen_date,
+        postprocess_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending')
     `
     ).run(fileHash, duration, fps, width, height, videoCodec, audioCodec, bitrate);
 
@@ -643,6 +666,11 @@ export class BackgroundProcessorService {
 
     // Process pending API generation group assignments
     await this.processApiGenerationGroupAssignment(fileHash);
+
+    const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(fileHash);
+    if (releasedForVisibility) {
+      QueryCacheService.scheduleGalleryCacheInvalidation();
+    }
 
     console.log(`  ✨ Processed video/animated: ${fileName} (${width}x${height})`);
   }

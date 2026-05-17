@@ -38,6 +38,17 @@ export interface GenerationQueueJobRecord {
   is_mine?: boolean
 }
 
+export type GenerationQueueDurationSample = Pick<
+  GenerationQueueJobRecord,
+  | 'id'
+  | 'service_type'
+  | 'workflow_id'
+  | 'requested_server_id'
+  | 'assigned_server_id'
+  | 'started_at'
+  | 'completed_at'
+>
+
 export interface GenerationQueueJobCreateData {
   service_type: ServiceType
   status?: GenerationQueueJobStatus

@@ -6,6 +6,7 @@ import { runtimePaths, resolveUploadsPath } from '../../config/runtimePaths';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { ImageSafetyService } from '../../services/imageSafetyService';
+import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
 import type { ImageFileRecord, ImageMetadataRecord } from '../../types/image';
 import {
@@ -45,6 +46,14 @@ export async function getVisibleMetadataOrBlock(res: Response, compositeHash: st
     res.status(403).json({
       success: false,
       error: 'This image is hidden by the current safety policy'
+    });
+    return null;
+  }
+
+  if (!MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
+    res.status(404).json({
+      success: false,
+      error: 'Metadata not found'
     });
     return null;
   }
@@ -238,7 +247,11 @@ export async function buildBatchDownloadArchive(
 
   for (const compositeHash of compositeHashes.slice(0, MAX_BATCH_DOWNLOAD_FILE_COUNT)) {
     const metadata = MediaMetadataModel.findByHash(compositeHash);
-    if (!metadata || (!options.includeHidden && ImageSafetyService.isHidden(metadata.rating_score))) {
+    if (
+      !metadata ||
+      !MediaPostprocessVisibilityService.isReadyRecord(metadata) ||
+      (!options.includeHidden && ImageSafetyService.isHidden(metadata.rating_score))
+    ) {
       continue;
     }
 

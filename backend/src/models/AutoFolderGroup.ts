@@ -1,5 +1,6 @@
 import { db } from '../database/init';
 import { ImageSafetyService } from '../services/imageSafetyService';
+import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
 import { AutoFolderGroup,
 CreateAutoFolderGroupData,
 AutoFolderGroupWithStats } from '@conai/shared';
@@ -11,6 +12,10 @@ import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
  */
 function getVisibleAutoFolderImageCondition() {
   return ImageSafetyService.buildVisibleScoreCondition('m.rating_score');
+}
+
+function getReadyAutoFolderImageCondition() {
+  return MediaPostprocessVisibilityService.buildReadyCondition('m');
 }
 
 export class AutoFolderGroupModel {
@@ -223,7 +228,7 @@ export class AutoFolderGroupImageModel {
         (SELECT original_file_path FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as original_file_path
         FROM auto_folder_group_images afgi
         INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
-        WHERE afgi.group_id = ?
+        WHERE afgi.group_id = ? AND ${getReadyAutoFolderImageCondition()}
         ORDER BY m.first_seen_date DESC
         LIMIT ? OFFSET ?
       `;
@@ -266,7 +271,7 @@ export class AutoFolderGroupImageModel {
       SELECT m.*
       FROM auto_folder_group_images afgi
       INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
-      WHERE afgi.group_id = ? AND ${getVisibleAutoFolderImageCondition()}
+      WHERE afgi.group_id = ? AND ${getVisibleAutoFolderImageCondition()} AND ${getReadyAutoFolderImageCondition()}
       ORDER BY RANDOM()
       LIMIT 1
     `;
@@ -330,7 +335,7 @@ export class AutoFolderGroupImageModel {
       LEFT JOIN image_files if ON afgi.composite_hash = if.composite_hash
         AND if.file_status = 'active'
       LEFT JOIN watched_folders f ON if.folder_id = f.id
-      WHERE afgi.group_id = ? AND ${getVisibleAutoFolderImageCondition()}
+      WHERE afgi.group_id = ? AND ${getVisibleAutoFolderImageCondition()} AND ${getReadyAutoFolderImageCondition()}
       ORDER BY RANDOM()
       LIMIT ?
     `;

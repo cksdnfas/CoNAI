@@ -32,6 +32,7 @@ export class QueryCacheService {
   private static galleryCache: InstanceType<typeof LRUCache>;
   private static metadataCache: InstanceType<typeof LRUCache>;
   private static thumbnailCache: InstanceType<typeof LRUCache>;
+  private static galleryInvalidationTimer: NodeJS.Timeout | null = null;
   private static stats = {
     gallery: { hits: 0, misses: 0 },
     metadata: { hits: 0, misses: 0 },
@@ -92,10 +93,38 @@ export class QueryCacheService {
 
   static invalidateGalleryCache(): void {
     try {
+      if (this.galleryInvalidationTimer) {
+        clearTimeout(this.galleryInvalidationTimer);
+        this.galleryInvalidationTimer = null;
+      }
+
+      if (!this.galleryCache) {
+        return;
+      }
+
       this.galleryCache.clear();
       logger.debug('🗑️ Gallery cache invalidated');
     } catch (error) {
       logger.warn('⚠️ Gallery cache invalidate error:', error instanceof Error ? error.message : error);
+    }
+  }
+
+  static scheduleGalleryCacheInvalidation(delayMs = 250): void {
+    try {
+      if (this.galleryInvalidationTimer) {
+        clearTimeout(this.galleryInvalidationTimer);
+      }
+
+      const normalizedDelayMs = Number.isFinite(delayMs)
+        ? Math.max(0, Math.floor(delayMs))
+        : 250;
+
+      this.galleryInvalidationTimer = setTimeout(() => {
+        this.galleryInvalidationTimer = null;
+        this.invalidateGalleryCache();
+      }, normalizedDelayMs);
+    } catch (error) {
+      logger.warn('⚠️ Gallery cache scheduled invalidate error:', error instanceof Error ? error.message : error);
     }
   }
 

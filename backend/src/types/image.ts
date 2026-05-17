@@ -76,6 +76,10 @@ export interface ImageMetadataRecord {
   // 타임스탬프
   first_seen_date: string;
   metadata_updated_date: string;
+
+  // Immediate post-processing visibility gate
+  postprocess_status?: 'pending' | 'ready';
+  postprocess_completed_at?: string | null;
 }
 
 /**

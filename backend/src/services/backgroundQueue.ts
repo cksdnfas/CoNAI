@@ -11,6 +11,7 @@ import { CivitaiService } from './civitaiService';
 import { ImageModel, ModelRole } from '../models/ImageModel';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { CivitaiSettings } from '../models/CivitaiSettings';
+import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import type { AIMetadata, ModelReference } from './metadata/types';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 
@@ -214,6 +215,10 @@ export class BackgroundQueueService {
             this.queue.push(task);
           } else {
             logger.error(`  ❌ 작업 최종 실패: ${task.id}`, result.reason);
+            if (task.type === TaskType.METADATA_EXTRACTION) {
+              MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(task.compositeHash);
+              QueryCacheService.scheduleGalleryCacheInvalidation();
+            }
           }
         }
       });
@@ -261,6 +266,10 @@ export class BackgroundQueueService {
       if (error instanceof MetadataExtractionError) {
         if (!error.retryable) {
           logger.debug(`  ⏭️  재시도 불필요한 오류: ${error.type} - ${error.message}`);
+          if (task.type === TaskType.METADATA_EXTRACTION) {
+            MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(task.compositeHash);
+            QueryCacheService.scheduleGalleryCacheInvalidation();
+          }
           return; // 재시도하지 않음 (성공으로 간주)
         }
         logger.error(`  ❌ 재시도 가능한 오류: ${error.type} - ${error.message}`);
@@ -289,6 +298,8 @@ export class BackgroundQueueService {
       if (error instanceof RangeError) {
         logger.error(`  ❌ RangeError during metadata update (skipping): ${path.basename(filePath)}`);
         // RangeError는 재시도해도 해결되지 않으므로 throw하지 않고 스킵
+        MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
+        QueryCacheService.scheduleGalleryCacheInvalidation();
         return;
       }
       throw error;
@@ -332,8 +343,13 @@ export class BackgroundQueueService {
       }
     }
 
+    const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
+    if (!releasedForVisibility) {
+      logger.debug(`  ⏳ Waiting for optional auto post-processing before gallery visibility: ${path.basename(filePath)}`);
+    }
+
     // 새 이미지가 추가되었으므로 갤러리 캐시 무효화
-    QueryCacheService.invalidateGalleryCache();
+    QueryCacheService.scheduleGalleryCacheInvalidation();
   }
 
   /**

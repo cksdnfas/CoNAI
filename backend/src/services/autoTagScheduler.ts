@@ -9,6 +9,8 @@ import { PromptCollectionService } from './promptCollectionService';
 import { AutoTagsComposeService } from './autoTagsComposeService';
 import { kaloscopeTaggerService } from './kaloscopeTaggerService';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
+import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
+import { QueryCacheService } from './QueryCacheService';
 import { RatingData } from '../types/autoTag';
 
 interface PendingAutoTagMedia {
@@ -47,7 +49,7 @@ class AutoTagScheduler {
   private getCapabilities(): AutoTagCapabilities {
     const settings = settingsService.loadSettings();
     return {
-      taggerAutoEnabled: settings.tagger.enabled,
+      taggerAutoEnabled: settings.tagger.enabled && settings.tagger.autoTagOnUpload,
       kaloscopeAutoEnabled: settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload,
     };
   }
@@ -56,10 +58,20 @@ class AutoTagScheduler {
     return capabilities.taggerAutoEnabled || capabilities.kaloscopeAutoEnabled;
   }
 
+  private releaseRowsWithoutRequiredWork(): void {
+    const releasedCount = MediaPostprocessVisibilityService.markReadyRowsWithoutPendingImmediateWork();
+    if (releasedCount > 0) {
+      QueryCacheService.scheduleGalleryCacheInvalidation();
+      console.log(`[AutoTagScheduler] Released ${releasedCount} media item(s) with no remaining auto post-processing requirement`);
+    }
+  }
+
   start(): boolean {
     if (this.isRunning) {
       return true;
     }
+
+    this.releaseRowsWithoutRequiredWork();
 
     const capabilities = this.getCapabilities();
     if (!this.hasEnabledProcessor(capabilities)) {
@@ -239,13 +251,15 @@ class AutoTagScheduler {
         ? await imageTaggerService.tagVideo(filePath)
         : await taggerDaemon.tagImage(filePath);
 
-      if (!taggerResult.success) {
-        throw new Error(taggerResult.error || 'Unknown tagging error');
+      if (taggerResult.success) {
+        autoTags = AutoTagsComposeService.mergeTagger(autoTags, taggerResult);
+        taggerTaglist = taggerResult.taglist || '';
+        ratingData = this.extractRatingData(taggerResult.rating);
+      } else {
+        const errorMessage = taggerResult.error || 'Unknown tagging error';
+        console.warn('[AutoTagScheduler] Tagger failed:', errorMessage);
+        autoTags = AutoTagsComposeService.mergeTaggerFailure(autoTags, errorMessage);
       }
-
-      autoTags = AutoTagsComposeService.mergeTagger(autoTags, taggerResult);
-      taggerTaglist = taggerResult.taglist || '';
-      ratingData = this.extractRatingData(taggerResult.rating);
     }
 
     if (needsKaloscope) {
@@ -257,6 +271,7 @@ class AutoTagScheduler {
         autoTags = AutoTagsComposeService.mergeKaloscope(autoTags, kaloscopeResult);
       } else {
         console.warn('[AutoTagScheduler] Kaloscope tagging failed:', kaloscopeResult.error || kaloscopeResult.error_type || 'unknown');
+        autoTags = AutoTagsComposeService.mergeKaloscopeFailure(autoTags, kaloscopeResult.error, kaloscopeResult.error_type);
       }
     }
 
@@ -286,9 +301,14 @@ class AutoTagScheduler {
   private persistAutoTags(compositeHash: string, autoTags: string, ratingScore: number | null): void {
     db.prepare(`
       UPDATE media_metadata
-      SET auto_tags = ?, rating_score = ?
+      SET auto_tags = ?, rating_score = ?, metadata_updated_date = CURRENT_TIMESTAMP
       WHERE composite_hash = ?
     `).run(autoTags, ratingScore, compositeHash);
+
+    const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
+    if (releasedForVisibility) {
+      QueryCacheService.scheduleGalleryCacheInvalidation();
+    }
   }
 
   private async collectAutoPrompts(taggerTaglist: string): Promise<void> {

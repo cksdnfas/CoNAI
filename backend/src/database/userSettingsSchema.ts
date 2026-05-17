@@ -728,6 +728,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_graph_workflow_schedules_status ON graph_workflow_schedules(status)',
     'CREATE INDEX IF NOT EXISTS idx_graph_workflow_schedules_next_run_at ON graph_workflow_schedules(next_run_at)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_status_priority ON generation_queue_jobs(status, priority ASC, queued_at ASC, id ASC)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_completed_recent ON generation_queue_jobs(status, completed_at DESC, id DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_completed_service_workflow_recent ON generation_queue_jobs(status, service_type, workflow_id, completed_at DESC, id DESC)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_service_type ON generation_queue_jobs(service_type)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requested_by_account_id ON generation_queue_jobs(requested_by_account_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_requested_server_id ON generation_queue_jobs(requested_server_id)',
