@@ -123,6 +123,7 @@ nul
 
 # Local/agent cleanup artifacts
 .sisyphus/
+.hermes/
 **/__pycache__/
 models/models--*/
 
