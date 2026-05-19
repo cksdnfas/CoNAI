@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAutoFolderGroupFileCounts } from '@/lib/api-auto-folder-groups'
 import {
@@ -109,16 +110,32 @@ export function useGroupPageQueries({
         has_children: true,
       }
     : null
-  const groupImages = (groupImagesQuery.data?.pages ?? []).flatMap((page) => page.images)
-  const selectedGroupImages = groupImages.filter((image) => selectedGroupImageIds.includes(String(image.composite_hash ?? image.id)))
-  const selectedGroupCompositeHashes = selectedGroupImages
-    .map((image) => image.composite_hash)
-    .filter((value): value is string => typeof value === 'string' && value.length > 0)
-  const selectedDownloadCounts = getDownloadCountsFromImages(selectedGroupImages)
+  const groupImages = useMemo(
+    () => (groupImagesQuery.data?.pages ?? []).flatMap((page) => page.images),
+    [groupImagesQuery.data?.pages],
+  )
+  const selectedGroupImageIdSet = useMemo(() => new Set(selectedGroupImageIds), [selectedGroupImageIds])
+  const selectedGroupImages = useMemo(
+    () => groupImages.filter((image) => selectedGroupImageIdSet.has(String(image.composite_hash ?? image.id))),
+    [groupImages, selectedGroupImageIdSet],
+  )
+  const selectedGroupCompositeHashes = useMemo(
+    () => selectedGroupImages
+      .map((image) => image.composite_hash)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0),
+    [selectedGroupImages],
+  )
+  const selectedDownloadCounts = useMemo(
+    () => getDownloadCountsFromImages(selectedGroupImages),
+    [selectedGroupImages],
+  )
   const activeDownloadCounts = downloadScope === 'selection'
     ? selectedDownloadCounts
     : groupFileCountsQuery.data ?? createEmptyGroupFileCounts()
-  const selectableDownloadCount = selectedGroupImages.filter((image) => image.original_file_path || image.thumbnail_url).length
+  const selectableDownloadCount = useMemo(
+    () => selectedGroupImages.filter((image) => image.original_file_path || image.thumbnail_url).length,
+    [selectedGroupImages],
+  )
 
   return {
     appearanceQuery,

@@ -12,6 +12,7 @@ const imageListSource = source('features/images/components/image-list/image-list
 const gridSource = source('features/images/components/image-list/image-list-grid.tsx')
 const masonrySource = source('features/images/components/image-list/image-list-masonry.tsx')
 const homePageDataSource = source('features/home/use-home-page-data.ts')
+const groupPageQueriesSource = source('features/groups/use-group-page-queries.ts')
 
 assert.match(
   imageListSource,
@@ -80,6 +81,22 @@ assert.doesNotMatch(
   homePageDataSource,
   /selectedIds\.includes\(String\(image\.composite_hash \?\? image\.id\)\)/,
   'Home page selected action hash derivation must not scan selectedIds per visible image',
+)
+
+assert.match(
+  groupPageQueriesSource,
+  /const selectedGroupImageIdSet = useMemo\(\(\) => new Set\(selectedGroupImageIds\), \[selectedGroupImageIds\]\)/,
+  'Group page should build one memoized selected image-id Set for selected download lookups',
+)
+assert.match(
+  groupPageQueriesSource,
+  /selectedGroupImageIdSet\.has\(String\(image\.composite_hash \?\? image\.id\)\)/,
+  'Group page selected image derivation should reuse the selected-id Set',
+)
+assert.doesNotMatch(
+  groupPageQueriesSource,
+  /selectedGroupImageIds\.includes\(String\(image\.composite_hash \?\? image\.id\)\)/,
+  'Group page selected image derivation must not scan selectedGroupImageIds per group image',
 )
 
 console.log('Image list selection contracts verified.')
