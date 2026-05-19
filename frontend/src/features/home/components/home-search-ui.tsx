@@ -3,10 +3,48 @@ import { Search } from 'lucide-react'
 import { useHomeSearch } from '@/features/home/home-search-context'
 import { useI18n } from '@/i18n'
 
-const HomeSearchDrawerContentLazy = lazy(async () => {
-  const module = await import('./home-search-drawer-content')
-  return { default: module.HomeSearchDrawerContent }
-})
+type HomeSearchDrawerContentModule = typeof import('./home-search-drawer-content')
+type HomeSearchDrawerContentComponent = HomeSearchDrawerContentModule['HomeSearchDrawerContent']
+type IdlePreloadWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
+
+let homeSearchDrawerContentLoadPromise: Promise<{ default: HomeSearchDrawerContentComponent }> | null = null
+
+function loadHomeSearchDrawerContent() {
+  homeSearchDrawerContentLoadPromise ??= import('./home-search-drawer-content')
+    .then((module) => ({ default: module.HomeSearchDrawerContent }))
+    .catch((error: unknown) => {
+      homeSearchDrawerContentLoadPromise = null
+      throw error
+    })
+
+  return homeSearchDrawerContentLoadPromise
+}
+
+function scheduleHomeSearchDrawerContentPreload() {
+  if (typeof window === 'undefined') {
+    return () => {}
+  }
+
+  const idleWindow = window as IdlePreloadWindow
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const idleHandle = idleWindow.requestIdleCallback(() => {
+      void loadHomeSearchDrawerContent()
+    }, { timeout: 2500 })
+
+    return () => idleWindow.cancelIdleCallback?.(idleHandle)
+  }
+
+  const timeoutHandle = window.setTimeout(() => {
+    void loadHomeSearchDrawerContent()
+  }, 1200)
+
+  return () => window.clearTimeout(timeoutHandle)
+}
+
+const HomeSearchDrawerContentLazy = lazy(loadHomeSearchDrawerContent)
 
 /** Render the header search control as a drawer toggle button. */
 export function HomeSearchHeaderBox({ active }: { active: boolean }) {
@@ -26,6 +64,7 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
           return
         }
 
+        void loadHomeSearchDrawerContent()
         openDrawer()
       }}
       data-state={isDrawerOpen ? 'open' : appliedChips.length > 0 ? 'active' : 'closed'}
@@ -53,6 +92,14 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
       setShouldMountDrawer(true)
     }
   }, [isDrawerOpen])
+
+  useEffect(() => {
+    if (!active) {
+      return
+    }
+
+    return scheduleHomeSearchDrawerContentPreload()
+  }, [active])
 
   if (!active || !shouldMountDrawer) {
     return null

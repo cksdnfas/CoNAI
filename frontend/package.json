@@ -31,7 +31,8 @@
     "verify:image-detail-filter-preview-contracts": "tsx src/scripts/verifyImageDetailFilterPreviewContracts.ts",
     "verify:image-download-contracts": "tsx src/scripts/verifyImageDownloadContracts.ts",
     "verify:data-rematch-ui-contracts": "tsx src/scripts/verifyDataRematchUiContracts.ts",
-    "verify:image-modal-layout-contracts": "tsx src/scripts/verifyImageModalLayoutContracts.ts"
+    "verify:image-modal-layout-contracts": "tsx src/scripts/verifyImageModalLayoutContracts.ts",
+    "verify:home-search-drawer-contracts": "tsx src/scripts/verifyHomeSearchDrawerContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",

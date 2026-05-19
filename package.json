@@ -91,6 +91,7 @@
     "verify:image-detail-filter-preview-contracts": "cd frontend && npm run verify:image-detail-filter-preview-contracts",
     "verify:image-download-contracts": "cd frontend && npm run verify:image-download-contracts",
     "verify:image-modal-layout-contracts": "cd frontend && npm run verify:image-modal-layout-contracts",
+    "verify:home-search-drawer-contracts": "cd frontend && npm run verify:home-search-drawer-contracts",
     "verify:image-file-route-contracts": "cd backend && npm run verify:image-file-route-contracts",
     "verify:backup-source-contracts": "cd backend && npm run verify:backup-source-contracts",
     "verify:like-search-literal-contracts": "cd backend && npm run verify:like-search-literal-contracts",
