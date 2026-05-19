@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { searchPromptCollection } from '@/lib/api-prompts'
 import { getRatingTiers, getSearchLoraSuggestions, getSearchModelSuggestions } from '@/lib/api-search'
+import { isPromptSuggestionScope, shouldEnableSearchSuggestionQuery } from './search-suggestion-query-policy'
 import type { SearchScope } from './search-types'
 
 /** Load shared prompt, rating, model, and LoRA suggestions for the reusable search UI. */
@@ -11,14 +12,13 @@ export function useSearchSuggestionData(searchScope: SearchScope, searchInput: s
   const ratingTiersQuery = useQuery({
     queryKey: ['rating-tiers'],
     queryFn: getRatingTiers,
+    enabled: shouldEnableSearchSuggestionQuery('rating', searchScope, normalizedInput),
   })
 
   const promptSuggestionsQuery = useQuery({
     queryKey: ['search-suggestions', searchScope, normalizedInput],
     queryFn: () => {
-      const promptType = searchScope === 'positive' || searchScope === 'negative' || searchScope === 'auto'
-        ? searchScope
-        : 'positive'
+      const promptType = isPromptSuggestionScope(searchScope) ? searchScope : 'positive'
 
       return searchPromptCollection({
         query: normalizedInput,
@@ -29,19 +29,19 @@ export function useSearchSuggestionData(searchScope: SearchScope, searchInput: s
         sortOrder: 'DESC',
       })
     },
-    enabled: (searchScope === 'positive' || searchScope === 'negative' || searchScope === 'auto') && normalizedInput.length > 0,
+    enabled: shouldEnableSearchSuggestionQuery('prompt', searchScope, normalizedInput),
   })
 
   const modelSuggestionsQuery = useQuery({
     queryKey: ['search-model-suggestions', normalizedInput],
     queryFn: () => getSearchModelSuggestions({ query: normalizedInput, limit: 16 }),
-    enabled: searchScope === 'model',
+    enabled: shouldEnableSearchSuggestionQuery('model', searchScope, normalizedInput),
   })
 
   const loraSuggestionsQuery = useQuery({
     queryKey: ['search-lora-suggestions', normalizedInput],
     queryFn: () => getSearchLoraSuggestions({ query: normalizedInput, limit: 16 }),
-    enabled: searchScope === 'lora',
+    enabled: shouldEnableSearchSuggestionQuery('lora', searchScope, normalizedInput),
   })
 
   const ratingTiers = useMemo(() => ratingTiersQuery.data ?? [], [ratingTiersQuery.data])
