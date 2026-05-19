@@ -13,6 +13,7 @@ const gridSource = source('features/images/components/image-list/image-list-grid
 const masonrySource = source('features/images/components/image-list/image-list-masonry.tsx')
 const homePageDataSource = source('features/home/use-home-page-data.ts')
 const groupPageQueriesSource = source('features/groups/use-group-page-queries.ts')
+const imageAttachmentPickerSource = source('features/image-generation/components/image-attachment-picker.tsx')
 
 assert.match(
   imageListSource,
@@ -97,6 +98,22 @@ assert.doesNotMatch(
   groupPageQueriesSource,
   /selectedGroupImageIds\.includes\(String\(image\.composite_hash \?\? image\.id\)\)/,
   'Group page selected image derivation must not scan selectedGroupImageIds per group image',
+)
+
+assert.match(
+  imageAttachmentPickerSource,
+  /const selectedImageAttachmentIdSet = useMemo\(\(\) => new Set\(selectedIds\), \[selectedIds\]\)/,
+  'Image attachment picker should build one memoized selected-id Set for overlay lookups',
+)
+assert.match(
+  imageAttachmentPickerSource,
+  /selectedImageAttachmentIdSet\.has\(getImageListItemId\(image\)\)/,
+  'Image attachment picker selected overlay should reuse Set.has per rendered image',
+)
+assert.doesNotMatch(
+  imageAttachmentPickerSource,
+  /selectedIds\.includes\(getImageListItemId\(image\)\)/,
+  'Image attachment picker overlay must not scan selectedIds per rendered image',
 )
 
 console.log('Image list selection contracts verified.')

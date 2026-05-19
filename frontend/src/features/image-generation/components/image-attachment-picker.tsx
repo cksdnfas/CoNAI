@@ -133,6 +133,7 @@ function ImageAttachmentBrowserSection({
   renderSelectedAction,
 }: ImageAttachmentBrowserSectionProps) {
   const { t } = useI18n()
+  const selectedImageAttachmentIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
 
   return (
     <div className="space-y-4">
@@ -166,7 +167,7 @@ function ImageAttachmentBrowserSection({
           minColumnWidth={180}
           gridItemHeight={220}
           renderItemOverlay={(image) => (
-            selectedIds.includes(getImageListItemId(image)) ? renderSelectedAction?.(image) ?? null : null
+            selectedImageAttachmentIdSet.has(getImageListItemId(image)) ? renderSelectedAction?.(image) ?? null : null
           )}
         />
       ) : (
