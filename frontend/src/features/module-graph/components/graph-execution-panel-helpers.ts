@@ -199,9 +199,13 @@ export function getExecutionInputEntries(plan: ParsedExecutionPlan | null, input
 }
 
 /** Resolve a human-readable node label from the selected workflow graph. */
-export function getNodeDisplayLabel(
-  selectedGraph: GraphWorkflowRecord | null | undefined,
+function buildNodeDisplayLabelMap(selectedGraph: GraphWorkflowRecord | null | undefined) {
+  return new Map((selectedGraph?.graph.nodes ?? []).map((node) => [node.id, node.label?.trim() ?? ''] as const))
+}
+
+function resolveNodeDisplayLabel(
   nodeId: string,
+  explicitLabel: string | undefined,
   nodeLabelOverrides?: Record<string, string> | null,
 ) {
   const overrideLabel = nodeLabelOverrides?.[nodeId]?.trim()
@@ -209,13 +213,20 @@ export function getNodeDisplayLabel(
     return overrideLabel
   }
 
-  const nodeRecord = selectedGraph?.graph.nodes.find((node) => node.id === nodeId)
-  const explicitLabel = nodeRecord?.label?.trim()
   if (explicitLabel) {
     return explicitLabel
   }
 
   return `노드 ${nodeId}`
+}
+
+export function getNodeDisplayLabel(
+  selectedGraph: GraphWorkflowRecord | null | undefined,
+  nodeId: string,
+  nodeLabelOverrides?: Record<string, string> | null,
+) {
+  const nodeRecord = selectedGraph?.graph.nodes.find((node) => node.id === nodeId)
+  return resolveNodeDisplayLabel(nodeId, nodeRecord?.label?.trim(), nodeLabelOverrides)
 }
 
 /** Group artifacts by node so the panel can render per-node outputs. */
@@ -225,6 +236,7 @@ export function groupArtifactsByNode(
   nodeLabelOverrides?: Record<string, string> | null,
 ) {
   const groupMap = new Map<string, GraphExecutionArtifactRecord[]>()
+  const nodeLabelMap = buildNodeDisplayLabelMap(selectedGraph)
 
   for (const artifact of artifacts) {
     const current = groupMap.get(artifact.node_id) ?? []
@@ -235,7 +247,7 @@ export function groupArtifactsByNode(
   return Array.from(groupMap.entries())
     .map(([nodeId, nodeArtifacts]) => ({
       nodeId,
-      nodeLabel: getNodeDisplayLabel(selectedGraph, nodeId, nodeLabelOverrides),
+      nodeLabel: resolveNodeDisplayLabel(nodeId, nodeLabelMap.get(nodeId), nodeLabelOverrides),
       artifacts: [...nodeArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime()),
     }))
     .sort((left, right) => {
@@ -256,9 +268,20 @@ function pickHighlightedArtifacts(artifacts: GraphExecutionArtifactRecord[]) {
     return visualArtifacts.slice(0, 4)
   }
 
-  const readableArtifacts = sortedArtifacts.filter((artifact) => artifact.port_key !== 'metadata')
-  const textArtifacts = readableArtifacts.filter((artifact) => artifact.port_key === 'text' || artifact.artifact_type === 'text' || artifact.artifact_type === 'prompt')
-  const structuredArtifacts = readableArtifacts.filter((artifact) => !textArtifacts.includes(artifact))
+  const textArtifacts: GraphExecutionArtifactRecord[] = []
+  const structuredArtifacts: GraphExecutionArtifactRecord[] = []
+
+  for (const artifact of sortedArtifacts) {
+    if (artifact.port_key === 'metadata') {
+      continue
+    }
+
+    if (artifact.port_key === 'text' || artifact.artifact_type === 'text' || artifact.artifact_type === 'prompt') {
+      textArtifacts.push(artifact)
+    } else {
+      structuredArtifacts.push(artifact)
+    }
+  }
 
   return [...textArtifacts, ...structuredArtifacts].slice(0, 4)
 }

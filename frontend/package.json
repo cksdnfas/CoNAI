@@ -11,6 +11,7 @@
     "verify:app-document-metadata-contracts": "tsx src/scripts/verifyAppDocumentMetadataContracts.ts",
     "verify:module-library-grouping": "tsx src/scripts/verifyModuleLibraryGrouping.ts",
     "verify:module-graph-execution-status-contracts": "tsx src/scripts/verifyModuleGraphExecutionStatusContracts.ts",
+    "verify:module-graph-execution-panel-contracts": "tsx src/scripts/verifyModuleGraphExecutionPanelContracts.ts",
     "verify:wallpaper-layout-contracts": "tsx src/scripts/verifyWallpaperLayoutContracts.ts",
     "verify:wallpaper-queue-status-contracts": "tsx src/scripts/verifyWallpaperQueueStatusContracts.ts",
     "verify:generation-queue-ui-contracts": "tsx src/scripts/verifyGenerationQueueUiContracts.ts",
