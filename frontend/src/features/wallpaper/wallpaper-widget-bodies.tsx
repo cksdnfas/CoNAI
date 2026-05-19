@@ -11,7 +11,7 @@ import type { WallpaperWidgetInstance } from './wallpaper-types'
 import type { WallpaperWidgetPreviewImage } from './wallpaper-widget-preview-surface'
 
 export type { WallpaperWidgetPreviewImage } from './wallpaper-widget-preview-surface'
-import { getWallpaperQueueAgeLabel } from './wallpaper-queue-status-utils'
+import { getWallpaperQueueAgeLabelFromAnchor, getWallpaperQueueExecutionSummary } from './wallpaper-queue-status-utils'
 import { useWallpaperBrowseContentQuery } from './wallpaper-widget-data'
 import {
   getWallpaperMotionStrengthMultiplier,
@@ -145,9 +145,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   const queueSummary = useMemo(() => {
     const executions = queueQuery.data?.executions ?? []
     return {
-      queued: executions.filter((item) => item.status === 'queued').length,
-      running: executions.filter((item) => item.status === 'running').length,
-      failed: executions.filter((item) => item.status === 'failed').length,
+      ...getWallpaperQueueExecutionSummary(executions),
       workflows: queueQuery.data?.scope.workflow_count ?? 0,
     }
   }, [queueQuery.data])
@@ -160,11 +158,10 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
     return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t('wallpaper.wallpaper.widget.bodies.workflow.status.failed.to.load')}</div>
   }
 
-  const executions = queueQuery.data?.executions ?? []
   const nowMs = Date.now()
   const queueItems = [
-    { id: 'queued', label: t('wallpaper.wallpaper.widget.bodies.queued'), value: queueSummary.queued, tone: 'var(--secondary)', short: 'Q', ageLabel: getWallpaperQueueAgeLabel(executions, 'queued', t, formatNumber, nowMs) },
-    { id: 'running', label: t('wallpaper.wallpaper.widget.bodies.running'), value: queueSummary.running, tone: '#3ddc97', short: 'R', ageLabel: getWallpaperQueueAgeLabel(executions, 'running', t, formatNumber, nowMs) },
+    { id: 'queued', label: t('wallpaper.wallpaper.widget.bodies.queued'), value: queueSummary.queued, tone: 'var(--secondary)', short: 'Q', ageLabel: getWallpaperQueueAgeLabelFromAnchor('queued', queueSummary.oldestQueuedAnchorMs, t, formatNumber, nowMs) },
+    { id: 'running', label: t('wallpaper.wallpaper.widget.bodies.running'), value: queueSummary.running, tone: '#3ddc97', short: 'R', ageLabel: getWallpaperQueueAgeLabelFromAnchor('running', queueSummary.oldestRunningAnchorMs, t, formatNumber, nowMs) },
     { id: 'failed', label: t('wallpaper.wallpaper.widget.bodies.failed'), value: queueSummary.failed, tone: '#ff6b6b', short: 'F', ageLabel: null },
     { id: 'workflow', label: t('wallpaper.wallpaper.widget.bodies.workflow'), value: queueSummary.workflows, tone: 'var(--primary)', short: 'W', ageLabel: null },
   ]
@@ -295,21 +292,13 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
       }
     }
 
-    const executions = browseContent.executions
-    const queued = executions.filter((item) => item.status === 'queued').length
-    const running = executions.filter((item) => item.status === 'running').length
-    const failed = executions.filter((item) => item.status === 'failed').length
-    const completed = executions.filter((item) => item.status === 'completed').length
+    const executionSummary = getWallpaperQueueExecutionSummary(browseContent.executions)
     const recentResults = browseContent.final_results.length
-    const latestExecution = [...executions].sort((left, right) => new Date(right.updated_date).getTime() - new Date(left.updated_date).getTime())[0]
 
     return {
-      queued,
-      running,
-      failed,
-      completed,
+      ...executionSummary,
       recentResults,
-      lastUpdated: latestExecution?.updated_date ?? null,
+      lastUpdated: executionSummary.latestUpdatedAt,
     }
   }, [activityQuery.data])
 

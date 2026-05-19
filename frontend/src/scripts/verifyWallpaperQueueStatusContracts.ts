@@ -1,6 +1,11 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { TranslationInput, TranslationParams } from '../i18n'
 import type { GraphExecutionRecord } from '../lib/api-module-graph'
-import { getWallpaperQueueAgeLabel } from '../features/wallpaper/wallpaper-queue-status-utils'
+import { getWallpaperQueueAgeLabel, getWallpaperQueueAgeLabelFromAnchor, getWallpaperQueueExecutionSummary } from '../features/wallpaper/wallpaper-queue-status-utils'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 function translate(input: TranslationInput, params?: TranslationParams) {
   const template = typeof input === 'string'
@@ -91,6 +96,43 @@ function assertQueueAgeLabels() {
   )
 }
 
+function assertQueueExecutionSummary() {
+  const executions = [
+    makeExecution({ status: 'queued', created_date: '2026-05-14T11:02:30.000Z', updated_date: '2026-05-14T11:02:40.000Z' }),
+    makeExecution({ status: 'queued', created_date: '2026-05-14T11:01:30.000Z', updated_date: '2026-05-14T11:01:40.000Z' }),
+    makeExecution({ status: 'running', started_at: '2026-05-14T10:59:00.000Z', updated_date: '2026-05-14T11:03:40.000Z' }),
+    makeExecution({ status: 'failed', updated_date: '2026-05-14T11:00:40.000Z' }),
+    makeExecution({ status: 'completed', updated_date: '2026-05-14T11:04:40.000Z' }),
+    makeExecution({ status: 'cancelled', updated_date: '2026-05-14T10:58:40.000Z' }),
+  ]
+  const summary = getWallpaperQueueExecutionSummary(executions)
+
+  assertEqual(summary.queued, 2, 'summary should count queued executions')
+  assertEqual(summary.running, 1, 'summary should count running executions')
+  assertEqual(summary.failed, 1, 'summary should count failed executions')
+  assertEqual(summary.completed, 1, 'summary should count completed executions')
+  assertEqual(summary.oldestQueuedAnchorMs, Date.parse('2026-05-14T11:01:30.000Z'), 'summary should retain the oldest queued anchor')
+  assertEqual(summary.oldestRunningAnchorMs, Date.parse('2026-05-14T10:59:00.000Z'), 'summary should retain the oldest running anchor')
+  assertEqual(summary.latestUpdatedAt, '2026-05-14T11:04:40.000Z', 'summary should retain the latest update timestamp')
+  assertEqual(
+    getWallpaperQueueAgeLabelFromAnchor('queued', summary.oldestQueuedAnchorMs, translate, formatNumber, Date.parse('2026-05-14T11:04:00.000Z')),
+    '최장 대기 2m',
+    'precomputed queue anchors should render age labels',
+  )
+}
+
+function assertQueueSummarySourcePolicy() {
+  const widgetBodiesSource = readFileSync(resolve(__dirname, '../features/wallpaper/wallpaper-widget-bodies.tsx'), 'utf8')
+  const queueStatusUtilsSource = readFileSync(resolve(__dirname, '../features/wallpaper/wallpaper-queue-status-utils.ts'), 'utf8')
+
+  assertEqual(widgetBodiesSource.includes('getWallpaperQueueExecutionSummary'), true, 'wallpaper widgets should use the shared execution summary helper')
+  assertEqual(widgetBodiesSource.includes('executions.filter((item) => item.status'), false, 'wallpaper widgets must not rescan executions for each status count')
+  assertEqual(widgetBodiesSource.includes('[...executions].sort'), false, 'wallpaper widgets must not clone and sort executions to find the latest update')
+  assertEqual(queueStatusUtilsSource.includes('for (const execution of executions)'), true, 'queue summary helper should keep execution aggregation single-pass')
+}
+
 assertQueueAgeLabels()
+assertQueueExecutionSummary()
+assertQueueSummarySourcePolicy()
 
 console.log('Wallpaper queue status contracts verified.')
