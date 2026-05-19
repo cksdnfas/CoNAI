@@ -11,6 +11,7 @@ function source(relativePath: string) {
 const imageListSource = source('features/images/components/image-list/image-list.tsx')
 const gridSource = source('features/images/components/image-list/image-list-grid.tsx')
 const masonrySource = source('features/images/components/image-list/image-list-masonry.tsx')
+const homePageDataSource = source('features/home/use-home-page-data.ts')
 
 assert.match(
   imageListSource,
@@ -63,6 +64,22 @@ assert.doesNotMatch(
   masonrySource,
   /selectedIds\.includes\(itemId\)/,
   'masonry rendering must not scan the selectedIds array per rendered card',
+)
+
+assert.match(
+  homePageDataSource,
+  /const selectedIdSet = useMemo\(\(\) => new Set\(selectedIds\), \[selectedIds\]\)/,
+  'Home page should build one memoized selected-id Set for selected action lookups',
+)
+assert.match(
+  homePageDataSource,
+  /selectedIdSet\.has\(String\(image\.composite_hash \?\? image\.id\)\)/,
+  'Home page selected action hashes should reuse the selected-id Set',
+)
+assert.doesNotMatch(
+  homePageDataSource,
+  /selectedIds\.includes\(String\(image\.composite_hash \?\? image\.id\)\)/,
+  'Home page selected action hash derivation must not scan selectedIds per visible image',
 )
 
 console.log('Image list selection contracts verified.')

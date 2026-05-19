@@ -113,13 +113,14 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     onLoadMore: imagesQuery.fetchNextPage,
   })
 
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const selectedCompositeHashes = useMemo(
     () =>
       visibleImages
-        .filter((image) => selectedIds.includes(String(image.composite_hash ?? image.id)))
+        .filter((image) => selectedIdSet.has(String(image.composite_hash ?? image.id)))
         .map((image) => image.composite_hash)
         .filter((value): value is string => typeof value === 'string' && value.length > 0),
-    [visibleImages, selectedIds],
+    [visibleImages, selectedIdSet],
   )
 
   const emptyStateTitle = isSearchMode ? t('useHomePageData.noSearchResults') : t('useHomePageData.noImagesToShowYet')
