@@ -117,6 +117,47 @@ function verifyImageNavigationButtonsUseProjectChrome() {
   )
 }
 
+function verifyModalOverlayLoadsOffClickPath() {
+  const providerSource = source('src/features/images/components/detail/image-view-modal-provider.tsx')
+  const openImageViewSource = sliceRequiredSource(
+    providerSource,
+    'const openImageView = useCallback((input: ImageViewModalOpenInput) => {',
+    '  const syncImageViewSequence = useCallback',
+  )
+  const preloadIndex = openImageViewSource.indexOf('void loadImageViewModalOverlay()')
+  const stateUpdateIndex = openImageViewSource.indexOf('setModalState((current) => {')
+
+  match(
+    providerSource,
+    /let imageViewModalOverlayLoadPromise: Promise<\{ default: ImageViewModalOverlayComponent \}> \| null = null/,
+    'modal overlay import should be cached so idle preload and React.lazy share the same chunk promise',
+  )
+  match(
+    providerSource,
+    /function loadImageViewModalOverlay\(\) \{[\s\S]*?import\('\.\/image-view-modal-overlay'\)[\s\S]*?imageViewModalOverlayLoadPromise = null[\s\S]*?return imageViewModalOverlayLoadPromise[\s\S]*?\}/,
+    'modal overlay import should be centralized and reset on load failure for retryable opens',
+  )
+  match(
+    providerSource,
+    /const ImageViewModalOverlayLazy = lazy\(loadImageViewModalOverlay\)/,
+    'React.lazy should consume the same modal overlay loader used by preload paths',
+  )
+  match(
+    providerSource,
+    /requestIdleCallback[\s\S]*?loadImageViewModalOverlay\(\)[\s\S]*?setTimeout[\s\S]*?loadImageViewModalOverlay\(\)/,
+    'image modal overlay chunk should be warmed during idle time with a timer fallback',
+  )
+  match(
+    providerSource,
+    /useEffect\(\(\) => scheduleImageViewModalOverlayPreload\(\), \[\]\)/,
+    'image modal provider should schedule the off-click overlay preload after mount',
+  )
+  ok(
+    preloadIndex >= 0 && preloadIndex < stateUpdateIndex,
+    'opening the image modal should start loading the overlay chunk before rendering lazy modal state',
+  )
+}
+
 function verifyModalKeyboardNavigationPreservesFormControls() {
   const providerSource = source('src/features/images/components/detail/image-view-modal-provider.tsx')
   const keyboardSource = sliceRequiredSource(
@@ -156,5 +197,6 @@ function verifyModalKeyboardNavigationPreservesFormControls() {
 verifyModalToolbarStaysSingleLine()
 verifyInfoToggleAvoidsImageNavigationControls()
 verifyImageNavigationButtonsUseProjectChrome()
+verifyModalOverlayLoadsOffClickPath()
 verifyModalKeyboardNavigationPreservesFormControls()
 console.log('Image modal layout contracts verified.')

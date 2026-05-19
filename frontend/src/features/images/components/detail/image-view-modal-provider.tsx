@@ -5,10 +5,48 @@ import type { ImageRecord } from '@/types/image'
 import { ImageViewModalContext, type ImageViewModalAccessOptions, type ImageViewModalOpenInput } from './image-view-modal-context'
 import { getImage } from '@/lib/api-images'
 
-const ImageViewModalOverlayLazy = lazy(async () => {
-  const module = await import('./image-view-modal-overlay')
-  return { default: module.ImageViewModalOverlay }
-})
+type ImageViewModalOverlayModule = typeof import('./image-view-modal-overlay')
+type ImageViewModalOverlayComponent = ImageViewModalOverlayModule['ImageViewModalOverlay']
+type IdlePreloadWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
+
+let imageViewModalOverlayLoadPromise: Promise<{ default: ImageViewModalOverlayComponent }> | null = null
+
+function loadImageViewModalOverlay() {
+  imageViewModalOverlayLoadPromise ??= import('./image-view-modal-overlay')
+    .then((module) => ({ default: module.ImageViewModalOverlay }))
+    .catch((error: unknown) => {
+      imageViewModalOverlayLoadPromise = null
+      throw error
+    })
+
+  return imageViewModalOverlayLoadPromise
+}
+
+function scheduleImageViewModalOverlayPreload() {
+  if (typeof window === 'undefined') {
+    return () => {}
+  }
+
+  const idleWindow = window as IdlePreloadWindow
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const idleHandle = idleWindow.requestIdleCallback(() => {
+      void loadImageViewModalOverlay()
+    }, { timeout: 2500 })
+
+    return () => idleWindow.cancelIdleCallback?.(idleHandle)
+  }
+
+  const timeoutHandle = window.setTimeout(() => {
+    void loadImageViewModalOverlay()
+  }, 1200)
+
+  return () => window.clearTimeout(timeoutHandle)
+}
+
+const ImageViewModalOverlayLazy = lazy(loadImageViewModalOverlay)
 
 interface ImageViewModalState {
   compositeHash: string | null
@@ -84,6 +122,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   const activeSourceItem = modalState.compositeHash ? modalState.sourceItemsByHash[modalState.compositeHash] : null
   const isModalOpen = Boolean(modalState.compositeHash)
 
+  useEffect(() => scheduleImageViewModalOverlayPreload(), [])
+
   useEffect(() => {
     if (!modalState.compositeHash || activeIndex < 0) {
       return
@@ -113,6 +153,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     const nextSourceItemsByHash = buildSourceItemsByHash(input.sourceItems)
     const activeInputImage = nextSourceItemsByHash[input.compositeHash]
 
+    void loadImageViewModalOverlay()
     warmImagePreviewSource(activeInputImage)
     void queryClient.prefetchQuery({
       queryKey: ['image-detail', input.compositeHash],
