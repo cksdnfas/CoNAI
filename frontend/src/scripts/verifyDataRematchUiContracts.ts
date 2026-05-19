@@ -17,6 +17,8 @@ assert.ok(generalTab.includes('confirmHashRegeneration'), 'hash confirmation mus
 assert.ok(generalTab.includes('자동 태그/작가 추출은 여기서 실행하지 않음'), 'hash warning must state no auto tag/artist extraction');
 assert.ok(generalTab.includes('이미지/GIF만 처리하고 비디오는 제외'), 'hash warning must state image/GIF-only scope');
 assert.ok(generalTab.includes('maintenanceLock'), 'maintenance lock status must be surfaced in UI');
+assert.ok(generalTab.includes("refetchInterval: (query) => query.state.data?.status === 'running' ? 2000 : false"), 'data rematch status polling must stop while idle');
+assert.equal(generalTab.includes('refetchInterval: 2000'), false, 'data rematch status polling must not run continuously while idle');
 
 assert.ok(apiSettings.includes("'/api/settings/data-rematch/status'"), 'status endpoint missing');
 assert.ok(apiSettings.includes("'/api/settings/data-rematch/jobs'"), 'start endpoint missing');

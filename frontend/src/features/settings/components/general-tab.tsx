@@ -58,7 +58,7 @@ export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtecti
   const dataRematchStatusQuery = useQuery({
     queryKey: ['data-rematch-status'],
     queryFn: getDataRematchStatus,
-    refetchInterval: 2000,
+    refetchInterval: (query) => query.state.data?.status === 'running' ? 2000 : false,
   })
 
   const dataRematchMutation = useMutation({
