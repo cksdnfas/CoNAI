@@ -42,6 +42,7 @@
     "db:reset": "rm -f database/*.db && cd backend && npm run db:migrate",
     "verify:no-banned-imports": "node scripts/verify-no-banned-imports.mjs --mode=phase1",
     "verify:no-banned-imports:phase2": "node scripts/verify-no-banned-imports.mjs --mode=phase2",
+    "verify:workspace-script-aliases": "node scripts/verify-workspace-script-aliases.mjs",
     "verify:user-db-smoke": "cd backend && npm run verify:user-db-smoke",
     "verify:builtin-system-modules": "cd backend && npm run verify:builtin-system-modules",
     "verify:queue-routing-smoke": "cd backend && npm run verify:queue-routing-smoke",
