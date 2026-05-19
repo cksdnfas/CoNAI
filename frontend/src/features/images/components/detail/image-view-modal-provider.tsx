@@ -51,12 +51,21 @@ const ImageViewModalOverlayLazy = lazy(loadImageViewModalOverlay)
 interface ImageViewModalState {
   compositeHash: string | null
   compositeHashes: string[]
+  compositeHashIndexByHash: Map<string, number>
   sourceId: string | null
   sourceItemsByHash: Record<string, ImageRecord>
   openSessionId: number
   stripFocusRequestId: number
   stripFocusBehavior: ScrollBehavior | null
   accessOptions: ImageViewModalAccessOptions
+}
+
+function buildCompositeHashIndexByHash(compositeHashes: string[]) {
+  return new Map(compositeHashes.map((compositeHash, index) => [compositeHash, index] as const))
+}
+
+function getModalActiveIndex(state: ImageViewModalState) {
+  return state.compositeHash ? (state.compositeHashIndexByHash.get(state.compositeHash) ?? -1) : -1
 }
 
 function warmImagePreviewSource(image?: ImageRecord | null) {
@@ -100,6 +109,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   const [modalState, setModalState] = useState<ImageViewModalState>({
     compositeHash: null,
     compositeHashes: [],
+    compositeHashIndexByHash: new Map(),
     sourceId: null,
     sourceItemsByHash: {},
     openSessionId: 0,
@@ -109,13 +119,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   })
 
 
-  const activeIndex = useMemo(() => {
-    if (!modalState.compositeHash) {
-      return -1
-    }
-
-    return modalState.compositeHashes.indexOf(modalState.compositeHash)
-  }, [modalState.compositeHash, modalState.compositeHashes])
+  const activeIndex = useMemo(() => getModalActiveIndex(modalState), [modalState.compositeHash, modalState.compositeHashIndexByHash])
 
   const canViewPrevious = activeIndex > 0
   const canViewNext = activeIndex >= 0 && activeIndex < modalState.compositeHashes.length - 1
@@ -146,10 +150,12 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
 
   /** Open the image view modal with an optional ordered navigation context. */
   const openImageView = useCallback((input: ImageViewModalOpenInput) => {
-    const compositeHashes = Array.from(new Set((input.compositeHashes ?? []).filter((value) => typeof value === 'string' && value.length > 0)))
-    const nextCompositeHashes = compositeHashes.includes(input.compositeHash)
+    const compositeHashSet = new Set((input.compositeHashes ?? []).filter((value) => typeof value === 'string' && value.length > 0))
+    const compositeHashes = Array.from(compositeHashSet)
+    const nextCompositeHashes = compositeHashSet.has(input.compositeHash)
       ? compositeHashes
       : [input.compositeHash, ...compositeHashes]
+    const nextCompositeHashIndexByHash = buildCompositeHashIndexByHash(nextCompositeHashes)
     const nextSourceItemsByHash = buildSourceItemsByHash(input.sourceItems)
     const activeInputImage = nextSourceItemsByHash[input.compositeHash]
 
@@ -173,6 +179,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       return {
         compositeHash: input.compositeHash,
         compositeHashes: nextCompositeHashes,
+        compositeHashIndexByHash: nextCompositeHashIndexByHash,
         sourceId: input.sourceId ?? current.sourceId ?? null,
         sourceItemsByHash: isFreshOpen || isSourceChanged
           ? nextSourceItemsByHash
@@ -192,7 +199,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       }
 
       const nextCompositeHashes = Array.from(new Set(input.compositeHashes.filter((value) => typeof value === 'string' && value.length > 0)))
-      if (!nextCompositeHashes.includes(current.compositeHash)) {
+      const nextCompositeHashIndexByHash = buildCompositeHashIndexByHash(nextCompositeHashes)
+      if (!nextCompositeHashIndexByHash.has(current.compositeHash)) {
         return current
       }
 
@@ -212,6 +220,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       return {
         ...current,
         compositeHashes: nextCompositeHashes,
+        compositeHashIndexByHash: nextCompositeHashIndexByHash,
         sourceItemsByHash: mergedSourceItemsByHash,
       }
     })
@@ -221,6 +230,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     setModalState((current) => ({
       compositeHash: null,
       compositeHashes: [],
+      compositeHashIndexByHash: new Map(),
       sourceId: null,
       sourceItemsByHash: {},
       openSessionId: current.openSessionId,
@@ -239,7 +249,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         return current
       }
 
-      const currentIndex = current.compositeHashes.indexOf(current.compositeHash)
+      const currentIndex = getModalActiveIndex(current)
       if (currentIndex <= 0) {
         return current
       }
@@ -260,7 +270,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         return current
       }
 
-      const currentIndex = current.compositeHashes.indexOf(current.compositeHash)
+      const currentIndex = getModalActiveIndex(current)
       if (currentIndex < 0 || currentIndex >= current.compositeHashes.length - 1) {
         return current
       }
