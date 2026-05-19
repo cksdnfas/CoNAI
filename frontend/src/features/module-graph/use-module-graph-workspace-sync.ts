@@ -9,6 +9,7 @@ import {
 import {
   buildNodeArtifactGroups,
   buildNodeArtifactPreview,
+  buildNodeOrderIndex,
   getNodeExecutionStatus,
   parseHandleId,
   type ModuleGraphEdge,
@@ -192,6 +193,8 @@ export function useModuleGraphWorkspaceSync({
       : { orderedNodeIds: [] }
 
     const orderedNodeIds = executionPlan.orderedNodeIds ?? []
+    const nodeOrderIndex = buildNodeOrderIndex(orderedNodeIds)
+    const orderedNodeIdSet = new Set(orderedNodeIds)
     const reusedNodeIds = new Set(executionPlan.reusedNodeIds ?? [])
     const artifactsByNode = executionDetail.artifacts.reduce<Record<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
       if (!acc[artifact.node_id]) {
@@ -228,11 +231,12 @@ export function useModuleGraphWorkspaceSync({
         const selectedExecutionStatus = getNodeExecutionStatus({
           nodeId: node.id,
           orderedNodeIds,
+          nodeOrderIndex,
           artifactNodeIds,
           executionStatus: executionDetail.execution.status,
           failedNodeId: executionDetail.execution.failed_node_id,
         })
-        const executionStatus = nodeArtifacts.length > 0 || orderedNodeIds.includes(node.id)
+        const executionStatus = nodeArtifacts.length > 0 || orderedNodeIdSet.has(node.id)
           ? selectedExecutionStatus
           : fallbackPreview
             ? 'completed'

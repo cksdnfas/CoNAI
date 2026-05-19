@@ -802,15 +802,21 @@ export function buildNodeArtifactGroups(
     })
 }
 
+/** Build per-node execution-order positions so large graphs avoid repeated array scans. */
+export function buildNodeOrderIndex(orderedNodeIds: string[]): ReadonlyMap<string, number> {
+  return new Map(orderedNodeIds.map((nodeId, index) => [nodeId, index]))
+}
+
 /** Resolve a compact node execution status from the selected execution detail. */
 export function getNodeExecutionStatus(params: {
   nodeId: string
   orderedNodeIds: string[]
+  nodeOrderIndex: ReadonlyMap<string, number>
   artifactNodeIds: Set<string>
   executionStatus: GraphExecutionStatus
   failedNodeId?: string | null
 }): 'idle' | 'completed' | 'failed' | 'blocked' {
-  const { nodeId, orderedNodeIds, artifactNodeIds, executionStatus, failedNodeId } = params
+  const { nodeId, orderedNodeIds, nodeOrderIndex, artifactNodeIds, executionStatus, failedNodeId } = params
 
   if (artifactNodeIds.has(nodeId)) {
     return 'completed'
@@ -825,8 +831,8 @@ export function getNodeExecutionStatus(params: {
       return 'failed'
     }
 
-    const failedIndex = orderedNodeIds.indexOf(failedNodeId)
-    const nodeIndex = orderedNodeIds.indexOf(nodeId)
+    const failedIndex = nodeOrderIndex.get(failedNodeId) ?? -1
+    const nodeIndex = nodeOrderIndex.get(nodeId) ?? -1
     return failedIndex !== -1 && nodeIndex > failedIndex ? 'blocked' : 'idle'
   }
 
@@ -839,9 +845,9 @@ export function getNodeExecutionStatus(params: {
     return 'failed'
   }
 
-  const failedIndex = orderedNodeIds.indexOf(firstMissingExecutedNode)
-  const nodeIndex = orderedNodeIds.indexOf(nodeId)
-  return nodeIndex > failedIndex ? 'blocked' : 'idle'
+  const failedIndex = nodeOrderIndex.get(firstMissingExecutedNode) ?? -1
+  const nodeIndex = nodeOrderIndex.get(nodeId) ?? -1
+  return failedIndex !== -1 && nodeIndex > failedIndex ? 'blocked' : 'idle'
 }
 
 /** Resolve one module port from a node/handle pair. */
