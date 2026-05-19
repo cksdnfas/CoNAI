@@ -119,9 +119,10 @@ export function PromptPage() {
 
   const items = useMemo(() => promptSearchQuery.data?.items ?? [], [promptSearchQuery.data?.items])
   const pagination = promptSearchQuery.data?.pagination
+  const selectedPromptIdSet = useMemo(() => new Set(selectedPromptIds), [selectedPromptIds])
   const selectedPromptItems = useMemo(
-    () => items.filter((item) => selectedPromptIds.includes(item.id)),
-    [items, selectedPromptIds],
+    () => items.filter((item) => selectedPromptIdSet.has(item.id)),
+    [items, selectedPromptIdSet],
   )
   const selectedLockedPromptCount = selectedPromptItems.filter((item) => isLockedPromptItem(item, promptGroups)).length
   const assignableGroups = useMemo(
@@ -475,7 +476,7 @@ export function PromptPage() {
 
               <PromptListPanel
                 items={items}
-                selectedPromptIds={selectedPromptIds}
+                selectedPromptIdSet={selectedPromptIdSet}
                 activePrompt={activePrompt}
                 isLoading={promptSearchQuery.isLoading}
                 isError={promptSearchQuery.isError}

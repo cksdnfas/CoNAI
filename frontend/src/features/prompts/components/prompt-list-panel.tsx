@@ -10,7 +10,7 @@ import { PromptListItem } from './prompt-list-item'
 
 interface PromptListPanelProps {
   items: PromptCollectionItem[]
-  selectedPromptIds: number[]
+  selectedPromptIdSet: ReadonlySet<number>
   isLoading: boolean
   isError: boolean
   errorMessage?: string | null
@@ -32,7 +32,7 @@ interface PromptListPanelProps {
 
 export function PromptListPanel({
   items,
-  selectedPromptIds,
+  selectedPromptIdSet,
   isLoading,
   isError,
   errorMessage,
@@ -101,7 +101,7 @@ export function PromptListPanel({
                 <PromptListItem
                   key={`${item.type}-${item.id}`}
                   item={item}
-                  selected={selectedPromptIds.includes(item.id)}
+                  selected={selectedPromptIdSet.has(item.id)}
                   active={activePrompt?.type === item.type && activePrompt?.prompt === item.prompt}
                   canAssign={!isLocked}
                   canDelete={canDeletePromptItem(item)}
