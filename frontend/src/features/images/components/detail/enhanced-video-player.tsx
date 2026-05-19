@@ -204,9 +204,7 @@ export function EnhancedVideoPlayer({
       const activePlayer = playerRef.current
       playerRef.current = null
       destroyPlyrSafely(activePlayer)
-      if (mediaMountRef.current === mountElement) {
-        mountElement.replaceChildren()
-      }
+      mountElement.replaceChildren()
     }
   }, [autoPlay, loop, preload, renderUrl, updateAvailableSize])
 

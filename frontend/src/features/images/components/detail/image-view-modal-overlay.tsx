@@ -1,12 +1,8 @@
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useI18n } from '@/i18n'
-import { useMinWidth } from '@/lib/use-min-width'
-import { cn } from '@/lib/utils'
 import { ImageDetailView } from '@/features/images/image-detail-view'
-import { ImageViewModalActions, type ImageViewModalMode } from './image-view-modal-actions'
-import { ImageViewMediumContent, ImageViewMinimalContent } from './image-view-modal-surfaces'
+import { ImageViewModalActions } from './image-view-modal-actions'
 import type { ImageRecord } from '@/types/image'
 import type { ImageViewModalAccessOptions } from './image-view-modal-context'
 
@@ -16,8 +12,6 @@ interface ImageViewModalOverlayProps {
   activeIndex: number
   totalCount: number
   openSessionId: number
-  viewMode: ImageViewModalMode
-  onChangeViewMode: (mode: ImageViewModalMode) => void
   canViewPrevious: boolean
   canViewNext: boolean
   accessOptions: ImageViewModalAccessOptions
@@ -33,8 +27,6 @@ export function ImageViewModalOverlay({
   activeIndex,
   totalCount,
   openSessionId,
-  viewMode,
-  onChangeViewMode,
   canViewPrevious,
   canViewNext,
   accessOptions,
@@ -44,200 +36,51 @@ export function ImageViewModalOverlay({
 }: ImageViewModalOverlayProps) {
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const mobileActionsRef = useRef<HTMLDivElement | null>(null)
-  const isDesktopModalLayout = useMinWidth(1280)
-  const [mobileActionsHeight, setMobileActionsHeight] = useState(0)
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const containerElement = containerRef.current
-    if (!containerElement || viewMode === 'minimal') {
+    if (!containerElement) {
       return
     }
 
-    containerElement.scrollTop = 0
-    containerElement.scrollLeft = 0
     containerElement.focus({ preventScroll: true })
-  }, [compositeHash, openSessionId, viewMode])
-
-  useEffect(() => {
-    const containerElement = containerRef.current
-    if (!containerElement || viewMode === 'minimal') {
-      return
-    }
-
-    const resetScroll = () => {
-      containerElement.scrollTop = 0
-      containerElement.scrollLeft = 0
-    }
-
-    resetScroll()
-    const frameId = window.requestAnimationFrame(resetScroll)
-    const timeoutId = window.setTimeout(resetScroll, 180)
-
-    return () => {
-      window.cancelAnimationFrame(frameId)
-      window.clearTimeout(timeoutId)
-    }
-  }, [compositeHash, openSessionId, viewMode, mobileActionsHeight])
-
-  useEffect(() => {
-    if (isDesktopModalLayout || viewMode === 'minimal') {
-      setMobileActionsHeight(0)
-      return
-    }
-
-    const mobileActionsElement = mobileActionsRef.current
-    if (!mobileActionsElement) {
-      setMobileActionsHeight(0)
-      return
-    }
-
-    const updateMobileActionsHeight = () => {
-      setMobileActionsHeight(mobileActionsElement.getBoundingClientRect().height)
-    }
-
-    updateMobileActionsHeight()
-
-    const resizeObserver = new ResizeObserver(() => {
-      updateMobileActionsHeight()
-    })
-    resizeObserver.observe(mobileActionsElement)
-    window.addEventListener('resize', updateMobileActionsHeight)
-
-    return () => {
-      resizeObserver.disconnect()
-      window.removeEventListener('resize', updateMobileActionsHeight)
-    }
-  }, [isDesktopModalLayout, compositeHash, viewMode])
+  }, [compositeHash, openSessionId])
 
   return createPortal(
-    <div className={cn('fixed inset-0 z-[90] bg-black/76 backdrop-blur-[2px]', viewMode === 'minimal' ? 'p-0' : 'p-4 md:p-5')} onMouseDown={onClose}>
-      {canViewPrevious ? (
-        <button
-          type="button"
-          className={cn(
-            'absolute left-0 top-1/2 z-[91] hidden -translate-y-1/2 items-center justify-start text-white/72 transition hover:text-white xl:flex',
-            viewMode === 'minimal'
-              ? 'h-48 w-20 bg-gradient-to-r from-black/46 via-black/16 to-transparent pl-4'
-              : 'h-40 w-16 bg-gradient-to-r from-black/34 via-black/12 to-transparent pl-3',
-          )}
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={onViewPrevious}
-          aria-label={t('images.components.detail.image.view.modal.overlay.previous.images')}
-        >
-          <span className={cn(
-            'flex items-center justify-center rounded-full border border-white/18 bg-black/20 backdrop-blur-sm',
-            viewMode === 'minimal' ? 'h-14 w-14' : 'h-12 w-12',
-          )}>
-            <ChevronLeft className={viewMode === 'minimal' ? 'h-7 w-7' : 'h-6 w-6'} />
-          </span>
-        </button>
-      ) : null}
-
-      {canViewNext ? (
-        <button
-          type="button"
-          className={cn(
-            'absolute right-0 top-1/2 z-[91] hidden -translate-y-1/2 items-center justify-end text-white/72 transition hover:text-white xl:flex',
-            viewMode === 'minimal'
-              ? 'h-48 w-20 bg-gradient-to-l from-black/46 via-black/16 to-transparent pr-4'
-              : 'h-40 w-16 bg-gradient-to-l from-black/34 via-black/12 to-transparent pr-3',
-          )}
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={onViewNext}
-          aria-label={t('images.components.detail.image.view.modal.overlay.next.images')}
-        >
-          <span className={cn(
-            'flex items-center justify-center rounded-full border border-white/18 bg-black/20 backdrop-blur-sm',
-            viewMode === 'minimal' ? 'h-14 w-14' : 'h-12 w-12',
-          )}>
-            <ChevronRight className={viewMode === 'minimal' ? 'h-7 w-7' : 'h-6 w-6'} />
-          </span>
-        </button>
-      ) : null}
-
-      {viewMode === 'minimal' ? (
-        <ImageViewMinimalContent
+    <div className="fixed inset-0 z-[90] bg-black" onMouseDown={onClose}>
+      <div
+        ref={containerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('images.components.detail.image.view.modal.overlay.view.image')}
+        tabIndex={-1}
+        className="h-[100dvh] w-[100vw] overflow-hidden bg-background outline-none"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <ImageDetailView
           compositeHash={compositeHash}
+          presentation="modal"
           initialImage={initialImage}
-          activeIndex={activeIndex}
-          totalCount={totalCount}
-          viewMode={viewMode}
-          onChangeViewMode={onChangeViewMode}
-          canViewPrevious={canViewPrevious}
-          canViewNext={canViewNext}
-          onClose={onClose}
-          onViewPrevious={onViewPrevious}
-          onViewNext={onViewNext}
+          modalNavigation={{
+            activeIndex,
+            totalCount,
+            canViewPrevious,
+            canViewNext,
+            onViewPrevious,
+            onViewNext,
+          }}
+          renderHeader={(controls) => (
+            <ImageViewModalActions
+              compositeHash={compositeHash}
+              activeIndex={activeIndex}
+              totalCount={totalCount}
+              controls={controls}
+              accessOptions={accessOptions}
+              onClose={onClose}
+            />
+          )}
         />
-      ) : (
-        <div
-          ref={containerRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label={t('images.components.detail.image.view.modal.overlay.view.image')}
-          tabIndex={-1}
-          className="scrollbar-stable-pane mx-auto max-h-full w-full max-w-[1680px] overflow-y-auto rounded-sm border border-border/85 bg-background/96 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] outline-none md:p-5 xl:flex xl:h-[calc(100vh-3rem)] xl:flex-col xl:overflow-hidden xl:pb-5"
-          style={
-            isDesktopModalLayout
-              ? { overflowAnchor: 'none' }
-              : {
-                  paddingBottom: `calc(env(safe-area-inset-bottom) + ${Math.ceil(mobileActionsHeight) + 16}px)`,
-                  overflowAnchor: 'none',
-                }
-          }
-          onMouseDown={(event) => event.stopPropagation()}
-        >
-          <div className="xl:min-h-0 xl:flex-1">
-            {viewMode === 'full' ? (
-              <ImageDetailView
-                compositeHash={compositeHash}
-                presentation="modal"
-                initialImage={initialImage}
-                renderHeader={(controls) => (
-                  <ImageViewModalActions
-                    compositeHash={compositeHash}
-                    activeIndex={activeIndex}
-                    totalCount={totalCount}
-                    viewMode={viewMode}
-                    onChangeViewMode={onChangeViewMode}
-                    canViewPrevious={canViewPrevious}
-                    canViewNext={canViewNext}
-                    controls={controls}
-                    mobileActionsRef={mobileActionsRef}
-                    accessOptions={accessOptions}
-                    onClose={onClose}
-                    onViewPrevious={onViewPrevious}
-                    onViewNext={onViewNext}
-                  />
-                )}
-              />
-            ) : (
-              <ImageViewMediumContent
-                compositeHash={compositeHash}
-                initialImage={initialImage}
-                renderHeader={(controls) => (
-                  <ImageViewModalActions
-                    compositeHash={compositeHash}
-                    activeIndex={activeIndex}
-                    totalCount={totalCount}
-                    viewMode={viewMode}
-                    onChangeViewMode={onChangeViewMode}
-                    canViewPrevious={canViewPrevious}
-                    canViewNext={canViewNext}
-                    controls={controls}
-                    mobileActionsRef={mobileActionsRef}
-                    accessOptions={accessOptions}
-                    onClose={onClose}
-                    onViewPrevious={onViewPrevious}
-                    onViewNext={onViewNext}
-                  />
-                )}
-              />
-            )}
-          </div>
-        </div>
-      )}
+      </div>
     </div>,
     document.body,
   )

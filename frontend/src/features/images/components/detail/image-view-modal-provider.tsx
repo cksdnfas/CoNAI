@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import type { ImageRecord } from '@/types/image'
 import { ImageViewModalContext, type ImageViewModalAccessOptions, type ImageViewModalOpenInput } from './image-view-modal-context'
-import type { ImageViewModalMode } from './image-view-modal-actions'
 import { getImage } from '@/lib/api-images'
 
 const ImageViewModalOverlayLazy = lazy(async () => {
@@ -20,25 +19,6 @@ interface ImageViewModalState {
   stripFocusRequestId: number
   stripFocusBehavior: ScrollBehavior | null
   accessOptions: ImageViewModalAccessOptions
-}
-
-const IMAGE_VIEW_MODAL_MODE_STORAGE_KEY = 'conai:image-view-modal:mode'
-
-function loadImageViewModalMode(): ImageViewModalMode {
-  if (typeof window === 'undefined') {
-    return 'full'
-  }
-
-  const savedValue = window.localStorage.getItem(IMAGE_VIEW_MODAL_MODE_STORAGE_KEY)
-  return savedValue === 'medium' || savedValue === 'minimal' ? savedValue : 'full'
-}
-
-function persistImageViewModalMode(mode: ImageViewModalMode) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.localStorage.setItem(IMAGE_VIEW_MODAL_MODE_STORAGE_KEY, mode)
 }
 
 function warmImagePreviewSource(image?: ImageRecord | null) {
@@ -80,7 +60,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     stripFocusBehavior: null,
     accessOptions: {},
   })
-  const [viewMode, setViewMode] = useState<ImageViewModalMode>(() => loadImageViewModalMode())
+
 
   const activeIndex = useMemo(() => {
     if (!modalState.compositeHash) {
@@ -201,11 +181,6 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   }, [])
 
   useOverlayBackClose({ open: isModalOpen, onClose: closeImageView })
-
-  const handleViewModeChange = useCallback((nextMode: ImageViewModalMode) => {
-    setViewMode(nextMode)
-    persistImageViewModalMode(nextMode)
-  }, [])
 
   /** Move to the previous image within the active modal navigation context. */
   const viewPreviousImage = useCallback(() => {
@@ -334,8 +309,6 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
             initialImage={activeSourceItem}
             activeIndex={activeIndex}
             totalCount={modalState.compositeHashes.length}
-            viewMode={viewMode}
-            onChangeViewMode={handleViewModeChange}
             openSessionId={modalState.openSessionId}
             canViewPrevious={canViewPrevious}
             canViewNext={canViewNext}

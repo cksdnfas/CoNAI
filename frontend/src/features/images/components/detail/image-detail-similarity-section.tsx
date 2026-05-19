@@ -1,11 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Image as ImageIcon, Type, type LucideIcon } from 'lucide-react'
+import { ScanSearch } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { updateSimilaritySettings } from '@/lib/api-settings'
 import { getErrorMessage } from '@/lib/error-message'
-import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import type { PromptSimilarImage, SimilarImage } from '@/types/similarity'
 import type { RelatedImageCardAspectRatio, SimilaritySettings } from '@/types/settings'
@@ -27,25 +26,19 @@ interface ImageDetailSimilaritySectionProps {
   similarImageItems: SimilarImage[]
   similarImagesLoading: boolean
   similarImagesError: unknown
+  similarImagesRequested?: boolean
+  onRequestSimilarImages?: () => void
   promptSimilarImageItems: PromptSimilarImage[]
   promptSimilarImages: ImageRecord[]
   promptSimilarImagesLoading: boolean
   promptSimilarImagesError: unknown
+  promptSimilarImagesRequested?: boolean
+  onRequestPromptSimilarImages?: () => void
   mobileCardColumns?: number
   desktopCardColumns?: number
   cardAspectRatio?: RelatedImageCardAspectRatio
+  hideEmptySections?: boolean
 }
-
-type SimilarImageTab = 'image' | 'text'
-
-
-const SIMILAR_IMAGE_TABS: SimilarImageTab[] = ['image', 'text']
-
-const SIMILAR_IMAGE_TAB_ICONS: Record<SimilarImageTab, LucideIcon> = {
-  image: ImageIcon,
-  text: Type,
-}
-
 
 /** Build the image-similarity draft from the current app settings when the flyout opens. */
 function buildSimilaritySettingsDraft(similarity?: SimilaritySettings | null): SimilaritySettingsDraft | null {
@@ -145,7 +138,7 @@ function sanitizePromptSimilaritySettingsDraft(
   }
 }
 
-/** Render the similarity gallery area, including tabs, flyouts, and score overlays. */
+/** Render image- and text-similarity sections in the modal's Similar tab. */
 export function ImageDetailSimilaritySection({
   presentation,
   currentSimilaritySettings,
@@ -153,17 +146,21 @@ export function ImageDetailSimilaritySection({
   similarImageItems,
   similarImagesLoading,
   similarImagesError,
+  similarImagesRequested = true,
+  onRequestSimilarImages,
   promptSimilarImageItems,
   promptSimilarImages,
   promptSimilarImagesLoading,
   promptSimilarImagesError,
+  promptSimilarImagesRequested = true,
+  onRequestPromptSimilarImages,
   mobileCardColumns = 1,
   desktopCardColumns = 3,
   cardAspectRatio = 'square',
+  hideEmptySections = false,
 }: ImageDetailSimilaritySectionProps) {
   const queryClient = useQueryClient()
   const { t } = useI18n()
-  const [activeSimilarImageTab, setActiveSimilarImageTab] = useState<SimilarImageTab>('image')
   const [isSimilaritySettingsOpen, setIsSimilaritySettingsOpen] = useState(false)
   const [isPromptSimilaritySettingsOpen, setIsPromptSimilaritySettingsOpen] = useState(false)
   const [similarityDraft, setSimilarityDraft] = useState<SimilaritySettingsDraft | null>(null)
@@ -210,34 +207,14 @@ export function ImageDetailSimilaritySection({
     [promptSimilarImageItems],
   )
 
-  const similarImageSectionTitleLabels: Record<SimilarImageTab, string> = {
-    image: t('images.components.detail.image.detail.similarity.section.similarity.images.images'),
-    text: t('images.components.detail.image.detail.similarity.section.similarity.images.text'),
-  }
-  const similarSectionTitle = similarImageSectionTitleLabels[activeSimilarImageTab]
-  const similarSectionItems = activeSimilarImageTab === 'image' ? similarImages : promptSimilarImages
-  const similarSectionIsLoading = activeSimilarImageTab === 'image'
-    ? similarImagesLoading
-    : promptSimilarImagesLoading
-  const similarSectionErrorMessage = activeSimilarImageTab === 'image'
-    ? (similarImagesError ? getErrorMessage(similarImagesError, t('images.components.detail.image.detail.similarity.section.an.unknown.error.occurred')) : null)
-    : (promptSimilarImagesError ? getErrorMessage(promptSimilarImagesError, t('images.components.detail.image.detail.similarity.section.an.unknown.error.occurred')) : null)
-  const similarSectionEmptyMessage = activeSimilarImageTab === 'image'
-    ? t('images.components.detail.image.detail.similarity.section.no.similar.images.to.show.with.the')
-    : t('images.components.detail.image.detail.similarity.section.no.similar.images.to.show.for.the')
-
-  /** Keep tab changes responsible for closing the other flyout so only one popup stays active. */
-  const handleSelectSimilarImageTab = (tab: SimilarImageTab) => {
-    setActiveSimilarImageTab(tab)
-
-    if (tab !== 'image') {
-      setIsSimilaritySettingsOpen(false)
-    }
-
-    if (tab !== 'text') {
-      setIsPromptSimilaritySettingsOpen(false)
-    }
-  }
+  const imageSimilarityTitle = t('images.components.detail.image.detail.similarity.section.similarity.images.images')
+  const promptSimilarityTitle = t('images.components.detail.image.detail.similarity.section.similarity.images.text')
+  const imageSimilarityErrorMessage = similarImagesError
+    ? getErrorMessage(similarImagesError, t('images.components.detail.image.detail.similarity.section.an.unknown.error.occurred'))
+    : null
+  const promptSimilarityErrorMessage = promptSimilarImagesError
+    ? getErrorMessage(promptSimilarImagesError, t('images.components.detail.image.detail.similarity.section.an.unknown.error.occurred'))
+    : null
 
   /** Open or close the image-similarity flyout with a fresh draft from current settings. */
   const handleToggleSimilaritySettings = () => {
@@ -323,31 +300,16 @@ export function ImageDetailSimilaritySection({
     return item ? <PromptSimilarImageScoreOverlay item={item} /> : null
   }
 
-  const similarSectionActions = (
+  const imageSimilarityActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <div className="inline-flex items-center gap-0.5 rounded-sm border border-border bg-surface-container p-0.5 shadow-sm">
-        {SIMILAR_IMAGE_TABS.map((tab) => {
-          const Icon = SIMILAR_IMAGE_TAB_ICONS[tab]
+      {!similarImagesRequested && onRequestSimilarImages ? (
+        <Button type="button" variant="secondary" size="sm" onClick={onRequestSimilarImages}>
+          <ScanSearch className="h-4 w-4" />
+          {t({ ko: '유사 이미지 검사', en: 'Check similar images' })}
+        </Button>
+      ) : null}
 
-          return (
-            <Button
-              key={tab}
-              size="icon-sm"
-              variant="ghost"
-              onClick={() => handleSelectSimilarImageTab(tab)}
-              className={cn(
-                activeSimilarImageTab === tab ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
-              )}
-              aria-label={similarImageSectionTitleLabels[tab]}
-              title={similarImageSectionTitleLabels[tab]}
-            >
-              <Icon className="h-4 w-4" />
-            </Button>
-          )
-        })}
-      </div>
-
-      {canEditSettings && activeSimilarImageTab === 'image' ? (
+      {canEditSettings && currentSimilaritySettings ? (
         <div className="shrink-0">
           <SimilaritySettingsPanel
             isOpen={isSimilaritySettingsOpen}
@@ -364,8 +326,19 @@ export function ImageDetailSimilaritySection({
           />
         </div>
       ) : null}
+    </div>
+  )
 
-      {canEditSettings && activeSimilarImageTab === 'text' ? (
+  const promptSimilarityActions = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {!promptSimilarImagesRequested && onRequestPromptSimilarImages ? (
+        <Button type="button" variant="secondary" size="sm" onClick={onRequestPromptSimilarImages}>
+          <ScanSearch className="h-4 w-4" />
+          {t({ ko: '텍스트 유사 이미지 검사', en: 'Check text-similar images' })}
+        </Button>
+      ) : null}
+
+      {canEditSettings && currentSimilaritySettings ? (
         <div className="shrink-0">
           <PromptSimilaritySettingsPanel
             isOpen={isPromptSimilaritySettingsOpen}
@@ -385,19 +358,63 @@ export function ImageDetailSimilaritySection({
     </div>
   )
 
-  return (
-    <RelatedImageGallerySection
-      title={similarSectionTitle}
-      items={similarSectionItems}
-      isLoading={similarSectionIsLoading}
-      errorMessage={similarSectionErrorMessage}
-      emptyMessage={similarSectionEmptyMessage}
-      actions={similarSectionActions}
-      activationMode={presentation === 'modal' ? 'modal' : 'modal-single'}
-      mobileCardColumns={mobileCardColumns}
-      desktopCardColumns={desktopCardColumns}
-      cardAspectRatio={cardAspectRatio}
-      renderItemPersistentOverlay={activeSimilarImageTab === 'image' ? renderSimilarImageOverlay : renderPromptSimilarImageOverlay}
-    />
-  )
+  const shouldShowImageSimilaritySection = similarImagesRequested
+    ? similarImagesLoading || Boolean(imageSimilarityErrorMessage) || similarImages.length > 0 || !hideEmptySections
+    : Boolean(onRequestSimilarImages)
+  const shouldShowPromptSimilaritySection = promptSimilarImagesRequested
+    ? promptSimilarImagesLoading || Boolean(promptSimilarityErrorMessage) || promptSimilarImages.length > 0 || !hideEmptySections
+    : Boolean(onRequestPromptSimilarImages)
+  const sections: ReactNode[] = []
+
+  if (shouldShowImageSimilaritySection) {
+    sections.push(
+      <RelatedImageGallerySection
+        key="image-similarity"
+        title={imageSimilarityTitle}
+        items={similarImagesRequested ? similarImages : []}
+        isLoading={similarImagesRequested ? similarImagesLoading : false}
+        errorMessage={similarImagesRequested ? imageSimilarityErrorMessage : null}
+        emptyMessage={
+          similarImagesRequested
+            ? t('images.components.detail.image.detail.similarity.section.no.similar.images.to.show.with.the')
+            : t({ ko: '필요할 때만 이미지 기준 유사 검사를 실행해.', en: 'Run image-based similarity only when needed.' })
+        }
+        actions={imageSimilarityActions}
+        activationMode={presentation === 'modal' ? 'modal' : 'modal-single'}
+        mobileCardColumns={mobileCardColumns}
+        desktopCardColumns={desktopCardColumns}
+        cardAspectRatio={cardAspectRatio}
+        renderItemPersistentOverlay={renderSimilarImageOverlay}
+      />,
+    )
+  }
+
+  if (shouldShowPromptSimilaritySection) {
+    sections.push(
+      <RelatedImageGallerySection
+        key="prompt-similarity"
+        title={promptSimilarityTitle}
+        items={promptSimilarImagesRequested ? promptSimilarImages : []}
+        isLoading={promptSimilarImagesRequested ? promptSimilarImagesLoading : false}
+        errorMessage={promptSimilarImagesRequested ? promptSimilarityErrorMessage : null}
+        emptyMessage={
+          promptSimilarImagesRequested
+            ? t('images.components.detail.image.detail.similarity.section.no.similar.images.to.show.for.the')
+            : t({ ko: '필요할 때만 텍스트 기준 유사 검사를 실행해.', en: 'Run text-based similarity only when needed.' })
+        }
+        actions={promptSimilarityActions}
+        activationMode={presentation === 'modal' ? 'modal' : 'modal-single'}
+        mobileCardColumns={mobileCardColumns}
+        desktopCardColumns={desktopCardColumns}
+        cardAspectRatio={cardAspectRatio}
+        renderItemPersistentOverlay={renderPromptSimilarImageOverlay}
+      />,
+    )
+  }
+
+  if (sections.length === 0) {
+    return null
+  }
+
+  return <div className="space-y-6">{sections}</div>
 }

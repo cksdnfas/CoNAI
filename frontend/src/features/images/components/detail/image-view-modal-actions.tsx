@@ -1,7 +1,5 @@
-import type { RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, ExternalLink, RefreshCcw, X } from 'lucide-react'
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { ExternalLink, RefreshCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
@@ -10,49 +8,13 @@ import { ImageGroupAssignAction } from './image-group-assign-action'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
 import type { ImageViewModalAccessOptions } from './image-view-modal-context'
 
-export type ImageViewModalMode = 'full' | 'medium' | 'minimal'
-
-interface ImageViewModeSwitcherProps {
-  viewMode: ImageViewModalMode
-  onChangeViewMode: (mode: ImageViewModalMode) => void
-  tone?: 'surface' | 'overlay'
-}
-
-/** Render the modal mode switcher with surface or overlay styling. */
-export function ImageViewModeSwitcher({
-  viewMode,
-  onChangeViewMode,
-  tone = 'surface',
-}: ImageViewModeSwitcherProps) {
-  return (
-    <SegmentedControl
-      value={viewMode}
-      items={[
-        { value: 'full', label: 'L' },
-        { value: 'medium', label: 'M' },
-        { value: 'minimal', label: 'S' },
-      ]}
-      onChange={(nextMode) => onChangeViewMode(nextMode as ImageViewModalMode)}
-      size="xs"
-      className={tone === 'overlay' ? 'border-white/12 bg-black/36 text-white backdrop-blur-sm' : undefined}
-    />
-  )
-}
-
 interface ImageViewModalActionsProps {
   compositeHash: string
   activeIndex: number
   totalCount: number
-  viewMode: ImageViewModalMode
-  onChangeViewMode: (mode: ImageViewModalMode) => void
-  canViewPrevious: boolean
-  canViewNext: boolean
   controls: ImageDetailViewHeaderControls
-  mobileActionsRef: RefObject<HTMLDivElement | null>
   accessOptions?: ImageViewModalAccessOptions
   onClose: () => void
-  onViewPrevious: () => void
-  onViewNext: () => void
 }
 
 /** Render the header action area shared by the full and medium modal surfaces. */
@@ -60,16 +22,9 @@ export function ImageViewModalActions({
   compositeHash,
   activeIndex,
   totalCount,
-  viewMode,
-  onChangeViewMode,
-  canViewPrevious,
-  canViewNext,
   controls,
-  mobileActionsRef,
   accessOptions,
   onClose,
-  onViewPrevious,
-  onViewNext,
 }: ImageViewModalActionsProps) {
   const navigate = useNavigate()
   const { t } = useI18n()
@@ -84,24 +39,20 @@ export function ImageViewModalActions({
     onClose()
   }
 
+  const overlayButtonClassName = 'border-white/14 bg-black/42 text-white shadow-[0_12px_32px_rgba(0,0,0,0.38)] hover:bg-black/62 hover:text-white'
+
   const navigationButtons = (
     <>
-      <Button size="icon-sm" variant="secondary" onClick={onClose} aria-label={t('images.components.detail.image.view.modal.actions.close')} title={t('images.components.detail.image.view.modal.actions.close')}>
+      <Button size="icon-sm" variant="secondary" className={overlayButtonClassName} onClick={onClose} aria-label={t('images.components.detail.image.view.modal.actions.close')} title={t('images.components.detail.image.view.modal.actions.close')}>
         <X className="h-4 w-4" />
       </Button>
-      <Button size="icon-sm" variant="outline" onClick={onViewPrevious} disabled={!canViewPrevious} aria-label={t('images.components.detail.image.view.modal.actions.previous.images')} title={t('images.components.detail.image.view.modal.actions.previous.images')}>
-        <ChevronLeft className="h-4 w-4" />
-      </Button>
-      <Button size="icon-sm" variant="outline" onClick={onViewNext} disabled={!canViewNext} aria-label={t('images.components.detail.image.view.modal.actions.next.images')} title={t('images.components.detail.image.view.modal.actions.next.images')}>
-        <ChevronRight className="h-4 w-4" />
-      </Button>
-      {showCounter ? <div className="px-2 text-xs text-muted-foreground">{activeIndex + 1} / {totalCount}</div> : null}
+      {showCounter ? <div className="shrink-0 px-2 text-xs text-muted-foreground">{activeIndex + 1} / {totalCount}</div> : null}
       {allowDetailNavigation ? (
-        <Button size="icon-sm" variant="outline" onClick={openDetailPage} aria-label={t('images.components.detail.image.view.modal.actions.open.detail.page')} title={t('images.components.detail.image.view.modal.actions.detail.page')}>
+        <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={openDetailPage} aria-label={t('images.components.detail.image.view.modal.actions.open.detail.page')} title={t('images.components.detail.image.view.modal.actions.detail.page')}>
           <ExternalLink className="h-4 w-4" />
         </Button>
       ) : null}
-      <Button size="icon-sm" variant="outline" onClick={controls.refresh} disabled={controls.isRefreshing} aria-label={t('images.components.detail.image.view.modal.actions.refresh')} title={t('images.components.detail.image.view.modal.actions.refresh')}>
+      <Button size="icon-sm" variant="outline" className={overlayButtonClassName} onClick={controls.refresh} disabled={controls.isRefreshing} aria-label={t('images.components.detail.image.view.modal.actions.refresh')} title={t('images.components.detail.image.view.modal.actions.refresh')}>
         <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
       </Button>
     </>
@@ -109,41 +60,18 @@ export function ImageViewModalActions({
 
   const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} /> : null
   const editButton = allowEditAction ? <ImageEditAction image={controls.image} /> : null
-  const modeSwitcher = <ImageViewModeSwitcher viewMode={viewMode} onChangeViewMode={onChangeViewMode} />
-
-  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} /> : null
+  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="outline" className={overlayButtonClassName} /> : null
 
   return (
-    <>
-      <div className="hidden xl:flex xl:flex-wrap xl:items-center xl:justify-between xl:gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {navigationButtons}
-          {modeSwitcher}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {editButton}
-          {groupAssignButton}
-          {downloadButton}
-        </div>
+    <div className="image-detail-modal-toolbar-actions flex w-full min-w-0 flex-nowrap items-center justify-between gap-2 overflow-x-auto" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="flex shrink-0 items-center gap-2">
+        {navigationButtons}
       </div>
-
-      <div
-        ref={mobileActionsRef}
-        className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-[92] px-4 md:px-5 xl:hidden"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="mx-auto w-full max-w-[1680px] rounded-sm border border-border/85 bg-background/94 p-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.35)] backdrop-blur-md">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {navigationButtons}
-              {editButton}
-              {groupAssignButton}
-              {downloadButton}
-            </div>
-            {modeSwitcher}
-          </div>
-        </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {editButton}
+        {groupAssignButton}
+        {downloadButton}
       </div>
-    </>
+    </div>
   )
 }

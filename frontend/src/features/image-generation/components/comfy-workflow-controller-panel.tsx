@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, ChevronDown, Play, RotateCcw, Save } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -196,7 +196,10 @@ export function ComfyWorkflowControllerPanel({
   onGenerateSelected,
 }: ComfyWorkflowControllerPanelProps) {
   const { t } = useI18n()
-  const isModalServer = (server: ComfyUIServer) => server.backend_type === 'modal' || serverTests[server.id]?.status?.backend_type === 'modal'
+  const isModalServer = useCallback(
+    (server: ComfyUIServer) => server.backend_type === 'modal' || serverTests[server.id]?.status?.backend_type === 'modal',
+    [serverTests],
+  )
   const connectedServers = servers.filter((server) => serverTests[server.id]?.status?.is_connected === true)
   const autoRoutableServers = connectedServers.filter((server) => !isModalServer(server))
   const routingTags = Array.from(new Set(servers.flatMap((server) => server.routing_tags ?? []))).sort((left, right) => left.localeCompare(right))
@@ -273,7 +276,7 @@ export function ComfyWorkflowControllerPanel({
         }
       }),
     ]
-  }, [autoRoutableServers, routingTags, serverTests, servers, t])
+  }, [autoRoutableServers, isModalServer, routingTags, serverTests, servers, t])
 
   const desktopActionButtons = (
     <div className="flex flex-wrap items-center justify-between gap-3">

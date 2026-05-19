@@ -306,7 +306,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       : items
 
     return sortSavedAssets(filteredItems, savedVibeSort, recentVibeIds, pinnedVibeIds, locale)
-  }, [pinnedVibeIds, recentVibeIds, savedVibeSearch, savedVibeSort, savedVibesQuery.data])
+  }, [locale, pinnedVibeIds, recentVibeIds, savedVibeSearch, savedVibeSort, savedVibesQuery.data])
 
   const filteredSavedCharacterReferences = useMemo(() => {
     const items = savedCharacterReferencesQuery.data || []
@@ -316,7 +316,7 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
       : items
 
     return sortSavedAssets(filteredItems, savedCharacterReferenceSort, recentCharacterReferenceIds, pinnedCharacterReferenceIds, locale)
-  }, [pinnedCharacterReferenceIds, recentCharacterReferenceIds, savedCharacterReferenceSearch, savedCharacterReferenceSort, savedCharacterReferencesQuery.data])
+  }, [locale, pinnedCharacterReferenceIds, recentCharacterReferenceIds, savedCharacterReferenceSearch, savedCharacterReferenceSort, savedCharacterReferencesQuery.data])
 
   const updateVibes = (nextDrafts: NaiVibeDraft[]) => {
     onChange(buildNaiVibeValue(nextDrafts))

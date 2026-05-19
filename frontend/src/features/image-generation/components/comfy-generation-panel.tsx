@@ -63,7 +63,7 @@ export function ComfyGenerationPanel({
   compactActionBarContentTargetId,
 }: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
-  const { t, formatNumber } = useI18n()
+  const { t } = useI18n()
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)

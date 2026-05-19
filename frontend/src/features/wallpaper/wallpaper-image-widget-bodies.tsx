@@ -219,7 +219,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
       })
 
     return [...finalEntries, ...artifactEntries].slice(0, visibleCount)
-  }, [resultsQuery.data, visibleCount])
+  }, [resultsQuery.data, t, visibleCount])
 
   const stackIndex = useWallpaperRotatingIndex(recentEntries.length, shiftInterval, displayMode === 'stack' && recentEntries.length > 1)
 

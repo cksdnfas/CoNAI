@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ScanSearch } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info, ScanSearch } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -33,12 +34,23 @@ import { RelatedImageGallerySection } from './components/detail/related-image-ga
 
 const SIMILARITY_INSPECTION_STABLE_DELAY_MS = 350
 
+type ImageDetailImageAreaTab = 'current' | 'similar'
+
 export interface ImageDetailViewHeaderControls {
   downloadName: string
   downloadUrl: string | null
   image: ImageRecord | undefined
   isRefreshing: boolean
   refresh: () => void
+}
+
+interface ImageDetailViewModalNavigation {
+  activeIndex: number
+  totalCount: number
+  canViewPrevious: boolean
+  canViewNext: boolean
+  onViewPrevious: () => void
+  onViewNext: () => void
 }
 
 function isImageRecordLike(value: unknown): value is ImageRecord {
@@ -75,21 +87,70 @@ function findCachedImageRecord(value: unknown, compositeHash: string, depth = 0)
   return undefined
 }
 
+function ImageDetailModalNavigationButtons({ navigation }: { navigation?: ImageDetailViewModalNavigation }) {
+  const { t } = useI18n()
+
+  if (!navigation || (!navigation.canViewPrevious && !navigation.canViewNext)) {
+    return null
+  }
+
+  const buttonClassName = 'group/modal-nav pointer-events-auto absolute top-1/2 z-30 hidden h-40 w-16 -translate-y-1/2 items-center text-white/74 opacity-0 transition hover:text-white focus-visible:opacity-100 group-hover/image-pane:opacity-100 md:flex'
+  const buttonInnerClassName = 'flex h-12 w-12 items-center justify-center rounded-sm border border-white/14 bg-black/42 shadow-[0_12px_32px_rgba(0,0,0,0.38)] backdrop-blur-md transition-colors group-hover/modal-nav:border-white/24 group-hover/modal-nav:bg-black/62'
+
+  return (
+    <>
+      {navigation.canViewPrevious ? (
+        <button
+          type="button"
+          className={cn(buttonClassName, 'left-0 justify-start bg-gradient-to-r from-black/36 via-black/12 to-transparent pl-3')}
+          onClick={navigation.onViewPrevious}
+          onMouseDown={(event) => event.stopPropagation()}
+          aria-label={t('images.components.detail.image.view.modal.overlay.previous.images')}
+        >
+          <span className={buttonInnerClassName}>
+            <ChevronLeft className="h-6 w-6" />
+          </span>
+        </button>
+      ) : null}
+
+      {navigation.canViewNext ? (
+        <button
+          type="button"
+          className={cn(buttonClassName, 'right-0 justify-end bg-gradient-to-l from-black/36 via-black/12 to-transparent pr-3')}
+          onClick={navigation.onViewNext}
+          onMouseDown={(event) => event.stopPropagation()}
+          aria-label={t('images.components.detail.image.view.modal.overlay.next.images')}
+        >
+          <span className={buttonInnerClassName}>
+            <ChevronRight className="h-6 w-6" />
+          </span>
+        </button>
+      ) : null}
+    </>
+  )
+}
+
 interface ImageDetailViewProps {
   compositeHash: string
   presentation?: 'page' | 'modal'
   initialImage?: ImageRecord | null
   renderHeader?: (controls: ImageDetailViewHeaderControls) => ReactNode
+  modalNavigation?: ImageDetailViewModalNavigation
 }
 
 /** Render the shared image detail body so page and modal presentations stay aligned. */
-export function ImageDetailView({ compositeHash, presentation = 'page', initialImage = null, renderHeader }: ImageDetailViewProps) {
+export function ImageDetailView({ compositeHash, presentation = 'page', initialImage = null, renderHeader, modalNavigation }: ImageDetailViewProps) {
   const { t } = useI18n()
   const canUseSplitPaneScroll = useMinWidth(1280)
+  const canUseDesktopModalLayout = useMinWidth(920)
   const useSplitPaneScroll = presentation === 'modal' && canUseSplitPaneScroll
   const usesDesktopRelatedImageColumns = useMinWidth(768)
+  const [activeImageAreaTab, setActiveImageAreaTab] = useState<ImageDetailImageAreaTab>('current')
+  const [isModalInfoViewerOpen, setIsModalInfoViewerOpen] = useState(canUseDesktopModalLayout)
   const [isPrimaryMediaReady, setIsPrimaryMediaReady] = useState(false)
   const [isSimilarityInspectionRequested, setIsSimilarityInspectionRequested] = useState(false)
+  const [isImageSimilarityInspectionRequested, setIsImageSimilarityInspectionRequested] = useState(false)
+  const [isPromptSimilarityInspectionRequested, setIsPromptSimilarityInspectionRequested] = useState(false)
   const [stableSimilarityInspectionCompositeHash, setStableSimilarityInspectionCompositeHash] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
@@ -120,8 +181,17 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   useEffect(() => {
     setIsPrimaryMediaReady(false)
     setIsSimilarityInspectionRequested(false)
+    setIsImageSimilarityInspectionRequested(false)
+    setIsPromptSimilarityInspectionRequested(false)
     setStableSimilarityInspectionCompositeHash(null)
+    setActiveImageAreaTab('current')
   }, [compositeHash])
+
+  useEffect(() => {
+    if (presentation === 'modal') {
+      setIsModalInfoViewerOpen(canUseDesktopModalLayout)
+    }
+  }, [canUseDesktopModalLayout, compositeHash, presentation])
 
   useEffect(() => {
     return () => {
@@ -141,6 +211,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const effectiveAppearanceSettings = appearanceQuery.data
   const canManageSimilaritySettings = hasAuthPermission(authStatusQuery.data?.permissionKeys, 'page.settings.view')
   const shouldAutoRunSimilarityInspection = shouldAutoRunImageSimilarityChecks(appSettingsQuery.data?.general)
+  const isRelatedImageAreaActive = presentation === 'modal' ? activeImageAreaTab === 'similar' : isSimilarityInspectionRequested || shouldAutoRunSimilarityInspection
 
   const relatedImageMobileColumns = effectiveAppearanceSettings?.detailRelatedImageMobileColumns ?? 1
   const relatedImageDesktopColumns = effectiveAppearanceSettings?.detailRelatedImageColumns ?? 3
@@ -162,11 +233,12 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const canRunSimilarityInspection = isSimilarityInspectionRequested && Boolean(compositeHash) && isSecondaryContentReady
   const canRunStabilizedSimilarityInspection = canRunSimilarityInspection && stableSimilarityInspectionCompositeHash === compositeHash
   const isSimilarityInspectionSettling = canRunSimilarityInspection && !canRunStabilizedSimilarityInspection
+  const shouldLoadRuntimeSimilaritySettings = canRunStabilizedSimilarityInspection && (isImageSimilarityInspectionRequested || isPromptSimilarityInspectionRequested)
 
   const runtimeSimilarityQuery = useQuery({
     queryKey: ['runtime-similarity-settings'],
     queryFn: ({ signal }) => getRuntimeSimilaritySettings({ signal }),
-    enabled: canRunStabilizedSimilarityInspection,
+    enabled: shouldLoadRuntimeSimilaritySettings,
   })
 
   const effectiveSimilaritySettings = runtimeSimilarityQuery.data
@@ -181,13 +253,38 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
 
   const handleRequestSimilarityInspection = useCallback(() => {
     setIsSimilarityInspectionRequested(true)
+    setIsImageSimilarityInspectionRequested(true)
+    setIsPromptSimilarityInspectionRequested(true)
+  }, [])
+
+  const handleRequestImageSimilarityInspection = useCallback(() => {
+    setIsSimilarityInspectionRequested(true)
+    setIsImageSimilarityInspectionRequested(true)
+  }, [])
+
+  const handleRequestPromptSimilarityInspection = useCallback(() => {
+    setIsSimilarityInspectionRequested(true)
+    setIsPromptSimilarityInspectionRequested(true)
+  }, [])
+
+  const handleSelectImageAreaTab = useCallback((tab: string) => {
+    const nextTab = tab === 'similar' ? 'similar' : 'current'
+    setActiveImageAreaTab(nextTab)
+
+    if (nextTab === 'similar') {
+      setIsSimilarityInspectionRequested(true)
+    }
   }, [])
 
   useEffect(() => {
-    if (shouldAutoRunSimilarityInspection) {
-      setIsSimilarityInspectionRequested(true)
+    if (!shouldAutoRunSimilarityInspection || !isRelatedImageAreaActive) {
+      return
     }
-  }, [shouldAutoRunSimilarityInspection, compositeHash])
+
+    setIsSimilarityInspectionRequested(true)
+    setIsImageSimilarityInspectionRequested(true)
+    setIsPromptSimilarityInspectionRequested(true)
+  }, [shouldAutoRunSimilarityInspection, isRelatedImageAreaActive, compositeHash])
 
   useEffect(() => {
     if (!canRunSimilarityInspection) {
@@ -268,7 +365,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
         },
         { signal },
       ),
-    enabled: canRunStabilizedSimilarityInspection && Boolean(effectiveSimilaritySettings),
+    enabled: canRunStabilizedSimilarityInspection && isImageSimilarityInspectionRequested && Boolean(effectiveSimilaritySettings),
     staleTime: 5 * 60_000,
     gcTime: 15 * 60_000,
   })
@@ -290,7 +387,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       effectiveSimilaritySettings?.promptSimilarity?.fieldThresholds?.auto ?? 50,
     ],
     queryFn: ({ signal }) => getPromptSimilarImages(compositeHash, promptSimilarLimit, { signal }),
-    enabled: canRunStabilizedSimilarityInspection && Boolean(effectiveSimilaritySettings),
+    enabled: canRunStabilizedSimilarityInspection && isPromptSimilarityInspectionRequested && Boolean(effectiveSimilaritySettings),
     staleTime: 5 * 60_000,
     gcTime: 15 * 60_000,
   })
@@ -356,21 +453,217 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     },
   }
 
+  const duplicateImagesLoading = isSimilarityInspectionSettling || duplicatesQuery.isLoading
+  const duplicateImagesErrorMessage = duplicatesQuery.isError
+    ? getErrorMessage(duplicatesQuery.error, t('images.image.detail.view.an.unknown.error.occurred'))
+    : null
+  const similarImagesLoading = isImageSimilarityInspectionRequested && (isSimilarityInspectionSettling || similarQuery.isLoading || runtimeSimilarityQuery.isLoading)
+  const promptSimilarImagesLoading = isPromptSimilarityInspectionRequested && (isSimilarityInspectionSettling || promptSimilarQuery.isLoading || runtimeSimilarityQuery.isLoading)
+  const similarImagesError = isImageSimilarityInspectionRequested
+    ? (similarQuery.isError ? similarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null)
+    : null
+  const promptSimilarImagesError = isPromptSimilarityInspectionRequested
+    ? (promptSimilarQuery.isError ? promptSimilarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null)
+    : null
+  const shouldShowDuplicateSection = duplicateImagesLoading || Boolean(duplicateImagesErrorMessage) || duplicateImages.length > 0 || (presentation === 'page' && isSimilarityInspectionRequested)
+  const shouldShowRelatedEmptyState = presentation === 'modal'
+    && isSimilarityInspectionRequested
+    && isImageSimilarityInspectionRequested
+    && isPromptSimilarityInspectionRequested
+    && !duplicateImagesLoading
+    && !similarImagesLoading
+    && !promptSimilarImagesLoading
+    && !duplicateImagesErrorMessage
+    && !similarImagesError
+    && !promptSimilarImagesError
+    && duplicateImages.length === 0
+    && similarImageItems.length === 0
+    && promptSimilarImages.length === 0
+
+  const relatedImagesContent = (
+    <div className="space-y-6">
+      {shouldShowDuplicateSection ? (
+        <RelatedImageGallerySection
+          title={t('images.image.detail.view.duplicate.images')}
+          items={duplicateImages}
+          isLoading={duplicateImagesLoading}
+          errorMessage={duplicateImagesErrorMessage}
+          emptyMessage={t('images.image.detail.view.there.are.no.duplicate.images.right.now')}
+          activationMode={presentation === 'modal' ? 'modal' : 'navigate'}
+          mobileCardColumns={relatedImageMobileColumns}
+          desktopCardColumns={relatedImageDesktopColumns}
+          cardAspectRatio={relatedImageAspectRatio}
+          renderItemPersistentOverlay={renderDuplicateImageOverlay}
+        />
+      ) : null}
+
+      <ImageDetailSimilaritySection
+        presentation={presentation}
+        currentSimilaritySettings={effectiveSimilaritySettings}
+        canEditSettings={canManageSimilaritySettings}
+        similarImageItems={similarImageItems}
+        similarImagesLoading={similarImagesLoading}
+        similarImagesError={similarImagesError}
+        similarImagesRequested={isImageSimilarityInspectionRequested}
+        onRequestSimilarImages={handleRequestImageSimilarityInspection}
+        promptSimilarImageItems={promptSimilarImageItems}
+        promptSimilarImages={promptSimilarImages}
+        promptSimilarImagesLoading={promptSimilarImagesLoading}
+        promptSimilarImagesError={promptSimilarImagesError}
+        promptSimilarImagesRequested={isPromptSimilarityInspectionRequested}
+        onRequestPromptSimilarImages={handleRequestPromptSimilarityInspection}
+        mobileCardColumns={relatedImageMobileColumns}
+        desktopCardColumns={relatedImageDesktopColumns}
+        cardAspectRatio={relatedImageAspectRatio}
+        hideEmptySections={presentation === 'modal'}
+      />
+
+      {shouldShowRelatedEmptyState ? (
+        <div className="rounded-sm border border-border/70 bg-surface-container/70 px-4 py-6 text-sm text-muted-foreground">
+          {t({ ko: '표시할 유사/중복 이미지가 없어.', en: 'No similar or duplicate images to show.' })}
+        </div>
+      ) : null}
+    </div>
+  )
+
+  if (presentation === 'modal') {
+    const activeTabIsCurrent = activeImageAreaTab === 'current'
+    const modalInfoToggleLabel = isModalInfoViewerOpen
+      ? t({ ko: '정보 뷰어 닫기', en: 'Close info viewer' })
+      : t({ ko: '정보 뷰어 열기', en: 'Open info viewer' })
+
+    return (
+      <div className="image-detail-modal-shell">
+        <div className={cn('image-detail-modal-layout', isModalInfoViewerOpen ? 'info-open' : 'info-collapsed')}>
+          <section className="image-detail-modal-image-pane group/image-pane">
+            <div className="image-detail-modal-toolbar">
+              <div className="image-detail-modal-toolbar-inner">
+                <div className="image-detail-modal-header-actions min-w-0 flex-1">{renderHeader ? renderHeader(headerControls) : null}</div>
+                <SegmentedControl
+                  value={activeImageAreaTab}
+                  items={[
+                    { value: 'current', label: t({ ko: '현재 이미지', en: 'Current image' }) },
+                    { value: 'similar', label: t({ ko: '유사 이미지', en: 'Similar images' }), disabled: Boolean(image) && !canLoadRelatedImages },
+                  ]}
+                  onChange={handleSelectImageAreaTab}
+                  size="xs"
+                  className="shrink-0 flex-nowrap whitespace-nowrap border-white/14 bg-black/42 text-white shadow-[0_12px_32px_rgba(0,0,0,0.32)] backdrop-blur-md"
+                />
+              </div>
+            </div>
+
+            {!isModalInfoViewerOpen ? (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                className="image-detail-modal-info-reopen-desktop"
+                onClick={() => setIsModalInfoViewerOpen(true)}
+                aria-label={modalInfoToggleLabel}
+                title={modalInfoToggleLabel}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            ) : null}
+
+            <div className="image-detail-modal-stage">
+              {imageQuery.isLoading ? (
+                <div className="flex h-full w-full items-center justify-center p-6">
+                  <Skeleton className="h-[min(70vh,52rem)] w-full max-w-5xl rounded-sm bg-white/8" />
+                </div>
+              ) : null}
+
+              {imageQuery.isError ? (
+                <div className="flex h-full w-full items-center justify-center p-6">
+                  <Alert variant="destructive" className="max-w-xl">
+                    <AlertTitle>{t('images.image.detail.view.images.details.failed.to.load')}</AlertTitle>
+                    <AlertDescription>{getErrorMessage(imageQuery.error, t('images.image.detail.view.an.unknown.error.occurred'))}</AlertDescription>
+                  </Alert>
+                </div>
+              ) : null}
+
+              {!imageQuery.isLoading && !imageQuery.isError && image && activeTabIsCurrent ? (
+                <div className="relative h-full w-full bg-black">
+                  <ImageDetailModalNavigationButtons navigation={modalNavigation} />
+                  <div className="flex h-full w-full items-center justify-center bg-black">
+                    <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} className="max-h-full max-w-full w-auto object-contain" onPrimaryLoad={handlePrimaryMediaReady} />
+                  </div>
+                </div>
+              ) : null}
+
+              {!imageQuery.isLoading && !imageQuery.isError && image && !activeTabIsCurrent ? (
+                <div className="image-detail-modal-related-pane image-detail-scroll-pane">
+                  {!canLoadRelatedImages ? (
+                    <div className="rounded-sm border border-border/70 bg-surface-container/70 px-4 py-6 text-sm text-muted-foreground">
+                      {t({ ko: '이미지 파일만 유사 이미지 검사를 사용할 수 있어.', en: 'Similarity checks are available for image files only.' })}
+                    </div>
+                  ) : isSecondaryContentReady ? relatedImagesContent : (
+                    <div className="space-y-4">
+                      <Skeleton className="h-10 w-48 rounded-sm" />
+                      <Skeleton className="h-64 w-full rounded-sm" />
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <aside className="image-detail-modal-info-pane">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="image-detail-modal-info-toggle-desktop"
+              onClick={() => setIsModalInfoViewerOpen(false)}
+              aria-label={modalInfoToggleLabel}
+              title={modalInfoToggleLabel}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+
+            <button
+              type="button"
+              className="image-detail-modal-info-mobile-header"
+              onClick={() => setIsModalInfoViewerOpen((current) => !current)}
+              aria-expanded={isModalInfoViewerOpen}
+              aria-label={modalInfoToggleLabel}
+            >
+              <span className="inline-flex items-center gap-2">
+                <Info className="h-4 w-4" />
+                {t({ ko: '정보 뷰어', en: 'Info viewer' })}
+              </span>
+              {isModalInfoViewerOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+            </button>
+
+            <div className="image-detail-modal-info-content image-detail-scroll-pane">
+              {imageQuery.isLoading ? (
+                <div className="space-y-3 p-4">
+                  <Skeleton className="h-16 w-full rounded-sm" />
+                  <Skeleton className="h-16 w-full rounded-sm" />
+                  <Skeleton className="h-16 w-full rounded-sm" />
+                </div>
+              ) : null}
+
+              {!imageQuery.isLoading && !imageQuery.isError && image ? <ImageDetailMetaCard image={image as ImageRecord} /> : null}
+            </div>
+          </aside>
+        </div>
+      </div>
+    )
+  }
+
   const detailViewportHeightClassName = 'xl:min-h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))]'
-  const detailShellClassName = presentation === 'modal'
-    ? 'xl:flex xl:h-full xl:min-h-0 xl:flex-col xl:space-y-0'
-    : detailViewportHeightClassName
+  const detailShellClassName = detailViewportHeightClassName
 
   const detailGridClassName = cn(
     'grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]',
-    presentation === 'page'
-      ? cn('bg-background xl:items-start', detailViewportHeightClassName)
-      : 'xl:h-full xl:min-h-0 xl:flex-1 xl:items-stretch',
+    'bg-background xl:items-start',
+    detailViewportHeightClassName,
   )
 
   return (
     <div className={cn('space-y-8', detailShellClassName)}>
-      {renderHeader ? <div className={cn(presentation === 'modal' && 'xl:pb-6')}>{renderHeader(headerControls)}</div> : null}
+      {renderHeader ? <div>{renderHeader(headerControls)}</div> : null}
 
       {imageQuery.isLoading ? (
         <div className={detailGridClassName}>
@@ -414,38 +707,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
 
             {isSecondaryContentReady ? (
               isSimilarityInspectionRequested ? (
-                <>
-                  {duplicateImages.length > 0 ? (
-                    <RelatedImageGallerySection
-                      title={t('images.image.detail.view.duplicate.images')}
-                      items={duplicateImages}
-                      isLoading={false}
-                      errorMessage={null}
-                      emptyMessage={t('images.image.detail.view.there.are.no.duplicate.images.right.now')}
-                      activationMode={presentation === 'modal' ? 'modal' : 'navigate'}
-                      mobileCardColumns={relatedImageMobileColumns}
-                      desktopCardColumns={relatedImageDesktopColumns}
-                      cardAspectRatio={relatedImageAspectRatio}
-                      renderItemPersistentOverlay={renderDuplicateImageOverlay}
-                    />
-                  ) : null}
-
-                  <ImageDetailSimilaritySection
-                    presentation={presentation}
-                    currentSimilaritySettings={effectiveSimilaritySettings}
-                    canEditSettings={canManageSimilaritySettings}
-                    similarImageItems={similarImageItems}
-                    similarImagesLoading={isSimilarityInspectionSettling || similarQuery.isLoading || runtimeSimilarityQuery.isLoading}
-                    similarImagesError={similarQuery.isError ? similarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null}
-                    promptSimilarImageItems={promptSimilarImageItems}
-                    promptSimilarImages={promptSimilarImages}
-                    promptSimilarImagesLoading={isSimilarityInspectionSettling || promptSimilarQuery.isLoading || runtimeSimilarityQuery.isLoading}
-                    promptSimilarImagesError={promptSimilarQuery.isError ? promptSimilarQuery.error : runtimeSimilarityQuery.isError ? runtimeSimilarityQuery.error : null}
-                    mobileCardColumns={relatedImageMobileColumns}
-                    desktopCardColumns={relatedImageDesktopColumns}
-                    cardAspectRatio={relatedImageAspectRatio}
-                  />
-                </>
+                relatedImagesContent
               ) : (
                 <div className="flex justify-start">
                   <Button type="button" variant="secondary" size="sm" onClick={handleRequestSimilarityInspection}>

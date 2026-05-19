@@ -150,7 +150,7 @@ function withDefaultDateTimeOptions(
 }
 
 export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithChildren<{ catalog?: TranslationCatalog }>) {
-  const storedLanguage = useMemo(readStoredLanguage, [])
+  const storedLanguage = useMemo(() => readStoredLanguage(), [])
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
     queryFn: getAppSettings,

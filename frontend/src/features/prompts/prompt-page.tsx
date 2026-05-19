@@ -109,7 +109,7 @@ export function PromptPage() {
     sortOrder,
   })
 
-  const promptGroups = groupsQuery.data ?? []
+  const promptGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data])
   const isSelectedGroupProtected = isProtectedLoRAPromptGroup(selectedGroup)
   const isSelectedGroupDanbooru = isDanbooruPromptGroup(selectedGroup, promptGroups)
   const isSelectedGroupLocked = isSelectedGroupProtected || isSelectedGroupDanbooru
