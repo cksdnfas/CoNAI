@@ -1,5 +1,13 @@
-import { deepEqual } from 'node:assert/strict'
+import { deepEqual, doesNotMatch, match } from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { resolveModuleWorkflowOutputProgress } from '../features/module-graph/module-workflow-output-progress'
+
+const root = resolve(process.cwd(), 'src')
+
+function source(relativePath: string) {
+  return readFileSync(resolve(root, relativePath), 'utf8')
+}
 
 const firstPage = resolveModuleWorkflowOutputProgress({ page: 1, pageSize: 50, visibleCount: 50, totalCount: 180 })
 deepEqual(firstPage, {
@@ -45,5 +53,65 @@ deepEqual(clamped, {
   totalCount: 55,
   hiddenCount: 0,
 })
+
+const outputManagementSource = source('features/module-graph/components/module-workflow-output-management-panel.tsx')
+const artifactRecordsSource = source('features/module-graph/components/module-workflow-artifact-records-tab.tsx')
+
+match(
+  outputManagementSource,
+  /const selectedOutputIdSet = useMemo\([\s\S]*?\(\) => new Set\(selectedOutputIds\)[\s\S]*?\[selectedOutputIds\][\s\S]*?\)/,
+  'workflow output management should memoize selected output ids for bulk lookups',
+)
+match(
+  outputManagementSource,
+  /const selectedArtifactIdSet = useMemo\([\s\S]*?\(\) => new Set\(selectedArtifactIds\)[\s\S]*?\[selectedArtifactIds\][\s\S]*?\)/,
+  'workflow output management should memoize selected artifact ids for bulk lookups',
+)
+match(
+  outputManagementSource,
+  /selectedOutputIdSet\.has\(item\.id\)/,
+  'selected output derivation should use Set.has instead of scanning selectedOutputIds',
+)
+match(
+  outputManagementSource,
+  /selectedArtifactIdSet\.has\(artifact\.id\)/,
+  'selected artifact derivation should use Set.has instead of scanning selectedArtifactIds',
+)
+match(
+  outputManagementSource,
+  /const pagedOutputIdSet = useMemo\([\s\S]*?new Set\(pagedOutputItems\.map\(\(item\) => item\.id\)\)[\s\S]*?\[pagedOutputItems\][\s\S]*?\)/,
+  'paged output ids should be indexed once for visible image and clear-selection lookups',
+)
+match(
+  outputManagementSource,
+  /const pagedArtifactIdSet = useMemo\([\s\S]*?new Set\(pagedTechnicalArtifacts\.map\(\(artifact\) => artifact\.id\)\)[\s\S]*?\[pagedTechnicalArtifacts\][\s\S]*?\)/,
+  'paged artifact ids should be indexed once for clear-selection lookups',
+)
+doesNotMatch(
+  outputManagementSource,
+  /selectedOutputIds\.includes\(item\.id\)/,
+  'workflow output management must not scan selectedOutputIds per output item',
+)
+doesNotMatch(
+  outputManagementSource,
+  /selectedArtifactIds\.includes\(artifact\.id\)/,
+  'workflow output management must not scan selectedArtifactIds per artifact item',
+)
+
+match(
+  artifactRecordsSource,
+  /const selectedArtifactIdSet = useMemo\([\s\S]*?\(\) => new Set\(selectedArtifactIds\)[\s\S]*?\[selectedArtifactIds\][\s\S]*?\)/,
+  'artifact records tab should build one selected-artifact Set per selected ids snapshot',
+)
+match(
+  artifactRecordsSource,
+  /const isSelected = selectedArtifactIdSet\.has\(artifact\.id\)/,
+  'artifact record row selected state should use Set.has for paged row rendering',
+)
+doesNotMatch(
+  artifactRecordsSource,
+  /selectedArtifactIds\.includes\(artifact\.id\)/,
+  'artifact record row rendering must not scan selectedArtifactIds per artifact row',
+)
 
 console.log('Module workflow output progress contracts verified')

@@ -92,6 +92,14 @@ export function ModuleWorkflowOutputManagementPanel({
     () => listModuleWorkflowArtifactTypes(outputCollections.technicalArtifacts),
     [outputCollections.technicalArtifacts],
   )
+  const selectedOutputIdSet = useMemo(
+    () => new Set(selectedOutputIds),
+    [selectedOutputIds],
+  )
+  const selectedArtifactIdSet = useMemo(
+    () => new Set(selectedArtifactIds),
+    [selectedArtifactIds],
+  )
 
   const filteredTechnicalArtifacts = useMemo(() => filterModuleWorkflowTechnicalArtifacts({
     artifacts: outputCollections.technicalArtifacts,
@@ -102,16 +110,16 @@ export function ModuleWorkflowOutputManagementPanel({
   }), [artifactSearchTerm, artifactTypeFilter, executionById, outputCollections.technicalArtifacts, workflowNameById])
 
   const selectedOutputItems = useMemo(
-    () => outputCollections.outputItems.filter((item) => selectedOutputIds.includes(item.id)),
-    [outputCollections.outputItems, selectedOutputIds],
+    () => outputCollections.outputItems.filter((item) => selectedOutputIdSet.has(item.id)),
+    [outputCollections.outputItems, selectedOutputIdSet],
   )
   const downloadableSelectedItems = useMemo(
     () => selectedOutputItems.filter((item) => Boolean(item.downloadUrl)),
     [selectedOutputItems],
   )
   const selectedArtifacts = useMemo(
-    () => filteredTechnicalArtifacts.filter((artifact) => selectedArtifactIds.includes(artifact.id)),
-    [filteredTechnicalArtifacts, selectedArtifactIds],
+    () => filteredTechnicalArtifacts.filter((artifact) => selectedArtifactIdSet.has(artifact.id)),
+    [filteredTechnicalArtifacts, selectedArtifactIdSet],
   )
 
   const outputTotalPages = outputCollections.outputItems.length > 0
@@ -126,14 +134,21 @@ export function ModuleWorkflowOutputManagementPanel({
     const startIndex = (safeOutputsPage - 1) * WORKFLOW_OUTPUT_PAGE_SIZE
     return outputCollections.outputItems.slice(startIndex, startIndex + WORKFLOW_OUTPUT_PAGE_SIZE)
   }, [outputCollections.outputItems, safeOutputsPage])
+  const pagedOutputIdSet = useMemo(
+    () => new Set(pagedOutputItems.map((item) => item.id)),
+    [pagedOutputItems],
+  )
   const pagedOutputImageItems = useMemo(() => {
-    const visibleOutputIds = new Set(pagedOutputItems.map((item) => item.id))
-    return outputCollections.outputImageItems.filter((item) => visibleOutputIds.has(String(item.id)))
-  }, [outputCollections.outputImageItems, pagedOutputItems])
+    return outputCollections.outputImageItems.filter((item) => pagedOutputIdSet.has(String(item.id)))
+  }, [outputCollections.outputImageItems, pagedOutputIdSet])
   const pagedTechnicalArtifacts = useMemo(() => {
     const startIndex = (safeArtifactsPage - 1) * WORKFLOW_OUTPUT_PAGE_SIZE
     return filteredTechnicalArtifacts.slice(startIndex, startIndex + WORKFLOW_OUTPUT_PAGE_SIZE)
   }, [filteredTechnicalArtifacts, safeArtifactsPage])
+  const pagedArtifactIdSet = useMemo(
+    () => new Set(pagedTechnicalArtifacts.map((artifact) => artifact.id)),
+    [pagedTechnicalArtifacts],
+  )
 
   useEffect(() => {
     setSelectedOutputIds((current) => current.filter((id) => outputCollections.outputItems.some((item) => item.id === id)))
@@ -431,8 +446,8 @@ export function ModuleWorkflowOutputManagementPanel({
     }
   }
 
-  const allVisibleSelected = pagedOutputItems.length > 0 && pagedOutputItems.every((item) => selectedOutputIds.includes(item.id))
-  const allArtifactSelected = pagedTechnicalArtifacts.length > 0 && pagedTechnicalArtifacts.every((artifact) => selectedArtifactIds.includes(artifact.id))
+  const allVisibleSelected = pagedOutputItems.length > 0 && pagedOutputItems.every((item) => selectedOutputIdSet.has(item.id))
+  const allArtifactSelected = pagedTechnicalArtifacts.length > 0 && pagedTechnicalArtifacts.every((artifact) => selectedArtifactIdSet.has(artifact.id))
 
   return (
     <div className="space-y-6">
@@ -487,7 +502,7 @@ export function ModuleWorkflowOutputManagementPanel({
           onClearAll={handleClearAllOutputs}
           onToggleVisibleSelection={() => setSelectedOutputIds((current) => (
             allVisibleSelected
-              ? current.filter((id) => !pagedOutputItems.some((item) => item.id === id))
+              ? current.filter((id) => !pagedOutputIdSet.has(id))
               : Array.from(new Set([...current, ...pagedOutputItems.map((item) => item.id)]))
           ))}
           onSelectedOutputIdsChange={setSelectedOutputIds}
@@ -519,7 +534,7 @@ export function ModuleWorkflowOutputManagementPanel({
           onArtifactTypeFilterChange={setArtifactTypeFilter}
           onToggleVisibleSelection={() => setSelectedArtifactIds((current) => (
             allArtifactSelected
-              ? current.filter((id) => !pagedTechnicalArtifacts.some((artifact) => artifact.id === id))
+              ? current.filter((id) => !pagedArtifactIdSet.has(id))
               : Array.from(new Set([...current, ...pagedTechnicalArtifacts.map((artifact) => artifact.id)]))
           ))}
           onToggleArtifactSelection={handleToggleArtifactSelection}

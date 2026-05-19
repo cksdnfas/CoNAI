@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Square, SquareCheckBig, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -81,6 +81,10 @@ export function ModuleWorkflowArtifactRecordsTab({
     selectedIds: selectedArtifactIds.map((artifactId) => String(artifactId)),
     onSelectedIdsChange: (nextIds) => onSetSelectedArtifactIds(nextIds.map((id) => Number(id)).filter((id) => Number.isFinite(id))),
   })
+  const selectedArtifactIdSet = useMemo(
+    () => new Set(selectedArtifactIds),
+    [selectedArtifactIds],
+  )
 
   return (
     <Card>
@@ -145,7 +149,7 @@ export function ModuleWorkflowArtifactRecordsTab({
               const workflowName = execution
                 ? (workflowNameById.get(execution.graph_workflow_id) ?? `Workflow #${execution.graph_workflow_id}`)
                 : 'Unknown workflow'
-              const isSelected = selectedArtifactIds.includes(artifact.id)
+              const isSelected = selectedArtifactIdSet.has(artifact.id)
               const previewText = buildArtifactTextPreview(artifact, 220)
 
               return (
