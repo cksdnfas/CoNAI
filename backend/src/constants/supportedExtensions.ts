@@ -40,14 +40,22 @@ export const ALL_SUPPORTED_EXTENSIONS = [
   ...SUPPORTED_VIDEO_EXTENSIONS
 ] as const;
 
+const SUPPORTED_IMAGE_EXTENSION_SET = new Set<string>(SUPPORTED_IMAGE_EXTENSIONS);
+const SUPPORTED_VIDEO_EXTENSION_SET = new Set<string>(SUPPORTED_VIDEO_EXTENSIONS);
+const ALL_SUPPORTED_EXTENSION_SET = new Set<string>(ALL_SUPPORTED_EXTENSIONS);
+
+export function normalizeFileExtension(ext: string): string {
+  const normalized = ext.trim().toLowerCase();
+  return normalized.startsWith('.') ? normalized : `.${normalized}`;
+}
+
 /**
  * Type guard to check if a file extension is supported
  * @param ext - File extension (with or without leading dot)
  * @returns true if the extension is supported
  */
 export function isSupportedExtension(ext: string): boolean {
-  const normalized = ext.toLowerCase().startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`;
-  return (ALL_SUPPORTED_EXTENSIONS as readonly string[]).includes(normalized);
+  return ALL_SUPPORTED_EXTENSION_SET.has(normalizeFileExtension(ext));
 }
 
 /**
@@ -60,8 +68,8 @@ function isExcludedExtension(ext: string, excludeList: string[]): boolean {
   if (!excludeList || excludeList.length === 0) {
     return false;
   }
-  const normalized = ext.toLowerCase().startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`;
-  return excludeList.map(e => e.toLowerCase()).includes(normalized);
+  const normalized = normalizeFileExtension(ext);
+  return excludeList.some(excludedExtension => normalizeFileExtension(excludedExtension) === normalized);
 }
 
 /**
@@ -80,8 +88,7 @@ export function shouldProcessFileExtension(ext: string, excludeList: string[] = 
  * @returns true if the extension is a video format
  */
 export function isVideoExtension(ext: string): boolean {
-  const normalized = ext.toLowerCase().startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`;
-  return (SUPPORTED_VIDEO_EXTENSIONS as readonly string[]).includes(normalized);
+  return SUPPORTED_VIDEO_EXTENSION_SET.has(normalizeFileExtension(ext));
 }
 
 /**
@@ -90,6 +97,5 @@ export function isVideoExtension(ext: string): boolean {
  * @returns true if the extension is an image format
  */
 export function isImageExtension(ext: string): boolean {
-  const normalized = ext.toLowerCase().startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`;
-  return (SUPPORTED_IMAGE_EXTENSIONS as readonly string[]).includes(normalized);
+  return SUPPORTED_IMAGE_EXTENSION_SET.has(normalizeFileExtension(ext));
 }

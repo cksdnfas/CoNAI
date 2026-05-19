@@ -42,6 +42,7 @@
     "verify:search-option-suggestion-contracts": "tsx src/scripts/verifySearchOptionSuggestionContracts.ts",
     "verify:danbooru-browser-locale-contracts": "tsx src/scripts/verifyDanbooruBrowserLocaleContracts.ts",
     "verify:group-image-route-contracts": "tsx src/scripts/verifyGroupImageRouteContracts.ts",
+    "verify:supported-extension-contracts": "tsx src/scripts/verifySupportedExtensionContracts.ts",
     "verify:recycle-bin-deletion-contracts": "tsx src/scripts/verifyRecycleBinDeletionContracts.ts",
     "verify:data-rematch-contracts": "tsx src/scripts/verifyDataRematchContracts.ts"
   },
