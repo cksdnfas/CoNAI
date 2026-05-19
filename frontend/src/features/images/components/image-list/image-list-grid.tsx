@@ -6,7 +6,7 @@ import { ImageListItem } from './image-list-item'
 
 interface ImageListGridProps {
   items: ImageRecord[]
-  selectedIds: string[]
+  selectedIdSet: ReadonlySet<string>
   selectionMode: boolean
   minColumnWidth: number
   columnCount: number
@@ -29,7 +29,7 @@ interface ImageListGridProps {
 /** Render a reusable virtualized grid layout with equally sized cards. */
 export function ImageListGrid({
   items,
-  selectedIds,
+  selectedIdSet,
   selectionMode,
   minColumnWidth,
   columnCount,
@@ -94,7 +94,7 @@ export function ImageListGrid({
               image={image}
               itemId={itemId}
               href={getItemHref?.(image)}
-              selected={selectedIds.includes(itemId)}
+              selected={selectedIdSet.has(itemId)}
               selectionMode={selectionMode}
               gridItemHeight={gridItemHeight}
               onActivate={onActivate}

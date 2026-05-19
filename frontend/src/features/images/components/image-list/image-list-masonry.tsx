@@ -6,7 +6,7 @@ import { ImageListItem } from './image-list-item'
 
 interface ImageListMasonryProps {
   items: ImageRecord[]
-  selectedIds: string[]
+  selectedIdSet: ReadonlySet<string>
   selectionMode: boolean
   columnCount: number
   columnGap: number
@@ -25,7 +25,7 @@ interface ImageListMasonryProps {
 
 interface ImageListMasonryContext {
   rowGap: number
-  selectedIds: string[]
+  selectedIdSet: ReadonlySet<string>
   selectionMode: boolean
   getItemHref?: (image: ImageRecord) => string | undefined
   getItemId?: (image: ImageRecord) => string
@@ -50,7 +50,7 @@ const MasonryItemContent: ItemContent<ImageRecord, ImageListMasonryContext> = ({
         image={image}
         itemId={itemId}
         href={context.getItemHref?.(image)}
-        selected={context.selectedIds.includes(itemId)}
+        selected={context.selectedIdSet.has(itemId)}
         selectionMode={context.selectionMode}
         onActivate={context.onActivate}
         renderOverlay={context.renderItemOverlay?.(image)}
@@ -66,7 +66,7 @@ const MasonryItemContent: ItemContent<ImageRecord, ImageListMasonryContext> = ({
 /** Render a reusable virtualized masonry layout with responsive column count. */
 export function ImageListMasonry({
   items,
-  selectedIds,
+  selectedIdSet,
   selectionMode,
   columnCount,
   columnGap,
@@ -96,7 +96,7 @@ export function ImageListMasonry({
       data={items}
       context={{
         rowGap,
-        selectedIds,
+        selectedIdSet,
         selectionMode,
         getItemHref,
         getItemId,

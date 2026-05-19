@@ -63,6 +63,7 @@ export function ImageList({
     () => items.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
     [items],
   )
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const resolvedColumnCount = useImageListColumnCount(containerElement, minColumnWidth, columnGap, preferredColumnCount)
   const loadMoreSentinelRef = useImageListLoadMore({
     hasMore: scrollMode === 'window' && hasMore,
@@ -99,7 +100,7 @@ export function ImageList({
       }
 
       if (selectionMode && onSelectedIdsChange) {
-        const nextSelectedIds = selectedIds.includes(imageId)
+        const nextSelectedIds = selectedIdSet.has(imageId)
           ? selectedIds.filter((selectedId) => selectedId !== imageId)
           : [...selectedIds, imageId]
         onSelectedIdsChange(nextSelectedIds)
@@ -143,7 +144,7 @@ export function ImageList({
         })
       }
     },
-    [activationMode, imageViewModal, itemCompositeHashes, items, location.pathname, modalAccessOptions, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIds, selectionMode, shouldSuppressClick],
+    [activationMode, imageViewModal, itemCompositeHashes, items, location.pathname, modalAccessOptions, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIdSet, selectedIds, selectionMode, shouldSuppressClick],
   )
 
   const activeModalIndexInList = useMemo(() => {
@@ -216,7 +217,7 @@ export function ImageList({
           {layout === 'grid' ? (
             <ImageListGridLazy
               items={items}
-              selectedIds={selectedIds}
+              selectedIdSet={selectedIdSet}
               getItemId={getItemId}
               selectionMode={selectionMode}
               minColumnWidth={minColumnWidth}
@@ -238,7 +239,7 @@ export function ImageList({
           ) : (
             <ImageListMasonryLazy
               items={items}
-              selectedIds={selectedIds}
+              selectedIdSet={selectedIdSet}
               getItemId={getItemId}
               selectionMode={selectionMode}
               columnCount={resolvedColumnCount}
