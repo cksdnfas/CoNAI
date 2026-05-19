@@ -117,7 +117,44 @@ function verifyImageNavigationButtonsUseProjectChrome() {
   )
 }
 
+function verifyModalKeyboardNavigationPreservesFormControls() {
+  const providerSource = source('src/features/images/components/detail/image-view-modal-provider.tsx')
+  const keyboardSource = sliceRequiredSource(
+    providerSource,
+    'const handleKeyDown = (event: KeyboardEvent) => {',
+    "    document.body.style.overflow = 'hidden'",
+  )
+  const editingGuardIndex = keyboardSource.indexOf('isModalKeyboardEditingTarget(event.target)')
+  const arrowNavigationIndex = keyboardSource.indexOf("event.key === 'ArrowLeft' || event.key === 'ArrowRight'")
+
+  match(
+    providerSource,
+    /function isModalKeyboardEditingTarget\(target: EventTarget \| null\)/,
+    'modal keyboard shortcuts should centralize form-control target detection',
+  )
+  match(
+    providerSource,
+    /tagName === 'INPUT' \|\| tagName === 'TEXTAREA' \|\| tagName === 'SELECT' \|\| target\.isContentEditable/,
+    'modal keyboard shortcuts should preserve arrows for inputs, textareas, selects, and content-editable controls',
+  )
+  match(
+    keyboardSource,
+    /if \(event\.defaultPrevented\) \{[\s\S]*?return[\s\S]*?\}/,
+    'modal keyboard shortcuts should not override nested handlers that already handled a key event',
+  )
+  ok(
+    editingGuardIndex > arrowNavigationIndex,
+    'modal keyboard shortcut handler should check focused form controls inside the arrow-navigation branch',
+  )
+  match(
+    keyboardSource,
+    /if \(isModalKeyboardEditingTarget\(event\.target\)\) \{[\s\S]*?return[\s\S]*?\}\s*\n\s*event\.preventDefault\(\)/,
+    'modal arrow navigation should not prevent default while a form control is focused',
+  )
+}
+
 verifyModalToolbarStaysSingleLine()
 verifyInfoToggleAvoidsImageNavigationControls()
 verifyImageNavigationButtonsUseProjectChrome()
+verifyModalKeyboardNavigationPreservesFormControls()
 console.log('Image modal layout contracts verified.')

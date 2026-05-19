@@ -47,6 +47,15 @@ function buildSourceItemsByHash(items?: ImageRecord[]) {
   return Object.fromEntries(entries) as Record<string, ImageRecord>
 }
 
+function isModalKeyboardEditingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  const tagName = target.tagName
+  return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target.isContentEditable
+}
+
 /** Provide a global image view modal for app-shell image browsing flows. */
 export function ImageViewModalProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient()
@@ -241,19 +250,27 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       width: document.body.style.width,
     }
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return
+      }
+
       if (event.key === 'Escape') {
         closeImageView()
         return
       }
 
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault()
-        viewPreviousImage()
-        return
-      }
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        if (isModalKeyboardEditingTarget(event.target)) {
+          return
+        }
 
-      if (event.key === 'ArrowRight') {
         event.preventDefault()
+
+        if (event.key === 'ArrowLeft') {
+          viewPreviousImage()
+          return
+        }
+
         viewNextImage()
       }
     }
