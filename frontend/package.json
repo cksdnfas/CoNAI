@@ -35,7 +35,8 @@
     "verify:image-modal-layout-contracts": "tsx src/scripts/verifyImageModalLayoutContracts.ts",
     "verify:home-search-drawer-contracts": "tsx src/scripts/verifyHomeSearchDrawerContracts.ts",
     "verify:search-suggestion-query-contracts": "tsx src/scripts/verifySearchSuggestionQueryContracts.ts",
-    "verify:image-list-selection-contracts": "tsx src/scripts/verifyImageListSelectionContracts.ts"
+    "verify:image-list-selection-contracts": "tsx src/scripts/verifyImageListSelectionContracts.ts",
+    "verify:image-list-modal-contracts": "tsx src/scripts/verifyImageListModalContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",

@@ -63,6 +63,11 @@ export function ImageList({
     () => items.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
     [items],
   )
+  // Keep modal next-page sync from scanning large media lists on every active image change.
+  const itemCompositeHashIndex = useMemo(
+    () => new Map(itemCompositeHashes.map((compositeHash, index) => [compositeHash, index] as const)),
+    [itemCompositeHashes],
+  )
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const resolvedColumnCount = useImageListColumnCount(containerElement, minColumnWidth, columnGap, preferredColumnCount)
   const loadMoreSentinelRef = useImageListLoadMore({
@@ -153,8 +158,8 @@ export function ImageList({
       return -1
     }
 
-    return itemCompositeHashes.indexOf(activeCompositeHash)
-  }, [activationMode, imageViewModal?.activeCompositeHash, itemCompositeHashes])
+    return itemCompositeHashIndex.get(activeCompositeHash) ?? -1
+  }, [activationMode, imageViewModal?.activeCompositeHash, itemCompositeHashIndex])
 
   useEffect(() => {
     if (activationMode !== 'modal' || !imageViewModal?.activeCompositeHash || activeModalIndexInList < 0) {
