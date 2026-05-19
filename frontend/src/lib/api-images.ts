@@ -304,12 +304,11 @@ export async function downloadImageSelection(compositeHashes: string[], type: Im
     body: JSON.stringify({ compositeHashes, type }),
   })
 
-  if (!response.ok) {
-    throw new Error(`Batch download failed: ${response.status}`)
-  }
+  const blob = await readDownloadBlob(response, `Batch download failed: ${response.status}`)
+  const fallbackFileName = `conai-images-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`
+  const fileName = getDownloadFileName(response.headers.get('Content-Disposition'), fallbackFileName)
 
-  const blob = await response.blob()
-  triggerBlobDownload(blob, `conai-images-${type}-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.zip`)
+  triggerBlobDownload(blob, fileName)
 }
 
 export interface UploadBatchResultItem {

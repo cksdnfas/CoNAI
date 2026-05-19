@@ -56,5 +56,36 @@ function verifySingleImageDownloadUsesBlobFlow() {
   )
 }
 
+function verifyBatchImageDownloadUsesServerArchiveName() {
+  const apiImagesSource = source('src/lib/api-images.ts')
+  const batchDownloadSource = sliceRequiredSource(
+    apiImagesSource,
+    'export async function downloadImageSelection',
+    'export interface UploadBatchResultItem',
+  )
+
+  match(
+    batchDownloadSource,
+    /const blob = await readDownloadBlob\(response, `Batch download failed: \$\{response\.status\}`\)/,
+    'batch image downloads should reuse the shared blob/error reader so backend error text is preserved',
+  )
+  match(
+    batchDownloadSource,
+    /const fallbackFileName = `conai-images-\$\{type\}-\$\{new Date\(\)\.toISOString\(\)\.slice\(0, 19\)\.replace\(\/\[T:\]\/g, '-'\)\}\.zip`/,
+    'batch image downloads should keep the timestamped fallback zip name',
+  )
+  match(
+    batchDownloadSource,
+    /getDownloadFileName\(response\.headers\.get\('Content-Disposition'\), fallbackFileName\)/,
+    'batch image downloads should preserve backend archive filenames when Content-Disposition is available',
+  )
+  match(
+    batchDownloadSource,
+    /triggerBlobDownload\(blob, fileName\)/,
+    'batch image downloads should trigger the save UI with the resolved archive filename',
+  )
+}
+
 verifySingleImageDownloadUsesBlobFlow()
+verifyBatchImageDownloadUsesServerArchiveName()
 console.log('Image download contracts verified.')
