@@ -98,6 +98,7 @@
     "verify:search-suggestion-query-contracts": "cd frontend && npm run verify:search-suggestion-query-contracts",
     "verify:image-list-selection-contracts": "cd frontend && npm run verify:image-list-selection-contracts",
     "verify:image-list-modal-contracts": "cd frontend && npm run verify:image-list-modal-contracts",
+    "verify:nai-reusable-assets-contracts": "cd frontend && npm run verify:nai-reusable-assets-contracts",
     "verify:image-file-route-contracts": "cd backend && npm run verify:image-file-route-contracts",
     "verify:backup-source-contracts": "cd backend && npm run verify:backup-source-contracts",
     "verify:like-search-literal-contracts": "cd backend && npm run verify:like-search-literal-contracts",

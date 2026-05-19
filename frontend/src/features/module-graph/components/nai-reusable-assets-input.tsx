@@ -213,6 +213,15 @@ function togglePinnedAssetIds(storageKey: string, assetId: string, currentIds: s
   return nextIds
 }
 
+/** Index saved asset order preferences once before comparator hot paths run. */
+function buildAssetOrderIndex(ids: string[]) {
+  return new Map(ids.map((id, index) => [id, index] as const))
+}
+
+function getAssetOrder(orderIndex: ReadonlyMap<string, number>, assetId: string) {
+  return orderIndex.get(assetId) ?? Number.MAX_SAFE_INTEGER
+}
+
 /** Sort saved asset cards so users can switch between pinned, recent use, recency, and name ordering. */
 function sortSavedAssets<T extends { id: string; label: string; created_date: string }>(
   items: T[],
@@ -224,20 +233,19 @@ function sortSavedAssets<T extends { id: string; label: string; created_date: st
   const nextItems = [...items]
 
   if (sort === 'pinned') {
+    const pinnedIdOrder = buildAssetOrderIndex(pinnedIds)
+    const recentIdOrder = buildAssetOrderIndex(recentIds)
+
     return nextItems.sort((left, right) => {
-      const leftPinnedIndex = pinnedIds.indexOf(left.id)
-      const rightPinnedIndex = pinnedIds.indexOf(right.id)
-      const normalizedLeftPinned = leftPinnedIndex === -1 ? Number.MAX_SAFE_INTEGER : leftPinnedIndex
-      const normalizedRightPinned = rightPinnedIndex === -1 ? Number.MAX_SAFE_INTEGER : rightPinnedIndex
+      const normalizedLeftPinned = getAssetOrder(pinnedIdOrder, left.id)
+      const normalizedRightPinned = getAssetOrder(pinnedIdOrder, right.id)
 
       if (normalizedLeftPinned !== normalizedRightPinned) {
         return normalizedLeftPinned - normalizedRightPinned
       }
 
-      const leftRecentIndex = recentIds.indexOf(left.id)
-      const rightRecentIndex = recentIds.indexOf(right.id)
-      const normalizedLeftRecent = leftRecentIndex === -1 ? Number.MAX_SAFE_INTEGER : leftRecentIndex
-      const normalizedRightRecent = rightRecentIndex === -1 ? Number.MAX_SAFE_INTEGER : rightRecentIndex
+      const normalizedLeftRecent = getAssetOrder(recentIdOrder, left.id)
+      const normalizedRightRecent = getAssetOrder(recentIdOrder, right.id)
       if (normalizedLeftRecent !== normalizedRightRecent) {
         return normalizedLeftRecent - normalizedRightRecent
       }
@@ -247,11 +255,11 @@ function sortSavedAssets<T extends { id: string; label: string; created_date: st
   }
 
   if (sort === 'recent') {
+    const recentIdOrder = buildAssetOrderIndex(recentIds)
+
     return nextItems.sort((left, right) => {
-      const leftIndex = recentIds.indexOf(left.id)
-      const rightIndex = recentIds.indexOf(right.id)
-      const normalizedLeft = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex
-      const normalizedRight = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex
+      const normalizedLeft = getAssetOrder(recentIdOrder, left.id)
+      const normalizedRight = getAssetOrder(recentIdOrder, right.id)
 
       if (normalizedLeft !== normalizedRight) {
         return normalizedLeft - normalizedRight
