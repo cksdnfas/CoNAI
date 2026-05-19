@@ -1,6 +1,14 @@
+import { readFileSync } from 'node:fs'
 import type { ModuleAuthoringSource, ModuleDefinitionRecord, ModuleEngineType, ModulePortDefinition } from '../lib/api-module-graph'
 import {
+  CUSTOM_NODE_GROUP_ORDER,
+  CUSTOM_NODE_GROUP_ORDER_INDEX,
+  SAVED_MODULE_GROUP_ORDER,
+  SAVED_MODULE_GROUP_ORDER_INDEX,
+  SYSTEM_GROUP_ORDER,
+  SYSTEM_GROUP_ORDER_INDEX,
   getCustomNodeGroup,
+  getModuleGroupSortIndex,
   getSavedModuleGroup,
   getSystemModuleGroup,
   isCustomNodeModule,
@@ -83,6 +91,31 @@ function assertGroup(group: { key: string; label: string }, expectedKey: string,
   assert(group.label === expectedLabel, `${label}: expected group label ${expectedLabel}, got ${group.label}`)
 }
 
+function assertOrderIndex(groupOrder: readonly string[], groupOrderIndex: ReadonlyMap<string, number>, label: string) {
+  for (const [expectedIndex, groupKey] of groupOrder.entries()) {
+    assert(
+      getModuleGroupSortIndex(groupOrderIndex, groupKey) === expectedIndex,
+      `${label}: expected ${groupKey} to sort at index ${expectedIndex}`,
+    )
+  }
+}
+
+function assertModuleLibrarySortUsesOrderIndexes() {
+  const panelSource = readFileSync(new URL('../features/module-graph/components/module-library-panel.tsx', import.meta.url), 'utf8')
+  const quickCreateSource = readFileSync(new URL('../features/module-graph/components/module-graph-quick-create-menu.tsx', import.meta.url), 'utf8')
+
+  assert(
+    panelSource.includes('getModuleGroupSortIndex(groupOrderIndex'),
+    'module library panel group sorting should use the precomputed group-order index',
+  )
+  assert(!panelSource.includes('orderedKeys.indexOf'), 'module library panel group sorting must not scan orderedKeys in the comparator')
+  assert(
+    quickCreateSource.includes('getModuleGroupSortIndex(groupOrderIndex'),
+    'quick create menu group sorting should use the precomputed group-order index',
+  )
+  assert(!quickCreateSource.includes('groupOrder.indexOf'), 'quick create menu group sorting must not scan groupOrder in the comparator')
+}
+
 const fixedNai = makeGenerationSystemModule(1, 'NovelAI image generation', 'system.generate_image_nai')
 const fixedCodex = makeGenerationSystemModule(2, 'Codex image generation', 'system.generate_image_codex')
 const savedComfy = makeSavedModule(3, 'comfyui', 'comfyui_workflow_wrap')
@@ -129,5 +162,13 @@ assert(shouldHideFromModuleLibrary(legacyNaiSnapshot), 'legacy saved NAI snapsho
 assert(shouldHideFromModuleLibrary(legacyCodexSnapshot), 'legacy saved Codex snapshot module must stay hidden')
 assert(!shouldHideFromModuleLibrary(constantText), 'constant text module must stay visible')
 assert(shouldHideFromModuleLibrary(constantPrompt), 'legacy constant prompt duplicate must stay hidden')
+assertOrderIndex(SYSTEM_GROUP_ORDER, SYSTEM_GROUP_ORDER_INDEX, 'system group order')
+assertOrderIndex(SAVED_MODULE_GROUP_ORDER, SAVED_MODULE_GROUP_ORDER_INDEX, 'saved module group order')
+assertOrderIndex(CUSTOM_NODE_GROUP_ORDER, CUSTOM_NODE_GROUP_ORDER_INDEX, 'custom-node group order')
+assert(
+  getModuleGroupSortIndex(SYSTEM_GROUP_ORDER_INDEX, 'unlisted') === Number.MAX_SAFE_INTEGER,
+  'unknown module groups should still sort after known group keys',
+)
+assertModuleLibrarySortUsesOrderIndexes()
 
 console.log('Module library grouping contracts verified.')

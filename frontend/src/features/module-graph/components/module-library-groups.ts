@@ -13,6 +13,21 @@ export const SAVED_MODULE_GROUP_ORDER = ['generation', 'other']
 export const CUSTOM_NODE_GROUP_ORDER = ['custom-js', 'other']
 export const CUSTOM_GROUP_ORDER = SAVED_MODULE_GROUP_ORDER
 
+const MODULE_GROUP_FALLBACK_ORDER = Number.MAX_SAFE_INTEGER
+
+function buildModuleGroupOrderIndex(groupOrder: readonly string[]) {
+  return new Map(groupOrder.map((key, index) => [key, index]))
+}
+
+export const SYSTEM_GROUP_ORDER_INDEX = buildModuleGroupOrderIndex(SYSTEM_GROUP_ORDER)
+export const SAVED_MODULE_GROUP_ORDER_INDEX = buildModuleGroupOrderIndex(SAVED_MODULE_GROUP_ORDER)
+export const CUSTOM_NODE_GROUP_ORDER_INDEX = buildModuleGroupOrderIndex(CUSTOM_NODE_GROUP_ORDER)
+
+/** Resolve sortable group priority without scanning order arrays inside render-sort comparators. */
+export function getModuleGroupSortIndex(groupOrderIndex: ReadonlyMap<string, number>, groupKey: string) {
+  return groupOrderIndex.get(groupKey) ?? MODULE_GROUP_FALLBACK_ORDER
+}
+
 const GET_MODULE_OPERATION_KEYS = new Set([
   'system.find_similar_images',
   'system.load_prompt_from_reference',

@@ -9,7 +9,7 @@ import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getModuleBaseDisplayName } from '../module-graph-shared'
-import { CUSTOM_NODE_GROUP_ORDER, SAVED_MODULE_GROUP_ORDER, SYSTEM_GROUP_ORDER, getCustomNodeGroup, getSavedModuleGroup, getSystemModuleGroup, isCustomNodeModule, isGenerationModule, localizeModuleGroupLabel, shouldHideFromModuleLibrary } from './module-library-groups'
+import { CUSTOM_NODE_GROUP_ORDER_INDEX, SAVED_MODULE_GROUP_ORDER_INDEX, SYSTEM_GROUP_ORDER_INDEX, getCustomNodeGroup, getModuleGroupSortIndex, getSavedModuleGroup, getSystemModuleGroup, isCustomNodeModule, isGenerationModule, localizeModuleGroupLabel, shouldHideFromModuleLibrary } from './module-library-groups'
 import type { RecommendedModuleMatch } from './module-graph-canvas'
 
 type QuickCreateTab = 'recommended' | 'system' | 'generation' | 'custom-nodes'
@@ -132,16 +132,14 @@ export function ModuleGraphQuickCreateMenu({
       })
     }
 
-    const groupOrder = activeTab === 'system'
-      ? SYSTEM_GROUP_ORDER
+    const groupOrderIndex = activeTab === 'system'
+      ? SYSTEM_GROUP_ORDER_INDEX
       : activeTab === 'custom-nodes'
-        ? CUSTOM_NODE_GROUP_ORDER
-        : SAVED_MODULE_GROUP_ORDER
+        ? CUSTOM_NODE_GROUP_ORDER_INDEX
+        : SAVED_MODULE_GROUP_ORDER_INDEX
     return [...groupMap.values()].sort((left, right) => {
-      const leftIndex = groupOrder.indexOf(left.key)
-      const rightIndex = groupOrder.indexOf(right.key)
-      const normalizedLeftIndex = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex
-      const normalizedRightIndex = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex
+      const normalizedLeftIndex = getModuleGroupSortIndex(groupOrderIndex, left.key)
+      const normalizedRightIndex = getModuleGroupSortIndex(groupOrderIndex, right.key)
       if (normalizedLeftIndex !== normalizedRightIndex) {
         return normalizedLeftIndex - normalizedRightIndex
       }
