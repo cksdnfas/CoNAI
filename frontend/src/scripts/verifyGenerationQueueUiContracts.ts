@@ -8,6 +8,7 @@ import {
   getGenerationQueueRequesterLabel,
   getGenerationQueueStatusLabel,
   getGenerationQueueWorkflowLabel,
+  shouldEnableFilteredQueueHeaderQuery,
 } from '../features/image-generation/components/generation-queue-ui'
 
 const translationTemplates: Record<string, string> = {
@@ -250,6 +251,29 @@ function assertHeaderQuerySnapshotSelection() {
   )
 }
 
+function assertFilteredQueueHeaderQueryEnablement() {
+  assertEqual(
+    shouldEnableFilteredQueueHeaderQuery({ hasGenerationPermission: true, isFilteredQueueView: true, isOpen: true }),
+    true,
+    'filtered queue query should run while the filtered popup view is open',
+  )
+  assertEqual(
+    shouldEnableFilteredQueueHeaderQuery({ hasGenerationPermission: true, isFilteredQueueView: true, isOpen: false }),
+    false,
+    'filtered queue query should not keep polling after the popup closes',
+  )
+  assertEqual(
+    shouldEnableFilteredQueueHeaderQuery({ hasGenerationPermission: true, isFilteredQueueView: false, isOpen: true }),
+    false,
+    'all-queue scope should not enable the filtered queue query',
+  )
+  assertEqual(
+    shouldEnableFilteredQueueHeaderQuery({ hasGenerationPermission: false, isFilteredQueueView: true, isOpen: true }),
+    false,
+    'missing generation permission should keep the filtered queue query disabled',
+  )
+}
+
 assertStatusLabels()
 assertWorkflowLabels()
 assertRequesterLabels()
@@ -257,5 +281,6 @@ assertRemainingLabels()
 assertElapsedLabels()
 assertProgressPercent()
 assertHeaderQuerySnapshotSelection()
+assertFilteredQueueHeaderQueryEnablement()
 
 console.log('Generation queue UI contracts verified.')

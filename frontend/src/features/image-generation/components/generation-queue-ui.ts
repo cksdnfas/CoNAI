@@ -23,6 +23,19 @@ export function getGenerationQueueHeaderQuerySnapshot<TRecord>({
   return isFilteredQueueView ? filteredQueue : globalQueue
 }
 
+export function shouldEnableFilteredQueueHeaderQuery({
+  hasGenerationPermission,
+  isFilteredQueueView,
+  isOpen,
+}: {
+  hasGenerationPermission: boolean
+  isFilteredQueueView: boolean
+  isOpen: boolean
+}) {
+  // The filtered queue is popup-only; keep the global active query as the only closed-header poller.
+  return hasGenerationPermission && isFilteredQueueView && isOpen
+}
+
 /** Render the shared localized status label for queue rows and widgets. */
 export function getGenerationQueueStatusLabel(record: GenerationQueueJobRecord, t: Translate) {
   if (record.cancel_requested > 0 && record.status === 'completed') {

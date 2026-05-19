@@ -25,6 +25,7 @@ import {
   getGenerationQueueRequesterLabel,
   getGenerationQueueStatusLabel,
   getGenerationQueueWorkflowLabel,
+  shouldEnableFilteredQueueHeaderQuery,
 } from './generation-queue-ui'
 import {
   formatReservationTimestamp,
@@ -146,6 +147,11 @@ export function GenerationQueueHeaderWidget() {
   const workflows = useMemo(() => workflowsQuery.data ?? [], [workflowsQuery.data])
   const filterParams = useMemo(() => parseQueueFilter(selectedFilter), [selectedFilter])
   const isFilteredQueueView = selectedFilter !== 'all'
+  const isFilteredQueueQueryEnabled = shouldEnableFilteredQueueHeaderQuery({
+    hasGenerationPermission,
+    isFilteredQueueView,
+    isOpen,
+  })
 
   const globalQueueQuery = useQuery({
     queryKey: ['image-generation-queue', 'header-widget', 'global-active'],
@@ -164,7 +170,7 @@ export function GenerationQueueHeaderWidget() {
       serviceType: filterParams.serviceType,
       workflowId: filterParams.workflowId,
     }),
-    enabled: hasGenerationPermission && isFilteredQueueView,
+    enabled: isFilteredQueueQueryEnabled,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
       return activeCount > 0 || isOpen ? ACTIVE_QUEUE_REFETCH_INTERVAL_MS : IDLE_QUEUE_REFETCH_INTERVAL_MS
