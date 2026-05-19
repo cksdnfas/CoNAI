@@ -1,7 +1,12 @@
 import { deepEqual, equal } from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import type { WildcardRecord } from '../lib/api-wildcards'
 import { resolveWildcardWorkspaceSelection } from '../features/image-generation/components/use-wildcard-workspace-browser'
 import type { WildcardTreeEntry } from '../features/image-generation/components/wildcard-generation-panel-helpers'
+
+function source(path: string) {
+  return readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
+}
 
 function makeWildcard(id: number, name: string): WildcardRecord {
   return {
@@ -73,5 +78,22 @@ const emptyWorkspace = resolveWildcardWorkspaceSelection({
 })
 equal(emptyWorkspace.nextSelectedWildcardId, null)
 equal(emptyWorkspace.selectedEntry, null)
+
+const inlineExplorerSource = source('features/image-generation/components/wildcard-inline-picker-explorer.tsx')
+equal(
+  inlineExplorerSource.includes('const expandedWildcardIdSet = useMemo(() => new Set(expandedWildcardIds), [expandedWildcardIds])'),
+  true,
+  'inline wildcard tree should memoize expanded ids once per expanded id snapshot',
+)
+equal(
+  inlineExplorerSource.includes('expandedWildcardIdSet.has(node.id)'),
+  true,
+  'inline wildcard tree rendering should use Set.has for per-node expanded state',
+)
+equal(
+  inlineExplorerSource.includes('expandedWildcardIds.includes(node.id)'),
+  false,
+  'inline wildcard tree rendering must not scan expandedWildcardIds for every visible node',
+)
 
 console.log('Wildcard search selection contracts verified')

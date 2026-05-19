@@ -1,5 +1,5 @@
 import { ChevronRight, Folder, FolderOpen, Plus } from 'lucide-react'
-import type { MouseEventHandler } from 'react'
+import { useMemo, type MouseEventHandler } from 'react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
@@ -46,6 +46,7 @@ export function WildcardInlinePickerExplorer({
 }: WildcardInlinePickerExplorerProps) {
   const { t } = useI18n()
   const tabs = getWildcardInlineExplorerTabs(t)
+  const expandedWildcardIdSet = useMemo(() => new Set(expandedWildcardIds), [expandedWildcardIds])
 
   const renderExplorerTree = (nodes: WildcardRecord[], depth = 0) => {
     if (nodes.length === 0) {
@@ -56,7 +57,7 @@ export function WildcardInlinePickerExplorer({
       <div className="space-y-1">
         {nodes.map((node) => {
           const hasChildren = (node.children?.length ?? 0) > 0
-          const isExpanded = expandedWildcardIds.includes(node.id)
+          const isExpanded = expandedWildcardIdSet.has(node.id)
           const isSelected = selectedWildcardId === node.id
           const generalItemCount = countStoredWildcardItemsForTool(node.items ?? [], 'general')
           const naiItemCount = countStoredWildcardItemsForTool(node.items ?? [], 'nai')
