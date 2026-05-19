@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, ChevronDown, Play, RotateCcw, Save } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -12,6 +12,11 @@ import { type ComfyUIServerTestState, type SelectedImageDraft, type WorkflowFiel
 import { CompactGenerationActionSurface, GenerationControllerFieldStack } from './shared-generation-controller'
 import { WorkflowFieldDisclosureCard } from './workflow-field-disclosure-card'
 import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownItemClassName, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
+import {
+  buildComfyWorkflowServerRoutingSummary,
+  isComfyWorkflowModalServer,
+  isComfyWorkflowServerRoutable,
+} from './comfy-workflow-routing'
 
 type WorkflowTargetOption = {
   value: string
@@ -196,15 +201,12 @@ export function ComfyWorkflowControllerPanel({
   onGenerateSelected,
 }: ComfyWorkflowControllerPanelProps) {
   const { t } = useI18n()
-  const isModalServer = useCallback(
-    (server: ComfyUIServer) => server.backend_type === 'modal' || serverTests[server.id]?.status?.backend_type === 'modal',
-    [serverTests],
+  const routingSummary = useMemo(
+    () => buildComfyWorkflowServerRoutingSummary(servers, serverTests),
+    [serverTests, servers],
   )
-  const connectedServers = servers.filter((server) => serverTests[server.id]?.status?.is_connected === true)
-  const autoRoutableServers = connectedServers.filter((server) => !isModalServer(server))
-  const routingTags = Array.from(new Set(servers.flatMap((server) => server.routing_tags ?? []))).sort((left, right) => left.localeCompare(right))
   const selectedServer = selectedTarget.startsWith('server:')
-    ? servers.find((server) => server.id === Number(selectedTarget.slice('server:'.length))) ?? null
+    ? routingSummary.serverById.get(Number(selectedTarget.slice('server:'.length))) ?? null
     : null
   const [, setPortalRevision] = useState(0)
   const useDrawerCompactChrome = Boolean(headerPortalTargetId)
@@ -228,15 +230,15 @@ export function ComfyWorkflowControllerPanel({
     : null
 
   const selectedTag = selectedTarget.startsWith('tag:') ? selectedTarget.slice('tag:'.length) : null
-  const selectedTagRoutableServers = selectedTag
-    ? servers.filter((server) => (server.routing_tags ?? []).includes(selectedTag) && (isModalServer(server) || serverTests[server.id]?.status?.is_connected === true))
-    : []
+  const selectedTagRoutableCount = selectedTag
+    ? routingSummary.tagRoutableCounts.get(selectedTag) ?? 0
+    : 0
   const canGenerateSelected = selectedTarget === 'auto'
-    ? autoRoutableServers.length > 0
+    ? routingSummary.autoRoutableCount > 0
     : selectedTag !== null
-      ? selectedTagRoutableServers.length > 0
+      ? selectedTagRoutableCount > 0
       : selectedServer
-        ? isModalServer(selectedServer) || serverTests[selectedServer.id]?.status?.is_connected === true
+        ? isComfyWorkflowServerRoutable(selectedServer, serverTests[selectedServer.id])
         : false
   const targetOptions = useMemo<WorkflowTargetOption[]>(() => {
     if (servers.length === 0) {
@@ -247,10 +249,10 @@ export function ComfyWorkflowControllerPanel({
       {
         value: 'auto',
         label: t({ ko: '자동 분산', en: 'Auto routing' }),
-        description: autoRoutableServers.length > 0 ? t({ ko: '연결 {count}', en: '{count} connected' }, { count: autoRoutableServers.length }) : t({ ko: '연결 없음', en: 'Not connected' }),
+        description: routingSummary.autoRoutableCount > 0 ? t({ ko: '연결 {count}', en: '{count} connected' }, { count: routingSummary.autoRoutableCount }) : t({ ko: '연결 없음', en: 'Not connected' }),
       },
-      ...routingTags.map((tag) => {
-        const routableCount = servers.filter((server) => (server.routing_tags ?? []).includes(tag) && (isModalServer(server) || serverTests[server.id]?.status?.is_connected === true)).length
+      ...routingSummary.routingTags.map((tag) => {
+        const routableCount = routingSummary.tagRoutableCounts.get(tag) ?? 0
         return {
           value: `tag:${tag}`,
           label: `#${tag}`,
@@ -259,7 +261,7 @@ export function ComfyWorkflowControllerPanel({
       }),
       ...servers.map((server) => {
         const connectionStatus = serverTests[server.id]?.status
-        const statusLabel = isModalServer(server)
+        const statusLabel = isComfyWorkflowModalServer(server, serverTests[server.id])
           ? t({ ko: 'Modal · 생성 시 호출', en: 'Modal · Called on generation' })
           : connectionStatus?.is_connected === true
             ? connectionStatus.is_idle
@@ -276,7 +278,7 @@ export function ComfyWorkflowControllerPanel({
         }
       }),
     ]
-  }, [autoRoutableServers, isModalServer, routingTags, serverTests, servers, t])
+  }, [routingSummary, serverTests, servers, t])
 
   const desktopActionButtons = (
     <div className="flex flex-wrap items-center justify-between gap-3">

@@ -15,6 +15,7 @@
     "verify:wallpaper-layout-contracts": "tsx src/scripts/verifyWallpaperLayoutContracts.ts",
     "verify:wallpaper-queue-status-contracts": "tsx src/scripts/verifyWallpaperQueueStatusContracts.ts",
     "verify:generation-queue-ui-contracts": "tsx src/scripts/verifyGenerationQueueUiContracts.ts",
+    "verify:comfy-workflow-routing-contracts": "tsx src/scripts/verifyComfyWorkflowRoutingContracts.ts",
     "verify:generation-history-feed-progress-ui-contracts": "tsx src/scripts/verifyGenerationHistoryFeedProgressUiContracts.ts",
     "verify:workflow-reservations-ui-contracts": "tsx src/scripts/verifyWorkflowReservationsUiContracts.ts",
     "verify:home-feed-progress-ui-contracts": "tsx src/scripts/verifyHomeFeedProgressUiContracts.ts",

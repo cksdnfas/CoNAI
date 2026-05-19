@@ -79,6 +79,7 @@
     "verify:graph-workflow-route-contracts": "cd backend && npm run verify:graph-workflow-route-contracts",
     "verify:queue-eta-contracts": "cd backend && npm run verify:queue-eta-contracts",
     "verify:generation-queue-ui-contracts": "cd frontend && npm run verify:generation-queue-ui-contracts",
+    "verify:comfy-workflow-routing-contracts": "cd frontend && npm run verify:comfy-workflow-routing-contracts",
     "verify:generation-history-feed-progress-ui-contracts": "cd frontend && npm run verify:generation-history-feed-progress-ui-contracts",
     "verify:workflow-reservations-ui-contracts": "cd frontend && npm run verify:workflow-reservations-ui-contracts",
     "verify:home-feed-progress-ui-contracts": "cd frontend && npm run verify:home-feed-progress-ui-contracts",
