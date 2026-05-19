@@ -46,10 +46,12 @@ export function WorkflowReservationsPanel() {
     () => new Map<number, string>(workflows.map((workflow: GraphWorkflowRecord) => [workflow.id, workflow.name])),
     [workflows],
   )
+  const reservationExecutionIdSet = useMemo(() => new Set(reservationExecutions.map((execution) => execution.id)), [reservationExecutions])
+  const selectedReservationExecutionIdSet = useMemo(() => new Set(selectedReservationExecutionIds), [selectedReservationExecutionIds])
 
   const selectedReservationExecutions = useMemo(
-    () => reservationExecutions.filter((execution) => selectedReservationExecutionIds.includes(execution.id)),
-    [reservationExecutions, selectedReservationExecutionIds],
+    () => reservationExecutions.filter((execution) => selectedReservationExecutionIdSet.has(execution.id)),
+    [reservationExecutions, selectedReservationExecutionIdSet],
   )
   const cancelableReservationExecutions = useMemo(
     () => selectedReservationExecutions.filter((execution) => isActiveReservationExecution(execution.status)),
@@ -59,19 +61,20 @@ export function WorkflowReservationsPanel() {
     () => selectedReservationExecutions.filter((execution) => !isActiveReservationExecution(execution.status)),
     [selectedReservationExecutions],
   )
-  const allVisibleSelected = reservationExecutions.length > 0 && selectedReservationExecutionIds.length === reservationExecutions.length
+  const allVisibleSelected = reservationExecutions.length > 0 && selectedReservationExecutions.length === reservationExecutions.length
 
   useEffect(() => {
-    setSelectedReservationExecutionIds((current) => current.filter((id) => reservationExecutions.some((execution) => execution.id === id)))
-  }, [reservationExecutions])
+    setSelectedReservationExecutionIds((current) => current.filter((id) => reservationExecutionIdSet.has(id)))
+  }, [reservationExecutionIdSet])
 
   const handleRefresh = async () => {
     await reservationsQuery.refetch()
   }
 
   const handleCancelSelectedReservationExecutions = async (executionIds?: number[]) => {
+    const targetExecutionIdSet = new Set(executionIds ?? [])
     const cancelTargets = executionIds
-      ? reservationExecutions.filter((execution) => executionIds.includes(execution.id) && isActiveReservationExecution(execution.status))
+      ? reservationExecutions.filter((execution) => targetExecutionIdSet.has(execution.id) && isActiveReservationExecution(execution.status))
       : cancelableReservationExecutions
 
     if (cancelTargets.length === 0) {
@@ -96,8 +99,9 @@ export function WorkflowReservationsPanel() {
   }
 
   const handleCleanupSelectedReservations = async (executionIds?: number[]) => {
+    const targetExecutionIdSet = new Set(executionIds ?? [])
     const cleanupTargets = executionIds
-      ? reservationExecutions.filter((execution) => executionIds.includes(execution.id) && !isActiveReservationExecution(execution.status))
+      ? reservationExecutions.filter((execution) => targetExecutionIdSet.has(execution.id) && !isActiveReservationExecution(execution.status))
       : deletableReservationExecutions
 
     if (cleanupTargets.length === 0) {
@@ -267,7 +271,7 @@ export function WorkflowReservationsPanel() {
           schedules={schedules}
           workflows={workflows}
           queueExecutions={reservationExecutions}
-          selectedQueueExecutionIds={selectedReservationExecutionIds}
+          selectedQueueExecutionIdSet={selectedReservationExecutionIdSet}
           allQueueSelected={allVisibleSelected}
           workflowNameById={workflowNameById}
           isCleaningQueue={isCleaningReservations}

@@ -1,5 +1,8 @@
 import type { TranslationInput, TranslationParams } from '../i18n'
 import type { GraphExecutionRecord, GraphWorkflowScheduleRecord } from '../lib/api-module-graph'
+import * as assertNode from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { getImageGenerationTabLabel, getImageGenerationTabs, parseImageGenerationTab } from '../features/image-generation/image-generation-tabs'
 import {
   formatReservationTimestamp,
@@ -36,6 +39,11 @@ function createTranslate(language: 'ko' | 'en') {
 
 const translate = createTranslate('en')
 const translateKo = createTranslate('ko')
+const sourceRoot = resolve(process.cwd(), 'src')
+
+function source(relativePath: string) {
+  return readFileSync(resolve(sourceRoot, relativePath), 'utf8')
+}
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -164,10 +172,52 @@ function assertRunSummariesAndSorting() {
   assertEqual(getActiveWorkflowReservationScheduleCount(sortedSchedules), 2, 'active reservation count should only include active schedules')
 }
 
+function assertReservationSelectionLookupPolicy() {
+  const panelSource = source('features/image-generation/components/workflow-reservations-panel.tsx')
+  const emptyRunsTabSource = source('features/module-graph/components/module-workflow-empty-runs-tab.tsx')
+
+  assertNode.match(
+    panelSource,
+    /const reservationExecutionIdSet = useMemo\(\(\) => new Set\(reservationExecutions\.map\(\(execution\) => execution\.id\)\), \[reservationExecutions\]\)/,
+    'reservation panel should memoize visible execution ids before pruning stale selections',
+  )
+  assertNode.match(
+    panelSource,
+    /const selectedReservationExecutionIdSet = useMemo\(\(\) => new Set\(selectedReservationExecutionIds\), \[selectedReservationExecutionIds\]\)/,
+    'reservation panel should memoize selected execution ids for large empty-run lists',
+  )
+  assertNode.match(
+    panelSource,
+    /selectedReservationExecutionIdSet\.has\(execution\.id\)/,
+    'selected reservation derivation should reuse Set.has instead of scanning selected ids per execution',
+  )
+  assertNode.doesNotMatch(
+    panelSource,
+    /selectedReservationExecutionIds\.includes\(execution\.id\)/,
+    'reservation panel must not scan selected ids for every visible execution',
+  )
+  assertNode.match(
+    emptyRunsTabSource,
+    /selectedQueueExecutionIdSet: ReadonlySet<number>/,
+    'empty-runs tab should receive selection membership as a readonly Set',
+  )
+  assertNode.match(
+    emptyRunsTabSource,
+    /const isSelected = selectedQueueExecutionIdSet\.has\(execution\.id\)/,
+    'empty-runs tab row selection should use Set.has during list rendering',
+  )
+  assertNode.doesNotMatch(
+    emptyRunsTabSource,
+    /selectedQueueExecutionIds\.includes\(execution\.id\)/,
+    'empty-runs tab must not scan selected queue ids for every rendered row',
+  )
+}
+
 assertImageGenerationTabs()
 assertActiveExecutionDetection()
 assertStatusVariants()
 assertTypeAndTimingLabels()
 assertRunSummariesAndSorting()
+assertReservationSelectionLookupPolicy()
 
 console.log('Workflow reservations UI contracts verified.')

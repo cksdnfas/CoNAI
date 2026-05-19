@@ -12,7 +12,7 @@ export function ModuleWorkflowEmptyRunsTab({
   schedules,
   workflows,
   queueExecutions,
-  selectedQueueExecutionIds,
+  selectedQueueExecutionIdSet,
   allQueueSelected,
   workflowNameById,
   isCleaningQueue,
@@ -31,7 +31,7 @@ export function ModuleWorkflowEmptyRunsTab({
   schedules: GraphWorkflowScheduleRecord[]
   workflows: GraphWorkflowRecord[]
   queueExecutions: GraphExecutionRecord[]
-  selectedQueueExecutionIds: number[]
+  selectedQueueExecutionIdSet: ReadonlySet<number>
   allQueueSelected: boolean
   workflowNameById: Map<number, string>
   isCleaningQueue: boolean
@@ -110,7 +110,7 @@ export function ModuleWorkflowEmptyRunsTab({
         ) : (
           <div className="space-y-3">
             {queueExecutions.map((execution) => {
-              const isSelected = selectedQueueExecutionIds.includes(execution.id)
+              const isSelected = selectedQueueExecutionIdSet.has(execution.id)
               const isCancelable = execution.status === 'queued' || execution.status === 'running'
 
               return (
