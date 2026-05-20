@@ -58,6 +58,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<ModuleLibraryTab>('saved')
   const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<string[]>([])
+  const collapsedGroupKeySet = useMemo(() => new Set(collapsedGroupKeys), [collapsedGroupKeys])
 
   const savedModules = useMemo(() => modules.filter((module) => module.engine_type !== 'system' && !isCustomNodeModule(module) && !shouldHideFromModuleLibrary(module)), [modules])
   const customNodeModules = useMemo(() => modules.filter((module) => isCustomNodeModule(module) && !shouldHideFromModuleLibrary(module)), [modules])
@@ -297,7 +298,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
       <div className="max-h-[min(68vh,760px)] space-y-5 overflow-y-auto pr-1">
         {groupedModules.map((group) => {
           const scopedKey = `${activeTab}:${group.key}`
-          const isCollapsed = collapsedGroupKeys.includes(scopedKey)
+          const isCollapsed = collapsedGroupKeySet.has(scopedKey)
 
           return (
             <section key={group.key} className="space-y-2">

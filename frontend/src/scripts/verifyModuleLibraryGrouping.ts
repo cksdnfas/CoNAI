@@ -110,6 +110,15 @@ function assertModuleLibrarySortUsesOrderIndexes() {
   )
   assert(!panelSource.includes('orderedKeys.indexOf'), 'module library panel group sorting must not scan orderedKeys in the comparator')
   assert(
+    panelSource.includes('const collapsedGroupKeySet = useMemo(() => new Set(collapsedGroupKeys), [collapsedGroupKeys])'),
+    'module library panel should memoize collapsed group keys before rendering groups',
+  )
+  assert(
+    panelSource.includes('collapsedGroupKeySet.has(scopedKey)'),
+    'module library panel group rendering should use Set.has for collapsed-state lookups',
+  )
+  assert(!panelSource.includes('const isCollapsed = collapsedGroupKeys.includes(scopedKey)'), 'module library panel group rendering must not scan collapsedGroupKeys per group')
+  assert(
     quickCreateSource.includes('getModuleGroupSortIndex(groupOrderIndex'),
     'quick create menu group sorting should use the precomputed group-order index',
   )
