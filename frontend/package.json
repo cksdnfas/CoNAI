@@ -43,7 +43,8 @@
     "verify:image-list-modal-contracts": "tsx src/scripts/verifyImageListModalContracts.ts",
     "verify:nai-reusable-assets-contracts": "tsx src/scripts/verifyNaiReusableAssetsContracts.ts",
     "verify:thumbnail-settings-ui-contracts": "tsx src/scripts/verifyThumbnailSettingsUiContracts.ts",
-    "verify:comfy-workflow-authoring-contracts": "tsx src/scripts/verifyComfyWorkflowAuthoringContracts.ts"
+    "verify:comfy-workflow-authoring-contracts": "tsx src/scripts/verifyComfyWorkflowAuthoringContracts.ts",
+    "verify:comfy-dropdown-auto-collect-contracts": "tsx src/scripts/verifyComfyDropdownAutoCollectContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",

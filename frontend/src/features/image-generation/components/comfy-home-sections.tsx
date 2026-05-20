@@ -312,6 +312,7 @@ function getKnownModelFileName(fileName: string) {
 
 function collectModelFoldersFromSelection(files: RelativeFile[], locale: string) {
   const folderMap = new Map<string, ComfyUIModelFolderScanInput>()
+  const filePathSetByFolder = new Map<string, Set<string>>()
   const firstRelativePath = files[0]?.webkitRelativePath ?? files[0]?.name ?? ''
   const selectedRootName = firstRelativePath.split('/')[0] || 'selected-folder'
   const selectedRootLower = selectedRootName.toLowerCase()
@@ -354,7 +355,14 @@ function collectModelFoldersFromSelection(files: RelativeFile[], locale: string)
       files: [],
     }
 
-    if (!bucket.files.includes(modelOptionPath)) {
+    let bucketFileSet = filePathSetByFolder.get(displayName)
+    if (!bucketFileSet) {
+      bucketFileSet = new Set(bucket.files)
+      filePathSetByFolder.set(displayName, bucketFileSet)
+    }
+
+    if (!bucketFileSet.has(modelOptionPath)) {
+      bucketFileSet.add(modelOptionPath)
       bucket.files.push(modelOptionPath)
     }
     folderMap.set(displayName, bucket)
