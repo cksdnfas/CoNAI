@@ -112,21 +112,23 @@ export function WallpaperEditorPage() {
   })
 
   const canvasPreset = useMemo(() => getWallpaperCanvasPreset(layoutPreset.canvasPresetId), [layoutPreset.canvasPresetId])
+  const savedPresetById = useMemo(() => new Map(savedPresets.map((preset) => [preset.id, preset])), [savedPresets])
+  const widgetById = useMemo(() => new Map(layoutPreset.widgets.map((widget) => [widget.id, widget])), [layoutPreset.widgets])
   const effectiveActivePresetId = useMemo(
-    () => (activePresetId && savedPresets.some((preset) => preset.id === activePresetId) ? activePresetId : null),
-    [activePresetId, savedPresets],
+    () => (activePresetId && savedPresetById.has(activePresetId) ? activePresetId : null),
+    [activePresetId, savedPresetById],
   )
   const activePreset = useMemo(
-    () => savedPresets.find((preset) => preset.id === effectiveActivePresetId) ?? null,
-    [effectiveActivePresetId, savedPresets],
+    () => (effectiveActivePresetId ? (savedPresetById.get(effectiveActivePresetId) ?? null) : null),
+    [effectiveActivePresetId, savedPresetById],
   )
   const effectiveSelectedWidgetId = useMemo(
-    () => (selectedWidgetId && layoutPreset.widgets.some((widget) => widget.id === selectedWidgetId) ? selectedWidgetId : (layoutPreset.widgets[0]?.id ?? null)),
-    [layoutPreset.widgets, selectedWidgetId],
+    () => (selectedWidgetId && widgetById.has(selectedWidgetId) ? selectedWidgetId : (layoutPreset.widgets[0]?.id ?? null)),
+    [layoutPreset.widgets, selectedWidgetId, widgetById],
   )
   const selectedWidget = useMemo(
-    () => layoutPreset.widgets.find((widget) => widget.id === effectiveSelectedWidgetId) ?? null,
-    [effectiveSelectedWidgetId, layoutPreset.widgets],
+    () => (effectiveSelectedWidgetId ? (widgetById.get(effectiveSelectedWidgetId) ?? null) : null),
+    [effectiveSelectedWidgetId, widgetById],
   )
   const orderedWidgets = useMemo(
     () => getWallpaperWidgetsFrontToBack(layoutPreset.widgets),
@@ -199,7 +201,7 @@ export function WallpaperEditorPage() {
       return
     }
 
-    const nextPreset = savedPresets.find((preset) => preset.id === presetId)
+    const nextPreset = savedPresetById.get(presetId)
     if (!nextPreset) {
       return
     }

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from '../features/wallpaper/wallpaper-canvas-presets'
 import {
   appendWallpaperWidget,
@@ -40,6 +42,26 @@ function assert(condition: unknown, message: string): asserts condition {
 function assertUnique(values: string[], label: string) {
   assert(new Set(values).size === values.length, `${label} must be unique`)
 }
+
+const wallpaperEditorPageSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-editor-page.tsx'), 'utf8')
+assert(
+  wallpaperEditorPageSource.includes('const savedPresetById = useMemo(() => new Map(savedPresets.map((preset) => [preset.id, preset])), [savedPresets])'),
+  'wallpaper editor should build one saved-preset id index per preset change',
+)
+assert(
+  wallpaperEditorPageSource.includes('const widgetById = useMemo(() => new Map(layoutPreset.widgets.map((widget) => [widget.id, widget])), [layoutPreset.widgets])'),
+  'wallpaper editor should build one widget id index per layout widget change',
+)
+assert(
+  !wallpaperEditorPageSource.includes('savedPresets.some((preset) => preset.id === activePresetId)')
+    && !wallpaperEditorPageSource.includes('savedPresets.find((preset) => preset.id ==='),
+  'wallpaper editor active preset lookup should use the saved-preset id index instead of repeated array scans',
+)
+assert(
+  !wallpaperEditorPageSource.includes('layoutPreset.widgets.some((widget) => widget.id === selectedWidgetId)')
+    && !wallpaperEditorPageSource.includes('layoutPreset.widgets.find((widget) => widget.id === effectiveSelectedWidgetId)'),
+  'wallpaper editor selected widget lookup should use the widget id index instead of repeated array scans',
+)
 
 function assertWidgetWithinCanvas(widget: WallpaperWidgetInstance, canvasPreset: WallpaperCanvasPreset, label: string) {
   assert(widget.w >= 1, `${label}: widget width must be positive`)
