@@ -21,12 +21,15 @@ export const WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS = 'border-t border-border/8
 type WorkflowFieldDisclosureCardProps = {
   field: WorkflowMarkedField
   value: WorkflowFieldDraftValue
+  loraOptions?: string[]
+  isRefreshingOptions?: boolean
+  onRefreshOptions?: () => Promise<void> | void
   onChange: (value: WorkflowFieldDraftValue) => void
   onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
 
 /** Render one runtime workflow field inside a collapsible card. */
-export function WorkflowFieldDisclosureCard({ field, value, onChange, onImageChange }: WorkflowFieldDisclosureCardProps) {
+export function WorkflowFieldDisclosureCard({ field, value, loraOptions, isRefreshingOptions = false, onRefreshOptions, onChange, onImageChange }: WorkflowFieldDisclosureCardProps) {
   const [isExpanded, setIsExpanded] = useState(field.default_collapsed !== true)
   const hasValue = hasWorkflowFieldValue(value)
   const fieldLabel = field.label || field.id
@@ -85,6 +88,9 @@ export function WorkflowFieldDisclosureCard({ field, value, onChange, onImageCha
             field={field}
             value={value}
             hideLabel
+            loraOptions={loraOptions}
+            isRefreshingOptions={isRefreshingOptions}
+            onRefreshOptions={onRefreshOptions}
             onChange={onChange}
             onImageChange={onImageChange}
           />

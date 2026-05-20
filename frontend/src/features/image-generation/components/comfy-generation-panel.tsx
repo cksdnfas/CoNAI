@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import type { GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
 import {
+  DEFAULT_COMFY_MODEL_API_PATHS,
   createGenerationCustomDropdownList,
   createGenerationWorkflow,
   deleteGenerationCustomDropdownList,
@@ -35,6 +36,7 @@ import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
 import { ComfyWorkflowAuthoringModal } from './comfy-workflow-authoring-modal'
 import { ComfyWorkflowControllerPanel } from './comfy-workflow-controller-panel'
+import { findAutoCollectedPowerLoraOptions } from './power-lora-loader-utils'
 import { useComfyGenerationActions } from './use-comfy-generation-actions'
 import { useComfyServerController } from './use-comfy-server-controller'
 
@@ -71,6 +73,7 @@ export function ComfyGenerationPanel({
   const [isModuleSaveModalOpen, setIsModuleSaveModalOpen] = useState(false)
   const [moduleSaveWorkflowId, setModuleSaveWorkflowId] = useState<number | null>(null)
   const [isSavingComfyModule, setIsSavingComfyModule] = useState(false)
+  const [isRefreshingDropdownLists, setIsRefreshingDropdownLists] = useState(false)
   const [comfyModuleName, setComfyModuleName] = useState('')
   const [comfyModuleDescription, setComfyModuleDescription] = useState('')
   const [comfyExposedFieldIds, setComfyExposedFieldIds] = useState<string[]>([])
@@ -121,6 +124,10 @@ export function ComfyGenerationPanel({
   )
   const dropdownListById = useMemo(
     () => new Map((dropdownListsQuery.data ?? []).map((list) => [list.id, list])),
+    [dropdownListsQuery.data],
+  )
+  const loraOptions = useMemo(
+    () => findAutoCollectedPowerLoraOptions(dropdownListsQuery.data ?? []),
     [dropdownListsQuery.data],
   )
 
@@ -435,14 +442,23 @@ export function ComfyGenerationPanel({
   }
 
   const handleScanDropdownLists = async (input: { apiPaths: string[] }) => {
+    if (isRefreshingDropdownLists) {
+      return
+    }
+
     try {
+      setIsRefreshingDropdownLists(true)
       const response = await scanGenerationComfyUIModelDropdownLists(input)
       await dropdownListsQuery.refetch()
       showSnackbar({ message: response.data.message || t({ ko: '자동수집 목록을 갱신했어.', en: 'Refreshed the auto-collect list.' }), tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '자동수집 목록 생성에 실패했어.', en: 'Failed to create the auto-collect list.' })), tone: 'error' })
+    } finally {
+      setIsRefreshingDropdownLists(false)
     }
   }
+
+  const handleRefreshDropdownLists = () => handleScanDropdownLists({ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS })
 
   const handleCreateComfyModule = async () => {
     if (!moduleSaveWorkflow) {
@@ -518,6 +534,7 @@ export function ComfyGenerationPanel({
 
             <ComfyDropdownListsSection
               dropdownLists={dropdownListsQuery.data ?? []}
+              isSubmitting={isRefreshingDropdownLists}
               onCreateManualList={(input) => handleCreateDropdownList(input)}
               onUpdateList={(listId, input) => handleUpdateDropdownList(listId, input)}
               onDeleteList={(listId) => handleDeleteDropdownList(listId)}
@@ -544,6 +561,8 @@ export function ComfyGenerationPanel({
             workflowDraft={workflowDraft}
             queueRegistrationCount={queueRegistrationCount}
             isGenerating={isComfyGenerating}
+            loraOptions={loraOptions}
+            isRefreshingDropdownLists={isRefreshingDropdownLists}
             splitPaneScroll={splitPaneScroll}
             headerPortalTargetId={headerPortalTargetId}
             compactActionBarContentTargetId={compactActionBarContentTargetId}
@@ -552,6 +571,7 @@ export function ComfyGenerationPanel({
             onQueueRegistrationCountChange={setQueueRegistrationCount}
             onFieldChange={handleWorkflowFieldChange}
             onImageChange={handleWorkflowImageChange}
+            onRefreshDropdownLists={handleRefreshDropdownLists}
             onResetDraft={() => {
               if (selectedWorkflow) {
                 clearPersistedComfyWorkflowDraft(selectedWorkflow.id)

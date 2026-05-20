@@ -164,6 +164,8 @@ type ComfyWorkflowControllerPanelProps = {
   workflowDraft: Record<string, WorkflowFieldDraftValue>
   queueRegistrationCount: string
   isGenerating: boolean
+  loraOptions?: string[]
+  isRefreshingDropdownLists?: boolean
   splitPaneScroll?: boolean
   headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
@@ -172,6 +174,7 @@ type ComfyWorkflowControllerPanelProps = {
   onQueueRegistrationCountChange: (value: string) => void
   onFieldChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
+  onRefreshDropdownLists?: () => Promise<void> | void
   onOpenModuleSave: () => void
   onResetDraft: () => void
   onGenerateSelected: () => void
@@ -188,6 +191,8 @@ export function ComfyWorkflowControllerPanel({
   workflowDraft,
   queueRegistrationCount,
   isGenerating,
+  loraOptions,
+  isRefreshingDropdownLists = false,
   splitPaneScroll = false,
   headerPortalTargetId,
   compactActionBarContentTargetId,
@@ -196,6 +201,7 @@ export function ComfyWorkflowControllerPanel({
   onQueueRegistrationCountChange,
   onFieldChange,
   onImageChange,
+  onRefreshDropdownLists,
   onOpenModuleSave,
   onResetDraft,
   onGenerateSelected,
@@ -484,6 +490,9 @@ export function ComfyWorkflowControllerPanel({
                   key={field.id}
                   field={field}
                   value={workflowDraft[field.id] ?? ''}
+                  loraOptions={loraOptions}
+                  isRefreshingOptions={isRefreshingDropdownLists}
+                  onRefreshOptions={onRefreshDropdownLists}
                   onChange={(value) => onFieldChange(field.id, value)}
                   onImageChange={(image) => onImageChange(field.id, image)}
                 />

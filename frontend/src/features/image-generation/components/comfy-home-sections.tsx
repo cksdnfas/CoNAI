@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Copy, ListTree, Pencil, Plus, RotateCcw, Save, Server, Trash2, Upload } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter, SettingsSection } from '@/features/settings/components/settings-primitives'
+import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsSection } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
+import { DEFAULT_COMFY_MODEL_API_PATHS } from '@/lib/api-image-generation-workflows'
 import type { ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api-image-generation-types'
 import type { ComfyUIServerTestState } from '../image-generation-shared'
 
@@ -265,13 +265,6 @@ type DropdownListsSectionProps = {
 
 type DropdownTab = 'custom' | 'auto'
 
-const DEFAULT_COMFY_MODEL_API_PATHS = [
-  '/models/checkpoints',
-  '/models/diffusion_models',
-  '/models/unet_gguf',
-  '/models/loras',
-]
-
 function splitDropdownItems(rawValue: string) {
   return rawValue
     .split(/\r?\n|,/)
@@ -385,31 +378,30 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
   return (
     <SettingsModal open={open} onClose={onClose} title={t({ ko: 'ComfyUI 자동수집', en: 'ComfyUI auto collect' })} widthClassName="max-w-3xl">
       <SettingsModalBody className="space-y-5">
-        <SettingsInsetBlock className="space-y-4">
-          <SettingsField label={t({ ko: 'API 목록', en: 'API paths' })}>
-            <Textarea
-              rows={8}
-              value={apiPathText}
-              onChange={(event) => setApiPathText(event.target.value)}
-              placeholder={DEFAULT_COMFY_MODEL_API_PATHS.join('\n')}
-            />
-          </SettingsField>
+        <SettingsField label={t({ ko: 'API 목록', en: 'API paths' })}>
+          <Textarea
+            variant="settings"
+            rows={8}
+            value={apiPathText}
+            onChange={(event) => setApiPathText(event.target.value)}
+            placeholder={DEFAULT_COMFY_MODEL_API_PATHS.join('\n')}
+          />
+        </SettingsField>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-muted-foreground">
-              {t({ ko: '{count}개 경로', en: '{count} paths' }, { count: formatNumber(apiPaths.length) })}
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => setApiPathText(defaultPathText)} disabled={isSubmitting}>
-              <RotateCcw className="h-4 w-4" />
-              {t({ ko: '기본값 초기화', en: 'Reset defaults' })}
-            </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-muted-foreground">
+            {t({ ko: '{count}개 경로', en: '{count} paths' }, { count: formatNumber(apiPaths.length) })}
           </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => setApiPathText(defaultPathText)} disabled={isSubmitting}>
+            <RotateCcw className="h-4 w-4" />
+            {t({ ko: '기본값 초기화', en: 'Reset defaults' })}
+          </Button>
+        </div>
 
-          <Alert>
-            <AlertTitle>{t({ ko: '대표 서버 API 기준', en: 'Representative server API' })}</AlertTitle>
-            <AlertDescription>{t({ ko: '자동수집은 대표 ComfyUI 서버에서 실행되며 통합 + 개별 생성, 하위 폴더 통합은 항상 적용됩니다.', en: 'Auto collect runs against the representative ComfyUI server; merged + separate lists and subfolder merging are always applied.' })}</AlertDescription>
-          </Alert>
-        </SettingsInsetBlock>
+        <div className="space-y-1 text-sm">
+          <div className="font-medium text-foreground">{t({ ko: '대표 서버 API 기준', en: 'Representative server API' })}</div>
+          <p className="text-muted-foreground">{t({ ko: '자동수집은 대표 ComfyUI 서버에서 실행되며 통합 + 개별 생성, 하위 폴더 통합은 항상 적용됩니다.', en: 'Auto collect runs against the representative ComfyUI server; merged + separate lists and subfolder merging are always applied.' })}</p>
+        </div>
 
         <SettingsModalFooter>
           <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{t({ ko: '취소', en: 'Cancel' })}</Button>

@@ -1,18 +1,33 @@
+import { useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
+import { DEFAULT_COMFY_MODEL_API_PATHS, getGenerationCustomDropdownLists, scanGenerationComfyUIModelDropdownLists } from '@/lib/api-image-generation-workflows'
 import { cn } from '@/lib/utils'
+import { PathOptionTreeSelect } from './path-option-tree-select'
+import {
+  buildAddedPowerLoraNodeValue,
+  buildFallbackPowerLoraNodeItems,
+  buildPowerLoraNodeItemsFromInputs,
+  findAutoCollectedPowerLoraOptions,
+  hasPowerLoraLoaderEntries,
+  isPowerLoraLoaderEntryValue,
+  isPowerLoraLoaderNodeValue,
+  type PowerLoraLoaderEntryValue,
+  type PowerLoraLoaderNodeItem,
+} from './power-lora-loader-utils'
 
-export type PowerLoraLoaderEntryValue = {
-  on?: boolean
-  lora?: string
-  strength?: number
+export {
+  buildAddedPowerLoraNodeValue,
+  buildFallbackPowerLoraNodeItems,
+  buildPowerLoraNodeItemsFromInputs,
+  findAutoCollectedPowerLoraOptions,
+  hasPowerLoraLoaderEntries,
+  isPowerLoraLoaderEntryValue,
+  isPowerLoraLoaderNodeValue,
 }
-
-export type PowerLoraLoaderNodeItem = {
-  key: string
-  label: string
-  lora?: string
-}
+export type { PowerLoraLoaderEntryValue, PowerLoraLoaderNodeItem }
 
 type PowerLoraLoaderField = {
   node_editor?: unknown
@@ -25,49 +40,23 @@ type PowerLoraLoaderInputProps = {
   onChange: (value: Record<string, unknown>) => void
   variant?: 'default' | 'compact'
   useValueFallback?: boolean
+  loraOptions?: string[]
+  isRefreshingLoraOptions?: boolean
+  onRefreshLoraOptions?: () => Promise<void> | void
 }
 
-export function isPowerLoraLoaderEntryValue(value: unknown): value is PowerLoraLoaderEntryValue {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false
+function buildVisiblePowerLoraNodeItems(field: PowerLoraLoaderField | null | undefined, nodeValue: Record<string, unknown>, useValueFallback: boolean) {
+  const configuredNodeItems = field?.node_items ?? []
+  const fallbackNodeItems = buildFallbackPowerLoraNodeItems(nodeValue)
+
+  if (configuredNodeItems.length === 0) {
+    return useValueFallback || fallbackNodeItems.length > 0 ? fallbackNodeItems : []
   }
 
-  const record = value as Record<string, unknown>
-  return typeof record.lora === 'string'
-    && typeof record.on === 'boolean'
-    && typeof record.strength === 'number'
-}
-
-export function isPowerLoraLoaderNodeValue(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-export function hasPowerLoraLoaderEntries(value: unknown) {
-  return isPowerLoraLoaderNodeValue(value) && Object.values(value).some(isPowerLoraLoaderEntryValue)
-}
-
-export function buildFallbackPowerLoraNodeItems(nodeValue: Record<string, unknown>): PowerLoraLoaderNodeItem[] {
-  return Object.entries(nodeValue)
-    .filter((entry): entry is [string, PowerLoraLoaderEntryValue] => isPowerLoraLoaderEntryValue(entry[1]))
-    .map(([key, entry]) => ({
-      key,
-      label: entry.lora || key,
-      lora: entry.lora,
-    }))
-}
-
-export function buildPowerLoraNodeItemsFromInputs(inputs: Record<string, unknown>): PowerLoraLoaderNodeItem[] {
-  return Object.entries(inputs)
-    .filter(([inputKey, inputValue]) => /^lora_/i.test(inputKey) && isPowerLoraLoaderEntryValue(inputValue))
-    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey, undefined, { numeric: true }))
-    .map(([inputKey, inputValue]) => {
-      const loraInput = inputValue as PowerLoraLoaderEntryValue & { lora: string }
-      return {
-        key: inputKey,
-        label: loraInput.lora.split(/[/\\]/).pop() || loraInput.lora,
-        lora: loraInput.lora,
-      }
-    })
+  const configuredItems = configuredNodeItems.filter((item) => isPowerLoraLoaderEntryValue(nodeValue[item.key]))
+  const configuredKeys = new Set(configuredItems.map((item) => item.key))
+  const addedItems = fallbackNodeItems.filter((item) => !configuredKeys.has(item.key))
+  return [...configuredItems, ...addedItems]
 }
 
 /** Render one compact switch-style toggle for a Power Lora Loader row. */
@@ -112,24 +101,88 @@ function PowerLoraRowToggle({
 }
 
 /** Render rgthree Power Lora Loader values as editable LoRA rows instead of raw JSON. */
-export function PowerLoraLoaderInput({ field, value, onChange, variant = 'default', useValueFallback = true }: PowerLoraLoaderInputProps) {
+export function PowerLoraLoaderInput({
+  field,
+  value,
+  onChange,
+  variant = 'default',
+  useValueFallback = true,
+  loraOptions,
+  isRefreshingLoraOptions = false,
+  onRefreshLoraOptions,
+}: PowerLoraLoaderInputProps) {
   const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
   const nodeValue = isPowerLoraLoaderNodeValue(value) ? value : {}
-  const configuredNodeItems = field?.node_items ?? []
-  const nodeItems = configuredNodeItems.length > 0
-    ? configuredNodeItems.filter((item) => isPowerLoraLoaderEntryValue(nodeValue[item.key]))
-    : useValueFallback
-      ? buildFallbackPowerLoraNodeItems(nodeValue)
-      : []
-
+  const nodeItems = buildVisiblePowerLoraNodeItems(field, nodeValue, useValueFallback)
   const isCompact = variant === 'compact'
+  const [isRefreshingFallbackLoraOptions, setIsRefreshingFallbackLoraOptions] = useState(false)
+  const shouldUseFallbackLoraOptions = loraOptions === undefined
+  const fallbackDropdownListsQuery = useQuery({
+    queryKey: ['image-generation-custom-dropdown-lists'],
+    queryFn: () => getGenerationCustomDropdownLists(),
+    enabled: shouldUseFallbackLoraOptions,
+  })
+  const resolvedLoraOptions = useMemo(
+    () => loraOptions ?? findAutoCollectedPowerLoraOptions(fallbackDropdownListsQuery.data ?? []),
+    [fallbackDropdownListsQuery.data, loraOptions],
+  )
+  const isRefreshingResolvedLoraOptions = isRefreshingLoraOptions || isRefreshingFallbackLoraOptions
+
+  const handleRefreshLoraOptions = async () => {
+    if (isRefreshingResolvedLoraOptions) {
+      return
+    }
+
+    if (onRefreshLoraOptions) {
+      await onRefreshLoraOptions()
+      return
+    }
+
+    try {
+      setIsRefreshingFallbackLoraOptions(true)
+      const response = await scanGenerationComfyUIModelDropdownLists({ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS })
+      await queryClient.invalidateQueries({ queryKey: ['image-generation-custom-dropdown-lists'] })
+      await fallbackDropdownListsQuery.refetch()
+      showSnackbar({ message: response.data.message || t({ ko: '자동수집 목록을 갱신했어.', en: 'Refreshed the auto-collect list.' }), tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '자동수집 목록 생성에 실패했어.', en: 'Failed to create the auto-collect list.' }), tone: 'error' })
+    } finally {
+      setIsRefreshingFallbackLoraOptions(false)
+    }
+  }
+
+  const handleAddLora = (loraPath: string) => {
+    if (loraPath) {
+      onChange(buildAddedPowerLoraNodeValue(nodeValue, loraPath))
+    }
+  }
+
+  const addLoraControl = (
+    <PathOptionTreeSelect
+      value=""
+      options={resolvedLoraOptions}
+      placeholder={fallbackDropdownListsQuery.isLoading ? t({ ko: 'LoRA 목록 불러오는 중', en: 'Loading LoRA list' }) : t({ ko: 'LoRA 추가', en: 'Add LoRA' })}
+      refreshLabel={t({ ko: 'LoRA 자동수집 새로고침', en: 'Refresh LoRA auto collect' })}
+      isRefreshing={isRefreshingResolvedLoraOptions}
+      onRefresh={handleRefreshLoraOptions}
+      onChange={handleAddLora}
+    />
+  )
 
   if (nodeItems.length === 0) {
-    return <div className={cn('rounded-sm border border-dashed border-border/80 text-muted-foreground', isCompact ? 'px-2 py-1.5 text-[11px]' : 'px-3 py-4 text-sm')}>{t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')}</div>
+    return (
+      <div className={cn(isCompact ? 'space-y-1' : 'space-y-2')}>
+        <div className={cn('rounded-sm border border-dashed border-border/80 text-muted-foreground', isCompact ? 'px-2 py-1.5 text-[11px]' : 'px-3 py-4 text-sm')}>{t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')}</div>
+        {addLoraControl}
+      </div>
+    )
   }
 
   return (
     <div className={cn(isCompact ? 'space-y-0.5' : 'space-y-2')}>
+      {addLoraControl}
       {nodeItems.map((item) => {
         const entry = nodeValue[item.key] as PowerLoraLoaderEntryValue
         return (

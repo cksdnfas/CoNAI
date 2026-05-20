@@ -28,6 +28,9 @@ type WorkflowFieldInputProps = {
   field: WorkflowMarkedField
   value: WorkflowFieldDraftValue
   hideLabel?: boolean
+  loraOptions?: string[]
+  isRefreshingOptions?: boolean
+  onRefreshOptions?: () => Promise<void> | void
   onChange: (value: WorkflowFieldDraftValue) => void
   onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
@@ -45,7 +48,7 @@ function isWorkflowNodeDraftValue(value: WorkflowFieldDraftValue): value is Reco
 }
 
 /** Render a single marked-field editor for a ComfyUI workflow. */
-export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, onImageChange }: WorkflowFieldInputProps) {
+export function WorkflowFieldInput({ field, value, hideLabel = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, onChange, onImageChange }: WorkflowFieldInputProps) {
   const fieldLabel = field.required ? `${field.label} *` : field.label
   const labelAccessory = field.description ? (
     <span
@@ -90,6 +93,9 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
         <PathOptionTreeSelect
           value={stringValue}
           options={options}
+          refreshLabel="ComfyUI 자동수집 새로고침"
+          isRefreshing={isRefreshingOptions}
+          onRefresh={onRefreshOptions}
           onChange={onChange}
         />,
       )
@@ -141,6 +147,9 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, onChange, 
       <PowerLoraLoaderInput
         field={field}
         value={nodeValue}
+        loraOptions={loraOptions}
+        isRefreshingLoraOptions={isRefreshingOptions}
+        onRefreshLoraOptions={onRefreshOptions}
         useValueFallback={false}
         onChange={onChange}
       />,

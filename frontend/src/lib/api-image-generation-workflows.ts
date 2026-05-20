@@ -11,6 +11,13 @@ import type {
   WorkflowArtifactListing,
 } from './api-image-generation-types'
 
+export const DEFAULT_COMFY_MODEL_API_PATHS = [
+  '/models/checkpoints',
+  '/models/diffusion_models',
+  '/models/unet_gguf',
+  '/models/loras',
+]
+
 interface WorkflowListResponse {
   success: boolean
   data: GenerationWorkflow[]
