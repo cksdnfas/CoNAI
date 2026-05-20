@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -794,6 +794,7 @@ export function NodeArtifactOutputs({
   const [artifactTextModal, setArtifactTextModal] = useState<{ title: string; text: string } | null>(null)
   const hasArtifactPreview = Boolean(data.latestArtifactPreviewUrl || data.latestArtifactTextPreview)
   const outputGroups = (data.executionOutputGroups ?? []).filter((group) => visibleOutputPortKeys.has(group.portKey))
+  const expandedOutputGroupKeySet = useMemo(() => new Set(expandedOutputGroupKeys), [expandedOutputGroupKeys])
   const hasOutputGroups = outputGroups.length > 0
   const hasStandaloneArtifactPreview = hasArtifactPreview && !hasOutputGroups
 
@@ -823,7 +824,7 @@ export function NodeArtifactOutputs({
       {hasOutputGroups ? (
         <div className="mt-2 border-t border-border/20 pt-1.5">
           {outputGroups.map((group) => {
-            const isExpanded = expandedOutputGroupKeys.includes(group.portKey)
+            const isExpanded = expandedOutputGroupKeySet.has(group.portKey)
 
             return (
               <div key={group.portKey} className="border-b border-border/20 py-0.5 last:border-b-0">

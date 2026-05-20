@@ -81,6 +81,7 @@ export function NodeInspectorPanel({
   const resolvedExecuteSelectedNodeLabel = executeSelectedNodeLabel ?? t({ ko: '선택 노드 실행', en: 'Run selected node' })
   const resolvedForceExecuteSelectedNodeLabel = forceExecuteSelectedNodeLabel ?? t({ ko: '강제 재실행', en: 'Force rerun' })
   const [collapsedOutputGroupKeys, setCollapsedOutputGroupKeys] = useState<string[]>([])
+  const collapsedOutputGroupKeySet = useMemo(() => new Set(collapsedOutputGroupKeys), [collapsedOutputGroupKeys])
   const selectedNodeOperationKey = selectedNode ? getModuleOperationKey(selectedNode.data.module) : null
   const isSystemCallLlmNode = selectedNodeOperationKey === 'system.call_llm'
   const isSystemCallCodexMessageNode = selectedNodeOperationKey === 'system.call_codex_message'
@@ -656,7 +657,7 @@ export function NodeInspectorPanel({
               ) : (
                 <div className="space-y-2">
                   {selectedNodeOutputGroups.map((group) => {
-                    const isCollapsed = collapsedOutputGroupKeys.includes(group.portKey)
+                    const isCollapsed = collapsedOutputGroupKeySet.has(group.portKey)
 
                     return (
                       <div key={group.portKey} className="rounded-sm border border-border bg-surface-low/70">

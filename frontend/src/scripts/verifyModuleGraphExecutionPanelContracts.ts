@@ -37,6 +37,8 @@ function extractFunction(sourceText: string, functionName: string) {
 
 function assertExecutionPanelLookupPolicy() {
   const helpersSource = source('features/module-graph/components/graph-execution-panel-helpers.ts')
+  const nodeCardLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts.tsx')
+  const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
 
@@ -83,6 +85,30 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     !pickHighlightedArtifactsSource.includes('textArtifacts.includes(artifact)'),
     'compact artifact picking must not scan the text-artifact list for every structured candidate',
+  )
+  assert(
+    nodeCardLayoutsSource.includes('const expandedOutputGroupKeySet = useMemo(() => new Set(expandedOutputGroupKeys), [expandedOutputGroupKeys])'),
+    'node card artifact outputs should build one expanded-output key Set per state snapshot',
+  )
+  assert(
+    nodeCardLayoutsSource.includes('expandedOutputGroupKeySet.has(group.portKey)'),
+    'node card artifact outputs should use Set.has while rendering output groups',
+  )
+  assert(
+    !nodeCardLayoutsSource.includes('const isExpanded = expandedOutputGroupKeys.includes(group.portKey)'),
+    'node card artifact outputs must not scan expanded output keys for every rendered group',
+  )
+  assert(
+    nodeInspectorSource.includes('const collapsedOutputGroupKeySet = useMemo(() => new Set(collapsedOutputGroupKeys), [collapsedOutputGroupKeys])'),
+    'node inspector should build one collapsed-output key Set per state snapshot',
+  )
+  assert(
+    nodeInspectorSource.includes('collapsedOutputGroupKeySet.has(group.portKey)'),
+    'node inspector should use Set.has while rendering output groups',
+  )
+  assert(
+    !nodeInspectorSource.includes('const isCollapsed = collapsedOutputGroupKeys.includes(group.portKey)'),
+    'node inspector must not scan collapsed output keys for every rendered group',
   )
 }
 
