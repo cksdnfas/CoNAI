@@ -18,6 +18,10 @@ const moduleSaveModalSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/module-save-modal.tsx'),
   'utf8',
 )
+const comfyGenerationPanelSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/comfy-generation-panel.tsx'),
+  'utf8',
+)
 
 match(
   markedFieldsEditorSource,
@@ -78,6 +82,46 @@ doesNotMatch(
   moduleSaveModalSource,
   /exposedFieldKeys\.includes\(field\.key\)/,
   'Module save modal must not scan exposedFieldKeys for every field option',
+)
+match(
+  comfyGenerationPanelSource,
+  /const workflowById = useMemo\(\s*\(\) => new Map<number, GenerationWorkflow>\(\(workflowsQuery\.data \?\? \[\]\)\.map\(\(workflow\) => \[workflow\.id, workflow\]\)\),\s*\[workflowsQuery\.data\],\s*\)/,
+  'Comfy generation panel should memoize workflow id lookups from the workflow query result',
+)
+match(
+  comfyGenerationPanelSource,
+  /selectedWorkflowId === null \? null : workflowById\.get\(selectedWorkflowId\) \?\? null/,
+  'Selected workflow lookup should use the memoized workflow map',
+)
+match(
+  comfyGenerationPanelSource,
+  /moduleSaveWorkflowId === null \? null : workflowById\.get\(moduleSaveWorkflowId\) \?\? null/,
+  'Module-save workflow lookup should use the memoized workflow map',
+)
+doesNotMatch(
+  comfyGenerationPanelSource,
+  /workflowsQuery\.data\?\.find\(\(workflow\) => workflow\.id === selectedWorkflowId\)/,
+  'Selected workflow lookup must not rescan workflows for every render',
+)
+doesNotMatch(
+  comfyGenerationPanelSource,
+  /workflowsQuery\.data\?\.find\(\(workflow\) => workflow\.id === moduleSaveWorkflowId\)/,
+  'Module-save workflow lookup must not rescan workflows for every render',
+)
+match(
+  comfyGenerationPanelSource,
+  /const dropdownListById = useMemo\(\s*\(\) => new Map\(\(dropdownListsQuery\.data \?\? \[\]\)\.map\(\(list\) => \[list\.id, list\]\)\),\s*\[dropdownListsQuery\.data\],\s*\)/,
+  'Comfy generation panel should memoize dropdown list id lookups from the dropdown query result',
+)
+match(
+  comfyGenerationPanelSource,
+  /const list = dropdownListById\.get\(listId\)/,
+  'Dropdown list deletion should use the memoized id map',
+)
+doesNotMatch(
+  comfyGenerationPanelSource,
+  /dropdownListsQuery\.data\?\.find\(\(item\) => item\.id === listId\)/,
+  'Dropdown list deletion must not rescan dropdown lists for every delete action',
 )
 
 console.log('Comfy workflow authoring contracts verified.')

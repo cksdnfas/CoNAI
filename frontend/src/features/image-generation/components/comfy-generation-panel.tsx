@@ -102,17 +102,25 @@ export function ComfyGenerationPanel({
     queryFn: () => getModuleDefinitions(false),
   })
 
+  const workflowById = useMemo(
+    () => new Map<number, GenerationWorkflow>((workflowsQuery.data ?? []).map((workflow) => [workflow.id, workflow])),
+    [workflowsQuery.data],
+  )
   const selectedWorkflow = useMemo(
-    () => workflowsQuery.data?.find((workflow) => workflow.id === selectedWorkflowId) ?? null,
-    [selectedWorkflowId, workflowsQuery.data],
+    () => selectedWorkflowId === null ? null : workflowById.get(selectedWorkflowId) ?? null,
+    [selectedWorkflowId, workflowById],
   )
   const moduleSaveWorkflow = useMemo(
-    () => workflowsQuery.data?.find((workflow) => workflow.id === moduleSaveWorkflowId) ?? null,
-    [moduleSaveWorkflowId, workflowsQuery.data],
+    () => moduleSaveWorkflowId === null ? null : workflowById.get(moduleSaveWorkflowId) ?? null,
+    [moduleSaveWorkflowId, workflowById],
   )
 
-  const dropdownListMap = useMemo(
+  const dropdownListByName = useMemo(
     () => new Map((dropdownListsQuery.data ?? []).map((list) => [list.name, list])),
+    [dropdownListsQuery.data],
+  )
+  const dropdownListById = useMemo(
+    () => new Map((dropdownListsQuery.data ?? []).map((list) => [list.id, list])),
     [dropdownListsQuery.data],
   )
 
@@ -128,7 +136,7 @@ export function ComfyGenerationPanel({
 
     return (workflow.marked_fields ?? []).map((field) => {
       if (field.dropdown_list_name) {
-        const dropdownList = dropdownListMap.get(field.dropdown_list_name)
+        const dropdownList = dropdownListByName.get(field.dropdown_list_name)
         if (dropdownList) {
           return {
             ...field,
@@ -140,7 +148,7 @@ export function ComfyGenerationPanel({
 
       return field
     })
-  }, [buildDropdownSelectOptions, dropdownListMap])
+  }, [buildDropdownSelectOptions, dropdownListByName])
 
   const selectedWorkflowFields = useMemo(() => resolveWorkflowFields(selectedWorkflow), [resolveWorkflowFields, selectedWorkflow])
   const moduleSaveWorkflowFields = useMemo(() => resolveWorkflowFields(moduleSaveWorkflow), [resolveWorkflowFields, moduleSaveWorkflow])
@@ -364,7 +372,7 @@ export function ComfyGenerationPanel({
   }
 
   const handleDeleteWorkflow = async (workflowId: number) => {
-    const workflow = workflowsQuery.data?.find((item) => item.id === workflowId)
+    const workflow = workflowById.get(workflowId)
     if (!workflow) {
       return
     }
@@ -397,7 +405,7 @@ export function ComfyGenerationPanel({
   }
 
   const handleDeleteDropdownList = async (listId: number) => {
-    const list = dropdownListsQuery.data?.find((item) => item.id === listId)
+    const list = dropdownListById.get(listId)
     if (!list) {
       return
     }
