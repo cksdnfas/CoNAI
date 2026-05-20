@@ -11,7 +11,6 @@ import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { CompactGenerationControllerActionBar } from './components/shared-generation-controller'
 import { getImageGenerationTabLabel, getImageGenerationTabs, parseImageGenerationTab, type ImageGenerationTab } from './image-generation-tabs'
-import { loadPersistedSelectedComfyWorkflowId, persistSelectedComfyWorkflowId } from './image-generation-shared'
 
 const NaiGenerationPanelLazy = lazy(async () => {
   const module = await import('./components/nai-generation-panel')
@@ -56,7 +55,7 @@ export function ImageGenerationPage() {
   const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
-  const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(() => loadPersistedSelectedComfyWorkflowId())
+  const [selectedComfyWorkflowId, setSelectedComfyWorkflowId] = useState<number | null>(null)
   const [isControllerOpen, setIsControllerOpen] = useState(false)
   const isWideLayout = useDesktopPageLayout()
   const selectedComfyWorkflowQuery = useQuery({
@@ -89,13 +88,18 @@ export function ImageGenerationPage() {
   const handleChangeTab = (nextTab: ImageGenerationTab) => {
     const nextSearchParams = new URLSearchParams(searchParams)
     nextSearchParams.set('tab', nextTab)
+    if (nextTab !== 'comfyui') {
+      setSelectedComfyWorkflowId(null)
+    }
     setIsControllerOpen(false)
     setSearchParams(nextSearchParams)
   }
 
   useEffect(() => {
-    persistSelectedComfyWorkflowId(selectedComfyWorkflowId)
-  }, [selectedComfyWorkflowId])
+    if (activeTab !== 'comfyui' && selectedComfyWorkflowId !== null) {
+      setSelectedComfyWorkflowId(null)
+    }
+  }, [activeTab, selectedComfyWorkflowId])
 
   useEffect(() => {
     const requestedTab = parseImageGenerationTab(searchParams.get('tab'))

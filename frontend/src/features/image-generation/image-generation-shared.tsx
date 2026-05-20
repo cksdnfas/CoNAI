@@ -232,8 +232,8 @@ export const DEFAULT_COMFYUI_SERVER_FORM: ComfyUIServerFormDraft = {
 }
 
 const NAI_FORM_DRAFT_STORAGE_KEY = 'conai:image-generation:nai-form-draft:v1'
-const COMFY_SELECTED_WORKFLOW_STORAGE_KEY = 'conai:image-generation:comfy:selected-workflow-id:v1'
 const COMFY_WORKFLOW_DRAFT_STORAGE_KEY_PREFIX = 'conai:image-generation:comfy:workflow-draft:v1:'
+
 type PersistedNaiFormDraft = {
   selectedCharacterIndex: number | null
   form: NAIFormDraft
@@ -347,39 +347,6 @@ export function persistNaiFormDraft(form: NAIFormDraft, selectedCharacterIndex: 
     selectedCharacterIndex,
     form: buildPersistableNaiFormDraft(form),
   } satisfies PersistedNaiFormDraft)
-}
-
-/** Restore the last selected Comfy workflow, if any. */
-export function loadPersistedSelectedComfyWorkflowId() {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  const rawValue = window.localStorage.getItem(COMFY_SELECTED_WORKFLOW_STORAGE_KEY)
-  if (!rawValue) {
-    return null
-  }
-
-  const parsedValue = Number(rawValue)
-  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null
-}
-
-/** Persist the current Comfy workflow selection for fast return after navigation. */
-export function persistSelectedComfyWorkflowId(workflowId: number | null) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  if (workflowId === null) {
-    removeLocalStorageValue(COMFY_SELECTED_WORKFLOW_STORAGE_KEY)
-    return
-  }
-
-  try {
-    window.localStorage.setItem(COMFY_SELECTED_WORKFLOW_STORAGE_KEY, String(workflowId))
-  } catch {
-    // Ignore quota/private-mode persistence failures.
-  }
 }
 
 function buildComfyWorkflowDraftStorageKey(workflowId: number) {
