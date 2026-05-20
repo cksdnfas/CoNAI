@@ -27,10 +27,25 @@ match(
   /if \(sort === 'recent'\) \{[\s\S]*?const recentIdOrder = buildAssetOrderIndex\(recentIds\)[\s\S]*?getAssetOrder\(recentIdOrder, left\.id\)/,
   'recent sort should reuse one recent order index inside the comparator',
 )
+match(
+  source,
+  /const pinnedVibeIdSet = useMemo\(\(\) => new Set\(pinnedVibeIds\), \[pinnedVibeIds\]\)[\s\S]*?pinnedVibeIdSet\.has\(asset\.id\)/,
+  'saved vibe card render should use one memoized pinned-id Set for badge and button state',
+)
+match(
+  source,
+  /const pinnedCharacterReferenceIdSet = useMemo\(\(\) => new Set\(pinnedCharacterReferenceIds\), \[pinnedCharacterReferenceIds\]\)[\s\S]*?pinnedCharacterReferenceIdSet\.has\(asset\.id\)/,
+  'saved character-reference card render should use one memoized pinned-id Set for badge and button state',
+)
 doesNotMatch(
   source,
   /(?:pinnedIds|recentIds)\.indexOf\((?:left|right)\.id\)/,
   'saved asset sort comparators must not scan preference arrays for every comparison',
+)
+doesNotMatch(
+  source,
+  /pinned(?:Vibe|CharacterReference)Ids\.includes\(asset\.id\)/,
+  'saved asset card render must not rescan pinned-id arrays for every badge/button state',
 )
 
 console.log('NAI reusable asset contracts verified.')

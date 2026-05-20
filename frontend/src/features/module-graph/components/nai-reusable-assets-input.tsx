@@ -291,6 +291,8 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
   const [savedCharacterReferenceSort, setSavedCharacterReferenceSort] = useState<SavedAssetSortOption>('recent')
   const [recentCharacterReferenceIds, setRecentCharacterReferenceIds] = useState<string[]>(() => loadRecentAssetIds('conai.nai.character_refs.recent'))
   const [pinnedCharacterReferenceIds, setPinnedCharacterReferenceIds] = useState<string[]>(() => loadPinnedAssetIds('conai.nai.character_refs.pinned'))
+  const pinnedVibeIdSet = useMemo(() => new Set(pinnedVibeIds), [pinnedVibeIds])
+  const pinnedCharacterReferenceIdSet = useMemo(() => new Set(pinnedCharacterReferenceIds), [pinnedCharacterReferenceIds])
   const vibeDrafts = useMemo(() => (kind === 'vibes' ? parseNaiVibeDrafts(value) : []), [kind, value])
   const characterReferenceDrafts = useMemo(() => (kind === 'character_refs' ? parseNaiCharacterReferenceDrafts(value) : []), [kind, value])
 
@@ -484,45 +486,49 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
             <div className="text-sm text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</div>
           ) : filteredSavedVibes.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2">
-              {filteredSavedVibes.map((asset) => (
-                <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-                  <div className="flex gap-3">
-                    {asset.thumbnail_url || asset.image_url || asset.image_data_url ? (
-                      <InlineMediaPreview
-                        src={asset.thumbnail_url || asset.image_url || asset.image_data_url}
-                        fileName={asset.label}
-                        alt={asset.label}
-                        frameClassName="h-20 w-20 shrink-0 p-1"
-                        mediaClassName="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">
-                        {t({ ko: '미리보기 없음', en: 'No preview' })}
+              {filteredSavedVibes.map((asset) => {
+                const isPinned = pinnedVibeIdSet.has(asset.id)
+
+                return (
+                  <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                    <div className="flex gap-3">
+                      {asset.thumbnail_url || asset.image_url || asset.image_data_url ? (
+                        <InlineMediaPreview
+                          src={asset.thumbnail_url || asset.image_url || asset.image_data_url}
+                          fileName={asset.label}
+                          alt={asset.label}
+                          frameClassName="h-20 w-20 shrink-0 p-1"
+                          mediaClassName="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm border border-dashed border-border text-[11px] text-muted-foreground">
+                          {t({ ko: '미리보기 없음', en: 'No preview' })}
+                        </div>
+                      )}
+                      <div className="min-w-0 space-y-2">
+                        <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
+                        <div className="truncate text-xs text-muted-foreground">{asset.model}</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {isPinned ? <Badge variant="secondary">{t({ ko: '핀', en: 'Pinned' })}</Badge> : null}
+                          <Badge variant="outline">{t({ ko: '강도 {value}', en: 'Strength {value}' }, { value: asset.strength })}</Badge>
+                          <Badge variant="outline">{t({ ko: '정보 추출 {value}', en: 'Info extracted {value}' }, { value: asset.information_extracted })}</Badge>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">{formatDateTime(asset.created_date)}</div>
                       </div>
-                    )}
-                    <div className="min-w-0 space-y-2">
-                      <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                      <div className="truncate text-xs text-muted-foreground">{asset.model}</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {pinnedVibeIds.includes(asset.id) ? <Badge variant="secondary">{t({ ko: '핀', en: 'Pinned' })}</Badge> : null}
-                        <Badge variant="outline">{t({ ko: '강도 {value}', en: 'Strength {value}' }, { value: asset.strength })}</Badge>
-                        <Badge variant="outline">{t({ ko: '정보 추출 {value}', en: 'Info extracted {value}' }, { value: asset.information_extracted })}</Badge>
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">{formatDateTime(asset.created_date)}</div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" size="sm" variant="ghost" onClick={() => togglePinnedVibe(asset.id)}>
+                        {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                        {isPinned ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })}
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void appendSavedVibe(asset)}>
+                        <Save className="h-4 w-4" />
+                        {t({ ko: '추가', en: 'Add' })}
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex justify-end gap-2">
-                    <Button type="button" size="sm" variant="ghost" onClick={() => togglePinnedVibe(asset.id)}>
-                      {pinnedVibeIds.includes(asset.id) ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                      {pinnedVibeIds.includes(asset.id) ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })}
-                    </Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void appendSavedVibe(asset)}>
-                      <Save className="h-4 w-4" />
-                      {t({ ko: '추가', en: 'Add' })}
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <div className="text-sm text-muted-foreground">{t({ ko: '검색 결과가 없거나 저장된 vibe가 없어.', en: 'There are no search results or saved vibes.' })}</div>
@@ -607,39 +613,43 @@ export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAsse
           <div className="text-sm text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</div>
         ) : filteredSavedCharacterReferences.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-2">
-            {filteredSavedCharacterReferences.map((asset) => (
-              <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
-                <div className="flex gap-3">
-                  <InlineMediaPreview
-                    src={asset.thumbnail_url || asset.image_url || asset.image_data_url}
-                    fileName={asset.label}
-                    alt={asset.label}
-                    frameClassName="h-20 w-20 shrink-0 p-1"
-                    mediaClassName="h-full w-full object-contain"
-                  />
-                  <div className="min-w-0 space-y-2">
-                    <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {pinnedCharacterReferenceIds.includes(asset.id) ? <Badge variant="secondary">{t({ ko: '핀', en: 'Pinned' })}</Badge> : null}
-                      <Badge variant="outline">{asset.type}</Badge>
-                      <Badge variant="outline">{t({ ko: '강도 {value}', en: 'Strength {value}' }, { value: asset.strength })}</Badge>
-                      <Badge variant="outline">{t({ ko: '충실도 {value}', en: 'Fidelity {value}' }, { value: asset.fidelity })}</Badge>
+            {filteredSavedCharacterReferences.map((asset) => {
+              const isPinned = pinnedCharacterReferenceIdSet.has(asset.id)
+
+              return (
+                <div key={asset.id} className="space-y-3 rounded-sm border border-border bg-surface-low p-3">
+                  <div className="flex gap-3">
+                    <InlineMediaPreview
+                      src={asset.thumbnail_url || asset.image_url || asset.image_data_url}
+                      fileName={asset.label}
+                      alt={asset.label}
+                      frameClassName="h-20 w-20 shrink-0 p-1"
+                      mediaClassName="h-full w-full object-contain"
+                    />
+                    <div className="min-w-0 space-y-2">
+                      <div className="truncate text-sm font-medium text-foreground">{asset.label}</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {isPinned ? <Badge variant="secondary">{t({ ko: '핀', en: 'Pinned' })}</Badge> : null}
+                        <Badge variant="outline">{asset.type}</Badge>
+                        <Badge variant="outline">{t({ ko: '강도 {value}', en: 'Strength {value}' }, { value: asset.strength })}</Badge>
+                        <Badge variant="outline">{t({ ko: '충실도 {value}', en: 'Fidelity {value}' }, { value: asset.fidelity })}</Badge>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">{formatDateTime(asset.created_date)}</div>
                     </div>
-                    <div className="text-[11px] text-muted-foreground">{formatDateTime(asset.created_date)}</div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" size="sm" variant="ghost" onClick={() => togglePinnedCharacterReference(asset.id)}>
+                      {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                      {isPinned ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void appendSavedCharacterReference(asset)}>
+                      <Save className="h-4 w-4" />
+                      {t({ ko: '추가', en: 'Add' })}
+                    </Button>
                   </div>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button type="button" size="sm" variant="ghost" onClick={() => togglePinnedCharacterReference(asset.id)}>
-                    {pinnedCharacterReferenceIds.includes(asset.id) ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                    {pinnedCharacterReferenceIds.includes(asset.id) ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })}
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => void appendSavedCharacterReference(asset)}>
-                    <Save className="h-4 w-4" />
-                    {t({ ko: '추가', en: 'Add' })}
-                  </Button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         ) : (
           <div className="text-sm text-muted-foreground">{t({ ko: '검색 결과가 없거나 저장된 reference가 없어.', en: 'There are no search results or saved references.' })}</div>
