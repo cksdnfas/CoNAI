@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { GenerationThrottleSettings, ImageSaveSettings, VideoOptimizationSettings } from '@/types/settings'
+import type { GenerationThrottleSettings, ImageSaveSettings, ThumbnailSettings, VideoOptimizationSettings } from '@/types/settings'
 import { useI18n } from '@/i18n'
 import { SettingsField, SettingsSection, SettingsToggleRow } from './settings-primitives'
 import { VideoOptimizationTab } from './video-optimization-tab'
@@ -43,6 +43,10 @@ interface ImageSaveTabProps {
   onPatchImageSave: (patch: Partial<ImageSaveSettings>) => void
   onSave: () => void
   isSaving: boolean
+  thumbnailDraft: ThumbnailSettings | null
+  onPatchThumbnail: (patch: Partial<ThumbnailSettings>) => void
+  onSaveThumbnail: () => void
+  isSavingThumbnail: boolean
   generationThrottleDraft: GenerationThrottleSettings | null
   onPatchGenerationThrottle: (patch: GenerationThrottleDraftPatch) => void
   onSaveGenerationThrottle: () => void
@@ -59,6 +63,10 @@ export function ImageSaveTab({
   onPatchImageSave,
   onSave,
   isSaving,
+  thumbnailDraft,
+  onPatchThumbnail,
+  onSaveThumbnail,
+  isSavingThumbnail,
   generationThrottleDraft,
   onPatchGenerationThrottle,
   onSaveGenerationThrottle,
@@ -337,6 +345,58 @@ export function ImageSaveTab({
               <Skeleton className="h-64 w-full rounded-sm md:col-span-2" />
             )}
           </div>
+        </SettingsSection>
+      </section>
+
+      <section>
+        <SettingsSection
+          heading={t({ ko: '썸네일', en: 'Thumbnail' })}
+          actions={
+            <Button
+              size="icon-sm"
+              onClick={onSaveThumbnail}
+              disabled={!thumbnailDraft || isSavingThumbnail}
+              aria-label={t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' })}
+              title={t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' })}
+            >
+              <Save className="h-4 w-4" />
+            </Button>
+          }
+        >
+          {thumbnailDraft ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <SettingsField label={t({ ko: '썸네일 크기', en: 'Thumbnail size' })}>
+                <Select
+                  variant="settings"
+                  value={thumbnailDraft.size}
+                  onChange={(event) => onPatchThumbnail({ size: event.target.value as ThumbnailSettings['size'] })}
+                >
+                  <option value="original">{t({ ko: '원본', en: 'Original' })}</option>
+                  <option value="2048">2048px</option>
+                  <option value="1080">1080px</option>
+                  <option value="720">720px</option>
+                  <option value="512">512px</option>
+                </Select>
+              </SettingsField>
+
+              <SettingsField label={t({ ko: '썸네일 품질', en: 'Thumbnail quality' })}>
+                <Input
+                  type="number"
+                  min={60}
+                  max={100}
+                  variant="settings"
+                  value={thumbnailDraft.quality}
+                  onChange={(event) => onPatchThumbnail({ quality: Number(event.target.value) || 60 })}
+                />
+              </SettingsField>
+
+              <p className="md:col-span-2 text-sm text-muted-foreground">
+                {t({ ko: '기존 썸네일은 재생성 필요. 일반 탭의 썸네일 재생성을 실행하면 새 품질로 다시 만들어져.', en: 'Existing thumbnails need regeneration. Run thumbnail regeneration in the General tab to rebuild them with the new quality.' })}
+              </p>
+            </div>
+          ) : (
+            <Skeleton className="h-36 w-full rounded-sm" />
+          )}
         </SettingsSection>
       </section>
 

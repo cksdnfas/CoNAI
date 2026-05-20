@@ -135,6 +135,10 @@ export const API_ERROR_FALLBACKS = {
     ko: '이미지 저장 설정을 저장하지 못했어.',
     en: 'Failed to save image save settings.',
   },
+  'settings.thumbnail.update': {
+    ko: '썸네일 설정을 저장하지 못했어.',
+    en: 'Failed to save thumbnail settings.',
+  },
   'settings.generationThrottle.update': {
     ko: '생성 텀 설정을 저장하지 못했어.',
     en: 'Failed to save generation throttle settings.',

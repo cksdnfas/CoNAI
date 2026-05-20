@@ -16,6 +16,7 @@ import type {
   TaggerModelInfo,
   TaggerServerStatus,
   TaggerSettings,
+  ThumbnailSettings,
   VideoOptimizationSettings,
 } from '@/types/settings'
 import type { RatingTierRecord } from '@/features/search/search-types'
@@ -308,6 +309,22 @@ export async function updateImageSaveSettings(settings: Partial<ImageSaveSetting
 
   if (!response.success) {
     throw createApiFallbackError(response.error, 'settings.imageSave.update')
+  }
+
+  return response.data
+}
+
+export async function updateThumbnailSettings(settings: Partial<ThumbnailSettings>) {
+  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/thumbnail', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  })
+
+  if (!response.success) {
+    throw createApiFallbackError(response.error, 'settings.thumbnail.update')
   }
 
   return response.data

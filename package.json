@@ -103,6 +103,7 @@
     "verify:image-list-selection-contracts": "cd frontend && npm run verify:image-list-selection-contracts",
     "verify:image-list-modal-contracts": "cd frontend && npm run verify:image-list-modal-contracts",
     "verify:nai-reusable-assets-contracts": "cd frontend && npm run verify:nai-reusable-assets-contracts",
+    "verify:thumbnail-settings-ui-contracts": "cd frontend && npm run verify:thumbnail-settings-ui-contracts",
     "verify:image-file-route-contracts": "cd backend && npm run verify:image-file-route-contracts",
     "verify:backup-source-contracts": "cd backend && npm run verify:backup-source-contracts",
     "verify:like-search-literal-contracts": "cd backend && npm run verify:like-search-literal-contracts",
@@ -121,7 +122,8 @@
     "verify:policy:generated-artifact": "node scripts/verify-repository-audit-policy.mjs --category=generated-artifact",
     "verify:migration": "npm run verify:policy:active-source && npm run verify:no-banned-imports:phase2 && npm run verify:no-ui-signatures:active && npm run verify:no-mui-deps:strict",
     "verify:migration:full": "npm run verify:migration && npm run verify:policy:generated-artifact && npm run verify:no-ui-signatures:generated && npm run verify:no-ui-signatures:full",
-    "i18n:check": "node scripts/i18n-check.mjs"
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "verify:thumbnail-default-settings-contracts": "cd backend && npm run verify:thumbnail-default-settings-contracts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

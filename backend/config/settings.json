@@ -38,8 +38,8 @@
     "skipStealthForWebUI": false
   },
   "thumbnail": {
-    "size": "1080",
-    "quality": 80
+    "size": "2048",
+    "quality": 85
   },
   "videoOptimization": {
     "enabled": true,

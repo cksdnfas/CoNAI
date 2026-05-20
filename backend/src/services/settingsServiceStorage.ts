@@ -440,8 +440,8 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       skipStealthForWebUI: false,
     },
     thumbnail: {
-      size: '1080',
-      quality: 80,
+      size: '2048',
+      quality: 85,
     },
     imageSave: {
       defaultFormat: 'webp',

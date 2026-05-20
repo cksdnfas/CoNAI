@@ -10,6 +10,7 @@ import {
   updateGenerationThrottleSettings,
   updateImageSaveSettings,
   updateMetadataSettings,
+  updateThumbnailSettings,
   updateVideoOptimizationSettings,
 } from '@/lib/api-settings'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
@@ -23,6 +24,7 @@ import type {
   GeneralSettings,
   ImageSaveSettings,
   MetadataExtractionSettings,
+  ThumbnailSettings,
   VideoOptimizationSettings,
 } from '@/types/settings'
 import { SettingsTabNav } from './components/settings-tab-nav'
@@ -87,6 +89,7 @@ export function SettingsPage() {
   const [generalDraft, setGeneralDraft] = useState<GeneralSettings | null>(null)
   const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
   const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
+  const [thumbnailDraft, setThumbnailDraft] = useState<ThumbnailSettings | null>(null)
   const [generationThrottleDraft, setGenerationThrottleDraft] = useState<GenerationThrottleSettings | null>(null)
   const [videoOptimizationDraft, setVideoOptimizationDraft] = useState<VideoOptimizationSettings | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
@@ -125,6 +128,7 @@ export function SettingsPage() {
 
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
   const effectiveImageSaveDraft = imageSaveDraft ?? settingsQuery.data?.imageSave ?? null
+  const effectiveThumbnailDraft = thumbnailDraft ?? settingsQuery.data?.thumbnail ?? null
   const effectiveGenerationThrottleDraft = generationThrottleDraft ?? settingsQuery.data?.generationThrottle ?? null
   const effectiveVideoOptimizationDraft = videoOptimizationDraft ?? settingsQuery.data?.videoOptimization ?? null
   const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
@@ -200,6 +204,18 @@ export function SettingsPage() {
     },
   })
 
+  const thumbnailMutation = useMutation({
+    mutationFn: updateThumbnailSettings,
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      setThumbnailDraft(settings.thumbnail)
+      notifyInfo(t({ ko: '썸네일 설정을 저장했어.', en: 'Thumbnail settings saved.' }))
+    },
+    onError: (error) => {
+      notifyError(error instanceof Error ? error.message : t({ ko: '썸네일 설정 저장에 실패했어.', en: 'Failed to save thumbnail settings.' }))
+    },
+  })
+
   const generationThrottleMutation = useMutation({
     mutationFn: updateGenerationThrottleSettings,
     onSuccess: (settings) => {
@@ -258,6 +274,11 @@ export function SettingsPage() {
   const patchImageSaveDraft = (patch: Partial<ImageSaveSettings>) => {
     if (!effectiveImageSaveDraft) return
     setImageSaveDraft({ ...effectiveImageSaveDraft, ...patch })
+  }
+
+  const patchThumbnailDraft = (patch: Partial<ThumbnailSettings>) => {
+    if (!effectiveThumbnailDraft) return
+    setThumbnailDraft({ ...effectiveThumbnailDraft, ...patch })
   }
 
   const patchGenerationThrottleDraft = (patch: {
@@ -342,6 +363,10 @@ export function SettingsPage() {
                 onPatchImageSave={patchImageSaveDraft}
                 onSave={() => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft)}
                 isSaving={imageSaveMutation.isPending}
+                thumbnailDraft={effectiveThumbnailDraft}
+                onPatchThumbnail={patchThumbnailDraft}
+                onSaveThumbnail={() => effectiveThumbnailDraft && void thumbnailMutation.mutateAsync(effectiveThumbnailDraft)}
+                isSavingThumbnail={thumbnailMutation.isPending}
                 generationThrottleDraft={effectiveGenerationThrottleDraft}
                 onPatchGenerationThrottle={patchGenerationThrottleDraft}
                 onSaveGenerationThrottle={() => effectiveGenerationThrottleDraft && void generationThrottleMutation.mutateAsync(effectiveGenerationThrottleDraft)}
