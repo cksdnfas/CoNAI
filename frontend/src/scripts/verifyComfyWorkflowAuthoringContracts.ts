@@ -10,6 +10,14 @@ const authoringGraphSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/comfy-workflow-authoring-graph.tsx'),
   'utf8',
 )
+const comfyModuleSaveModalSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/comfy-module-save-modal.tsx'),
+  'utf8',
+)
+const moduleSaveModalSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/module-save-modal.tsx'),
+  'utf8',
+)
 
 match(
   markedFieldsEditorSource,
@@ -40,6 +48,36 @@ doesNotMatch(
   authoringGraphSource,
   /markedJsonPaths\.includes\(path\)/,
   'Comfy workflow authoring inputs must not scan marked JSON paths for every rendered input',
+)
+match(
+  comfyModuleSaveModalSource,
+  /const exposedFieldIdSet = useMemo\(\(\) => new Set\(exposedFieldIds\), \[exposedFieldIds\]\)/,
+  'Comfy module save modal should memoize exposed field ids for checkbox rendering',
+)
+match(
+  comfyModuleSaveModalSource,
+  /const checked = exposedFieldIdSet\.has\(field\.key\)/,
+  'Comfy module save modal checkboxes should use Set.has for exposed-field membership',
+)
+doesNotMatch(
+  comfyModuleSaveModalSource,
+  /exposedFieldIds\.includes\(field\.key\)/,
+  'Comfy module save modal must not scan exposedFieldIds for every field option',
+)
+match(
+  moduleSaveModalSource,
+  /const exposedFieldKeySet = useMemo\(\(\) => new Set\(exposedFieldKeys\), \[exposedFieldKeys\]\)/,
+  'Module save modal should memoize exposed field keys for checkbox rendering',
+)
+match(
+  moduleSaveModalSource,
+  /const checked = exposedFieldKeySet\.has\(field\.key\)/,
+  'Module save modal checkboxes should use Set.has for exposed-field membership',
+)
+doesNotMatch(
+  moduleSaveModalSource,
+  /exposedFieldKeys\.includes\(field\.key\)/,
+  'Module save modal must not scan exposedFieldKeys for every field option',
 )
 
 console.log('Comfy workflow authoring contracts verified.')

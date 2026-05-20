@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -41,6 +42,7 @@ export function ComfyModuleSaveModal({
   onSave,
 }: ComfyModuleSaveModalProps) {
   const { t } = useI18n()
+  const exposedFieldIdSet = useMemo(() => new Set(exposedFieldIds), [exposedFieldIds])
   const selectedOverwriteModule = overwriteCandidates.find((module) => module.id === overwriteModuleId) ?? null
   return (
     <SettingsModal
@@ -83,7 +85,7 @@ export function ComfyModuleSaveModal({
           {fieldOptions.length > 0 ? (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {fieldOptions.map((field) => {
-                const checked = exposedFieldIds.includes(field.key)
+                const checked = exposedFieldIdSet.has(field.key)
                 return (
                   <label key={field.key} className="flex items-center gap-2 rounded-sm border border-border/70 bg-surface-low/45 px-3 py-2 text-sm text-foreground">
                     <input

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -45,6 +46,7 @@ export function ModuleSaveModal({
   onSave,
 }: ModuleSaveModalProps) {
   const { t } = useI18n()
+  const exposedFieldKeySet = useMemo(() => new Set(exposedFieldKeys), [exposedFieldKeys])
   const selectedOverwriteModule = overwriteCandidates.find((module) => module.id === overwriteModuleId) ?? null
   return (
     <SettingsModal
@@ -83,7 +85,7 @@ export function ModuleSaveModal({
           <div className="text-sm font-medium text-foreground">{t('image-generation.components.module.save.modal.exposed.inputs')}</div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {fieldOptions.map((field) => {
-              const checked = exposedFieldKeys.includes(field.key)
+              const checked = exposedFieldKeySet.has(field.key)
               return (
                 <label key={field.key} className="flex items-center gap-2 rounded-sm border border-border/70 bg-surface-low/45 px-3 py-2 text-sm text-foreground">
                   <input
