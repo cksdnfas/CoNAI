@@ -194,6 +194,31 @@ function verifyModalKeyboardNavigationPreservesFormControls() {
   )
 }
 
+function verifyModalSourceItemsIndexAvoidsIntermediateArrays() {
+  const providerSource = source('src/features/images/components/detail/image-view-modal-provider.tsx')
+  const sourceItemsIndexSource = sliceRequiredSource(
+    providerSource,
+    'function buildSourceItemsByHash(items?: ImageRecord[]) {',
+    'function isModalKeyboardEditingTarget',
+  )
+
+  match(
+    sourceItemsIndexSource,
+    /const sourceItemsByHash: Record<string, ImageRecord> = \{\}/,
+    'modal source-item lookup should build directly into a hash-index record',
+  )
+  match(
+    sourceItemsIndexSource,
+    /for \(const item of items \?\? \[\]\) \{[\s\S]*?sourceItemsByHash\[compositeHash\] = item/,
+    'modal source-item lookup should fill the hash index in one pass over the source items',
+  )
+  doesNotMatch(
+    sourceItemsIndexSource,
+    /\.map\(|\.filter\(|Object\.fromEntries/,
+    'modal source-item lookup must not allocate map/filter/fromEntries intermediates for large media lists',
+  )
+}
+
 function verifyInfoViewerStatePersistsAcrossModalNavigation() {
   const imageDetailSource = source('src/features/images/image-detail-view.tsx')
   const breakpointSyncSource = sliceRequiredSource(
@@ -309,6 +334,7 @@ verifyInfoToggleAvoidsImageNavigationControls()
 verifyImageNavigationButtonsUseProjectChrome()
 verifyModalOverlayLoadsOffClickPath()
 verifyModalKeyboardNavigationPreservesFormControls()
+verifyModalSourceItemsIndexAvoidsIntermediateArrays()
 verifyInfoViewerStatePersistsAcrossModalNavigation()
 verifyDesktopInfoTogglesAreDesktopOnly()
 verifySingleColumnInfoViewerReservesImageHeight()

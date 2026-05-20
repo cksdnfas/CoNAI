@@ -84,14 +84,16 @@ function warmImagePreviewSource(image?: ImageRecord | null) {
 }
 
 function buildSourceItemsByHash(items?: ImageRecord[]) {
-  const entries = (items ?? [])
-    .map((item) => {
-      const compositeHash = item.composite_hash
-      return typeof compositeHash === 'string' && compositeHash.length > 0 ? ([compositeHash, item] as const) : null
-    })
-    .filter((entry): entry is readonly [string, ImageRecord] => entry !== null)
+  const sourceItemsByHash: Record<string, ImageRecord> = {}
 
-  return Object.fromEntries(entries) as Record<string, ImageRecord>
+  for (const item of items ?? []) {
+    const compositeHash = item.composite_hash
+    if (typeof compositeHash === 'string' && compositeHash.length > 0) {
+      sourceItemsByHash[compositeHash] = item
+    }
+  }
+
+  return sourceItemsByHash
 }
 
 function isModalKeyboardEditingTarget(target: EventTarget | null) {
