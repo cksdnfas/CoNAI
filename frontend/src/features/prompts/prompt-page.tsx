@@ -110,8 +110,9 @@ export function PromptPage() {
   })
 
   const promptGroups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data])
+  const promptGroupById = useMemo(() => new Map(promptGroups.map((group) => [group.id, group] as const)), [promptGroups])
   const isSelectedGroupProtected = isProtectedLoRAPromptGroup(selectedGroup)
-  const isSelectedGroupDanbooru = isDanbooruPromptGroup(selectedGroup, promptGroups)
+  const isSelectedGroupDanbooru = isDanbooruPromptGroup(selectedGroup, promptGroupById)
   const isSelectedGroupLocked = isSelectedGroupProtected || isSelectedGroupDanbooru
   const selectedGroupSiblingIndex = siblingGroups.findIndex((group) => group.id === selectedGroup?.id)
   const canMoveGroupUp = !isSelectedGroupLocked && selectedGroupSiblingIndex > 0
@@ -124,14 +125,14 @@ export function PromptPage() {
     () => items.filter((item) => selectedPromptIdSet.has(item.id)),
     [items, selectedPromptIdSet],
   )
-  const selectedLockedPromptCount = selectedPromptItems.filter((item) => isLockedPromptItem(item, promptGroups)).length
+  const selectedLockedPromptCount = selectedPromptItems.filter((item) => isLockedPromptItem(item, promptGroupById)).length
   const assignableGroups = useMemo(
-    () => promptGroups.filter((group) => group.id !== 0 && !isLockedPromptGroup(group, promptGroups)),
-    [promptGroups],
+    () => promptGroups.filter((group) => group.id !== 0 && !isLockedPromptGroup(group, promptGroupById)),
+    [promptGroupById, promptGroups],
   )
   const editableParentGroups = useMemo(
-    () => promptGroups.filter((group) => group.id !== 0 && !isLockedPromptGroup(group, promptGroups)),
-    [promptGroups],
+    () => promptGroups.filter((group) => group.id !== 0 && !isLockedPromptGroup(group, promptGroupById)),
+    [promptGroupById, promptGroups],
   )
   const currentSectionTitle = selectedGroup?.group_name ?? 'All prompts'
   const currentSectionCount = pagination?.total ?? 0
@@ -357,12 +358,12 @@ export function PromptPage() {
   }
 
   const handleDeleteSinglePrompt = async (item: PromptCollectionItem) => {
-    if (isLockedPromptItem(item, promptGroups)) {
+    if (isLockedPromptItem(item, promptGroupById)) {
       showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 삭제할 수 없어.', en: 'Protected auto-group items cannot be deleted manually.' }), tone: 'error' })
       return
     }
 
-    if (!canDeletePromptItem(item, promptGroups)) {
+    if (!canDeletePromptItem(item, promptGroupById)) {
       showSnackbar({ message: t('prompts.prompt.page.you.can.delete.it.only.when.image'), tone: 'error' })
       return
     }
@@ -383,7 +384,7 @@ export function PromptPage() {
       showSnackbar({ message: t({ ko: '보호된 자동 그룹 항목은 직접 삭제할 수 없어.', en: 'Protected auto-group items cannot be deleted manually.' }), tone: 'error' })
       return
     }
-    if (selectedPromptItems.some((item) => !canDeletePromptItem(item, promptGroups))) {
+    if (selectedPromptItems.some((item) => !canDeletePromptItem(item, promptGroupById))) {
       showSnackbar({ message: t('prompts.prompt.page.prompts.with.remaining.usage.cannot.be.deleted'), tone: 'error' })
       return
     }
@@ -497,8 +498,8 @@ export function PromptPage() {
                   }
                   void handleActivatePrompt(item.prompt, item.type)
                 }}
-                isLockedPromptItem={(item) => isLockedPromptItem(item, promptGroups)}
-                canDeletePromptItem={(item) => canDeletePromptItem(item, promptGroups)}
+                isLockedPromptItem={(item) => isLockedPromptItem(item, promptGroupById)}
+                canDeletePromptItem={(item) => canDeletePromptItem(item, promptGroupById)}
               />
             </section>
           </div>

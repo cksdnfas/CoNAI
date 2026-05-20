@@ -1,5 +1,7 @@
 import type { PromptCollectionItem, PromptGroupRecord, PromptStatistics, PromptTypeFilter } from '@/types/prompt'
 
+export type PromptGroupLookup = PromptGroupRecord[] | ReadonlyMap<number, PromptGroupRecord>
+
 export const PROMPT_TYPE_TABS: Array<{ value: PromptTypeFilter; label: string }> = [
   { value: 'positive', label: 'Positive' },
   { value: 'negative', label: 'Negative' },
@@ -20,12 +22,17 @@ export function isProtectedLoRAPromptGroup(group?: PromptGroupRecord | null) {
   return group?.group_name?.trim().toLowerCase() === 'lora'
 }
 
-export function isDanbooruPromptGroup(group?: PromptGroupRecord | null, groups: PromptGroupRecord[] = []) {
+function getPromptGroupFromLookup(groups: PromptGroupLookup, groupId: number) {
+  return Array.isArray(groups)
+    ? groups.find((item) => item.id === groupId)
+    : groups.get(groupId)
+}
+
+export function isDanbooruPromptGroup(group?: PromptGroupRecord | null, groups: PromptGroupLookup = []) {
   if (!group) {
     return false
   }
 
-  const byId = new Map(groups.map((item) => [item.id, item] as const))
   const visited = new Set<number>()
   let current: PromptGroupRecord | null | undefined = group
 
@@ -35,21 +42,21 @@ export function isDanbooruPromptGroup(group?: PromptGroupRecord | null, groups: 
     if (current.parent_id == null && (normalizedName === 'danbooru' || normalizedName === '단부루')) {
       return true
     }
-    current = current.parent_id == null ? null : byId.get(current.parent_id)
+    current = current.parent_id == null ? null : getPromptGroupFromLookup(groups, current.parent_id)
   }
 
   return false
 }
 
-export function isLockedPromptGroup(group?: PromptGroupRecord | null, groups: PromptGroupRecord[] = []) {
+export function isLockedPromptGroup(group?: PromptGroupRecord | null, groups: PromptGroupLookup = []) {
   return isProtectedLoRAPromptGroup(group) || isDanbooruPromptGroup(group, groups)
 }
 
-export function isLockedPromptItem(item: PromptCollectionItem, groups: PromptGroupRecord[] = []) {
+export function isLockedPromptItem(item: PromptCollectionItem, groups: PromptGroupLookup = []) {
   return isProtectedLoRAPromptGroup(item.group_info) || isDanbooruPromptGroup(item.group_info, groups)
 }
 
-export function canDeletePromptItem(item: PromptCollectionItem, groups: PromptGroupRecord[] = []) {
+export function canDeletePromptItem(item: PromptCollectionItem, groups: PromptGroupLookup = []) {
   return !isLockedPromptItem(item, groups) && item.usage_count <= 0
 }
 
