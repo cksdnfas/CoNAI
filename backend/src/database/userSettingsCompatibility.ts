@@ -78,7 +78,7 @@ function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
         ${capacityExpr} AS capacity,
         ${descriptionExpr} AS description,
         ${isActiveExpr} AS is_active,
-        ${isDefaultExpr} AS is_default,
+        CASE WHEN ${backendTypeExpr} = 'modal' THEN 0 ELSE ${isDefaultExpr} END AS is_default,
         ${createdDateExpr} AS created_date,
         ${updatedDateExpr} AS updated_date
       FROM comfyui_servers
@@ -96,6 +96,40 @@ function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
   } finally {
     db.exec('PRAGMA foreign_keys = ON;');
   }
+}
+
+/** Keep representative ComfyUI server state unique after legacy schema reconciliation. */
+function ensureComfyUIServerSingleDefaultIndex(db: Database.Database): void {
+  const tableRow = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='comfyui_servers'").get();
+  if (!tableRow) {
+    return;
+  }
+
+  if (!hasColumn(db, 'comfyui_servers', 'is_default')) {
+    db.exec('ALTER TABLE comfyui_servers ADD COLUMN is_default BOOLEAN DEFAULT 0');
+  }
+
+  db.exec(`
+    UPDATE comfyui_servers
+    SET is_default = 0
+    WHERE backend_type = 'modal'
+      AND is_default = 1
+  `);
+
+  db.exec(`
+    UPDATE comfyui_servers
+    SET is_default = 0
+    WHERE is_default = 1
+      AND id NOT IN (
+        SELECT id
+        FROM comfyui_servers
+        WHERE is_default = 1
+          AND backend_type != 'modal'
+        ORDER BY id DESC
+        LIMIT 1
+      )
+  `);
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_comfyui_servers_single_default ON comfyui_servers(is_default) WHERE is_default = 1');
 }
 
 /** Rebuild wildcard_items when an older CHECK constraint does not allow General wildcard items. */
@@ -343,6 +377,7 @@ function ensureGraphWorkflowsAllowDuplicateNames(db: Database.Database): void {
 /** Apply all post-migration compatibility fixes for older user database schemas. */
 export function ensureUserSettingsCompatibility(db: Database.Database): void {
   ensureComfyUIServersUseEndpointSchema(db);
+  ensureComfyUIServerSingleDefaultIndex(db);
   ensureModuleDefinitionsSupportsCurrentShape(db);
   ensureModuleDefinitionCompatibilityIndexes(db);
   ensureGraphWorkflowsAllowDuplicateNames(db);

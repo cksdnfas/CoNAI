@@ -408,6 +408,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     console.log('  Migrating comfyui_servers: adding routing_tags_json column');
     db.exec('ALTER TABLE comfyui_servers ADD COLUMN routing_tags_json TEXT');
   }
+  if (!hasColumn('comfyui_servers', 'is_default')) {
+    console.log('  Migrating comfyui_servers: adding is_default column');
+    db.exec('ALTER TABLE comfyui_servers ADD COLUMN is_default BOOLEAN DEFAULT 0');
+  }
 
   // Migrate workflow_servers table
   if (!hasColumn('workflow_servers', 'is_enabled')) {
@@ -682,6 +686,27 @@ export function createUserSettingsSchema(db: Database.Database): void {
     }
   }
 
+  db.exec(`
+    UPDATE comfyui_servers
+    SET is_default = 0
+    WHERE backend_type = 'modal'
+      AND is_default = 1
+  `);
+
+  db.exec(`
+    UPDATE comfyui_servers
+    SET is_default = 0
+    WHERE is_default = 1
+      AND id NOT IN (
+        SELECT id
+        FROM comfyui_servers
+        WHERE is_default = 1
+          AND backend_type != 'modal'
+        ORDER BY id DESC
+        LIMIT 1
+      )
+  `);
+
   // Create indexes (now safe - all columns exist)
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows(name)',
@@ -692,6 +717,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_comfyui_servers_name ON comfyui_servers(name)',
     'CREATE INDEX IF NOT EXISTS idx_comfyui_servers_active ON comfyui_servers(is_active)',
     'CREATE INDEX IF NOT EXISTS idx_comfyui_servers_routing_tags_json ON comfyui_servers(routing_tags_json)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_comfyui_servers_single_default ON comfyui_servers(is_default) WHERE is_default = 1',
     'CREATE INDEX IF NOT EXISTS idx_workflow_servers_workflow ON workflow_servers(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_workflow_servers_server ON workflow_servers(server_id)',
     'CREATE INDEX IF NOT EXISTS idx_user_preferences_key ON user_preferences(key)',

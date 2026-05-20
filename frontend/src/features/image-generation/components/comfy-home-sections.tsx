@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { Copy, FolderOpen, ListTree, Pencil, Plus, Save, Server, Trash2, Upload } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Copy, ListTree, Pencil, Plus, RotateCcw, Save, Server, Trash2, Upload } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { SettingsField, SettingsInsetBlock, SettingsModalBody, SettingsModalFooter, SettingsSection } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
-import type { ComfyUIModelFolderScanInput, ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api-image-generation-types'
+import type { ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api-image-generation-types'
 import type { ComfyUIServerTestState } from '../image-generation-shared'
 
 type WorkflowListSectionProps = {
@@ -188,6 +188,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium text-foreground">{server.name}</span>
+                      {!isModalServer && server.is_default ? <Badge variant="secondary">{t({ ko: '대표', en: 'Default' })}</Badge> : null}
                       {isModalServer ? <Badge variant="outline">Modal</Badge> : null}
                       {isModalServer ? (
                         <Badge variant="outline">{t('image-generation.components.comfy.home.sections.modal.server.auto.check.skipped')}</Badge>
@@ -259,38 +260,17 @@ type DropdownListsSectionProps = {
   onCreateManualList: (input: { name: string; description?: string; items: string[] }) => Promise<void> | void
   onUpdateList: (listId: number, input: { name?: string; description?: string; items?: string[] }) => Promise<void> | void
   onDeleteList: (listId: number) => Promise<void> | void
-  onScanAutoLists: (input: {
-    modelFolders: ComfyUIModelFolderScanInput[]
-    sourcePath?: string
-    mergeSubfolders?: boolean
-    createBoth?: boolean
-  }) => Promise<void> | void
+  onScanAutoLists: (input: { apiPaths: string[] }) => Promise<void> | void
 }
 
 type DropdownTab = 'custom' | 'auto'
-type RelativeFile = File & { webkitRelativePath?: string }
 
-const KNOWN_MODEL_ROOTS = new Set([
-  'checkpoints',
-  'clip',
-  'clip_vision',
-  'controlnet',
-  'diffusion_models',
-  'embeddings',
-  'gligen',
-  'hypernetworks',
-  'ipadapter',
-  'loras',
-  'photomaker',
-  'style_models',
-  'text_encoders',
-  'unet',
-  'upscale_models',
-  'vae',
-  'vae_approx',
-  'vae_approximation',
-])
-const MODEL_FILE_EXTENSIONS = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin', '.gguf', '.onnx']
+const DEFAULT_COMFY_MODEL_API_PATHS = [
+  '/models/checkpoints',
+  '/models/diffusion_models',
+  '/models/unet_gguf',
+  '/models/loras',
+]
 
 function splitDropdownItems(rawValue: string) {
   return rawValue
@@ -299,84 +279,8 @@ function splitDropdownItems(rawValue: string) {
     .filter(Boolean)
 }
 
-/** Keep known model file extensions so auto-collected dropdowns match ComfyUI object-info values exactly. */
-function getKnownModelFileName(fileName: string) {
-  const lowerName = fileName.toLowerCase()
-  const matchedExtension = MODEL_FILE_EXTENSIONS.find((extension) => lowerName.endsWith(extension))
-  if (!matchedExtension) {
-    return null
-  }
-
-  return fileName
-}
-
-function collectModelFoldersFromSelection(files: RelativeFile[], locale: string) {
-  const folderMap = new Map<string, ComfyUIModelFolderScanInput>()
-  const filePathSetByFolder = new Map<string, Set<string>>()
-  const firstRelativePath = files[0]?.webkitRelativePath ?? files[0]?.name ?? ''
-  const selectedRootName = firstRelativePath.split('/')[0] || 'selected-folder'
-  const selectedRootLower = selectedRootName.toLowerCase()
-
-  for (const file of files) {
-    const relativePath = file.webkitRelativePath ?? file.name
-    const parts = relativePath.split('/').filter(Boolean)
-    if (parts.length < 2) {
-      continue
-    }
-
-    const selectedPart = parts[0]?.toLowerCase() ?? ''
-    const nestedPart = parts[1]?.toLowerCase() ?? ''
-    const knownRootAtSelected = KNOWN_MODEL_ROOTS.has(selectedPart)
-    const knownRootNested = KNOWN_MODEL_ROOTS.has(nestedPart)
-    const detectedModelRoot = knownRootNested ? parts[1] : knownRootAtSelected ? parts[0] : null
-
-    if (selectedRootLower === 'loras' || detectedModelRoot?.toLowerCase() === 'loras') {
-      continue
-    }
-
-    const modelFileName = getKnownModelFileName(parts[parts.length - 1])
-    if (!modelFileName) {
-      continue
-    }
-
-    let folderParts = parts.slice(0, -1)
-    if (knownRootNested) {
-      folderParts = parts.slice(2, -1)
-    } else if (knownRootAtSelected) {
-      folderParts = parts.slice(1, -1)
-    }
-
-    const rootFolder = folderParts[0] ?? detectedModelRoot ?? selectedRootName
-    const displayName = folderParts.join('/') || rootFolder
-    const modelOptionPath = folderParts.length > 0 ? [...folderParts, modelFileName].join('/') : modelFileName
-    const bucket = folderMap.get(displayName) ?? {
-      folderName: rootFolder,
-      displayName,
-      files: [],
-    }
-
-    let bucketFileSet = filePathSetByFolder.get(displayName)
-    if (!bucketFileSet) {
-      bucketFileSet = new Set(bucket.files)
-      filePathSetByFolder.set(displayName, bucketFileSet)
-    }
-
-    if (!bucketFileSet.has(modelOptionPath)) {
-      bucketFileSet.add(modelOptionPath)
-      bucket.files.push(modelOptionPath)
-    }
-    folderMap.set(displayName, bucket)
-  }
-
-  return {
-    sourcePath: selectedRootName,
-    modelFolders: [...folderMap.values()]
-      .map((folder) => ({
-        ...folder,
-        files: [...folder.files].sort((left, right) => left.localeCompare(right, locale)),
-      }))
-      .sort((left, right) => left.displayName.localeCompare(right.displayName, locale)),
-  }
+function splitComfyModelApiPaths(rawValue: string) {
+  return Array.from(new Set(splitDropdownItems(rawValue)))
 }
 
 type CustomDropdownListEditorModalProps = {
@@ -459,110 +363,57 @@ type ComfyDropdownAutoCollectModalProps = {
   open: boolean
   isSubmitting?: boolean
   onClose: () => void
-  onSubmit: (input: {
-    modelFolders: ComfyUIModelFolderScanInput[]
-    sourcePath?: string
-    mergeSubfolders?: boolean
-    createBoth?: boolean
-  }) => Promise<void> | void
+  onSubmit: (input: { apiPaths: string[] }) => Promise<void> | void
 }
 
 function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, onSubmit }: ComfyDropdownAutoCollectModalProps) {
-  const { t, locale, formatNumber } = useI18n()
-  const inputRef = useRef<HTMLInputElement | null>(null)
-  const [selectedSourceFiles, setSelectedSourceFiles] = useState<RelativeFile[]>([])
-  const [selectedSourceLabel, setSelectedSourceLabel] = useState('')
-  const [mergeSubfolders, setMergeSubfolders] = useState(true)
-  const [createBoth, setCreateBoth] = useState(false)
+  const { t, formatNumber } = useI18n()
+  const defaultPathText = DEFAULT_COMFY_MODEL_API_PATHS.join('\n')
+  const [apiPathText, setApiPathText] = useState(defaultPathText)
+  const apiPaths = useMemo(() => splitComfyModelApiPaths(apiPathText), [apiPathText])
 
   useEffect(() => {
-    if (!open) {
-      return
+    if (open) {
+      setApiPathText(defaultPathText)
     }
-
-    setSelectedSourceFiles([])
-    setSelectedSourceLabel('')
-    setMergeSubfolders(true)
-    setCreateBoth(false)
-  }, [open])
-
-  useEffect(() => {
-    if (!inputRef.current) {
-      return
-    }
-
-    inputRef.current.setAttribute('webkitdirectory', '')
-    inputRef.current.setAttribute('directory', '')
-  }, [open])
-
-  const autoScanPreview = useMemo(() => (selectedSourceFiles.length > 0 ? collectModelFoldersFromSelection(selectedSourceFiles, locale) : null), [locale, selectedSourceFiles])
-
-  const handlePickFolder = () => {
-    inputRef.current?.click()
-  }
-
-  const handleFolderChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []) as RelativeFile[]
-    if (files.length === 0) {
-      return
-    }
-
-    const sourceLabel = files[0]?.webkitRelativePath?.split('/')[0] ?? files[0]?.name ?? 'selected-folder'
-    setSelectedSourceFiles(files)
-    setSelectedSourceLabel(sourceLabel)
-    event.target.value = ''
-  }
+  }, [defaultPathText, open])
 
   const handleSubmit = async () => {
-    if (!autoScanPreview || autoScanPreview.modelFolders.length === 0) {
-      return
-    }
-
-    await onSubmit({
-      modelFolders: autoScanPreview.modelFolders,
-      sourcePath: autoScanPreview.sourcePath,
-      mergeSubfolders,
-      createBoth,
-    })
+    await onSubmit({ apiPaths })
   }
 
   return (
     <SettingsModal open={open} onClose={onClose} title={t({ ko: 'ComfyUI 자동수집', en: 'ComfyUI auto collect' })} widthClassName="max-w-3xl">
       <SettingsModalBody className="space-y-5">
-        <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => handleFolderChange(event)} />
-
         <SettingsInsetBlock className="space-y-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={handlePickFolder} disabled={isSubmitting}>
-              <FolderOpen className="h-4 w-4" />
-              {selectedSourceLabel ? selectedSourceLabel : t({ ko: '폴더 선택', en: 'Choose folder' })}
+          <SettingsField label={t({ ko: 'API 목록', en: 'API paths' })}>
+            <Textarea
+              rows={8}
+              value={apiPathText}
+              onChange={(event) => setApiPathText(event.target.value)}
+              placeholder={DEFAULT_COMFY_MODEL_API_PATHS.join('\n')}
+            />
+          </SettingsField>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-muted-foreground">
+              {t({ ko: '{count}개 경로', en: '{count} paths' }, { count: formatNumber(apiPaths.length) })}
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setApiPathText(defaultPathText)} disabled={isSubmitting}>
+              <RotateCcw className="h-4 w-4" />
+              {t({ ko: '기본값 초기화', en: 'Reset defaults' })}
             </Button>
           </div>
 
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={mergeSubfolders} onChange={(event) => setMergeSubfolders(event.target.checked)} />
-              {t({ ko: '하위 폴더 통합', en: 'Merge subfolders' })}
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={createBoth} onChange={(event) => setCreateBoth(event.target.checked)} disabled={!mergeSubfolders} />
-              {t({ ko: '통합 + 개별 생성', en: 'Create merged + separate' })}
-            </label>
-          </div>
-
-          {autoScanPreview ? (
-            <Alert>
-              <AlertTitle>{t({ ko: '수집 미리보기', en: 'Collection preview' })}</AlertTitle>
-              <AlertDescription>
-                {t({ ko: '폴더 {folders}개, 항목 {items}개', en: '{folders} folders, {items} items' }, { folders: formatNumber(autoScanPreview.modelFolders.length), items: formatNumber(autoScanPreview.modelFolders.reduce((sum, folder) => sum + folder.files.length, 0)) })}
-              </AlertDescription>
-            </Alert>
-          ) : null}
+          <Alert>
+            <AlertTitle>{t({ ko: '대표 서버 API 기준', en: 'Representative server API' })}</AlertTitle>
+            <AlertDescription>{t({ ko: '자동수집은 대표 ComfyUI 서버에서 실행되며 통합 + 개별 생성, 하위 폴더 통합은 항상 적용됩니다.', en: 'Auto collect runs against the representative ComfyUI server; merged + separate lists and subfolder merging are always applied.' })}</AlertDescription>
+          </Alert>
         </SettingsInsetBlock>
 
         <SettingsModalFooter>
           <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-          <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || !autoScanPreview || autoScanPreview.modelFolders.length === 0}>
+          <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting}>
             <Upload className="h-4 w-4" />
             {t({ ko: '자동수집 실행', en: 'Run auto collect' })}
           </Button>
@@ -605,7 +456,7 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
             </Button>
           ) : (
             <Button type="button" size="sm" variant="outline" onClick={() => setIsAutoModalOpen(true)}>
-              <FolderOpen className="h-4 w-4" />
+              <Upload className="h-4 w-4" />
               {t({ ko: '자동수집', en: 'Auto collect' })}
             </Button>
           )}

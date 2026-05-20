@@ -44,6 +44,13 @@ function parseBackendTypeInput(value: unknown): ComfyUIBackendType {
   throw new Error('backend_type must be either comfyui or modal');
 }
 
+function sendModalRepresentativeBadRequest(res: Response) {
+  return res.status(400).json({
+    success: false,
+    error: 'Modal servers cannot be representative servers'
+  } as ComfyUIServerResponse);
+}
+
 function parseCapacityInput(value: unknown, backendType: ComfyUIBackendType) {
   if (value === undefined || value === null || value === '') {
     return backendType === 'modal' ? 10 : 1;
@@ -321,7 +328,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/comfyui-servers
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, endpoint, description, is_active } = req.body;
+  const { name, endpoint, description, is_active, is_default } = req.body;
 
   if (!name || !endpoint) {
     return res.status(400).json({
@@ -342,6 +349,11 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
     const parsedRoutingTags = parseRoutingTagsInput(req.body?.routing_tags);
     const backendType = parseBackendTypeInput(req.body?.backend_type);
+    const requestedDefault = is_default === true;
+    if (backendType === 'modal' && requestedDefault) {
+      return sendModalRepresentativeBadRequest(res);
+    }
+
     const serverData: ComfyUIServerCreateData = {
       name,
       endpoint,
@@ -349,7 +361,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       capacity: parseCapacityInput(req.body?.capacity, backendType),
       description,
       routing_tags_json: parsedRoutingTags.provided ? JSON.stringify(parsedRoutingTags.tags) : null,
-      is_active
+      is_active,
+      is_default: requestedDefault
     };
 
     const serverId = await ComfyUIServerModel.create(serverData);
@@ -390,7 +403,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  const { name, endpoint, description, is_active } = req.body;
+  const { name, endpoint, description, is_active, is_default } = req.body;
 
   try {
     const existingServer = ComfyUIServerModel.findById(id);
@@ -411,8 +424,14 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 
     const parsedRoutingTags = parseRoutingTagsInput(req.body?.routing_tags);
     const backendType = req.body?.backend_type === undefined ? undefined : parseBackendTypeInput(req.body?.backend_type);
+    const nextBackendType = backendType ?? existingServer.backend_type;
+    const requestedDefault = is_default === true;
+    if (nextBackendType === 'modal' && requestedDefault) {
+      return sendModalRepresentativeBadRequest(res);
+    }
+
     const capacity = req.body?.capacity !== undefined
-      ? parseCapacityInput(req.body?.capacity, backendType ?? existingServer.backend_type)
+      ? parseCapacityInput(req.body?.capacity, nextBackendType)
       : backendType !== undefined
         ? parseCapacityInput(undefined, backendType)
         : undefined;
@@ -423,7 +442,8 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       capacity,
       description,
       routing_tags_json: parsedRoutingTags.provided ? JSON.stringify(parsedRoutingTags.tags) : undefined,
-      is_active
+      is_active,
+      is_default: is_default === undefined ? undefined : is_default === true
     };
 
     const updated = await ComfyUIServerModel.update(id, serverData);

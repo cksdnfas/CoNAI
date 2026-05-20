@@ -7,34 +7,42 @@ const comfyHomeSectionsSource = readFileSync(
   'utf8',
 )
 
+for (const defaultPath of ['/models/checkpoints', '/models/diffusion_models', '/models/unet_gguf', '/models/loras']) {
+  assert.match(
+    comfyHomeSectionsSource,
+    new RegExp(defaultPath.replace(/\//g, '\\/')),
+    `Comfy dropdown auto-collect should expose default API path ${defaultPath}`,
+  )
+}
+
 assert.match(
   comfyHomeSectionsSource,
-  /const filePathSetByFolder = new Map<string, Set<string>>\(\)/,
-  'Comfy dropdown auto-collect should create one Set cache per folder while scanning selected files',
+  /<Textarea[\s\S]*value=\{apiPathText\}[\s\S]*onChange=\{\(event\) => setApiPathText\(event\.target\.value\)\}/,
+  'auto-collect should use a textarea-driven API path list',
 )
 
 assert.match(
   comfyHomeSectionsSource,
-  /let bucketFileSet = filePathSetByFolder\.get\(displayName\)[\s\S]*?bucketFileSet = new Set\(bucket\.files\)[\s\S]*?filePathSetByFolder\.set\(displayName, bucketFileSet\)/,
-  'auto-collect duplicate tracking should reuse the per-folder Set instead of rebuilding from files repeatedly',
+  /기본값 초기화/,
+  'auto-collect should provide a default reset action',
 )
 
 assert.match(
   comfyHomeSectionsSource,
-  /if \(!bucketFileSet\.has\(modelOptionPath\)\) \{\s*bucketFileSet\.add\(modelOptionPath\)\s*bucket\.files\.push\(modelOptionPath\)\s*\}/,
-  'auto-collect should gate file pushes through Set.has/Set.add membership checks',
+  /await onSubmit\(\{ apiPaths \}\)/,
+  'auto-collect should submit API paths, not client-selected folder files',
+)
+
+assert.match(
+  comfyHomeSectionsSource,
+  /통합 \+ 개별 생성[\s\S]*하위 폴더 통합|하위 폴더 통합[\s\S]*통합 \+ 개별 생성/,
+  'auto-collect should tell users the fixed merge options are always applied',
 )
 
 assert.doesNotMatch(
   comfyHomeSectionsSource,
-  /bucket\.files\.includes\(modelOptionPath\)/,
-  'auto-collect must not rescan each folder file list for every selected model file',
+  /webkitdirectory|directory'|directory"|FolderOpen|modelFolders:|mergeSubfolders\?:|createBoth\?:|collectModelFoldersFromSelection/,
+  'auto-collect UI should not expose legacy folder-upload or merge option controls',
 )
 
-assert.match(
-  comfyHomeSectionsSource,
-  /sourcePath: selectedRootName,/,
-  'auto-collect preview should keep reporting the selected source folder path',
-)
-
-console.log('Comfy dropdown auto-collect contracts verified.')
+console.log('Comfy dropdown API auto-collect UI contracts verified.')

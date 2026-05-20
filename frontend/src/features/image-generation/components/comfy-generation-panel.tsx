@@ -434,12 +434,7 @@ export function ComfyGenerationPanel({
     }
   }
 
-  const handleScanDropdownLists = async (input: {
-    modelFolders: { folderName: string; displayName: string; files: string[] }[]
-    sourcePath?: string
-    mergeSubfolders?: boolean
-    createBoth?: boolean
-  }) => {
+  const handleScanDropdownLists = async (input: { apiPaths: string[] }) => {
     try {
       const response = await scanGenerationComfyUIModelDropdownLists(input)
       await dropdownListsQuery.refetch()

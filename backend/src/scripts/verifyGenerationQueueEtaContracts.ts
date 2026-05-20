@@ -19,6 +19,7 @@ function server(overrides: Partial<ComfyUIServerRecord> & Pick<ComfyUIServerReco
     routing_tags_json: overrides.routing_tags_json ?? null,
     routing_tags: overrides.routing_tags ?? [],
     is_active: overrides.is_active ?? true,
+    is_default: overrides.is_default ?? false,
     created_date: overrides.created_date ?? ISO,
     updated_date: overrides.updated_date ?? ISO,
   }

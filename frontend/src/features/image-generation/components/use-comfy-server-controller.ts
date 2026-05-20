@@ -35,9 +35,9 @@ export function useComfyServerController({
   const [isServerModalOpen, setIsServerModalOpen] = useState(false)
 
   /** Update one editable ComfyUI server form field. */
-  const handleComfyServerFieldChange = (field: keyof ComfyUIServerFormDraft, value: string) => {
+  const handleComfyServerFieldChange = (field: keyof ComfyUIServerFormDraft, value: string | boolean) => {
     setComfyServerForm((current) => {
-      if (field === 'backendType') {
+      if (field === 'backendType' && typeof value === 'string') {
         const backendType = value === 'modal' ? 'modal' : 'comfyui'
         return {
           ...current,
@@ -45,7 +45,23 @@ export function useComfyServerController({
           capacity: current.capacity === '1' || current.capacity === '10' || current.capacity.trim().length === 0
             ? (backendType === 'modal' ? '10' : '1')
             : current.capacity,
+          isDefault: backendType === 'modal' ? false : current.isDefault,
         }
+      }
+
+      if (field === 'isDefault') {
+        if (current.backendType === 'modal') {
+          return current
+        }
+
+        return {
+          ...current,
+          isDefault: value === true,
+        }
+      }
+
+      if (typeof value !== 'string') {
+        return current
       }
 
       return {
@@ -186,6 +202,7 @@ export function useComfyServerController({
           description: comfyServerForm.description.trim() || undefined,
           routing_tags: parseRoutingTagsCsv(comfyServerForm.routingTags),
           is_active: true,
+          is_default: comfyServerForm.backendType !== 'modal' && comfyServerForm.isDefault,
         })
 
         await refetchServers()
@@ -203,6 +220,7 @@ export function useComfyServerController({
           capacity,
           description: comfyServerForm.description.trim() || undefined,
           routing_tags: parseRoutingTagsCsv(comfyServerForm.routingTags),
+          is_default: comfyServerForm.backendType !== 'modal' && comfyServerForm.isDefault,
         })
 
         await refetchServers()
@@ -235,6 +253,7 @@ export function useComfyServerController({
       capacity: String(server.capacity ?? (server.backend_type === 'modal' ? 10 : 1)),
       description: server.description ?? '',
       routingTags: (server.routing_tags ?? []).join(', '),
+      isDefault: server.backend_type !== 'modal' && server.is_default === true,
     })
     setIsServerModalOpen(true)
   }

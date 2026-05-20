@@ -189,4 +189,14 @@ export class CustomDropdownListModel {
     ).run(sourcePath);
     return info.changes;
   }
+
+  /**
+   * 모든 자동 수집 목록 삭제 (대표 서버 API 재수집용)
+   */
+  static deleteAutoCollected(): number {
+    const info = userSettingsDb.prepare(
+      'DELETE FROM custom_dropdown_lists WHERE is_auto_collected = 1'
+    ).run();
+    return info.changes;
+  }
 }

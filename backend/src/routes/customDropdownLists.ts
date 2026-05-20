@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { CustomDropdownListModel } from '../models/CustomDropdownList';
+import { collectAndReplaceComfyModelDropdownListsFromDefaultServer } from '../services/comfyDropdownAutoCollectionService';
 import { asyncHandler } from '../middleware/errorHandler';
 
 const router = Router();
@@ -11,15 +12,6 @@ interface ApiResponse {
   error?: string;
 }
 
-/** Normalize scanned ComfyUI model paths to the same backslash form returned by the server model list. */
-function normalizeComfyModelOptionPath(value: string) {
-  return value.replace(/\//g, '\\');
-}
-
-/** Build a stable auto-collected merged list name without colliding with direct folder lists. */
-function buildMergedComfyDropdownListName(rootFolder: string, createBoth: boolean) {
-  return createBoth ? `${rootFolder} (통합)` : rootFolder;
-}
 
 /**
  * 모든 커스텀 드롭다운 목록 조회
@@ -309,120 +301,29 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
- * ComfyUI 모델 수집 (프론트엔드 기반)
+ * ComfyUI 모델 수집 (대표 서버 API 기반)
  * POST /api/custom-dropdown-lists/scan-comfyui-models
  */
 router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Response) => {
-  const { modelFolders, sourcePath, mergeSubfolders, createBoth } = req.body;
-
-  // modelFolders: Array<{ folderName: string; displayName: string; files: string[] }>
-  // sourcePath: string (optional, for tracking rescan)
-  // mergeSubfolders: boolean (하위폴더를 하나로 통합)
-  // createBoth: boolean (통합 리스트와 개별 리스트 모두 생성)
-
-  if (!modelFolders || !Array.isArray(modelFolders)) {
-    return res.status(400).json({
-      success: false,
-      error: '모델 폴더 데이터가 필요합니다.'
-    } as ApiResponse);
-  }
-
   try {
-    let deletedCount = 0;
-
-    // 재스캔인 경우 - 같은 경로로 수집된 기존 항목 삭제
-    if (sourcePath) {
-      deletedCount = await CustomDropdownListModel.deleteBySourcePath(sourcePath);
-      if (deletedCount > 0) {
-        console.log(`Rescanning: Deleted ${deletedCount} existing lists from ${sourcePath}`);
-      }
-    }
-
-    let createdCount = 0;
-
-    // 통합 옵션이 활성화된 경우 - 같은 루트 폴더끼리 병합
-    if (mergeSubfolders) {
-      // 루트 폴더별로 그룹화 (예: checkpoints, unet, upscale_models)
-      const rootFolderMap = new Map<string, string[]>();
-
-      for (const folder of modelFolders) {
-        const rootFolder = folder.folderName;
-        if (!rootFolderMap.has(rootFolder)) {
-          rootFolderMap.set(rootFolder, []);
-        }
-
-        for (const file of folder.files) {
-          rootFolderMap.get(rootFolder)!.push(normalizeComfyModelOptionPath(file));
-        }
-      }
-
-      // 통합 리스트 생성
-      for (const [rootFolder, files] of Array.from(rootFolderMap.entries())) {
-        if (files.length > 0) {
-          try {
-            await CustomDropdownListModel.create({
-              name: buildMergedComfyDropdownListName(rootFolder, Boolean(createBoth)),
-              description: `ComfyUI ${rootFolder} 통합 모델 목록 (자동 수집)`,
-              items: [...new Set(files)].sort(),
-              is_auto_collected: 1,
-              source_path: sourcePath || 'client-selected'
-            });
-            createdCount++;
-          } catch (error) {
-            console.error(`Error creating merged list for ${rootFolder}:`, error);
-          }
-        }
-      }
-
-      // 둘 다 생성 옵션이면 개별 리스트도 추가 생성
-      if (createBoth) {
-        for (const folder of modelFolders) {
-          if (folder.files && folder.files.length > 0) {
-            try {
-              await CustomDropdownListModel.create({
-                name: folder.displayName,
-                description: `ComfyUI ${folder.folderName} 모델 목록 (자동 수집)`,
-                items: folder.files.map((item: string) => normalizeComfyModelOptionPath(item)),
-                is_auto_collected: 1,
-                source_path: sourcePath || 'client-selected'
-              });
-              createdCount++;
-            } catch (error) {
-              console.error(`Error creating list for ${folder.displayName}:`, error);
-            }
-          }
-        }
-      }
-    } else {
-      // 기존 동작: 폴더별로 개별 목록 생성
-      for (const folder of modelFolders) {
-        if (folder.files && folder.files.length > 0) {
-          try {
-            await CustomDropdownListModel.create({
-              name: folder.displayName,
-              description: `ComfyUI ${folder.folderName} 모델 목록 (자동 수집)`,
-              items: folder.files.map((item: string) => normalizeComfyModelOptionPath(item)),
-              is_auto_collected: 1,
-              source_path: sourcePath || 'client-selected'
-            });
-            createdCount++;
-          } catch (error) {
-            console.error(`Error creating list for ${folder.displayName}:`, error);
-          }
-        }
-      }
-    }
+    const result = await collectAndReplaceComfyModelDropdownListsFromDefaultServer({
+      apiPaths: req.body?.apiPaths ?? req.body?.modelApiPaths ?? req.body?.paths,
+    });
 
     const response: ApiResponse = {
       success: true,
       data: {
-        scannedFolders: modelFolders.length,
-        createdLists: createdCount,
-        isRescan: deletedCount > 0,
-        mergeSubfolders: !!mergeSubfolders,
-        message: deletedCount > 0
-          ? `${createdCount}개 목록이 업데이트되었습니다.`
-          : `${createdCount}개 목록이 생성되었습니다.`
+        scannedFolders: result.scannedFolders,
+        createdLists: result.createdLists,
+        deletedLists: result.deletedLists,
+        apiPaths: result.apiPaths,
+        sourcePath: result.sourcePath,
+        isRescan: result.deletedLists > 0,
+        mergeSubfolders: true,
+        createBoth: true,
+        message: result.deletedLists > 0
+          ? `${result.createdLists}개 목록이 업데이트되었습니다.`
+          : `${result.createdLists}개 목록이 생성되었습니다.`
       }
     };
 

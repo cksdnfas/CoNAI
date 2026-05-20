@@ -165,6 +165,7 @@ export interface ComfyUIServer {
   description?: string
   routing_tags?: string[]
   is_active: boolean
+  is_default: boolean
 }
 
 export interface CustomDropdownList {
@@ -178,12 +179,6 @@ export interface CustomDropdownList {
   updated_date?: string
 }
 
-export interface ComfyUIModelFolderScanInput {
-  folderName: string
-  displayName: string
-  files: string[]
-}
-
 export interface CreateComfyUIServerPayload {
   name: string
   endpoint: string
@@ -191,6 +186,7 @@ export interface CreateComfyUIServerPayload {
   capacity?: number
   description?: string
   routing_tags?: string[]
+  is_default?: boolean
 }
 
 export interface UpdateComfyUIServerPayload {
@@ -201,6 +197,7 @@ export interface UpdateComfyUIServerPayload {
   description?: string
   routing_tags?: string[]
   is_active?: boolean
+  is_default?: boolean
 }
 
 export interface ComfyUIServerConnectionStatus {

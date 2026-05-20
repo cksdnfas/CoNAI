@@ -1,6 +1,5 @@
 import { requestJson } from './api-image-generation-request'
 import type {
-  ComfyUIModelFolderScanInput,
   ComfyUIServer,
   ComfyUIServerConnectionStatus,
   CreateComfyUIServerPayload,
@@ -270,14 +269,11 @@ export async function deleteGenerationCustomDropdownList(listId: number) {
   })
 }
 
-/** Scan a selected ComfyUI models folder dump and store auto-collected dropdown lists. */
+/** Scan configured ComfyUI model API paths and store auto-collected dropdown lists. */
 export async function scanGenerationComfyUIModelDropdownLists(payload: {
-  modelFolders: ComfyUIModelFolderScanInput[]
-  sourcePath?: string
-  mergeSubfolders?: boolean
-  createBoth?: boolean
+  apiPaths: string[]
 }) {
-  return requestJson<{ success: boolean; data: { scannedFolders: number; createdLists: number; deletedLists?: number; message: string } }>('/api/custom-dropdown-lists/scan-comfyui-models', {
+  return requestJson<{ success: boolean; data: { scannedFolders: number; createdLists: number; deletedLists?: number; apiPaths?: string[]; sourcePath?: string; message: string } }>('/api/custom-dropdown-lists/scan-comfyui-models', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

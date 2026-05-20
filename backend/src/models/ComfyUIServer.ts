@@ -38,7 +38,15 @@ function normalizeCapacity(value: unknown, backendType: ComfyUIBackendType): num
   return Math.max(1, Math.min(100, Math.floor(parsed)));
 }
 
-function normalizeServerFields<T extends { backend_type?: unknown; capacity?: unknown; routing_tags_json?: unknown }>(row: T) {
+function normalizeBooleanFlag(value: unknown, fallback: boolean): boolean {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+
+  return value === true || value === 1 || value === '1';
+}
+
+function normalizeServerFields<T extends { backend_type?: unknown; capacity?: unknown; routing_tags_json?: unknown; is_active?: unknown; is_default?: unknown }>(row: T) {
   const backendType = normalizeBackendType(row.backend_type);
 
   return {
@@ -46,6 +54,8 @@ function normalizeServerFields<T extends { backend_type?: unknown; capacity?: un
     backend_type: backendType,
     capacity: normalizeCapacity(row.capacity, backendType),
     routing_tags: parseRoutingTagsJson(row.routing_tags_json),
+    is_active: normalizeBooleanFlag(row.is_active, true),
+    is_default: backendType === 'modal' ? false : normalizeBooleanFlag(row.is_default, false),
   };
 }
 
@@ -64,22 +74,36 @@ export class ComfyUIServerModel {
   static create(serverData: ComfyUIServerCreateData): number {
     const backendType = normalizeBackendType(serverData.backend_type);
     const capacity = normalizeCapacity(serverData.capacity, backendType);
+    const isDefault = backendType !== 'modal' && serverData.is_default === true;
 
-    const info = userSettingsDb.prepare(`
-      INSERT INTO comfyui_servers (
-        name, endpoint, backend_type, capacity, description, routing_tags_json, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      serverData.name,
-      serverData.endpoint,
-      backendType,
-      capacity,
-      serverData.description || null,
-      serverData.routing_tags_json ?? null,
-      serverData.is_active !== undefined ? (serverData.is_active ? 1 : 0) : 1
-    );
+    const createServer = userSettingsDb.transaction(() => {
+      if (isDefault) {
+        userSettingsDb.prepare(`
+          UPDATE comfyui_servers
+          SET is_default = 0, updated_date = CURRENT_TIMESTAMP
+          WHERE is_default = 1
+        `).run();
+      }
 
-    return info.lastInsertRowid as number;
+      const info = userSettingsDb.prepare(`
+        INSERT INTO comfyui_servers (
+          name, endpoint, backend_type, capacity, description, routing_tags_json, is_active, is_default
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        serverData.name,
+        serverData.endpoint,
+        backendType,
+        capacity,
+        serverData.description || null,
+        serverData.routing_tags_json ?? null,
+        serverData.is_active !== undefined ? (serverData.is_active ? 1 : 0) : 1,
+        isDefault ? 1 : 0
+      );
+
+      return info.lastInsertRowid as number;
+    });
+
+    return createServer();
   }
 
   /**
@@ -115,33 +139,105 @@ export class ComfyUIServerModel {
   }
 
   /**
+   * 현재 대표 서버 조회
+   */
+  static findDefault(): ComfyUIServerRecord | null {
+    const row = userSettingsDb.prepare(
+      'SELECT * FROM comfyui_servers WHERE is_default = 1 AND backend_type != \'modal\' ORDER BY updated_date DESC, id DESC LIMIT 1'
+    ).get() as ComfyUIServerRecord | undefined;
+    return normalizeServerRecord(row);
+  }
+
+  /**
+   * 현재 활성 대표 서버 조회
+   */
+  static findDefaultActive(): ComfyUIServerRecord | null {
+    const row = userSettingsDb.prepare(
+      'SELECT * FROM comfyui_servers WHERE is_default = 1 AND is_active = 1 AND backend_type != \'modal\' ORDER BY updated_date DESC, id DESC LIMIT 1'
+    ).get() as ComfyUIServerRecord | undefined;
+    return normalizeServerRecord(row);
+  }
+
+  /**
+   * 대표 서버 지정. 기존 대표는 같은 트랜잭션에서 해제한다.
+   */
+  static setDefault(id: number): boolean {
+    const setDefaultServer = userSettingsDb.transaction((serverId: number) => {
+      const existing = userSettingsDb.prepare('SELECT id, backend_type FROM comfyui_servers WHERE id = ?').get(serverId) as { id: number; backend_type?: unknown } | undefined;
+      if (!existing || normalizeBackendType(existing.backend_type) === 'modal') {
+        return false;
+      }
+
+      userSettingsDb.prepare(`
+        UPDATE comfyui_servers
+        SET is_default = 0, updated_date = CURRENT_TIMESTAMP
+        WHERE id != ? AND is_default = 1
+      `).run(serverId);
+
+      const info = userSettingsDb.prepare(`
+        UPDATE comfyui_servers
+        SET is_default = 1, updated_date = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(serverId);
+      return info.changes > 0;
+    });
+
+    return setDefaultServer(id);
+  }
+
+  /**
    * 서버 업데이트
    */
   static update(id: number, serverData: ComfyUIServerUpdateData): boolean {
-    // is_active를 boolean에서 number로 변환
-    const backendType = serverData.backend_type !== undefined ? normalizeBackendType(serverData.backend_type) : undefined;
-    const cleanData: Record<string, any> = {
-      ...serverData,
-      backend_type: backendType,
-      capacity: serverData.capacity !== undefined ? normalizeCapacity(serverData.capacity, backendType ?? 'comfyui') : undefined,
-      is_active: serverData.is_active !== undefined ? (serverData.is_active ? 1 : 0) : undefined
-    };
+    const updateServer = userSettingsDb.transaction((serverId: number, nextData: ComfyUIServerUpdateData) => {
+      const existing = userSettingsDb.prepare('SELECT id, backend_type FROM comfyui_servers WHERE id = ?').get(serverId) as { id: number; backend_type?: unknown } | undefined;
+      if (!existing) {
+        return false;
+      }
 
-    const updates = filterDefined(cleanData);
+      const backendType = nextData.backend_type !== undefined ? normalizeBackendType(nextData.backend_type) : undefined;
+      const nextBackendType = backendType ?? normalizeBackendType(existing.backend_type);
+      if (nextData.is_default === true && nextBackendType === 'modal') {
+        return false;
+      }
 
-    if (Object.keys(updates).length === 0) {
-      return false;
-    }
+      if (nextData.is_default === true) {
+        userSettingsDb.prepare(`
+          UPDATE comfyui_servers
+          SET is_default = 0, updated_date = CURRENT_TIMESTAMP
+          WHERE id != ? AND is_default = 1
+        `).run(serverId);
+      }
 
-    // updated_date는 SQL 함수로 직접 삽입
-    const finalUpdates = {
-      ...updates,
-      updated_date: sqlLiteral('CURRENT_TIMESTAMP')
-    };
+      const cleanData: Record<string, any> = {
+        ...nextData,
+        backend_type: backendType,
+        capacity: nextData.capacity !== undefined ? normalizeCapacity(nextData.capacity, nextBackendType) : undefined,
+        is_active: nextData.is_active !== undefined ? (nextData.is_active ? 1 : 0) : undefined,
+        is_default: nextBackendType === 'modal'
+          ? 0
+          : nextData.is_default !== undefined
+            ? (nextData.is_default ? 1 : 0)
+            : undefined
+      };
 
-    const { sql, values } = buildUpdateQuery('comfyui_servers', finalUpdates, { id });
-    const info = userSettingsDb.prepare(sql).run(...values);
-    return info.changes > 0;
+      const updates = filterDefined(cleanData);
+
+      if (Object.keys(updates).length === 0) {
+        return false;
+      }
+
+      const finalUpdates = {
+        ...updates,
+        updated_date: sqlLiteral('CURRENT_TIMESTAMP')
+      };
+
+      const { sql, values } = buildUpdateQuery('comfyui_servers', finalUpdates, { id: serverId });
+      const info = userSettingsDb.prepare(sql).run(...values);
+      return info.changes > 0;
+    });
+
+    return updateServer(id, serverData);
   }
 
   /**

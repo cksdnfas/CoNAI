@@ -109,6 +109,7 @@ export type ComfyUIServerFormDraft = {
   capacity: string
   description: string
   routingTags: string
+  isDefault: boolean
 }
 
 export type ComfyUIServerTestState = {
@@ -229,6 +230,7 @@ export const DEFAULT_COMFYUI_SERVER_FORM: ComfyUIServerFormDraft = {
   capacity: '1',
   description: '',
   routingTags: '',
+  isDefault: false,
 }
 
 const NAI_FORM_DRAFT_STORAGE_KEY = 'conai:image-generation:nai-form-draft:v1'

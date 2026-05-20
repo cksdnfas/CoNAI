@@ -13,6 +13,7 @@ export interface ComfyUIServerRecord {
   routing_tags_json?: string | null;
   routing_tags?: string[];
   is_active: boolean;
+  is_default: boolean;
   created_date: string;
   updated_date: string;
 }
@@ -28,6 +29,7 @@ export interface ComfyUIServerCreateData {
   description?: string;
   routing_tags_json?: string | null;
   is_active?: boolean;
+  is_default?: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export interface ComfyUIServerUpdateData {
   description?: string;
   routing_tags_json?: string | null;
   is_active?: boolean;
+  is_default?: boolean;
 }
 
 /**

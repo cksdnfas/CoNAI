@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 
 interface SettingsFieldProps extends ComponentProps<'label'> {
   label: ReactNode
+  hint?: ReactNode
   children: ReactNode
 }
 
@@ -60,10 +61,13 @@ export function SettingsModalFooter({ children, className, ...props }: SettingsM
 }
 
 // Shared field wrapper for settings forms.
-export function SettingsField({ label, children, className, ...props }: SettingsFieldProps) {
+export function SettingsField({ label, hint, children, className, ...props }: SettingsFieldProps) {
   return (
     <label className={cn('theme-settings-field flex flex-col text-sm', className)} {...props}>
-      <span className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">{label}</span>
+      <span className="flex items-center justify-between gap-3 text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+        <span className="min-w-0 truncate">{label}</span>
+        {hint ? <span className="shrink-0 text-[11px] font-medium tracking-normal text-muted-foreground normal-case">{hint}</span> : null}
+      </span>
       {children}
     </label>
   )

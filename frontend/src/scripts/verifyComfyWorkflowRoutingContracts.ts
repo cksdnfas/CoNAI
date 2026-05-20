@@ -17,6 +17,7 @@ function makeServer(overrides: Partial<ComfyUIServer>): ComfyUIServer {
     capacity: 1,
     routing_tags: [],
     is_active: true,
+    is_default: false,
     ...overrides,
   }
 }
