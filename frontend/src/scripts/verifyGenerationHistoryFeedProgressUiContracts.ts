@@ -1,4 +1,12 @@
+import { doesNotMatch, match } from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { getGenerationHistoryFeedProgressSummary } from '../features/image-generation/generation-history-feed-progress'
+
+const generationHistoryPanelSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel.tsx'),
+  'utf8',
+)
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -48,10 +56,29 @@ function assertCountNormalization() {
   assertEqual(summary.hiddenCount, 4, 'hidden count should use normalized counts')
 }
 
+function assertStatusSummarySourcePolicy() {
+  match(
+    generationHistoryPanelSource,
+    /function getHistoryRecordStatusSummary\(records: GenerationHistoryResponse\['records'\]\): HistoryRecordStatusSummary \{[\s\S]*?for \(const record of records\)[\s\S]*?summary\.inFlight \+= 1[\s\S]*?summary\.completed \+= 1[\s\S]*?summary\.failed \+= 1[\s\S]*?summary\.cancellation \+= 1/,
+    'generation history panel should aggregate status badge counts in one pass',
+  )
+  match(
+    generationHistoryPanelSource,
+    /inFlight: inFlightHistoryCount,[\s\S]*?completed: completedHistoryCount,[\s\S]*?failed: failedHistoryCount,[\s\S]*?cancellation: cancellationHistoryCount,[\s\S]*?\} = useMemo\(\(\) => getHistoryRecordStatusSummary\(historyRecords\), \[historyRecords\]\)/,
+    'generation history panel should memoize one status summary for badge counts',
+  )
+  doesNotMatch(
+    generationHistoryPanelSource,
+    /historyRecords\.filter\(/,
+    'generation history badge counts must not rescan the visible history list once per status',
+  )
+}
+
 assertEmptySummary()
 assertPagedSummary()
 assertFilteredSummary()
 assertTotalNeverFallsBelowLoaded()
 assertCountNormalization()
+assertStatusSummarySourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')

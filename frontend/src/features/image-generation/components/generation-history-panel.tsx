@@ -70,6 +70,40 @@ function dedupeHistoryRecords(records: GenerationHistoryResponse['records']) {
   })
 }
 
+type HistoryRecordStatusSummary = {
+  inFlight: number
+  completed: number
+  failed: number
+  cancellation: number
+}
+
+function getHistoryRecordStatusSummary(records: GenerationHistoryResponse['records']): HistoryRecordStatusSummary {
+  const summary: HistoryRecordStatusSummary = {
+    inFlight: 0,
+    completed: 0,
+    failed: 0,
+    cancellation: 0,
+  }
+
+  for (const record of records) {
+    const displayStatus = resolveHistoryDisplayStatus(record)
+
+    if (displayStatus === 'pending' || displayStatus === 'processing') {
+      summary.inFlight += 1
+    } else if (displayStatus === 'completed') {
+      summary.completed += 1
+    } else if (displayStatus === 'failed') {
+      summary.failed += 1
+    }
+
+    if ((record.queue_cancel_requested ?? 0) > 0) {
+      summary.cancellation += 1
+    }
+  }
+
+  return summary
+}
+
 function getHistoryMediaVersion(record: GenerationHistoryResponse['records'][number]) {
   return [
     record.actual_composite_hash ?? record.composite_hash ?? '',
@@ -195,26 +229,14 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => dedupeHistoryRecords((historyQuery.data?.pages ?? []).flatMap((page) => page.records)),
     [historyQuery.data?.pages],
   )
-  const inFlightHistoryCount = useMemo(
-    () => historyRecords.filter((record) => {
-      const displayStatus = resolveHistoryDisplayStatus(record)
-      return displayStatus === 'pending' || displayStatus === 'processing'
-    }).length,
-    [historyRecords],
-  )
-  const completedHistoryCount = useMemo(
-    () => historyRecords.filter((record) => resolveHistoryDisplayStatus(record) === 'completed').length,
-    [historyRecords],
-  )
-  const failedHistoryCount = useMemo(
-    () => historyRecords.filter((record) => resolveHistoryDisplayStatus(record) === 'failed').length,
-    [historyRecords],
-  )
-  const cancellationHistoryCount = useMemo(
-    () => historyRecords.filter((record) => (record.queue_cancel_requested ?? 0) > 0).length,
-    [historyRecords],
-  )
+  const {
+    inFlight: inFlightHistoryCount,
+    completed: completedHistoryCount,
+    failed: failedHistoryCount,
+    cancellation: cancellationHistoryCount,
+  } = useMemo(() => getHistoryRecordStatusSummary(historyRecords), [historyRecords])
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
+
   const feedProgress = getGenerationHistoryFeedProgressSummary({
     loadedCount: historyRecords.length,
     visibleCount: historyImages.length,
