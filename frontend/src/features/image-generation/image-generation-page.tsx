@@ -1,5 +1,4 @@
-import { Suspense, lazy, useState } from 'react'
-import { useEffect } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/common/page-header'
@@ -63,10 +62,12 @@ export function ImageGenerationPage() {
     queryFn: () => getGenerationWorkflow(selectedComfyWorkflowId as number),
     enabled: selectedComfyWorkflowId !== null,
   })
-  const imageGenerationTabs = getImageGenerationTabs(t)
+  const imageGenerationTabs = useMemo(() => getImageGenerationTabs(t), [t])
   const visibleTabs = imageGenerationTabs
-  const activeTab = visibleTabs.some((tab) => tab.value === parseImageGenerationTab(searchParams.get('tab')))
-    ? parseImageGenerationTab(searchParams.get('tab'))
+  const visibleTabValues = useMemo(() => new Set(visibleTabs.map((tab) => tab.value)), [visibleTabs])
+  const requestedTab = parseImageGenerationTab(searchParams.get('tab'))
+  const activeTab = visibleTabValues.has(requestedTab)
+    ? requestedTab
     : (visibleTabs[0]?.value ?? 'nai')
   const selectedComfyWorkflowResultMode = activeTab === 'comfyui'
     ? selectedComfyWorkflowQuery.data?.result_view_mode ?? 'history'
@@ -102,8 +103,7 @@ export function ImageGenerationPage() {
   }, [activeTab, selectedComfyWorkflowId])
 
   useEffect(() => {
-    const requestedTab = parseImageGenerationTab(searchParams.get('tab'))
-    if (visibleTabs.some((tab) => tab.value === requestedTab)) {
+    if (visibleTabValues.has(requestedTab)) {
       return
     }
 
@@ -112,7 +112,7 @@ export function ImageGenerationPage() {
       nextSearchParams.set('tab', visibleTabs[0].value)
       setSearchParams(nextSearchParams, { replace: true })
     }
-  }, [searchParams, setSearchParams, visibleTabs])
+  }, [requestedTab, searchParams, setSearchParams, visibleTabValues, visibleTabs])
 
   const controllerLabel = getImageGenerationTabLabel(activeTab, t)
   const shouldUseControllerDrawer = !isWideLayout && (activeTab === 'nai' || activeTab === 'codex' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null))

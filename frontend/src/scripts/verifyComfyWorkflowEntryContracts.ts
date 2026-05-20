@@ -31,6 +31,21 @@ match(
   /if \(activeTab !== 'comfyui' && selectedComfyWorkflowId !== null\) \{\s*setSelectedComfyWorkflowId\(null\)\s*\}/,
   'Leaving the ComfyUI tab should clear the selected workflow before returning',
 )
+match(
+  imageGenerationPageSource,
+  /const imageGenerationTabs = useMemo\(\(\) => getImageGenerationTabs\(t\), \[t\]\)/,
+  'Image-generation tab descriptors should stay memoized instead of forcing URL normalization work every render',
+)
+match(
+  imageGenerationPageSource,
+  /const visibleTabValues = useMemo\(\(\) => new Set\(visibleTabs\.map\(\(tab\) => tab\.value\)\), \[visibleTabs\]\)/,
+  'Image-generation active-tab validation should use a memoized Set lookup',
+)
+doesNotMatch(
+  imageGenerationPageSource,
+  /visibleTabs\.some\(\(tab\) => tab\.value === parseImageGenerationTab\(searchParams\.get\('tab'\)\)\)/,
+  'Image-generation active-tab validation should not rescan visible tabs while reparsing the URL tab',
+)
 doesNotMatch(
   imageGenerationSharedSource,
   /COMFY_SELECTED_WORKFLOW_STORAGE_KEY|loadPersistedSelectedComfyWorkflowId|persistSelectedComfyWorkflowId/,
