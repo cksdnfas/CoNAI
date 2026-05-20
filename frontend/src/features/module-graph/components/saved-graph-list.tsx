@@ -61,6 +61,7 @@ export function SavedGraphList({
   const { t, locale, formatNumber } = useI18n()
   const [searchQuery, setSearchQuery] = useState('')
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<number[]>([])
+  const collapsedFolderIdSet = useMemo(() => new Set(collapsedFolderIds), [collapsedFolderIds])
 
   const foldersByParent = useMemo(() => {
     const nextMap = new Map<number | null, GraphWorkflowFolderRecord[]>()
@@ -215,7 +216,7 @@ export function SavedGraphList({
       }
       return [workflow.name, workflow.description ?? ''].join(' ').toLowerCase().includes(query)
     })
-    const isExpanded = !collapsedFolderIds.includes(folder.id)
+    const isExpanded = !collapsedFolderIdSet.has(folder.id)
     const hasChildren = childFolders.length > 0 || childWorkflows.length > 0
     const childEntries: TreeEntry[] = [
       ...childFolders.map((childFolder) => ({ type: 'folder' as const, label: childFolder.name, folder: childFolder })),
