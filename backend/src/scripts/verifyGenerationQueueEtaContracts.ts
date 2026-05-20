@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { computeQueueEtas, computeQueuePositions } from '../routes/generation-queue/queue-eta'
 import { getGenerationQueueServerCapacity } from '../services/generationQueueRouting'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
@@ -69,6 +71,18 @@ function assertEta(
 }
 
 function main() {
+  const queueEtaSource = readFileSync(resolve(process.cwd(), 'src/routes/generation-queue/queue-eta.ts'), 'utf8')
+  assert.match(
+    queueEtaSource,
+    /const eligibleServerIdSet = new Set\(queuePosition\.eligibleServerIds\)/,
+    'tag/auto ETA lanes should build one eligible-server Set before scanning running jobs',
+  )
+  assert.doesNotMatch(
+    queueEtaSource,
+    /eligibleServerIds\.includes\(candidateServerId\)/,
+    'running-lane ETA scans must not linearly check eligible servers for every active job',
+  )
+
   const dualSlotServer = server({ id: 1, name: 'Dual Slot', capacity: 2, routing_tags: ['fast'] })
   const singleSlotServer = server({ id: 2, name: 'Single Slot', capacity: 1 })
   const activeServers = [dualSlotServer, singleSlotServer]

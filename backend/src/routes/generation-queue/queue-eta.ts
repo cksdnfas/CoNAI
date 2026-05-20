@@ -147,13 +147,14 @@ function getRunningLaneRecords(record: GenerationQueueJobRecord, queuePosition: 
     return activeRecords.filter((candidate) => candidate.service_type === 'comfyui' && candidate.status === 'running')
   }
 
+  const eligibleServerIdSet = new Set(queuePosition.eligibleServerIds)
   return activeRecords.filter((candidate) => {
     if (candidate.service_type !== 'comfyui' || candidate.status !== 'running') {
       return false
     }
 
     const candidateServerId = candidate.assigned_server_id ?? candidate.requested_server_id ?? null
-    return candidateServerId !== null && queuePosition.eligibleServerIds.includes(candidateServerId)
+    return candidateServerId !== null && eligibleServerIdSet.has(candidateServerId)
   })
 }
 
