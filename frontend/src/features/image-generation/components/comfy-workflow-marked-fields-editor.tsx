@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react'
+import { useMemo, useState, type DragEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -62,6 +62,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
   const { t } = useI18n()
   const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null)
   const [dragOverFieldId, setDragOverFieldId] = useState<string | null>(null)
+  const expandedFieldIdSet = useMemo(() => new Set(expandedFieldIds), [expandedFieldIds])
 
   const handleFieldDragStart = (fieldId: string) => (event: DragEvent<HTMLButtonElement>) => {
     event.dataTransfer.effectAllowed = 'move'
@@ -99,7 +100,7 @@ export function ComfyWorkflowMarkedFieldsEditor({
       {markedFields.length > 0 ? (
         <div className={cn('space-y-3 overflow-y-auto pr-1', listClassName ?? 'max-h-[620px]')}>
           {markedFields.map((field, index) => {
-            const isExpanded = expandedFieldIds.includes(field.id)
+            const isExpanded = expandedFieldIdSet.has(field.id)
 
             return (
               <div

@@ -42,7 +42,8 @@
     "verify:image-list-selection-contracts": "tsx src/scripts/verifyImageListSelectionContracts.ts",
     "verify:image-list-modal-contracts": "tsx src/scripts/verifyImageListModalContracts.ts",
     "verify:nai-reusable-assets-contracts": "tsx src/scripts/verifyNaiReusableAssetsContracts.ts",
-    "verify:thumbnail-settings-ui-contracts": "tsx src/scripts/verifyThumbnailSettingsUiContracts.ts"
+    "verify:thumbnail-settings-ui-contracts": "tsx src/scripts/verifyThumbnailSettingsUiContracts.ts",
+    "verify:comfy-workflow-authoring-contracts": "tsx src/scripts/verifyComfyWorkflowAuthoringContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",

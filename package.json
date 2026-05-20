@@ -123,7 +123,8 @@
     "verify:migration": "npm run verify:policy:active-source && npm run verify:no-banned-imports:phase2 && npm run verify:no-ui-signatures:active && npm run verify:no-mui-deps:strict",
     "verify:migration:full": "npm run verify:migration && npm run verify:policy:generated-artifact && npm run verify:no-ui-signatures:generated && npm run verify:no-ui-signatures:full",
     "i18n:check": "node scripts/i18n-check.mjs",
-    "verify:thumbnail-default-settings-contracts": "cd backend && npm run verify:thumbnail-default-settings-contracts"
+    "verify:thumbnail-default-settings-contracts": "cd backend && npm run verify:thumbnail-default-settings-contracts",
+    "verify:comfy-workflow-authoring-contracts": "cd frontend && npm run verify:comfy-workflow-authoring-contracts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
