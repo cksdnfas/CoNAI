@@ -96,6 +96,30 @@ function buildSourceItemsByHash(items?: ImageRecord[]) {
   return sourceItemsByHash
 }
 
+function areCompositeHashesEqual(currentHashes: string[], nextHashes: string[]) {
+  if (currentHashes.length !== nextHashes.length) {
+    return false
+  }
+
+  for (let index = 0; index < nextHashes.length; index += 1) {
+    if (currentHashes[index] !== nextHashes[index]) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function mergeSourceItemsByHash(currentItemsByHash: Record<string, ImageRecord>, nextItemsByHash: Record<string, ImageRecord>) {
+  for (const compositeHash in nextItemsByHash) {
+    if (currentItemsByHash[compositeHash] !== nextItemsByHash[compositeHash]) {
+      return { ...currentItemsByHash, ...nextItemsByHash }
+    }
+  }
+
+  return currentItemsByHash
+}
+
 function isModalKeyboardEditingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
     return false
@@ -207,13 +231,9 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       }
 
       const nextSourceItemsByHash = buildSourceItemsByHash(input.sourceItems)
-      const mergedSourceItemsByHash = Object.keys(nextSourceItemsByHash).length > 0
-        ? { ...current.sourceItemsByHash, ...nextSourceItemsByHash }
-        : current.sourceItemsByHash
-      const isSameSequence = nextCompositeHashes.length === current.compositeHashes.length
-        && nextCompositeHashes.every((value, index) => value === current.compositeHashes[index])
-      const isSameItems = Object.keys(mergedSourceItemsByHash).length === Object.keys(current.sourceItemsByHash).length
-        && Object.entries(mergedSourceItemsByHash).every(([key, value]) => current.sourceItemsByHash[key] === value)
+      const mergedSourceItemsByHash = mergeSourceItemsByHash(current.sourceItemsByHash, nextSourceItemsByHash)
+      const isSameSequence = areCompositeHashesEqual(current.compositeHashes, nextCompositeHashes)
+      const isSameItems = mergedSourceItemsByHash === current.sourceItemsByHash
 
       if (isSameSequence && isSameItems) {
         return current

@@ -219,6 +219,46 @@ function verifyModalSourceItemsIndexAvoidsIntermediateArrays() {
   )
 }
 
+function verifyModalSequenceSyncSkipsRedundantItemMerge() {
+  const providerSource = source('src/features/images/components/detail/image-view-modal-provider.tsx')
+  const syncHelpersSource = sliceRequiredSource(
+    providerSource,
+    'function areCompositeHashesEqual(currentHashes: string[], nextHashes: string[]) {',
+    'function isModalKeyboardEditingTarget',
+  )
+  const syncImageViewSequenceSource = sliceRequiredSource(
+    providerSource,
+    'const syncImageViewSequence = useCallback',
+    '  const closeImageView = useCallback',
+  )
+
+  match(
+    syncHelpersSource,
+    /for \(let index = 0; index < nextHashes\.length; index \+= 1\)/,
+    'modal sequence equality should use a direct loop instead of allocating callback closures',
+  )
+  match(
+    syncHelpersSource,
+    /function mergeSourceItemsByHash[\s\S]*?for \(const compositeHash in nextItemsByHash\)[\s\S]*?return \{ \.\.\.currentItemsByHash, \.\.\.nextItemsByHash \}[\s\S]*?return currentItemsByHash/,
+    'modal source-item sync should only spread the lookup record when incoming source items changed',
+  )
+  match(
+    syncImageViewSequenceSource,
+    /mergeSourceItemsByHash\(current\.sourceItemsByHash, nextSourceItemsByHash\)/,
+    'modal sequence sync should use the guarded source-item merge helper',
+  )
+  match(
+    syncImageViewSequenceSource,
+    /const isSameItems = mergedSourceItemsByHash === current\.sourceItemsByHash/,
+    'modal sequence sync should detect unchanged source items by retained lookup identity',
+  )
+  doesNotMatch(
+    syncImageViewSequenceSource,
+    /Object\.keys\(mergedSourceItemsByHash\)|Object\.entries\(mergedSourceItemsByHash\)|nextCompositeHashes\.every/,
+    'modal sequence sync must not rescan merged source items or allocate array callbacks to detect no-op updates',
+  )
+}
+
 function verifyInfoViewerStatePersistsAcrossModalNavigation() {
   const imageDetailSource = source('src/features/images/image-detail-view.tsx')
   const breakpointSyncSource = sliceRequiredSource(
@@ -335,6 +375,7 @@ verifyImageNavigationButtonsUseProjectChrome()
 verifyModalOverlayLoadsOffClickPath()
 verifyModalKeyboardNavigationPreservesFormControls()
 verifyModalSourceItemsIndexAvoidsIntermediateArrays()
+verifyModalSequenceSyncSkipsRedundantItemMerge()
 verifyInfoViewerStatePersistsAcrossModalNavigation()
 verifyDesktopInfoTogglesAreDesktopOnly()
 verifySingleColumnInfoViewerReservesImageHeight()
