@@ -11,6 +11,7 @@ function source(relativePath: string) {
 const imageListSource = source('features/images/components/image-list/image-list.tsx')
 const gridSource = source('features/images/components/image-list/image-list-grid.tsx')
 const masonrySource = source('features/images/components/image-list/image-list-masonry.tsx')
+const selectionHookSource = source('features/images/components/image-list/use-image-list-selection.ts')
 const homePageDataSource = source('features/home/use-home-page-data.ts')
 const groupPageQueriesSource = source('features/groups/use-group-page-queries.ts')
 const imageAttachmentPickerSource = source('features/image-generation/components/image-attachment-picker.tsx')
@@ -66,6 +67,22 @@ assert.doesNotMatch(
   masonrySource,
   /selectedIds\.includes\(itemId\)/,
   'masonry rendering must not scan the selectedIds array per rendered card',
+)
+
+assert.match(
+  selectionHookSource,
+  /const selectedIdSet = useMemo\(\(\) => new Set\(selectedIds\), \[selectedIds\]\)/,
+  'DOM selection sync should memoize selected ids instead of rebuilding the Set for every mutation observer pass',
+)
+assert.match(
+  selectionHookSource,
+  /const isSelected = selectedIdSet\.has\(imageId\)/,
+  'DOM selection sync should use the memoized Set for item selection state',
+)
+assert.doesNotMatch(
+  selectionHookSource,
+  /const selectedIdSet = new Set\(selectedIds\)/,
+  'DOM selection sync must not rebuild the selected-id Set inside each sync pass',
 )
 
 assert.match(

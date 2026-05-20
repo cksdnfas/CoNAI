@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import SelectionArea from '@viselect/vanilla'
 import { useMultiTouchSelectionStartGuard } from '@/lib/use-multi-touch-selection-start-guard'
 
@@ -25,6 +25,7 @@ export function useImageListSelection({
   const suppressClickUntilRef = useRef(0)
   const didDragSelectionRef = useRef(false)
   const canStartSelection = useMultiTouchSelectionStartGuard(containerElement, selectable)
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
 
   useEffect(() => {
     const container = containerElement
@@ -130,7 +131,6 @@ export function useImageListSelection({
     if (!container || !selectable) return
 
     const syncSelectedState = () => {
-      const selectedIdSet = new Set(selectedIds)
       const selectableElements = container.querySelectorAll<HTMLElement>('.image-list-selectable')
 
       for (const element of selectableElements) {
@@ -153,7 +153,7 @@ export function useImageListSelection({
     })
 
     return () => observer.disconnect()
-  }, [containerElement, selectable, selectedIds])
+  }, [containerElement, selectable, selectedIdSet])
 
   return {
     shouldSuppressClick: () => performance.now() < suppressClickUntilRef.current,
