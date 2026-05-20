@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Check, GripVertical, Plus } from 'lucide-react'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
@@ -395,6 +396,7 @@ export function findAuthoringGraphMatches(nodes: AuthoringNode[], query: string)
 /** Render one clickable workflow node card inside the authoring graph. */
 function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
   const { t } = useI18n()
+  const markedJsonPathSet = useMemo(() => new Set(data.markedJsonPaths), [data.markedJsonPaths])
 
   return (
     <div
@@ -422,7 +424,7 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
         <div className="mt-3 space-y-1.5">
           {data.editableInputs.map((input) => {
             const path = input.jsonPath ?? `${id}.inputs.${input.key}`
-            const selected = data.markedJsonPaths.includes(path)
+            const selected = markedJsonPathSet.has(path)
             return (
               <button
                 key={path}
