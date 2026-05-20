@@ -194,9 +194,123 @@ function verifyModalKeyboardNavigationPreservesFormControls() {
   )
 }
 
+function verifyInfoViewerStatePersistsAcrossModalNavigation() {
+  const imageDetailSource = source('src/features/images/image-detail-view.tsx')
+  const breakpointSyncSource = sliceRequiredSource(
+    imageDetailSource,
+    "  useEffect(() => {\n    if (presentation === 'modal') {\n      setIsModalInfoViewerOpen(canUseDesktopModalLayout)",
+    '  useEffect(() => {\n    return () => {',
+  )
+
+  match(
+    breakpointSyncSource,
+    /\}, \[canUseDesktopModalLayout, presentation\]\)/,
+    'modal info viewer should only sync to the desktop/mobile breakpoint, not to each image change',
+  )
+  doesNotMatch(
+    breakpointSyncSource,
+    /compositeHash/,
+    'modal info viewer open/collapsed state should persist while navigating previous/next images',
+  )
+}
+
+function verifyDesktopInfoTogglesAreDesktopOnly() {
+  const imageDetailSource = source('src/features/images/image-detail-view.tsx')
+  const modalSource = sliceRequiredSource(
+    imageDetailSource,
+    "  if (presentation === 'modal') {",
+    "  const detailViewportHeightClassName =",
+  )
+
+  match(
+    modalSource,
+    /!isModalInfoViewerOpen && canUseDesktopModalLayout \? \(/,
+    'desktop info reopen control should not render in the 1-column bottom-sheet layout',
+  )
+  match(
+    modalSource,
+    /\{canUseDesktopModalLayout \? \(\s*<Button[\s\S]*?className="image-detail-modal-info-toggle-desktop"/,
+    'desktop info collapse control should not render in the 1-column bottom-sheet layout',
+  )
+}
+
+function verifySingleColumnInfoViewerReservesImageHeight() {
+  const cssSource = source('src/index.css')
+  const singleColumnCss = sliceRequiredSource(
+    cssSource,
+    '@media (max-width: 919px) {',
+    '  .scrollbar-stable-pane {',
+  )
+  const singleColumnLayoutCss = sliceRequiredSource(
+    singleColumnCss,
+    '    .image-detail-modal-layout,\n    .image-detail-modal-layout.info-collapsed {',
+    '    .image-detail-modal-toolbar {',
+  )
+
+  match(
+    singleColumnCss,
+    /--image-detail-modal-info-open-height:\s*100%;/,
+    '1-column expanded info viewer should cover the full modal height',
+  )
+  match(
+    singleColumnCss,
+    /--image-detail-modal-info-height:\s*var\(--image-detail-modal-info-open-height\);/,
+    '1-column modal should use the expanded info viewer height as a layout variable',
+  )
+  match(
+    singleColumnCss,
+    /\.image-detail-modal-layout\.info-collapsed \{[\s\S]*?--image-detail-modal-info-height:\s*var\(--image-detail-modal-info-collapsed-height\);/,
+    '1-column collapsed info viewer should reserve only its header height',
+  )
+  match(
+    singleColumnCss,
+    /grid-template-rows:\s*minmax\(0, 1fr\) var\(--image-detail-modal-info-height\);/,
+    '1-column modal image pane should fill the remaining height above the info viewer',
+  )
+  match(
+    singleColumnCss,
+    /\.image-detail-modal-info-pane,[\s\S]*?\.image-detail-modal-layout\.info-collapsed \.image-detail-modal-info-pane \{[\s\S]*?position:\s*relative;[\s\S]*?height:\s*100%;[\s\S]*?transform:\s*none;/,
+    '1-column info viewer should occupy the reserved bottom row instead of overlaying the image pane',
+  )
+  match(
+    singleColumnCss,
+    /\.image-detail-modal-layout\.info-collapsed \.image-detail-modal-info-content \{[\s\S]*?display:\s*none;/,
+    '1-column collapsed info viewer should hide metadata content inside the reserved header row',
+  )
+  doesNotMatch(
+    singleColumnLayoutCss,
+    /display:\s*block;/,
+    '1-column modal layout must not fall back to block flow because it collapses the image pane height',
+  )
+}
+
+function verifyImageNavigationButtonsRemainAvailableInSingleColumn() {
+  const imageDetailSource = source('src/features/images/image-detail-view.tsx')
+  const navigationSource = sliceRequiredSource(
+    imageDetailSource,
+    'function ImageDetailModalNavigationButtons',
+    'interface ImageDetailViewProps',
+  )
+
+  match(
+    navigationSource,
+    /buttonClassName = '[^']*\bflex\b[^']*\bopacity-100\b[^']*\bmd:opacity-0\b/,
+    'image previous/next buttons should remain visible in narrow 1-column modal widths',
+  )
+  doesNotMatch(
+    navigationSource,
+    /\bhidden\b[^']*\bmd:flex\b/,
+    'image previous/next buttons must not disappear below the md breakpoint',
+  )
+}
+
 verifyModalToolbarStaysSingleLine()
 verifyInfoToggleAvoidsImageNavigationControls()
 verifyImageNavigationButtonsUseProjectChrome()
 verifyModalOverlayLoadsOffClickPath()
 verifyModalKeyboardNavigationPreservesFormControls()
+verifyInfoViewerStatePersistsAcrossModalNavigation()
+verifyDesktopInfoTogglesAreDesktopOnly()
+verifySingleColumnInfoViewerReservesImageHeight()
+verifyImageNavigationButtonsRemainAvailableInSingleColumn()
 console.log('Image modal layout contracts verified.')

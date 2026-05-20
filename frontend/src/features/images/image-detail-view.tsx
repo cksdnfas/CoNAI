@@ -94,15 +94,15 @@ function ImageDetailModalNavigationButtons({ navigation }: { navigation?: ImageD
     return null
   }
 
-  const buttonClassName = 'group/modal-nav pointer-events-auto absolute top-1/2 z-30 hidden h-40 w-16 -translate-y-1/2 items-center text-white/74 opacity-0 transition hover:text-white focus-visible:opacity-100 group-hover/image-pane:opacity-100 md:flex'
-  const buttonInnerClassName = 'flex h-12 w-12 items-center justify-center rounded-sm border border-white/14 bg-black/42 shadow-[0_12px_32px_rgba(0,0,0,0.38)] backdrop-blur-md transition-colors group-hover/modal-nav:border-white/24 group-hover/modal-nav:bg-black/62'
+  const buttonClassName = 'group/modal-nav pointer-events-auto absolute top-1/2 z-30 flex h-28 w-12 -translate-y-1/2 items-center text-white/80 opacity-100 transition hover:text-white focus-visible:opacity-100 md:h-40 md:w-16 md:text-white/74 md:opacity-0 md:group-hover/image-pane:opacity-100'
+  const buttonInnerClassName = 'flex h-10 w-10 items-center justify-center rounded-sm border border-white/14 bg-black/42 shadow-[0_12px_32px_rgba(0,0,0,0.38)] backdrop-blur-md transition-colors group-hover/modal-nav:border-white/24 group-hover/modal-nav:bg-black/62 md:h-12 md:w-12'
 
   return (
     <>
       {navigation.canViewPrevious ? (
         <button
           type="button"
-          className={cn(buttonClassName, 'left-0 justify-start bg-gradient-to-r from-black/36 via-black/12 to-transparent pl-3')}
+          className={cn(buttonClassName, 'left-0 justify-start bg-gradient-to-r from-black/36 via-black/12 to-transparent pl-1.5 md:pl-3')}
           onClick={navigation.onViewPrevious}
           onMouseDown={(event) => event.stopPropagation()}
           aria-label={t('images.components.detail.image.view.modal.overlay.previous.images')}
@@ -116,7 +116,7 @@ function ImageDetailModalNavigationButtons({ navigation }: { navigation?: ImageD
       {navigation.canViewNext ? (
         <button
           type="button"
-          className={cn(buttonClassName, 'right-0 justify-end bg-gradient-to-l from-black/36 via-black/12 to-transparent pr-3')}
+          className={cn(buttonClassName, 'right-0 justify-end bg-gradient-to-l from-black/36 via-black/12 to-transparent pr-1.5 md:pr-3')}
           onClick={navigation.onViewNext}
           onMouseDown={(event) => event.stopPropagation()}
           aria-label={t('images.components.detail.image.view.modal.overlay.next.images')}
@@ -191,7 +191,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     if (presentation === 'modal') {
       setIsModalInfoViewerOpen(canUseDesktopModalLayout)
     }
-  }, [canUseDesktopModalLayout, compositeHash, presentation])
+  }, [canUseDesktopModalLayout, presentation])
 
   useEffect(() => {
     return () => {
@@ -552,7 +552,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               </div>
             </div>
 
-            {!isModalInfoViewerOpen ? (
+            {!isModalInfoViewerOpen && canUseDesktopModalLayout ? (
               <Button
                 type="button"
                 size="icon-sm"
@@ -609,17 +609,19 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
           </section>
 
           <aside className="image-detail-modal-info-pane">
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              className="image-detail-modal-info-toggle-desktop"
-              onClick={() => setIsModalInfoViewerOpen(false)}
-              aria-label={modalInfoToggleLabel}
-              title={modalInfoToggleLabel}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            {canUseDesktopModalLayout ? (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="outline"
+                className="image-detail-modal-info-toggle-desktop"
+                onClick={() => setIsModalInfoViewerOpen(false)}
+                aria-label={modalInfoToggleLabel}
+                title={modalInfoToggleLabel}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            ) : null}
 
             <button
               type="button"
