@@ -37,6 +37,7 @@ function assertExecutionStatusLookupPolicy() {
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const syncSource = source('features/module-graph/use-module-graph-workspace-sync.ts')
   const statusSource = extractFunction(sharedSource, 'getNodeExecutionStatus')
+  const buildFlowFromGraphRecordSource = extractFunction(sharedSource, 'buildFlowFromGraphRecord')
 
   assert(
     sharedSource.includes('export function buildNodeOrderIndex'),
@@ -65,6 +66,22 @@ function assertExecutionStatusLookupPolicy() {
   assert(
     !syncSource.includes('orderedNodeIds.includes(node.id)'),
     'workspace sync must not scan orderedNodeIds while mapping each node',
+  )
+  assert(
+    buildFlowFromGraphRecordSource.includes('const nodeById = new Map(nodes.map((node) => [node.id, node]))'),
+    'saved workflow loading should build a node lookup map once before edge conversion',
+  )
+  assert(
+    buildFlowFromGraphRecordSource.includes('nodeById.get(edge.source_node_id)'),
+    'saved workflow loading should use the node lookup for source edge ports',
+  )
+  assert(
+    buildFlowFromGraphRecordSource.includes('nodeById.get(edge.target_node_id)'),
+    'saved workflow loading should use the node lookup for target edge ports',
+  )
+  assert(
+    !buildFlowFromGraphRecordSource.includes('nodes.find((node) => node.id === edge.'),
+    'saved workflow loading must not scan graph nodes for every edge',
   )
 }
 

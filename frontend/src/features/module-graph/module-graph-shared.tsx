@@ -922,9 +922,11 @@ export function buildFlowFromGraphRecord(graph: GraphWorkflowRecord, modules: Mo
 
   const nodes = applySavedWorkflowInputMetadataToNodes(baseNodes, graph.graph.metadata?.exposed_inputs)
 
+  const nodeById = new Map(nodes.map((node) => [node.id, node]))
+
   const edges: ModuleGraphEdge[] = graph.graph.edges.map((edge) => {
-    const sourceNode = nodes.find((node) => node.id === edge.source_node_id)
-    const targetNode = nodes.find((node) => node.id === edge.target_node_id)
+    const sourceNode = nodeById.get(edge.source_node_id)
+    const targetNode = nodeById.get(edge.target_node_id)
     const sourcePort = findNodePort(sourceNode, 'out', edge.source_port_key)
     const targetPort = findNodePort(targetNode, 'in', edge.target_port_key)
 
