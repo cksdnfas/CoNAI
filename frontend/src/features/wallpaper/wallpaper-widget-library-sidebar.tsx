@@ -80,6 +80,7 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
     () => getWallpaperWidgetLibrarySearchSummary(widgetDefinitions, searchQuery, t),
     [searchQuery, t, widgetDefinitions],
   )
+  const collapsedFolderIdSet = useMemo(() => new Set(collapsedFolderIds), [collapsedFolderIds])
 
   const hasVisibleWidgets = searchSummary.visibleFolders.length > 0
 
@@ -123,7 +124,7 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
       }
     >
       {searchSummary.visibleFolders.map((folder) => {
-        const isExpanded = searchSummary.hasSearch ? true : !collapsedFolderIds.includes(folder.id)
+        const isExpanded = searchSummary.hasSearch ? true : !collapsedFolderIdSet.has(folder.id)
 
         return (
           <div key={folder.id} className="space-y-1">
