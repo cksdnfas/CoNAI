@@ -34,6 +34,14 @@ const powerLoraLoaderUtilsSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/power-lora-loader-utils.ts'),
   'utf8',
 )
+const moduleGraphPowerLoraLoaderInputSource = readFileSync(
+  resolve(process.cwd(), 'src/features/module-graph/components/power-lora-loader-input.tsx'),
+  'utf8',
+)
+const imageGenerationResourcesSource = readFileSync(
+  resolve(process.cwd(), 'src/i18n/resources/image-generation.ts'),
+  'utf8',
+)
 const imageGenerationWorkflowsApiSource = readFileSync(
   resolve(process.cwd(), 'src/lib/api-image-generation-workflows.ts'),
   'utf8',
@@ -148,6 +156,21 @@ for (const pattern of [/Trash2/, /handleRemoveLora/, /buildRemovedPowerLoraNodeV
     powerLoraLoaderInputSource,
     pattern,
     'Power Lora Loader rows should expose an icon-only delete action for one LoRA entry',
+  )
+}
+assert.match(
+  moduleGraphPowerLoraLoaderInputSource,
+  /PowerLoraLoaderInput[\s\S]*buildRemovedPowerLoraNodeValue/,
+  'module graph Power Lora Loader fields should re-export the shared remove helper for compact runtime rows',
+)
+for (const pattern of [
+  /"image-generation\.components\.power\.lora\.loader\.input\.delete\.lora": "로라 삭제: \{label\}"/,
+  /"image-generation\.components\.power\.lora\.loader\.input\.delete\.lora": "Remove LoRA: \{label\}"/,
+]) {
+  assert.match(
+    imageGenerationResourcesSource,
+    pattern,
+    'Power Lora Loader delete action should keep localized accessible labels',
   )
 }
 assert.doesNotMatch(
