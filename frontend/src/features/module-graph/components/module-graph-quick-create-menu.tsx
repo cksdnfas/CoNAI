@@ -152,9 +152,20 @@ export function ModuleGraphQuickCreateMenu({
     () => groupedModules.flatMap((group) => group.modules),
     [groupedModules],
   )
-  const activeModuleId = activeModuleIdState && flatVisibleModules.some((item) => item.module.id === activeModuleIdState)
+  const visibleModuleLookup = useMemo(() => {
+    const modulesById = new Map<number, ModuleDefinitionRecord>()
+    const indexById = new Map<number, number>()
+    flatVisibleModules.forEach((item, index) => {
+      modulesById.set(item.module.id, item.module)
+      indexById.set(item.module.id, index)
+    })
+
+    return { modulesById, indexById }
+  }, [flatVisibleModules])
+  const activeModuleId = activeModuleIdState && visibleModuleLookup.modulesById.has(activeModuleIdState)
     ? activeModuleIdState
     : flatVisibleModules[0]?.module.id ?? null
+  const activeModule = activeModuleId ? visibleModuleLookup.modulesById.get(activeModuleId) ?? null : null
 
   const emptyMessage = activeTab === 'recommended'
     ? t({ ko: '이 포트와 바로 연결할 만한 추천 노드가 아직 없어.', en: 'There are no recommended nodes that can connect directly to this port yet.' })
@@ -185,7 +196,7 @@ export function ModuleGraphQuickCreateMenu({
 
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault()
-            const currentIndex = flatVisibleModules.findIndex((item) => item.module.id === activeModuleId)
+            const currentIndex = activeModuleId ? visibleModuleLookup.indexById.get(activeModuleId) ?? -1 : -1
             const fallbackIndex = currentIndex === -1 ? 0 : currentIndex
             const delta = event.key === 'ArrowDown' ? 1 : -1
             const nextIndex = (fallbackIndex + delta + flatVisibleModules.length) % flatVisibleModules.length
@@ -193,12 +204,9 @@ export function ModuleGraphQuickCreateMenu({
             return
           }
 
-          if (event.key === 'Enter' && activeModuleId) {
-            const targetModule = flatVisibleModules.find((item) => item.module.id === activeModuleId)?.module
-            if (targetModule) {
-              event.preventDefault()
-              onSelectModule(targetModule)
-            }
+          if (event.key === 'Enter' && activeModule) {
+            event.preventDefault()
+            onSelectModule(activeModule)
           }
         }}
       >
