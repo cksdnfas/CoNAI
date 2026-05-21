@@ -39,6 +39,18 @@ async function main() {
       `recent completed ETA query must not sort through a temp B-tree, got: ${plan.map((row) => row.detail).join(' | ')}`,
     )
 
+    const queueServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationQueueService.ts'), 'utf8')
+    assert.match(
+      queueServiceSource,
+      /const compatibleServerIdsByJobId = new Map<number, Set<number>>\(\)/,
+      'ComfyUI dispatcher should cache compatible server IDs once per queued job before server-slot scans',
+    )
+    assert.doesNotMatch(
+      queueServiceSource,
+      /isGenerationQueueComfyJobCompatibleWithServer/,
+      'ComfyUI dispatcher must not recompute full job/server compatibility inside nested dispatch loops',
+    )
+
     db.prepare(`
       INSERT INTO workflows (id, name, workflow_json)
       VALUES (?, ?, ?), (?, ?, ?)

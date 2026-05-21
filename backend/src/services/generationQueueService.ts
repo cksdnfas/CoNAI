@@ -3,7 +3,7 @@ import { WorkflowModel } from '../models/Workflow'
 import { GenerationQueueModel } from '../models/GenerationQueue'
 import { ComfyUIServerModel } from '../models/ComfyUIServer'
 import { createComfyUIService, getComfyUIServerRuntimeStatuses } from './comfyuiService'
-import { getGenerationQueueServerCapacity, isGenerationQueueComfyJobCompatibleWithServer } from './generationQueueRouting'
+import { getGenerationQueueEligibleServerIds, getGenerationQueueServerCapacity } from './generationQueueRouting'
 import { settingsService } from './settingsService'
 import { updateQueueRequestDebugMeta } from './generation-queue/queueDebugMeta'
 import { executeGenerationQueueJob, isGenerationQueueCancellationError } from './generation-queue/queueJobExecutors'
@@ -664,10 +664,15 @@ export class GenerationQueueService {
       return
     }
 
+    const compatibleServerIdsByJobId = new Map<number, Set<number>>()
+    for (const job of queuedJobs) {
+      compatibleServerIdsByJobId.set(job.id, new Set(getGenerationQueueEligibleServerIds(job, activeServers)))
+    }
+
     const failedJobIds = new Set<number>()
     for (const job of queuedJobs) {
-      const hasCompatibleServer = activeServers.some((server) => isGenerationQueueComfyJobCompatibleWithServer(job, server, activeServers))
-      if (hasCompatibleServer) {
+      const compatibleServerIds = compatibleServerIdsByJobId.get(job.id)
+      if (compatibleServerIds && compatibleServerIds.size > 0) {
         continue
       }
 
@@ -714,7 +719,7 @@ export class GenerationQueueService {
       }
 
       for (let slotIndex = 0; slotIndex < availableLocalSlots; slotIndex += 1) {
-        const candidateJob = runnableQueuedJobs.find((job) => !reservedJobIds.has(job.id) && isGenerationQueueComfyJobCompatibleWithServer(job, server, activeServers))
+        const candidateJob = runnableQueuedJobs.find((job) => !reservedJobIds.has(job.id) && compatibleServerIdsByJobId.get(job.id)?.has(server.id))
         if (!candidateJob) {
           break
         }
