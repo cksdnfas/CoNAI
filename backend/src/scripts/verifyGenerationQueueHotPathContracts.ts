@@ -45,6 +45,16 @@ async function main() {
       /const compatibleServerIdsByJobId = new Map<number, Set<number>>\(\)/,
       'ComfyUI dispatcher should cache compatible server IDs once per queued job before server-slot scans',
     )
+    assert.match(
+      queueServiceSource,
+      /const routingContext = createGenerationQueueRoutingContext\(activeServers\)/,
+      'ComfyUI dispatcher should build shared routing lookup state once per dispatch pass',
+    )
+    assert.match(
+      queueServiceSource,
+      /getGenerationQueueEligibleServerIds\(job, routingContext\)/,
+      'ComfyUI dispatcher should reuse routing lookup state while resolving queued job eligibility',
+    )
     assert.doesNotMatch(
       queueServiceSource,
       /isGenerationQueueComfyJobCompatibleWithServer/,

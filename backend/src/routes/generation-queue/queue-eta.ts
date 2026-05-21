@@ -1,5 +1,5 @@
 import { ComfyUIServerModel } from '../../models/ComfyUIServer'
-import { getGenerationQueueServerCapacity, resolveGenerationQueueLaneMeta } from '../../services/generationQueueRouting'
+import { createGenerationQueueRoutingContext, getGenerationQueueServerCapacity, resolveGenerationQueueLaneMeta } from '../../services/generationQueueRouting'
 import { settingsService } from '../../services/settingsService'
 import type { GenerationQueueDurationSample, GenerationQueueJobRecord } from '../../types/generationQueue'
 
@@ -10,13 +10,14 @@ export type QueueEtaEntry = { waitSeconds: number | null; totalSeconds: number |
 export function computeQueuePositions(records: GenerationQueueJobRecord[], activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>) {
   const positions = new Map<number, QueuePositionEntry>()
   const nextByLane = new Map<string, number>()
+  const routingContext = createGenerationQueueRoutingContext(activeComfyServers)
 
   for (const record of records) {
     if (record.status !== 'queued' && record.status !== 'dispatching') {
       continue
     }
 
-    const lane = resolveGenerationQueueLaneMeta(record, activeComfyServers)
+    const lane = resolveGenerationQueueLaneMeta(record, routingContext)
     const nextPosition = nextByLane.get(lane.laneKey) ?? 1
     positions.set(record.id, {
       laneKey: lane.laneKey,

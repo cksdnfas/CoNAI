@@ -3,7 +3,7 @@ import { WorkflowModel } from '../models/Workflow'
 import { GenerationQueueModel } from '../models/GenerationQueue'
 import { ComfyUIServerModel } from '../models/ComfyUIServer'
 import { createComfyUIService, getComfyUIServerRuntimeStatuses } from './comfyuiService'
-import { getGenerationQueueEligibleServerIds, getGenerationQueueServerCapacity } from './generationQueueRouting'
+import { createGenerationQueueRoutingContext, getGenerationQueueEligibleServerIds, getGenerationQueueServerCapacity } from './generationQueueRouting'
 import { settingsService } from './settingsService'
 import { updateQueueRequestDebugMeta } from './generation-queue/queueDebugMeta'
 import { executeGenerationQueueJob, isGenerationQueueCancellationError } from './generation-queue/queueJobExecutors'
@@ -664,9 +664,10 @@ export class GenerationQueueService {
       return
     }
 
+    const routingContext = createGenerationQueueRoutingContext(activeServers)
     const compatibleServerIdsByJobId = new Map<number, Set<number>>()
     for (const job of queuedJobs) {
-      compatibleServerIdsByJobId.set(job.id, new Set(getGenerationQueueEligibleServerIds(job, activeServers)))
+      compatibleServerIdsByJobId.set(job.id, new Set(getGenerationQueueEligibleServerIds(job, routingContext)))
     }
 
     const failedJobIds = new Set<number>()
