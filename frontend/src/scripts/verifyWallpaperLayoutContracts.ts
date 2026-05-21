@@ -44,6 +44,7 @@ function assertUnique(values: string[], label: string) {
 }
 
 const wallpaperEditorPageSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-editor-page.tsx'), 'utf8')
+const wallpaperCanvasViewSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-canvas-view.tsx'), 'utf8')
 assert(
   wallpaperEditorPageSource.includes('const savedPresetById = useMemo(() => new Map(savedPresets.map((preset) => [preset.id, preset])), [savedPresets])'),
   'wallpaper editor should build one saved-preset id index per preset change',
@@ -61,6 +62,15 @@ assert(
   !wallpaperEditorPageSource.includes('layoutPreset.widgets.some((widget) => widget.id === selectedWidgetId)')
     && !wallpaperEditorPageSource.includes('layoutPreset.widgets.find((widget) => widget.id === effectiveSelectedWidgetId)'),
   'wallpaper editor selected widget lookup should use the widget id index instead of repeated array scans',
+)
+assert(
+  wallpaperCanvasViewSource.includes('const widgetById = useMemo(() => new Map(layoutPreset.widgets.map((widget) => [widget.id, widget])), [layoutPreset.widgets])'),
+  'wallpaper canvas should build one widget id index per layout widget change',
+)
+assert(
+  wallpaperCanvasViewSource.includes('const activeWidget = widgetById.get(interaction.widgetId)')
+    && !wallpaperCanvasViewSource.includes('layoutPreset.widgets.find((widget) => widget.id === interaction.widgetId)'),
+  'wallpaper canvas pointer move should use the widget id index instead of repeated array scans',
 )
 
 function assertWidgetWithinCanvas(widget: WallpaperWidgetInstance, canvasPreset: WallpaperCanvasPreset, label: string) {

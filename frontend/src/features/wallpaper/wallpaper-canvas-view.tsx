@@ -207,6 +207,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
     () => layoutPreset.widgets.filter((widget) => !widget.hidden).sort((left, right) => left.zIndex - right.zIndex),
     [layoutPreset.widgets],
   )
+  const widgetById = useMemo(() => new Map(layoutPreset.widgets.map((widget) => [widget.id, widget])), [layoutPreset.widgets])
   const renderedWidgets = useMemo(
     () => visibleWidgets.map((widget) => (
       interaction && interactionPreview && widget.id === interaction.widgetId
@@ -225,6 +226,11 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
       return
     }
 
+    const activeWidget = widgetById.get(interaction.widgetId)
+    if (!activeWidget) {
+      return
+    }
+
     const previousBodyTouchAction = document.body.style.touchAction
     const previousBodyOverscrollBehavior = document.body.style.overscrollBehavior
     document.body.style.touchAction = 'none'
@@ -232,11 +238,6 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
 
     const handlePointerMove = (event: PointerEvent) => {
       if (event.pointerId !== interaction.pointerId || !canvasRef.current) {
-        return
-      }
-
-      const activeWidget = layoutPreset.widgets.find((widget) => widget.id === interaction.widgetId)
-      if (!activeWidget) {
         return
       }
 
@@ -272,7 +273,7 @@ export function WallpaperCanvasView({ canvasPreset, layoutPreset, mode, selected
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('pointercancel', handlePointerUp)
     }
-  }, [canvasPreset, interaction, layoutPreset.widgets, mode, onUpdateWidgetFrame])
+  }, [canvasPreset, interaction, mode, onUpdateWidgetFrame, widgetById])
 
   useEffect(() => {
     return () => {
