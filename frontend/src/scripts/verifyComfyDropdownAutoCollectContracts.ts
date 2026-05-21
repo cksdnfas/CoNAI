@@ -116,6 +116,20 @@ for (const pattern of [/Search/, /<Input[\s\S]*placeholder="검색"/, /filterPat
     'path tree selects should support compact search with auto-expanded results',
   )
 }
+for (const pattern of [
+  /function normalizePathOptionSearch\(value: string\)[\s\S]*return value\.trim\(\)\.toLocaleLowerCase\(\)/,
+  /if \(node\.kind === 'placeholder'\) \{[\s\S]*continue[\s\S]*\}/,
+  /const searchText = normalizePathOptionSearch\(`\$\{node\.label\} \$\{node\.value \?\? ''\}`\)/,
+  /includeAncestors\(node\)[\s\S]*if \(node\.kind === 'folder'\) \{[\s\S]*includeDescendants\(node\)/,
+  /const selectedNode = treeNodes\.find\(\(node\) => node\.value === value\) \?\? null/,
+  /useEffect\(\(\) => \{[\s\S]*if \(!isOpen\) \{[\s\S]*setSearchQuery\(''\)/,
+]) {
+  assert.match(
+    pathOptionTreeSelectSource,
+    pattern,
+    'path tree select search should preserve normalized matching, context expansion, and close reset behavior',
+  )
+}
 assert.match(
   pathOptionTreeSelectSource,
   /const selectedLabel = selectedNode\?\.label \?\? \(value \? getOptionDisplayLabel\(value\) : placeholder\)/,
@@ -131,6 +145,7 @@ assert.match(
   /<PathOptionTreeSelect[\s\S]*refreshLabel="ComfyUI 자동수집 새로고침"[\s\S]*onRefresh=\{onRefreshOptions\}/,
   'path-like ComfyUI dropdown fields should expose the shared auto-collect refresh action',
 )
+
 assert.match(
   powerLoraLoaderUtilsSource,
   /POWER_LORA_AUTO_COLLECTED_LIST_NAME = 'loras \(통합\)'[\s\S]*buildAddedPowerLoraNodeValue[\s\S]*\[buildNextPowerLoraKey\(nodeValue\)\][\s\S]*strength: 1/,
