@@ -40,13 +40,15 @@ export function hasGenerationQueueServerRoutingTag(server: Pick<ComfyUIServerRec
 
 /** Resolve the active ComfyUI servers a workflow is allowed to use. */
 export function getGenerationQueueWorkflowAllowedServerIds(workflowId: number | null | undefined, activeServers: ComfyUIServerRecord[]) {
+  const activeServerIdSet = new Set(activeServers.map((server) => server.id))
+
   if (!workflowId) {
     return activeServers.map((server) => server.id)
   }
 
   const linkedServerIds = WorkflowServerModel.findServersByWorkflow(workflowId, true)
     .map((server) => Number(server.id))
-    .filter((serverId) => Number.isInteger(serverId) && activeServers.some((server) => server.id === serverId))
+    .filter((serverId) => Number.isInteger(serverId) && activeServerIdSet.has(serverId))
 
   return linkedServerIds.length > 0 ? linkedServerIds : activeServers.map((server) => server.id)
 }
@@ -58,6 +60,7 @@ export function getGenerationQueueEligibleServerIds(job: GenerationQueueJobRecor
   }
 
   const allowedServerIds = getGenerationQueueWorkflowAllowedServerIds(job.workflow_id, activeServers)
+  const activeServerById = new Map(activeServers.map((server) => [server.id, server] as const))
   let eligibleServerIds = allowedServerIds
 
   if (job.requested_server_id !== null && job.requested_server_id !== undefined) {
@@ -65,15 +68,16 @@ export function getGenerationQueueEligibleServerIds(job: GenerationQueueJobRecor
   }
 
   if (job.requested_server_tag) {
+    const normalizedRequestedTag = normalizeGenerationQueueRoutingTag(job.requested_server_tag)
     eligibleServerIds = eligibleServerIds.filter((serverId) => {
-      const server = activeServers.find((candidate) => candidate.id === serverId)
-      return server ? getGenerationQueueServerRoutingTags(server).has(job.requested_server_tag ?? '') : false
+      const server = activeServerById.get(serverId)
+      return server ? getGenerationQueueServerRoutingTags(server).has(normalizedRequestedTag) : false
     })
   }
 
   if (job.requested_server_id == null && !job.requested_server_tag) {
     eligibleServerIds = eligibleServerIds.filter((serverId) => {
-      const server = activeServers.find((candidate) => candidate.id === serverId)
+      const server = activeServerById.get(serverId)
       return server?.backend_type !== 'modal'
     })
   }
@@ -113,11 +117,12 @@ export function resolveGenerationQueueLaneMeta(record: GenerationQueueJobRecord,
 
   const eligibleKeySuffix = eligibleServerIds.length > 0 ? eligibleServerIds.join(',') : 'none'
   if (record.requested_server_tag) {
+    const normalizedRequestedTag = normalizeGenerationQueueRoutingTag(record.requested_server_tag)
     return {
-      laneKey: `comfyui:tag:${record.requested_server_tag}:${eligibleKeySuffix}`,
+      laneKey: `comfyui:tag:${normalizedRequestedTag}:${eligibleKeySuffix}`,
       scope: 'tag',
       serverId: null,
-      serverTag: record.requested_server_tag,
+      serverTag: normalizedRequestedTag,
       eligibleServerIds,
     }
   }

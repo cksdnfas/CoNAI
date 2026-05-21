@@ -75,9 +75,9 @@ function main() {
   )
 
   assert.deepEqual(
-    getGenerationQueueEligibleServerIds(job({ id: 11, service_type: 'comfyui', requested_server_tag: 'fast.lane' }), activeServers),
+    getGenerationQueueEligibleServerIds(job({ id: 11, service_type: 'comfyui', requested_server_tag: ' FAST.LANE ' }), activeServers),
     [1],
-    'tag-routed ComfyUI jobs should resolve normalized routing tags',
+    'tag-routed ComfyUI jobs should trim and normalize requested routing tags',
   )
 
   assert.deepEqual(
@@ -92,14 +92,15 @@ function main() {
     'tag routing should allow a Modal backend when its tag was requested explicitly',
   )
 
-  const tagLane = resolveGenerationQueueLaneMeta(job({ id: 14, service_type: 'comfyui', requested_server_tag: 'fast.lane' }), activeServers)
+  const tagLane = resolveGenerationQueueLaneMeta(job({ id: 14, service_type: 'comfyui', requested_server_tag: ' FAST.LANE ' }), activeServers)
   assert.equal(tagLane.scope, 'tag')
   assert.equal(tagLane.serverTag, 'fast.lane')
+  assert.equal(tagLane.laneKey, 'comfyui:tag:fast.lane:1')
   assert.deepEqual(tagLane.eligibleServerIds, [1])
 
   const positions = computeQueuePositions([
     job({ id: 20, service_type: 'comfyui', requested_server_tag: 'fast.lane', priority: 1 }),
-    job({ id: 21, service_type: 'comfyui', requested_server_tag: 'fast.lane', priority: 2 }),
+    job({ id: 21, service_type: 'comfyui', requested_server_tag: ' FAST.LANE ', priority: 2 }),
     job({ id: 22, service_type: 'comfyui', requested_server_id: 2 }),
     job({ id: 23, service_type: 'novelai' }),
     job({ id: 24, service_type: 'novelai' }),
@@ -108,6 +109,7 @@ function main() {
 
   assert.equal(positions.get(20)?.position, 1)
   assert.equal(positions.get(21)?.position, 2)
+  assert.equal(positions.get(21)?.laneKey, positions.get(20)?.laneKey, 'equivalent requested tags should share one ETA lane')
   assert.equal(positions.get(22)?.position, 1)
   assert.equal(positions.get(23)?.position, 1)
   assert.equal(positions.get(24)?.position, 2)
