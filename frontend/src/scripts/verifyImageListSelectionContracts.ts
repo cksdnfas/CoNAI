@@ -63,6 +63,21 @@ assert.match(
   /selected=\{context\.selectedIdSet\.has\(itemId\)\}/,
   'masonry item selected state should use Set.has for virtualized card rendering',
 )
+assert.match(
+  masonrySource,
+  /const masonryContext = useMemo<ImageListMasonryContext>\(\(\) => \(\{/,
+  'masonry layout should memoize the Virtuoso context object between unrelated image-list renders',
+)
+assert.match(
+  masonrySource,
+  /context=\{masonryContext\}/,
+  'masonry layout should pass the memoized context object to VirtuosoMasonry',
+)
+assert.doesNotMatch(
+  masonrySource,
+  /context=\{\{/,
+  'masonry layout must not allocate a fresh Virtuoso context object inline on every render',
+)
 assert.doesNotMatch(
   masonrySource,
   /selectedIds\.includes\(itemId\)/,

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { VirtuosoMasonry, type ItemContent } from '@virtuoso.dev/masonry'
 import type { ImageRecord } from '@/types/image'
 import type { ImageListScrollMode } from './image-list-types'
@@ -90,23 +90,36 @@ export function ImageListMasonry({
       : typeof viewportHeight === 'string' && viewportHeight !== '100%'
         ? viewportHeight
         : undefined
+  const masonryContext = useMemo<ImageListMasonryContext>(() => ({
+    rowGap,
+    selectedIdSet,
+    selectionMode,
+    getItemHref,
+    getItemId,
+    onActivate,
+    renderItemOverlay,
+    renderItemPersistentOverlay,
+    showDefaultQuickActions,
+    interactive,
+    shouldBlurItemPreview,
+  }), [
+    rowGap,
+    selectedIdSet,
+    selectionMode,
+    getItemHref,
+    getItemId,
+    onActivate,
+    renderItemOverlay,
+    renderItemPersistentOverlay,
+    showDefaultQuickActions,
+    interactive,
+    shouldBlurItemPreview,
+  ])
 
   return (
     <VirtuosoMasonry<ImageRecord, ImageListMasonryContext>
       data={items}
-      context={{
-        rowGap,
-        selectedIdSet,
-        selectionMode,
-        getItemHref,
-        getItemId,
-        onActivate,
-        renderItemOverlay,
-        renderItemPersistentOverlay,
-        showDefaultQuickActions,
-        interactive,
-        shouldBlurItemPreview,
-      }}
+      context={masonryContext}
       useWindowScroll={usesWindowScroll}
       columnCount={columnCount}
       initialItemCount={Math.min(items.length, Math.max(columnCount * 2, 8))}
