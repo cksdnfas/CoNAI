@@ -87,6 +87,10 @@ export function ModuleWorkflowOutputManagementPanel({
     executionById,
     workflowNameById,
   }), [browseContent, executionById, workflowNameById])
+  const outputItemIdSet = useMemo(
+    () => new Set(outputCollections.outputItems.map((item) => item.id)),
+    [outputCollections.outputItems],
+  )
 
   const artifactTypeOptions = useMemo(
     () => listModuleWorkflowArtifactTypes(outputCollections.technicalArtifacts),
@@ -108,6 +112,10 @@ export function ModuleWorkflowOutputManagementPanel({
     executionById,
     workflowNameById,
   }), [artifactSearchTerm, artifactTypeFilter, executionById, outputCollections.technicalArtifacts, workflowNameById])
+  const filteredArtifactIdSet = useMemo(
+    () => new Set(filteredTechnicalArtifacts.map((artifact) => artifact.id)),
+    [filteredTechnicalArtifacts],
+  )
 
   const selectedOutputItems = useMemo(
     () => outputCollections.outputItems.filter((item) => selectedOutputIdSet.has(item.id)),
@@ -151,12 +159,18 @@ export function ModuleWorkflowOutputManagementPanel({
   )
 
   useEffect(() => {
-    setSelectedOutputIds((current) => current.filter((id) => outputCollections.outputItems.some((item) => item.id === id)))
-  }, [outputCollections.outputItems])
+    setSelectedOutputIds((current) => {
+      const next = current.filter((id) => outputItemIdSet.has(id))
+      return next.length === current.length ? current : next
+    })
+  }, [outputItemIdSet])
 
   useEffect(() => {
-    setSelectedArtifactIds((current) => current.filter((id) => filteredTechnicalArtifacts.some((artifact) => artifact.id === id)))
-  }, [filteredTechnicalArtifacts])
+    setSelectedArtifactIds((current) => {
+      const next = current.filter((id) => filteredArtifactIdSet.has(id))
+      return next.length === current.length ? current : next
+    })
+  }, [filteredArtifactIdSet])
 
   useEffect(() => {
     setOutputsPage(1)

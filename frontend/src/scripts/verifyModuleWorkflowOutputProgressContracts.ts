@@ -84,8 +84,18 @@ match(
 )
 match(
   outputManagementSource,
+  /const outputItemIdSet = useMemo\([\s\S]*?new Set\(outputCollections\.outputItems\.map\(\(item\) => item\.id\)\)[\s\S]*?\[outputCollections\.outputItems\][\s\S]*?\)/,
+  'all output ids should be indexed once for stale-selection pruning',
+)
+match(
+  outputManagementSource,
   /const pagedArtifactIdSet = useMemo\([\s\S]*?new Set\(pagedTechnicalArtifacts\.map\(\(artifact\) => artifact\.id\)\)[\s\S]*?\[pagedTechnicalArtifacts\][\s\S]*?\)/,
   'paged artifact ids should be indexed once for clear-selection lookups',
+)
+match(
+  outputManagementSource,
+  /const filteredArtifactIdSet = useMemo\([\s\S]*?new Set\(filteredTechnicalArtifacts\.map\(\(artifact\) => artifact\.id\)\)[\s\S]*?\[filteredTechnicalArtifacts\][\s\S]*?\)/,
+  'filtered artifact ids should be indexed once for stale-selection pruning',
 )
 doesNotMatch(
   outputManagementSource,
@@ -96,6 +106,26 @@ doesNotMatch(
   outputManagementSource,
   /selectedArtifactIds\.includes\(artifact\.id\)/,
   'workflow output management must not scan selectedArtifactIds per artifact item',
+)
+match(
+  outputManagementSource,
+  /current\.filter\(\(id\) => outputItemIdSet\.has\(id\)\)/,
+  'selected output pruning should use the memoized all-output id Set',
+)
+match(
+  outputManagementSource,
+  /current\.filter\(\(id\) => filteredArtifactIdSet\.has\(id\)\)/,
+  'selected artifact pruning should use the memoized filtered-artifact id Set',
+)
+doesNotMatch(
+  outputManagementSource,
+  /outputCollections\.outputItems\.some\(\(item\) => item\.id === id\)/,
+  'selected output pruning must not rescan all output items for every selected id',
+)
+doesNotMatch(
+  outputManagementSource,
+  /filteredTechnicalArtifacts\.some\(\(artifact\) => artifact\.id === id\)/,
+  'selected artifact pruning must not rescan all filtered artifacts for every selected id',
 )
 
 match(
