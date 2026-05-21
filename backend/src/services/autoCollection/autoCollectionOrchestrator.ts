@@ -160,7 +160,7 @@ export class AutoCollectionOrchestrator {
       const searchResult = await ComplexFilterService.executeComplexSearch(
         complexFilter,
         undefined,
-        { page: 1, limit: 10000 } // Get all matching images
+        { page: 1, limit: 10000, includeStats: false } // Get all matching images without stats-side CTE recounts
       );
 
       const matchingImages = searchResult.images;

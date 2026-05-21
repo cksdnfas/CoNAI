@@ -112,7 +112,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const result = await ComplexFilterService.executeComplexSearch(
       filter,
       buildSearchScope(requestBody),
-      { page, limit, sortBy, sortOrder }
+      { page, limit, sortBy, sortOrder, includeStats: false }
     );
 
     // Enrich images with URLs and structured metadata

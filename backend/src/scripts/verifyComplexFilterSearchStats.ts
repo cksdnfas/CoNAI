@@ -175,6 +175,19 @@ async function main() {
     assert.equal(result.stats?.final_result_count, 1);
     assert.ok((result.stats?.execution_time_ms ?? -1) >= 0);
 
+    const fastResult = await ComplexFilterService.executeComplexSearch(
+      filter,
+      { ai_tool: 'NovelAI' },
+      { page: 1, limit: 10, sortBy: 'first_seen_date', sortOrder: 'ASC', includeStats: false }
+    );
+
+    assert.equal(fastResult.total, 1, 'stats-disabled search should keep result totals intact');
+    assert.deepEqual(
+      fastResult.images.map((image) => image.composite_hash),
+      ['hash-visible-cat']
+    );
+    assert.equal(fastResult.stats, undefined, 'stats-disabled search should skip optional stats payload');
+
     const scopedNoGroup = await ComplexFilterService.executeComplexSearch(
       {},
       { ai_tool: 'ComfyUI' },

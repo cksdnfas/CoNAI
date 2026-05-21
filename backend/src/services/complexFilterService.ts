@@ -377,9 +377,11 @@ export class ComplexFilterService {
       limit: number;
       sortBy?: 'upload_date' | 'first_seen_date' | 'filename' | 'file_size' | 'width' | 'height';
       sortOrder?: 'ASC' | 'DESC';
+      includeStats?: boolean;
     }
   ): Promise<{ images: any[]; total: number; stats?: FilterExecutionStats }> {
-    const startTime = Date.now();
+    const includeStats = pagination?.includeStats !== false;
+    const startTime = includeStats ? Date.now() : 0;
 
     // Fetch rating weights
     const weights = await RatingScoreService.getWeights();
@@ -422,17 +424,15 @@ export class ComplexFilterService {
 
     const rows = db.prepare(dataQuery).all(...params, limit, offset) as any[];
 
-    const excludedCount = statsSources.excluded ? this.countCteRows(cteClause, cteParams, 'excluded') : 0;
-    const orMatchedCount = statsSources.orResults ? this.countCteRows(cteClause, cteParams, 'or_results') : 0;
-    const andMatchedCount = statsSources.andResults ? this.countCteRows(cteClause, cteParams, 'and_results') : 0;
-    const executionTime = Date.now() - startTime;
-    const stats: FilterExecutionStats = {
-      excluded_count: excludedCount,
-      or_matched_count: orMatchedCount,
-      and_matched_count: andMatchedCount,
-      final_result_count: total,
-      execution_time_ms: executionTime
-    };
+    const stats: FilterExecutionStats | undefined = includeStats
+      ? {
+          excluded_count: statsSources.excluded ? this.countCteRows(cteClause, cteParams, 'excluded') : 0,
+          or_matched_count: statsSources.orResults ? this.countCteRows(cteClause, cteParams, 'or_results') : 0,
+          and_matched_count: statsSources.andResults ? this.countCteRows(cteClause, cteParams, 'and_results') : 0,
+          final_result_count: total,
+          execution_time_ms: Date.now() - startTime,
+        }
+      : undefined;
 
     return { images: rows, total, stats };
   }
