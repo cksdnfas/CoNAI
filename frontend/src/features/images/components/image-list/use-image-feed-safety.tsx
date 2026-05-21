@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getRatingTiers } from '@/lib/api-search'
 import type { ImageRecord } from '@/types/image'
@@ -59,19 +59,25 @@ export function useImageFeedSafety({
     void onLoadMore()
   }, [hasMore, isError, isLoading, isLoadingMore, items.length, onLoadMore, visibleItems.length])
 
+  const renderItemPersistentOverlay = useCallback((image: ImageRecord) => {
+    const safety = itemSafetyById.get(getImageFeedSafetyKey(image))
+    if (!safety?.tier) {
+      return null
+    }
+
+    return <ImageRatingSafetyBadge tier={safety.tier} visibility={visibilityMode === 'badge-only' ? 'show' : safety.visibility} />
+  }, [itemSafetyById, visibilityMode])
+
+  const shouldBlurItemPreview = useCallback((image: ImageRecord) => visibilityMode === 'badge-only'
+    ? false
+    : itemSafetyById.get(getImageFeedSafetyKey(image))?.visibility === 'blur',
+  [itemSafetyById, visibilityMode])
+
   return {
     visibleItems,
     hasOnlyHiddenItems: items.length > 0 && visibleItems.length === 0,
-    renderItemPersistentOverlay: (image: ImageRecord) => {
-      const safety = itemSafetyById.get(getImageFeedSafetyKey(image))
-      if (!safety?.tier) {
-        return null
-      }
-
-      return <ImageRatingSafetyBadge tier={safety.tier} visibility={visibilityMode === 'badge-only' ? 'show' : safety.visibility} />
-    },
-    shouldBlurItemPreview: (image: ImageRecord) => visibilityMode === 'badge-only'
-      ? false
-      : itemSafetyById.get(getImageFeedSafetyKey(image))?.visibility === 'blur',
+    renderItemPersistentOverlay,
+    shouldBlurItemPreview,
   }
 }
+

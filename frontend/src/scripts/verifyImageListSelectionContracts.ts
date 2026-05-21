@@ -12,6 +12,7 @@ const imageListSource = source('features/images/components/image-list/image-list
 const gridSource = source('features/images/components/image-list/image-list-grid.tsx')
 const masonrySource = source('features/images/components/image-list/image-list-masonry.tsx')
 const selectionHookSource = source('features/images/components/image-list/use-image-list-selection.ts')
+const imageFeedSafetySource = source('features/images/components/image-list/use-image-feed-safety.tsx')
 const homePageDataSource = source('features/home/use-home-page-data.ts')
 const groupPageQueriesSource = source('features/groups/use-group-page-queries.ts')
 const imageAttachmentPickerSource = source('features/image-generation/components/image-attachment-picker.tsx')
@@ -113,6 +114,22 @@ assert.doesNotMatch(
   selectionHookSource,
   /const selectedIdSet = new Set\(selectedIds\)/,
   'DOM selection sync must not rebuild the selected-id Set inside each sync pass',
+)
+
+assert.match(
+  imageFeedSafetySource,
+  /const renderItemPersistentOverlay = useCallback\(\(image: ImageRecord\) => \{/,
+  'Image feed safety overlay renderer should be stable between unrelated image-list renders',
+)
+assert.match(
+  imageFeedSafetySource,
+  /const shouldBlurItemPreview = useCallback\(\(image: ImageRecord\) => visibilityMode === 'badge-only'/,
+  'Image feed safety blur resolver should be stable between unrelated image-list renders',
+)
+assert.match(
+  imageFeedSafetySource,
+  /return \{[\s\S]*renderItemPersistentOverlay,[\s\S]*shouldBlurItemPreview,/,
+  'Image feed safety should return the memoized overlay and blur callbacks',
 )
 
 assert.match(
