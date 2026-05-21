@@ -17,6 +17,7 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
   const treeGroups = useMemo(() => groups.filter((group) => group.id === 0 || Boolean(group.is_visible)), [groups])
   const visibleGroupIds = useMemo(() => new Set(treeGroups.map((group) => group.id)), [treeGroups])
   const { childCountByGroupId, totalPromptCountByGroupId } = useMemo(() => {
+    const groupById = new Map(treeGroups.map((group) => [group.id, group] as const))
     const childrenByParentId = new Map<number, PromptGroupRecord[]>()
     const childCounts = new Map<number, number>()
     const totals = new Map<number, number>()
@@ -34,7 +35,7 @@ export function PromptTree({ groups, selectedGroupId, totalCount = 0, onSelectGr
       if (visiting.has(groupId)) return 0
 
       visiting.add(groupId)
-      const group = treeGroups.find((item) => item.id === groupId)
+      const group = groupById.get(groupId)
       let total = group?.prompt_count ?? 0
       for (const child of childrenByParentId.get(groupId) ?? []) {
         total += collectTotal(child.id, visiting)

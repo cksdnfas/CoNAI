@@ -48,6 +48,7 @@ deepEqual(clamped, {
 
 const promptPageSource = source('features/prompts/prompt-page.tsx')
 const promptListPanelSource = source('features/prompts/components/prompt-list-panel.tsx')
+const promptTreeSource = source('features/prompts/components/prompt-tree.tsx')
 const promptPageUtilsSource = source('features/prompts/prompt-page-utils.ts')
 
 match(
@@ -105,6 +106,22 @@ doesNotMatch(
   promptListPanelSource,
   /selectedPromptIds\.includes\(item\.id\)/,
   'PromptListPanel rendering must not scan the selectedPromptIds array per row',
+)
+
+match(
+  promptTreeSource,
+  /const groupById = new Map\(treeGroups\.map\(\(group\) => \[group\.id, group\] as const\)\)/,
+  'PromptTree should build one group lookup Map per visible tree snapshot',
+)
+match(
+  promptTreeSource,
+  /const group = groupById\.get\(groupId\)/,
+  'PromptTree descendant totals should use the prebuilt group lookup Map',
+)
+doesNotMatch(
+  promptTreeSource,
+  /treeGroups\.find\(\(item\) => item\.id === groupId\)/,
+  'PromptTree descendant totals must not rescan the visible group list for every group',
 )
 
 match(
