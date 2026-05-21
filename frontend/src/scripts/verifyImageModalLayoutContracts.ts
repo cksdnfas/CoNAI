@@ -259,6 +259,26 @@ function verifyModalSequenceSyncSkipsRedundantItemMerge() {
   )
 }
 
+function verifyModalNeighborPreviewWarmupUsesSourceItems() {
+  const providerSource = source('src/features/images/components/detail/image-view-modal-provider.tsx')
+  const neighborPrefetchSource = sliceRequiredSource(
+    providerSource,
+    '    const neighborHashes = [modalState.compositeHashes[activeIndex - 1], modalState.compositeHashes[activeIndex + 1]]',
+    '  }, [activeIndex, modalState.compositeHash, modalState.compositeHashes, modalState.sourceItemsByHash, queryClient])',
+  )
+
+  match(
+    neighborPrefetchSource,
+    /for \(const neighborHash of neighborHashes\) \{[\s\S]*?warmImagePreviewSource\(modalState\.sourceItemsByHash\[neighborHash\]\)[\s\S]*?queryClient\.prefetchQuery/,
+    'modal previous/next navigation should warm neighboring preview image URLs from the current source-item index before detail fetches resolve',
+  )
+  match(
+    providerSource,
+    /\[activeIndex, modalState\.compositeHash, modalState\.compositeHashes, modalState\.sourceItemsByHash, queryClient\]/,
+    'neighbor preview warmup should rerun when synced source items add preview URLs for the active modal sequence',
+  )
+}
+
 function verifyInfoViewerStatePersistsAcrossModalNavigation() {
   const imageDetailSource = source('src/features/images/image-detail-view.tsx')
   const breakpointSyncSource = sliceRequiredSource(
@@ -376,6 +396,7 @@ verifyModalOverlayLoadsOffClickPath()
 verifyModalKeyboardNavigationPreservesFormControls()
 verifyModalSourceItemsIndexAvoidsIntermediateArrays()
 verifyModalSequenceSyncSkipsRedundantItemMerge()
+verifyModalNeighborPreviewWarmupUsesSourceItems()
 verifyInfoViewerStatePersistsAcrossModalNavigation()
 verifyDesktopInfoTogglesAreDesktopOnly()
 verifySingleColumnInfoViewerReservesImageHeight()

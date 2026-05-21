@@ -163,13 +163,14 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       .filter((value): value is string => typeof value === 'string' && value.length > 0)
 
     for (const neighborHash of neighborHashes) {
+      warmImagePreviewSource(modalState.sourceItemsByHash[neighborHash])
       void queryClient.prefetchQuery({
         queryKey: ['image-detail', neighborHash],
         queryFn: () => getImage(neighborHash),
         staleTime: 0,
       })
     }
-  }, [activeIndex, modalState.compositeHash, modalState.compositeHashes, queryClient])
+  }, [activeIndex, modalState.compositeHash, modalState.compositeHashes, modalState.sourceItemsByHash, queryClient])
 
   // 썸네일 스트립은 성능 문제로 잠시 비활성화한다.
   // 탐색 컨텍스트 자체는 유지하므로, 필요할 때 UI와 배치 로드만 다시 연결하면 된다.
