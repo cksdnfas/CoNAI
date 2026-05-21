@@ -44,8 +44,23 @@ assert.match(
 )
 assert.match(
   gridSource,
-  /selected=\{selectedIdSet\.has\(itemId\)\}/,
-  'grid item selected state should use Set.has for virtualized row rendering',
+  /selected=\{context\.selectedIdSet\.has\(itemId\)\}/,
+  'grid item selected state should use Set.has from the Virtuoso context for virtualized row rendering',
+)
+assert.match(
+  gridSource,
+  /const gridContext = useMemo<ImageListGridContext>\(\(\) => \(\{/,
+  'grid layout should memoize the Virtuoso context object between unrelated image-list renders',
+)
+assert.match(
+  gridSource,
+  /context=\{gridContext\}/,
+  'grid layout should pass the memoized context object to VirtuosoGrid',
+)
+assert.doesNotMatch(
+  gridSource,
+  /context=\{\{/,
+  'grid layout must not allocate a fresh Virtuoso context object inline on every render',
 )
 assert.doesNotMatch(
   gridSource,

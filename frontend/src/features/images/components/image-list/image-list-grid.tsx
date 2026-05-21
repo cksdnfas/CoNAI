@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { VirtuosoGrid } from 'react-virtuoso'
+import { useMemo, type ReactNode } from 'react'
+import { VirtuosoGrid, type GridComputeItemKey, type GridItemContent } from 'react-virtuoso'
 import type { ImageRecord } from '@/types/image'
 import type { ImageListScrollMode } from './image-list-types'
 import { ImageListItem } from './image-list-item'
@@ -24,6 +24,49 @@ interface ImageListGridProps {
   showDefaultQuickActions?: boolean
   interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
+}
+
+interface ImageListGridContext {
+  selectedIdSet: ReadonlySet<string>
+  selectionMode: boolean
+  gridItemHeight: number
+  getItemHref?: (image: ImageRecord) => string | undefined
+  getItemId?: (image: ImageRecord) => string
+  onActivate: (image: ImageRecord, imageId: string, href?: string) => void
+  renderItemOverlay?: (image: ImageRecord) => ReactNode
+  renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  showDefaultQuickActions?: boolean
+  interactive?: boolean
+  shouldBlurItemPreview?: (image: ImageRecord) => boolean
+}
+
+const computeImageGridItemKey: GridComputeItemKey<ImageRecord, ImageListGridContext> = (index, item, context) => (
+  item ? String(context.getItemId ? context.getItemId(item) : (item.composite_hash ?? item.id ?? index)) : String(index)
+)
+
+const ImageGridItemContent: GridItemContent<ImageRecord, ImageListGridContext> = (_, image, context) => {
+  if (!image) {
+    return null
+  }
+
+  const itemId = String(context.getItemId ? context.getItemId(image) : (image.composite_hash ?? image.id))
+
+  return (
+    <ImageListItem
+      image={image}
+      itemId={itemId}
+      href={context.getItemHref?.(image)}
+      selected={context.selectedIdSet.has(itemId)}
+      selectionMode={context.selectionMode}
+      gridItemHeight={context.gridItemHeight}
+      onActivate={context.onActivate}
+      renderOverlay={context.renderItemOverlay?.(image)}
+      renderPersistentOverlay={context.renderItemPersistentOverlay?.(image)}
+      showDefaultQuickActions={context.showDefaultQuickActions}
+      interactive={context.interactive}
+      blurPreview={context.shouldBlurItemPreview?.(image) ?? false}
+    />
+  )
 }
 
 /** Render a reusable virtualized grid layout with equally sized cards. */
@@ -56,6 +99,31 @@ export function ImageListGrid({
       : typeof viewportHeight === 'string' && viewportHeight !== '100%'
         ? viewportHeight
         : undefined
+  const gridContext = useMemo<ImageListGridContext>(() => ({
+    selectedIdSet,
+    selectionMode,
+    gridItemHeight,
+    getItemHref,
+    getItemId,
+    onActivate,
+    renderItemOverlay,
+    renderItemPersistentOverlay,
+    showDefaultQuickActions,
+    interactive,
+    shouldBlurItemPreview,
+  }), [
+    selectedIdSet,
+    selectionMode,
+    gridItemHeight,
+    getItemHref,
+    getItemId,
+    onActivate,
+    renderItemOverlay,
+    renderItemPersistentOverlay,
+    showDefaultQuickActions,
+    interactive,
+    shouldBlurItemPreview,
+  ])
 
   return (
     <div
@@ -73,39 +141,17 @@ export function ImageListGrid({
         paddingRight: usesWindowScroll ? undefined : '4px',
       }}
     >
-      <VirtuosoGrid<ImageRecord>
+      <VirtuosoGrid<ImageRecord, ImageListGridContext>
         data={items}
+        context={gridContext}
         useWindowScroll={usesWindowScroll}
         style={usesWindowScroll ? undefined : { height: '100%', minHeight: 0, flex: 1, overflowX: 'hidden', overflowY: 'auto' }}
         overscan={{ main: 1200, reverse: 600 }}
         endReached={onEndReached}
         listClassName="image-list-grid"
         itemClassName="image-list-grid-item"
-        computeItemKey={(index, item) => item ? String(getItemId ? getItemId(item) : (item.composite_hash ?? item.id ?? index)) : String(index)}
-        itemContent={(_, image) => {
-          if (!image) {
-            return null
-          }
-
-          const itemId = String(getItemId ? getItemId(image) : (image.composite_hash ?? image.id))
-
-          return (
-            <ImageListItem
-              image={image}
-              itemId={itemId}
-              href={getItemHref?.(image)}
-              selected={selectedIdSet.has(itemId)}
-              selectionMode={selectionMode}
-              gridItemHeight={gridItemHeight}
-              onActivate={onActivate}
-              renderOverlay={renderItemOverlay?.(image)}
-              renderPersistentOverlay={renderItemPersistentOverlay?.(image)}
-              showDefaultQuickActions={showDefaultQuickActions}
-              interactive={interactive}
-              blurPreview={shouldBlurItemPreview?.(image) ?? false}
-            />
-          )
-        }}
+        computeItemKey={computeImageGridItemKey}
+        itemContent={ImageGridItemContent}
       />
     </div>
   )
