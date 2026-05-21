@@ -4,6 +4,31 @@ import { SEARCH_AI_TOOL_OPTIONS } from './search-constants'
 import type { RatingTierRecord, SearchAiToolGroup, SearchChip, SearchOperator, SearchScope } from './search-types'
 
 const SEARCH_OPERATOR_SEQUENCE: SearchOperator[] = ['OR', 'AND', 'NOT']
+const SEARCH_AI_TOOL_OPTION_BY_VALUE = new Map<SearchAiToolGroup, (typeof SEARCH_AI_TOOL_OPTIONS)[number]>(
+  SEARCH_AI_TOOL_OPTIONS.map((option) => [option.value, option]),
+)
+
+const SEARCH_SCOPE_STYLE_BY_SCOPE: Record<SearchScope, CSSProperties> = {
+  positive: getThemeToneStyle('positive'),
+  negative: getThemeToneStyle('negative'),
+  auto: getThemeToneStyle('auto'),
+  rating: getThemeToneStyle('rating'),
+  model: {
+    backgroundColor: 'color-mix(in srgb, var(--primary) 12%, transparent)',
+    color: 'color-mix(in srgb, var(--primary) 88%, white 4%)',
+    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--primary) 24%, transparent)',
+  },
+  lora: {
+    backgroundColor: 'color-mix(in srgb, var(--secondary) 14%, transparent)',
+    color: 'color-mix(in srgb, var(--secondary) 88%, white 2%)',
+    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--secondary) 24%, transparent)',
+  },
+  tool: {
+    backgroundColor: 'color-mix(in srgb, #f59e0b 14%, transparent)',
+    color: 'color-mix(in srgb, #f59e0b 90%, white 2%)',
+    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, #f59e0b 28%, transparent)',
+  },
+}
 
 /** Build a stable UI label for a search chip. */
 export function buildSearchChipLabel(_scope: SearchScope, value: string) {
@@ -62,7 +87,7 @@ export function createTextSearchChip(scope: Exclude<SearchScope, 'rating' | 'too
 
 /** Create a fixed AI-tool group chip (NAI / ComfyUI / Other). */
 export function createAIToolSearchChip(tool: SearchAiToolGroup, options?: { operator?: SearchOperator }) {
-  const option = SEARCH_AI_TOOL_OPTIONS.find((item) => item.value === tool)
+  const option = SEARCH_AI_TOOL_OPTION_BY_VALUE.get(tool)
   if (!option) {
     return null
   }
@@ -135,31 +160,7 @@ export function buildSearchHistoryLabel(chips: SearchChip[], options?: { resolve
 
 /** Resolve the shared pill/toggle style for each search scope. */
 export function getSearchScopeStyle(scope: SearchScope): CSSProperties {
-  if (scope === 'positive' || scope === 'negative' || scope === 'auto' || scope === 'rating') {
-    return getThemeToneStyle(scope)
-  }
-
-  if (scope === 'model') {
-    return {
-      backgroundColor: 'color-mix(in srgb, var(--primary) 12%, transparent)',
-      color: 'color-mix(in srgb, var(--primary) 88%, white 4%)',
-      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--primary) 24%, transparent)',
-    }
-  }
-
-  if (scope === 'lora') {
-    return {
-      backgroundColor: 'color-mix(in srgb, var(--secondary) 14%, transparent)',
-      color: 'color-mix(in srgb, var(--secondary) 88%, white 2%)',
-      boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--secondary) 24%, transparent)',
-    }
-  }
-
-  return {
-    backgroundColor: 'color-mix(in srgb, #f59e0b 14%, transparent)',
-    color: 'color-mix(in srgb, #f59e0b 90%, white 2%)',
-    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, #f59e0b 28%, transparent)',
-  }
+  return SEARCH_SCOPE_STYLE_BY_SCOPE[scope]
 }
 
 /** Convert UI chips into the backend complex filter payload. */
