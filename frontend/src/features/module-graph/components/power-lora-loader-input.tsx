@@ -1,5 +1,6 @@
 export {
   PowerLoraLoaderInput,
+  buildRemovedPowerLoraNodeValue,
   buildFallbackPowerLoraNodeItems,
   buildPowerLoraNodeItemsFromInputs,
   hasPowerLoraLoaderEntries,

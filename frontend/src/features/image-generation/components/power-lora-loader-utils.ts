@@ -103,3 +103,10 @@ export function buildAddedPowerLoraNodeValue(nodeValue: Record<string, unknown>,
     },
   }
 }
+
+/** Remove one editable Power Lora Loader entry while preserving the rest. */
+export function buildRemovedPowerLoraNodeValue(nodeValue: Record<string, unknown>, itemKey: string) {
+  const nextNodeValue = { ...nodeValue }
+  delete nextNodeValue[itemKey]
+  return nextNodeValue
+}

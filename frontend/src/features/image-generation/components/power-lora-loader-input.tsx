@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Trash2 } from 'lucide-react'
 import { ScrubbableNumberInput } from '@/components/ui/scrubbable-number-input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -8,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { PathOptionTreeSelect } from './path-option-tree-select'
 import {
   buildAddedPowerLoraNodeValue,
+  buildRemovedPowerLoraNodeValue,
   buildFallbackPowerLoraNodeItems,
   buildPowerLoraNodeItemsFromInputs,
   findAutoCollectedPowerLoraOptions,
@@ -20,6 +22,7 @@ import {
 
 export {
   buildAddedPowerLoraNodeValue,
+  buildRemovedPowerLoraNodeValue,
   buildFallbackPowerLoraNodeItems,
   buildPowerLoraNodeItemsFromInputs,
   findAutoCollectedPowerLoraOptions,
@@ -159,6 +162,10 @@ export function PowerLoraLoaderInput({
     }
   }
 
+  const handleRemoveLora = (itemKey: string) => {
+    onChange(buildRemovedPowerLoraNodeValue(nodeValue, itemKey))
+  }
+
   const addLoraControl = (
     <PathOptionTreeSelect
       value=""
@@ -191,8 +198,8 @@ export function PowerLoraLoaderInput({
             className={cn(
               'grid items-center rounded-sm border transition-colors',
               isCompact
-                ? 'grid-cols-[auto_minmax(0,1fr)_48px] gap-2 px-2 py-1'
-                : 'grid-cols-[auto_minmax(0,1fr)_88px] gap-3 px-3 py-2.5',
+                ? 'grid-cols-[auto_minmax(0,1fr)_48px_auto] gap-2 px-2 py-1'
+                : 'grid-cols-[auto_minmax(0,1fr)_88px_auto] gap-3 px-3 py-2.5',
               entry.on === true
                 ? isCompact
                   ? 'border-primary/20 bg-surface-container/25'
@@ -234,6 +241,19 @@ export function PowerLoraLoaderInput({
                 })
               }}
             />
+
+            <button
+              type="button"
+              aria-label={t('image-generation.components.power.lora.loader.input.delete.lora', { label: item.label })}
+              title={t('image-generation.components.power.lora.loader.input.delete.lora', { label: item.label })}
+              onClick={() => handleRemoveLora(item.key)}
+              className={cn(
+                'inline-flex shrink-0 items-center justify-center rounded-sm border border-transparent text-muted-foreground transition-colors hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive',
+                isCompact ? 'h-6 w-6' : 'h-8 w-8',
+              )}
+            >
+              <Trash2 className={cn(isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
+            </button>
           </div>
         )
       })}

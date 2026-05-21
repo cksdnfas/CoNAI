@@ -121,6 +121,11 @@ assert.match(
   /POWER_LORA_AUTO_COLLECTED_LIST_NAME = 'loras \(통합\)'[\s\S]*buildAddedPowerLoraNodeValue[\s\S]*\[buildNextPowerLoraKey\(nodeValue\)\][\s\S]*strength: 1/,
   'Power Lora Loader add action should append lora_N rows from the auto-collected merged LoRA list',
 )
+assert.match(
+  powerLoraLoaderUtilsSource,
+  /buildRemovedPowerLoraNodeValue[\s\S]*delete nextNodeValue\[itemKey\][\s\S]*return nextNodeValue/,
+  'Power Lora Loader remove action should delete one selected LoRA row without clearing the full node value',
+)
 for (const pattern of [/LoRA 추가/, /<PathOptionTreeSelect/, /findAutoCollectedPowerLoraOptions/, /scanGenerationComfyUIModelDropdownLists\(\{ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS \}\)/, /onRefresh=\{handleRefreshLoraOptions\}/]) {
   assert.match(
     powerLoraLoaderInputSource,
@@ -138,6 +143,13 @@ assert.match(
   /const addLoraControl = \([\s\S]*<PathOptionTreeSelect[\s\S]*placeholder=\{fallbackDropdownListsQuery\.isLoading \?[^}]*LoRA 목록 불러오는 중[\s\S]*LoRA 추가/,
   'Power Lora Loader should render Add LoRA as the always-visible dropdown trigger, not a two-step button',
 )
+for (const pattern of [/Trash2/, /handleRemoveLora/, /buildRemovedPowerLoraNodeValue/, /power\.lora\.loader\.input\.delete\.lora/]) {
+  assert.match(
+    powerLoraLoaderInputSource,
+    pattern,
+    'Power Lora Loader rows should expose an icon-only delete action for one LoRA entry',
+  )
+}
 assert.doesNotMatch(
   powerLoraLoaderInputSource,
   /isAddingLora|setIsAddingLora|LoRA 선택|<Button/,
