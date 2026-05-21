@@ -96,4 +96,26 @@ equal(
   'inline wildcard tree rendering must not scan expandedWildcardIds for every visible node',
 )
 
+const inlinePickerFieldSource = source('features/image-generation/components/wildcard-inline-picker-field.tsx')
+equal(
+  inlinePickerFieldSource.includes('const explorerEntryIdSet = useMemo(() => new Set(explorerEntries.map((entry) => entry.wildcard.id)), [explorerEntries])'),
+  true,
+  'inline wildcard picker should memoize explorer entry ids once per explorer entry snapshot',
+)
+equal(
+  inlinePickerFieldSource.includes('const rootExplorerEntryIds = useMemo('),
+  true,
+  'inline wildcard picker should memoize root explorer ids for default expansion',
+)
+equal(
+  inlinePickerFieldSource.includes('!explorerEntryIdSet.has(selectedExplorerId)'),
+  true,
+  'inline wildcard picker selection recovery should use Set.has for selected explorer membership',
+)
+equal(
+  inlinePickerFieldSource.includes('!explorerEntries.some((entry) => entry.wildcard.id === selectedExplorerId)'),
+  false,
+  'inline wildcard picker selection recovery must not scan explorer entries on every effect pass',
+)
+
 console.log('Wildcard search selection contracts verified')

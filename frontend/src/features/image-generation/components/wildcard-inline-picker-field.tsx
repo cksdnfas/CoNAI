@@ -120,6 +120,11 @@ export function WildcardInlinePickerField({
     records: wildcards,
     activeTab: activeExplorerTab,
   })
+  const explorerEntryIdSet = useMemo(() => new Set(explorerEntries.map((entry) => entry.wildcard.id)), [explorerEntries])
+  const rootExplorerEntryIds = useMemo(
+    () => explorerEntries.filter((entry) => entry.depth === 0).map((entry) => entry.wildcard.id),
+    [explorerEntries],
+  )
   const detectedTokens = useMemo(
     () => detectPromptSyntaxTokens(value, flattenedWildcards, tool),
     [flattenedWildcards, tool, value],
@@ -233,14 +238,14 @@ export function WildcardInlinePickerField({
   }, [tool])
 
   useEffect(() => {
-    if (explorerEntries.length === 0) {
+    if (rootExplorerEntryIds.length === 0) {
       return
     }
 
-    if (selectedExplorerId === null || !explorerEntries.some((entry) => entry.wildcard.id === selectedExplorerId)) {
-      setExpandedExplorerIds((current) => Array.from(new Set([...current, ...explorerEntries.filter((entry) => entry.depth === 0).map((entry) => entry.wildcard.id)])))
+    if (selectedExplorerId === null || !explorerEntryIdSet.has(selectedExplorerId)) {
+      setExpandedExplorerIds((current) => Array.from(new Set([...current, ...rootExplorerEntryIds])))
     }
-  }, [explorerEntries, selectedExplorerId])
+  }, [explorerEntryIdSet, rootExplorerEntryIds, selectedExplorerId])
 
   useEffect(() => () => {
     if (closeTimerRef.current !== null) {
