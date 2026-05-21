@@ -46,6 +46,14 @@ function sortTreeEntries(left: TreeEntry, right: TreeEntry, locale: string) {
   return compareTreeLabels(left.label, right.label, locale)
 }
 
+function buildWorkflowSearchText(workflow: GraphWorkflowRecord) {
+  return `${workflow.name} ${workflow.description ?? ''}`.toLowerCase()
+}
+
+function buildFolderSearchText(folder: GraphWorkflowFolderRecord) {
+  return folder.name.toLowerCase()
+}
+
 /** Render one explorer-style tree sidebar for workflow folders and documents. */
 export function SavedGraphList({
   graphs,
@@ -107,6 +115,26 @@ export function SavedGraphList({
     return nextMap
   }, [graphs, moduleDefinitionById])
 
+  const folderSearchTextById = useMemo(() => {
+    const nextMap = new Map<number, string>()
+
+    for (const folder of folders) {
+      nextMap.set(folder.id, buildFolderSearchText(folder))
+    }
+
+    return nextMap
+  }, [folders])
+
+  const workflowSearchTextById = useMemo(() => {
+    const nextMap = new Map<number, string>()
+
+    for (const graph of graphs) {
+      nextMap.set(graph.id, buildWorkflowSearchText(graph))
+    }
+
+    return nextMap
+  }, [graphs])
+
   const query = searchQuery.trim().toLowerCase()
   const visibleFolderIds = useMemo(() => {
     if (!query) {
@@ -114,8 +142,8 @@ export function SavedGraphList({
     }
 
     const nextVisible = new Set<number>()
-    const matchesFolder = (folder: GraphWorkflowFolderRecord) => folder.name.toLowerCase().includes(query)
-    const matchesWorkflow = (workflow: GraphWorkflowRecord) => [workflow.name, workflow.description ?? ''].join(' ').toLowerCase().includes(query)
+    const matchesFolder = (folder: GraphWorkflowFolderRecord) => (folderSearchTextById.get(folder.id) ?? '').includes(query)
+    const matchesWorkflow = (workflow: GraphWorkflowRecord) => (workflowSearchTextById.get(workflow.id) ?? '').includes(query)
 
     const visit = (folderId: number | null): boolean => {
       let hasMatch = false
@@ -136,7 +164,7 @@ export function SavedGraphList({
 
     visit(null)
     return nextVisible
-  }, [foldersByParent, query, workflowsByFolder])
+  }, [folderSearchTextById, foldersByParent, query, workflowSearchTextById, workflowsByFolder])
 
   const filteredRootWorkflows = useMemo(() => {
     const items = workflowsByFolder.get(null) ?? []
@@ -144,8 +172,8 @@ export function SavedGraphList({
       return items
     }
 
-    return items.filter((workflow) => [workflow.name, workflow.description ?? ''].join(' ').toLowerCase().includes(query))
-  }, [query, workflowsByFolder])
+    return items.filter((workflow) => (workflowSearchTextById.get(workflow.id) ?? '').includes(query))
+  }, [query, workflowSearchTextById, workflowsByFolder])
 
   const hasAnyVisibleItem = useMemo(() => {
     if (!query) {
@@ -214,7 +242,7 @@ export function SavedGraphList({
       if (!query) {
         return true
       }
-      return [workflow.name, workflow.description ?? ''].join(' ').toLowerCase().includes(query)
+      return (workflowSearchTextById.get(workflow.id) ?? '').includes(query)
     })
     const isExpanded = !collapsedFolderIdSet.has(folder.id)
     const hasChildren = childFolders.length > 0 || childWorkflows.length > 0
