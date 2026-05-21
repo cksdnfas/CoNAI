@@ -3,6 +3,22 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+const metadataModelSource = fs.readFileSync(
+  path.resolve(process.cwd(), 'src/models/Image/MediaMetadataModel.ts'),
+  'utf8',
+);
+
+assert.match(
+  metadataModelSource,
+  /function buildSuggestionSearchFilter\(columnExpression: string, normalizedQuery: string\)[\s\S]*?if \(normalizedQuery\.length === 0\) \{[\s\S]*?return \{ sql: '', params: \[\] \}/,
+  'empty search-option suggestion queries should skip per-row LOWER/LIKE filtering entirely',
+);
+assert.doesNotMatch(
+  metadataModelSource,
+  /\? = '' OR LOWER\(/,
+  'search-option suggestion SQL must not keep the empty-query OR guard that forces LOWER() into the hot path',
+);
+
 const runtimeBase = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-search-options-'));
 process.env.RUNTIME_BASE_PATH = runtimeBase;
 

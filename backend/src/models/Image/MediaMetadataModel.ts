@@ -14,6 +14,17 @@ function normalizeSuggestionLimit(limit: number, fallback = 16, max = 50): numbe
   return Math.min(Math.floor(limit), max);
 }
 
+function buildSuggestionSearchFilter(columnExpression: string, normalizedQuery: string): { sql: string; params: string[] } {
+  if (normalizedQuery.length === 0) {
+    return { sql: '', params: [] };
+  }
+
+  return {
+    sql: `AND LOWER(${columnExpression}) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`,
+    params: [buildSqlContainsPattern(normalizedQuery)],
+  };
+}
+
 function getReadyMediaMetadataCondition(alias = 'media_metadata'): string {
   return MediaPostprocessVisibilityService.buildReadyCondition(alias);
 }
@@ -397,7 +408,7 @@ export class MediaMetadataModel {
    */
   static searchModelSuggestions(query = '', limit = 16): Array<{ value: string; count: number }> {
     const normalizedQuery = query.trim().toLowerCase();
-    const likePattern = buildSqlContainsPattern(normalizedQuery);
+    const searchFilter = buildSuggestionSearchFilter('model_name', normalizedQuery);
     const normalizedLimit = normalizeSuggestionLimit(limit);
 
     const readyCondition = getReadyMediaMetadataCondition();
@@ -408,11 +419,11 @@ export class MediaMetadataModel {
       WHERE model_name IS NOT NULL
         AND TRIM(model_name) != ''
         AND ${readyCondition}
-        AND (? = '' OR LOWER(model_name) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE})
+        ${searchFilter.sql}
       GROUP BY model_name
       ORDER BY count DESC, model_name ASC
       LIMIT ?
-    `).all(normalizedQuery, likePattern, normalizedLimit) as Array<{ value: string; count: number }>;
+    `).all(...searchFilter.params, normalizedLimit) as Array<{ value: string; count: number }>;
   }
 
   /**
@@ -420,7 +431,7 @@ export class MediaMetadataModel {
    */
   static searchLoraSuggestions(query = '', limit = 16): Array<{ value: string; count: number }> {
     const normalizedQuery = query.trim().toLowerCase();
-    const likePattern = buildSqlContainsPattern(normalizedQuery);
+    const searchFilter = buildSuggestionSearchFilter('CAST(lora_item.value AS TEXT)', normalizedQuery);
     const normalizedLimit = normalizeSuggestionLimit(limit);
 
     const readyCondition = getReadyMediaMetadataCondition('metadata');
@@ -432,11 +443,11 @@ export class MediaMetadataModel {
       WHERE metadata.lora_models IS NOT NULL
         AND TRIM(CAST(lora_item.value AS TEXT)) != ''
         AND ${readyCondition}
-        AND (? = '' OR LOWER(CAST(lora_item.value AS TEXT)) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE})
+        ${searchFilter.sql}
       GROUP BY TRIM(CAST(lora_item.value AS TEXT))
       ORDER BY count DESC, value ASC
       LIMIT ?
-    `).all(normalizedQuery, likePattern, normalizedLimit) as Array<{ value: string; count: number }>;
+    `).all(...searchFilter.params, normalizedLimit) as Array<{ value: string; count: number }>;
   }
 
   /**
