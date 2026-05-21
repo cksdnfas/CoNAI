@@ -87,21 +87,22 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   })
 
   const historyEntries = useMemo(() => historyQuery.data ?? [], [historyQuery.data])
+  const saveHistoryEntryMutation = saveHistoryMutation.mutateAsync
+  const deleteHistoryEntryMutation = deleteHistoryMutation.mutateAsync
+  const clearHistoryEntriesMutation = clearHistoryMutation.mutateAsync
 
   const openDrawer = useCallback(() => setIsDrawerOpen(true), [])
   const closeDrawer = useCallback(() => setIsDrawerOpen(false), [])
 
   const setSearchScope = useCallback((scope: SearchScope) => {
     setSearchScopeState(scope)
-    openDrawer()
-  }, [openDrawer])
+    setIsDrawerOpen(true)
+  }, [])
 
   const setSearchInput = useCallback((value: string) => {
     setSearchInputState(value)
-    if (!isDrawerOpen) {
-      openDrawer()
-    }
-  }, [isDrawerOpen, openDrawer])
+    setIsDrawerOpen(true)
+  }, [])
 
   const appendDraftChip = useCallback((chip: SearchChip) => {
     setDraftChips((current) => {
@@ -188,13 +189,13 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
 
     navigate('/')
 
-    void saveHistoryMutation.mutateAsync({
+    void saveHistoryEntryMutation({
       label: buildSearchHistoryLabel(nextChips, {
         resolveScopeLabel: (scope) => t(SEARCH_SCOPE_LABEL_KEYS[scope]),
       }),
       chips: nextChips,
     })
-  }, [draftChips, navigate, saveHistoryMutation, showSnackbar, t, withPendingInputChip])
+  }, [draftChips, navigate, saveHistoryEntryMutation, showSnackbar, t, withPendingInputChip])
 
   const submitSearchFromInput = useCallback(() => {
     applySearch()
@@ -206,6 +207,14 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     setSearchInputState('')
   }, [])
 
+  const cycleChipOperator = useCallback((chipId: string) => {
+    setDraftChips((current) => current.map((chip) => (chip.id === chipId ? { ...chip, operator: cycleSearchOperator(chip.operator) } : chip)))
+  }, [])
+
+  const removeChip = useCallback((chipId: string) => {
+    setDraftChips((current) => current.filter((chip) => chip.id !== chipId))
+  }, [])
+
   const selectHistoryEntry = useCallback((entry: SearchHistoryEntry) => {
     setDraftChips(entry.chips)
     setAppliedChips(entry.chips)
@@ -214,6 +223,14 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     navigate('/')
     showSnackbar({ message: t('homeSearchContext.savedSearchReapplied'), tone: 'info' })
   }, [navigate, openDrawer, showSnackbar, t])
+
+  const deleteHistoryEntry = useCallback(async (entryId: string) => {
+    await deleteHistoryEntryMutation(entryId)
+  }, [deleteHistoryEntryMutation])
+
+  const clearHistoryEntries = useCallback(async () => {
+    await clearHistoryEntriesMutation()
+  }, [clearHistoryEntriesMutation])
 
   const value = useMemo<HomeSearchContextValue>(
     () => ({
@@ -233,21 +250,13 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       addSuggestionChip,
       addAIToolChip,
       addRatingChip,
-      cycleChipOperator: (chipId: string) => {
-        setDraftChips((current) => current.map((chip) => (chip.id === chipId ? { ...chip, operator: cycleSearchOperator(chip.operator) } : chip)))
-      },
-      removeChip: (chipId: string) => {
-        setDraftChips((current) => current.filter((chip) => chip.id !== chipId))
-      },
+      cycleChipOperator,
+      removeChip,
       applySearch,
       clearSearch,
       selectHistoryEntry,
-      deleteHistoryEntry: async (entryId: string) => {
-        await deleteHistoryMutation.mutateAsync(entryId)
-      },
-      clearHistoryEntries: async () => {
-        await clearHistoryMutation.mutateAsync()
-      },
+      deleteHistoryEntry,
+      clearHistoryEntries,
     }),
     [
       addAIToolChip,
@@ -256,15 +265,17 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       addTextChip,
       appliedChips,
       applySearch,
-      clearHistoryMutation,
+      clearHistoryEntries,
       clearSearch,
       closeDrawer,
-      deleteHistoryMutation,
+      cycleChipOperator,
+      deleteHistoryEntry,
       draftChips,
       historyEntries,
       historyQuery.isLoading,
       isDrawerOpen,
       openDrawer,
+      removeChip,
       searchInput,
       searchScope,
       selectHistoryEntry,
