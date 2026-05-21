@@ -1,8 +1,9 @@
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, File, Folder, RotateCcw } from 'lucide-react'
+import { ChevronDown, File, Folder, RotateCcw, Search } from 'lucide-react'
 import { HierarchyNav, type HierarchyNavItemState } from '@/components/common/hierarchy-nav'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { cn } from '@/lib/utils'
 import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
@@ -120,6 +121,64 @@ function sortPathOptionNodes(left: PathOptionTreeNode, right: PathOptionTreeNode
   return left.label.localeCompare(right.label, undefined, { numeric: true, sensitivity: 'base' })
 }
 
+function normalizePathOptionSearch(value: string) {
+  return value.trim().toLocaleLowerCase()
+}
+
+function filterPathOptionTreeNodes(nodes: PathOptionTreeNode[], query: string) {
+  const normalizedQuery = normalizePathOptionSearch(query)
+  if (!normalizedQuery) {
+    return nodes
+  }
+
+  const nodeById = new Map(nodes.map((node) => [node.id, node]))
+  const childrenByParentId = new Map<string | null, PathOptionTreeNode[]>()
+  const includedIds = new Set<string>()
+
+  for (const node of nodes) {
+    const siblings = childrenByParentId.get(node.parentId) ?? []
+    siblings.push(node)
+    childrenByParentId.set(node.parentId, siblings)
+  }
+
+  const includeAncestors = (node: PathOptionTreeNode) => {
+    let current: PathOptionTreeNode | undefined = node
+    while (current) {
+      includedIds.add(current.id)
+      current = current.parentId ? nodeById.get(current.parentId) : undefined
+    }
+  }
+
+  const includeDescendants = (node: PathOptionTreeNode) => {
+    for (const child of childrenByParentId.get(node.id) ?? []) {
+      includedIds.add(child.id)
+      includeDescendants(child)
+    }
+  }
+
+  for (const node of nodes) {
+    if (node.kind === 'placeholder') {
+      continue
+    }
+
+    const searchText = normalizePathOptionSearch(`${node.label} ${node.value ?? ''}`)
+    if (!searchText.includes(normalizedQuery)) {
+      continue
+    }
+
+    includeAncestors(node)
+    if (node.kind === 'folder') {
+      includeDescendants(node)
+    }
+  }
+
+  return nodes.filter((node) => includedIds.has(node.id))
+}
+
+function collectPathOptionFolderIds(nodes: PathOptionTreeNode[]) {
+  return nodes.filter((node) => node.kind === 'folder').map((node) => node.id)
+}
+
 function renderPathOptionIcon(node: PathOptionTreeNode, state: HierarchyNavItemState) {
   if (node.kind === 'folder') {
     return <Folder className={cn('h-4 w-4 shrink-0', state.isExpanded ? 'text-yellow-300' : 'text-muted-foreground')} />
@@ -135,16 +194,25 @@ function renderPathOptionIcon(node: PathOptionTreeNode, state: HierarchyNavItemS
 /** Render path-like select options as a reusable HierarchyNav tree while preserving the actual selected value. */
 export function PathOptionTreeSelect({ value, options, placeholder = '선택', refreshLabel = '자동수집 새로고침', isRefreshing = false, onRefresh, onChange }: PathOptionTreeSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [menuRect, setMenuRect] = useState<FloatingDropdownRect | null>(null)
   const [isLocalRefreshing, setIsLocalRefreshing] = useState(false)
   const triggerRef = useRef<HTMLDivElement | null>(null)
   const menuId = useId()
   const treeNodes = useMemo(() => buildPathOptionTree(options, placeholder), [options, placeholder])
+  const filteredTreeNodes = useMemo(() => filterPathOptionTreeNodes(treeNodes, searchQuery), [searchQuery, treeNodes])
+  const searchExpandedIds = useMemo(() => (searchQuery.trim() ? collectPathOptionFolderIds(filteredTreeNodes) : []), [filteredTreeNodes, searchQuery])
   const selectedNode = treeNodes.find((node) => node.value === value) ?? null
   const selectedLabel = selectedNode?.label ?? (value ? getOptionDisplayLabel(value) : placeholder)
   const refreshing = isRefreshing || isLocalRefreshing
 
   useOverlayBackClose({ open: isOpen, onClose: () => setIsOpen(false) })
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery('')
+    }
+  }, [isOpen])
 
   useEffect(() => {
     if (!isOpen) {
@@ -250,8 +318,18 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
               className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'overflow-auto p-2')}
               style={{ left: menuRect.left, top: menuRect.top, width: menuRect.width, maxHeight: menuRect.maxHeight }}
             >
+              <div className="relative mb-2">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="검색"
+                  aria-label="옵션 검색"
+                  className="h-8 pl-8 text-sm"
+                />
+              </div>
               <HierarchyNav
-                items={treeNodes}
+                items={filteredTreeNodes}
                 selectedId={selectedNode?.id ?? null}
                 onSelect={(node) => {
                   if (node.value === undefined) {
@@ -268,6 +346,7 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
                 isItemSelectable={(node) => node.value !== undefined}
                 expandable
                 expandOnSelect={(node) => node.kind === 'folder'}
+                defaultExpandedIds={searchExpandedIds}
               />
             </div>,
             document.body,

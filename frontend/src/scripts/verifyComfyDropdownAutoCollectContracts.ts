@@ -109,6 +109,13 @@ for (const pattern of [/onRefresh\?: \(\) => Promise<void> \| void/, /stopPropag
     'path tree selects should support an inline refresh button without toggling the dropdown',
   )
 }
+for (const pattern of [/Search/, /<Input[\s\S]*placeholder="검색"/, /filterPathOptionTreeNodes/, /items=\{filteredTreeNodes\}/, /defaultExpandedIds=\{searchExpandedIds\}/]) {
+  assert.match(
+    pathOptionTreeSelectSource,
+    pattern,
+    'path tree selects should support compact search with auto-expanded results',
+  )
+}
 assert.match(
   pathOptionTreeSelectSource,
   /const selectedLabel = selectedNode\?\.label \?\? \(value \? getOptionDisplayLabel\(value\) : placeholder\)/,
