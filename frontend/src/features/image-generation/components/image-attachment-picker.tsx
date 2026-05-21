@@ -51,6 +51,11 @@ type PendingImageSaveState = {
   sourceInfo: ImageSaveSourceInfo
 }
 
+type SearchableImageAttachmentRecord = {
+  image: ImageRecord
+  searchLabel: string
+}
+
 type ImageAttachmentBrowserSectionProps = {
   searchValue: string
   searchPlaceholder: string
@@ -92,6 +97,14 @@ function toSaveBrowserImageRecord(item: SaveBrowserImageRecord): ImageRecord {
     mime_type: item.mime_type,
     file_size: item.file_size,
     first_seen_date: item.modified_at,
+  }
+}
+
+/** Cache normalized display text so picker search does not rebuild labels on every keystroke. */
+function toSearchableImageAttachmentRecord(image: ImageRecord): SearchableImageAttachmentRecord {
+  return {
+    image,
+    searchLabel: getImageListDisplayName(image).toLowerCase(),
   }
 }
 
@@ -250,16 +263,20 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
     setSystemImages((current) => (systemPage === 1 ? systemImagesQuery.data.images : mergeImageAttachmentRecords(current, systemImagesQuery.data.images)))
   }, [isOpen, source, systemImagesQuery.data, systemPage])
 
+  const systemImageSearchEntries = useMemo(() => systemImages.map(toSearchableImageAttachmentRecord), [systemImages])
+
   const filteredSystemImages = useMemo(() => {
     const search = systemSearch.trim().toLowerCase()
     if (!search) {
       return systemImages
     }
 
-    return systemImages.filter((image) => getImageListDisplayName(image).toLowerCase().includes(search))
-  }, [systemImages, systemSearch])
+    return systemImageSearchEntries.filter((entry) => entry.searchLabel.includes(search)).map((entry) => entry.image)
+  }, [systemImageSearchEntries, systemImages, systemSearch])
 
   const saveImageRecords = useMemo(() => (saveImagesQuery.data ?? []).map(toSaveBrowserImageRecord), [saveImagesQuery.data])
+
+  const saveImageSearchEntries = useMemo(() => saveImageRecords.map(toSearchableImageAttachmentRecord), [saveImageRecords])
 
   const filteredSaveImages = useMemo(() => {
     const search = saveSearch.trim().toLowerCase()
@@ -267,8 +284,8 @@ export function ImageAttachmentPickerButton({ label, modalTitle, disabled = fals
       return saveImageRecords
     }
 
-    return saveImageRecords.filter((image) => getImageListDisplayName(image).toLowerCase().includes(search))
-  }, [saveImageRecords, saveSearch])
+    return saveImageSearchEntries.filter((entry) => entry.searchLabel.includes(search)).map((entry) => entry.image)
+  }, [saveImageRecords, saveImageSearchEntries, saveSearch])
 
   const systemHasMore = Boolean(systemImagesQuery.data?.hasMore)
   const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS

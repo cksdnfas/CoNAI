@@ -132,5 +132,25 @@ assert.doesNotMatch(
   /selectedIds\.includes\(getImageListItemId\(image\)\)/,
   'Image attachment picker overlay must not scan selectedIds per rendered image',
 )
+assert.match(
+  imageAttachmentPickerSource,
+  /function toSearchableImageAttachmentRecord\(image: ImageRecord\): SearchableImageAttachmentRecord[\s\S]*?searchLabel: getImageListDisplayName\(image\)\.toLowerCase\(\)/,
+  'Image attachment picker should cache lowercase display labels once per image snapshot',
+)
+assert.match(
+  imageAttachmentPickerSource,
+  /const systemImageSearchEntries = useMemo\(\(\) => systemImages\.map\(toSearchableImageAttachmentRecord\), \[systemImages\]\)/,
+  'System image search should build cached searchable entries only when loaded images change',
+)
+assert.match(
+  imageAttachmentPickerSource,
+  /const saveImageSearchEntries = useMemo\(\(\) => saveImageRecords\.map\(toSearchableImageAttachmentRecord\), \[saveImageRecords\]\)/,
+  'Save image search should build cached searchable entries only when save records change',
+)
+assert.doesNotMatch(
+  imageAttachmentPickerSource,
+  /getImageListDisplayName\(image\)\.toLowerCase\(\)\.includes\(search\)/,
+  'Image attachment picker search must not rebuild display names while filtering each keystroke',
+)
 
 console.log('Image list selection contracts verified.')
