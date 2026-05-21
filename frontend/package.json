@@ -45,7 +45,8 @@
     "verify:thumbnail-settings-ui-contracts": "tsx src/scripts/verifyThumbnailSettingsUiContracts.ts",
     "verify:comfy-workflow-authoring-contracts": "tsx src/scripts/verifyComfyWorkflowAuthoringContracts.ts",
     "verify:comfy-workflow-entry-contracts": "tsx src/scripts/verifyComfyWorkflowEntryContracts.ts",
-    "verify:comfy-dropdown-auto-collect-contracts": "tsx src/scripts/verifyComfyDropdownAutoCollectContracts.ts"
+    "verify:comfy-dropdown-auto-collect-contracts": "tsx src/scripts/verifyComfyDropdownAutoCollectContracts.ts",
+    "verify:lora-auto-collect-contracts": "tsx src/scripts/verifyLoraAutoCollectContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",

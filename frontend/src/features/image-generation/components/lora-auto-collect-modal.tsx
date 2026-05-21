@@ -22,6 +22,18 @@ type RelativeFile = File & {
   webkitRelativePath?: string
 }
 
+function getRelativeFilePath(file: RelativeFile) {
+  return file.webkitRelativePath ?? file.name
+}
+
+function getFolderPath(relativePath: string) {
+  return relativePath.split('/').slice(0, -1).join('/')
+}
+
+function isLoraModelFile(file: RelativeFile) {
+  return file.name.toLocaleLowerCase().endsWith('.safetensors')
+}
+
 function splitPromptLines(text: string) {
   return text
     .split(/\r?\n/)
@@ -38,33 +50,33 @@ async function collectLoraFilesFromSelection(
   },
 ) {
   const loraFiles: LoraFileData[] = []
+  const fileByRelativePath = new Map<string, RelativeFile>()
   const commonTextCache = new Map<string, string[]>()
   const normalizedCommonTextFilename = options.commonTextFilename.trim()
 
-  if (normalizedCommonTextFilename.length > 0) {
-    for (const file of files) {
-      if (file.name !== normalizedCommonTextFilename) {
-        continue
-      }
-
-      const relativePath = file.webkitRelativePath ?? file.name
-      const folderPath = relativePath.split('/').slice(0, -1).join('/')
-      commonTextCache.set(folderPath, splitPromptLines(await file.text()))
-    }
-  }
-
   for (const file of files) {
-    if (!file.name.endsWith('.safetensors')) {
+    const relativePath = getRelativeFilePath(file)
+    fileByRelativePath.set(relativePath, file)
+
+    if (normalizedCommonTextFilename.length === 0 || file.name !== normalizedCommonTextFilename) {
       continue
     }
 
-    const relativePath = file.webkitRelativePath ?? file.name
+    commonTextCache.set(getFolderPath(relativePath), splitPromptLines(await file.text()))
+  }
+
+  for (const file of files) {
+    if (!isLoraModelFile(file)) {
+      continue
+    }
+
+    const relativePath = getRelativeFilePath(file)
     const pathParts = relativePath.split('/')
-    const folderPath = pathParts.slice(0, -1).join('/')
+    const folderPath = getFolderPath(relativePath)
     const folderName = pathParts.slice(1, -1).join('/') || pathParts[0] || 'root'
     const loraName = file.name.replace(/\.safetensors$/i, '')
     const pairedTextPath = relativePath.replace(/\.safetensors$/i, '.txt')
-    const pairedTextFile = files.find((candidate) => (candidate.webkitRelativePath ?? candidate.name) === pairedTextPath)
+    const pairedTextFile = fileByRelativePath.get(pairedTextPath)
     const pairedLines = pairedTextFile ? splitPromptLines(await pairedTextFile.text()) : []
     const commonLines = commonTextCache.get(folderPath) ?? []
 
