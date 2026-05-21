@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
 import { GripVertical, Play, RotateCcw } from 'lucide-react'
@@ -24,6 +24,7 @@ import {
   SourceNodeOutputPorts,
   TextMergeNodeLayout,
   TextTransformNodeLayout,
+  buildModuleUiFieldMap,
   getInputPortState,
   stopNodeActionEvent,
   stopNodeInteraction,
@@ -125,12 +126,13 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const { t } = useI18n()
   const { module } = data
   const updateNodeInternals = useUpdateNodeInternals()
+  const uiFieldByKey = useMemo(() => buildModuleUiFieldMap(module.ui_schema), [module.ui_schema])
   const powerLoraUiFields = (module.ui_schema ?? []).filter((field) => (
     isPowerLoraLoaderUiField(field) || hasPowerLoraLoaderEntries(data.inputValues?.[field.key] ?? field.default_value)
   ))
   const powerLoraUiFieldKeys = new Set(powerLoraUiFields.map((field) => field.key))
   const inputPorts = (module.exposed_inputs ?? []).filter((port) => {
-    const uiField = module.ui_schema?.find((field) => field.key === port.key)
+    const uiField = uiFieldByKey.get(port.key)
     const value = data.inputValues?.[port.key] ?? port.default_value ?? uiField?.default_value
     return !powerLoraUiFieldKeys.has(port.key) && !isPowerLoraLoaderUiField(uiField) && !hasPowerLoraLoaderEntries(value)
   })
@@ -241,7 +243,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     ? inputPorts.find((port) => port.key === 'model')
     : null
   const codexModelUiField = isSystemCallCodexMessageModule
-    ? module.ui_schema?.find((field) => field.key === 'model')
+    ? uiFieldByKey.get('model') ?? null
     : null
   const codexModelCurrentValue = normalizeOptionalString(data.inputValues?.model)
   const codexModelOptions = normalizeSelectOptions(
@@ -600,6 +602,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             accentColor={accentColor}
             connectedInputKeys={connectedInputKeys}
             connectedOutputKeys={connectedOutputKeys}
+            uiFieldByKey={uiFieldByKey}
           />
         ) : isTextTransformModule ? (
           <TextTransformNodeLayout
@@ -608,6 +611,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             accentColor={accentColor}
             connectedInputKeys={connectedInputKeys}
             connectedOutputKeys={connectedOutputKeys}
+            uiFieldByKey={uiFieldByKey}
           />
         ) : isIfBranchModule ? (
           <IfBranchNodeLayout
@@ -616,6 +620,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             accentColor={accentColor}
             connectedInputKeys={connectedInputKeys}
             connectedOutputKeys={connectedOutputKeys}
+            uiFieldByKey={uiFieldByKey}
           />
         ) : (
           <div className="mt-2.5 grid gap-1">
@@ -631,6 +636,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
                     nodeId={id}
                     data={data}
                     port={inputPort}
+                    uiField={inputPort ? uiFieldByKey.get(inputPort.key) ?? null : null}
                     accentColor={accentColor}
                     connected={inputPortState.connected}
                     satisfied={inputPortState.satisfied}

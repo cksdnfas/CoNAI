@@ -37,6 +37,7 @@ function extractFunction(sourceText: string, functionName: string) {
 
 function assertExecutionPanelLookupPolicy() {
   const helpersSource = source('features/module-graph/components/graph-execution-panel-helpers.ts')
+  const nodeCardSource = source('features/module-graph/components/module-graph-node-card.tsx')
   const nodeCardLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts.tsx')
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
@@ -89,6 +90,26 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     nodeCardLayoutsSource.includes('const expandedOutputGroupKeySet = useMemo(() => new Set(expandedOutputGroupKeys), [expandedOutputGroupKeys])'),
     'node card artifact outputs should build one expanded-output key Set per state snapshot',
+  )
+  assert(
+    nodeCardLayoutsSource.includes('export function buildModuleUiFieldMap'),
+    'node card layouts should expose a reusable UI-field map builder',
+  )
+  assert(
+    nodeCardSource.includes('const uiFieldByKey = useMemo(() => buildModuleUiFieldMap(module.ui_schema), [module.ui_schema])'),
+    'node card should build the module UI-field map once per module schema snapshot',
+  )
+  assert(
+    nodeCardSource.includes('uiFieldByKey.get(port.key)'),
+    'node card should use Map-backed UI-field lookup for rendered input ports',
+  )
+  assert(
+    nodeCardSource.includes('uiFieldByKey={uiFieldByKey}'),
+    'specialized node card layouts should receive the precomputed UI-field map',
+  )
+  assert(
+    nodeCardLayoutsSource.includes('const resolvedUiFieldByKey = uiFieldByKey ?? fallbackUiFieldByKey'),
+    'specialized node card layouts should reuse the supplied UI-field map with a local fallback',
   )
   assert(
     nodeCardLayoutsSource.includes('expandedOutputGroupKeySet.has(group.portKey)'),

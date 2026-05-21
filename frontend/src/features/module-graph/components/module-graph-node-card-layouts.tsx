@@ -37,6 +37,12 @@ type PortCellProps = {
   onDisconnectInput?: (nodeId: string, portKey: string) => void
 }
 
+type ModuleUiFieldMap = Map<string, ModuleUiFieldDefinition>
+
+export function buildModuleUiFieldMap(fields: ModuleUiFieldDefinition[] | null | undefined): ModuleUiFieldMap {
+  return new Map((fields ?? []).map((field) => [field.key, field] as const))
+}
+
 /** Prevent embedded controls from triggering node drag or canvas selection. */
 export function stopNodeInteraction(event: SyntheticEvent) {
   event.stopPropagation()
@@ -170,6 +176,7 @@ export function InputPortCell({
   nodeId,
   data,
   port,
+  uiField: uiFieldOverride,
   accentColor,
   connected,
   satisfied,
@@ -179,6 +186,7 @@ export function InputPortCell({
   nodeId: string
   data: ModuleGraphNode['data']
   port?: ModulePortDefinition
+  uiField?: ModuleUiFieldDefinition | null
   accentColor: string
   connected: boolean
   satisfied: boolean
@@ -195,7 +203,7 @@ export function InputPortCell({
   const portTypeColor = getPortTypeColor(port.data_type)
   const statusLabel = requiredMissing ? t({ ko: '입력 필요', en: 'Input required' }) : connected ? t({ ko: '연결됨', en: 'Connected' }) : satisfied ? t({ ko: '설정됨', en: 'Configured' }) : t({ ko: '대기', en: 'Waiting' })
   const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
-  const uiField = data.module.ui_schema?.find((field) => field.key === port.key)
+  const uiField = uiFieldOverride !== undefined ? uiFieldOverride : data.module.ui_schema?.find((field) => field.key === port.key)
   const operationKey = getModuleOperationKey(data.module)
   const isSystemCallLlmPort = operationKey === 'system.call_llm'
   const selectOptions = selectOptionsOverride && selectOptionsOverride.length > 0
@@ -541,23 +549,27 @@ export function TextMergeNodeLayout({
   accentColor,
   connectedInputKeys,
   connectedOutputKeys,
+  uiFieldByKey,
 }: {
   id: string
   data: ModuleGraphNode['data']
   accentColor: string
   connectedInputKeys: Set<string>
   connectedOutputKeys: Set<string>
+  uiFieldByKey?: ModuleUiFieldMap
 }) {
   const { t } = useI18n()
   const inputPorts = data.module.exposed_inputs ?? []
   const outputPort = data.module.output_ports[0]
-  const separatorAbField = data.module.ui_schema?.find((field) => field.key === 'separator_ab') ?? {
+  const fallbackUiFieldByKey = useMemo(() => buildModuleUiFieldMap(data.module.ui_schema), [data.module.ui_schema])
+  const resolvedUiFieldByKey = uiFieldByKey ?? fallbackUiFieldByKey
+  const separatorAbField = resolvedUiFieldByKey.get('separator_ab') ?? {
     key: 'separator_ab',
     label: t({ ko: 'A 뒤 문자열', en: 'Text after A' }),
     data_type: 'text',
     default_value: ',',
   }
-  const separatorBcField = data.module.ui_schema?.find((field) => field.key === 'separator_bc') ?? {
+  const separatorBcField = resolvedUiFieldByKey.get('separator_bc') ?? {
     key: 'separator_bc',
     label: t({ ko: 'B 뒤 문자열', en: 'Text after B' }),
     data_type: 'text',
@@ -636,24 +648,27 @@ export function TextTransformNodeLayout({
   accentColor,
   connectedInputKeys,
   connectedOutputKeys,
+  uiFieldByKey,
 }: {
   id: string
   data: ModuleGraphNode['data']
   accentColor: string
   connectedInputKeys: Set<string>
   connectedOutputKeys: Set<string>
+  uiFieldByKey?: ModuleUiFieldMap
 }) {
   const inputPort = data.module.exposed_inputs[0]
   const outputPort = data.module.output_ports[0]
   const inputPortState = getInputPortState(data, inputPort, connectedInputKeys)
-  const uiFields = data.module.ui_schema ?? []
-  const modeField = uiFields.find((field) => field.key === 'mode')
-  const patternField = uiFields.find((field) => field.key === 'pattern')
-  const flagsField = uiFields.find((field) => field.key === 'flags')
-  const replacementField = uiFields.find((field) => field.key === 'replacement')
-  const groupIndexField = uiFields.find((field) => field.key === 'group_index')
-  const prefixField = uiFields.find((field) => field.key === 'prefix')
-  const suffixField = uiFields.find((field) => field.key === 'suffix')
+  const fallbackUiFieldByKey = useMemo(() => buildModuleUiFieldMap(data.module.ui_schema), [data.module.ui_schema])
+  const resolvedUiFieldByKey = uiFieldByKey ?? fallbackUiFieldByKey
+  const modeField = resolvedUiFieldByKey.get('mode')
+  const patternField = resolvedUiFieldByKey.get('pattern')
+  const flagsField = resolvedUiFieldByKey.get('flags')
+  const replacementField = resolvedUiFieldByKey.get('replacement')
+  const groupIndexField = resolvedUiFieldByKey.get('group_index')
+  const prefixField = resolvedUiFieldByKey.get('prefix')
+  const suffixField = resolvedUiFieldByKey.get('suffix')
   const currentMode = getInlineUiFieldValue(data.inputValues?.mode, modeField)
   const hasAdvancedFlagsValue = hasMeaningfulValue(data.inputValues?.flags)
   const [showAdvancedFields, setShowAdvancedFields] = useState(hasAdvancedFlagsValue)
@@ -671,6 +686,7 @@ export function TextTransformNodeLayout({
           nodeId={id}
           data={data}
           port={inputPort}
+          uiField={inputPort ? resolvedUiFieldByKey.get(inputPort.key) ?? null : null}
           accentColor={accentColor}
           connected={inputPortState.connected}
           satisfied={inputPortState.satisfied}
@@ -719,19 +735,22 @@ export function IfBranchNodeLayout({
   accentColor,
   connectedInputKeys,
   connectedOutputKeys,
+  uiFieldByKey,
 }: {
   id: string
   data: ModuleGraphNode['data']
   accentColor: string
   connectedInputKeys: Set<string>
   connectedOutputKeys: Set<string>
+  uiFieldByKey?: ModuleUiFieldMap
 }) {
   const { t } = useI18n()
   const inputPorts = data.module.exposed_inputs ?? []
   const outputPorts = data.module.output_ports ?? []
-  const uiFields = data.module.ui_schema ?? []
-  const modeField = uiFields.find((field) => field.key === 'mode')
-  const expectedTypeField = uiFields.find((field) => field.key === 'expected_type')
+  const fallbackUiFieldByKey = useMemo(() => buildModuleUiFieldMap(data.module.ui_schema), [data.module.ui_schema])
+  const resolvedUiFieldByKey = uiFieldByKey ?? fallbackUiFieldByKey
+  const modeField = resolvedUiFieldByKey.get('mode')
+  const expectedTypeField = resolvedUiFieldByKey.get('expected_type')
   const modeValue = getInlineUiFieldValue(data.inputValues?.mode, modeField)
   const portRowCount = Math.max(inputPorts.length, outputPorts.length, 1)
 
@@ -757,6 +776,7 @@ export function IfBranchNodeLayout({
                 nodeId={id}
                 data={data}
                 port={inputPort}
+                uiField={inputPort ? resolvedUiFieldByKey.get(inputPort.key) ?? null : null}
                 accentColor={accentColor}
                 connected={inputPortState.connected}
                 satisfied={inputPortState.satisfied}
