@@ -74,11 +74,35 @@ function assertStatusSummarySourcePolicy() {
   )
 }
 
+function assertImageListCallbackSourcePolicy() {
+  match(
+    generationHistoryPanelSource,
+    /const getHistoryImageHref = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?return `\/images\/\$\{image\.composite_hash\}`[\s\S]*?\}, \[historyRecordMap\]\)/,
+    'generation history image links should use a stable callback for the virtualized image list',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const renderHistoryItemOverlay = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?const cancellationLabel = getHistoryCancellationBadgeLabel\(record\)[\s\S]*?\}, \[historyRecordMap\]\)/,
+    'generation history item overlay should use a stable callback and cache cancellation labels per render',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const renderHistoryPersistentOverlay = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?renderSafetyPersistentOverlay\(image\)[\s\S]*?\}, \[historyRecordMap, renderSafetyPersistentOverlay\]\)/,
+    'generation history persistent overlay should keep a stable callback when history records are unchanged',
+  )
+  doesNotMatch(
+    generationHistoryPanelSource,
+    /renderItemOverlay=\{\(image\) =>/,
+    'generation history image list should not recreate the item overlay callback inline',
+  )
+}
+
 assertEmptySummary()
 assertPagedSummary()
 assertFilteredSummary()
 assertTotalNeverFallsBelowLoaded()
 assertCountNormalization()
 assertStatusSummarySourcePolicy()
+assertImageListCallbackSourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')

@@ -260,7 +260,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     () => new Map(historyRecords.map((record) => [getGenerationHistorySelectionId(record), record])),
     [historyRecords],
   )
-  const renderHistoryPersistentOverlay = (image: ImageRecord) => {
+  const renderHistoryPersistentOverlay = useCallback((image: ImageRecord) => {
     const record = historyRecordMap.get(String(image?.id ?? ''))
     const safetyOverlay = renderSafetyPersistentOverlay(image)
     const cancellationLabel = record ? getHistoryCancellationBadgeLabel(record) : null
@@ -279,7 +279,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         {safetyOverlay}
       </div>
     )
-  }
+  }, [historyRecordMap, renderSafetyPersistentOverlay])
   const selectedHistoryRecords = useMemo(
     () => selectedHistoryIds.map((id) => historyRecordMap.get(id)).filter((record): record is NonNullable<typeof record> => Boolean(record)),
     [historyRecordMap, selectedHistoryIds],
@@ -300,14 +300,45 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         : workflowId
           ? 'ComfyUI Workflow'
           : 'ComfyUI'
-  const getHistoryImageHref = (image: ImageRecord) => {
+  const getHistoryImageHref = useCallback((image: ImageRecord) => {
     const record = historyRecordMap.get(String(image?.id ?? ''))
     if (!record || resolveHistoryDisplayStatus(record) !== 'completed' || !image?.composite_hash) {
       return undefined
     }
 
     return `/images/${image.composite_hash}`
-  }
+  }, [historyRecordMap])
+  const renderHistoryItemOverlay = useCallback((image: ImageRecord) => {
+    const imageSelectionId = String(image?.id ?? '')
+    if (!imageSelectionId) {
+      return null
+    }
+
+    const record = historyRecordMap.get(imageSelectionId)
+    if (!record) {
+      return null
+    }
+
+    const displayStatus = resolveHistoryDisplayStatus(record)
+    if (displayStatus === 'completed') {
+      return null
+    }
+
+    const cancellationLabel = getHistoryCancellationBadgeLabel(record)
+
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <Badge variant="outline">
+          {getHistoryStatusLabel(displayStatus)}
+        </Badge>
+        {cancellationLabel ? (
+          <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
+            {cancellationLabel}
+          </Badge>
+        ) : null}
+      </div>
+    )
+  }, [historyRecordMap])
 
   useEffect(() => {
     setSelectedHistoryIds((current) => current.filter((id) => historyRecordMap.has(id)))
@@ -488,35 +519,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               hasMore={Boolean(historyQuery.hasNextPage)}
               isLoadingMore={historyQuery.isFetchingNextPage}
               onLoadMore={historyQuery.fetchNextPage}
-              renderItemOverlay={(image) => {
-                const imageSelectionId = String(image?.id ?? '')
-                if (!imageSelectionId) {
-                  return null
-                }
-
-                const record = historyRecordMap.get(String(imageSelectionId))
-                if (!record) {
-                  return null
-                }
-
-                const displayStatus = resolveHistoryDisplayStatus(record)
-                if (displayStatus === 'completed') {
-                  return null
-                }
-
-                return (
-                  <div className="flex flex-col items-end gap-1">
-                    <Badge variant="outline">
-                      {getHistoryStatusLabel(displayStatus)}
-                    </Badge>
-                    {getHistoryCancellationBadgeLabel(record) ? (
-                      <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
-                        {getHistoryCancellationBadgeLabel(record)}
-                      </Badge>
-                    ) : null}
-                  </div>
-                )
-              }}
+              renderItemOverlay={renderHistoryItemOverlay}
               renderItemPersistentOverlay={renderHistoryPersistentOverlay}
               shouldBlurItemPreview={shouldBlurItemPreview}
             />
