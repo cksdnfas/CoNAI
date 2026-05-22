@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { ScanSearch } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -279,7 +279,7 @@ export function ImageDetailSimilaritySection({
   }
 
   /** Render a persistent score badge only for cards that have a matching similarity result. */
-  const renderSimilarImageOverlay = (image: ImageRecord): ReactNode => {
+  const renderSimilarImageOverlay = useCallback((image: ImageRecord): ReactNode => {
     const compositeHash = image.composite_hash
     if (typeof compositeHash !== 'string' || compositeHash.length === 0) {
       return null
@@ -287,10 +287,10 @@ export function ImageDetailSimilaritySection({
 
     const item = similarImageItemByHash.get(compositeHash)
     return item ? <SimilarImageScoreOverlay item={item} /> : null
-  }
+  }, [similarImageItemByHash])
 
   /** Render a prompt-similarity badge using the same shared overlay shell as image similarity. */
-  const renderPromptSimilarImageOverlay = (image: ImageRecord): ReactNode => {
+  const renderPromptSimilarImageOverlay = useCallback((image: ImageRecord): ReactNode => {
     const compositeHash = image.composite_hash
     if (typeof compositeHash !== 'string' || compositeHash.length === 0) {
       return null
@@ -298,7 +298,7 @@ export function ImageDetailSimilaritySection({
 
     const item = promptSimilarImageItemByHash.get(compositeHash)
     return item ? <PromptSimilarImageScoreOverlay item={item} /> : null
-  }
+  }, [promptSimilarImageItemByHash])
 
   const imageSimilarityActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">

@@ -17,6 +17,7 @@ function verifyPolicyHelper() {
 function verifyStaticContracts() {
   const generalTab = source('src/features/settings/components/general-tab.tsx')
   const imageDetailView = source('src/features/images/image-detail-view.tsx')
+  const imageDetailSimilaritySection = source('src/features/images/components/detail/image-detail-similarity-section.tsx')
   const relatedImageGallerySection = source('src/features/images/components/detail/related-image-gallery-section.tsx')
   const apiImages = source('src/lib/api-images.ts')
   const apiSettings = source('src/lib/api-settings.ts')
@@ -46,6 +47,10 @@ function verifyStaticContracts() {
   match(relatedImageGallerySection, /const handleActivate = useCallback\(\(_image: ImageRecord, imageId: string, href\?: string\) => \{[\s\S]*?imageViewModal\.openImageView[\s\S]*?navigate\(href\)[\s\S]*?\}, \[activationMode, imageViewModal, itemCompositeHashes, navigate\]\)/, 'related image gallery should keep one stable activation callback for modal and route launches')
   match(relatedImageGallerySection, /const gridStyle = useMemo\([\s\S]*?--related-image-grid-columns-base[\s\S]*?\[resolvedMobileCardColumns, resolvedDesktopCardColumns\]/, 'related image gallery should memoize responsive grid style objects for large result lists')
   match(relatedImageGallerySection, /onActivate=\{handleActivate\}/, 'related image cards should reuse the stable activation callback instead of per-card wrapper functions')
+  match(imageDetailSimilaritySection, /const renderSimilarImageOverlay = useCallback\(\(image: ImageRecord\): ReactNode => \{[\s\S]*?similarImageItemByHash\.get\(compositeHash\)[\s\S]*?\}, \[similarImageItemByHash\]\)/, 'image similarity score overlay renderer should stay stable while the result map is unchanged')
+  match(imageDetailSimilaritySection, /const renderPromptSimilarImageOverlay = useCallback\(\(image: ImageRecord\): ReactNode => \{[\s\S]*?promptSimilarImageItemByHash\.get\(compositeHash\)[\s\S]*?\}, \[promptSimilarImageItemByHash\]\)/, 'prompt similarity score overlay renderer should stay stable while the result map is unchanged')
+  match(imageDetailSimilaritySection, /renderItemPersistentOverlay=\{renderSimilarImageOverlay\}/, 'image similarity gallery should reuse the stable score overlay renderer')
+  match(imageDetailSimilaritySection, /renderItemPersistentOverlay=\{renderPromptSimilarImageOverlay\}/, 'prompt similarity gallery should reuse the stable score overlay renderer')
   match(apiImages, /getImageDuplicates\(compositeHash: string, threshold = 5, init\?: RequestInit\)/, 'duplicate API helper should accept request init for cancellation')
   match(apiImages, /getSimilarImages\([\s\S]*init\?: RequestInit[\s\S]*fetchJson[\s\S]*, init\)/, 'similar API helper should forward request init for cancellation')
   match(apiImages, /getPromptSimilarImages\(compositeHash: string, limit\?: number, init\?: RequestInit\)/, 'prompt similarity API helper should accept request init for cancellation')
