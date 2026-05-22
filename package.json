@@ -67,6 +67,7 @@
     "verify:danbooru-browser-progress-contracts": "cd frontend && npm run verify:danbooru-browser-progress-contracts",
     "verify:module-workflow-output-progress-contracts": "cd frontend && npm run verify:module-workflow-output-progress-contracts",
     "verify:settings-paged-list-progress-contracts": "cd frontend && npm run verify:settings-paged-list-progress-contracts",
+    "verify:settings-folder-selection-contracts": "cd frontend && npm run verify:settings-folder-selection-contracts",
     "verify:wildcard-search-selection-contracts": "cd frontend && npm run verify:wildcard-search-selection-contracts",
     "verify:saved-graph-list-summary-contracts": "cd frontend && npm run verify:saved-graph-list-summary-contracts",
     "verify:saved-graph-list-contracts": "cd frontend && npm run verify:saved-graph-list-contracts",

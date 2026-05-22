@@ -109,26 +109,28 @@ export function FoldersTab({
   const [isAddFolderModalOpen, setIsAddFolderModalOpen] = useState(false)
   const [isAddBackupSourceModalOpen, setIsAddBackupSourceModalOpen] = useState(false)
 
+  const foldersById = useMemo(() => new Map(folders.map((folder) => [folder.id, folder] as const)), [folders])
+  const backupSourcesById = useMemo(() => new Map(backupSources.map((source) => [source.id, source] as const)), [backupSources])
   const selectedFolder = useMemo(
-    () => folders.find((folder) => folder.id === selectedFolderId) ?? null,
-    [folders, selectedFolderId],
+    () => (selectedFolderId !== null ? foldersById.get(selectedFolderId) ?? null : null),
+    [foldersById, selectedFolderId],
   )
   const selectedBackupSource = useMemo(
-    () => backupSources.find((source) => source.id === selectedBackupSourceId) ?? null,
-    [backupSources, selectedBackupSourceId],
+    () => (selectedBackupSourceId !== null ? backupSourcesById.get(selectedBackupSourceId) ?? null : null),
+    [backupSourcesById, selectedBackupSourceId],
   )
 
   useEffect(() => {
-    if (selectedFolderId !== null && !folders.some((folder) => folder.id === selectedFolderId)) {
+    if (selectedFolderId !== null && !foldersById.has(selectedFolderId)) {
       setSelectedFolderId(null)
     }
-  }, [folders, selectedFolderId])
+  }, [foldersById, selectedFolderId])
 
   useEffect(() => {
-    if (selectedBackupSourceId !== null && !backupSources.some((source) => source.id === selectedBackupSourceId)) {
+    if (selectedBackupSourceId !== null && !backupSourcesById.has(selectedBackupSourceId)) {
       setSelectedBackupSourceId(null)
     }
-  }, [backupSources, selectedBackupSourceId])
+  }, [backupSourcesById, selectedBackupSourceId])
 
   const handleAddFolderFromModal = async () => {
     const success = await onAddFolder()

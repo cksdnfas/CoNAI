@@ -25,6 +25,7 @@
     "verify:danbooru-browser-progress-contracts": "tsx src/scripts/verifyDanbooruBrowserProgressContracts.ts",
     "verify:module-workflow-output-progress-contracts": "tsx src/scripts/verifyModuleWorkflowOutputProgressContracts.ts",
     "verify:settings-paged-list-progress-contracts": "tsx src/scripts/verifySettingsPagedListProgressContracts.ts",
+    "verify:settings-folder-selection-contracts": "tsx src/scripts/verifySettingsFolderSelectionContracts.ts",
     "verify:wildcard-search-selection-contracts": "tsx src/scripts/verifyWildcardSearchSelectionContracts.ts",
     "verify:saved-graph-list-summary-contracts": "tsx src/scripts/verifySavedGraphListSummaryContracts.ts",
     "verify:saved-graph-list-contracts": "tsx src/scripts/verifySavedGraphListContracts.ts",
