@@ -8,6 +8,48 @@ export const USER_DB_PATH = path.join(runtimePaths.databaseDir, 'user.db');
 const LEGACY_USER_SETTINGS_DB_PATH = path.join(runtimePaths.databaseDir, 'user-settings.db');
 const LEGACY_API_GENERATION_DB_PATH = path.join(runtimePaths.databaseDir, 'api-generation-history.db');
 
+function quoteSqlIdentifier(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function quoteSqlString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function getTableColumnNames(userSettingsDb: Database.Database, tableName: string, schemaName?: string): string[] {
+  const tableInfoSql = schemaName
+    ? `PRAGMA ${quoteSqlIdentifier(schemaName)}.table_info(${quoteSqlIdentifier(tableName)})`
+    : `PRAGMA table_info(${quoteSqlIdentifier(tableName)})`;
+  return (userSettingsDb.prepare(tableInfoSql).all() as Array<{ name: string }>).map((column) => column.name);
+}
+
+function buildLegacyApiGenerationHistoryCopyPlan(userSettingsDb: Database.Database) {
+  const legacyColumnNames = new Set(getTableColumnNames(userSettingsDb, 'api_generation_history', 'legacy_api_generation'));
+  const currentColumnNames = getTableColumnNames(userSettingsDb, 'api_generation_history');
+  const copyColumnNames = currentColumnNames.filter((column) => column !== 'id');
+
+  return {
+    columnList: copyColumnNames.map(quoteSqlIdentifier).join(', '),
+    selectList: copyColumnNames
+      .map((column) => legacyColumnNames.has(column)
+        ? `legacy.${quoteSqlIdentifier(column)}`
+        : `NULL AS ${quoteSqlIdentifier(column)}`)
+      .join(', '),
+    matchPredicate: copyColumnNames
+      .map((column) => legacyColumnNames.has(column)
+        ? `current.${quoteSqlIdentifier(column)} IS legacy.${quoteSqlIdentifier(column)}`
+        : `current.${quoteSqlIdentifier(column)} IS NULL`)
+      .join(' AND '),
+    fingerprintExpression: copyColumnNames.length > 0
+      ? copyColumnNames
+        .map((column) => legacyColumnNames.has(column)
+          ? `quote(legacy.${quoteSqlIdentifier(column)})`
+          : `'NULL'`)
+        .join(' || char(31) || ')
+      : "''",
+  };
+}
+
 /** Resolve the user-settings migrations directory across dev, dist, and portable layouts. */
 function getUserSettingsMigrationsPath(): string {
   const possiblePaths = [
@@ -236,80 +278,131 @@ export function migrateLegacyApiGenerationHistory(userSettingsDb: Database.Datab
     if (legacyCount > 0) {
       userSettingsDb.exec('BEGIN');
       try {
+        const currentCountBefore = (userSettingsDb.prepare('SELECT COUNT(*) AS count FROM api_generation_history').get() as { count: number }).count;
+        const copyPlan = buildLegacyApiGenerationHistoryCopyPlan(userSettingsDb);
+        const legacySource = quoteSqlString(path.resolve(LEGACY_API_GENERATION_DB_PATH));
+
         userSettingsDb.exec(`
-          INSERT OR IGNORE INTO api_generation_history (
-            id,
-            service_type,
-            generation_status,
-            created_at,
-            completed_at,
-            comfyui_workflow,
-            comfyui_prompt_id,
-            workflow_id,
-            workflow_name,
-            group_id,
-            nai_model,
-            nai_sampler,
-            nai_seed,
-            nai_steps,
-            nai_scale,
-            nai_parameters,
-            positive_prompt,
-            negative_prompt,
-            width,
-            height,
-            original_path,
-            file_size,
-            assigned_group_id,
-            composite_hash,
-            error_message,
-            metadata
+          CREATE TABLE IF NOT EXISTS api_generation_history_legacy_imports (
+            legacy_source TEXT NOT NULL,
+            legacy_id INTEGER NOT NULL,
+            legacy_fingerprint TEXT NOT NULL,
+            imported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (legacy_source, legacy_id, legacy_fingerprint)
+          );
+
+          DROP TABLE IF EXISTS temp.legacy_api_generation_import_plan;
+          CREATE TEMP TABLE legacy_api_generation_import_plan (
+            legacy_id INTEGER NOT NULL,
+            legacy_fingerprint TEXT NOT NULL,
+            id_collided INTEGER NOT NULL,
+            already_imported INTEGER NOT NULL,
+            PRIMARY KEY (legacy_id, legacy_fingerprint)
+          );
+
+          INSERT INTO temp.legacy_api_generation_import_plan (
+            legacy_id, legacy_fingerprint, id_collided, already_imported
           )
           SELECT
-            id,
-            service_type,
-            generation_status,
-            created_at,
-            completed_at,
-            comfyui_workflow,
-            comfyui_prompt_id,
-            workflow_id,
-            workflow_name,
-            group_id,
-            nai_model,
-            nai_sampler,
-            nai_seed,
-            nai_steps,
-            nai_scale,
-            nai_parameters,
-            positive_prompt,
-            negative_prompt,
-            width,
-            height,
-            original_path,
-            file_size,
-            assigned_group_id,
-            composite_hash,
-            error_message,
-            metadata
-          FROM legacy_api_generation.api_generation_history
+            legacy.id,
+            ${copyPlan.fingerprintExpression},
+            CASE WHEN EXISTS (
+              SELECT 1
+              FROM api_generation_history current
+              WHERE current.id = legacy.id
+            ) THEN 1 ELSE 0 END AS id_collided,
+            CASE WHEN EXISTS (
+              SELECT 1
+              FROM api_generation_history_legacy_imports imported
+              WHERE imported.legacy_source = ${legacySource}
+                AND imported.legacy_id = legacy.id
+                AND imported.legacy_fingerprint = ${copyPlan.fingerprintExpression}
+            ) THEN 1 ELSE 0 END AS already_imported
+          FROM legacy_api_generation.api_generation_history legacy
         `);
+
+        const pendingLegacyCount = (userSettingsDb.prepare(`
+          SELECT COUNT(*) AS count
+          FROM temp.legacy_api_generation_import_plan
+          WHERE already_imported = 0
+        `).get() as { count: number }).count;
+
+        userSettingsDb.exec(`
+          INSERT INTO api_generation_history (
+            id,
+            ${copyPlan.columnList}
+          )
+          SELECT
+            legacy.id,
+            ${copyPlan.selectList}
+          FROM legacy_api_generation.api_generation_history legacy
+          JOIN temp.legacy_api_generation_import_plan plan
+            ON plan.legacy_id = legacy.id
+           AND plan.legacy_fingerprint = ${copyPlan.fingerprintExpression}
+          WHERE plan.already_imported = 0
+            AND plan.id_collided = 0
+        `);
+
+        userSettingsDb.exec(`
+          INSERT INTO api_generation_history (
+            ${copyPlan.columnList}
+          )
+          SELECT
+            ${copyPlan.selectList}
+          FROM legacy_api_generation.api_generation_history legacy
+          JOIN temp.legacy_api_generation_import_plan plan
+            ON plan.legacy_id = legacy.id
+           AND plan.legacy_fingerprint = ${copyPlan.fingerprintExpression}
+          WHERE plan.already_imported = 0
+            AND plan.id_collided = 1
+        `);
+
+        userSettingsDb.exec(`
+          INSERT OR IGNORE INTO api_generation_history_legacy_imports (legacy_source, legacy_id, legacy_fingerprint)
+          SELECT ${legacySource}, legacy.id, ${copyPlan.fingerprintExpression}
+          FROM legacy_api_generation.api_generation_history legacy
+        `);
+
+        const currentCountAfter = (userSettingsDb.prepare('SELECT COUNT(*) AS count FROM api_generation_history').get() as { count: number }).count;
+        const missingImportCount = (userSettingsDb.prepare(`
+          SELECT COUNT(*) AS count
+          FROM legacy_api_generation.api_generation_history legacy
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM api_generation_history_legacy_imports imported
+            WHERE imported.legacy_source = ${legacySource}
+              AND imported.legacy_id = legacy.id
+              AND imported.legacy_fingerprint = ${copyPlan.fingerprintExpression}
+          )
+        `).get() as { count: number }).count;
+        const missingContentCount = (userSettingsDb.prepare(`
+          SELECT COUNT(*) AS count
+          FROM legacy_api_generation.api_generation_history legacy
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM api_generation_history current
+            WHERE ${copyPlan.matchPredicate}
+          )
+        `).get() as { count: number }).count;
+
+        if (missingImportCount > 0 || missingContentCount > 0) {
+          throw new Error(`Failed to migrate api_generation_history rows into user.db (imports: ${missingImportCount}, content: ${missingContentCount})`);
+        }
+
+        if (currentCountAfter !== currentCountBefore + pendingLegacyCount) {
+          throw new Error(`Failed to preserve ${pendingLegacyCount} api_generation_history row(s) from legacy db`);
+        }
+
+        if (pendingLegacyCount < legacyCount) {
+          console.log('  ℹ️ Legacy api_generation_history rows already imported; skipped recorded duplicates');
+        }
+
+        userSettingsDb.exec('DROP TABLE IF EXISTS temp.legacy_api_generation_import_plan');
         userSettingsDb.exec('COMMIT');
       } catch (error) {
         userSettingsDb.exec('ROLLBACK');
         throw error;
       }
-    }
-
-    const missingCount = (userSettingsDb.prepare(`
-      SELECT COUNT(*) AS count
-      FROM legacy_api_generation.api_generation_history legacy
-      LEFT JOIN api_generation_history current ON current.id = legacy.id
-      WHERE current.id IS NULL
-    `).get() as { count: number }).count;
-
-    if (missingCount > 0) {
-      throw new Error(`Failed to migrate ${missingCount} api_generation_history rows into user.db`);
     }
 
     shouldDeleteLegacyFile = true;

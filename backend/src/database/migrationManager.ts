@@ -8,6 +8,10 @@ interface Migration {
   down: (db: Database.Database) => Promise<void>;
 }
 
+function escapeSavepointName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
 export class MigrationManager {
   private db: Database.Database;
   private migrationsPath: string;
@@ -86,9 +90,11 @@ export class MigrationManager {
             up: migrationModule.up,
             down: migrationModule.down
           });
+        } else {
+          throw new Error(`Migration ${file} must export both up and down handlers`);
         }
       } catch (error) {
-        console.warn(`⚠️  Warning loading migration ${file}:`, error);
+        throw new Error(`Failed to load migration ${file}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
@@ -115,12 +121,21 @@ export class MigrationManager {
       console.log(`🔄 ${pendingMigrations.length}개의 마이그레이션을 적용합니다...`);
 
       for (const migration of pendingMigrations) {
+        const savepointName = `migration_${escapeSavepointName(migration.version)}`;
         try {
           console.log(`📦 마이그레이션 적용 중: ${migration.version}`);
+          this.db.exec(`SAVEPOINT ${savepointName}`);
           await migration.up(this.db);
           this.recordMigration(migration.version);
+          this.db.exec(`RELEASE SAVEPOINT ${savepointName}`);
           console.log(`✅ 마이그레이션 완료: ${migration.version}`);
         } catch (error) {
+          try {
+            this.db.exec(`ROLLBACK TO SAVEPOINT ${savepointName}`);
+            this.db.exec(`RELEASE SAVEPOINT ${savepointName}`);
+          } catch {
+            // Migration may have already closed or released the savepoint.
+          }
           console.error(`❌ 마이그레이션 실패: ${migration.version}`, error);
           throw error;
         }
@@ -165,16 +180,25 @@ export class MigrationManager {
       for (const version of migrationsToRollback) {
         const migration = availableMigrations.find(m => m.version === version);
         if (!migration) {
-          console.warn(`⚠️  마이그레이션 파일을 찾을 수 없습니다: ${version}`);
-          continue;
+          throw new Error(`Migration file not found: ${version}`);
         }
 
         try {
           console.log(`📦 마이그레이션 롤백 중: ${version}`);
+          const savepointName = `migration_rollback_${escapeSavepointName(version)}`;
+          this.db.exec(`SAVEPOINT ${savepointName}`);
           await migration.down(this.db);
           this.removeMigrationRecord(version);
+          this.db.exec(`RELEASE SAVEPOINT ${savepointName}`);
           console.log(`✅ 마이그레이션 롤백 완료: ${version}`);
         } catch (error) {
+          const savepointName = `migration_rollback_${escapeSavepointName(version)}`;
+          try {
+            this.db.exec(`ROLLBACK TO SAVEPOINT ${savepointName}`);
+            this.db.exec(`RELEASE SAVEPOINT ${savepointName}`);
+          } catch {
+            // Migration may have already closed or released the savepoint.
+          }
           console.error(`❌ 마이그레이션 롤백 실패: ${version}`, error);
           throw error;
         }

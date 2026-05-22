@@ -171,20 +171,31 @@ function migrateFromLegacyUserDbs(): void {
         }
 
         console.log(`🔄 Migrating authentication data from ${path.basename(candidatePath)} to auth.db...`);
-        authDb.prepare(`
-          INSERT INTO auth_credentials (id, username, password_hash, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?)
-        `).run(authData.id, authData.username, authData.password_hash, authData.created_at, authData.updated_at);
+        const hasSessionsTable = userSettingsDb.prepare(`
+          SELECT name FROM sqlite_master
+          WHERE type='table' AND name='sessions'
+        `).get();
+        const sessions = hasSessionsTable
+          ? userSettingsDb.prepare('SELECT * FROM sessions').all() as any[]
+          : [];
 
-        const sessions = userSettingsDb.prepare('SELECT * FROM sessions').all();
-        if (sessions.length > 0) {
-          const insertSession = authDb.prepare('INSERT OR REPLACE INTO sessions (sid, sess, expire) VALUES (?, ?, ?)');
-          const insertMany = authDb.transaction((sessionList: any[]) => {
-            for (const session of sessionList) {
+        const migrateAuthData = authDb.transaction(() => {
+          authDb.prepare(`
+            INSERT INTO auth_credentials (id, username, password_hash, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+          `).run(authData.id, authData.username, authData.password_hash, authData.created_at, authData.updated_at);
+
+          if (sessions.length > 0) {
+            const insertSession = authDb.prepare('INSERT OR REPLACE INTO sessions (sid, sess, expire) VALUES (?, ?, ?)');
+            for (const session of sessions) {
               insertSession.run(session.sid, session.sess, session.expire);
             }
-          });
-          insertMany(sessions);
+          }
+        });
+
+        migrateAuthData();
+
+        if (sessions.length > 0) {
           console.log(`  ✅ Migrated ${sessions.length} session(s)`);
         }
 

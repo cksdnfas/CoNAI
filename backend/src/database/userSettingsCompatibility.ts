@@ -6,6 +6,11 @@ function hasColumn(db: Database.Database, tableName: string, columnName: string)
   return pragma.some((column) => column.name === columnName);
 }
 
+/** Return a SELECT expression that preserves an optional legacy column when it exists. */
+function optionalColumnExpr(db: Database.Database, tableName: string, columnName: string, fallback = 'NULL'): string {
+  return hasColumn(db, tableName, columnName) ? columnName : fallback;
+}
+
 /** Rebuild legacy comfyui_servers tables so endpoint becomes the single canonical URL column. */
 function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
   const schemaRow = db
@@ -36,6 +41,7 @@ function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
   const backendTypeExpr = hasColumn(db, 'comfyui_servers', 'backend_type') ? "COALESCE(backend_type, 'comfyui')" : "'comfyui'";
   const capacityExpr = hasColumn(db, 'comfyui_servers', 'capacity') ? 'COALESCE(capacity, 1)' : '1';
   const descriptionExpr = hasColumn(db, 'comfyui_servers', 'description') ? 'description' : 'NULL';
+  const routingTagsJsonExpr = optionalColumnExpr(db, 'comfyui_servers', 'routing_tags_json');
   const isActiveExpr = hasColumn(db, 'comfyui_servers', 'is_active') ? 'COALESCE(is_active, 1)' : '1';
   const isDefaultExpr = hasColumn(db, 'comfyui_servers', 'is_default') ? 'COALESCE(is_default, 0)' : '0';
   const createdDateExpr = hasColumn(db, 'comfyui_servers', 'created_date')
@@ -61,6 +67,7 @@ function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
         backend_type TEXT NOT NULL DEFAULT 'comfyui',
         capacity INTEGER NOT NULL DEFAULT 1,
         description TEXT,
+        routing_tags_json TEXT,
         is_active BOOLEAN DEFAULT 1,
         is_default BOOLEAN DEFAULT 0,
         created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -68,7 +75,7 @@ function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
       );
 
       INSERT INTO comfyui_servers__new (
-        id, name, endpoint, backend_type, capacity, description, is_active, is_default, created_date, updated_date
+        id, name, endpoint, backend_type, capacity, description, routing_tags_json, is_active, is_default, created_date, updated_date
       )
       SELECT
         id,
@@ -77,6 +84,7 @@ function ensureComfyUIServersUseEndpointSchema(db: Database.Database): void {
         ${backendTypeExpr} AS backend_type,
         ${capacityExpr} AS capacity,
         ${descriptionExpr} AS description,
+        ${routingTagsJsonExpr} AS routing_tags_json,
         ${isActiveExpr} AS is_active,
         CASE WHEN ${backendTypeExpr} = 'modal' THEN 0 ELSE ${isDefaultExpr} END AS is_default,
         ${createdDateExpr} AS created_date,
@@ -197,28 +205,37 @@ export function migrateExistingUserSettingsTables(db: Database.Database): void {
     if (hasColumn(db, 'wildcard_items', 'item_text')) {
       console.log('  Migrating wildcard_items table to new schema...');
 
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS wildcard_items_new (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          wildcard_id INTEGER NOT NULL,
-          tool TEXT NOT NULL CHECK(tool IN ('general', 'comfyui', 'nai')) DEFAULT 'comfyui',
-          content TEXT NOT NULL,
-          order_index INTEGER NOT NULL DEFAULT 0,
-          created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (wildcard_id) REFERENCES wildcards(id) ON DELETE CASCADE
-        )
-      `);
+      db.exec('PRAGMA foreign_keys = OFF;');
+      try {
+        db.exec(`
+          BEGIN TRANSACTION;
+          DROP TABLE IF EXISTS wildcard_items_new;
+          CREATE TABLE wildcard_items_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            wildcard_id INTEGER NOT NULL,
+            tool TEXT NOT NULL CHECK(tool IN ('general', 'comfyui', 'nai')) DEFAULT 'comfyui',
+            content TEXT NOT NULL,
+            order_index INTEGER NOT NULL DEFAULT 0,
+            created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (wildcard_id) REFERENCES wildcards(id) ON DELETE CASCADE
+          );
 
-      db.exec(`
-        INSERT INTO wildcard_items_new (id, wildcard_id, tool, content, order_index, created_date)
-        SELECT id, wildcard_id, 'comfyui', item_text, 0, created_at
-        FROM wildcard_items
-      `);
+          INSERT INTO wildcard_items_new (id, wildcard_id, tool, content, order_index, created_date)
+          SELECT id, wildcard_id, 'comfyui', item_text, 0, created_at
+          FROM wildcard_items;
 
-      db.exec('DROP TABLE wildcard_items');
-      db.exec('ALTER TABLE wildcard_items_new RENAME TO wildcard_items');
-      db.exec('CREATE INDEX IF NOT EXISTS idx_wildcard_items_wildcard_id ON wildcard_items(wildcard_id)');
-      db.exec('CREATE INDEX IF NOT EXISTS idx_wildcard_items_tool ON wildcard_items(tool)');
+          DROP TABLE wildcard_items;
+          ALTER TABLE wildcard_items_new RENAME TO wildcard_items;
+          CREATE INDEX IF NOT EXISTS idx_wildcard_items_wildcard_id ON wildcard_items(wildcard_id);
+          CREATE INDEX IF NOT EXISTS idx_wildcard_items_tool ON wildcard_items(tool);
+          COMMIT;
+        `);
+      } catch (error) {
+        db.exec('ROLLBACK;');
+        throw error;
+      } finally {
+        db.exec('PRAGMA foreign_keys = ON;');
+      }
 
       console.log('  ✅ wildcard_items table migrated successfully');
     } else {
@@ -233,6 +250,7 @@ export function migrateExistingUserSettingsTables(db: Database.Database): void {
     console.log('  ✅ Schema migration complete');
   } catch (error) {
     console.error('  ⚠️ Error during schema migration:', error);
+    throw error;
   }
 }
 
@@ -257,6 +275,10 @@ function ensureModuleDefinitionsSupportsCurrentShape(db: Database.Database): voi
   }
 
   console.log('🔧 Updating module_definitions schema to support current custom-node shape...');
+
+  const externalKeyExpr = optionalColumnExpr(db, 'module_definitions', 'external_key');
+  const sourcePathExpr = optionalColumnExpr(db, 'module_definitions', 'source_path');
+  const sourceHashExpr = optionalColumnExpr(db, 'module_definitions', 'source_hash');
 
   try {
     db.exec(`
@@ -294,9 +316,9 @@ function ensureModuleDefinitionsSupportsCurrentShape(db: Database.Database): voi
         id, name, description, engine_type, authoring_source, category, source_workflow_id,
         template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
         version, is_active, color,
-        NULL AS external_key,
-        NULL AS source_path,
-        NULL AS source_hash,
+        ${externalKeyExpr} AS external_key,
+        ${sourcePathExpr} AS source_path,
+        ${sourceHashExpr} AS source_hash,
         created_date, updated_date
       FROM module_definitions;
 
