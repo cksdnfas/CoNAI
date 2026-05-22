@@ -279,6 +279,31 @@ function verifyModalNeighborPreviewWarmupUsesSourceItems() {
   )
 }
 
+function verifyModalPreviewWarmupDedupesUrls() {
+  const providerSource = source('src/features/images/components/detail/image-view-modal-provider.tsx')
+  const warmupSource = sliceRequiredSource(
+    providerSource,
+    'const MAX_WARMED_IMAGE_PREVIEW_SOURCE_URLS = 48',
+    'function buildSourceItemsByHash',
+  )
+
+  match(
+    warmupSource,
+    /const warmedImagePreviewSourceUrls: string\[\] = \[\][\s\S]*?const warmedImagePreviewSourceUrlSet = new Set<string>\(\)/,
+    'modal preview warmup should keep a small URL cache beside the best-effort image preloader',
+  )
+  match(
+    warmupSource,
+    /function rememberWarmedImagePreviewSourceUrl\(previewUrl: string\)[\s\S]*?warmedImagePreviewSourceUrlSet\.has\(previewUrl\)[\s\S]*?warmedImagePreviewSourceUrls\.push\(previewUrl\)[\s\S]*?warmedImagePreviewSourceUrls\.length > MAX_WARMED_IMAGE_PREVIEW_SOURCE_URLS[\s\S]*?warmedImagePreviewSourceUrlSet\.delete\(expiredPreviewUrl\)/,
+    'modal preview warmup should skip URLs already warmed while bounding the dedupe cache',
+  )
+  match(
+    warmupSource,
+    /if \(!rememberWarmedImagePreviewSourceUrl\(previewUrl\)\) \{[\s\S]*?return[\s\S]*?\}\s*\n\s*const previewImage = new Image\(\)/,
+    'modal preview warmup should check the URL cache before allocating another Image preloader',
+  )
+}
+
 function verifyInfoViewerStatePersistsAcrossModalNavigation() {
   const imageDetailSource = source('src/features/images/image-detail-view.tsx')
   const breakpointSyncSource = sliceRequiredSource(
@@ -397,6 +422,7 @@ verifyModalKeyboardNavigationPreservesFormControls()
 verifyModalSourceItemsIndexAvoidsIntermediateArrays()
 verifyModalSequenceSyncSkipsRedundantItemMerge()
 verifyModalNeighborPreviewWarmupUsesSourceItems()
+verifyModalPreviewWarmupDedupesUrls()
 verifyInfoViewerStatePersistsAcrossModalNavigation()
 verifyDesktopInfoTogglesAreDesktopOnly()
 verifySingleColumnInfoViewerReservesImageHeight()

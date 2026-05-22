@@ -47,6 +47,9 @@ function scheduleImageViewModalOverlayPreload() {
 }
 
 const ImageViewModalOverlayLazy = lazy(loadImageViewModalOverlay)
+const MAX_WARMED_IMAGE_PREVIEW_SOURCE_URLS = 48
+const warmedImagePreviewSourceUrls: string[] = []
+const warmedImagePreviewSourceUrlSet = new Set<string>()
 
 interface ImageViewModalState {
   compositeHash: string | null
@@ -78,9 +81,31 @@ function warmImagePreviewSource(image?: ImageRecord | null) {
     return
   }
 
+  if (!rememberWarmedImagePreviewSourceUrl(previewUrl)) {
+    return
+  }
+
   const previewImage = new Image()
   previewImage.decoding = 'async'
   previewImage.src = previewUrl
+}
+
+function rememberWarmedImagePreviewSourceUrl(previewUrl: string) {
+  if (warmedImagePreviewSourceUrlSet.has(previewUrl)) {
+    return false
+  }
+
+  warmedImagePreviewSourceUrlSet.add(previewUrl)
+  warmedImagePreviewSourceUrls.push(previewUrl)
+
+  while (warmedImagePreviewSourceUrls.length > MAX_WARMED_IMAGE_PREVIEW_SOURCE_URLS) {
+    const expiredPreviewUrl = warmedImagePreviewSourceUrls.shift()
+    if (expiredPreviewUrl) {
+      warmedImagePreviewSourceUrlSet.delete(expiredPreviewUrl)
+    }
+  }
+
+  return true
 }
 
 function buildSourceItemsByHash(items?: ImageRecord[]) {
