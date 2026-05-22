@@ -9,6 +9,7 @@ import { useImageEditorLifecycle } from './use-image-editor-lifecycle'
 import { ImageEditorModalLayout } from './image-editor-modal-layout'
 import { useImageEditorPointerInteractions } from './use-image-editor-pointer-interactions'
 import { useImageEditorSelectionActions } from './use-image-editor-selection-actions'
+import { isImageEditorBrushTool } from './image-editor-tool-metadata'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorSavePayload, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import {
   calculateImageEditorFitZoom,
@@ -209,13 +210,7 @@ export function ImageEditorModal({
   }, [documentSize.height, documentSize.width, enableMaskEditing, initialMaskImage, maskStrokes])
 
   useEffect(() => {
-    if (tool !== 'brush' && tool !== 'eraser' && tool !== 'mask-brush' && tool !== 'mask-eraser') {
-      setBrushPreviewPoint(null)
-    }
-  }, [tool])
-
-  useEffect(() => {
-    if (tool !== 'brush' && tool !== 'eraser' && tool !== 'mask-brush' && tool !== 'mask-eraser') {
+    if (!isImageEditorBrushTool(tool)) {
       setBrushPreviewPoint(null)
     }
   }, [tool])

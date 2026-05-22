@@ -1,6 +1,7 @@
 import { useCallback, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type Konva from 'konva'
 import { useI18n } from '@/i18n'
+import { isImageEditorBrushTool } from './image-editor-tool-metadata'
 import type { ImageEditorCropRect, ImageEditorLayer, ImageEditorStroke, ImageEditorTool } from './image-editor-types'
 import { clampImageEditorRect, createImageEditorId, normalizeImageEditorRect } from './image-editor-utils'
 
@@ -181,7 +182,7 @@ export function useImageEditorPointerInteractions({
       return
     }
 
-    if (tool === 'brush' || tool === 'eraser' || tool === 'mask-brush' || tool === 'mask-eraser') {
+    if (isImageEditorBrushTool(tool)) {
       setBrushPreviewPoint(point)
     }
 
@@ -247,7 +248,7 @@ export function useImageEditorPointerInteractions({
       return
     }
 
-    if (tool === 'brush' || tool === 'eraser' || tool === 'mask-brush' || tool === 'mask-eraser') {
+    if (isImageEditorBrushTool(tool)) {
       setBrushPreviewPoint(point)
     }
 
