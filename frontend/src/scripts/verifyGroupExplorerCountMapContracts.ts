@@ -9,6 +9,7 @@ function source(relativePath: string) {
 }
 
 const groupPageSource = source('features/groups/group-page.tsx')
+const groupQueriesSource = source('features/groups/use-group-page-queries.ts')
 const sidebarSource = source('features/groups/components/group-explorer-sidebar-panel.tsx')
 const treeSource = source('features/groups/components/group-tree.tsx')
 const rootGridSource = source('features/groups/components/group-root-grid-section.tsx')
@@ -18,6 +19,41 @@ assert.match(
   groupPageSource,
   /const groupCountMaps = useMemo\(\(\) => buildGroupCountMaps\(allGroups\), \[allGroups\]\)/,
   'Group page should build one memoized group count map snapshot for the loaded hierarchy',
+)
+assert.match(
+  groupQueriesSource,
+  /const groupHierarchyLookups = useMemo\(\(\) => \{/,
+  'Group page query hook should build one memoized hierarchy lookup snapshot for the loaded groups',
+)
+assert.match(
+  groupQueriesSource,
+  /const groupById = new Map<number, GroupWithHierarchy>\(\)/,
+  'Group page query hook should index groups by id once per hierarchy refresh',
+)
+assert.match(
+  groupQueriesSource,
+  /const childrenByParentId = new Map<number \| null, GroupWithHierarchy\[\]>\(\)/,
+  'Group page query hook should bucket child groups by parent once per hierarchy refresh',
+)
+assert.match(
+  groupQueriesSource,
+  /groupHierarchyLookups\.groupById\.get\(selectedGroupId\)/,
+  'Selected group lookup should use the precomputed group id map',
+)
+assert.match(
+  groupQueriesSource,
+  /groupHierarchyLookups\.childrenByParentId\.get\(selectedGroupId\)/,
+  'Child group lookup should use the precomputed parent bucket map',
+)
+assert.doesNotMatch(
+  groupQueriesSource,
+  /allGroups\.find\(\(group\) => group\.id === selectedGroupId\)/,
+  'Selected group lookup must not scan all groups every render',
+)
+assert.doesNotMatch(
+  groupQueriesSource,
+  /allGroups\.filter\(\(group\) => group\.parent_id/,
+  'Root and child group lookups must not rescan all groups every render',
 )
 assert.match(
   groupPageSource,

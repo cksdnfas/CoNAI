@@ -8,7 +8,10 @@ import {
 } from '@/lib/api-groups'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
+import type { GroupWithHierarchy } from '@/types/group'
 import { createEmptyGroupFileCounts, getDownloadCountsFromImages, type GroupSourceDefinition } from './group-page-shared'
+
+const EMPTY_GROUP_HIERARCHY_LIST: GroupWithHierarchy[] = []
 
 /** Own query loading, invalidation helpers, and lightweight derived data for the group page. */
 export function useGroupPageQueries({
@@ -95,11 +98,28 @@ export function useGroupPageQueries({
   }
 
   const groupExplorerCardStyle = appearanceQuery.data?.groupExplorerCardStyle ?? DEFAULT_APPEARANCE_SETTINGS.groupExplorerCardStyle
-  const allGroups = groupsQuery.data ?? []
-  const selectedGroupHierarchy = allGroups.find((group) => group.id === selectedGroupId) ?? null
-  const rootGroups = allGroups.filter((group) => group.parent_id == null)
-  const childGroups = allGroups.filter((group) => group.parent_id === selectedGroupId)
-  const parentGroupHierarchy = allGroups.find((group) => group.id === selectedGroupHierarchy?.parent_id) ?? null
+  const allGroups = groupsQuery.data ?? EMPTY_GROUP_HIERARCHY_LIST
+  const groupHierarchyLookups = useMemo(() => {
+    const groupById = new Map<number, GroupWithHierarchy>()
+    const childrenByParentId = new Map<number | null, GroupWithHierarchy[]>()
+
+    for (const group of allGroups) {
+      groupById.set(group.id, group)
+      const parentId = group.parent_id ?? null
+      const siblings = childrenByParentId.get(parentId)
+      if (siblings) {
+        siblings.push(group)
+      } else {
+        childrenByParentId.set(parentId, [group])
+      }
+    }
+
+    return { groupById, childrenByParentId }
+  }, [allGroups])
+  const selectedGroupHierarchy = selectedGroupId == null ? null : groupHierarchyLookups.groupById.get(selectedGroupId) ?? null
+  const rootGroups = groupHierarchyLookups.childrenByParentId.get(null) ?? EMPTY_GROUP_HIERARCHY_LIST
+  const childGroups = selectedGroupId == null ? EMPTY_GROUP_HIERARCHY_LIST : groupHierarchyLookups.childrenByParentId.get(selectedGroupId) ?? EMPTY_GROUP_HIERARCHY_LIST
+  const parentGroupHierarchy = selectedGroupHierarchy?.parent_id == null ? null : groupHierarchyLookups.groupById.get(selectedGroupHierarchy.parent_id) ?? null
   const backNavigationGroup = selectedGroupHierarchy
     ? parentGroupHierarchy ?? {
         ...selectedGroupHierarchy,
