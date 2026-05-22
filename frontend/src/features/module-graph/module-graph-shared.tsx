@@ -725,22 +725,42 @@ export function buildArtifactTextPreview(artifact: GraphExecutionArtifactRecord,
 
 /** Pick the most useful inline preview payload for one node artifact list. */
 export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord[]) {
-  const visibleArtifacts = artifacts.filter((artifact) => !isEmptyLlmJsonArtifact(artifact))
-  const latestVisualArtifact = visibleArtifacts.find((artifact) => hasGraphArtifactVisualPreview(artifact))
+  let primaryTextArtifact: GraphExecutionArtifactRecord | null = null
+  let fallbackTextArtifact: GraphExecutionArtifactRecord | null = null
+  let structuredTextArtifact: GraphExecutionArtifactRecord | null = null
 
-  if (latestVisualArtifact) {
-    return {
-      latestArtifactLabel: `${latestVisualArtifact.port_key} · ${latestVisualArtifact.artifact_type}`,
-      latestArtifactPreviewUrl: getArtifactPreviewUrl(latestVisualArtifact),
-      latestArtifactTextPreview: null,
-      latestArtifactTextValue: null,
+  for (const artifact of artifacts) {
+    if (isEmptyLlmJsonArtifact(artifact)) {
+      continue
+    }
+
+    if (hasGraphArtifactVisualPreview(artifact)) {
+      return {
+        latestArtifactLabel: `${artifact.port_key} · ${artifact.artifact_type}`,
+        latestArtifactPreviewUrl: getArtifactPreviewUrl(artifact),
+        latestArtifactTextPreview: null,
+        latestArtifactTextValue: null,
+      }
+    }
+
+    if (artifact.port_key === 'metadata') {
+      continue
+    }
+
+    if (!primaryTextArtifact && artifact.port_key === 'text' && artifact.artifact_type === 'text') {
+      primaryTextArtifact = artifact
+    }
+
+    if (!fallbackTextArtifact && (artifact.artifact_type === 'prompt' || artifact.artifact_type === 'text')) {
+      fallbackTextArtifact = artifact
+    }
+
+    if (!structuredTextArtifact && (artifact.artifact_type === 'json' || artifact.artifact_type === 'number' || artifact.artifact_type === 'boolean')) {
+      structuredTextArtifact = artifact
     }
   }
 
-  const readableArtifacts = visibleArtifacts.filter((artifact) => artifact.port_key !== 'metadata')
-  const latestTextArtifact = readableArtifacts.find((artifact) => artifact.port_key === 'text' && artifact.artifact_type === 'text')
-    ?? readableArtifacts.find((artifact) => artifact.artifact_type === 'prompt' || artifact.artifact_type === 'text')
-    ?? readableArtifacts.find((artifact) => artifact.artifact_type === 'json' || artifact.artifact_type === 'number' || artifact.artifact_type === 'boolean')
+  const latestTextArtifact = primaryTextArtifact ?? fallbackTextArtifact ?? structuredTextArtifact
 
   if (latestTextArtifact) {
     return {
@@ -765,14 +785,20 @@ export function buildNodeArtifactGroups(
   outputPorts: ModulePortDefinition[],
 ): NodeArtifactGroupPreview[] {
   const outputPortMap = new Map(outputPorts.map((port, index) => [port.key, { port, index }]))
-  const groupedArtifacts = artifacts
-    .filter((artifact) => !isEmptyLlmJsonArtifact(artifact))
-    .reduce<Map<string, GraphExecutionArtifactRecord[]>>((acc, artifact) => {
-      const current = acc.get(artifact.port_key) ?? []
+  const groupedArtifacts = new Map<string, GraphExecutionArtifactRecord[]>()
+
+  for (const artifact of artifacts) {
+    if (isEmptyLlmJsonArtifact(artifact)) {
+      continue
+    }
+
+    const current = groupedArtifacts.get(artifact.port_key)
+    if (current) {
       current.push(artifact)
-      acc.set(artifact.port_key, current)
-      return acc
-    }, new Map())
+    } else {
+      groupedArtifacts.set(artifact.port_key, [artifact])
+    }
+  }
 
   return Array.from(groupedArtifacts.entries())
     .map(([portKey, portArtifacts]) => {

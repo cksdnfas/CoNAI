@@ -41,8 +41,11 @@ function assertExecutionPanelLookupPolicy() {
   const nodeCardSource = source('features/module-graph/components/module-graph-node-card.tsx')
   const nodeCardLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts.tsx')
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
+  const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
+  const buildNodeArtifactPreviewSource = extractFunction(sharedSource, 'buildNodeArtifactPreview')
+  const buildNodeArtifactGroupsSource = extractFunction(sharedSource, 'buildNodeArtifactGroups')
   const recommendationSource = extractFunction(canvasSource, 'getRecommendedModulesFromConnectionStart')
   const actionMenuLookupCount = canvasSource.match(/const targetNode = nodeById\.get\(actionMenuState\.nodeId\)/g)?.length ?? 0
 
@@ -89,6 +92,34 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     !pickHighlightedArtifactsSource.includes('textArtifacts.includes(artifact)'),
     'compact artifact picking must not scan the text-artifact list for every structured candidate',
+  )
+  assert(
+    buildNodeArtifactPreviewSource.includes('for (const artifact of artifacts)'),
+    'node artifact preview selection should scan artifacts once without visible/readable list allocations',
+  )
+  assert(
+    buildNodeArtifactPreviewSource.includes('if (hasGraphArtifactVisualPreview(artifact))'),
+    'node artifact preview selection should return the first visual artifact during the scan',
+  )
+  assert(
+    !buildNodeArtifactPreviewSource.includes('artifacts.filter'),
+    'node artifact preview selection must not allocate filtered artifact lists',
+  )
+  assert(
+    !buildNodeArtifactPreviewSource.includes('visibleArtifacts.find'),
+    'node artifact preview selection must not rescan visible artifacts for each priority',
+  )
+  assert(
+    buildNodeArtifactGroupsSource.includes('const groupedArtifacts = new Map<string, GraphExecutionArtifactRecord[]>()'),
+    'node artifact grouping should build its port groups directly in a map',
+  )
+  assert(
+    buildNodeArtifactGroupsSource.includes('for (const artifact of artifacts)'),
+    'node artifact grouping should skip empty artifacts while grouping in one pass',
+  )
+  assert(
+    !buildNodeArtifactGroupsSource.includes('.filter((artifact) => !isEmptyLlmJsonArtifact(artifact))'),
+    'node artifact grouping must not allocate a filtered artifact list before grouping',
   )
   assert(
     nodeCardLayoutsSource.includes('const expandedOutputGroupKeySet = useMemo(() => new Set(expandedOutputGroupKeys), [expandedOutputGroupKeys])'),
