@@ -659,7 +659,12 @@ export class GenerationQueueService {
       return
     }
 
-    const queuedJobs = GenerationQueueModel.findQueuedComfyJobs()
+    const serversWithLocalCapacity = activeServers.filter((server) => this.getActiveComfyWorkerCount(server.id) < getGenerationQueueServerCapacity(server))
+    if (serversWithLocalCapacity.length === 0) {
+      return
+    }
+
+    const queuedJobs = GenerationQueueModel.findQueuedComfyDispatchCandidates()
     if (queuedJobs.length === 0) {
       return
     }
@@ -683,11 +688,6 @@ export class GenerationQueueService {
 
     const runnableQueuedJobs = queuedJobs.filter((job) => !failedJobIds.has(job.id))
     if (runnableQueuedJobs.length === 0) {
-      return
-    }
-
-    const serversWithLocalCapacity = activeServers.filter((server) => this.getActiveComfyWorkerCount(server.id) < getGenerationQueueServerCapacity(server))
-    if (serversWithLocalCapacity.length === 0) {
       return
     }
 

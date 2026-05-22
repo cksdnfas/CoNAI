@@ -1,6 +1,6 @@
 import { WorkflowServerModel } from '../models/ComfyUIServer'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
-import type { GenerationQueueJobRecord } from '../types/generationQueue'
+import type { GenerationQueueJobListRecord, GenerationQueueRoutingJobRecord } from '../types/generationQueue'
 
 export type GenerationQueueLaneScope = 'service' | 'server' | 'tag' | 'auto'
 
@@ -99,7 +99,7 @@ export function getGenerationQueueWorkflowAllowedServerIds(workflowId: number | 
 }
 
 /** Resolve the active ComfyUI servers a queued job can actually run on. */
-export function getGenerationQueueEligibleServerIds(job: GenerationQueueJobRecord, source: GenerationQueueRoutingSource) {
+export function getGenerationQueueEligibleServerIds(job: GenerationQueueRoutingJobRecord, source: GenerationQueueRoutingSource) {
   if (job.service_type !== 'comfyui' || job.cancel_requested > 0) {
     return []
   }
@@ -128,12 +128,12 @@ export function getGenerationQueueEligibleServerIds(job: GenerationQueueJobRecor
 }
 
 /** Check whether a queued ComfyUI job is dispatch-compatible with one active server. */
-export function isGenerationQueueComfyJobCompatibleWithServer(job: GenerationQueueJobRecord, server: ComfyUIServerRecord, source: GenerationQueueRoutingSource) {
+export function isGenerationQueueComfyJobCompatibleWithServer(job: GenerationQueueRoutingJobRecord, server: ComfyUIServerRecord, source: GenerationQueueRoutingSource) {
   return getGenerationQueueEligibleServerIds(job, source).includes(server.id)
 }
 
 /** Build the display lane metadata for queue position and ETA calculations. */
-export function resolveGenerationQueueLaneMeta(record: GenerationQueueJobRecord, source: GenerationQueueRoutingSource): GenerationQueueLaneMeta {
+export function resolveGenerationQueueLaneMeta(record: GenerationQueueJobListRecord, source: GenerationQueueRoutingSource): GenerationQueueLaneMeta {
   if (record.service_type === 'novelai' || record.service_type === 'codex') {
     return {
       laneKey: record.service_type,

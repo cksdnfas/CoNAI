@@ -12,6 +12,7 @@ import {
 } from './userSettingsBootstrap';
 import { ensureUserSettingsCompatibility, migrateExistingUserSettingsTables } from './userSettingsCompatibility';
 import { createUserSettingsSchema } from './userSettingsSchema';
+import { configureSqliteConnection } from './sqlitePragmas';
 
 export let userSettingsDb: Database.Database;
 
@@ -29,8 +30,8 @@ export function initializeUserSettingsDb(): void {
 
     const bootstrapResult = bootstrapUnifiedUserDb();
     const isNewDatabase = !fs.existsSync(USER_DB_PATH);
-
     userSettingsDb = new Database(USER_DB_PATH);
+    configureSqliteConnection(userSettingsDb, { label: 'user.db' });
 
     if (isNewDatabase) {
       console.log('✅ New unified user database created');

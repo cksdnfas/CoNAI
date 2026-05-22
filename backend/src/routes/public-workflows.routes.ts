@@ -342,7 +342,7 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
   }
 
   const requesterAccountId = getRequesterAccountId(req);
-  const records = Array.from({ length: parsedEnqueueCount.count }, () => {
+  const jobIds = Array.from({ length: parsedEnqueueCount.count }, () => {
     const jobId = GenerationQueueModel.create({
       service_type: 'comfyui',
       workflow_id: workflow.id,
@@ -355,8 +355,9 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
       requested_by_account_type: req.session?.accountType,
     });
 
-    return GenerationQueueModel.findById(jobId);
+    return jobId;
   });
+  const records = jobIds.map((jobId) => GenerationQueueModel.findListRecordById(jobId));
   GenerationQueueService.requestDispatch();
 
   res.status(201).json({

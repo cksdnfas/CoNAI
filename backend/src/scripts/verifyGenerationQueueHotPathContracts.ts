@@ -40,6 +40,10 @@ async function main() {
     )
 
     const queueServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationQueueService.ts'), 'utf8')
+    const generationQueueModelSource = fs.readFileSync(path.resolve(process.cwd(), 'src/models/GenerationQueue.ts'), 'utf8')
+    const queueReadRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/generation-queue/queue-read-routes.ts'), 'utf8')
+    const publicWorkflowRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/public-workflows.routes.ts'), 'utf8')
+    const generationHistoryServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationHistoryService.ts'), 'utf8')
     assert.match(
       queueServiceSource,
       /const compatibleServerIdsByJobId = new Map<number, Set<number>>\(\)/,
@@ -55,10 +59,49 @@ async function main() {
       /getGenerationQueueEligibleServerIds\(job, routingContext\)/,
       'ComfyUI dispatcher should reuse routing lookup state while resolving queued job eligibility',
     )
+    assert.match(
+      queueServiceSource,
+      /GenerationQueueModel\.findQueuedComfyDispatchCandidates\(\)/,
+      'ComfyUI dispatcher should read lean queued candidates before hydrating a claimed queue job payload',
+    )
+    assert.ok(
+      queueServiceSource.indexOf('const serversWithLocalCapacity = activeServers.filter') < queueServiceSource.indexOf('GenerationQueueModel.findQueuedComfyDispatchCandidates()'),
+      'ComfyUI dispatcher should return early on zero local capacity before reading queued candidates',
+    )
     assert.doesNotMatch(
       queueServiceSource,
       /isGenerationQueueComfyJobCompatibleWithServer/,
       'ComfyUI dispatcher must not recompute full job/server compatibility inside nested dispatch loops',
+    )
+    assert.match(
+      generationQueueModelSource,
+      /const GENERATION_QUEUE_LIST_COLUMNS = `[\s\S]*request_summary[\s\S]*`/,
+      'queue list model should maintain an explicit lean response column set',
+    )
+    assert.doesNotMatch(
+      generationQueueModelSource.match(/const GENERATION_QUEUE_LIST_COLUMNS = `[\s\S]*?`/)?.[0] ?? '',
+      /request_payload/,
+      'queue list column set must not select request_payload',
+    )
+    assert.match(
+      generationQueueModelSource,
+      /findQueuedComfyDispatchCandidates\(\)[\s\S]*SELECT \$\{GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS\}/,
+      'queued ComfyUI dispatch candidates should use a lean explicit column set',
+    )
+    assert.match(
+      queueReadRoutesSource,
+      /GenerationQueueModel\.findAllListRecords\(/,
+      'queue list route should use lean list records without request_payload',
+    )
+    assert.doesNotMatch(
+      publicWorkflowRoutesSource,
+      /GenerationQueueModel\.findById\(jobId\)/,
+      'public workflow multi-enqueue response must not hydrate full request payloads for every created job',
+    )
+    assert.match(
+      generationHistoryServiceSource,
+      /Slow generation postprocess/,
+      'generation postprocess should log slow media/group assignment timing for stalled queue diagnosis',
     )
 
     db.prepare(`
@@ -116,7 +159,7 @@ async function main() {
       'queue stats must count filtered visibility in SQL without hydrating all queue rows',
     )
 
-    const activeComfyWorkflow = GenerationQueueModel.findAll({
+    const activeComfyWorkflow = GenerationQueueModel.findAllListRecords({
       statuses: ['queued', 'dispatching', 'running'],
       serviceType: 'comfyui',
       workflowId: 7,
@@ -125,6 +168,17 @@ async function main() {
       activeComfyWorkflow.map((job) => job.status),
       ['queued', 'dispatching'],
       'queue list must apply service/workflow filters in SQL before route-level enrichment',
+    )
+    assert.ok(
+      activeComfyWorkflow.every((job) => !('request_payload' in job)),
+      'queue list records must not hydrate heavyweight request_payload columns',
+    )
+
+    const dispatchCandidates = GenerationQueueModel.findQueuedComfyDispatchCandidates()
+    assert.ok(dispatchCandidates.length > 0)
+    assert.ok(
+      dispatchCandidates.every((job) => !('request_payload' in job) && !('request_summary' in job)),
+      'dispatch candidates must not hydrate heavyweight request payload/summary columns',
     )
 
     const completedSamples = GenerationQueueModel.findRecentCompleted({ serviceType: 'comfyui', workflowId: 7, limit: 5 })

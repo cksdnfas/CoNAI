@@ -3,7 +3,7 @@ import { AuthAccount } from '../../models/AuthAccount'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../../services/generationQueueRouting'
 import { AuthAccessControlService } from '../../services/authAccessControlService'
-import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
+import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 
@@ -120,7 +120,7 @@ export function hasGenerationPageAccess(req: Request) {
   return AuthAccessControlService.hasPermission(accountId, 'page.generation.view')
 }
 
-export function buildQueueRequesterUsernameMap(records: GenerationQueueJobRecord[]) {
+export function buildQueueRequesterUsernameMap(records: Array<Pick<GenerationQueueJobRecord, 'requested_by_account_id'>>) {
   const usernameByAccountId = new Map<number, string>()
   const accountIds = Array.from(new Set(
     records
@@ -138,7 +138,7 @@ export function buildQueueRequesterUsernameMap(records: GenerationQueueJobRecord
   return usernameByAccountId
 }
 
-export function filterQueueRecords(records: GenerationQueueJobRecord[], filters: {
+export function filterQueueRecords(records: GenerationQueueJobListRecord[], filters: {
   serviceType?: GenerationQueueJobRecord['service_type']
   workflowId?: number
 }) {

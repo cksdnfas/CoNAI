@@ -303,7 +303,7 @@ export function createGenerationQueueActionRoutes() {
 
     }
 
-    const record = GenerationQueueModel.findById(jobIds[0] ?? 0)
+    const record = GenerationQueueModel.findListRecordById(jobIds[0] ?? 0)
 
     GenerationQueueService.requestDispatch()
 
@@ -344,12 +344,13 @@ export function createGenerationQueueActionRoutes() {
     try {
 
       const retryRecord = GenerationQueueService.retryJob(jobId)
+      const responseRecord = retryRecord ? GenerationQueueModel.findListRecordById(retryRecord.id) : null
 
       res.status(201).json({
 
         success: true,
 
-        record: retryRecord,
+        record: responseRecord,
 
         message: 'Queue job retried',
 
@@ -383,7 +384,7 @@ export function createGenerationQueueActionRoutes() {
 
         success: true,
 
-        record: existing,
+        record: GenerationQueueModel.findListRecordById(existing.id),
 
         message: 'Queue job is already finished',
 
@@ -396,12 +397,13 @@ export function createGenerationQueueActionRoutes() {
     try {
 
       const updated = await GenerationQueueService.requestCancellation(jobId)
+      const responseRecord = updated ? GenerationQueueModel.findListRecordById(updated.id) : null
 
       res.json({
 
         success: true,
 
-        record: updated,
+        record: responseRecord,
 
         message: existing.status === 'running' ? 'Cancellation requested' : 'Queue job cancelled',
 

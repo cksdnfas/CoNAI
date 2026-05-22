@@ -115,7 +115,7 @@ export function createGenerationQueueReadRoutes() {
 
     const requesterAccountId = getRequesterAccountId(req)
 
-    const filteredRecords = GenerationQueueModel.findAll({
+    const filteredRecords = GenerationQueueModel.findAllListRecords({
       statuses,
       serviceType,
       workflowId,
@@ -130,7 +130,7 @@ export function createGenerationQueueReadRoutes() {
 
     const activeRelevantRecords = matchesActiveQueueStatusFilter(statuses)
       ? filteredRecords
-      : GenerationQueueModel.findAll({
+      : GenerationQueueModel.findAllListRecords({
         statuses: ACTIVE_QUEUE_STATUSES,
         serviceType,
         workflowId,

@@ -38,6 +38,26 @@ export interface GenerationQueueJobRecord {
   is_mine?: boolean
 }
 
+export type GenerationQueueJobListRecord = Omit<GenerationQueueJobRecord, 'request_payload'>
+
+export type GenerationQueueRoutingJobRecord = Pick<
+  GenerationQueueJobRecord,
+  | 'id'
+  | 'service_type'
+  | 'workflow_id'
+  | 'requested_server_id'
+  | 'requested_server_tag'
+  | 'assigned_server_id'
+  | 'cancel_requested'
+>
+
+export type GenerationQueueDispatchCandidateRecord = GenerationQueueRoutingJobRecord & Pick<
+  GenerationQueueJobRecord,
+  | 'status'
+  | 'priority'
+  | 'queued_at'
+>
+
 export type GenerationQueueDurationSample = Pick<
   GenerationQueueJobRecord,
   | 'id'

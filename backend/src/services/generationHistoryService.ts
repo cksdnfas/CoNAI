@@ -4,6 +4,25 @@ import { APIImageProcessor } from './APIImageProcessor';
 import { BackgroundProcessorService } from './backgroundProcessorService';
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver';
 
+const SLOW_GENERATION_POSTPROCESS_MS = 3000;
+
+function logSlowGenerationPostprocessStep(params: {
+  stage: string;
+  historyId: number;
+  serviceType: ServiceType;
+  startedAt: number;
+  extra?: string;
+}): void {
+  const elapsedMs = Date.now() - params.startedAt;
+  if (elapsedMs < SLOW_GENERATION_POSTPROCESS_MS) {
+    return;
+  }
+
+  console.warn(
+    `⚠️ Slow generation postprocess: ${params.stage} took ${elapsedMs}ms for ${params.serviceType} history ${params.historyId}${params.extra ? ` (${params.extra})` : ''}`,
+  );
+}
+
 /**
  * GenerationHistoryService
  * Manages dual storage:
@@ -109,11 +128,20 @@ export class GenerationHistoryService {
     saveOptions?: GeneratedImageSaveOptions,
   ): Promise<void> {
     try {
+      const totalStartedAt = Date.now();
       // Step 1: Update status to processing
       GenerationHistoryModel.updateStatus(historyId, 'processing');
 
       // Step 2: Save original file only to uploads/API/images/YYYY-MM-DD/
+      const mediaPipelineStartedAt = Date.now();
       const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, serviceType, saveOptions);
+      logSlowGenerationPostprocessStep({
+        stage: 'media pipeline',
+        historyId,
+        serviceType,
+        startedAt: mediaPipelineStartedAt,
+        extra: processedPaths.originalPath,
+      });
 
       // Step 3: Update API history with the main-DB linkage key only.
       GenerationHistoryModel.updateImagePaths(historyId, {
@@ -122,7 +150,15 @@ export class GenerationHistoryService {
 
       // The file is already registered by APIImageProcessor; run the generation
       // group handoff after history linking so requested groups are not missed.
+      const groupAssignmentStartedAt = Date.now();
       await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(processedPaths.compositeHash);
+      logSlowGenerationPostprocessStep({
+        stage: 'group assignment',
+        historyId,
+        serviceType,
+        startedAt: groupAssignmentStartedAt,
+        extra: processedPaths.compositeHash,
+      });
 
       // Step 4: Update status to completed (file save complete)
       GenerationHistoryModel.updateStatus(historyId, 'completed');
@@ -130,6 +166,13 @@ export class GenerationHistoryService {
       console.log(`✅ ${serviceType.toUpperCase()} image saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
       console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
       console.log(`   → Main system will auto-detect and process (thumbnails, metadata, prompts, tags, groups)`);
+      logSlowGenerationPostprocessStep({
+        stage: 'total',
+        historyId,
+        serviceType,
+        startedAt: totalStartedAt,
+        extra: processedPaths.compositeHash,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       GenerationHistoryModel.recordError(historyId, errorMessage);
@@ -148,21 +191,45 @@ export class GenerationHistoryService {
     saveOptions?: GeneratedImageSaveOptions,
   ): Promise<void> {
     try {
+      const totalStartedAt = Date.now();
       GenerationHistoryModel.updateStatus(historyId, 'processing');
 
+      const mediaPipelineStartedAt = Date.now();
       const processedPaths = await APIImageProcessor.processGeneratedFile(sourceFilePath, serviceType, saveOptions);
+      logSlowGenerationPostprocessStep({
+        stage: 'media pipeline',
+        historyId,
+        serviceType,
+        startedAt: mediaPipelineStartedAt,
+        extra: processedPaths.originalPath,
+      });
 
       GenerationHistoryModel.updateImagePaths(historyId, {
         compositeHash: processedPaths.compositeHash
       });
 
+      const groupAssignmentStartedAt = Date.now();
       await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(processedPaths.compositeHash);
+      logSlowGenerationPostprocessStep({
+        stage: 'group assignment',
+        historyId,
+        serviceType,
+        startedAt: groupAssignmentStartedAt,
+        extra: processedPaths.compositeHash,
+      });
 
       GenerationHistoryModel.updateStatus(historyId, 'completed');
 
       console.log(`✅ ${serviceType.toUpperCase()} file saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
       console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
       console.log('   → Main system will auto-detect and process (thumbnails, metadata, prompts, tags, groups)');
+      logSlowGenerationPostprocessStep({
+        stage: 'total',
+        historyId,
+        serviceType,
+        startedAt: totalStartedAt,
+        extra: processedPaths.compositeHash,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       GenerationHistoryModel.recordError(historyId, errorMessage);

@@ -1,13 +1,36 @@
 import { ComfyUIServerModel } from '../../models/ComfyUIServer'
 import { createGenerationQueueRoutingContext, getGenerationQueueServerCapacity, resolveGenerationQueueLaneMeta } from '../../services/generationQueueRouting'
 import { settingsService } from '../../services/settingsService'
-import type { GenerationQueueDurationSample, GenerationQueueJobRecord } from '../../types/generationQueue'
+import type { GenerationQueueDurationSample, GenerationQueueJobListRecord } from '../../types/generationQueue'
 
 export type QueuePositionScope = 'service' | 'server' | 'tag' | 'auto'
 export type QueuePositionEntry = { laneKey: string; position: number; scope: QueuePositionScope; serverId: number | null; serverTag: string | null; eligibleServerIds: number[] }
 export type QueueEtaEntry = { waitSeconds: number | null; totalSeconds: number | null; durationSeconds: number | null }
 
-export function computeQueuePositions(records: GenerationQueueJobRecord[], activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>) {
+type QueueEtaCapacityContext = {
+  totalComfyCapacity: number
+  comfyCapacityByServerId: Map<number, number>
+  novelaiCapacity: number
+  codexCapacity: number
+}
+
+type DurationSampleStats = {
+  novelaiDurations: number[]
+  codexDurations: number[]
+  comfyDurations: number[]
+  comfyDurationsByWorkflowId: Map<number, number[]>
+  comfyDurationsByServerId: Map<number, number[]>
+  comfyDurationsByWorkflowServerKey: Map<string, number[]>
+}
+
+type RunningLaneRecordIndex = {
+  novelai: GenerationQueueJobListRecord[]
+  codex: GenerationQueueJobListRecord[]
+  comfyByServerId: Map<number, GenerationQueueJobListRecord[]>
+  comfyAll: GenerationQueueJobListRecord[]
+}
+
+export function computeQueuePositions(records: GenerationQueueJobListRecord[], activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>) {
   const positions = new Map<number, QueuePositionEntry>()
   const nextByLane = new Map<string, number>()
   const routingContext = createGenerationQueueRoutingContext(activeComfyServers)
@@ -72,126 +95,222 @@ function getMedianDurationSeconds(values: number[]) {
   return Math.round((left + right) / 2)
 }
 
-function getRecentCompletedDurations(records: GenerationQueueDurationSample[], predicate: (record: GenerationQueueDurationSample) => boolean) {
-  const filtered = records
-    .filter(predicate)
+function pushRecentDuration(bucket: number[], durationSeconds: number) {
+  if (bucket.length < 12) {
+    bucket.push(durationSeconds)
+  }
+}
+
+function getWorkflowServerDurationKey(workflowId: number, serverId: number) {
+  return `${workflowId}:${serverId}`
+}
+
+function buildDurationSampleStats(completedRecords: GenerationQueueDurationSample[]): DurationSampleStats {
+  const stats: DurationSampleStats = {
+    novelaiDurations: [],
+    codexDurations: [],
+    comfyDurations: [],
+    comfyDurationsByWorkflowId: new Map(),
+    comfyDurationsByServerId: new Map(),
+    comfyDurationsByWorkflowServerKey: new Map(),
+  }
+
+  const recordsByMostRecentCompletion = [...completedRecords]
     .sort((left, right) => String(right.completed_at ?? '').localeCompare(String(left.completed_at ?? '')))
 
-  const durations: number[] = []
-  for (const record of filtered) {
-    const duration = getJobDurationSeconds(record)
-    if (duration !== null) {
-      durations.push(duration)
+  for (const record of recordsByMostRecentCompletion) {
+    const durationSeconds = getJobDurationSeconds(record)
+    if (durationSeconds === null) {
+      continue
     }
-    if (durations.length >= 12) {
-      break
+
+    if (record.service_type === 'novelai') {
+      pushRecentDuration(stats.novelaiDurations, durationSeconds)
+      continue
+    }
+
+    if (record.service_type === 'codex') {
+      pushRecentDuration(stats.codexDurations, durationSeconds)
+      continue
+    }
+
+    if (record.service_type !== 'comfyui') {
+      continue
+    }
+
+    pushRecentDuration(stats.comfyDurations, durationSeconds)
+
+    if (record.workflow_id != null) {
+      const workflowDurations = stats.comfyDurationsByWorkflowId.get(record.workflow_id) ?? []
+      pushRecentDuration(workflowDurations, durationSeconds)
+      stats.comfyDurationsByWorkflowId.set(record.workflow_id, workflowDurations)
+    }
+
+    const serverId = record.assigned_server_id ?? record.requested_server_id ?? null
+    if (serverId !== null) {
+      const serverDurations = stats.comfyDurationsByServerId.get(serverId) ?? []
+      pushRecentDuration(serverDurations, durationSeconds)
+      stats.comfyDurationsByServerId.set(serverId, serverDurations)
+
+      if (record.workflow_id != null) {
+        const workflowServerKey = getWorkflowServerDurationKey(record.workflow_id, serverId)
+        const workflowServerDurations = stats.comfyDurationsByWorkflowServerKey.get(workflowServerKey) ?? []
+        pushRecentDuration(workflowServerDurations, durationSeconds)
+        stats.comfyDurationsByWorkflowServerKey.set(workflowServerKey, workflowServerDurations)
+      }
     }
   }
 
-  return durations
+  return stats
 }
 
-function resolveReferenceDurationSeconds(record: GenerationQueueJobRecord, completedRecords: GenerationQueueDurationSample[], queuePosition: QueuePositionEntry | undefined) {
-  if (record.service_type === 'novelai' || record.service_type === 'codex') {
-    return getMedianDurationSeconds(getRecentCompletedDurations(completedRecords, (candidate) => candidate.service_type === record.service_type))
+function resolveReferenceDurationSeconds(record: GenerationQueueJobListRecord, stats: DurationSampleStats, queuePosition: QueuePositionEntry | undefined) {
+  if (record.service_type === 'novelai') {
+    return getMedianDurationSeconds(stats.novelaiDurations)
+  }
+
+  if (record.service_type === 'codex') {
+    return getMedianDurationSeconds(stats.codexDurations)
   }
 
   if (record.workflow_id != null) {
     if (queuePosition?.scope === 'server' && queuePosition.serverId !== null) {
-      const workflowServerDurations = getRecentCompletedDurations(completedRecords, (candidate) => (
-        candidate.service_type === 'comfyui'
-        && candidate.workflow_id === record.workflow_id
-        && (candidate.assigned_server_id ?? candidate.requested_server_id ?? null) === queuePosition.serverId
-      ))
-      const workflowServerMedian = getMedianDurationSeconds(workflowServerDurations)
+      const workflowServerMedian = getMedianDurationSeconds(
+        stats.comfyDurationsByWorkflowServerKey.get(getWorkflowServerDurationKey(record.workflow_id, queuePosition.serverId)) ?? [],
+      )
       if (workflowServerMedian !== null) {
         return workflowServerMedian
       }
     }
 
-    const workflowDurations = getRecentCompletedDurations(completedRecords, (candidate) => (
-      candidate.service_type === 'comfyui' && candidate.workflow_id === record.workflow_id
-    ))
-    const workflowMedian = getMedianDurationSeconds(workflowDurations)
+    const workflowMedian = getMedianDurationSeconds(stats.comfyDurationsByWorkflowId.get(record.workflow_id) ?? [])
     if (workflowMedian !== null) {
       return workflowMedian
     }
   }
 
   if (queuePosition?.scope === 'server' && queuePosition.serverId !== null) {
-    const serverDurations = getRecentCompletedDurations(completedRecords, (candidate) => (
-      candidate.service_type === 'comfyui' && (candidate.assigned_server_id ?? candidate.requested_server_id ?? null) === queuePosition.serverId
-    ))
-    const serverMedian = getMedianDurationSeconds(serverDurations)
+    const serverMedian = getMedianDurationSeconds(stats.comfyDurationsByServerId.get(queuePosition.serverId) ?? [])
     if (serverMedian !== null) {
       return serverMedian
     }
   }
 
-  return getMedianDurationSeconds(getRecentCompletedDurations(completedRecords, (candidate) => candidate.service_type === 'comfyui'))
+  return getMedianDurationSeconds(stats.comfyDurations)
 }
 
-function getRunningLaneRecords(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeRecords: GenerationQueueJobRecord[]) {
-  if (record.service_type === 'novelai' || record.service_type === 'codex') {
-    return activeRecords.filter((candidate) => candidate.service_type === record.service_type && candidate.status === 'running')
+function buildCapacityContext(activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>): QueueEtaCapacityContext {
+  const comfyCapacityByServerId = new Map<number, number>()
+  let totalComfyCapacity = 0
+
+  for (const server of activeComfyServers) {
+    const capacity = getGenerationQueueServerCapacity(server)
+    comfyCapacityByServerId.set(server.id, capacity)
+    totalComfyCapacity += capacity
+  }
+
+  const generationThrottle = settingsService.loadSettings().generationThrottle
+  return {
+    totalComfyCapacity: Math.max(totalComfyCapacity, 1),
+    comfyCapacityByServerId,
+    novelaiCapacity: Math.max(generationThrottle.novelai.maxConcurrentJobs, 1),
+    codexCapacity: Math.max(generationThrottle.codex.maxConcurrentJobs, 1),
+  }
+}
+
+function buildRunningLaneRecordIndex(activeRecords: GenerationQueueJobListRecord[]): RunningLaneRecordIndex {
+  const index: RunningLaneRecordIndex = {
+    novelai: [],
+    codex: [],
+    comfyByServerId: new Map(),
+    comfyAll: [],
+  }
+
+  for (const record of activeRecords) {
+    if (record.status !== 'running') {
+      continue
+    }
+
+    if (record.service_type === 'novelai') {
+      index.novelai.push(record)
+      continue
+    }
+
+    if (record.service_type === 'codex') {
+      index.codex.push(record)
+      continue
+    }
+
+    if (record.service_type !== 'comfyui') {
+      continue
+    }
+
+    index.comfyAll.push(record)
+    const serverId = record.assigned_server_id ?? record.requested_server_id ?? null
+    if (serverId !== null) {
+      const serverRecords = index.comfyByServerId.get(serverId) ?? []
+      serverRecords.push(record)
+      index.comfyByServerId.set(serverId, serverRecords)
+    }
+  }
+
+  return index
+}
+
+function getRunningLaneRecords(record: GenerationQueueJobListRecord, queuePosition: QueuePositionEntry | undefined, runningIndex: RunningLaneRecordIndex) {
+  if (record.service_type === 'novelai') {
+    return runningIndex.novelai
+  }
+
+  if (record.service_type === 'codex') {
+    return runningIndex.codex
   }
 
   if (queuePosition?.scope === 'server' && queuePosition.serverId !== null) {
-    return activeRecords.filter((candidate) => (
-      candidate.service_type === 'comfyui'
-      && candidate.status === 'running'
-      && (candidate.assigned_server_id ?? candidate.requested_server_id ?? null) === queuePosition.serverId
-    ))
+    return runningIndex.comfyByServerId.get(queuePosition.serverId) ?? []
   }
 
   if (!queuePosition || queuePosition.eligibleServerIds.length === 0) {
-    return activeRecords.filter((candidate) => candidate.service_type === 'comfyui' && candidate.status === 'running')
+    return runningIndex.comfyAll
   }
 
   const eligibleServerIdSet = new Set(queuePosition.eligibleServerIds)
-  return activeRecords.filter((candidate) => {
-    if (candidate.service_type !== 'comfyui' || candidate.status !== 'running') {
-      return false
+  const records: GenerationQueueJobListRecord[] = []
+  runningIndex.comfyByServerId.forEach((serverRecords, serverId) => {
+    if (eligibleServerIdSet.has(serverId)) {
+      records.push(...serverRecords)
     }
-
-    const candidateServerId = candidate.assigned_server_id ?? candidate.requested_server_id ?? null
-    return candidateServerId !== null && eligibleServerIdSet.has(candidateServerId)
   })
+
+  return records
 }
 
-function getComfyServerCapacitySum(activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>, serverIds?: number[]) {
-  const serverIdSet = serverIds && serverIds.length > 0 ? new Set(serverIds) : null
-  const capacity = activeComfyServers
-    .filter((server) => serverIdSet === null || serverIdSet.has(server.id))
-    .reduce((sum, server) => sum + getGenerationQueueServerCapacity(server), 0)
+function getLaneCapacity(record: GenerationQueueJobListRecord, queuePosition: QueuePositionEntry | undefined, capacityContext: QueueEtaCapacityContext) {
+  if (record.service_type === 'novelai') {
+    return capacityContext.novelaiCapacity
+  }
 
-  return Math.max(capacity, 1)
-}
-
-function getLaneCapacity(record: GenerationQueueJobRecord, queuePosition: QueuePositionEntry | undefined, activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>) {
-  if (record.service_type === 'novelai' || record.service_type === 'codex') {
-    const generationThrottle = settingsService.loadSettings().generationThrottle
-    return record.service_type === 'novelai'
-      ? Math.max(generationThrottle.novelai.maxConcurrentJobs, 1)
-      : Math.max(generationThrottle.codex.maxConcurrentJobs, 1)
+  if (record.service_type === 'codex') {
+    return capacityContext.codexCapacity
   }
 
   if (!queuePosition) {
-    return getComfyServerCapacitySum(activeComfyServers)
+    return capacityContext.totalComfyCapacity
   }
 
   if (queuePosition.scope === 'server' && queuePosition.serverId !== null) {
-    return getComfyServerCapacitySum(activeComfyServers, [queuePosition.serverId])
+    return Math.max(capacityContext.comfyCapacityByServerId.get(queuePosition.serverId) ?? 0, 1)
   }
 
   if (queuePosition.eligibleServerIds.length > 0) {
-    return getComfyServerCapacitySum(activeComfyServers, queuePosition.eligibleServerIds)
+    const capacity = queuePosition.eligibleServerIds.reduce((sum, serverId) => sum + (capacityContext.comfyCapacityByServerId.get(serverId) ?? 0), 0)
+    return Math.max(capacity, 1)
   }
 
-  return getComfyServerCapacitySum(activeComfyServers)
+  return capacityContext.totalComfyCapacity
 }
 
-function getEstimatedRunningRemainingSeconds(record: GenerationQueueJobRecord, durationSeconds: number) {
+function getEstimatedRunningRemainingSeconds(record: GenerationQueueJobListRecord, durationSeconds: number) {
   const startedAt = record.started_at ? new Date(record.started_at).getTime() : null
   const elapsedSeconds = startedAt && Number.isFinite(startedAt)
     ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
@@ -210,13 +329,46 @@ function getEarliestSlotIndex(slotAvailabilitySeconds: number[]) {
   return earliestIndex
 }
 
+function buildQueuedRecordsByLaneKey(
+  activeRecords: GenerationQueueJobListRecord[],
+  queuePositions: Map<number, QueuePositionEntry>,
+) {
+  const recordsByLaneKey = new Map<string, GenerationQueueJobListRecord[]>()
+
+  for (const record of activeRecords) {
+    if (record.status !== 'queued' && record.status !== 'dispatching') {
+      continue
+    }
+
+    const queuePosition = queuePositions.get(record.id)
+    if (!queuePosition) {
+      continue
+    }
+
+    const laneRecords = recordsByLaneKey.get(queuePosition.laneKey) ?? []
+    laneRecords.push(record)
+    recordsByLaneKey.set(queuePosition.laneKey, laneRecords)
+  }
+
+  recordsByLaneKey.forEach((laneRecords) => {
+    laneRecords.sort((left, right) => {
+      const leftPosition = queuePositions.get(left.id)?.position ?? Number.MAX_SAFE_INTEGER
+      const rightPosition = queuePositions.get(right.id)?.position ?? Number.MAX_SAFE_INTEGER
+      return leftPosition - rightPosition
+    })
+  })
+
+  return recordsByLaneKey
+}
+
 function estimateQueueEta(
-  record: GenerationQueueJobRecord,
+  record: GenerationQueueJobListRecord,
   queuePosition: QueuePositionEntry | undefined,
-  activeRecords: GenerationQueueJobRecord[],
+  runningIndex: RunningLaneRecordIndex,
+  queuedRecordsByLaneKey: Map<string, GenerationQueueJobListRecord[]>,
   queuePositions: Map<number, QueuePositionEntry>,
   referenceDurationById: Map<number, number | null>,
-  activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>,
+  capacityContext: QueueEtaCapacityContext,
 ): QueueEtaEntry {
   const durationSeconds = referenceDurationById.get(record.id) ?? null
   if (durationSeconds === null) {
@@ -239,8 +391,8 @@ function estimateQueueEta(
     return { waitSeconds: null, totalSeconds: null, durationSeconds }
   }
 
-  const capacity = getLaneCapacity(record, queuePosition, activeComfyServers)
-  const slotAvailabilitySeconds = getRunningLaneRecords(record, queuePosition, activeRecords)
+  const capacity = getLaneCapacity(record, queuePosition, capacityContext)
+  const slotAvailabilitySeconds = getRunningLaneRecords(record, queuePosition, runningIndex)
     .map((candidate) => {
       const candidateDurationSeconds = referenceDurationById.get(candidate.id) ?? durationSeconds
       return candidateDurationSeconds === null ? durationSeconds : getEstimatedRunningRemainingSeconds(candidate, candidateDurationSeconds)
@@ -252,23 +404,17 @@ function estimateQueueEta(
     slotAvailabilitySeconds.push(0)
   }
 
-  const queuedAheadInSameLane = activeRecords
-    .filter((candidate) => {
-      if ((candidate.status !== 'queued' && candidate.status !== 'dispatching') || candidate.id === record.id) {
-        return false
-      }
+  const queuedCandidatesInSameLane = queuedRecordsByLaneKey.get(queuePosition.laneKey) ?? []
+  for (const queuedCandidate of queuedCandidatesInSameLane) {
+    if (queuedCandidate.id === record.id) {
+      continue
+    }
 
-      const candidateQueuePosition = queuePositions.get(candidate.id)
-      return candidateQueuePosition?.laneKey === queuePosition.laneKey
-        && candidateQueuePosition.position < queuePosition.position
-    })
-    .sort((left, right) => {
-      const leftPosition = queuePositions.get(left.id)?.position ?? Number.MAX_SAFE_INTEGER
-      const rightPosition = queuePositions.get(right.id)?.position ?? Number.MAX_SAFE_INTEGER
-      return leftPosition - rightPosition
-    })
+    const candidateQueuePosition = queuePositions.get(queuedCandidate.id)
+    if (!candidateQueuePosition || candidateQueuePosition.position >= queuePosition.position) {
+      break
+    }
 
-  for (const queuedCandidate of queuedAheadInSameLane) {
     const queuedDurationSeconds = referenceDurationById.get(queuedCandidate.id) ?? durationSeconds
     const earliestSlotIndex = getEarliestSlotIndex(slotAvailabilitySeconds)
     slotAvailabilitySeconds[earliestSlotIndex] += queuedDurationSeconds ?? durationSeconds
@@ -283,22 +429,26 @@ function estimateQueueEta(
 }
 
 export function computeQueueEtas(
-  activeRecords: GenerationQueueJobRecord[],
+  activeRecords: GenerationQueueJobListRecord[],
   queuePositions: Map<number, QueuePositionEntry>,
   completedRecords: GenerationQueueDurationSample[],
   activeComfyServers: ReturnType<typeof ComfyUIServerModel.findActiveServers>,
 ) {
   const etaById = new Map<number, QueueEtaEntry>()
   const referenceDurationById = new Map<number, number | null>()
+  const durationStats = buildDurationSampleStats(completedRecords)
+  const runningIndex = buildRunningLaneRecordIndex(activeRecords)
+  const queuedRecordsByLaneKey = buildQueuedRecordsByLaneKey(activeRecords, queuePositions)
+  const capacityContext = buildCapacityContext(activeComfyServers)
 
   for (const record of activeRecords) {
-    referenceDurationById.set(record.id, resolveReferenceDurationSeconds(record, completedRecords, queuePositions.get(record.id)))
+    referenceDurationById.set(record.id, resolveReferenceDurationSeconds(record, durationStats, queuePositions.get(record.id)))
   }
 
   for (const record of activeRecords) {
     etaById.set(
       record.id,
-      estimateQueueEta(record, queuePositions.get(record.id), activeRecords, queuePositions, referenceDurationById, activeComfyServers),
+      estimateQueueEta(record, queuePositions.get(record.id), runningIndex, queuedRecordsByLaneKey, queuePositions, referenceDurationById, capacityContext),
     )
   }
 

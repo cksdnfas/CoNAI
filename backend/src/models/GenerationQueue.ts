@@ -1,7 +1,9 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import type {
+  GenerationQueueDispatchCandidateRecord,
   GenerationQueueDurationSample,
   GenerationQueueJobCreateData,
+  GenerationQueueJobListRecord,
   GenerationQueueJobRecord,
   GenerationQueueJobStatus,
   GenerationQueueJobUpdateData,
@@ -34,6 +36,23 @@ type GenerationQueueFilters = {
 type GenerationQueueFindAllInput = GenerationQueueJobStatus[] | GenerationQueueFilters
 type GenerationQueueStatusCountFilters = Pick<GenerationQueueFilters, 'serviceType' | 'workflowId'>
 type GenerationQueueRecentCompletedFilters = GenerationQueueStatusCountFilters & { limit?: number }
+
+const GENERATION_QUEUE_LIST_COLUMNS = `
+  id, service_type, status, priority,
+  requested_by_account_id, requested_by_account_type,
+  workflow_id, workflow_name,
+  requested_group_id, requested_server_id, requested_server_tag,
+  assigned_server_id, provider_job_id,
+  request_summary, failure_code, failure_message,
+  cancel_requested, queued_at, started_at, completed_at,
+  created_date, updated_date
+`
+
+const GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS = `
+  id, service_type, status, priority,
+  workflow_id, requested_server_id, requested_server_tag,
+  assigned_server_id, cancel_requested, queued_at
+`
 
 type QueueWhereOptions = {
   includeStatuses?: boolean
@@ -91,6 +110,23 @@ function emptyStatusCounts(): Record<GenerationQueueJobStatus, number> {
   }
 }
 
+function getQueueOrderSql(hasStatusFilter: boolean) {
+  return hasStatusFilter
+    ? 'ORDER BY priority ASC, queued_at ASC, id ASC'
+    : `
+      ORDER BY
+        CASE status
+          WHEN 'running' THEN 0
+          WHEN 'dispatching' THEN 1
+          WHEN 'queued' THEN 2
+          ELSE 3
+        END ASC,
+        priority ASC,
+        queued_at ASC,
+        id ASC
+    `
+}
+
 export class GenerationQueueModel {
   /** Create one persistent queue job row. */
   static create(data: GenerationQueueJobCreateData) {
@@ -140,32 +176,44 @@ export class GenerationQueueModel {
     return row ?? null
   }
 
-  /** List queue jobs, newest queue entries last within status groups. */
+  /** Find one queue job for API responses without hydrating heavyweight request payloads. */
+  static findListRecordById(id: number) {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT ${GENERATION_QUEUE_LIST_COLUMNS}
+      FROM generation_queue_jobs
+      WHERE id = ?
+    `).get(id) as GenerationQueueJobListRecord | undefined
+    return row ?? null
+  }
+
+  /** List full queue jobs, newest queue entries last within status groups. */
   static findAll(input?: GenerationQueueFindAllInput) {
     const db = getUserSettingsDb()
     const filters = normalizeFindAllInput(input)
     const { whereSql, values } = buildQueueWhereClause(filters)
-    const hasStatusFilter = Boolean(filters.statuses && filters.statuses.length > 0)
-    const orderSql = hasStatusFilter
-      ? 'ORDER BY priority ASC, queued_at ASC, id ASC'
-      : `
-        ORDER BY
-          CASE status
-            WHEN 'running' THEN 0
-            WHEN 'dispatching' THEN 1
-            WHEN 'queued' THEN 2
-            ELSE 3
-          END ASC,
-          priority ASC,
-          queued_at ASC,
-          id ASC
-      `
+    const orderSql = getQueueOrderSql(Boolean(filters.statuses && filters.statuses.length > 0))
 
     return db.prepare(`
       SELECT * FROM generation_queue_jobs
       ${whereSql}
       ${orderSql}
     `).all(...values) as GenerationQueueJobRecord[]
+  }
+
+  /** List queue jobs for polling/UI without hydrating heavyweight request payloads. */
+  static findAllListRecords(input?: GenerationQueueFindAllInput) {
+    const db = getUserSettingsDb()
+    const filters = normalizeFindAllInput(input)
+    const { whereSql, values } = buildQueueWhereClause(filters)
+    const orderSql = getQueueOrderSql(Boolean(filters.statuses && filters.statuses.length > 0))
+
+    return db.prepare(`
+      SELECT ${GENERATION_QUEUE_LIST_COLUMNS}
+      FROM generation_queue_jobs
+      ${whereSql}
+      ${orderSql}
+    `).all(...values) as GenerationQueueJobListRecord[]
   }
 
   /** Check whether a queued ComfyUI job exists without hydrating queue rows. */
@@ -191,6 +239,19 @@ export class GenerationQueueModel {
         AND cancel_requested = 0
       ORDER BY priority ASC, queued_at ASC, id ASC
     `).all() as GenerationQueueJobRecord[]
+  }
+
+  /** List queued ComfyUI dispatch candidates without hydrating heavyweight request payloads. */
+  static findQueuedComfyDispatchCandidates() {
+    const db = getUserSettingsDb()
+    return db.prepare(`
+      SELECT ${GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS}
+      FROM generation_queue_jobs
+      WHERE status = 'queued'
+        AND service_type = 'comfyui'
+        AND cancel_requested = 0
+      ORDER BY priority ASC, queued_at ASC, id ASC
+    `).all() as GenerationQueueDispatchCandidateRecord[]
   }
 
   /** List lean recent completed queue jobs for ETA sampling without scanning or hydrating whole history. */

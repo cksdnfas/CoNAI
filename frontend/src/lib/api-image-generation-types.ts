@@ -16,7 +16,6 @@ export interface GenerationQueueJobRecord {
   requested_server_tag?: string | null
   assigned_server_id?: number | null
   provider_job_id?: string | null
-  request_payload: string
   request_summary?: string | null
   failure_code?: string | null
   failure_message?: string | null

@@ -4,6 +4,7 @@ import fs from 'fs';
 import { runtimePaths } from '../config/runtimePaths';
 import { createAuthTables } from './authDbSchema';
 import { seedAccessControlDefaults } from './authDbSeed';
+import { configureSqliteConnection } from './sqlitePragmas';
 
 const AUTH_DB_PATH = path.join(runtimePaths.databaseDir, 'auth.db');
 const LEGACY_ADMIN_SYNC_KEY = 'legacy-admin';
@@ -35,6 +36,7 @@ export function initializeAuthDb(): void {
 
     const isNewDatabase = !fs.existsSync(AUTH_DB_PATH);
     authDb = new Database(AUTH_DB_PATH);
+    configureSqliteConnection(authDb, { label: 'auth.db' });
 
     if (isNewDatabase) {
       console.log('✅ New authentication database created');

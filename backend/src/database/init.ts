@@ -3,6 +3,7 @@ import fs from 'fs';
 import { MigrationManager } from './migrationManager';
 import { runtimePaths } from '../config/runtimePaths';
 import { checkLegacyDatabase, showUpgradeNotice } from '../utils/versionCheck';
+import { configureSqliteConnection } from './sqlitePragmas';
 
 const DB_PATH = runtimePaths.databaseFile;
 
@@ -13,6 +14,7 @@ if (!fs.existsSync(dbDir)) {
 }
 
 export const db: Database.Database = new Database(DB_PATH);
+configureSqliteConnection(db, { label: 'images.db' });
 export const migrationManager = new MigrationManager(db);
 
 export const initializeDatabase = async (): Promise<void> => {

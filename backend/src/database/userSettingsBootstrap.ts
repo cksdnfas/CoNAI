@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { runtimePaths } from '../config/runtimePaths';
+import { configureAttachedSqliteDatabase } from './sqlitePragmas';
 
 export const USER_DB_PATH = path.join(runtimePaths.databaseDir, 'user.db');
 const LEGACY_USER_SETTINGS_DB_PATH = path.join(runtimePaths.databaseDir, 'user-settings.db');
@@ -63,6 +64,7 @@ export function attachMainImagesDatabase(userSettingsDb: Database.Database): voi
 
   const escapedPath = mainDbPath.replace(/'/g, "''");
   userSettingsDb.exec(`ATTACH DATABASE '${escapedPath}' AS main_db`);
+  configureAttachedSqliteDatabase(userSettingsDb, 'main_db', 'main_db/images.db');
 }
 
 /** Ensure the unified user.db contains the API generation history table and indexes. */
