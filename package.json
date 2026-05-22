@@ -87,6 +87,7 @@
     "verify:workflow-reservations-ui-contracts": "cd frontend && npm run verify:workflow-reservations-ui-contracts",
     "verify:home-feed-progress-ui-contracts": "cd frontend && npm run verify:home-feed-progress-ui-contracts",
     "verify:group-image-feed-progress-ui-contracts": "cd frontend && npm run verify:group-image-feed-progress-ui-contracts",
+    "verify:group-explorer-count-map-contracts": "cd frontend && npm run verify:group-explorer-count-map-contracts",
     "verify:graph-queue-wait-contracts": "cd backend && npm run verify:graph-queue-wait-contracts",
     "verify:image-similarity-policy-contracts": "cd frontend && npm run verify:image-similarity-policy-contracts",
     "verify:image-similarity-contracts": "cd backend && npm run verify:image-similarity-contracts",

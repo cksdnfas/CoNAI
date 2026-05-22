@@ -1,9 +1,8 @@
-import { useMemo } from 'react'
 import { ArrowLeft, ChevronRight } from 'lucide-react'
 import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'
-import { buildGroupCountMaps, getGroupHierarchyCountLabel, getGroupHierarchyTotalCount } from '@/features/groups/group-count-utils'
+import { getGroupHierarchyCountLabel, getGroupHierarchyTotalCount, type GroupCountMaps } from '@/features/groups/group-count-utils'
 import { GroupChildCard } from './group-child-card'
 import { useI18n } from '@/i18n'
 
@@ -12,7 +11,7 @@ interface GroupNavigationGridSectionProps {
   parentGroupHierarchy: GroupWithHierarchy | null
   rootTitle: string
   childGroups: GroupWithHierarchy[]
-  allGroups: GroupWithHierarchy[]
+  countMaps: GroupCountMaps
   cardStyle: GroupExplorerCardStyle
   gridClassName: string
   previewSourceKey: 'custom' | 'folders'
@@ -28,7 +27,7 @@ export function GroupNavigationGridSection({
   parentGroupHierarchy,
   rootTitle,
   childGroups,
-  allGroups,
+  countMaps,
   cardStyle,
   gridClassName,
   previewSourceKey,
@@ -38,7 +37,6 @@ export function GroupNavigationGridSection({
   isWideLayout = false,
 }: GroupNavigationGridSectionProps) {
   const { t, formatNumber } = useI18n()
-  const countMaps = useMemo(() => buildGroupCountMaps(allGroups), [allGroups])
   const backTitle = parentGroupHierarchy?.name ?? rootTitle
   const backSubtitle = parentGroupHierarchy ? t({ ko: '상위 그룹으로 이동', en: 'Go to parent group' }) : t({ ko: '루트 목록으로 이동', en: 'Go to root list' })
   const handleOpenBack = () => {

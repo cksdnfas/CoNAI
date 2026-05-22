@@ -5,12 +5,14 @@ import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import type { GroupWithHierarchy } from '@/types/group'
+import type { GroupCountMaps } from '@/features/groups/group-count-utils'
 import { GroupTree } from './group-tree'
 import { useI18n } from '@/i18n'
 
 interface GroupExplorerSidebarPanelProps {
   isWideLayout: boolean
   groups: GroupWithHierarchy[]
+  countMaps: GroupCountMaps
   selectedGroupId?: number
   isLoading: boolean
   isError: boolean
@@ -23,6 +25,7 @@ interface GroupExplorerSidebarPanelProps {
 export function GroupExplorerSidebarPanel({
   isWideLayout,
   groups,
+  countMaps,
   selectedGroupId,
   isLoading,
   isError,
@@ -58,7 +61,7 @@ export function GroupExplorerSidebarPanel({
       ) : null}
 
       {!isLoading && !isError ? (
-        <GroupTree groups={groups} selectedGroupId={selectedGroupId} onSelectGroup={onSelectGroup} />
+        <GroupTree groups={groups} countMaps={countMaps} selectedGroupId={selectedGroupId} onSelectGroup={onSelectGroup} />
       ) : null}
     </ExplorerSidebar>
   )

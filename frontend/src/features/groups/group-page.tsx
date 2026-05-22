@@ -184,6 +184,7 @@ export function GroupPage() {
         <GroupExplorerSidebarPanel
           isWideLayout={isWideLayout}
           groups={allGroups}
+          countMaps={groupCountMaps}
           selectedGroupId={selectedGroupId}
           isLoading={groupsQuery.isLoading}
           isError={groupsQuery.isError}
@@ -259,7 +260,7 @@ export function GroupPage() {
             <GroupRootGridSection
               title={getSourceLabel(selectedSource, 'rootSection')}
               groups={rootGroups}
-              allGroups={allGroups}
+              countMaps={groupCountMaps}
               cardStyle={groupExplorerCardStyle}
               gridClassName={getGroupCardGridClassName(groupExplorerCardStyle)}
               previewSourceKey={selectedSource.key}
@@ -308,7 +309,7 @@ export function GroupPage() {
                   parentGroupHierarchy={parentGroupHierarchy}
                   rootTitle={getSourceLabel(selectedSource, 'root')}
                   childGroups={childGroups}
-                  allGroups={allGroups}
+                  countMaps={groupCountMaps}
                   cardStyle={groupExplorerCardStyle}
                   gridClassName={getGroupCardGridClassName(groupExplorerCardStyle)}
                   previewSourceKey={selectedSource.key}

@@ -1,17 +1,16 @@
-import { useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { SectionHeading } from '@/components/common/section-heading'
 import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
 import type { GroupExplorerCardStyle } from '@/types/settings'
-import { buildGroupCountMaps, getGroupHierarchyCountLabel, getGroupHierarchyTotalCount } from '@/features/groups/group-count-utils'
+import { getGroupHierarchyCountLabel, getGroupHierarchyTotalCount, type GroupCountMaps } from '@/features/groups/group-count-utils'
 import { GroupChildCard } from './group-child-card'
 import { useI18n } from '@/i18n'
 
 interface GroupRootGridSectionProps {
   title: string
   groups: GroupWithHierarchy[]
-  allGroups: GroupWithHierarchy[]
+  countMaps: GroupCountMaps
   cardStyle: GroupExplorerCardStyle
   gridClassName: string
   previewSourceKey: 'custom' | 'folders'
@@ -23,7 +22,7 @@ interface GroupRootGridSectionProps {
 export function GroupRootGridSection({
   title,
   groups,
-  allGroups,
+  countMaps,
   cardStyle,
   gridClassName,
   previewSourceKey,
@@ -31,7 +30,6 @@ export function GroupRootGridSection({
   onOpenGroup,
 }: GroupRootGridSectionProps) {
   const { t, formatNumber } = useI18n()
-  const countMaps = useMemo(() => buildGroupCountMaps(allGroups), [allGroups])
 
   return (
     <section className="space-y-4">
