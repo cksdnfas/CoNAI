@@ -414,6 +414,41 @@ function verifyImageNavigationButtonsRemainAvailableInSingleColumn() {
   )
 }
 
+function verifyImageModalMediaStartsFromContainedCenter() {
+  const mediaSource = source('src/features/images/components/detail/image-detail-media.tsx')
+
+  match(
+    mediaSource,
+    /const \[naturalMediaSize, setNaturalMediaSize\] = useState<MediaSize \| null>\(null\)/,
+    'modal image should track natural media dimensions before calculating the fitted frame',
+  )
+  match(
+    mediaSource,
+    /new ResizeObserver\(\(\[entry\]\) => \{[\s\S]*?setViewportSize\(getElementSize\(entry\.target\)\)/,
+    'modal image should observe the real viewport size instead of relying on intrinsic CSS max-height behavior',
+  )
+  match(
+    mediaSource,
+    /const fitScale = Math\.min\(viewportSize\.width \/ naturalMediaSize\.width, viewportSize\.height \/ naturalMediaSize\.height\)/,
+    'modal image fit should use contain math against both viewport axes',
+  )
+  match(
+    mediaSource,
+    /const resetView = useCallback\(\(\) => \{[\s\S]*?scaleRef\.current = DEFAULT_SCALE[\s\S]*?setScale\(DEFAULT_SCALE\)[\s\S]*?setOffset\(\{ x: 0, y: 0 \}\)[\s\S]*?\}, \[\]\)/,
+    'modal reset should return to the fitted contain scale and centered offset',
+  )
+  match(
+    mediaSource,
+    /useEffect\(\(\) => \{[\s\S]*?setNaturalMediaSize\(null\)[\s\S]*?scaleRef\.current = DEFAULT_SCALE[\s\S]*?setScale\(DEFAULT_SCALE\)[\s\S]*?\}, \[renderUrl\]\)/,
+    'changing modal images should not inherit a stale zoom level from a previous image',
+  )
+  doesNotMatch(
+    mediaSource,
+    /IMAGE_DETAIL_SCALE_STORAGE_KEY|loadImageDetailScale|persistImageDetailScale/,
+    'modal image zoom scale must not be persisted across images because default view should always be fitted contain',
+  )
+}
+
 verifyModalToolbarStaysSingleLine()
 verifyInfoToggleAvoidsImageNavigationControls()
 verifyImageNavigationButtonsUseProjectChrome()
@@ -427,4 +462,5 @@ verifyInfoViewerStatePersistsAcrossModalNavigation()
 verifyDesktopInfoTogglesAreDesktopOnly()
 verifySingleColumnInfoViewerReservesImageHeight()
 verifyImageNavigationButtonsRemainAvailableInSingleColumn()
+verifyImageModalMediaStartsFromContainedCenter()
 console.log('Image modal layout contracts verified.')

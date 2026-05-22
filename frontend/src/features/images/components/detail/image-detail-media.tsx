@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, LoaderCircle, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type SyntheticEvent as ReactSyntheticEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -43,6 +43,11 @@ interface PointerPosition {
   y: number
 }
 
+interface MediaSize {
+  width: number
+  height: number
+}
+
 const MIN_SCALE = 0.25
 const DEFAULT_SCALE = 1
 const MAX_SCALE = 6
@@ -51,7 +56,6 @@ const DOUBLE_TAP_SCALE = 2
 const ROTATION_STEP = 90
 const IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY = 'conai:image-detail-media:wheel-zoom-enabled'
 const IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY = 'conai:image-detail-media:controls-collapsed'
-const IMAGE_DETAIL_SCALE_STORAGE_KEY = 'conai:image-detail-media:scale'
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -107,21 +111,12 @@ function persistImageControlsCollapsed(collapsed: boolean) {
   window.localStorage.setItem(IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY, collapsed ? 'true' : 'false')
 }
 
-function loadImageDetailScale() {
-  if (typeof window === 'undefined') {
-    return DEFAULT_SCALE
+function getElementSize(element: Element): MediaSize {
+  const rect = element.getBoundingClientRect()
+  return {
+    width: Math.max(0, rect.width),
+    height: Math.max(0, rect.height),
   }
-
-  const value = Number(window.localStorage.getItem(IMAGE_DETAIL_SCALE_STORAGE_KEY))
-  return Number.isFinite(value) ? clamp(value, MIN_SCALE, MAX_SCALE) : DEFAULT_SCALE
-}
-
-function persistImageDetailScale(scale: number) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.localStorage.setItem(IMAGE_DETAIL_SCALE_STORAGE_KEY, String(clamp(scale, MIN_SCALE, MAX_SCALE)))
 }
 
 /** Render the main detail media using the correct element for image, GIF, or video files. */
@@ -234,9 +229,8 @@ function InteractiveImageDetailMedia({
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const pointersRef = useRef(new Map<number, PointerPosition>())
-  const initialScaleRef = useRef(loadImageDetailScale())
   const pinchStartDistanceRef = useRef<number | null>(null)
-  const pinchStartScaleRef = useRef(initialScaleRef.current)
+  const pinchStartScaleRef = useRef(DEFAULT_SCALE)
   const panOriginRef = useRef<{
     pointerId: number
     startX: number
@@ -244,12 +238,14 @@ function InteractiveImageDetailMedia({
     offsetX: number
     offsetY: number
   } | null>(null)
-  const scaleRef = useRef(initialScaleRef.current)
+  const scaleRef = useRef(DEFAULT_SCALE)
   const rotationRef = useRef(0)
   const offsetRef = useRef({ x: 0, y: 0 })
-  const [scale, setScale] = useState(initialScaleRef.current)
+  const [scale, setScale] = useState(DEFAULT_SCALE)
   const [rotation, setRotation] = useState(0)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const [naturalMediaSize, setNaturalMediaSize] = useState<MediaSize | null>(null)
+  const [viewportSize, setViewportSize] = useState<MediaSize>({ width: 0, height: 0 })
   const [isGestureActive, setIsGestureActive] = useState(false)
   const [isWheelZoomEnabled, setIsWheelZoomEnabled] = useState(() => loadImageWheelZoomEnabled())
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(() => loadImageControlsCollapsed())
@@ -272,18 +268,65 @@ function InteractiveImageDetailMedia({
   }, [offset])
 
   useEffect(() => {
+    const node = viewportRef.current
+    if (!node) {
+      return
+    }
+
+    setViewportSize(getElementSize(node))
+
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
+
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      if (!entry) {
+        return
+      }
+      setViewportSize(getElementSize(entry.target))
+    })
+    resizeObserver.observe(node)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [])
+
+  useEffect(() => {
     pointersRef.current.clear()
     pinchStartDistanceRef.current = null
     panOriginRef.current = null
-    const savedScale = loadImageDetailScale()
-    scaleRef.current = savedScale
+    setNaturalMediaSize(null)
+    scaleRef.current = DEFAULT_SCALE
     rotationRef.current = 0
     offsetRef.current = { x: 0, y: 0 }
-    setScale(savedScale)
+    setScale(DEFAULT_SCALE)
     setRotation(0)
     setOffset({ x: 0, y: 0 })
     setIsGestureActive(false)
   }, [renderUrl])
+
+  const fittedMediaSize = useMemo(() => {
+    if (!naturalMediaSize || naturalMediaSize.width <= 0 || naturalMediaSize.height <= 0 || viewportSize.width <= 0 || viewportSize.height <= 0) {
+      return null
+    }
+
+    const fitScale = Math.min(viewportSize.width / naturalMediaSize.width, viewportSize.height / naturalMediaSize.height)
+    if (!Number.isFinite(fitScale) || fitScale <= 0) {
+      return null
+    }
+
+    return {
+      width: Math.max(1, Math.floor(naturalMediaSize.width * fitScale)),
+      height: Math.max(1, Math.floor(naturalMediaSize.height * fitScale)),
+    }
+  }, [naturalMediaSize, viewportSize])
+  const mediaFitFrameStyle = fittedMediaSize
+    ? {
+        width: `${fittedMediaSize.width}px`,
+        height: `${fittedMediaSize.height}px`,
+      }
+    : undefined
 
   const isScaled = Math.abs(scale - DEFAULT_SCALE) > 0.001
   const hasRotation = rotation !== 0
@@ -299,7 +342,6 @@ function InteractiveImageDetailMedia({
 
   const resetView = useCallback(() => {
     scaleRef.current = DEFAULT_SCALE
-    persistImageDetailScale(DEFAULT_SCALE)
     rotationRef.current = 0
     offsetRef.current = { x: 0, y: 0 }
     setScale(DEFAULT_SCALE)
@@ -310,7 +352,6 @@ function InteractiveImageDetailMedia({
   const applyScale = useCallback((nextScale: number) => {
     const clampedScale = clamp(nextScale, MIN_SCALE, MAX_SCALE)
     scaleRef.current = clampedScale
-    persistImageDetailScale(clampedScale)
     setScale(clampedScale)
 
     if (clampedScale <= DEFAULT_SCALE + 0.001) {
@@ -634,6 +675,18 @@ function InteractiveImageDetailMedia({
     }
   }
 
+  const handlePrimaryImageLoad = useCallback((event: ReactSyntheticEvent<HTMLImageElement>) => {
+    const element = event.currentTarget
+    const width = element.naturalWidth || element.width
+    const height = element.naturalHeight || element.height
+
+    if (width > 0 && height > 0) {
+      setNaturalMediaSize({ width, height })
+    }
+
+    onPrimaryLoad?.()
+  }, [onPrimaryLoad])
+
   if (hasRenderError) {
     return <ImageDetailMediaFallback image={image} />
   }
@@ -813,21 +866,26 @@ function InteractiveImageDetailMedia({
         onPointerCancel={finishPointerInteraction}
       >
         <div
-          className={cn('inline-flex max-h-full max-w-full will-change-transform', !isGestureActive && 'transition-transform duration-150 ease-out')}
+          className={cn('inline-flex will-change-transform', !fittedMediaSize && 'max-h-full max-w-full', !isGestureActive && 'transition-transform duration-150 ease-out')}
           style={{
             transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale}) rotate(${rotation}deg)`,
             transformOrigin: 'center center',
           }}
         >
-          <div className="relative grid max-h-full max-w-full place-items-center">
+          <div className={cn('relative grid place-items-center', !fittedMediaSize && 'max-h-full max-w-full')} style={mediaFitFrameStyle}>
             <img
               src={renderUrl}
               alt={altText}
-              className={cn('col-start-1 row-start-1 block h-auto w-auto pointer-events-none select-none transition-opacity duration-150', className, shouldRenderPixelPreview && isPixelPreviewReady && 'opacity-0')}
+              className={cn(
+                'col-start-1 row-start-1 block pointer-events-none select-none transition-opacity duration-150',
+                fittedMediaSize ? 'h-full w-full object-contain' : cn('h-auto w-auto', className),
+                shouldRenderPixelPreview && isPixelPreviewReady && 'opacity-0',
+              )}
               draggable={false}
-              onLoad={onPrimaryLoad}
+              onLoad={handlePrimaryImageLoad}
               onError={() => setHasRenderError(true)}
             />
+
             {shouldRenderPixelPreview ? (
               <canvas
                 ref={canvasRef}
