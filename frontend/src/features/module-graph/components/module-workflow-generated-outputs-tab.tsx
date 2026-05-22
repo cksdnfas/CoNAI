@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Download, Square, SquareCheckBig, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -82,6 +82,37 @@ export function ModuleWorkflowGeneratedOutputsTab({
     () => new Map(outputItems.map((item) => [item.id, item])),
     [outputItems],
   )
+  const selectedCopyTargetFolder = useMemo(
+    () => watchedFolders.find((folder) => String(folder.id) === copyTargetFolderId) ?? null,
+    [copyTargetFolderId, watchedFolders],
+  )
+  const getGeneratedOutputImageId = useCallback((image: ImageRecord) => String(image.id), [])
+  const renderGeneratedOutputOverlay = useCallback((image: ImageRecord) => {
+    const item = outputItemById.get(String(image.id))
+    if (!item?.downloadUrl) {
+      return null
+    }
+
+    return (
+      <Button
+        type="button"
+        size="icon"
+        variant="secondary"
+        className="h-8 w-8"
+        title={t('module-graph.components.module.workflow.generated.outputs.tab.download.value', { label: item.label })}
+        aria-label={t('module-graph.components.module.workflow.generated.outputs.tab.download.value', { label: item.label })}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          onDownloadItems([item])
+        }}
+        disabled={isDownloading}
+      >
+        <Download className="h-4 w-4" />
+      </Button>
+    )
+  }, [isDownloading, onDownloadItems, outputItemById, t])
 
   return (
     <Card>
@@ -136,7 +167,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
                 </Select>
                 {copyTargetFolderId ? (
                   <div className="text-xs text-muted-foreground">
-                    {watchedFolders.find((folder) => String(folder.id) === copyTargetFolderId)?.folder_path}
+                    {selectedCopyTargetFolder?.folder_path}
                   </div>
                 ) : null}
               </div>
@@ -165,37 +196,12 @@ export function ModuleWorkflowGeneratedOutputsTab({
               forceSelectionMode
               selectedIds={selectedOutputIds}
               onSelectedIdsChange={onSelectedOutputIdsChange}
-              getItemId={(image) => String(image.id)}
+              getItemId={getGeneratedOutputImageId}
               minColumnWidth={260}
               gridItemHeight={320}
               columnGap={20}
               rowGap={20}
-              renderItemOverlay={(image) => {
-                const item = outputItemById.get(String(image.id))
-                if (!item?.downloadUrl) {
-                  return null
-                }
-
-                return (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="secondary"
-                    className="h-8 w-8"
-                    title={t('module-graph.components.module.workflow.generated.outputs.tab.download.value', { label: item.label })}
-                    aria-label={t('module-graph.components.module.workflow.generated.outputs.tab.download.value', { label: item.label })}
-                    onMouseDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      onDownloadItems([item])
-                    }}
-                    disabled={isDownloading}
-                  >
-                    <Download className="h-4 w-4" />
-                  </Button>
-                )
-              }}
+              renderItemOverlay={renderGeneratedOutputOverlay}
             />
             <WorkflowOutputPagination page={page} totalPages={totalPages} visibleCount={outputItems.length} totalCount={totalOutputCount} onPageChange={onPageChange} />
           </div>

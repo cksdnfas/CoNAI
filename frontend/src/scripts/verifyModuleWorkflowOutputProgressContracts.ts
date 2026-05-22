@@ -56,6 +56,7 @@ deepEqual(clamped, {
 
 const outputManagementSource = source('features/module-graph/components/module-workflow-output-management-panel.tsx')
 const artifactRecordsSource = source('features/module-graph/components/module-workflow-artifact-records-tab.tsx')
+const generatedOutputsSource = source('features/module-graph/components/module-workflow-generated-outputs-tab.tsx')
 
 match(
   outputManagementSource,
@@ -142,6 +143,47 @@ doesNotMatch(
   artifactRecordsSource,
   /selectedArtifactIds\.includes\(artifact\.id\)/,
   'artifact record row rendering must not scan selectedArtifactIds per artifact row',
+)
+
+match(
+  outputManagementSource,
+  /const handleDownloadItems = useCallback\(\(items: ModuleWorkflowGeneratedOutputItem\[\]\) => \{[\s\S]*?setIsDownloading\(false\)[\s\S]*?\}, \[\]\)/,
+  'generated-output download handler should keep a stable identity for image-grid overlay renderers',
+)
+match(
+  generatedOutputsSource,
+  /const selectedCopyTargetFolder = useMemo\([\s\S]*?watchedFolders\.find\(\(folder\) => String\(folder\.id\) === copyTargetFolderId\)[\s\S]*?\[copyTargetFolderId, watchedFolders\][\s\S]*?\)/,
+  'generated outputs tab should resolve the selected copy target once per folder snapshot',
+)
+match(
+  generatedOutputsSource,
+  /const getGeneratedOutputImageId = useCallback\(\(image: ImageRecord\) => String\(image\.id\), \[\]\)/,
+  'generated outputs tab should pass a stable image id resolver into ImageList',
+)
+match(
+  generatedOutputsSource,
+  /const renderGeneratedOutputOverlay = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?outputItemById\.get\(String\(image\.id\)\)[\s\S]*?\[isDownloading, onDownloadItems, outputItemById, t\][\s\S]*?\)/,
+  'generated outputs tab should memoize image-grid overlay rendering around the output lookup map',
+)
+match(
+  generatedOutputsSource,
+  /getItemId=\{getGeneratedOutputImageId\}/,
+  'generated outputs ImageList should consume the stable image id resolver',
+)
+match(
+  generatedOutputsSource,
+  /renderItemOverlay=\{renderGeneratedOutputOverlay\}/,
+  'generated outputs ImageList should consume the stable overlay renderer',
+)
+doesNotMatch(
+  generatedOutputsSource,
+  /renderItemOverlay=\{\(image\) =>/,
+  'generated outputs ImageList must not recreate its overlay renderer inline',
+)
+doesNotMatch(
+  generatedOutputsSource,
+  /\{watchedFolders\.find\(\(folder\) => String\(folder\.id\) === copyTargetFolderId\)\?\.folder_path\}/,
+  'generated outputs copy panel must not scan watched folders inside render output',
 )
 
 console.log('Module workflow output progress contracts verified')

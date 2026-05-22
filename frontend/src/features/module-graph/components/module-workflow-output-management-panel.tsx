@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { CopyPlus, Trash2 } from 'lucide-react'
@@ -221,7 +221,7 @@ export function ModuleWorkflowOutputManagementPanel({
     ))
   }
 
-  const handleDownloadItems = (items: ModuleWorkflowGeneratedOutputItem[]) => {
+  const handleDownloadItems = useCallback((items: ModuleWorkflowGeneratedOutputItem[]) => {
     const downloadableItems = items.filter((item) => item.downloadUrl)
     if (downloadableItems.length === 0) {
       return
@@ -239,7 +239,7 @@ export function ModuleWorkflowOutputManagementPanel({
     window.setTimeout(() => {
       setIsDownloading(false)
     }, downloadableItems.length * 180 + 300)
-  }
+  }, [])
 
   const handleCopySelectedToFolder = async () => {
     const targetFolderId = Number(copyTargetFolderId)
