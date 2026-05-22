@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useCallback, useMemo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -58,10 +58,10 @@ export function RelatedImageGallerySection({
     () => items.map((item) => item.composite_hash).filter((value): value is string => typeof value === 'string' && value.length > 0),
     [items],
   )
-  const cardAspectRatioValue = getRelatedImageCardAspectRatioValue(cardAspectRatio)
+  const cardAspectRatioValue = useMemo(() => getRelatedImageCardAspectRatioValue(cardAspectRatio), [cardAspectRatio])
 
   /** Activate a related image in either modal or route-navigation mode. */
-  const handleActivate = (imageId: string, href?: string) => {
+  const handleActivate = useCallback((_image: ImageRecord, imageId: string, href?: string) => {
     if ((activationMode === 'modal' || activationMode === 'modal-single') && imageViewModal) {
       imageViewModal.openImageView(
         activationMode === 'modal'
@@ -79,15 +79,18 @@ export function RelatedImageGallerySection({
     if (href) {
       navigate(href)
     }
-  }
+  }, [activationMode, imageViewModal, itemCompositeHashes, navigate])
 
   const resolvedMobileCardColumns = Math.min(Math.max(mobileCardColumns, 1), 6)
   const resolvedDesktopCardColumns = Math.min(Math.max(desktopCardColumns, 1), 6)
-  const gridStyle = {
-    ['--related-image-grid-columns-base' as string]: String(resolvedMobileCardColumns),
-    ['--related-image-grid-columns-md' as string]: String(resolvedDesktopCardColumns),
-    ['--related-image-grid-columns-xl' as string]: String(resolvedDesktopCardColumns),
-  }
+  const gridStyle = useMemo(
+    () => ({
+      ['--related-image-grid-columns-base' as string]: String(resolvedMobileCardColumns),
+      ['--related-image-grid-columns-md' as string]: String(resolvedDesktopCardColumns),
+      ['--related-image-grid-columns-xl' as string]: String(resolvedDesktopCardColumns),
+    }),
+    [resolvedMobileCardColumns, resolvedDesktopCardColumns],
+  )
   const skeletonCount = Math.max(resolvedMobileCardColumns, resolvedDesktopCardColumns)
 
   return (
@@ -121,7 +124,7 @@ export function RelatedImageGallerySection({
               image={relatedImage}
               href={relatedImage.composite_hash ? `/images/${relatedImage.composite_hash}` : undefined}
               gridItemAspectRatio={cardAspectRatioValue}
-              onActivate={(_, imageId, href) => handleActivate(imageId, href)}
+              onActivate={handleActivate}
               renderPersistentOverlay={renderItemPersistentOverlay?.(relatedImage)}
             />
           ))}

@@ -17,6 +17,7 @@ function verifyPolicyHelper() {
 function verifyStaticContracts() {
   const generalTab = source('src/features/settings/components/general-tab.tsx')
   const imageDetailView = source('src/features/images/image-detail-view.tsx')
+  const relatedImageGallerySection = source('src/features/images/components/detail/related-image-gallery-section.tsx')
   const apiImages = source('src/lib/api-images.ts')
   const apiSettings = source('src/lib/api-settings.ts')
   const scoreOverlay = source('src/features/images/components/detail/similarity-score-overlay.tsx')
@@ -24,6 +25,7 @@ function verifyStaticContracts() {
   const backendSettingsTypes = source('../backend/src/types/settings.ts')
   const backendDefaults = source('../backend/src/services/settingsServiceStorage.ts')
   const backendSettingsRoutes = source('../backend/src/routes/settings.ts')
+
 
   match(settingsTypes, /export type ImageSimilarityCheckMode = 'manual' \| 'always'/, 'frontend settings type should expose manual/always modes')
   match(backendSettingsTypes, /export type ImageSimilarityCheckMode = 'manual' \| 'always'/, 'backend settings type should expose manual/always modes')
@@ -41,6 +43,9 @@ function verifyStaticContracts() {
   match(imageDetailView, /queryFn: \(\{ signal \}\) =>[\s\S]*getSimilarImages\([\s\S]*\{ signal \},\s*\)/, 'similar query should consume React Query abort signals')
   match(imageDetailView, /queryFn: \(\{ signal \}\) => getPromptSimilarImages\(compositeHash, promptSimilarLimit, \{ signal \}\)/, 'prompt similarity query should consume React Query abort signals')
   match(imageDetailView, /isSimilarityInspectionRequested \? \(/, 'detail view should hide heavy result sections until requested or auto policy allows')
+  match(relatedImageGallerySection, /const handleActivate = useCallback\(\(_image: ImageRecord, imageId: string, href\?: string\) => \{[\s\S]*?imageViewModal\.openImageView[\s\S]*?navigate\(href\)[\s\S]*?\}, \[activationMode, imageViewModal, itemCompositeHashes, navigate\]\)/, 'related image gallery should keep one stable activation callback for modal and route launches')
+  match(relatedImageGallerySection, /const gridStyle = useMemo\([\s\S]*?--related-image-grid-columns-base[\s\S]*?\[resolvedMobileCardColumns, resolvedDesktopCardColumns\]/, 'related image gallery should memoize responsive grid style objects for large result lists')
+  match(relatedImageGallerySection, /onActivate=\{handleActivate\}/, 'related image cards should reuse the stable activation callback instead of per-card wrapper functions')
   match(apiImages, /getImageDuplicates\(compositeHash: string, threshold = 5, init\?: RequestInit\)/, 'duplicate API helper should accept request init for cancellation')
   match(apiImages, /getSimilarImages\([\s\S]*init\?: RequestInit[\s\S]*fetchJson[\s\S]*, init\)/, 'similar API helper should forward request init for cancellation')
   match(apiImages, /getPromptSimilarImages\(compositeHash: string, limit\?: number, init\?: RequestInit\)/, 'prompt similarity API helper should accept request init for cancellation')
