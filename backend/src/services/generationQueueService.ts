@@ -10,7 +10,12 @@ import { executeGenerationQueueJob, isGenerationQueueCancellationError } from '.
 import { parseStoredRequestPayload, resolveFailureMessage } from './generation-queue/queuePayloads'
 import type { ServiceType } from '../models/GenerationHistory'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
-import type { GenerationQueueJobRecord, GenerationQueueJobStatus, GenerationQueueJobUpdateData } from '../types/generationQueue'
+import type {
+  GenerationQueueDispatchCandidateRecord,
+  GenerationQueueJobRecord,
+  GenerationQueueJobStatus,
+  GenerationQueueJobUpdateData,
+} from '../types/generationQueue'
 
 const ALLOWED_TRANSITIONS: Record<GenerationQueueJobStatus, GenerationQueueJobStatus[]> = {
   queued: ['dispatching', 'cancelled', 'failed'],
@@ -691,10 +696,42 @@ export class GenerationQueueService {
       return
     }
 
+    const runnableJobsByServerId = new Map<number, GenerationQueueDispatchCandidateRecord[]>()
+    for (const job of runnableQueuedJobs) {
+      for (const serverId of compatibleServerIdsByJobId.get(job.id) ?? []) {
+        const jobsForServer = runnableJobsByServerId.get(serverId)
+        if (jobsForServer) {
+          jobsForServer.push(job)
+        } else {
+          runnableJobsByServerId.set(serverId, [job])
+        }
+      }
+    }
+
     const probeableServers = serversWithLocalCapacity.filter((server) => server.backend_type !== 'modal')
     const runtimeStatuses = await getComfyUIServerRuntimeStatuses(probeableServers)
     const statusByServerId = new Map(runtimeStatuses.map((status) => [status.server_id, status]))
     const reservedJobIds = new Set<number>()
+    const nextRunnableJobIndexByServerId = new Map<number, number>()
+    const takeNextRunnableJobForServer = (serverId: number) => {
+      const jobsForServer = runnableJobsByServerId.get(serverId)
+      if (!jobsForServer) {
+        return null
+      }
+
+      let index = nextRunnableJobIndexByServerId.get(serverId) ?? 0
+      while (index < jobsForServer.length) {
+        const job = jobsForServer[index]
+        index += 1
+        if (!reservedJobIds.has(job.id)) {
+          nextRunnableJobIndexByServerId.set(serverId, index)
+          return job
+        }
+      }
+
+      nextRunnableJobIndexByServerId.set(serverId, index)
+      return null
+    }
 
     for (const server of serversWithLocalCapacity) {
       const runtimeStatus = server.backend_type === 'modal'
@@ -720,7 +757,7 @@ export class GenerationQueueService {
       }
 
       for (let slotIndex = 0; slotIndex < availableLocalSlots; slotIndex += 1) {
-        const candidateJob = runnableQueuedJobs.find((job) => !reservedJobIds.has(job.id) && compatibleServerIdsByJobId.get(job.id)?.has(server.id))
+        const candidateJob = takeNextRunnableJobForServer(server.id)
         if (!candidateJob) {
           break
         }

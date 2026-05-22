@@ -61,6 +61,21 @@ async function main() {
     )
     assert.match(
       queueServiceSource,
+      /const runnableJobsByServerId = new Map<number, GenerationQueueDispatchCandidateRecord\[\]>\(\)/,
+      'ComfyUI dispatcher should pre-bucket runnable jobs by server before capacity-slot scans',
+    )
+    assert.match(
+      queueServiceSource,
+      /takeNextRunnableJobForServer\(server\.id\)/,
+      'ComfyUI dispatcher should reuse per-server runnable-job cursors while filling local capacity slots',
+    )
+    assert.doesNotMatch(
+      queueServiceSource,
+      /runnableQueuedJobs\.find\(\(job\) => !reservedJobIds\.has\(job\.id\) && compatibleServerIdsByJobId\.get\(job\.id\)\?\.has\(server\.id\)\)/,
+      'ComfyUI dispatcher must not rescan every runnable job for each server capacity slot',
+    )
+    assert.match(
+      queueServiceSource,
       /GenerationQueueModel\.findQueuedComfyDispatchCandidates\(\)/,
       'ComfyUI dispatcher should read lean queued candidates before hydrating a claimed queue job payload',
     )
