@@ -80,17 +80,22 @@ function getCompatibilityRank(compatibility: 'exact' | 'string-bridge' | 'incomp
   return 0
 }
 
+/** Index graph nodes once so canvas menus do not rescan the node list by id. */
+export function buildModuleGraphNodeMap(nodes: ModuleGraphNode[]) {
+  return new Map(nodes.map((node) => [node.id, node] as const))
+}
+
 /** Build the recommended modules that can connect directly from one pending dragged port. */
 function getRecommendedModulesFromConnectionStart(
   modules: ModuleDefinitionRecord[],
-  nodes: ModuleGraphNode[],
+  nodeById: ReadonlyMap<string, ModuleGraphNode>,
   connectionStart: PendingConnectionStart | null,
 ): RecommendedModuleMatch[] {
   if (!connectionStart) {
     return []
   }
 
-  const existingNode = nodes.find((node) => node.id === connectionStart.nodeId)
+  const existingNode = nodeById.get(connectionStart.nodeId)
   const parsedHandle = parseHandleId(connectionStart.handleId)
   if (!existingNode || !parsedHandle) {
     return []
@@ -243,9 +248,11 @@ export function ModuleGraphCanvas({
   const lastInteractionFlowPositionRef = useRef<{ x: number; y: number } | null>(null)
   const isCanvasActiveRef = useRef(false)
 
+  const nodeById = useMemo(() => buildModuleGraphNodeMap(nodes), [nodes])
+
   const recommendedModules = useMemo(
-    () => getRecommendedModulesFromConnectionStart(modules, nodes, quickCreateState?.connectionStart ?? null),
-    [modules, nodes, quickCreateState?.connectionStart],
+    () => getRecommendedModulesFromConnectionStart(modules, nodeById, quickCreateState?.connectionStart ?? null),
+    [modules, nodeById, quickCreateState?.connectionStart],
   )
 
   const reactFlowNodes = useMemo(
@@ -562,7 +569,7 @@ export function ModuleGraphCanvas({
               return
             }
 
-            const targetNode = nodes.find((node) => node.id === actionMenuState.nodeId)
+            const targetNode = nodeById.get(actionMenuState.nodeId)
             const connectionStart = targetNode ? getDefaultConnectionStartForNode(targetNode) : null
             closeActionMenu()
             openQuickCreateMenuAt(actionMenuState.anchor, actionMenuState.flowPosition, connectionStart ? 'connect' : 'pane', connectionStart)
@@ -572,7 +579,7 @@ export function ModuleGraphCanvas({
               return
             }
 
-            const targetNode = nodes.find((node) => node.id === actionMenuState.nodeId)
+            const targetNode = nodeById.get(actionMenuState.nodeId)
             targetNode?.data.onNodeValueChange?.(
               actionMenuState.nodeId,
               ADVANCED_OUTPUT_PORTS_ENABLED_KEY,

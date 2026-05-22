@@ -37,11 +37,14 @@ function extractFunction(sourceText: string, functionName: string) {
 
 function assertExecutionPanelLookupPolicy() {
   const helpersSource = source('features/module-graph/components/graph-execution-panel-helpers.ts')
+  const canvasSource = source('features/module-graph/components/module-graph-canvas.tsx')
   const nodeCardSource = source('features/module-graph/components/module-graph-node-card.tsx')
   const nodeCardLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts.tsx')
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
+  const recommendationSource = extractFunction(canvasSource, 'getRecommendedModulesFromConnectionStart')
+  const actionMenuLookupCount = canvasSource.match(/const targetNode = nodeById\.get\(actionMenuState\.nodeId\)/g)?.length ?? 0
 
   assert(
     helpersSource.includes('function buildNodeDisplayLabelMap'),
@@ -130,6 +133,38 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     !nodeInspectorSource.includes('const isCollapsed = collapsedOutputGroupKeys.includes(group.portKey)'),
     'node inspector must not scan collapsed output keys for every rendered group',
+  )
+  assert(
+    canvasSource.includes('export function buildModuleGraphNodeMap'),
+    'module graph canvas should expose a reusable node-id map builder',
+  )
+  assert(
+    canvasSource.includes('const nodeById = useMemo(() => buildModuleGraphNodeMap(nodes), [nodes])'),
+    'module graph canvas should build one node-id map per node snapshot',
+  )
+  assert(
+    recommendationSource.includes('nodeById: ReadonlyMap<string, ModuleGraphNode>'),
+    'recommended-node resolution should receive the precomputed node lookup map',
+  )
+  assert(
+    recommendationSource.includes('const existingNode = nodeById.get(connectionStart.nodeId)'),
+    'recommended-node resolution should use the node lookup map for the connection source',
+  )
+  assert(
+    !recommendationSource.includes('nodes.find((node) => node.id === connectionStart.nodeId)'),
+    'recommended-node resolution must not scan graph nodes for every connection-source lookup',
+  )
+  assert(
+    canvasSource.includes('getRecommendedModulesFromConnectionStart(modules, nodeById, quickCreateState?.connectionStart ?? null)'),
+    'recommended-node memo should pass the precomputed node lookup map',
+  )
+  assert(
+    actionMenuLookupCount === 2,
+    'node action menu callbacks should use the node lookup map for both node-target actions',
+  )
+  assert(
+    !canvasSource.includes('const targetNode = nodes.find((node) => node.id === actionMenuState.nodeId)'),
+    'node action menu callbacks must not rescan graph nodes by id',
   )
 }
 
