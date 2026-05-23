@@ -13,13 +13,16 @@ import type { RefObject } from 'react'
 type PromptPresetTreeEntry = {
   preset: PromptPresetRecord
   path: string[]
+  insertionText: string
+  itemCount: number
 }
 
 function flattenPromptPresetTree(records: PromptPresetRecord[], parentPath: string[] = []): PromptPresetTreeEntry[] {
   return records.flatMap((preset) => {
     const path = [...parentPath, preset.name]
+    const insertionText = buildPromptPresetInsertionText(preset)
     return [
-      { preset, path },
+      { preset, path, insertionText, itemCount: preset.items?.length ?? 0 },
       ...flattenPromptPresetTree(preset.children ?? [], path),
     ]
   })
@@ -45,10 +48,18 @@ export function PromptPresetInlinePicker({
   })
 
   const entries = useMemo(() => flattenPromptPresetTree(presetsQuery.data ?? []), [presetsQuery.data])
-  const insertableCount = entries.filter((entry) => buildPromptPresetInsertionText(entry.preset).length > 0).length
+  const presetNavItems = useMemo(() => entries.map((entry) => entry.preset), [entries])
+  const insertableCount = entries.reduce((count, entry) => count + (entry.insertionText ? 1 : 0), 0)
+  const presetEntriesById = useMemo(() => {
+    const nextEntriesById = new Map<number, PromptPresetTreeEntry>()
+    entries.forEach((entry) => {
+      nextEntriesById.set(entry.preset.id, entry)
+    })
+    return nextEntriesById
+  }, [entries])
 
   const handleSelect = (preset: PromptPresetRecord) => {
-    const insertionText = buildPromptPresetInsertionText(preset)
+    const insertionText = presetEntriesById.get(preset.id)?.insertionText ?? ''
     if (!insertionText) {
       return
     }
@@ -72,18 +83,18 @@ export function PromptPresetInlinePicker({
           <div className="px-2 py-3 text-sm text-muted-foreground">{t('image-generation.components.prompt.preset.inline.picker.loading.presets')}</div>
         ) : entries.length > 0 ? (
           <HierarchyNav
-            items={entries.map((entry) => entry.preset)}
+            items={presetNavItems}
             expandable
             selectedId={null}
             onSelect={handleSelect}
             getId={(preset) => preset.id}
             getParentId={(preset) => preset.parent_id}
             getLabel={(preset) => {
-              const insertionText = buildPromptPresetInsertionText(preset)
+              const entry = presetEntriesById.get(preset.id)
               return (
                 <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
                   <span className="truncate">{preset.name}</span>
-                  <Badge variant={insertionText ? 'outline' : 'secondary'}>{preset.items?.length ?? 0}</Badge>
+                  <Badge variant={entry?.insertionText ? 'outline' : 'secondary'}>{entry?.itemCount ?? 0}</Badge>
                 </span>
               )
             }}
