@@ -285,11 +285,13 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   }
 
   const handleAddExtractedPromptSearchFilter = (scope: ExtractedPromptActionScope, tag: string) => {
-    addScopedTextChip(getTextSearchScopeForExtractedPrompt(scope), tag)
+    imageViewModal?.closeImageView()
+    addScopedTextChip(getTextSearchScopeForExtractedPrompt(scope), tag, { apply: true })
   }
 
   const handleAddAutoPromptSearchFilter = (tag: string) => {
-    addScopedTextChip('auto', tag)
+    imageViewModal?.closeImageView()
+    addScopedTextChip('auto', tag, { apply: true })
   }
 
   return (

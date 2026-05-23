@@ -3,6 +3,7 @@ import type { GenerationQueueJobRecord } from '../lib/api-image-generation-types
 import {
   getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
+  getGenerationQueueHeaderRefreshTargets,
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
   getGenerationQueueRequesterLabel,
@@ -273,6 +274,24 @@ function assertFilteredQueueHeaderQueryEnablement() {
   )
 }
 
+function assertHeaderRefreshTargets() {
+  assertEqual(
+    JSON.stringify(getGenerationQueueHeaderRefreshTargets({ activeTab: 'jobs', isFilteredQueueQueryEnabled: false })),
+    JSON.stringify(['globalQueue']),
+    'jobs refresh without filtered query should only refresh the global queue',
+  )
+  assertEqual(
+    JSON.stringify(getGenerationQueueHeaderRefreshTargets({ activeTab: 'jobs', isFilteredQueueQueryEnabled: true })),
+    JSON.stringify(['globalQueue', 'filteredQueue']),
+    'jobs refresh with filtered query should include the filtered queue',
+  )
+  assertEqual(
+    JSON.stringify(getGenerationQueueHeaderRefreshTargets({ activeTab: 'reservations', isFilteredQueueQueryEnabled: false })),
+    JSON.stringify(['globalQueue', 'reservationSchedules', 'reservationWorkflows']),
+    'reservations refresh should include reservation schedule and workflow queries',
+  )
+}
+
 assertStatusLabels()
 assertWorkflowLabels()
 assertRequesterLabels()
@@ -281,5 +300,6 @@ assertElapsedLabels()
 assertProgressPercent()
 assertHeaderQuerySnapshotSelection()
 assertFilteredQueueHeaderQueryEnablement()
+assertHeaderRefreshTargets()
 
 console.log('Generation queue UI contracts verified.')

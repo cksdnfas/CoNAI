@@ -10,6 +10,7 @@ type GenerationQueueHeaderQuerySnapshot<TRecord = GenerationQueueJobRecord> = {
   isError: boolean
   error?: unknown
 }
+type GenerationQueueHeaderRefreshTarget = 'globalQueue' | 'filteredQueue' | 'reservationSchedules' | 'reservationWorkflows'
 
 export function getGenerationQueueHeaderQuerySnapshot<TRecord>({
   isFilteredQueueView,
@@ -34,6 +35,26 @@ export function shouldEnableFilteredQueueHeaderQuery({
 }) {
   // The filtered queue is popup-only; keep the global active query as the only closed-header poller.
   return hasGenerationPermission && isFilteredQueueView && isOpen
+}
+
+export function getGenerationQueueHeaderRefreshTargets({
+  activeTab,
+  isFilteredQueueQueryEnabled,
+}: {
+  activeTab: 'jobs' | 'reservations'
+  isFilteredQueueQueryEnabled: boolean
+}): GenerationQueueHeaderRefreshTarget[] {
+  const targets: GenerationQueueHeaderRefreshTarget[] = ['globalQueue']
+
+  if (isFilteredQueueQueryEnabled) {
+    targets.push('filteredQueue')
+  }
+
+  if (activeTab === 'reservations') {
+    targets.push('reservationSchedules', 'reservationWorkflows')
+  }
+
+  return targets
 }
 
 /** Render the shared localized status label for queue rows and widgets. */

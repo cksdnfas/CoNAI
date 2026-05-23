@@ -20,6 +20,7 @@ import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
   getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
+  getGenerationQueueHeaderRefreshTargets,
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
   getGenerationQueueRequesterLabel,
@@ -273,11 +274,16 @@ export function GenerationQueueHeaderWidget() {
   const hasUnreadQueueUpdate = isNotificationBaselineReady && latestQueueJobId > (lastSeenQueueJobId ?? 0)
 
   const handleRefresh = async () => {
+    const refreshTargets = getGenerationQueueHeaderRefreshTargets({
+      activeTab,
+      isFilteredQueueQueryEnabled,
+    })
+
     await Promise.all([
-      globalQueueQuery.refetch(),
-      filteredQueueQuery.refetch(),
-      activeTab === 'reservations' ? reservationSchedulesQuery.refetch() : Promise.resolve(undefined),
-      activeTab === 'reservations' ? reservationWorkflowQuery.refetch() : Promise.resolve(undefined),
+      refreshTargets.includes('globalQueue') ? globalQueueQuery.refetch() : Promise.resolve(undefined),
+      refreshTargets.includes('filteredQueue') ? filteredQueueQuery.refetch() : Promise.resolve(undefined),
+      refreshTargets.includes('reservationSchedules') ? reservationSchedulesQuery.refetch() : Promise.resolve(undefined),
+      refreshTargets.includes('reservationWorkflows') ? reservationWorkflowQuery.refetch() : Promise.resolve(undefined),
     ])
   }
 

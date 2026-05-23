@@ -38,7 +38,18 @@ function assertPromptTagActionMenuSearchCopy() {
   assertIncludes(source, "ko: '검색에 {tag} 추가'", 'Prompt tag action menu should show localized Korean search-filter copy')
   assertIncludes(source, "en: 'Add {tag} to search'", 'Prompt tag action menu should show clear English search-filter copy')
   assertIncludes(source, 'onAddSearchFilter?.(tag)', 'Prompt tag action menu should call the scoped search-filter action with the original tag')
-  assertIncludes(source, 'setOpen(false)', 'Prompt tag action menu should close after a menu action')
+  assertIncludes(source, 'setOpen(false)', 'Prompt tag action menu should close before menu actions change route')
+}
+
+function assertPromptTagSearchFilterActionsApplyImmediately() {
+  const detailSource = readSource('features/images/components/detail/image-detail-meta-card.tsx')
+  const uploadSource = readSource('features/upload/components/upload-page-sections.tsx')
+  const settingsSource = readSource('features/settings/components/auto-test-card.tsx')
+
+  assertIncludes(detailSource, 'imageViewModal?.closeImageView()', 'Image detail prompt-tag search filters should close the active image modal before applying')
+  assertIncludes(detailSource, "addScopedTextChip('auto', tag, { apply: true })", 'Image detail auto/artist tags should immediately apply search')
+  assertIncludes(uploadSource, '{ apply: true }', 'Upload prompt tags should immediately apply search')
+  assertIncludes(settingsSource, '{ apply: true }', 'Settings auto-test prompt tags should immediately apply search')
 }
 
 function assertExtractedPromptSearchActionsStayScoped() {
@@ -53,5 +64,6 @@ assertSpecialCharactersAreEncoded()
 assertBlankTagsAreNotLinked()
 assertPromptTagActionMenuSearchCopy()
 assertExtractedPromptSearchActionsStayScoped()
+assertPromptTagSearchFilterActionsApplyImmediately()
 
 console.log('Prompt tag link/action contracts verified.')

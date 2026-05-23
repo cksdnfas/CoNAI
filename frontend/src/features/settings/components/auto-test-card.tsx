@@ -63,11 +63,11 @@ export function AutoTestCard({
   const extractedPromptCards = autoTestImage ? getImageExtractedPromptCards(autoTestImage, t) : []
 
   const handleAddExtractedPromptSearchFilter = (scope: ExtractedPromptActionScope, tag: string) => {
-    addScopedTextChip(getTextSearchScopeForExtractedPrompt(scope), tag)
+    addScopedTextChip(getTextSearchScopeForExtractedPrompt(scope), tag, { apply: true })
   }
 
   const handleAddAutoPromptSearchFilter = (tag: string) => {
-    addScopedTextChip('auto', tag)
+    addScopedTextChip('auto', tag, { apply: true })
   }
 
   return (

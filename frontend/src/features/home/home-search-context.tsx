@@ -10,6 +10,7 @@ import type { SearchAiToolGroup, SearchChip, SearchHistoryEntry, SearchOperator,
 import { buildSearchChipKey, buildSearchHistoryLabel, createAIToolSearchChip, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
 
 export type TextSearchScope = Exclude<SearchScope, 'rating' | 'tool'>
+type AddScopedTextChipOptions = { operator?: SearchOperator; apply?: boolean }
 
 interface HomeSearchContextValue {
   isDrawerOpen: boolean
@@ -25,7 +26,7 @@ interface HomeSearchContextValue {
   setSearchInput: (value: string) => void
   addTextChip: () => boolean
   submitSearchFromInput: () => void
-  addScopedTextChip: (scope: TextSearchScope, value: string, options?: { operator?: SearchOperator }) => boolean
+  addScopedTextChip: (scope: TextSearchScope, value: string, options?: AddScopedTextChipOptions) => boolean
   addSuggestionChip: (value: string) => void
   addAIToolChip: (tool: SearchAiToolGroup) => void
   addRatingChip: (chip: SearchChip) => void
@@ -39,6 +40,15 @@ interface HomeSearchContextValue {
 }
 
 const HomeSearchContext = createContext<HomeSearchContextValue | null>(null)
+
+function appendUniqueSearchChip(chips: SearchChip[], chip: SearchChip) {
+  const nextKey = buildSearchChipKey(chip)
+  if (chips.some((item) => buildSearchChipKey(item) === nextKey)) {
+    return chips
+  }
+
+  return [...chips, chip]
+}
 
 /** Provide shared home-search state for the header search box, drawer, and image feed. */
 export function HomeSearchProvider({ children }: { children: ReactNode }) {
@@ -108,14 +118,28 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const appendDraftChip = useCallback((chip: SearchChip) => {
-    setDraftChips((current) => {
-      const nextKey = buildSearchChipKey(chip)
-      if (current.some((item) => buildSearchChipKey(item) === nextKey)) {
-        return current
-      }
-      return [...current, chip]
-    })
+    setDraftChips((current) => appendUniqueSearchChip(current, chip))
   }, [])
+
+  const commitSearchChips = useCallback((nextChips: SearchChip[]) => {
+    setDraftChips(nextChips)
+    setAppliedChips(nextChips)
+    setSearchInputState('')
+
+    if (nextChips.length === 0) {
+      showSnackbar({ message: t('homeSearchContext.noSearchChipsAreActive'), tone: 'info' })
+      return
+    }
+
+    navigate('/')
+
+    void saveHistoryEntryMutation({
+      label: buildSearchHistoryLabel(nextChips, {
+        resolveScopeLabel: (scope) => t(SEARCH_SCOPE_LABEL_KEYS[scope]),
+      }),
+      chips: nextChips,
+    })
+  }, [navigate, saveHistoryEntryMutation, showSnackbar, t])
 
   const addTextChip = useCallback(() => {
     if (searchScope === 'rating' || searchScope === 'tool') {
@@ -132,18 +156,26 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     return true
   }, [appendDraftChip, searchInput, searchScope])
 
-  const addScopedTextChip = useCallback((scope: TextSearchScope, value: string, options?: { operator?: SearchOperator }) => {
-    const chip = createTextSearchChip(scope, value, options)
+  const addScopedTextChip = useCallback((scope: TextSearchScope, value: string, options?: AddScopedTextChipOptions) => {
+    const chip = createTextSearchChip(scope, value, options?.operator ? { operator: options.operator } : undefined)
     if (!chip) {
       return false
     }
 
-    appendDraftChip(chip)
+    const nextDraftChips = appendUniqueSearchChip(draftChips, chip)
     setSearchScopeState(scope)
+
+    if (options?.apply) {
+      commitSearchChips(nextDraftChips)
+      setIsDrawerOpen(false)
+      return true
+    }
+
+    setDraftChips(nextDraftChips)
     setSearchInputState('')
     setIsDrawerOpen(true)
     return true
-  }, [appendDraftChip])
+  }, [commitSearchChips, draftChips])
 
   const addSuggestionChip = useCallback((value: string) => {
     if (searchScope === 'rating' || searchScope === 'tool') {
@@ -194,24 +226,8 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
 
   const applySearch = useCallback(() => {
     const nextChips = withPendingInputChip(draftChips)
-    setDraftChips(nextChips)
-    setAppliedChips(nextChips)
-    setSearchInputState('')
-
-    if (nextChips.length === 0) {
-      showSnackbar({ message: t('homeSearchContext.noSearchChipsAreActive'), tone: 'info' })
-      return
-    }
-
-    navigate('/')
-
-    void saveHistoryEntryMutation({
-      label: buildSearchHistoryLabel(nextChips, {
-        resolveScopeLabel: (scope) => t(SEARCH_SCOPE_LABEL_KEYS[scope]),
-      }),
-      chips: nextChips,
-    })
-  }, [draftChips, navigate, saveHistoryEntryMutation, showSnackbar, t, withPendingInputChip])
+    commitSearchChips(nextChips)
+  }, [commitSearchChips, draftChips, withPendingInputChip])
 
   const submitSearchFromInput = useCallback(() => {
     applySearch()

@@ -7,6 +7,7 @@ import type { SearchChip } from '../features/search/search-types'
 
 const root = resolve(process.cwd(), 'src')
 const homeSearchUi = readFileSync(resolve(root, 'features/home/components/home-search-ui.tsx'), 'utf8')
+const homeSearchContext = readFileSync(resolve(root, 'features/home/home-search-context.tsx'), 'utf8')
 
 assert.ok(
   homeSearchUi.includes('let homeSearchDrawerContentLoadPromise'),
@@ -45,6 +46,15 @@ assert.match(
   homeSearchUi,
   /useEffect\(\(\) => \{\s*if \(!active\) \{\s*return\s*}\s*return scheduleHomeSearchDrawerContentPreload\(\)/,
   'drawer preload should only be scheduled while the home search surface is active',
+)
+assert.ok(
+  homeSearchContext.includes('type AddScopedTextChipOptions = { operator?: SearchOperator; apply?: boolean }'),
+  'scoped text chips should support an immediate apply option',
+)
+assert.match(
+  homeSearchContext,
+  /if \(options\?\.apply\) \{\s*commitSearchChips\(nextDraftChips\)\s*setIsDrawerOpen\(false\)/,
+  'immediate scoped tag filters should apply search results and close the drawer',
 )
 
 const unboundedRatingChip: SearchChip = {

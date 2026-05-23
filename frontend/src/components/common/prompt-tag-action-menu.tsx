@@ -36,8 +36,8 @@ export function PromptTagActionMenu({
   }
 
   const handleAddSearchFilter = () => {
-    onAddSearchFilter?.(tag)
     setOpen(false)
+    onAddSearchFilter?.(tag)
   }
 
   const handleOpenHref = () => {
@@ -45,13 +45,13 @@ export function PromptTagActionMenu({
       return
     }
 
+    setOpen(false)
+
     if (onOpenHref) {
       onOpenHref(tag, resolvedHref)
     } else if (typeof window !== 'undefined') {
       window.open(resolvedHref, '_blank', 'noopener,noreferrer')
     }
-
-    setOpen(false)
   }
 
   return (
