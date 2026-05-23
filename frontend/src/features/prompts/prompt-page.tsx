@@ -125,15 +125,16 @@ export function PromptPage() {
     () => items.filter((item) => selectedPromptIdSet.has(item.id)),
     [items, selectedPromptIdSet],
   )
-  const selectedLockedPromptCount = selectedPromptItems.filter((item) => isLockedPromptItem(item, promptGroupById)).length
-  const assignableGroups = useMemo(
+  const selectedLockedPromptCount = useMemo(
+    () => selectedPromptItems.filter((item) => isLockedPromptItem(item, promptGroupById)).length,
+    [promptGroupById, selectedPromptItems],
+  )
+  const editablePromptGroups = useMemo(
     () => promptGroups.filter((group) => group.id !== 0 && !isLockedPromptGroup(group, promptGroupById)),
     [promptGroupById, promptGroups],
   )
-  const editableParentGroups = useMemo(
-    () => promptGroups.filter((group) => group.id !== 0 && !isLockedPromptGroup(group, promptGroupById)),
-    [promptGroupById, promptGroups],
-  )
+  const assignableGroups = editablePromptGroups
+  const editableParentGroups = editablePromptGroups
   const currentSectionTitle = selectedGroup?.group_name ?? 'All prompts'
   const currentSectionCount = pagination?.total ?? 0
   const sidebarTotalCount = selectedGroupId == null && currentSectionCount > 0 ? currentSectionCount : totalCount

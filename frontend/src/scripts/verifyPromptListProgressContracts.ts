@@ -78,6 +78,21 @@ match(
 )
 match(
   promptPageSource,
+  /const selectedLockedPromptCount = useMemo\([\s\S]*?selectedPromptItems\.filter\(\(item\) => isLockedPromptItem\(item, promptGroupById\)\)\.length[\s\S]*?\[promptGroupById, selectedPromptItems\],[\s\S]*?\)/,
+  'PromptPage should memoize selected locked prompt checks for bulk action gating',
+)
+match(
+  promptPageSource,
+  /const editablePromptGroups = useMemo\([\s\S]*?promptGroups\.filter\(\(group\) => group\.id !== 0 && !isLockedPromptGroup\(group, promptGroupById\)\)[\s\S]*?\[promptGroupById, promptGroups\],[\s\S]*?\)/,
+  'PromptPage should compute editable prompt groups once per group snapshot',
+)
+match(
+  promptPageSource,
+  /const assignableGroups = editablePromptGroups[\s\S]*?const editableParentGroups = editablePromptGroups/,
+  'PromptPage should share the editable group snapshot between assign and parent selectors',
+)
+match(
+  promptPageSource,
   /isLockedPromptItem=\{\(item\) => isLockedPromptItem\(item, promptGroupById\)\}/,
   'PromptListPanel lock checks should reuse the prompt-group lookup Map',
 )
