@@ -30,6 +30,13 @@ const SEARCH_SCOPE_STYLE_BY_SCOPE: Record<SearchScope, CSSProperties> = {
   },
 }
 
+function getSearchChipScoreRange(chip: Pick<SearchChip, 'minScore' | 'maxScore'>) {
+  return {
+    ...(Number.isFinite(chip.minScore) ? { min_score: chip.minScore } : {}),
+    ...(Number.isFinite(chip.maxScore) ? { max_score: chip.maxScore } : {}),
+  }
+}
+
 /** Build a stable UI label for a search chip. */
 export function buildSearchChipLabel(_scope: SearchScope, value: string) {
   const trimmedValue = value.trim()
@@ -179,8 +186,7 @@ export function buildComplexFilterPayload(chips: SearchChip[]) {
         category: chip.conditionCategory,
         type: chip.conditionType,
         value: chip.value,
-        ...(chip.minScore !== undefined ? { min_score: chip.minScore } : {}),
-        ...(chip.maxScore !== undefined ? { max_score: chip.maxScore } : {}),
+        ...getSearchChipScoreRange(chip),
       })
       continue
     }
@@ -218,8 +224,7 @@ export function buildComplexFilterPayload(chips: SearchChip[]) {
       category: 'auto_tag',
       type: 'auto_tag_rating_score',
       value: chip.value,
-      ...(chip.minScore !== undefined ? { min_score: chip.minScore } : {}),
-      ...(chip.maxScore !== undefined ? { max_score: chip.maxScore } : {}),
+      ...getSearchChipScoreRange(chip),
     })
   }
 

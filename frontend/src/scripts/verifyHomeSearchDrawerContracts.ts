@@ -2,6 +2,9 @@ import * as assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import { buildComplexFilterPayload } from '../features/search/search-utils'
+import type { SearchChip } from '../features/search/search-types'
+
 const root = resolve(process.cwd(), 'src')
 const homeSearchUi = readFileSync(resolve(root, 'features/home/components/home-search-ui.tsx'), 'utf8')
 
@@ -44,4 +47,33 @@ assert.match(
   'drawer preload should only be scheduled while the home search surface is active',
 )
 
-console.log('Home search drawer loading contracts verified.')
+const unboundedRatingChip: SearchChip = {
+  id: 'rating-nsfw',
+  scope: 'rating',
+  operator: 'OR',
+  label: 'NSFW',
+  value: 'NSFW',
+  minScore: 15,
+  maxScore: null,
+}
+const unboundedRatingPayload = buildComplexFilterPayload([unboundedRatingChip])
+const unboundedRatingCondition = unboundedRatingPayload.or_group[0]
+assert.equal(unboundedRatingCondition?.min_score, 15, 'rating payload should keep finite min_score')
+assert.equal(
+  Object.prototype.hasOwnProperty.call(unboundedRatingCondition, 'max_score'),
+  false,
+  'unbounded rating payload should omit null max_score instead of sending max_score: null',
+)
+
+const boundedRatingChip: SearchChip = {
+  ...unboundedRatingChip,
+  id: 'rating-safe',
+  label: 'Safe-ish',
+  value: 'Safe-ish',
+  minScore: 0,
+  maxScore: 5,
+}
+const boundedRatingPayload = buildComplexFilterPayload([boundedRatingChip])
+assert.equal(boundedRatingPayload.or_group[0]?.max_score, 5, 'rating payload should keep finite max_score')
+
+console.log('Home search contracts verified.')
