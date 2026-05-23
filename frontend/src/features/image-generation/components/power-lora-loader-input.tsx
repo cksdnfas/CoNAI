@@ -170,6 +170,7 @@ export function PowerLoraLoaderInput({
     <PathOptionTreeSelect
       value=""
       options={resolvedLoraOptions}
+      modelPreviewFolder="loras"
       placeholder={fallbackDropdownListsQuery.isLoading ? t({ ko: 'LoRA 목록 불러오는 중', en: 'Loading LoRA list' }) : t({ ko: 'LoRA 추가', en: 'Add LoRA' })}
       refreshLabel={t({ ko: 'LoRA 자동수집 새로고침', en: 'Refresh LoRA auto collect' })}
       isRefreshing={isRefreshingResolvedLoraOptions}

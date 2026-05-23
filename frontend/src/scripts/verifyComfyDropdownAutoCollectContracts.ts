@@ -145,6 +145,11 @@ assert.match(
   /<PathOptionTreeSelect[\s\S]*refreshLabel="ComfyUI 자동수집 새로고침"[\s\S]*onRefresh=\{onRefreshOptions\}/,
   'path-like ComfyUI dropdown fields should expose the shared auto-collect refresh action',
 )
+assert.match(
+  workflowFieldInputSource,
+  /<PathOptionTreeSelect[\s\S]*modelPreviewFolder=\{field\.model_preview_folder\}[\s\S]*refreshLabel="ComfyUI 자동수집 새로고침"/,
+  'path-like ComfyUI dropdown fields should pass model preview folders to hover thumbnail trees',
+)
 
 assert.match(
   powerLoraLoaderUtilsSource,
@@ -172,6 +177,11 @@ assert.match(
   powerLoraLoaderInputSource,
   /const addLoraControl = \([\s\S]*<PathOptionTreeSelect[\s\S]*placeholder=\{fallbackDropdownListsQuery\.isLoading \?[^}]*LoRA 목록 불러오는 중[\s\S]*LoRA 추가/,
   'Power Lora Loader should render Add LoRA as the always-visible dropdown trigger, not a two-step button',
+)
+assert.match(
+  powerLoraLoaderInputSource,
+  /const addLoraControl = \([\s\S]*<PathOptionTreeSelect[\s\S]*modelPreviewFolder="loras"[\s\S]*placeholder=\{fallbackDropdownListsQuery\.isLoading/,
+  'Power Lora Loader add dropdown should pass the LoRA preview folder to hover thumbnail trees',
 )
 for (const pattern of [/Trash2/, /handleRemoveLora/, /buildRemovedPowerLoraNodeValue/, /power\.lora\.loader\.input\.delete\.lora/]) {
   assert.match(

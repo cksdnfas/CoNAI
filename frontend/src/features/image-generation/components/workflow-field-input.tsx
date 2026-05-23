@@ -93,6 +93,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         <PathOptionTreeSelect
           value={stringValue}
           options={options}
+          modelPreviewFolder={field.model_preview_folder}
           refreshLabel="ComfyUI 자동수집 새로고침"
           isRefreshing={isRefreshingOptions}
           onRefresh={onRefreshOptions}
