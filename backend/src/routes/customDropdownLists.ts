@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { CustomDropdownListModel } from '../models/CustomDropdownList';
 import { collectAndReplaceComfyModelDropdownListsFromDefaultServer } from '../services/comfyDropdownAutoCollectionService';
+import { resolveComfyModelThumbnail } from '../services/comfyModelThumbnailService';
+import { streamCacheableFile } from './images/query-file-response-helpers';
 import { asyncHandler } from '../middleware/errorHandler';
 
 const router = Router();
@@ -75,6 +77,34 @@ router.get('/by-name/:name', asyncHandler(async (req: Request, res: Response) =>
     };
     return res.status(500).json(response);
   }
+}));
+
+/**
+ * ComfyUI 자동수집 모델 썸네일 조회
+ * GET /api/custom-dropdown-lists/comfy-model-thumbnail?folder=loras&value=...
+ */
+router.get('/comfy-model-thumbnail', asyncHandler(async (req: Request, res: Response) => {
+  const result = await resolveComfyModelThumbnail({
+    folder: req.query.folder,
+    value: req.query.value,
+  });
+
+  if (result.status === 'invalid') {
+    return res.status(400).json({
+      success: false,
+      error: result.message,
+    } as ApiResponse);
+  }
+
+  if (result.status === 'missing' || result.status === 'unavailable') {
+    return res.status(404).json({
+      success: false,
+      error: result.message,
+    } as ApiResponse);
+  }
+
+  await streamCacheableFile(req, res, result.filePath, 'image/webp');
+  return undefined;
 }));
 
 /**

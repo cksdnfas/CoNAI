@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import type { GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
+import type { CustomDropdownList, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
 import {
   DEFAULT_COMFY_MODEL_API_PATHS,
   createGenerationCustomDropdownList,
@@ -52,6 +52,18 @@ type ComfyGenerationPanelProps = {
 
 type ComfyWorkflowEditorState = {
   workflow: GenerationWorkflowDetail
+}
+
+const COMFY_AUTO_COLLECT_SOURCE_PATH = 'comfyui-default-server-api'
+const COMFY_MODEL_PREVIEW_FOLDERS = new Set(['checkpoints', 'loras', 'diffusion_models', 'unet_gguf'])
+
+function resolveComfyModelPreviewFolder(dropdownList: CustomDropdownList) {
+  if (!dropdownList.is_auto_collected || dropdownList.source_path !== COMFY_AUTO_COLLECT_SOURCE_PATH) {
+    return undefined
+  }
+
+  const rootFolder = dropdownList.name.replace(/\s*\(통합\)$/, '').split('/')[0]?.trim()
+  return rootFolder && COMFY_MODEL_PREVIEW_FOLDERS.has(rootFolder) ? rootFolder : undefined
 }
 
 /** Render the ComfyUI home/workflow views and coordinate server-targeted generation. */
@@ -149,6 +161,7 @@ export function ComfyGenerationPanel({
             ...field,
             type: 'select' as const,
             options: buildDropdownSelectOptions(dropdownList.items),
+            model_preview_folder: resolveComfyModelPreviewFolder(dropdownList),
           }
         }
       }

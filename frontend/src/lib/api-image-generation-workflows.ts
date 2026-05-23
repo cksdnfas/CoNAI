@@ -1,3 +1,4 @@
+import { buildApiUrl } from './api-client'
 import { requestJson } from './api-image-generation-request'
 import type {
   ComfyUIServer,
@@ -17,6 +18,11 @@ export const DEFAULT_COMFY_MODEL_API_PATHS = [
   '/models/unet_gguf',
   '/models/loras',
 ]
+
+export function buildComfyModelThumbnailUrl(folder: string, value: string) {
+  const searchParams = new URLSearchParams({ folder, value })
+  return buildApiUrl(`/api/custom-dropdown-lists/comfy-model-thumbnail?${searchParams.toString()}`)
+}
 
 interface WorkflowListResponse {
   success: boolean

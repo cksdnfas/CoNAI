@@ -17,6 +17,7 @@ const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
   auto: { ko: '자동화', en: 'Automation' },
   metadata: { ko: '메타데이터', en: 'Metadata' },
   'image-save': { ko: '미디어 생성/저장', en: 'Media generation/save' },
+  'integration-tools': { ko: '연동 도구', en: 'Integration tools' },
   'llm-connections': { ko: 'LLM 설정', en: 'LLM settings' },
 }
 

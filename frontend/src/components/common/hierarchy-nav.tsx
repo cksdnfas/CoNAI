@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FocusEvent, type PointerEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { getNavigationItemClassName } from './navigation-item'
 
@@ -26,6 +26,10 @@ interface HierarchyNavProps<T> {
   renderIcon?: (item: T, state: HierarchyNavItemState) => ReactNode
   isItemSelectable?: (item: T, hasChildren: boolean) => boolean
   getItemClassName?: (item: T, state: HierarchyNavItemState) => string | undefined
+  onItemPointerEnter?: (item: T, state: HierarchyNavItemState, target: HTMLElement, event: PointerEvent<HTMLElement>) => void
+  onItemPointerLeave?: (item: T, state: HierarchyNavItemState, target: HTMLElement, event: PointerEvent<HTMLElement>) => void
+  onItemFocus?: (item: T, state: HierarchyNavItemState, target: HTMLElement, event: FocusEvent<HTMLElement>) => void
+  onItemBlur?: (item: T, state: HierarchyNavItemState, target: HTMLElement, event: FocusEvent<HTMLElement>) => void
   expandable?: boolean
   expandOnSelect?: boolean | ((item: T, state: HierarchyNavItemState) => boolean)
   defaultExpandedIds?: HierarchyNodeId[]
@@ -88,6 +92,10 @@ export function HierarchyNav<T>({
   renderIcon,
   isItemSelectable,
   getItemClassName,
+  onItemPointerEnter,
+  onItemPointerLeave,
+  onItemFocus,
+  onItemBlur,
   expandable = false,
   expandOnSelect,
   defaultExpandedIds = EMPTY_EXPANDED_IDS,
@@ -172,6 +180,12 @@ export function HierarchyNav<T>({
               <div className="min-w-0 flex-1">{getLabel(item)}</div>
             </>
           )
+          const itemEventHandlers = {
+            onPointerEnter: (event: PointerEvent<HTMLElement>) => onItemPointerEnter?.(item, state, event.currentTarget, event),
+            onPointerLeave: (event: PointerEvent<HTMLElement>) => onItemPointerLeave?.(item, state, event.currentTarget, event),
+            onFocus: (event: FocusEvent<HTMLElement>) => onItemFocus?.(item, state, event.currentTarget, event),
+            onBlur: (event: FocusEvent<HTMLElement>) => onItemBlur?.(item, state, event.currentTarget, event),
+          }
 
           return (
             <div key={String(itemId)}>
@@ -194,6 +208,7 @@ export function HierarchyNav<T>({
                   {selectable || hasChildren ? (
                     <button
                       type="button"
+                      {...itemEventHandlers}
                       onClick={() => {
                         if (hasChildren && shouldExpandOnSelect) {
                           expandItem(itemId)
@@ -212,7 +227,10 @@ export function HierarchyNav<T>({
                       {content}
                     </button>
                   ) : (
-                    <div className={cn('inline-flex max-w-full flex-1 items-center gap-2 rounded-sm px-2 py-2 text-sm text-muted-foreground/45', itemClassName)}>
+                    <div
+                      {...itemEventHandlers}
+                      className={cn('inline-flex max-w-full flex-1 items-center gap-2 rounded-sm px-2 py-2 text-sm text-muted-foreground/45', itemClassName)}
+                    >
                       {content}
                     </div>
                   )}
@@ -220,6 +238,7 @@ export function HierarchyNav<T>({
               ) : (
                 <button
                   type="button"
+                  {...itemEventHandlers}
                   onClick={() => onSelect(item)}
                   className={getNavigationItemClassName({
                     active: isSelected,

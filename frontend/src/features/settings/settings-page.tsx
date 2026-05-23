@@ -68,6 +68,11 @@ const ImageSaveTabLazy = lazy(async () => {
   return { default: module.ImageSaveTab }
 })
 
+const IntegrationToolsTabLazy = lazy(async () => {
+  const module = await import('./components/integration-tools-tab')
+  return { default: module.IntegrationToolsTab }
+})
+
 const LlmConnectionsTabLazy = lazy(async () => {
   const module = await import('./components/llm-connections-tab')
   return { default: module.LlmConnectionsTab }
@@ -377,6 +382,8 @@ export function SettingsPage() {
                 isSavingVideoOptimization={videoOptimizationMutation.isPending}
               />
             ) : null}
+
+            {activeTab === 'integration-tools' ? <IntegrationToolsTabLazy /> : null}
 
             {activeTab === 'llm-connections' ? <LlmConnectionsTabLazy /> : null}
           </Suspense>

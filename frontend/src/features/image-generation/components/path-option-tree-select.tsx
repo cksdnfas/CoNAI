@@ -5,10 +5,14 @@ import { HierarchyNav, type HierarchyNavItemState } from '@/components/common/hi
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
+import { buildComfyModelThumbnailUrl } from '@/lib/api-image-generation-workflows'
 import { cn } from '@/lib/utils'
 import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 
 const PATH_RANDOM_OPTION_VALUE = '__random__'
+const MODEL_PREVIEW_HOVER_DELAY_MS = 150
+const MODEL_PREVIEW_POPUP_WIDTH = 224
+const MODEL_PREVIEW_POPUP_MAX_HEIGHT = 260
 
 type PathOptionTreeNode = {
   id: string
@@ -25,8 +29,16 @@ type PathOptionTreeSelectProps = {
   placeholder?: string
   refreshLabel?: string
   isRefreshing?: boolean
+  modelPreviewFolder?: string
   onRefresh?: () => Promise<void> | void
   onChange: (value: string) => void
+}
+
+type ModelPreviewState = {
+  key: string
+  src: string
+  left: number
+  top: number
 }
 
 function splitOptionPath(option: string) {
@@ -191,12 +203,22 @@ function renderPathOptionIcon(node: PathOptionTreeNode, state: HierarchyNavItemS
   return null
 }
 
+function resolveModelPreviewPosition(target: HTMLElement) {
+  const rect = target.getBoundingClientRect()
+  const left = Math.min(rect.right + 8, Math.max(8, window.innerWidth - MODEL_PREVIEW_POPUP_WIDTH - 8))
+  const top = Math.min(rect.top, Math.max(8, window.innerHeight - MODEL_PREVIEW_POPUP_MAX_HEIGHT - 8))
+  return { left, top }
+}
+
 /** Render path-like select options as a reusable HierarchyNav tree while preserving the actual selected value. */
-export function PathOptionTreeSelect({ value, options, placeholder = '선택', refreshLabel = '자동수집 새로고침', isRefreshing = false, onRefresh, onChange }: PathOptionTreeSelectProps) {
+export function PathOptionTreeSelect({ value, options, placeholder = '선택', refreshLabel = '자동수집 새로고침', isRefreshing = false, modelPreviewFolder, onRefresh, onChange }: PathOptionTreeSelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [menuRect, setMenuRect] = useState<FloatingDropdownRect | null>(null)
   const [isLocalRefreshing, setIsLocalRefreshing] = useState(false)
+  const [modelPreview, setModelPreview] = useState<ModelPreviewState | null>(null)
+  const [missingPreviewKeys, setMissingPreviewKeys] = useState<Set<string>>(() => new Set())
+  const previewTimerRef = useRef<number | null>(null)
   const triggerRef = useRef<HTMLDivElement | null>(null)
   const menuId = useId()
   const treeNodes = useMemo(() => buildPathOptionTree(options, placeholder), [options, placeholder])
@@ -206,13 +228,60 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
   const selectedLabel = selectedNode?.label ?? (value ? getOptionDisplayLabel(value) : placeholder)
   const refreshing = isRefreshing || isLocalRefreshing
 
+  const clearModelPreviewDelay = () => {
+    if (previewTimerRef.current !== null && typeof window !== 'undefined') {
+      window.clearTimeout(previewTimerRef.current)
+      previewTimerRef.current = null
+    }
+  }
+
+  const clearModelPreview = () => {
+    clearModelPreviewDelay()
+    setModelPreview(null)
+  }
+
+  const handleModelPreviewCandidate = (node: PathOptionTreeNode, target: HTMLElement) => {
+    if (!modelPreviewFolder || node.kind !== 'option' || !node.value || node.value === PATH_RANDOM_OPTION_VALUE) {
+      clearModelPreview()
+      return
+    }
+
+    const previewKey = `${modelPreviewFolder}:${node.value}`
+    if (missingPreviewKeys.has(previewKey)) {
+      clearModelPreview()
+      return
+    }
+
+    clearModelPreviewDelay()
+    previewTimerRef.current = window.setTimeout(() => {
+      const position = resolveModelPreviewPosition(target)
+      setModelPreview({
+        key: previewKey,
+        src: buildComfyModelThumbnailUrl(modelPreviewFolder, node.value ?? ''),
+        ...position,
+      })
+    }, MODEL_PREVIEW_HOVER_DELAY_MS)
+  }
+
+  const handleModelPreviewError = (previewKey: string) => {
+    setMissingPreviewKeys((current) => {
+      const next = new Set(current)
+      next.add(previewKey)
+      return next
+    })
+    setModelPreview((current) => (current?.key === previewKey ? null : current))
+  }
+
   useOverlayBackClose({ open: isOpen, onClose: () => setIsOpen(false) })
 
   useEffect(() => {
     if (!isOpen) {
       setSearchQuery('')
+      clearModelPreview()
     }
   }, [isOpen])
+
+  useEffect(() => () => clearModelPreviewDelay(), [])
 
   useEffect(() => {
     if (!isOpen) {
@@ -336,6 +405,7 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
                     return
                   }
                   onChange(node.value)
+                  clearModelPreview()
                   setIsOpen(false)
                 }}
                 getId={(node) => node.id}
@@ -344,9 +414,33 @@ export function PathOptionTreeSelect({ value, options, placeholder = '선택', r
                 sortItems={sortPathOptionNodes}
                 renderIcon={renderPathOptionIcon}
                 isItemSelectable={(node) => node.value !== undefined}
+                onItemPointerEnter={(node, _state, target) => handleModelPreviewCandidate(node, target)}
+                onItemPointerLeave={clearModelPreview}
+                onItemFocus={(node, _state, target) => handleModelPreviewCandidate(node, target)}
+                onItemBlur={clearModelPreview}
                 expandable
                 expandOnSelect={(node) => node.kind === 'folder'}
                 defaultExpandedIds={searchExpandedIds}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {isOpen && modelPreview && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-[10000] overflow-hidden rounded-sm border border-border/80 bg-popover shadow-xl"
+              style={{ left: modelPreview.left, top: modelPreview.top, width: MODEL_PREVIEW_POPUP_WIDTH }}
+            >
+              <img
+                key={modelPreview.key}
+                src={modelPreview.src}
+                alt="모델 썸네일"
+                className="block max-h-[240px] w-full bg-surface-low object-contain"
+                loading="eager"
+                decoding="async"
+                onError={() => handleModelPreviewError(modelPreview.key)}
               />
             </div>,
             document.body,

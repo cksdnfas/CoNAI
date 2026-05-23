@@ -116,6 +116,7 @@ export interface WorkflowMarkedField {
   default_value?: string | number | boolean | Record<string, unknown> | null
   placeholder?: string
   dropdown_list_name?: string
+  model_preview_folder?: string
   options?: string[]
   required?: boolean
   min?: number

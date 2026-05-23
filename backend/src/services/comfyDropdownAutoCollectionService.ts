@@ -10,7 +10,7 @@ export const DEFAULT_COMFY_MODEL_API_PATHS = [
 ];
 
 const MODEL_FILE_EXTENSIONS = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin', '.gguf', '.onnx'];
-const AUTO_COLLECT_SOURCE_PATH = 'comfyui-default-server-api';
+export const AUTO_COLLECT_SOURCE_PATH = 'comfyui-default-server-api';
 
 type ApiModelFileBatch = {
   apiPath: string;

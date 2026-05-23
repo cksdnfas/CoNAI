@@ -30,6 +30,10 @@ import { ratingSettingsRoutes } from './settings/rating.routes';
 import { runtimeSettingsRoutes } from './settings/runtime.routes';
 import { appearanceSettingsRoutes } from './settings/appearance.routes';
 import { dataRematchSettingsRoutes } from './settings/data-rematch.routes';
+import {
+  buildConaiHelperCustomNodeArchive,
+  CONAI_HELPER_CUSTOM_NODE_PACKAGE_FILENAME,
+} from '../services/conaiHelperCustomNodePackageService';
 
 const router = Router();
 const validLanguages: SupportedLanguage[] = ['ko', 'en'];
@@ -139,6 +143,18 @@ router.get(
       success: true,
       data: settings,
     });
+    return;
+  })
+);
+
+router.get(
+  '/resources/comfyui-helper/download',
+  asyncHandler(async (req: Request, res: Response) => {
+    const archive = buildConaiHelperCustomNodeArchive();
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${CONAI_HELPER_CUSTOM_NODE_PACKAGE_FILENAME}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(archive);
     return;
   })
 );
