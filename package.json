@@ -133,6 +133,7 @@
     "verify:comfy-dropdown-auto-collect-contracts": "cd frontend && npm run verify:comfy-dropdown-auto-collect-contracts",
     "verify:comfy-server-default-contracts": "cd backend && npm run verify:comfy-server-default-contracts",
     "verify:comfy-dropdown-auto-collect-api-contracts": "cd backend && npm run verify:comfy-dropdown-auto-collect-api-contracts",
+    "verify:comfy-model-thumbnail-startup-cleanup": "cd backend && npm run verify:comfy-model-thumbnail-startup-cleanup",
     "verify:lora-auto-collect-contracts": "cd frontend && npm run verify:lora-auto-collect-contracts"
   },
   "devDependencies": {
