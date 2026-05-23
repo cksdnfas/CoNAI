@@ -433,7 +433,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     [promptSimilarImageItems],
   )
 
-  const renderDuplicateImageOverlay = (duplicateImage: ImageRecord): ReactNode => {
+  const renderDuplicateImageOverlay = useCallback((duplicateImage: ImageRecord): ReactNode => {
     const compositeHash = duplicateImage.composite_hash
     if (typeof compositeHash !== 'string' || compositeHash.length === 0) {
       return null
@@ -441,17 +441,19 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
 
     const item = duplicateImageItemByHash.get(compositeHash)
     return item ? <SimilarImageScoreOverlay item={item} /> : null
-  }
+  }, [duplicateImageItemByHash])
 
-  const headerControls: ImageDetailViewHeaderControls = {
+  const refreshImage = useCallback(() => {
+    void imageQuery.refetch()
+  }, [imageQuery.refetch])
+
+  const headerControls = useMemo<ImageDetailViewHeaderControls>(() => ({
     downloadName,
     downloadUrl,
     image,
     isRefreshing: imageQuery.isFetching,
-    refresh: () => {
-      void imageQuery.refetch()
-    },
-  }
+    refresh: refreshImage,
+  }), [downloadName, downloadUrl, image, imageQuery.isFetching, refreshImage])
 
   const duplicateImagesLoading = isSimilarityInspectionSettling || duplicatesQuery.isLoading
   const duplicateImagesErrorMessage = duplicatesQuery.isError
