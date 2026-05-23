@@ -14,6 +14,7 @@ import { getExternalApiLlmOptions, type ExternalApiLlmOptionRecord } from '@/lib
 import { getLlmPresetOptions } from '@/lib/api-settings'
 import type { GraphExecutionArtifactRecord, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { ExecutionArtifactCard } from './execution-artifact-card'
+import { ModuleGraphKeyValueListInput } from './module-graph-key-value-list-input'
 import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
@@ -320,6 +321,15 @@ export function NodeInspectorPanel({
             emptyLabel={hasMeaningfulValue(port.default_value ?? uiField?.default_value) ? t({ ko: '기본값 사용', en: 'Use default' }) : t({ ko: '선택', en: 'Select' })}
             allowEmptyOption={!isCodexModelPort}
           />
+        </div>
+      )
+    }
+
+    if (uiField?.ui_hint === 'key_value_entries') {
+      return (
+        <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
+          <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
+          <ModuleGraphKeyValueListInput value={rawValue ?? uiField.default_value ?? port.default_value} onChange={(value) => onNodeValueChange(node.id, port.key, value)} />
         </div>
       )
     }

@@ -1,0 +1,443 @@
+import { type GraphWorkflowNode } from '../../types/moduleGraph'
+import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
+import {
+  bufferToDataUrl,
+  type ExecutionContext,
+  type ParsedModuleDefinition,
+} from './shared'
+
+type ApiKeyValueEntry = {
+  key?: unknown
+  value?: unknown
+}
+
+type NormalizedDataUrl = {
+  mimeType: string
+  base64: string
+  buffer: Buffer
+}
+
+const API_REQUEST_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+const DATA_URL_PATTERN = /^data:([^;,]+)?;base64,([a-zA-Z0-9+/=\s]+)$/
+const TEXT_RESPONSE_CONTENT_TYPES = [
+  'application/json',
+  'application/problem+json',
+  'application/xml',
+  'application/xhtml+xml',
+  'application/x-www-form-urlencoded',
+  'text/',
+]
+
+/** Parse a JSON-ish input value while preserving already-parsed values. */
+function parseJsonishInput(value: unknown, fallback: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return fallback
+  }
+
+  if (typeof value !== 'string') {
+    return value
+  }
+
+  const trimmedValue = value.trim()
+  if (!trimmedValue) {
+    return fallback
+  }
+
+  try {
+    return JSON.parse(trimmedValue)
+  } catch {
+    return value
+  }
+}
+
+/** Convert key/value editor output or JSON objects into one plain object. */
+export function normalizeApiKeyValueMap(value: unknown) {
+  const parsedValue = parseJsonishInput(value, [])
+  const result: Record<string, unknown> = {}
+
+  if (Array.isArray(parsedValue)) {
+    for (const rawEntry of parsedValue) {
+      if (!rawEntry || typeof rawEntry !== 'object') {
+        continue
+      }
+
+      const entry = rawEntry as ApiKeyValueEntry
+      const key = typeof entry.key === 'string' ? entry.key.trim() : ''
+      if (!key) {
+        continue
+      }
+
+      result[key] = normalizeApiEntryValue(entry.value)
+    }
+
+    return result
+  }
+
+  if (parsedValue && typeof parsedValue === 'object') {
+    for (const [key, entryValue] of Object.entries(parsedValue as Record<string, unknown>)) {
+      if (key.trim()) {
+        result[key.trim()] = normalizeApiEntryValue(entryValue)
+      }
+    }
+  }
+
+  return result
+}
+
+/** Coerce text values from the key/value editor into practical API body values. */
+function normalizeApiEntryValue(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value
+  }
+
+  const trimmedValue = value.trim()
+  if (trimmedValue.length === 0) {
+    return ''
+  }
+
+  if (trimmedValue === 'true') return true
+  if (trimmedValue === 'false') return false
+  if (trimmedValue === 'null') return null
+
+  if (/^-?\d+(\.\d+)?$/.test(trimmedValue)) {
+    const numericValue = Number(trimmedValue)
+    if (Number.isFinite(numericValue)) {
+      return numericValue
+    }
+  }
+
+  if (trimmedValue.startsWith('{') || trimmedValue.startsWith('[')) {
+    try {
+      return JSON.parse(trimmedValue)
+    } catch {
+      return value
+    }
+  }
+
+  return value
+}
+
+/** Normalize a supported HTTP method for the API request node. */
+function normalizeApiMethod(value: unknown) {
+  const method = typeof value === 'string' ? value.trim().toUpperCase() : 'POST'
+  if (!API_REQUEST_METHODS.has(method)) {
+    throw new Error(`API 요청 노드는 지원하지 않는 HTTP 방식이야: ${method || 'empty'}`)
+  }
+
+  return method
+}
+
+/** Normalize a required HTTP(S) URL and block non-network schemes. */
+function normalizeApiUrl(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('API 요청 노드에는 URL이 필요해')
+  }
+
+  const url = new URL(value.trim())
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('API 요청 노드는 http 또는 https URL만 지원해')
+  }
+
+  return url
+}
+
+/** Normalize user-provided header values into fetch headers. */
+function normalizeApiHeaders(value: unknown) {
+  const headerMap = normalizeApiKeyValueMap(value)
+  const headers: Record<string, string> = {}
+
+  for (const [key, entryValue] of Object.entries(headerMap)) {
+    if (entryValue === undefined || entryValue === null) {
+      continue
+    }
+
+    headers[key] = typeof entryValue === 'string' ? entryValue : JSON.stringify(entryValue)
+  }
+
+  return headers
+}
+
+/** Parse data URLs into binary payloads for multipart requests and base64 helpers. */
+function parseDataUrl(value: unknown): NormalizedDataUrl | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const match = value.match(DATA_URL_PATTERN)
+  if (!match) {
+    return null
+  }
+
+  const mimeType = match[1] || 'application/octet-stream'
+  const base64 = match[2].replace(/\s/g, '')
+  if (!base64) {
+    return null
+  }
+
+  return {
+    mimeType,
+    base64,
+    buffer: Buffer.from(base64, 'base64'),
+  }
+}
+
+/** Resolve a stable file extension for common data URL MIME types. */
+function getExtensionForMimeType(mimeType: string) {
+  const normalizedMimeType = mimeType.toLowerCase()
+  if (normalizedMimeType === 'image/jpeg') return 'jpg'
+  if (normalizedMimeType === 'image/png') return 'png'
+  if (normalizedMimeType === 'image/webp') return 'webp'
+  if (normalizedMimeType === 'image/gif') return 'gif'
+  if (normalizedMimeType === 'video/mp4') return 'mp4'
+  if (normalizedMimeType === 'video/webm') return 'webm'
+  if (normalizedMimeType === 'application/json') return 'json'
+  if (normalizedMimeType.startsWith('text/')) return 'txt'
+  return 'bin'
+}
+
+/** Check whether any top-level value needs multipart/form-data transport. */
+function hasMultipartValue(value: unknown): boolean {
+  if (parseDataUrl(value)) {
+    return true
+  }
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  return Object.values(value as Record<string, unknown>).some((entryValue) => Boolean(parseDataUrl(entryValue)))
+}
+
+function buildBlobPartFromBuffer(buffer: Buffer) {
+  const arrayBuffer = new ArrayBuffer(buffer.byteLength)
+  new Uint8Array(arrayBuffer).set(buffer)
+  return arrayBuffer
+}
+
+/** Build a Blob-backed multipart body from top-level API body entries. */
+function buildMultipartBody(value: Record<string, unknown>) {
+  const formData = new FormData()
+
+  for (const [key, entryValue] of Object.entries(value)) {
+    const parsedDataUrl = parseDataUrl(entryValue)
+    if (parsedDataUrl) {
+      const extension = getExtensionForMimeType(parsedDataUrl.mimeType)
+      const blob = new Blob([buildBlobPartFromBuffer(parsedDataUrl.buffer)], { type: parsedDataUrl.mimeType })
+      formData.append(key, blob, `${key}.${extension}`)
+      continue
+    }
+
+    if (entryValue === undefined || entryValue === null) {
+      continue
+    }
+
+    formData.append(key, typeof entryValue === 'string' ? entryValue : JSON.stringify(entryValue))
+  }
+
+  return formData
+}
+
+/** Merge key/value entries and upstream payload into one request body value. */
+function buildApiBodyValue(entries: Record<string, unknown>, payload: unknown) {
+  const hasEntries = Object.keys(entries).length > 0
+  if (payload === undefined || payload === null || payload === '') {
+    return hasEntries ? entries : undefined
+  }
+
+  const parsedPayload = parseJsonishInput(payload, payload)
+  if (!hasEntries) {
+    return parsedPayload
+  }
+
+  if (parsedPayload && typeof parsedPayload === 'object' && !Array.isArray(parsedPayload) && !parseDataUrl(parsedPayload)) {
+    return {
+      ...entries,
+      ...(parsedPayload as Record<string, unknown>),
+    }
+  }
+
+  return {
+    ...entries,
+    payload: parsedPayload,
+  }
+}
+
+/** Append query values to URL for GET requests. */
+function applyQueryParams(url: URL, queryValue: Record<string, unknown>) {
+  for (const [key, entryValue] of Object.entries(queryValue)) {
+    if (entryValue === undefined || entryValue === null) {
+      continue
+    }
+
+    url.searchParams.set(key, typeof entryValue === 'string' ? entryValue : JSON.stringify(entryValue))
+  }
+}
+
+/** Build fetch body and headers from method, body mode, and normalized body value. */
+function buildApiRequestPayload(params: {
+  method: string
+  bodyMode: string
+  bodyValue: unknown
+  headers: Record<string, string>
+}) {
+  const { method, bodyMode, bodyValue } = params
+  const headers = { ...params.headers }
+
+  if (method === 'GET' || bodyValue === undefined) {
+    return { headers, body: undefined }
+  }
+
+  const normalizedBodyValue = bodyValue && typeof bodyValue === 'object' && !Array.isArray(bodyValue)
+    ? bodyValue as Record<string, unknown>
+    : { payload: bodyValue }
+  const shouldUseMultipart = bodyMode === 'form' || (bodyMode === 'auto' && hasMultipartValue(normalizedBodyValue))
+
+  if (shouldUseMultipart) {
+    for (const headerName of Object.keys(headers)) {
+      if (headerName.toLowerCase() === 'content-type') {
+        delete headers[headerName]
+      }
+    }
+
+    return { headers, body: buildMultipartBody(normalizedBodyValue) }
+  }
+
+  if (!Object.keys(headers).some((headerName) => headerName.toLowerCase() === 'content-type')) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  return { headers, body: JSON.stringify(bodyValue) }
+}
+
+/** Convert one fetch response into the graph node's single response value. */
+async function parseApiResponse(response: Response) {
+  const contentType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? ''
+  const shouldReadText = TEXT_RESPONSE_CONTENT_TYPES.some((candidate) => (
+    candidate.endsWith('/') ? contentType.startsWith(candidate) : contentType === candidate || contentType.endsWith('+json')
+  ))
+
+  if (shouldReadText) {
+    const text = await response.text()
+    if (contentType.includes('json')) {
+      return text.trim() ? JSON.parse(text) : null
+    }
+
+    return text
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer())
+  return bufferToDataUrl(buffer, contentType || 'application/octet-stream')
+}
+
+/** Execute a generic HTTP API request node and expose the received value. */
+export async function executeApiRequestNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const url = normalizeApiUrl(resolvedInputs.url)
+  const method = normalizeApiMethod(resolvedInputs.method)
+  const bodyMode = typeof resolvedInputs.body_mode === 'string' ? resolvedInputs.body_mode : 'auto'
+  const timeoutMs = Math.max(1000, Math.min(300_000, Number(resolvedInputs.timeout_ms) || 30_000))
+  const entries = normalizeApiKeyValueMap(resolvedInputs.values)
+  const headers = normalizeApiHeaders(resolvedInputs.headers)
+  const bodyValue = buildApiBodyValue(entries, resolvedInputs.payload)
+
+  if (method === 'GET' && bodyValue !== undefined) {
+    const queryValue = bodyValue && typeof bodyValue === 'object' && !Array.isArray(bodyValue)
+      ? bodyValue as Record<string, unknown>
+      : { payload: bodyValue }
+    applyQueryParams(url, queryValue)
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  const requestPayload = buildApiRequestPayload({
+    method,
+    bodyMode: bodyMode === 'json' || bodyMode === 'form' ? bodyMode : 'auto',
+    bodyValue,
+    headers,
+  })
+
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: requestPayload.headers,
+      body: requestPayload.body,
+      signal: controller.signal,
+    })
+    const responseValue = await parseApiResponse(response)
+
+    if (!response.ok) {
+      const preview = typeof responseValue === 'string'
+        ? responseValue.slice(0, 400)
+        : JSON.stringify(responseValue).slice(0, 400)
+      throw new Error(`API 요청 실패: HTTP ${response.status} ${response.statusText}${preview ? ` - ${preview}` : ''}`)
+    }
+
+    completeSystemNode(context, node, moduleDefinition, 'system.api_request', {
+      response: buildRuntimeArtifact(context.executionId, node.id, 'response', 'any', responseValue, {
+        kind: 'system-api-response',
+        operationKey: 'system.api_request',
+        status: response.status,
+        contentType: response.headers.get('content-type') ?? undefined,
+      }),
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+/** Convert text, JSON, or data URL values into base64 text. */
+export function executeBase64EncodeNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const inputMode = typeof resolvedInputs.input_mode === 'string' ? resolvedInputs.input_mode : 'auto'
+  const value = resolvedInputs.value
+  const dataUrl = inputMode === 'data_url' || inputMode === 'auto' ? parseDataUrl(value) : null
+  const base64 = dataUrl
+    ? dataUrl.base64
+    : Buffer.from(inputMode === 'json' ? JSON.stringify(parseJsonishInput(value, value)) : String(value ?? ''), 'utf8').toString('base64')
+
+  completeSystemNode(context, node, moduleDefinition, 'system.base64_encode', {
+    base64: buildRuntimeArtifact(context.executionId, node.id, 'base64', 'text', base64, {
+      kind: 'system-base64-encode',
+      operationKey: 'system.base64_encode',
+      mimeType: dataUrl?.mimeType,
+    }),
+  })
+}
+
+/** Decode base64 into text, JSON, or data URL output. */
+export function executeBase64DecodeNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const outputMode = typeof resolvedInputs.output_mode === 'string' ? resolvedInputs.output_mode : 'data_url'
+  const mimeType = typeof resolvedInputs.mime_type === 'string' && resolvedInputs.mime_type.trim()
+    ? resolvedInputs.mime_type.trim()
+    : 'application/octet-stream'
+  const parsedDataUrl = parseDataUrl(resolvedInputs.base64)
+  const base64 = parsedDataUrl?.base64 ?? String(resolvedInputs.base64 ?? '').replace(/\s/g, '')
+  const buffer = Buffer.from(base64, 'base64')
+  const value = outputMode === 'text'
+    ? buffer.toString('utf8')
+    : outputMode === 'json'
+      ? JSON.parse(buffer.toString('utf8'))
+      : bufferToDataUrl(buffer, parsedDataUrl?.mimeType ?? mimeType)
+
+  completeSystemNode(context, node, moduleDefinition, 'system.base64_decode', {
+    value: buildRuntimeArtifact(context.executionId, node.id, 'value', 'any', value, {
+      kind: 'system-base64-decode',
+      operationKey: 'system.base64_decode',
+      outputMode,
+      mimeType: parsedDataUrl?.mimeType ?? mimeType,
+    }),
+  })
+}

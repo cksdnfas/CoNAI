@@ -33,6 +33,11 @@ import { executeNaiImageGenerationNode } from './execute-nai'
 import { executeCallCodexMessageNode } from './system-codex-message-operations'
 import { executeJsonExtractNode } from './system-json-operations'
 import {
+  executeApiRequestNode,
+  executeBase64DecodeNode,
+  executeBase64EncodeNode,
+} from './system-api-operations'
+import {
   executeLogicAndNode,
   executeLogicCompareNode,
   executeLogicConditionSelectNode,
@@ -60,6 +65,9 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.constant_boolean': executeConstantBooleanNode,
   'system.regex_text_transform': executeRegexTextTransformNode,
   'system.json_extract': executeJsonExtractNode,
+  'system.api_request': executeApiRequestNode,
+  'system.base64_encode': executeBase64EncodeNode,
+  'system.base64_decode': executeBase64DecodeNode,
   'system.merge_text': executeTextMergeNode,
   'system.apply_wildcards': executeWildcardTransformNode,
   'system.random_prompt_from_group': executeRandomPromptFromGroup,

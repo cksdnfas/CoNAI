@@ -149,6 +149,14 @@ const constantPrompt = makeModule({
   internal_fixed_values: { operation_key: 'system.constant_prompt' },
   output_ports: [{ ...textInputPort, direction: 'output' }],
 })
+const llmPresetLoader = makeModule({
+  id: 9,
+  name: 'LLM 프리셋 불러오기',
+  engine_type: 'system',
+  authoring_source: 'manual',
+  category: 'llm',
+  internal_fixed_values: { operation_key: 'system.load_llm_preset' },
+})
 
 for (const module of [fixedNai, fixedCodex]) {
   assert(!shouldHideFromModuleLibrary(module), `${module.name}: fixed generation system module must stay visible`)
@@ -171,6 +179,7 @@ assert(shouldHideFromModuleLibrary(legacyNaiSnapshot), 'legacy saved NAI snapsho
 assert(shouldHideFromModuleLibrary(legacyCodexSnapshot), 'legacy saved Codex snapshot module must stay hidden')
 assert(!shouldHideFromModuleLibrary(constantText), 'constant text module must stay visible')
 assert(shouldHideFromModuleLibrary(constantPrompt), 'legacy constant prompt duplicate must stay hidden')
+assertGroup(getSystemModuleGroup(llmPresetLoader), 'llm', 'LLM', 'LLM preset loader')
 assertOrderIndex(SYSTEM_GROUP_ORDER, SYSTEM_GROUP_ORDER_INDEX, 'system group order')
 assertOrderIndex(SAVED_MODULE_GROUP_ORDER, SAVED_MODULE_GROUP_ORDER_INDEX, 'saved module group order')
 assertOrderIndex(CUSTOM_NODE_GROUP_ORDER, CUSTOM_NODE_GROUP_ORDER_INDEX, 'custom-node group order')

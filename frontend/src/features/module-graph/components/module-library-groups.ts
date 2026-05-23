@@ -141,6 +141,10 @@ export function getSystemModuleGroup(module: ModuleDefinitionRecord): ModuleGrou
     return { key: 'logic', label: 'Logic' }
   }
 
+  if (category === 'llm') {
+    return { key: 'llm', label: 'LLM' }
+  }
+
   if (
     category === 'input'
     || category === 'prompt-source'
