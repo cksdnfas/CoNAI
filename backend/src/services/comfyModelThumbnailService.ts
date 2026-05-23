@@ -29,6 +29,12 @@ export type ComfyModelThumbnailResolveResult =
   | { status: 'missing'; message: string }
   | { status: 'unavailable'; message: string };
 
+export type ComfyModelThumbnailStartupCleanupReport = {
+  missingDeleted: number;
+  sourceDeleted: number;
+  errors: number;
+};
+
 const inFlightThumbnailResolutions = new Map<string, Promise<ComfyModelThumbnailResolveResult>>();
 
 function getThumbnailCacheRoot() {
@@ -37,6 +43,55 @@ function getThumbnailCacheRoot() {
 
 function getThumbnailSourceRoot() {
   return path.join(getThumbnailCacheRoot(), 'sources');
+}
+
+async function listDirectoryEntries(directory: string) {
+  try {
+    return await fs.promises.readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+}
+
+/** Remove transient negative-cache markers and scratch sources while preserving successful thumbnails. */
+export async function cleanupComfyModelThumbnailStartupCache(): Promise<ComfyModelThumbnailStartupCleanupReport> {
+  const report: ComfyModelThumbnailStartupCleanupReport = {
+    missingDeleted: 0,
+    sourceDeleted: 0,
+    errors: 0,
+  };
+
+  const cacheRoot = getThumbnailCacheRoot();
+  const sourceRoot = getThumbnailSourceRoot();
+
+  for (const entry of await listDirectoryEntries(cacheRoot)) {
+    if (!entry.isFile() || !entry.name.endsWith('.missing.json')) {
+      continue;
+    }
+
+    try {
+      await fs.promises.rm(path.join(cacheRoot, entry.name), { force: true });
+      report.missingDeleted++;
+    } catch (error) {
+      report.errors++;
+      console.warn('Failed to remove ComfyUI model thumbnail missing marker:', entry.name, error);
+    }
+  }
+
+  for (const entry of await listDirectoryEntries(sourceRoot)) {
+    try {
+      await fs.promises.rm(path.join(sourceRoot, entry.name), { force: true, recursive: entry.isDirectory() });
+      report.sourceDeleted++;
+    } catch (error) {
+      report.errors++;
+      console.warn('Failed to remove ComfyUI model thumbnail source cache:', entry.name, error);
+    }
+  }
+
+  return report;
 }
 
 function isPlainModelFolder(value: string) {

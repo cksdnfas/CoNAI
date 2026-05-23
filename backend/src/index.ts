@@ -303,6 +303,19 @@ async function startServer() {
     const { TempImageService } = await import('./services/tempImageService');
     await TempImageService.initialize();
 
+    // 6-2. ComfyUI model preview negative cache cleanup
+    try {
+      const { cleanupComfyModelThumbnailStartupCache } = await import('./services/comfyModelThumbnailService');
+      const thumbnailCleanupReport = await cleanupComfyModelThumbnailStartupCache();
+      if (thumbnailCleanupReport.missingDeleted > 0 || thumbnailCleanupReport.sourceDeleted > 0 || thumbnailCleanupReport.errors > 0) {
+        console.log(
+          `🧹 ComfyUI model preview startup cleanup: ${thumbnailCleanupReport.missingDeleted} missing markers, ${thumbnailCleanupReport.sourceDeleted} source files, ${thumbnailCleanupReport.errors} errors`,
+        );
+      }
+    } catch (error) {
+      console.warn('⚠️  Failed to cleanup ComfyUI model preview cache:', error instanceof Error ? error.message : error);
+    }
+
     // 7. API 이미지 저장 디렉토리 생성
     await APIImageProcessor.ensureDirectories();
 
