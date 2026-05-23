@@ -14,6 +14,10 @@ const comfyWorkflowControllerPanelSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/comfy-workflow-controller-panel.tsx'),
   'utf8',
 )
+const publicComfyWorkflowPageSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/public-comfy-workflow-page.tsx'),
+  'utf8',
+)
 const workflowFieldDisclosureCardSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/workflow-field-disclosure-card.tsx'),
   'utf8',
@@ -219,6 +223,16 @@ assert.match(
   comfyWorkflowControllerPanelSource,
   /loraOptions\?: string\[\][\s\S]*onRefreshDropdownLists\?: \(\) => Promise<void> \| void[\s\S]*<WorkflowFieldDisclosureCard[\s\S]*loraOptions=\{loraOptions\}[\s\S]*onRefreshOptions=\{onRefreshDropdownLists\}/,
   'Comfy workflow controller should pass dropdown refresh wiring to each field card',
+)
+assert.match(
+  publicComfyWorkflowPageSource,
+  /DEFAULT_COMFY_MODEL_API_PATHS[\s\S]*scanGenerationComfyUIModelDropdownLists[\s\S]*handleRefreshDropdownLists[\s\S]*scanGenerationComfyUIModelDropdownLists\(\{ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS \}\)[\s\S]*workflowQuery\.refetch\(\)/,
+  'public Comfy workflow page should rescan auto-collected model dropdowns and refetch public workflow fields',
+)
+assert.match(
+  publicComfyWorkflowPageSource,
+  /<WorkflowFieldDisclosureCard[\s\S]*isRefreshingOptions=\{isRefreshingDropdownLists\}[\s\S]*onRefreshOptions=\{handleRefreshDropdownLists\}/,
+  'public Comfy workflow fields should expose the shared auto-collect refresh action',
 )
 assert.match(
   workflowFieldDisclosureCardSource,

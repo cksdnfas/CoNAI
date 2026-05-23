@@ -12,6 +12,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { DEFAULT_COMFY_MODEL_API_PATHS, scanGenerationComfyUIModelDropdownLists } from '@/lib/api-image-generation-workflows'
 import { getPublicGenerationWorkflow, queuePublicGenerationWorkflowJob } from '@/lib/api-public-workflows'
 import { getAppSettings } from '@/lib/api-settings'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
@@ -64,6 +65,7 @@ export function PublicComfyWorkflowPage() {
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
   const [isQueueSubmitting, setIsQueueSubmitting] = useState(false)
+  const [isRefreshingDropdownLists, setIsRefreshingDropdownLists] = useState(false)
   const [isControllerOpen, setIsControllerOpen] = useState(false)
   const [drawerHeaderPortalRevision, setDrawerHeaderPortalRevision] = useState(0)
 
@@ -134,6 +136,26 @@ export function PublicComfyWorkflowPage() {
 
     clearPersistedComfyWorkflowDraft(workflow.id)
     setWorkflowDraft(buildWorkflowDraft(workflowFields))
+  }
+
+  const handleRefreshDropdownLists = async () => {
+    if (isRefreshingDropdownLists) {
+      return
+    }
+
+    try {
+      setIsRefreshingDropdownLists(true)
+      const response = await scanGenerationComfyUIModelDropdownLists({ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['image-generation-custom-dropdown-lists'] }),
+        workflowQuery.refetch(),
+      ])
+      showSnackbar({ message: response.data.message || t({ ko: '자동수집 목록을 갱신했어.', en: 'Refreshed the auto-collect list.' }), tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '자동수집 목록 생성에 실패했어.', en: 'Failed to create the auto-collect list.' })), tone: 'error' })
+    } finally {
+      setIsRefreshingDropdownLists(false)
+    }
   }
 
   const handleQueueSubmit = async () => {
@@ -319,6 +341,8 @@ export function PublicComfyWorkflowPage() {
               key={field.id}
               field={field}
               value={workflowDraft[field.id] ?? ''}
+              isRefreshingOptions={isRefreshingDropdownLists}
+              onRefreshOptions={handleRefreshDropdownLists}
               onChange={(value) => handleFieldChange(field.id, value)}
               onImageChange={(image) => handleImageChange(field.id, image)}
             />
