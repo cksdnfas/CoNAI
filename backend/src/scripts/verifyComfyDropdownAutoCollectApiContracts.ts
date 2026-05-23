@@ -55,6 +55,7 @@ function startModelApiServer() {
 
 async function main() {
   const { server, baseUrl } = await startModelApiServer()
+  const publicWorkflowRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/public-workflows.routes.ts'), 'utf8')
   const { initializeUserSettingsDb, closeUserSettingsDb } = await import('../database/userSettingsDb')
   const { ComfyUIServerModel } = await import('../models/ComfyUIServer')
   const { CustomDropdownListModel } = await import('../models/CustomDropdownList')
@@ -114,6 +115,12 @@ async function main() {
       'Base.safetensors',
       'Illustrious\\디테일\\AddMicroDetails_Illustrious_v3.safetensors',
     ])
+
+    assert.match(
+      publicWorkflowRoutesSource,
+      /function resolveComfyModelPreviewFolder[\s\S]*AUTO_COLLECT_SOURCE_PATH[\s\S]*model_preview_folder: resolveComfyModelPreviewFolder\(dropdownList\)/,
+      'public workflow responses should preserve Comfy model preview folders for auto-collected dropdown fields',
+    )
 
     const lorasMerged = lists.find((list) => list.name === 'loras (통합)')
     assert.ok(lorasMerged)

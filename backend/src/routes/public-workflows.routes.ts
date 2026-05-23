@@ -5,13 +5,14 @@ import path from 'path';
 import { asyncHandler } from '../middleware/errorHandler';
 import { WorkflowModel } from '../models/Workflow';
 import { WorkflowServerModel } from '../models/ComfyUIServer';
-import { CustomDropdownListModel } from '../models/CustomDropdownList';
+import { CustomDropdownListModel, type CustomDropdownListWithParsedItems } from '../models/CustomDropdownList';
 import { GenerationHistoryModel } from '../models/GenerationHistory';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
 import { GenerationQueueService } from '../services/generationQueueService';
 import { settingsService } from '../services/settingsService';
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
+import { AUTO_COLLECT_SOURCE_PATH } from '../services/comfyDropdownAutoCollectionService';
 import type { MarkedField, WorkflowRecord } from '../types/workflow';
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers';
 
@@ -19,6 +20,7 @@ const router = Router();
 
 const DROPDOWN_RANDOM_OPTION_VALUE = '__random__';
 const PUBLIC_QUEUE_MAX_COUNT_DEFAULT = 32;
+const COMFY_MODEL_PREVIEW_FOLDERS = new Set(['checkpoints', 'loras', 'diffusion_models', 'unet_gguf']);
 
 function getPublicWorkflowOrNull(slug: string) {
   return WorkflowModel.findPublicBySlug(slug.trim().toLowerCase());
@@ -39,8 +41,17 @@ function parseMarkedFields(markedFieldsJson?: string | null): MarkedField[] {
 
 function buildCustomDropdownListMap() {
   return new Map(
-    CustomDropdownListModel.findAll().map((list) => [list.name, list.items]),
+    CustomDropdownListModel.findAll().map((list) => [list.name, list]),
   );
+}
+
+function resolveComfyModelPreviewFolder(dropdownList: CustomDropdownListWithParsedItems) {
+  if (!dropdownList.is_auto_collected || dropdownList.source_path !== AUTO_COLLECT_SOURCE_PATH) {
+    return undefined;
+  }
+
+  const rootFolder = dropdownList.name.replace(/\s*\(통합\)$/, '').split('/')[0]?.trim();
+  return rootFolder && COMFY_MODEL_PREVIEW_FOLDERS.has(rootFolder) ? rootFolder : undefined;
 }
 
 function buildDropdownSelectOptions(items: string[]) {
@@ -52,21 +63,22 @@ function buildDropdownSelectOptions(items: string[]) {
 
 function resolveCustomDropdownMarkedFields(
   markedFields: MarkedField[],
-  dropdownListMap: Map<string, string[]>,
+  dropdownListMap: Map<string, CustomDropdownListWithParsedItems>,
 ): MarkedField[] {
   return markedFields.map((field) => {
     if (field.type !== 'select' || !field.dropdown_list_name) {
       return field;
     }
 
-    const dropdownItems = dropdownListMap.get(field.dropdown_list_name);
-    if (!dropdownItems) {
+    const dropdownList = dropdownListMap.get(field.dropdown_list_name);
+    if (!dropdownList) {
       return field;
     }
 
     return {
       ...field,
-      options: buildDropdownSelectOptions(dropdownItems),
+      options: buildDropdownSelectOptions(dropdownList.items),
+      model_preview_folder: resolveComfyModelPreviewFolder(dropdownList),
     };
   });
 }
@@ -77,7 +89,7 @@ function resolvePublicQueueMaxCount(workflow: WorkflowRecord) {
     : PUBLIC_QUEUE_MAX_COUNT_DEFAULT;
 }
 
-function serializePublicWorkflow(workflow: WorkflowRecord, dropdownListMap: Map<string, string[]>) {
+function serializePublicWorkflow(workflow: WorkflowRecord, dropdownListMap: Map<string, CustomDropdownListWithParsedItems>) {
   return {
     id: workflow.id,
     name: workflow.name,
