@@ -7,6 +7,7 @@ export type ImageListScrollMode = 'window' | 'container'
 
 export interface ImageListProps {
   items: ImageRecord[]
+  resetKey?: string
   layout?: ImageListLayoutMode
   activationMode?: 'none' | 'navigate' | 'modal' | 'modal-single'
   getItemHref?: (image: ImageRecord) => string | undefined

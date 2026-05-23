@@ -35,6 +35,19 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const isAuthenticated = authStatusQuery.data?.authenticated === true
   const isAnonymousSession = hasCredentials && !isAuthenticated
   const isSearchMode = !isAnonymousSession && appliedChips.length > 0
+  const imageListResetKey = useMemo(() => {
+    if (isAnonymousSession) {
+      return 'anonymous'
+    }
+
+    if (appliedChips.length === 0) {
+      return 'home'
+    }
+
+    return `search:${appliedChips
+      .map((chip) => [chip.scope, chip.operator, chip.conditionType ?? '', chip.value, chip.minScore ?? '', chip.maxScore ?? ''].join('::'))
+      .join('|')}`
+  }, [appliedChips, isAnonymousSession])
 
   const imagesQuery = useInfiniteQuery({
     queryKey: ['home-images', appliedChips],
@@ -234,6 +247,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     groupsQuery,
     assignToGroupMutation,
     visibleImages,
+    imageListResetKey,
     feedProgress,
     renderItemPersistentOverlay,
     shouldBlurItemPreview,

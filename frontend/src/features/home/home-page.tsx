@@ -36,6 +36,7 @@ export function HomePage() {
     groupsQuery,
     assignToGroupMutation,
     visibleImages,
+    imageListResetKey,
     feedProgress,
     renderItemPersistentOverlay,
     shouldBlurItemPreview,
@@ -153,6 +154,7 @@ export function HomePage() {
 
           <ImageList
             items={visibleImages}
+            resetKey={imageListResetKey}
             layout="masonry"
             activationMode={isAnonymousSession ? 'navigate' : 'modal'}
             getItemHref={isAnonymousSession ? undefined : ((image) => (image.composite_hash ? `/images/${image.composite_hash}` : undefined))}

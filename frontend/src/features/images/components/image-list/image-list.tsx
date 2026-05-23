@@ -25,6 +25,7 @@ function ImageListFallback() {
 /** Render the reusable CoNAI image list using Virtuoso rendering + ViSelect selection. */
 export function ImageList({
   items,
+  resetKey,
   layout = 'masonry',
   activationMode = 'navigate',
   getItemHref,
@@ -221,6 +222,7 @@ export function ImageList({
         <Suspense fallback={<ImageListFallback />}>
           {layout === 'grid' ? (
             <ImageListGridLazy
+              key={`grid:${resetKey ?? 'stable'}`}
               items={items}
               selectedIdSet={selectedIdSet}
               getItemId={getItemId}
@@ -243,6 +245,7 @@ export function ImageList({
             />
           ) : (
             <ImageListMasonryLazy
+              key={`masonry:${resetKey ?? 'stable'}`}
               items={items}
               selectedIdSet={selectedIdSet}
               getItemId={getItemId}

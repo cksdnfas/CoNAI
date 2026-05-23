@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { ComplexFilter } from '@conai/shared';
+import { cleanPromptTerm } from '@conai/shared';
 
 const runtimeBase = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-like-search-'));
 process.env.RUNTIME_BASE_PATH = runtimeBase;
@@ -148,6 +149,18 @@ async function main() {
       negativePrompt: 'avoid badXvalue',
       loraModels: 'loraXneedle',
     });
+    seedImage({
+      id: 3,
+      hash: 'hash-escaped-bracket-prompt',
+      modelName: 'Model escaped prompt',
+      prompt: 'crow \\(la+ darknesss\\), on head',
+    });
+    seedImage({
+      id: 4,
+      hash: 'hash-weighted-lora-prompt',
+      modelName: 'Model weighted lora prompt',
+      prompt: '<lora:weighted_unit_probe:0.8>, on head',
+    });
 
     const imageSearch = await ImageSearchModel.advancedSearch(
       { search_text: '100%', model_name: '100%' },
@@ -205,6 +218,48 @@ async function main() {
       complexLora.images.map((image) => image.composite_hash),
       ['hash-literal-percent'],
       'complex model/lora filters should treat LIKE wildcards as literals'
+    );
+
+    assert.equal(
+      cleanPromptTerm('crow \\(la+ darknesss\\)'),
+      'crow la+ darknesss',
+      'prompt collection cleanup should remove bracket escape slashes before stripping brackets'
+    );
+
+    const escapedBracketPromptFilter: ComplexFilter = {
+      and_group: [
+        { category: 'positive_prompt', type: 'prompt_contains', value: 'crow \\la+ darknesss\\' },
+      ],
+    };
+
+    const escapedBracketPrompt = await ComplexFilterService.executeComplexSearch(
+      escapedBracketPromptFilter,
+      undefined,
+      { page: 1, limit: 10, sortBy: 'first_seen_date', sortOrder: 'ASC' }
+    );
+
+    assert.deepEqual(
+      escapedBracketPrompt.images.map((image) => image.composite_hash),
+      ['hash-escaped-bracket-prompt'],
+      'complex prompt contains should match prompt-collection terms cleaned from escaped brackets'
+    );
+
+    const weightedLoraPromptFilter: ComplexFilter = {
+      and_group: [
+        { category: 'positive_prompt', type: 'prompt_contains', value: '<lora:weighted_unit_probe>' },
+      ],
+    };
+
+    const weightedLoraPrompt = await ComplexFilterService.executeComplexSearch(
+      weightedLoraPromptFilter,
+      undefined,
+      { page: 1, limit: 10, sortBy: 'first_seen_date', sortOrder: 'ASC' }
+    );
+
+    assert.deepEqual(
+      weightedLoraPrompt.images.map((image) => image.composite_hash),
+      ['hash-weighted-lora-prompt'],
+      'complex prompt contains should match weighted LoRA prompts when search omits the weight'
     );
 
     console.log('✅ LIKE search literal contracts passed');

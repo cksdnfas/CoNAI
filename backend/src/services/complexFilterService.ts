@@ -58,6 +58,53 @@ function getReadyImageCondition() {
   return MediaPostprocessVisibilityService.buildReadyCondition('im');
 }
 
+function normalizePromptSearchValue(value: string): string {
+  return value
+    .replace(/\\/g, '')
+    .replace(/[()[\]{}]/g, '')
+    .replace(/:[+-]?[\d.]+/g, '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildWeightedLoraPromptSearchPattern(value: string, caseSensitive: boolean): string | null {
+  const normalizedValue = normalizePromptSearchValue(value);
+  const match = /^<lora:([^:>]+)>$/i.exec(normalizedValue);
+  if (!match) {
+    return null;
+  }
+
+  const prefix = `<lora:${match[1]}:`;
+  return buildSqlContainsPattern(caseSensitive ? prefix : prefix.toLowerCase());
+}
+
+function appendUniquePattern(patterns: string[], pattern: string | null): string[] {
+  if (!pattern || patterns.includes(pattern)) {
+    return patterns;
+  }
+  return [...patterns, pattern];
+}
+
+const PROMPT_NORMALIZATION_SQL_REPLACEMENTS: Array<[string, string]> = [
+  ['char(92)', "''"],
+  ["'('", "''"],
+  ["')'", "''"],
+  ["'['", "''"],
+  ["']'", "''"],
+  ["'{'", "''"],
+  ["'}'", "''"],
+  ["'_'", "' '"],
+];
+
+function buildPromptNormalizedSqlExpression(valueExpression: string, caseSensitive: boolean): string {
+  let expression = `COALESCE(${valueExpression}, '')`;
+  for (const [from, to] of PROMPT_NORMALIZATION_SQL_REPLACEMENTS) {
+    expression = `REPLACE(${expression}, ${from}, ${to})`;
+  }
+  return caseSensitive ? expression : `LOWER(${expression})`;
+}
+
 export class ComplexFilterService {
 
   /**
@@ -290,16 +337,30 @@ export class ComplexFilterService {
       const pattern = condition.case_sensitive
         ? buildSqlContainsPattern(value)
         : buildSqlContainsPattern(value.toLowerCase());
+      const normalizedValue = normalizePromptSearchValue(value);
+      const normalizedPattern = normalizedValue && normalizedValue !== value
+        ? buildSqlContainsPattern(condition.case_sensitive ? normalizedValue : normalizedValue.toLowerCase())
+        : null;
+      const normalizedAlternatePatterns = appendUniquePattern(
+        appendUniquePattern([], normalizedPattern),
+        buildWeightedLoraPromptSearchPattern(value, !!condition.case_sensitive)
+      );
 
       // Positive prompt 검색은 NAI character prompt까지 포함
       if (!isNegative) {
-        return this.buildPositivePromptSearchCondition(pattern, params, !!condition.case_sensitive);
+        return this.buildPositivePromptSearchCondition(pattern, params, !!condition.case_sensitive, normalizedAlternatePatterns);
       }
 
       params.push(pattern);
-      return condition.case_sensitive
+      const rawCondition = condition.case_sensitive
         ? `${column} LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`
         : `LOWER(${column}) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
+      if (normalizedAlternatePatterns.length > 0) {
+        const normalizedCondition = `${buildPromptNormalizedSqlExpression(column, !!condition.case_sensitive)} LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
+        params.push(...normalizedAlternatePatterns);
+        return `(${[rawCondition, ...normalizedAlternatePatterns.map(() => normalizedCondition)].join(' OR ')})`;
+      }
+      return rawCondition;
     }
 
     if (condition.type === 'prompt_regex' || condition.type === 'negative_prompt_regex') {
@@ -327,7 +388,8 @@ export class ComplexFilterService {
   private static buildPositivePromptSearchCondition(
     pattern: string,
     params: any[],
-    caseSensitive: boolean
+    caseSensitive: boolean,
+    normalizedPatterns: string[] = []
   ): string {
     const basePromptCondition = caseSensitive
       ? `im.prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`
@@ -343,6 +405,15 @@ export class ComplexFilterService {
 
     params.push(pattern, pattern, pattern);
 
+    const normalizedBasePromptCondition = `${buildPromptNormalizedSqlExpression('im.prompt', caseSensitive)} LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
+    const normalizedCharacterTextCondition = `${buildPromptNormalizedSqlExpression('im.character_prompt_text', caseSensitive)} LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
+    const normalizedCharCaptionCondition = `${buildPromptNormalizedSqlExpression("json_extract(char_item.value, '$.char_caption')", caseSensitive)} LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
+    const hasNormalizedPatterns = normalizedPatterns.length > 0;
+
+    if (hasNormalizedPatterns) {
+      params.push(...normalizedPatterns, ...normalizedPatterns, ...normalizedPatterns);
+    }
+
     return `(
       ${basePromptCondition}
       OR ${characterTextCondition}
@@ -354,6 +425,17 @@ export class ComplexFilterService {
           WHERE ${charCaptionCondition}
         )
       )
+      ${hasNormalizedPatterns ? `
+      OR ${normalizedPatterns.map(() => normalizedBasePromptCondition).join('\n      OR ')}
+      OR ${normalizedPatterns.map(() => normalizedCharacterTextCondition).join('\n      OR ')}
+      OR (
+        json_valid(im.raw_nai_parameters) = 1
+        AND EXISTS (
+          SELECT 1
+          FROM json_each(im.raw_nai_parameters, '$.v4_prompt.caption.char_captions') AS char_item
+          WHERE ${normalizedPatterns.map(() => normalizedCharCaptionCondition).join(' OR ')}
+        )
+      )` : ''}
     )`;
   }
 

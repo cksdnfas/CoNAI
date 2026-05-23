@@ -2,12 +2,15 @@ import * as assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { buildComplexFilterPayload } from '../features/search/search-utils'
+import { buildComplexFilterPayload, createTextSearchChip, cycleSearchOperator } from '../features/search/search-utils'
 import type { SearchChip } from '../features/search/search-types'
 
 const root = resolve(process.cwd(), 'src')
 const homeSearchUi = readFileSync(resolve(root, 'features/home/components/home-search-ui.tsx'), 'utf8')
 const homeSearchContext = readFileSync(resolve(root, 'features/home/home-search-context.tsx'), 'utf8')
+const homePage = readFileSync(resolve(root, 'features/home/home-page.tsx'), 'utf8')
+const homePageData = readFileSync(resolve(root, 'features/home/use-home-page-data.ts'), 'utf8')
+const imageList = readFileSync(resolve(root, 'features/images/components/image-list/image-list.tsx'), 'utf8')
 
 assert.ok(
   homeSearchUi.includes('let homeSearchDrawerContentLoadPromise'),
@@ -55,6 +58,23 @@ assert.match(
   homeSearchContext,
   /if \(options\?\.apply\) \{\s*commitSearchChips\(nextDraftChips\)\s*setIsDrawerOpen\(false\)/,
   'immediate scoped tag filters should apply search results and close the drawer',
+)
+assert.ok(
+  homePageData.includes('imageListResetKey') && homePage.includes('resetKey={imageListResetKey}'),
+  'home search result list should receive a reset key when the active filter set changes',
+)
+assert.ok(
+  imageList.includes("key={`masonry:${resetKey ?? 'stable'}`}") && imageList.includes("key={`grid:${resetKey ?? 'stable'}`}"),
+  'image list virtualizers should remount from the reset key so stale filter layouts cannot render blank lists',
+)
+
+const defaultTextChip = createTextSearchChip('positive', 'crow \\la+ darknesss\\')
+assert.equal(defaultTextChip?.operator, 'AND', 'new text search chips should default to AND')
+assert.equal(cycleSearchOperator('AND'), 'OR', 'operator toggle should move from default AND to OR')
+assert.deepEqual(
+  defaultTextChip ? buildComplexFilterPayload([defaultTextChip]).and_group : [],
+  [{ category: 'positive_prompt', type: 'prompt_contains', value: 'crow \\la+ darknesss\\' }],
+  'default text search payload should target and_group',
 )
 
 const unboundedRatingChip: SearchChip = {

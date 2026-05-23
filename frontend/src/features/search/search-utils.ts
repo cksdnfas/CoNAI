@@ -3,7 +3,7 @@ import { getThemeToneStyle } from '@/lib/theme-tones'
 import { SEARCH_AI_TOOL_OPTIONS } from './search-constants'
 import type { RatingTierRecord, SearchAiToolGroup, SearchChip, SearchOperator, SearchScope } from './search-types'
 
-const SEARCH_OPERATOR_SEQUENCE: SearchOperator[] = ['OR', 'AND', 'NOT']
+const SEARCH_OPERATOR_SEQUENCE: SearchOperator[] = ['AND', 'OR', 'NOT']
 const SEARCH_AI_TOOL_OPTION_BY_VALUE = new Map<SearchAiToolGroup, (typeof SEARCH_AI_TOOL_OPTIONS)[number]>(
   SEARCH_AI_TOOL_OPTIONS.map((option) => [option.value, option]),
 )
@@ -63,7 +63,7 @@ export function createTextSearchChip(scope: Exclude<SearchScope, 'rating' | 'too
     return {
       id: createSearchChipId(scope),
       scope,
-      operator: options?.operator ?? 'OR',
+      operator: options?.operator ?? 'AND',
       label: trimmedValue,
       value: trimmedValue,
       conditionCategory: 'basic',
@@ -75,7 +75,7 @@ export function createTextSearchChip(scope: Exclude<SearchScope, 'rating' | 'too
     return {
       id: createSearchChipId(scope),
       scope,
-      operator: options?.operator ?? 'OR',
+      operator: options?.operator ?? 'AND',
       label: trimmedValue,
       value: trimmedValue,
       conditionCategory: 'basic',
@@ -86,7 +86,7 @@ export function createTextSearchChip(scope: Exclude<SearchScope, 'rating' | 'too
   return {
     id: createSearchChipId(scope),
     scope,
-    operator: options?.operator ?? 'OR',
+    operator: options?.operator ?? 'AND',
     label: buildSearchChipLabel(scope, trimmedValue),
     value: trimmedValue,
   } satisfies SearchChip
@@ -102,7 +102,7 @@ export function createAIToolSearchChip(tool: SearchAiToolGroup, options?: { oper
   return {
     id: createSearchChipId('tool'),
     scope: 'tool',
-    operator: options?.operator ?? 'OR',
+    operator: options?.operator ?? 'AND',
     label: option.label,
     value: option.value,
     conditionCategory: 'basic',
@@ -133,7 +133,7 @@ export function createRatingSearchChip(tier: RatingTierRecord, options?: { opera
   return {
     id: createSearchChipId('rating'),
     scope: 'rating',
-    operator: options?.operator ?? 'OR',
+    operator: options?.operator ?? 'AND',
     label: tier.tier_name,
     value: tier.tier_name,
     minScore: tier.min_score,

@@ -261,10 +261,11 @@ export const parsePromptWithLoRAs = (prompt: string): { loras: string[], terms: 
  * This is the final cleaning step before storing in prompt_collection table
  *
  * Cleaning steps:
- *   1. Remove all bracket types: (), [], {}, including nested
- *   2. Remove weight notation: :1.2, :0.8, :-1.5
- *   3. Replace underscores with spaces: _ → space
- *   4. Trim and normalize whitespace
+ *   1. Remove prompt escape slashes before bracket characters
+ *   2. Remove all bracket types: (), [], {}, including nested
+ *   3. Remove weight notation: :1.2, :0.8, :-1.5
+ *   4. Replace underscores with spaces: _ → space
+ *   5. Trim and normalize whitespace
  *
  * Examples:
  *   (Superb_Quality:1.2) → Superb Quality
@@ -277,7 +278,10 @@ export const cleanPromptTerm = (term: string): string => {
 
   let cleaned = term;
 
-  // Step 1: Remove all types of brackets (multiple passes for nested brackets)
+  // Step 1: Remove prompt escape slashes before bracket characters
+  cleaned = cleaned.replace(/\\([()[\]{}])/g, '$1');
+
+  // Step 2: Remove all types of brackets (multiple passes for nested brackets)
   // Repeat removal until no more brackets remain
   let prevLength = 0;
   while (cleaned.length !== prevLength) {
@@ -285,14 +289,14 @@ export const cleanPromptTerm = (term: string): string => {
     cleaned = cleaned.replace(/[()[\]{}]/g, '');
   }
 
-  // Step 2: Remove weight notation (:number)
+  // Step 3: Remove weight notation (:number)
   // Pattern matches :1.2, :-0.5, :+1.0, etc.
   cleaned = cleaned.replace(/:[+-]?[\d.]+/g, '');
 
-  // Step 3: Replace underscores with spaces
+  // Step 4: Replace underscores with spaces
   cleaned = cleaned.replace(/_/g, ' ');
 
-  // Step 4: Normalize whitespace (collapse multiple spaces to single space)
+  // Step 5: Normalize whitespace (collapse multiple spaces to single space)
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
   return cleaned;
