@@ -1,6 +1,7 @@
 import { apiGenDb } from '../database/apiGenerationDb';
 import type { AuthAccountType } from './AuthAccount';
 import { buildUpdateQuery, filterDefined } from '../utils/dynamicUpdate';
+import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
 
 export type ServiceType = 'comfyui' | 'novelai' | 'codex';
 export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed';
@@ -410,6 +411,7 @@ export class GenerationHistoryModel {
         LIMIT 1
       )
       LEFT JOIN main_db.media_metadata im ON im.composite_hash = matched_file.composite_hash
+        AND ${MediaPostprocessVisibilityService.buildReadyCondition('im')}
       WHERE gh.id = ?
       LIMIT 1
     `);
@@ -467,6 +469,7 @@ export class GenerationHistoryModel {
         LIMIT 1
       )
       LEFT JOIN main_db.media_metadata im ON im.composite_hash = matched_file.composite_hash
+        AND ${MediaPostprocessVisibilityService.buildReadyCondition('im')}
       WHERE 1=1
     `;
     const params: any[] = [];

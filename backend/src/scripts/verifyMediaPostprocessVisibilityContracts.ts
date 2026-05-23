@@ -11,15 +11,18 @@ process.env.RUNTIME_BASE_PATH = runtimeBase;
 
 async function main() {
   const { db, closeDatabase } = await import('../database/init');
-    const { MediaMetadataModel } = await import('../models/Image/MediaMetadataModel');
-    const { ImageSearchModel } = await import('../models/Image/ImageSearchModel');
-    const { ImageSimilarityModel } = await import('../models/Image/ImageSimilarityModel');
-    const { ComplexFilterService } = await import('../services/complexFilterService');
-    const { findImagesByGroupWithFilesQuery } = await import('../models/GroupImageQueries');
-    const { MediaPostprocessVisibilityService } = await import('../services/mediaPostprocessVisibilityService');
-    const { BackgroundProcessorService } = await import('../services/backgroundProcessorService');
-    const { settingsService } = await import('../services/settingsService');
-    const { AutoTagsComposeService } = await import('../services/autoTagsComposeService');
+  const { initializeUserSettingsDb, closeUserSettingsDb } = await import('../database/userSettingsDb');
+  const { initializeApiGenerationDb } = await import('../database/apiGenerationDb');
+  const { MediaMetadataModel } = await import('../models/Image/MediaMetadataModel');
+  const { ImageSearchModel } = await import('../models/Image/ImageSearchModel');
+  const { ImageSimilarityModel } = await import('../models/Image/ImageSimilarityModel');
+  const { ComplexFilterService } = await import('../services/complexFilterService');
+  const { findImagesByGroupWithFilesQuery } = await import('../models/GroupImageQueries');
+  const { MediaPostprocessVisibilityService } = await import('../services/mediaPostprocessVisibilityService');
+  const { BackgroundProcessorService } = await import('../services/backgroundProcessorService');
+  const { settingsService } = await import('../services/settingsService');
+  const { AutoTagsComposeService } = await import('../services/autoTagsComposeService');
+  const { GenerationHistoryModel } = await import('../models/GenerationHistory');
 
   try {
     db.exec(`
@@ -114,6 +117,8 @@ async function main() {
         folder_name TEXT
       );
     `);
+    initializeUserSettingsDb();
+    initializeApiGenerationDb();
 
     db.prepare(`
       INSERT INTO rating_weights (id, general_weight, sensitive_weight, questionable_weight, explicit_weight)
@@ -166,6 +171,44 @@ async function main() {
 
     seed('ready-hash', 1, 'ready', '01');
     seed('pending-hash', 2, 'pending', '02');
+
+    const readyHistoryId = GenerationHistoryModel.create({
+      service_type: 'novelai',
+      generation_status: 'completed',
+      nai_model: 'model',
+      composite_hash: 'ready-hash',
+    });
+    const pendingHistoryId = GenerationHistoryModel.create({
+      service_type: 'novelai',
+      generation_status: 'completed',
+      nai_model: 'model',
+      composite_hash: 'pending-hash',
+    });
+    GenerationHistoryModel.updateImagePaths(readyHistoryId, { compositeHash: 'ready-hash' });
+    GenerationHistoryModel.updateImagePaths(pendingHistoryId, { compositeHash: 'pending-hash' });
+
+    const generationHistoryRecords = GenerationHistoryModel.findAllWithMetadata({ service_type: 'novelai', limit: 10 });
+    const historyByHash = new Map(generationHistoryRecords.map((record) => [record.composite_hash, record]));
+    assert.equal(
+      historyByHash.get('ready-hash')?.actual_composite_hash,
+      'ready-hash',
+      'generation history lists should resolve ready media metadata'
+    );
+    assert.equal(
+      historyByHash.get('pending-hash')?.actual_composite_hash ?? null,
+      null,
+      'generation history lists must not expose pending postprocessed media as display-ready'
+    );
+    assert.equal(
+      GenerationHistoryModel.findByIdWithMetadata(readyHistoryId)?.actual_composite_hash,
+      'ready-hash',
+      'generation history detail should resolve ready media metadata'
+    );
+    assert.equal(
+      GenerationHistoryModel.findByIdWithMetadata(pendingHistoryId)?.actual_composite_hash ?? null,
+      null,
+      'generation history detail must not expose pending postprocessed media as display-ready'
+    );
 
     const list = MediaMetadataModel.findAllWithFiles({ page: 1, limit: 10, sortOrder: 'ASC' });
     assert.deepEqual(
@@ -385,6 +428,7 @@ async function main() {
 
     console.log('✅ Media postprocess visibility contracts passed');
   } finally {
+    closeUserSettingsDb();
     closeDatabase();
     fs.rmSync(runtimeBase, { recursive: true, force: true });
   }
