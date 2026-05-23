@@ -85,7 +85,7 @@ export function PromptTagActionMenu({
               }}
             >
               <Search className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 truncate">{t({ ko: 'add tag {tag}', en: 'add tag {tag}' }, { tag })}</span>
+              <span className="min-w-0 truncate">{t({ ko: '검색에 {tag} 추가', en: 'Add {tag} to search' }, { tag })}</span>
             </button>
           ) : null}
 
