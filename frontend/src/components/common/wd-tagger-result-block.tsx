@@ -12,9 +12,10 @@ import { formatPromptTagCopyText, getSortedEntries, parseTaglistTokens } from '.
 interface WDTaggerResultBlockProps {
   result: AutoTestTaggerResult
   title?: string
+  onAddSearchFilter?: (tag: string) => void
 }
 
-export function WDTaggerResultBlock({ result, title }: WDTaggerResultBlockProps) {
+export function WDTaggerResultBlock({ result, title, onAddSearchFilter }: WDTaggerResultBlockProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const ratingEntries = getSortedEntries(result.rating)
@@ -63,6 +64,7 @@ export function WDTaggerResultBlock({ result, title }: WDTaggerResultBlockProps)
               entries={generalEntries}
               collapsibleScores
               getTagHref={buildDanbooruTagUrl}
+              onAddSearchFilter={onAddSearchFilter}
               tagsHeaderAction={generalCopyText ? (
                 <Button
                   type="button"

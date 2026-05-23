@@ -21,11 +21,15 @@ const DEFAULT_PROMPT_GROUPING_DISPLAY_OPTIONS: PromptGroupingDisplayOptions = {
   treatDanbooruAsRoot: false,
 }
 
+export type ExtractedPromptActionScope = 'positive' | 'negative' | 'lora'
+
 export interface ExtractedPromptCardItem {
   id: string
   title: string
   text: string
   tone: 'positive' | 'negative' | 'character' | 'neutral'
+  actionScope?: ExtractedPromptActionScope
+  actionTerms?: string[]
   badges?: string[]
   groupedSections?: ExtractedPromptGroupedSection[]
 }
@@ -235,6 +239,15 @@ function dedupePreservingOrder(values: string[]) {
   return items
 }
 
+function getCleanPromptTerms(prompt?: string | null) {
+  const { terms } = splitPromptTokens(prompt)
+  return dedupePreservingOrder(
+    terms
+      .map((term) => cleanPromptTerm(term))
+      .filter(Boolean),
+  )
+}
+
 function getPromptGroupingUnclassifiedLabel(translate?: TranslateText) {
   return translateOrFallback(translate, EXTRACTED_PROMPT_LABEL_KEYS.unclassified)
 }
@@ -312,12 +325,7 @@ export function getImagePromptTerms(image: ImageRecord, type: 'positive' | 'nega
     ? getTrimmedText(image.ai_metadata?.prompts?.prompt) ?? getRawPositivePrompt(rawNaiParameters)
     : getTrimmedText(image.ai_metadata?.prompts?.negative_prompt) ?? getRawNegativePrompt(rawNaiParameters)
 
-  const { terms } = splitPromptTokens(promptText)
-  return dedupePreservingOrder(
-    terms
-      .map((term) => cleanPromptTerm(term))
-      .filter(Boolean),
-  )
+  return getCleanPromptTerms(promptText)
 }
 
 export function getImageLoraModels(image: ImageRecord) {
@@ -406,6 +414,8 @@ export function getImageExtractedPromptCards(
   const rawNaiParameters = image.ai_metadata?.raw_nai_parameters
   const { positivePrompt: positiveText, negativePrompt: negativeText, characterPrompts: characterTexts } = getImageExtractedPromptSummary(image)
   const loraModels = getImageLoraModels(image)
+  const positivePromptTerms = getImagePromptTerms(image, 'positive')
+  const negativePromptTerms = getImagePromptTerms(image, 'negative')
   const labels = resolveExtractedPromptCardLabels(translate)
 
   const cards: ExtractedPromptCardItem[] = []
@@ -416,6 +426,8 @@ export function getImageExtractedPromptCards(
       title: 'LoRA',
       text: loraModels.join(', '),
       tone: 'neutral',
+      actionScope: 'lora',
+      actionTerms: loraModels,
     })
   }
 
@@ -425,6 +437,8 @@ export function getImageExtractedPromptCards(
       title: labels.positivePrompt,
       text: positiveText,
       tone: 'positive',
+      actionScope: 'positive',
+      actionTerms: positivePromptTerms,
       badges: isProcessedPrompt(positiveText, getRawPositivePrompt(rawNaiParameters)) ? [labels.processedBadge] : undefined,
     })
   }
@@ -444,6 +458,8 @@ export function getImageExtractedPromptCards(
       title: labels.negativePrompt,
       text: negativeText,
       tone: 'negative',
+      actionScope: 'negative',
+      actionTerms: negativePromptTerms,
       badges: isProcessedPrompt(negativeText, getRawNegativePrompt(rawNaiParameters)) ? [labels.processedBadge] : undefined,
     })
   }

@@ -6,8 +6,10 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { clearSearchHistory, deleteSearchHistory, getSearchHistory, saveSearchHistory } from '@/lib/api-search'
 import { SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
-import type { SearchAiToolGroup, SearchChip, SearchHistoryEntry, SearchScope } from '@/features/search/search-types'
+import type { SearchAiToolGroup, SearchChip, SearchHistoryEntry, SearchOperator, SearchScope } from '@/features/search/search-types'
 import { buildSearchChipKey, buildSearchHistoryLabel, createAIToolSearchChip, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
+
+export type TextSearchScope = Exclude<SearchScope, 'rating' | 'tool'>
 
 interface HomeSearchContextValue {
   isDrawerOpen: boolean
@@ -23,6 +25,7 @@ interface HomeSearchContextValue {
   setSearchInput: (value: string) => void
   addTextChip: () => boolean
   submitSearchFromInput: () => void
+  addScopedTextChip: (scope: TextSearchScope, value: string, options?: { operator?: SearchOperator }) => boolean
   addSuggestionChip: (value: string) => void
   addAIToolChip: (tool: SearchAiToolGroup) => void
   addRatingChip: (chip: SearchChip) => void
@@ -128,6 +131,19 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     setSearchInputState('')
     return true
   }, [appendDraftChip, searchInput, searchScope])
+
+  const addScopedTextChip = useCallback((scope: TextSearchScope, value: string, options?: { operator?: SearchOperator }) => {
+    const chip = createTextSearchChip(scope, value, options)
+    if (!chip) {
+      return false
+    }
+
+    appendDraftChip(chip)
+    setSearchScopeState(scope)
+    setSearchInputState('')
+    setIsDrawerOpen(true)
+    return true
+  }, [appendDraftChip])
 
   const addSuggestionChip = useCallback((value: string) => {
     if (searchScope === 'rating' || searchScope === 'tool') {
@@ -247,6 +263,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       setSearchInput,
       addTextChip,
       submitSearchFromInput,
+      addScopedTextChip,
       addSuggestionChip,
       addAIToolChip,
       addRatingChip,
@@ -261,6 +278,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     [
       addAIToolChip,
       addRatingChip,
+      addScopedTextChip,
       addSuggestionChip,
       addTextChip,
       appliedChips,

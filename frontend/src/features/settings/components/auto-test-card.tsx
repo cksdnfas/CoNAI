@@ -4,13 +4,26 @@ import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
+import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
+import { getImageExtractedPromptCards, type ExtractedPromptActionScope } from '@/lib/image-extracted-prompts'
 import type { AutoTestKaloscopeResult, AutoTestMediaRecord, AutoTestTaggerResult } from '@/lib/api-settings'
 import type { ImageRecord } from '@/types/image'
 import { formatFileSize } from '../settings-utils'
 import { EnhancedVideoPlayer } from '@/features/images/components/detail/enhanced-video-player'
 import { SettingsField, SettingsInsetBlock, SettingsSection, SettingsValueTile } from './settings-primitives'
 import { useI18n } from '@/i18n'
+
+function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope): TextSearchScope {
+  if (scope === 'negative') {
+    return 'negative'
+  }
+
+  if (scope === 'lora') {
+    return 'lora'
+  }
+
+  return 'positive'
+}
 
 interface AutoTestCardProps {
   heading: ReactNode
@@ -46,7 +59,16 @@ export function AutoTestCard({
   isRunningKaloscopeAutoTest,
 }: AutoTestCardProps) {
   const { t } = useI18n()
+  const { addScopedTextChip } = useHomeSearch()
   const extractedPromptCards = autoTestImage ? getImageExtractedPromptCards(autoTestImage, t) : []
+
+  const handleAddExtractedPromptSearchFilter = (scope: ExtractedPromptActionScope, tag: string) => {
+    addScopedTextChip(getTextSearchScopeForExtractedPrompt(scope), tag)
+  }
+
+  const handleAddAutoPromptSearchFilter = (tag: string) => {
+    addScopedTextChip('auto', tag)
+  }
 
   return (
     <SettingsSection heading={heading} actions={actions}>
@@ -119,7 +141,7 @@ export function AutoTestCard({
         <SettingsInsetBlock>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</div>
           <div className="mt-3">
-            <ExtractedPromptSections items={extractedPromptCards} />
+            <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
           </div>
         </SettingsInsetBlock>
       ) : null}
@@ -133,8 +155,8 @@ export function AutoTestCard({
         </Button>
       </div>
 
-      {kaloscopeTestResult ? <KaloscopeResultBlock result={kaloscopeTestResult} /> : null}
-      {taggerTestResult ? <WDTaggerResultBlock result={taggerTestResult} /> : null}
+      {kaloscopeTestResult ? <KaloscopeResultBlock result={kaloscopeTestResult} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}
+      {taggerTestResult ? <WDTaggerResultBlock result={taggerTestResult} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}
     </SettingsSection>
   )
 }

@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
 import { resolvePromptGroups } from '@/lib/api-prompts'
@@ -20,7 +21,7 @@ import { getAppSettings, updateKaloscopeSettings } from '@/lib/api-settings'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
-import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms, type PromptGroupingDisplayOptions } from '@/lib/image-extracted-prompts'
+import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms, type ExtractedPromptActionScope, type PromptGroupingDisplayOptions } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
@@ -140,10 +141,23 @@ function PromptGroupingOptionsFlyout({ isOpen, options, onToggle, onChange }: Pr
   )
 }
 
+function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope): TextSearchScope {
+  if (scope === 'negative') {
+    return 'negative'
+  }
+
+  if (scope === 'lora') {
+    return 'lora'
+  }
+
+  return 'positive'
+}
+
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const imageViewModal = useImageViewModal()
+  const { addScopedTextChip } = useHomeSearch()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const [promptDisplayMode, setPromptDisplayMode] = useState<PromptDisplayMode>(() => loadPromptDisplayMode())
@@ -270,6 +284,14 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     void artistPromptLinkMutation.mutateAsync({ artistLinkUrlTemplate: template })
   }
 
+  const handleAddExtractedPromptSearchFilter = (scope: ExtractedPromptActionScope, tag: string) => {
+    addScopedTextChip(getTextSearchScopeForExtractedPrompt(scope), tag)
+  }
+
+  const handleAddAutoPromptSearchFilter = (tag: string) => {
+    addScopedTextChip('auto', tag)
+  }
+
   return (
     <div className="space-y-3 text-sm text-muted-foreground">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -349,7 +371,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
               ) : null}
             </div>
             <div className="mt-3">
-              <ExtractedPromptSections items={displayedPromptCards} />
+              <ExtractedPromptSections items={displayedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
             </div>
           </div>
         ) : null}
@@ -366,6 +388,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
                 entries={autoPromptContent.generalEntries}
                 collapsibleScores
                 getTagHref={buildDanbooruTagUrl}
+                onAddSearchFilter={handleAddAutoPromptSearchFilter}
                 tagsHeaderAction={(
                   <Button
                     type="button"
@@ -406,6 +429,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
                 entries={artistPromptSection.entries}
                 collapsibleScores
                 getTagHref={(tag) => buildArtistPromptTagUrl(tag, artistLinkUrlTemplate)}
+                onAddSearchFilter={handleAddAutoPromptSearchFilter}
               />
             </div>
           </div>

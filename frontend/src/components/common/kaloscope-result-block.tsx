@@ -9,9 +9,10 @@ import { getSortedEntries } from './tag-result-utils'
 interface KaloscopeResultBlockProps {
   result: AutoTestKaloscopeResult
   title?: string
+  onAddSearchFilter?: (tag: string) => void
 }
 
-export function KaloscopeResultBlock({ result, title }: KaloscopeResultBlockProps) {
+export function KaloscopeResultBlock({ result, title, onAddSearchFilter }: KaloscopeResultBlockProps) {
   const { t } = useI18n()
   const artistEntries = getSortedEntries(result.artists)
   const settingsQuery = useQuery({
@@ -36,6 +37,7 @@ export function KaloscopeResultBlock({ result, title }: KaloscopeResultBlockProp
           entries={artistEntries}
           collapsibleScores={false}
           getTagHref={(tag) => buildArtistPromptTagUrl(tag, artistLinkUrlTemplate)}
+          onAddSearchFilter={onAddSearchFilter}
         />
       </div>
     </div>

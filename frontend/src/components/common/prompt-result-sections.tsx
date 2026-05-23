@@ -41,6 +41,7 @@ export function GeneralPromptSection({
   tagsHeaderAction,
   getTagHref,
   onTagClick,
+  onAddSearchFilter,
 }: {
   tags: string[]
   entries: PromptScoreEntries
@@ -50,12 +51,13 @@ export function GeneralPromptSection({
   tagsHeaderAction?: ReactNode
   getTagHref?: (tag: string) => string | null
   onTagClick?: (tag: string, href: string) => void
+  onAddSearchFilter?: (tag: string) => void
 }) {
   if (tags.length === 0 && entries.length === 0) return null
 
   return (
     <div className="space-y-3">
-      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} getTagHref={getTagHref} onTagClick={onTagClick} headerAction={tagsHeaderAction} /> : null}
+      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} getTagHref={getTagHref} onTagClick={onTagClick} onAddSearchFilter={onAddSearchFilter} headerAction={tagsHeaderAction} /> : null}
       {entries.length > 0
         ? collapsibleScores
           ? <CollapsibleScoreMeterList title={label} entries={entries} accentClassName={accentClassName} />
@@ -74,6 +76,7 @@ export function ArtistPromptSection({
   collapsibleScores = true,
   getTagHref,
   onTagClick,
+  onAddSearchFilter,
 }: {
   tags: string[]
   entries: PromptScoreEntries
@@ -82,12 +85,13 @@ export function ArtistPromptSection({
   collapsibleScores?: boolean
   getTagHref?: (tag: string) => string | null
   onTagClick?: (tag: string, href: string) => void
+  onAddSearchFilter?: (tag: string) => void
 }) {
   if (tags.length === 0 && entries.length === 0) return null
 
   return (
     <div className="space-y-3">
-      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} getTagHref={getTagHref} onTagClick={onTagClick} /> : null}
+      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} getTagHref={getTagHref} onTagClick={onTagClick} onAddSearchFilter={onAddSearchFilter} /> : null}
       {entries.length > 0
         ? collapsibleScores
           ? <CollapsibleScoreMeterList title={label} entries={entries} accentClassName={accentClassName} />

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { getThemeToneFillStyle, getThemeToneStyle } from '@/lib/theme-tones'
+import { PromptTagActionMenu } from './prompt-tag-action-menu'
 import { formatScore } from './tag-result-utils'
 
 function getRatingAccentStyle(label: string) {
@@ -23,12 +24,14 @@ export function TagBundleSection({
   tags,
   getTagHref,
   onTagClick,
+  onAddSearchFilter,
   headerAction,
 }: {
   label: string
   tags: string[]
   getTagHref?: (tag: string) => string | null
   onTagClick?: (tag: string, href: string) => void
+  onAddSearchFilter?: (tag: string) => void
   headerAction?: ReactNode
 }) {
   if (tags.length === 0) return null
@@ -43,17 +46,18 @@ export function TagBundleSection({
         {tags.map((tag) => {
           const href = getTagHref?.(tag) ?? null
 
-          if (href) {
+          if (href || onAddSearchFilter) {
             return (
-              <button
+              <PromptTagActionMenu
                 key={`${label}:${tag}`}
-                type="button"
+                tag={tag}
+                href={href}
+                onAddSearchFilter={onAddSearchFilter}
+                onOpenHref={onTagClick}
                 className="rounded-full bg-surface-low px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high hover:text-primary"
-                onClick={() => onTagClick ? onTagClick(tag, href) : window.open(href, '_blank', 'noopener,noreferrer')}
-                title={`${tag} 링크 열기`}
               >
                 {tag}
-              </button>
+              </PromptTagActionMenu>
             )
           }
 

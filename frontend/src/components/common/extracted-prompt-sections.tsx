@@ -6,7 +6,8 @@ import { useI18n } from '@/i18n'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneStyle, getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
-import type { ExtractedPromptCardItem, ExtractedPromptGroupedSection } from '@/lib/image-extracted-prompts'
+import { PromptTagActionMenu } from './prompt-tag-action-menu'
+import type { ExtractedPromptActionScope, ExtractedPromptCardItem, ExtractedPromptGroupedSection } from '@/lib/image-extracted-prompts'
 
 function getPromptToneStyle(tone: ExtractedPromptCardItem['tone']) {
   switch (tone) {
@@ -51,9 +52,42 @@ function getGroupedSectionTooltip(section: ExtractedPromptGroupedSection) {
 
 interface ExtractedPromptCardProps {
   item: ExtractedPromptCardItem
+  onAddSearchFilter?: (scope: ExtractedPromptActionScope, tag: string) => void
 }
 
-function ExtractedPromptGroupedBody({ sections }: { sections: ExtractedPromptGroupedSection[] }) {
+interface ExtractedPromptTermListProps {
+  terms: string[]
+  scope: ExtractedPromptActionScope
+  onAddSearchFilter?: (scope: ExtractedPromptActionScope, tag: string) => void
+}
+
+function getPromptActionHref(scope: ExtractedPromptActionScope) {
+  return scope === 'lora' ? null : undefined
+}
+
+function ExtractedPromptTermList({ terms, scope, onAddSearchFilter }: ExtractedPromptTermListProps) {
+  if (terms.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2 leading-normal">
+      {terms.map((term) => (
+        <PromptTagActionMenu
+          key={`${scope}:${term}`}
+          tag={term}
+          href={getPromptActionHref(scope)}
+          onAddSearchFilter={onAddSearchFilter ? (tag) => onAddSearchFilter(scope, tag) : undefined}
+          className="rounded-full bg-surface-low px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high hover:text-primary"
+        >
+          {term}
+        </PromptTagActionMenu>
+      ))}
+    </div>
+  )
+}
+
+function ExtractedPromptGroupedBody({ sections, actionScope, onAddSearchFilter }: { sections: ExtractedPromptGroupedSection[]; actionScope?: ExtractedPromptActionScope; onAddSearchFilter?: (scope: ExtractedPromptActionScope, tag: string) => void }) {
   return (
     <div className="space-y-4">
       {sections.map((section) => {
@@ -74,7 +108,11 @@ function ExtractedPromptGroupedBody({ sections }: { sections: ExtractedPromptGro
               </span>
             </div>
             <div className="text-base leading-8 text-foreground/92 break-words">
-              {section.prompts.join(', ')}
+              {actionScope ? (
+                <ExtractedPromptTermList terms={section.prompts} scope={actionScope} onAddSearchFilter={onAddSearchFilter} />
+              ) : (
+                section.prompts.join(', ')
+              )}
             </div>
           </div>
         )
@@ -83,7 +121,7 @@ function ExtractedPromptGroupedBody({ sections }: { sections: ExtractedPromptGro
   )
 }
 
-function ExtractedPromptCard({ item }: ExtractedPromptCardProps) {
+function ExtractedPromptCard({ item, onAddSearchFilter }: ExtractedPromptCardProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const [expanded, setExpanded] = useState(true)
@@ -131,7 +169,9 @@ function ExtractedPromptCard({ item }: ExtractedPromptCardProps) {
       {expanded ? (
         <div className="px-4 py-4 text-base text-foreground/92 whitespace-pre-wrap break-words">
           {item.groupedSections?.length ? (
-            <ExtractedPromptGroupedBody sections={item.groupedSections} />
+            <ExtractedPromptGroupedBody sections={item.groupedSections} actionScope={item.actionScope} onAddSearchFilter={onAddSearchFilter} />
+          ) : item.actionScope && item.actionTerms?.length ? (
+            <ExtractedPromptTermList terms={item.actionTerms} scope={item.actionScope} onAddSearchFilter={onAddSearchFilter} />
           ) : (
             <div className="leading-8">{item.text}</div>
           )}
@@ -142,7 +182,13 @@ function ExtractedPromptCard({ item }: ExtractedPromptCardProps) {
 }
 
 /** Render reusable extracted prompt cards for image-derived prompt text. */
-export function ExtractedPromptSections({ items }: { items: ExtractedPromptCardItem[] }) {
+export function ExtractedPromptSections({
+  items,
+  onAddSearchFilter,
+}: {
+  items: ExtractedPromptCardItem[]
+  onAddSearchFilter?: (scope: ExtractedPromptActionScope, tag: string) => void
+}) {
   if (items.length === 0) {
     return null
   }
@@ -150,7 +196,7 @@ export function ExtractedPromptSections({ items }: { items: ExtractedPromptCardI
   return (
     <div className="space-y-3">
       {items.map((item) => (
-        <ExtractedPromptCard key={item.id} item={item} />
+        <ExtractedPromptCard key={item.id} item={item} onAddSearchFilter={onAddSearchFilter} />
       ))}
     </div>
   )

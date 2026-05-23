@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { MetadataRewriteForm } from '@/features/metadata/components/metadata-rewrite-form'
+import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
 import type { RewriteMetadataDraft } from '@/features/metadata/use-metadata-rewrite-draft'
 import { useI18n } from '@/i18n'
 import { formatBytes } from '@/features/images/components/detail/image-detail-utils'
@@ -22,7 +23,7 @@ import { getUploadResultDetailPath } from '../upload-result-links'
 import { getVisibleUploadResultLists } from '../upload-result-list'
 import type { UploadBatchResult, UploadTransferProgress } from '@/lib/api-images'
 import type { AutoTestKaloscopeResult, AutoTestTaggerResult } from '@/lib/api-settings'
-import type { ExtractedPromptCardItem } from '@/lib/image-extracted-prompts'
+import type { ExtractedPromptActionScope, ExtractedPromptCardItem } from '@/lib/image-extracted-prompts'
 import type { ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageRecord } from '@/types/image'
 import type { ImageSaveSettings } from '@/types/settings'
@@ -33,6 +34,18 @@ const MAX_VISIBLE_FILES = 6
 function formatDimensions(width?: number | null, height?: number | null) {
   if (!width || !height) return '—'
   return `${width} × ${height}`
+}
+
+function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope): TextSearchScope {
+  if (scope === 'negative') {
+    return 'negative'
+  }
+
+  if (scope === 'lora') {
+    return 'lora'
+  }
+
+  return 'positive'
 }
 
 /** Render a compact summary tile for upload or extraction metadata. */
@@ -356,6 +369,15 @@ export function UploadPageExtractSection({
   onRewriteDraftChange: (patch: Record<string, unknown>) => void
 }) {
   const { t } = useI18n()
+  const { addScopedTextChip } = useHomeSearch()
+
+  const handleAddExtractedPromptSearchFilter = (scope: ExtractedPromptActionScope, tag: string) => {
+    addScopedTextChip(getTextSearchScopeForExtractedPrompt(scope), tag)
+  }
+
+  const handleAddAutoPromptSearchFilter = (tag: string) => {
+    addScopedTextChip('auto', tag)
+  }
 
   return (
     <PageSection
@@ -465,7 +487,7 @@ export function UploadPageExtractSection({
 
                 {extractedPromptCards.length > 0 ? (
                   <div className="rounded-sm border border-border/70 bg-background/50 p-4">
-                    <ExtractedPromptSections items={extractedPromptCards} />
+                    <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
                   </div>
                 ) : (
                   <PageInset className="text-sm text-muted-foreground">{t({ ko: '표시할 프롬프트가 없어.', en: 'No prompts to show.' })}</PageInset>
@@ -473,8 +495,8 @@ export function UploadPageExtractSection({
               </PageInset>
             ) : null}
 
-            {taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '자동', en: 'Auto' })} /> : null}
-            {kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title={t({ ko: '작가', en: 'Artist' })} /> : null}
+            {taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '자동', en: 'Auto' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}
+            {kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title={t({ ko: '작가', en: 'Artist' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}
           </div>
         </div>
       ) : null}
