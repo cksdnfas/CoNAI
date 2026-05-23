@@ -61,6 +61,7 @@
     "verify:upload-metadata-utilities": "cd backend && npm run verify:upload-metadata-utilities",
     "verify:upload-response-contracts": "cd backend && npm run verify:upload-response-contracts",
     "verify:prompt-tag-links": "cd frontend && npm run verify:prompt-tag-links",
+    "verify:prompt-weight-display-contracts": "cd frontend && npm run verify:prompt-weight-display-contracts",
     "verify:app-document-metadata-contracts": "cd frontend && npm run verify:app-document-metadata-contracts",
     "verify:prompt-list-progress-contracts": "cd frontend && npm run verify:prompt-list-progress-contracts",
     "verify:upload-result-links": "cd frontend && npm run verify:upload-result-links",

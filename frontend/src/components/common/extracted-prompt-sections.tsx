@@ -7,7 +7,7 @@ import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneStyle, getThemeToneTextStyle } from '@/lib/theme-tones'
 import { cn } from '@/lib/utils'
 import { PromptTagActionMenu } from './prompt-tag-action-menu'
-import type { ExtractedPromptActionScope, ExtractedPromptCardItem, ExtractedPromptGroupedSection } from '@/lib/image-extracted-prompts'
+import type { ExtractedPromptActionScope, ExtractedPromptActionTerm, ExtractedPromptCardItem, ExtractedPromptGroupedSection } from '@/lib/image-extracted-prompts'
 
 function getPromptToneStyle(tone: ExtractedPromptCardItem['tone']) {
   switch (tone) {
@@ -56,7 +56,7 @@ interface ExtractedPromptCardProps {
 }
 
 interface ExtractedPromptTermListProps {
-  terms: string[]
+  terms: ExtractedPromptActionTerm[]
   scope: ExtractedPromptActionScope
   onAddSearchFilter?: (scope: ExtractedPromptActionScope, tag: string) => void
 }
@@ -74,13 +74,13 @@ function ExtractedPromptTermList({ terms, scope, onAddSearchFilter }: ExtractedP
     <div className="flex flex-wrap gap-2 leading-normal">
       {terms.map((term) => (
         <PromptTagActionMenu
-          key={`${scope}:${term}`}
-          tag={term}
+          key={`${scope}:${term.searchValue}:${term.display}`}
+          tag={term.searchValue}
           href={getPromptActionHref(scope)}
           onAddSearchFilter={onAddSearchFilter ? (tag) => onAddSearchFilter(scope, tag) : undefined}
           className="rounded-full bg-surface-low px-2.5 py-1 text-xs text-foreground transition hover:bg-surface-high hover:text-primary"
         >
-          {term}
+          {term.display}
         </PromptTagActionMenu>
       ))}
     </div>
@@ -111,7 +111,7 @@ function ExtractedPromptGroupedBody({ sections, actionScope, onAddSearchFilter }
               {actionScope ? (
                 <ExtractedPromptTermList terms={section.prompts} scope={actionScope} onAddSearchFilter={onAddSearchFilter} />
               ) : (
-                section.prompts.join(', ')
+                section.prompts.map((term) => term.display).join(', ')
               )}
             </div>
           </div>

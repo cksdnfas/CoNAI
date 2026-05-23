@@ -222,13 +222,23 @@ async function main() {
 
     assert.equal(
       cleanPromptTerm('crow \\(la+ darknesss\\)'),
-      'crow la+ darknesss',
-      'prompt collection cleanup should remove bracket escape slashes before stripping brackets'
+      'crow (la+ darknesss)',
+      'prompt collection cleanup should unescape literal brackets without stripping non-weight parentheses'
+    );
+    assert.equal(
+      cleanPromptTerm('stocking_(psg)'),
+      'stocking_(psg)',
+      'prompt collection cleanup should preserve non-weight tag parentheses'
+    );
+    assert.equal(
+      cleanPromptTerm('(머리:1.2)'),
+      '머리',
+      'prompt collection cleanup should remove explicit prompt weights for dedupe'
     );
 
     const escapedBracketPromptFilter: ComplexFilter = {
       and_group: [
-        { category: 'positive_prompt', type: 'prompt_contains', value: 'crow \\la+ darknesss\\' },
+        { category: 'positive_prompt', type: 'prompt_contains', value: 'crow (la+ darknesss)' },
       ],
     };
 
@@ -241,7 +251,7 @@ async function main() {
     assert.deepEqual(
       escapedBracketPrompt.images.map((image) => image.composite_hash),
       ['hash-escaped-bracket-prompt'],
-      'complex prompt contains should match prompt-collection terms cleaned from escaped brackets'
+      'complex prompt contains should match escaped prompt brackets without deleting literal parentheses'
     );
 
     const weightedLoraPromptFilter: ComplexFilter = {

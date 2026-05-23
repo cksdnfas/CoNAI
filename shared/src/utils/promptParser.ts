@@ -12,19 +12,33 @@ export interface ParsedPrompt {
   terms: string[];
 }
 
+const WEIGHT_NUMBER_SOURCE = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)';
+const WEIGHTED_PARENTHESES_PATTERN = new RegExp(`\\(([^()]+(?:[^()]*)?):${WEIGHT_NUMBER_SOURCE}\\)`, 'g');
+const WEIGHTED_SQUARE_BRACKETS_PATTERN = new RegExp(`\\[([^\\[\\]]+(?:[^\\[\\]]*)?):${WEIGHT_NUMBER_SOURCE}\\]`, 'g');
+const WEIGHTED_CURLY_BRACKETS_PATTERN = new RegExp(`\\{([^{}]+(?:[^{}]*)?):${WEIGHT_NUMBER_SOURCE}\\}`, 'g');
+
 /**
- * Remove weights from prompt and clean it up
+ * Remove explicit prompt weights while preserving non-weight bracket text.
  * Examples:
  *   (대한민국:1.2) -> 대한민국
- *   (대한민국:0.5) -> 대한민국
- *   하루노 사쿠라(나루토) -> 하루노 사쿠라(나루토) (no change)
+ *   (artist:yuuinami:1.23) -> artist:yuuinami
+ *   stocking_(psg) -> stocking_(psg) (no change)
  */
 export const removeWeights = (prompt: string): string => {
   if (!prompt) return '';
 
-  // Weight pattern: find (text:number) format and convert to just text
-  // Preserve regular parentheses that are not weights
-  return prompt.replace(/\(([^:)]+):[+-]?[\d.]+\)/g, '$1');
+  let cleaned = prompt;
+  let previous = '';
+
+  while (cleaned !== previous) {
+    previous = cleaned;
+    cleaned = cleaned
+      .replace(WEIGHTED_PARENTHESES_PATTERN, '$1')
+      .replace(WEIGHTED_SQUARE_BRACKETS_PATTERN, '$1')
+      .replace(WEIGHTED_CURLY_BRACKETS_PATTERN, '$1');
+  }
+
+  return cleaned;
 };
 
 /**
@@ -256,47 +270,27 @@ export const parsePromptWithLoRAs = (prompt: string): { loras: string[], terms: 
 };
 
 /**
- * Clean a prompt term for collection storage
- * Removes all brackets, weights, and replaces underscores with spaces
- * This is the final cleaning step before storing in prompt_collection table
- *
- * Cleaning steps:
- *   1. Remove prompt escape slashes before bracket characters
- *   2. Remove all bracket types: (), [], {}, including nested
- *   3. Remove weight notation: :1.2, :0.8, :-1.5
- *   4. Replace underscores with spaces: _ → space
- *   5. Trim and normalize whitespace
+ * Clean a prompt term for collection storage.
+ * Removes only explicit weights; preserves literal tag brackets/underscores.
  *
  * Examples:
- *   (Superb_Quality:1.2) → Superb Quality
- *   {{best_quality}} → best quality
- *   [low_quality:0.8] → low quality
- *   ((((masterpiece)))) → masterpiece
+ *   (Superb_Quality:1.2) → Superb_Quality
+ *   [low_quality:0.8] → low_quality
+ *   stocking_(psg) → stocking_(psg)
+ *   crow \(la+ darknesss\) → crow (la+ darknesss)
  */
 export const cleanPromptTerm = (term: string): string => {
   if (!term) return '';
 
   let cleaned = term;
 
-  // Step 1: Remove prompt escape slashes before bracket characters
+  // Remove prompt escape slashes before bracket characters.
   cleaned = cleaned.replace(/\\([()[\]{}])/g, '$1');
 
-  // Step 2: Remove all types of brackets (multiple passes for nested brackets)
-  // Repeat removal until no more brackets remain
-  let prevLength = 0;
-  while (cleaned.length !== prevLength) {
-    prevLength = cleaned.length;
-    cleaned = cleaned.replace(/[()[\]{}]/g, '');
-  }
+  // Remove explicit weight wrappers, not literal parentheses inside tag names.
+  cleaned = removeWeights(cleaned);
 
-  // Step 3: Remove weight notation (:number)
-  // Pattern matches :1.2, :-0.5, :+1.0, etc.
-  cleaned = cleaned.replace(/:[+-]?[\d.]+/g, '');
-
-  // Step 4: Replace underscores with spaces
-  cleaned = cleaned.replace(/_/g, ' ');
-
-  // Step 5: Normalize whitespace (collapse multiple spaces to single space)
+  // Normalize whitespace.
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
   return cleaned;

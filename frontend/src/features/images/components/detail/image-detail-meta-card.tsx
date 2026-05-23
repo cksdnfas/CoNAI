@@ -21,7 +21,7 @@ import { getAppSettings, updateKaloscopeSettings } from '@/lib/api-settings'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
-import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTerms, type ExtractedPromptActionScope, type PromptGroupingDisplayOptions } from '@/lib/image-extracted-prompts'
+import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTermItems, type ExtractedPromptActionScope, type PromptGroupingDisplayOptions } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
 import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
@@ -178,14 +178,16 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
       return nextOptions
     })
   }
-  const positivePromptTerms = useMemo(() => getImagePromptTerms(image, 'positive'), [image])
-  const negativePromptTerms = useMemo(() => getImagePromptTerms(image, 'negative'), [image])
+  const positivePromptTermItems = useMemo(() => getImagePromptTermItems(image, 'positive'), [image])
+  const negativePromptTermItems = useMemo(() => getImagePromptTermItems(image, 'negative'), [image])
+  const positivePromptTerms = useMemo(() => positivePromptTermItems.map((term) => term.searchValue), [positivePromptTermItems])
+  const negativePromptTerms = useMemo(() => negativePromptTermItems.map((term) => term.searchValue), [negativePromptTermItems])
   const autoPromptContent = getImageAutoPromptContent(image)
   const artistPromptSection = getImageArtistPromptSection(image)
   const autoPromptCopyText = useMemo(() => getImageAutoPromptCopyText(image), [image])
   const generationParamItems = getImageGenerationParamItems(image)
   const canEditMetadata = Boolean(image.composite_hash) && image.file_type === 'image'
-  const canTogglePromptGrouping = positivePromptTerms.length > 0 || negativePromptTerms.length > 0
+  const canTogglePromptGrouping = positivePromptTermItems.length > 0 || negativePromptTermItems.length > 0
   const metaItemClassName = 'rounded-sm border border-border bg-surface-container p-4'
 
   const settingsQuery = useQuery({
@@ -228,25 +230,25 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     }
 
     return extractedPromptCards.map((item) => {
-      if (item.id === 'positive-prompt' && positivePromptTerms.length > 0) {
+      if (item.id === 'positive-prompt' && positivePromptTermItems.length > 0) {
         if (positivePromptGroupQuery.isPending) {
           return { ...item, text: t('images.components.detail.image.detail.meta.card.organizing.groups') }
         }
 
         if (positivePromptGroupQuery.data) {
-          const groupedSections = buildGroupedPromptSections(positivePromptTerms, positivePromptGroupQuery.data, promptGroupingOptions, t)
+          const groupedSections = buildGroupedPromptSections(positivePromptTermItems, positivePromptGroupQuery.data, promptGroupingOptions, t)
           const groupedText = formatGroupedPromptText(groupedSections)
           return { ...item, text: groupedText || item.text, groupedSections }
         }
       }
 
-      if (item.id === 'negative-prompt' && negativePromptTerms.length > 0) {
+      if (item.id === 'negative-prompt' && negativePromptTermItems.length > 0) {
         if (negativePromptGroupQuery.isPending) {
           return { ...item, text: t('images.components.detail.image.detail.meta.card.organizing.groups') }
         }
 
         if (negativePromptGroupQuery.data) {
-          const groupedSections = buildGroupedPromptSections(negativePromptTerms, negativePromptGroupQuery.data, promptGroupingOptions, t)
+          const groupedSections = buildGroupedPromptSections(negativePromptTermItems, negativePromptGroupQuery.data, promptGroupingOptions, t)
           const groupedText = formatGroupedPromptText(groupedSections)
           return { ...item, text: groupedText || item.text, groupedSections }
         }
@@ -258,10 +260,10 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     extractedPromptCards,
     negativePromptGroupQuery.data,
     negativePromptGroupQuery.isPending,
-    negativePromptTerms,
+    negativePromptTermItems,
     positivePromptGroupQuery.data,
     positivePromptGroupQuery.isPending,
-    positivePromptTerms,
+    positivePromptTermItems,
     promptDisplayMode,
     promptGroupingOptions,
     t,

@@ -3,10 +3,15 @@ import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { ImageAiRawNaiParameters, ImageRecord } from '@/types/image'
 import type { PromptGroupResolveItem } from '@/types/prompt'
 
+export interface ExtractedPromptActionTerm {
+  display: string
+  searchValue: string
+}
+
 export interface ExtractedPromptGroupedSection {
   id: string
   label: string
-  prompts: string[]
+  prompts: ExtractedPromptActionTerm[]
   hierarchyPath?: string[]
   kind: 'root' | 'child' | 'unclassified'
 }
@@ -29,7 +34,7 @@ export interface ExtractedPromptCardItem {
   text: string
   tone: 'positive' | 'negative' | 'character' | 'neutral'
   actionScope?: ExtractedPromptActionScope
-  actionTerms?: string[]
+  actionTerms?: ExtractedPromptActionTerm[]
   badges?: string[]
   groupedSections?: ExtractedPromptGroupedSection[]
 }
@@ -186,24 +191,41 @@ function splitPromptTokens(prompt?: string | null) {
   return { loras, terms }
 }
 
+const WEIGHT_NUMBER_SOURCE = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)'
+const WEIGHTED_PARENTHESES_PATTERN = new RegExp(`\\(([^()]+(?:[^()]*)?):${WEIGHT_NUMBER_SOURCE}\\)`, 'g')
+const WEIGHTED_SQUARE_BRACKETS_PATTERN = new RegExp(`\\[([^\\[\\]]+(?:[^\\[\\]]*)?):${WEIGHT_NUMBER_SOURCE}\\]`, 'g')
+const WEIGHTED_CURLY_BRACKETS_PATTERN = new RegExp(`\\{([^{}]+(?:[^{}]*)?):${WEIGHT_NUMBER_SOURCE}\\}`, 'g')
+
+function removePromptWeights(term: string) {
+  let cleaned = term
+  let previous = ''
+
+  while (cleaned !== previous) {
+    previous = cleaned
+    cleaned = cleaned
+      .replace(WEIGHTED_PARENTHESES_PATTERN, '$1')
+      .replace(WEIGHTED_SQUARE_BRACKETS_PATTERN, '$1')
+      .replace(WEIGHTED_CURLY_BRACKETS_PATTERN, '$1')
+  }
+
+  return cleaned
+}
+
+function normalizePromptDisplayTerm(term: string) {
+  return term
+    .replace(/\\([()[\]{}])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function cleanPromptTerm(term: string) {
   if (!term) {
     return ''
   }
 
-  let cleaned = term
-  let previousLength = -1
-
-  while (cleaned.length !== previousLength) {
-    previousLength = cleaned.length
-    cleaned = cleaned.replace(/[()[\]{}]/g, '')
-  }
-
-  cleaned = cleaned.replace(/:[+-]?[\d.]+/g, '')
-  cleaned = cleaned.replace(/_/g, ' ')
-  cleaned = cleaned.replace(/\s+/g, ' ').trim()
-
-  return cleaned
+  return removePromptWeights(normalizePromptDisplayTerm(term))
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function removeLoraWeight(value: string) {
@@ -239,14 +261,47 @@ function dedupePreservingOrder(values: string[]) {
   return items
 }
 
-function getCleanPromptTerms(prompt?: string | null) {
+function toPromptActionTerm(display: string, searchValue = display): ExtractedPromptActionTerm | null {
+  const normalizedDisplay = display.trim()
+  const normalizedSearchValue = searchValue.trim()
+
+  if (!normalizedDisplay || !normalizedSearchValue) {
+    return null
+  }
+
+  return {
+    display: normalizedDisplay,
+    searchValue: normalizedSearchValue,
+  }
+}
+
+function dedupePromptActionTerms(values: ExtractedPromptActionTerm[]) {
+  const seen = new Set<string>()
+  const items: ExtractedPromptActionTerm[] = []
+
+  values.forEach((value) => {
+    const lookupKey = value.searchValue.trim().toLowerCase()
+    if (!lookupKey || seen.has(lookupKey)) {
+      return
+    }
+
+    seen.add(lookupKey)
+    items.push(value)
+  })
+
+  return items
+}
+
+function getPromptTermItems(prompt?: string | null) {
   const { terms } = splitPromptTokens(prompt)
-  return dedupePreservingOrder(
+
+  return dedupePromptActionTerms(
     terms
-      .map((term) => cleanPromptTerm(term))
-      .filter(Boolean),
+      .map((term) => toPromptActionTerm(normalizePromptDisplayTerm(term), cleanPromptTerm(term)))
+      .filter((term): term is ExtractedPromptActionTerm => Boolean(term)),
   )
 }
+
 
 function getPromptGroupingUnclassifiedLabel(translate?: TranslateText) {
   return translateOrFallback(translate, EXTRACTED_PROMPT_LABEL_KEYS.unclassified)
@@ -319,13 +374,17 @@ function getPromptGroupingKind(
   return visiblePath.length <= 1 ? 'root' : 'child'
 }
 
-export function getImagePromptTerms(image: ImageRecord, type: 'positive' | 'negative') {
+export function getImagePromptTermItems(image: ImageRecord, type: 'positive' | 'negative') {
   const rawNaiParameters = image.ai_metadata?.raw_nai_parameters
   const promptText = type === 'positive'
     ? getTrimmedText(image.ai_metadata?.prompts?.prompt) ?? getRawPositivePrompt(rawNaiParameters)
     : getTrimmedText(image.ai_metadata?.prompts?.negative_prompt) ?? getRawNegativePrompt(rawNaiParameters)
 
-  return getCleanPromptTerms(promptText)
+  return getPromptTermItems(promptText)
+}
+
+export function getImagePromptTerms(image: ImageRecord, type: 'positive' | 'negative') {
+  return getImagePromptTermItems(image, type).map((term) => term.searchValue)
 }
 
 export function getImageLoraModels(image: ImageRecord) {
@@ -343,8 +402,16 @@ export function getImageLoraModels(image: ImageRecord) {
   ])
 }
 
+function normalizePromptActionTermInput(term: string | ExtractedPromptActionTerm): ExtractedPromptActionTerm | null {
+  if (typeof term === 'string') {
+    return toPromptActionTerm(term)
+  }
+
+  return toPromptActionTerm(term.display, term.searchValue)
+}
+
 export function buildGroupedPromptSections(
-  terms: string[],
+  terms: Array<string | ExtractedPromptActionTerm>,
   resolvedItems: PromptGroupResolveItem[],
   options?: Partial<PromptGroupingDisplayOptions>,
   translate?: TranslateText,
@@ -359,10 +426,15 @@ export function buildGroupedPromptSections(
     resolvedItems.map((item) => [item.query.trim().toLowerCase(), item] as const),
   )
 
-  const grouped = new Map<string, { id: string; label: string; order: number; prompts: string[]; hierarchyPath?: string[]; kind: ExtractedPromptGroupedSection['kind'] }>()
+  const grouped = new Map<string, { id: string; label: string; order: number; prompts: ExtractedPromptActionTerm[]; hierarchyPath?: string[]; kind: ExtractedPromptGroupedSection['kind'] }>()
 
   terms.forEach((term) => {
-    const resolvedItem = resolvedByKey.get(term.trim().toLowerCase())
+    const promptTerm = normalizePromptActionTermInput(term)
+    if (!promptTerm) {
+      return
+    }
+
+    const resolvedItem = resolvedByKey.get(promptTerm.searchValue.trim().toLowerCase())
     const visiblePath = getVisiblePromptGroupingPath(resolvedItem?.group_info, displayOptions, translate)
     const label = visiblePath.join(' > ') || getPromptGroupingLabel(resolvedItem?.group_info, translate)
     const order = getPromptGroupingOrder(resolvedItem?.group_info)
@@ -371,7 +443,7 @@ export function buildGroupedPromptSections(
     const existing = grouped.get(label)
 
     if (existing) {
-      existing.prompts.push(term)
+      existing.prompts.push(promptTerm)
       return
     }
 
@@ -379,13 +451,13 @@ export function buildGroupedPromptSections(
       id: label.toLowerCase(),
       label,
       order,
-      prompts: [term],
+      prompts: [promptTerm],
       hierarchyPath,
       kind,
     })
   })
 
-  return [...grouped.values()]
+  return Array.from(grouped.values())
     .sort((left, right) => left.order - right.order || left.label.localeCompare(right.label, 'ko'))
     .map((group) => ({
       id: group.id,
@@ -402,7 +474,7 @@ export function formatGroupedPromptText(sections: ExtractedPromptGroupedSection[
   }
 
   return sections
-    .map((group) => `${group.label}\n${group.prompts.join(', ')}`)
+    .map((group) => `${group.label}\n${group.prompts.map((prompt) => prompt.display).join(', ')}`)
     .join('\n\n')
 }
 
@@ -414,8 +486,11 @@ export function getImageExtractedPromptCards(
   const rawNaiParameters = image.ai_metadata?.raw_nai_parameters
   const { positivePrompt: positiveText, negativePrompt: negativeText, characterPrompts: characterTexts } = getImageExtractedPromptSummary(image)
   const loraModels = getImageLoraModels(image)
-  const positivePromptTerms = getImagePromptTerms(image, 'positive')
-  const negativePromptTerms = getImagePromptTerms(image, 'negative')
+  const loraActionTerms = loraModels
+    .map((item) => toPromptActionTerm(item))
+    .filter((term): term is ExtractedPromptActionTerm => Boolean(term))
+  const positivePromptTerms = getImagePromptTermItems(image, 'positive')
+  const negativePromptTerms = getImagePromptTermItems(image, 'negative')
   const labels = resolveExtractedPromptCardLabels(translate)
 
   const cards: ExtractedPromptCardItem[] = []
@@ -427,7 +502,7 @@ export function getImageExtractedPromptCards(
       text: loraModels.join(', '),
       tone: 'neutral',
       actionScope: 'lora',
-      actionTerms: loraModels,
+      actionTerms: loraActionTerms,
     })
   }
 

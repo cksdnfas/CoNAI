@@ -2,7 +2,8 @@ import { db } from '../database/init';
 import { ComplexFilter,
 FilterCondition,
 FilterValidationResult,
-FilterExecutionStats } from '@conai/shared';
+FilterExecutionStats,
+removeWeights } from '@conai/shared';
 import { RatingScoreService } from './ratingScoreService';
 import { RatingWeights } from '../types/rating';
 import { ImageSafetyService } from './imageSafetyService';
@@ -59,17 +60,14 @@ function getReadyImageCondition() {
 }
 
 function normalizePromptSearchValue(value: string): string {
-  return value
-    .replace(/\\/g, '')
-    .replace(/[()[\]{}]/g, '')
-    .replace(/:[+-]?[\d.]+/g, '')
-    .replace(/_/g, ' ')
+  return removeWeights(value.replace(/\\([()[\]{}])/g, '$1'))
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 function buildWeightedLoraPromptSearchPattern(value: string, caseSensitive: boolean): string | null {
-  const normalizedValue = normalizePromptSearchValue(value);
+  const normalizedValue = normalizePromptSearchValue(value)
+    .replace(/(<lora:[^:>]+):[+-]?(?:\d+(?:\.\d*)?|\.\d+)>/i, '$1>');
   const match = /^<lora:([^:>]+)>$/i.exec(normalizedValue);
   if (!match) {
     return null;
@@ -88,13 +86,6 @@ function appendUniquePattern(patterns: string[], pattern: string | null): string
 
 const PROMPT_NORMALIZATION_SQL_REPLACEMENTS: Array<[string, string]> = [
   ['char(92)', "''"],
-  ["'('", "''"],
-  ["')'", "''"],
-  ["'['", "''"],
-  ["']'", "''"],
-  ["'{'", "''"],
-  ["'}'", "''"],
-  ["'_'", "' '"],
 ];
 
 function buildPromptNormalizedSqlExpression(valueExpression: string, caseSensitive: boolean): string {
@@ -338,7 +329,8 @@ export class ComplexFilterService {
         ? buildSqlContainsPattern(value)
         : buildSqlContainsPattern(value.toLowerCase());
       const normalizedValue = normalizePromptSearchValue(value);
-      const normalizedPattern = normalizedValue && normalizedValue !== value
+      const shouldUseNormalizedPromptMatch = normalizedValue && (normalizedValue !== value || /[()[\]{}]/.test(value));
+      const normalizedPattern = shouldUseNormalizedPromptMatch
         ? buildSqlContainsPattern(condition.case_sensitive ? normalizedValue : normalizedValue.toLowerCase())
         : null;
       const normalizedAlternatePatterns = appendUniquePattern(
