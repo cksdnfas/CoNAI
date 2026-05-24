@@ -67,6 +67,22 @@ function buildCompositeHashIndexByHash(compositeHashes: string[]) {
   return new Map(compositeHashes.map((compositeHash, index) => [compositeHash, index] as const))
 }
 
+function buildUniqueCompositeHashes(compositeHashes: readonly string[] | undefined) {
+  const uniqueCompositeHashes: string[] = []
+  const seenCompositeHashes = new Set<string>()
+
+  for (const compositeHash of compositeHashes ?? []) {
+    if (typeof compositeHash !== 'string' || compositeHash.length === 0 || seenCompositeHashes.has(compositeHash)) {
+      continue
+    }
+
+    seenCompositeHashes.add(compositeHash)
+    uniqueCompositeHashes.push(compositeHash)
+  }
+
+  return uniqueCompositeHashes
+}
+
 function getModalActiveIndex(state: ImageViewModalState) {
   return state.compositeHash ? (state.compositeHashIndexByHash.get(state.compositeHash) ?? -1) : -1
 }
@@ -202,9 +218,9 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
 
   /** Open the image view modal with an optional ordered navigation context. */
   const openImageView = useCallback((input: ImageViewModalOpenInput) => {
-    const compositeHashSet = new Set((input.compositeHashes ?? []).filter((value) => typeof value === 'string' && value.length > 0))
-    const compositeHashes = Array.from(compositeHashSet)
-    const nextCompositeHashes = compositeHashSet.has(input.compositeHash)
+    const compositeHashes = buildUniqueCompositeHashes(input.compositeHashes)
+    const hasInputCompositeHash = compositeHashes.includes(input.compositeHash)
+    const nextCompositeHashes = hasInputCompositeHash
       ? compositeHashes
       : [input.compositeHash, ...compositeHashes]
     const nextCompositeHashIndexByHash = buildCompositeHashIndexByHash(nextCompositeHashes)
@@ -250,7 +266,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         return current
       }
 
-      const nextCompositeHashes = Array.from(new Set(input.compositeHashes.filter((value) => typeof value === 'string' && value.length > 0)))
+      const nextCompositeHashes = buildUniqueCompositeHashes(input.compositeHashes)
       const nextCompositeHashIndexByHash = buildCompositeHashIndexByHash(nextCompositeHashes)
       if (!nextCompositeHashIndexByHash.has(current.compositeHash)) {
         return current

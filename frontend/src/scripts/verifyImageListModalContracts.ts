@@ -43,6 +43,24 @@ assert.match(
 
 assert.match(
   imageViewModalProviderSource,
+  /function buildUniqueCompositeHashes\(compositeHashes: readonly string\[\] \| undefined\)[\s\S]*?seenCompositeHashes\.has\(compositeHash\)[\s\S]*?uniqueCompositeHashes\.push\(compositeHash\)/,
+  'modal navigation should sanitize and dedupe incoming sequence snapshots in one ordered pass',
+)
+
+assert.match(
+  imageViewModalProviderSource,
+  /const compositeHashes = buildUniqueCompositeHashes\(input\.compositeHashes\)[\s\S]*?const nextCompositeHashes = hasInputCompositeHash[\s\S]*?const nextCompositeHashes = buildUniqueCompositeHashes\(input\.compositeHashes\)/,
+  'modal open and sequence sync should share the ordered unique composite-hash snapshot builder',
+)
+
+assert.doesNotMatch(
+  imageViewModalProviderSource,
+  /Array\.from\(new Set\(input\.compositeHashes/,
+  'modal sequence sync must not allocate a filtered array before deduping incoming composite hashes',
+)
+
+assert.match(
+  imageViewModalProviderSource,
   /return state\.compositeHash \? \(state\.compositeHashIndexByHash\.get\(state\.compositeHash\) \?\? -1\) : -1/,
   'modal active-index lookup should read from the cached composite-hash index map',
 )
