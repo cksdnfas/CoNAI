@@ -1,3 +1,4 @@
+import { getUploadFileTotalSize } from '../features/upload/upload-file-summary'
 import { getUploadResultDetailPath } from '../features/upload/upload-result-links'
 import { getVisibleUploadResultItems, getVisibleUploadResultLists } from '../features/upload/upload-result-list'
 
@@ -47,10 +48,16 @@ function assertSuccessfulAndFailedRowsAreCappedTogether() {
   assertEqual(result.failed.hiddenCount, 2, 'upload result summary should count hidden failed rows')
 }
 
+function assertUploadFileTotalSizeIsSinglePassReusable() {
+  const totalSize = getUploadFileTotalSize([{ size: 15 }, { size: 20 }, { size: 0 }])
+  assertEqual(totalSize, 35, 'upload file total size should sum selected file sizes')
+}
+
 assertCompositeHashBuildsDetailPath()
 assertMissingCompositeHashHasNoDetailPath()
 assertHiddenUploadResultsAreCounted()
 assertInvalidVisibleLimitShowsNoRows()
 assertSuccessfulAndFailedRowsAreCappedTogether()
+assertUploadFileTotalSizeIsSinglePassReusable()
 
 console.log('Upload result link contracts verified.')

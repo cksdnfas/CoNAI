@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState, type ChangeEvent } from 'react'
+import { useMemo, useState, type ChangeEvent } from 'react'
 import { useI18n } from '@/i18n'
 import { uploadMultipleImages, type UploadBatchResult, type UploadTransferProgress } from '@/lib/api-images'
 import { getAppSettings } from '@/lib/api-settings'
@@ -10,6 +10,7 @@ import {
   type ImageSaveSourceInfo,
 } from '@/lib/image-save-output'
 import type { ImageSaveSettings } from '@/types/settings'
+import { getUploadFileTotalSize } from './upload-file-summary'
 
 export type PendingUploadSaveState = {
   files: File[]
@@ -38,7 +39,7 @@ export function useUploadPageUploadFlow({
   })
 
   const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
-  const uploadTotalSize = uploadFiles.reduce((sum, file) => sum + file.size, 0)
+  const uploadTotalSize = useMemo(() => getUploadFileTotalSize(uploadFiles), [uploadFiles])
   const uploadPercent = uploadProgress?.percent ?? (uploadResult ? 100 : 0)
 
   const resetUploadState = () => {
@@ -58,10 +59,12 @@ export function useUploadPageUploadFlow({
   }
 
   const runUpload = async (files: File[], options?: ImageSaveSettings) => {
+    const totalSize = getUploadFileTotalSize(files)
+
     setIsUploading(true)
     setUploadError(null)
     setUploadResult(null)
-    setUploadProgress({ loaded: 0, total: files.reduce((sum, file) => sum + file.size, 0) || null, percent: 0 })
+    setUploadProgress({ loaded: 0, total: totalSize || null, percent: 0 })
 
     try {
       const result = await uploadMultipleImages(
@@ -82,8 +85,8 @@ export function useUploadPageUploadFlow({
       )
       setUploadResult(result)
       setUploadProgress((current) => ({
-        loaded: current?.total ?? files.reduce((sum, file) => sum + file.size, 0),
-        total: current?.total ?? files.reduce((sum, file) => sum + file.size, 0),
+        loaded: current?.total ?? totalSize,
+        total: current?.total ?? totalSize,
         percent: 100,
       }))
       showSnackbar({
