@@ -51,7 +51,13 @@ function readLastSeenQueueJobId() {
     return null
   }
 
-  const rawValue = window.sessionStorage.getItem(LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY)
+  let rawValue: string | null = null
+  try {
+    rawValue = window.sessionStorage.getItem(LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY)
+  } catch {
+    return null
+  }
+
   if (rawValue === null) {
     return null
   }
@@ -65,7 +71,11 @@ function persistLastSeenQueueJobId(value: number) {
     return
   }
 
-  window.sessionStorage.setItem(LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY, String(Math.max(0, Math.trunc(value))))
+  try {
+    window.sessionStorage.setItem(LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY, String(Math.max(0, Math.trunc(value))))
+  } catch {
+    // Session storage can be unavailable in hardened browser contexts.
+  }
 }
 
 function parseQueueFilter(value: QueueFilterValue) {
@@ -130,8 +140,9 @@ export function GenerationQueueHeaderWidget() {
   const [activeTab, setActiveTab] = useState<HeaderPopupTab>('jobs')
   const [pendingJobId, setPendingJobId] = useState<number | null>(null)
   const [selectedFilter, setSelectedFilter] = useState<QueueFilterValue>('all')
-  const [lastSeenQueueJobId, setLastSeenQueueJobId] = useState<number | null>(() => readLastSeenQueueJobId())
-  const [isNotificationBaselineReady, setIsNotificationBaselineReady] = useState(() => readLastSeenQueueJobId() !== null)
+  const initialLastSeenQueueJobId = useMemo(() => readLastSeenQueueJobId(), [])
+  const [lastSeenQueueJobId, setLastSeenQueueJobId] = useState<number | null>(initialLastSeenQueueJobId)
+  const [isNotificationBaselineReady, setIsNotificationBaselineReady] = useState(initialLastSeenQueueJobId !== null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   useOverlayBackClose({ open: isOpen, onClose: () => setIsOpen(false) })

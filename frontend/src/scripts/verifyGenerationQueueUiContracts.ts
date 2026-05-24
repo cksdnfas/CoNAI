@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { TranslationInput, TranslationParams } from '../i18n'
 import type { GenerationQueueJobRecord } from '../lib/api-image-generation-types'
 import {
@@ -292,6 +294,26 @@ function assertHeaderRefreshTargets() {
   )
 }
 
+function assertHeaderWidgetStorageGuards() {
+  const headerWidgetSource = readFileSync(join(process.cwd(), 'src', 'features', 'image-generation', 'components', 'generation-queue-header-widget.tsx'), 'utf8')
+
+  assertEqual(
+    headerWidgetSource.includes('try {\n    rawValue = window.sessionStorage.getItem(LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY)\n  } catch {\n    return null\n  }'),
+    true,
+    'queue header should ignore blocked sessionStorage reads',
+  )
+  assertEqual(
+    headerWidgetSource.includes('try {\n    window.sessionStorage.setItem(LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY, String(Math.max(0, Math.trunc(value))))\n  } catch {'),
+    true,
+    'queue header should ignore blocked sessionStorage writes',
+  )
+  assertEqual(
+    headerWidgetSource.includes('const initialLastSeenQueueJobId = useMemo(() => readLastSeenQueueJobId(), [])'),
+    true,
+    'queue header should read the notification baseline once per mount',
+  )
+}
+
 assertStatusLabels()
 assertWorkflowLabels()
 assertRequesterLabels()
@@ -301,5 +323,6 @@ assertProgressPercent()
 assertHeaderQuerySnapshotSelection()
 assertFilteredQueueHeaderQueryEnablement()
 assertHeaderRefreshTargets()
+assertHeaderWidgetStorageGuards()
 
 console.log('Generation queue UI contracts verified.')
