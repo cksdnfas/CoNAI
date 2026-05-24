@@ -11,7 +11,7 @@ import { normalizeFilename } from './pathResolver';
 // RecycleBin 폴더 경로 (runtimePaths를 통해 중앙 관리)
 const RECYCLE_BIN_PATH = runtimePaths.recycleBinDir;
 const RETRYABLE_UNLINK_ERROR_CODES = new Set(['EBUSY', 'EPERM']);
-const UNLINK_RETRY_DELAYS_MS = [80, 160, 320, 640, 1280];
+const UNLINK_RETRY_DELAYS_MS = [100, 250, 500, 1000, 2000, 4000, 8000];
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

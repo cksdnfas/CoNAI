@@ -210,8 +210,10 @@ def tag_image_command(image_path: str, gen_threshold: float, char_threshold: flo
         # Validate image path
         image_path_obj = validate_image_path(image_path)
 
-        # Load and preprocess image
-        img_input: Image.Image = Image.open(image_path_obj)
+        # Load and preprocess image. Copy inside the context manager so Windows
+        # releases the source file handle before later delete/recycle requests.
+        with Image.open(image_path_obj) as image:
+            img_input: Image.Image = image.copy()
         img_input = pil_ensure_rgb(img_input)
         img_input = pil_pad_square(img_input)
 

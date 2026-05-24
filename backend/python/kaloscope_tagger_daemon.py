@@ -91,7 +91,10 @@ def load_mapping(repo_id: str, cache_dir: str | None = None) -> Dict[int, str]:
 
 
 def preprocess_image(image_path: Path) -> np.ndarray:
-    image = Image.open(image_path).convert("RGB")
+    # Convert inside the context manager so PIL does not keep the source file
+    # locked on Windows after inference finishes.
+    with Image.open(image_path) as image:
+        image = image.convert("RGB")
     image = image.resize((448, 448), Image.Resampling.BILINEAR)
     array = np.asarray(image, dtype=np.float32) / 255.0
     array = np.transpose(array, (2, 0, 1))

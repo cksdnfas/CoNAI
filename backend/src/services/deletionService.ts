@@ -139,7 +139,8 @@ export class DeletionService {
       try {
         await this.deletePhysicalFile(file.original_file_path, useRecycleBin);
       } catch (error) {
-        console.warn(`⚠️ Failed to delete original file (continuing): ${file.original_file_path}`, error);
+        console.error(`❌ Failed to delete original file: ${file.original_file_path}`, error);
+        throw error;
       }
     }
 
@@ -206,7 +207,7 @@ export class DeletionService {
       console.log(`✅ Physical file deleted: ${original_file_path}`);
     } catch (error) {
       console.error(`❌ Failed to delete physical file: ${original_file_path}`, error);
-      // 물리 파일 삭제 실패해도 DB는 정리 (파일이 이미 없을 수도 있음)
+      throw error;
     }
 
     // 4. image_files 테이블에서 삭제
