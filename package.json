@@ -130,6 +130,7 @@
     "verify:migration:full": "npm run verify:migration && npm run verify:policy:generated-artifact && npm run verify:no-ui-signatures:generated && npm run verify:no-ui-signatures:full",
     "i18n:check": "node scripts/i18n-check.mjs",
     "verify:thumbnail-default-settings-contracts": "cd backend && npm run verify:thumbnail-default-settings-contracts",
+    "verify:module-definition-reconcile-contracts": "cd backend && npm run verify:module-definition-reconcile-contracts",
     "verify:comfy-workflow-authoring-contracts": "cd frontend && npm run verify:comfy-workflow-authoring-contracts",
     "verify:comfy-workflow-entry-contracts": "cd frontend && npm run verify:comfy-workflow-entry-contracts",
     "verify:comfy-dropdown-auto-collect-contracts": "cd frontend && npm run verify:comfy-dropdown-auto-collect-contracts",

@@ -34,7 +34,12 @@ type InterruptedExecutionRecoverySummary = {
 
 const QUEUED_EXECUTION_RESTART_MESSAGE = 'Backend restarted before this queued graph execution could begin. Re-run is required.'
 const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
+const STRANDED_RUNNING_EXECUTION_MESSAGE = 'Execution process is no longer active. Re-run is required.'
 const QUEUE_RECHECK_INTERVAL_MS = 5000
+
+function formatExecutionError(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown execution error'
+}
 
 /** Manage graph workflow executions through an in-memory background queue. */
 export class GraphWorkflowExecutionQueue {
@@ -227,6 +232,21 @@ export class GraphWorkflowExecutionQueue {
       }
     }
 
+    if (execution.status === 'running') {
+      GraphExecutionModel.updateStatus(executionId, 'failed', STRANDED_RUNNING_EXECUTION_MESSAGE)
+      writeExecutionLog({
+        executionId,
+        level: 'error',
+        eventType: 'execution_failed',
+        message: STRANDED_RUNNING_EXECUTION_MESSAGE,
+      })
+      return {
+        success: true,
+        status: 'failed',
+        message: STRANDED_RUNNING_EXECUTION_MESSAGE,
+      }
+    }
+
     return {
       success: false,
       status: execution.status,
@@ -416,13 +436,28 @@ export class GraphWorkflowExecutionQueue {
   /** Execute one claimed job after moving it to running. */
   private static async runJob(job: QueuedExecutionJob) {
     GraphExecutionModel.updateStatus(job.executionId, 'running')
-    await GraphWorkflowExecutor.execute(job.workflowId, {
-      executionId: job.executionId,
-      runtimeInputValues: job.inputValues,
-      targetNodeId: job.targetNodeId,
-      forceRerun: job.forceRerun,
-      shouldCancel: () => this.cancelRequestedExecutionIds.has(job.executionId),
-    })
+    try {
+      await GraphWorkflowExecutor.execute(job.workflowId, {
+        executionId: job.executionId,
+        runtimeInputValues: job.inputValues,
+        targetNodeId: job.targetNodeId,
+        forceRerun: job.forceRerun,
+        shouldCancel: () => this.cancelRequestedExecutionIds.has(job.executionId),
+      })
+    } catch (error) {
+      const execution = GraphExecutionModel.findById(job.executionId)
+      if (execution?.status === 'queued' || execution?.status === 'running') {
+        const errorMessage = formatExecutionError(error)
+        GraphExecutionModel.updateStatus(job.executionId, 'failed', errorMessage)
+        writeExecutionLog({
+          executionId: job.executionId,
+          level: 'error',
+          eventType: 'execution_failed',
+          message: errorMessage,
+        })
+      }
+      throw error
+    }
   }
 
   /** Retry held queued work so reservations resume after foreground queue pressure clears. */
