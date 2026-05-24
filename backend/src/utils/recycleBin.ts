@@ -82,6 +82,7 @@ export async function copyToRecycleBin(filePath: string): Promise<string> {
 
   const recycleBinFileName = generateRecycleBinFileName(filePath);
   const recycleBinFilePath = path.join(RECYCLE_BIN_PATH, recycleBinFileName);
+  await fs.promises.mkdir(RECYCLE_BIN_PATH, { recursive: true });
   await fs.promises.copyFile(filePath, recycleBinFilePath);
   return recycleBinFilePath;
 }

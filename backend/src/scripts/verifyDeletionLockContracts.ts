@@ -33,6 +33,16 @@ function verifyDeletionFailureDoesNotPretendSuccess() {
   )
 }
 
+function verifyRecycleBinDirectoryIsCreatedBeforeCopy() {
+  const recycleBinSource = read(path.join(backendRoot, 'src', 'utils', 'recycleBin.ts'))
+  const mkdirIndex = recycleBinSource.indexOf('await fs.promises.mkdir(RECYCLE_BIN_PATH, { recursive: true })')
+  const copyIndex = recycleBinSource.indexOf('await fs.promises.copyFile(filePath, recycleBinFilePath)')
+
+  assert.ok(mkdirIndex !== -1, 'RecycleBin moves should create the recycle-bin directory when it is missing')
+  assert.ok(copyIndex !== -1, 'RecycleBin moves should still copy the file into the resolved recycle-bin path')
+  assert.ok(mkdirIndex < copyIndex, 'RecycleBin directory creation must happen before copying the source file')
+}
+
 function verifyPythonTaggersCloseImageHandles() {
   const wdv3Source = read(wdv3DaemonPath)
   const kaloscopeSource = read(kaloscopeDaemonPath)
@@ -61,6 +71,7 @@ function verifyPythonTaggersCloseImageHandles() {
 }
 
 verifyDeletionFailureDoesNotPretendSuccess()
+verifyRecycleBinDirectoryIsCreatedBeforeCopy()
 verifyPythonTaggersCloseImageHandles()
 
 console.log('✅ Deletion lock contracts passed')
