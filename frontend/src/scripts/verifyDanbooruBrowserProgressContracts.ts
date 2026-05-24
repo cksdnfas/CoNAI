@@ -1,5 +1,10 @@
 import { deepEqual } from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { resolveDanbooruBrowserProgress } from '../features/prompts/danbooru-browser-progress'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const firstTagPage = resolveDanbooruBrowserProgress({ page: 1, pageSize: 50, visibleCount: 50, totalCount: 2400 })
 deepEqual(firstTagPage, {
@@ -36,5 +41,24 @@ deepEqual(emptySearch, {
   totalCount: 0,
   hiddenCount: 0,
 })
+
+const panelSource = readFileSync(resolve(__dirname, '../features/prompts/components/prompt-danbooru-browser-panel.tsx'), 'utf8')
+const requiredStableCallbacks = [
+  'const getNodeLabel = useCallback',
+  'const sortTreeItems = useCallback',
+  'const renderTreeIcon = useCallback',
+  'const handleSearchInputChange = useCallback',
+  'const handleToggleRelatedTagOptionsOpen = useCallback',
+]
+
+for (const callback of requiredStableCallbacks) {
+  if (!panelSource.includes(callback)) {
+    throw new Error(`Danbooru browser panel should keep ${callback} stable`)
+  }
+}
+
+if (panelSource.includes('tagsQuery.data?.items ?? []} language={language}')) {
+  throw new Error('Danbooru browser tables should receive memoized empty item arrays')
+}
 
 console.log('Danbooru browser progress contracts verified')

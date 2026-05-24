@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Folder, FolderOpen, Search, SlidersHorizontal, X } from 'lucide-react'
 import { ExplorerSidebar } from '@/components/common/explorer-sidebar'
@@ -16,7 +16,7 @@ import {
 } from '@/lib/api-danbooru-browser'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import type { DanbooruBrowserRelatedTagCategory } from '@/types/danbooru-browser'
+import type { DanbooruBrowserRelatedTagCategory, DanbooruBrowserTreeNode } from '@/types/danbooru-browser'
 import { useI18n } from '@/i18n'
 import { resolveDanbooruBrowserProgress } from '../danbooru-browser-progress'
 import {
@@ -160,30 +160,95 @@ export function PromptDanbooruBrowserPanel() {
     )
     : t({ ko: '{count}개 표시 가능', en: '{count} available' }, { count: formatCompactK(currentCount) })
 
-  const handleApplySearch = () => {
-    setSearchQuery(searchInput.trim())
-  }
+  const tagItems = useMemo(() => tagsQuery.data?.items ?? [], [tagsQuery.data?.items])
+  const artistItems = useMemo(() => artistsQuery.data?.items ?? [], [artistsQuery.data?.items])
+  const characterItems = useMemo(() => charactersQuery.data?.items ?? [], [charactersQuery.data?.items])
 
-  const handleClearSearch = () => {
+  const handleSelectNode = useCallback((node: DanbooruBrowserTreeNode) => {
+    setSelectedNodeId(node.id)
+  }, [])
+
+  const getNodeId = useCallback((node: DanbooruBrowserTreeNode) => node.id, [])
+
+  const getNodeParentId = useCallback((node: DanbooruBrowserTreeNode) => node.parentId, [])
+
+  const getNodeLabel = useCallback((node: DanbooruBrowserTreeNode) => {
+    const hasChildren = (childCountByParentId.get(node.id) ?? 0) > 0
+    const countLabel = hasChildren && node.directCount !== undefined
+      ? node.directCount === 0
+        ? `(${formatCompactK(node.count)})`
+        : `${formatCompactK(node.directCount)}(${formatCompactK(node.count)})`
+      : formatCompactK(node.count)
+
+    return (
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+        <span className="min-w-0 truncate">{getLocalizedTreeLabel(node, language)}</span>
+        <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">{countLabel}</span>
+      </div>
+    )
+  }, [childCountByParentId, language])
+
+  const sortTreeItems = useCallback((left: DanbooruBrowserTreeNode, right: DanbooruBrowserTreeNode) => {
+    const rootOrder: Record<string, number> = { artists: 0, tags: 1, characters: 2 }
+    const leftIsRoot = left.parentId === null
+    const rightIsRoot = right.parentId === null
+    if (leftIsRoot || rightIsRoot) {
+      return (rootOrder[left.id] ?? 99) - (rootOrder[right.id] ?? 99)
+    }
+
+    const leftLabel = getLocalizedTreeLabel(left, language)
+    const rightLabel = getLocalizedTreeLabel(right, language)
+    const leftIsUnclassified = left.label.toLowerCase() === 'unclassified'
+    const rightIsUnclassified = right.label.toLowerCase() === 'unclassified'
+    if (leftIsUnclassified !== rightIsUnclassified) return leftIsUnclassified ? -1 : 1
+
+    return leftLabel.localeCompare(rightLabel, ['ko', 'en'], { numeric: true, sensitivity: 'base' })
+  }, [language])
+
+  const renderTreeIcon = useCallback((_node: DanbooruBrowserTreeNode, state: { hasChildren: boolean }) => (
+    state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />
+  ), [])
+
+  const handleApplySearch = useCallback(() => {
+    setSearchQuery(searchInput.trim())
+  }, [searchInput])
+
+  const handleClearSearch = useCallback(() => {
     setSearchInput('')
     setSearchQuery('')
-  }
+  }, [])
 
-  const handleToggleRelatedTagCategory = (category: DanbooruBrowserRelatedTagCategory) => {
+  const handleSearchInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setSearchInput(event.target.value)
+  }, [])
+
+  const handleSearchInputKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') handleApplySearch()
+  }, [handleApplySearch])
+
+  const handleToggleRelatedTagOptionsOpen = useCallback(() => {
+    setIsRelatedTagOptionsOpen((open) => !open)
+  }, [])
+
+  const handleCloseRelatedTagOptions = useCallback(() => {
+    setIsRelatedTagOptionsOpen(false)
+  }, [])
+
+  const handleToggleRelatedTagCategory = useCallback((category: DanbooruBrowserRelatedTagCategory) => {
     setRelatedTagCategories((current) => (
       current.includes(category)
         ? current.filter((item) => item !== category)
         : RELATED_TAG_CATEGORIES.filter((item) => item === category || current.includes(item))
     ))
-  }
+  }, [])
 
-  const handleResetRelatedTagOptions = () => {
+  const handleResetRelatedTagOptions = useCallback(() => {
     const defaults = getDefaultRelatedTagOptions()
     setRelatedTagCategories(defaults.categories)
     setRelatedTagScoreMinInput(defaults.scoreMinInput)
     setRelatedTagScoreMaxInput(defaults.scoreMaxInput)
     setRelatedTagLimitInput(defaults.limitInput)
-  }
+  }, [])
 
   return (
     <div className={cn('grid gap-6', isDesktopPageLayout ? 'grid-cols-[260px_minmax(0,1fr)]' : 'grid-cols-1')}>
@@ -217,41 +282,12 @@ export function PromptDanbooruBrowserPanel() {
             expandable
             defaultExpandedIds={defaultExpandedTreeIds}
             selectedId={selectedNodeId}
-            onSelect={(node) => setSelectedNodeId(node.id)}
-            getId={(node) => node.id}
-            getParentId={(node) => node.parentId}
-            getLabel={(node) => {
-              const hasChildren = (childCountByParentId.get(node.id) ?? 0) > 0
-              const countLabel = hasChildren && node.directCount !== undefined
-                ? node.directCount === 0
-                  ? `(${formatCompactK(node.count)})`
-                  : `${formatCompactK(node.directCount)}(${formatCompactK(node.count)})`
-                : formatCompactK(node.count)
-
-              return (
-                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                  <span className="min-w-0 truncate">{getLocalizedTreeLabel(node, language)}</span>
-                  <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">{countLabel}</span>
-                </div>
-              )
-            }}
-            sortItems={(left, right) => {
-              const rootOrder: Record<string, number> = { artists: 0, tags: 1, characters: 2 }
-              const leftIsRoot = left.parentId === null
-              const rightIsRoot = right.parentId === null
-              if (leftIsRoot || rightIsRoot) {
-                return (rootOrder[left.id] ?? 99) - (rootOrder[right.id] ?? 99)
-              }
-
-              const leftLabel = getLocalizedTreeLabel(left, language)
-              const rightLabel = getLocalizedTreeLabel(right, language)
-              const leftIsUnclassified = left.label.toLowerCase() === 'unclassified'
-              const rightIsUnclassified = right.label.toLowerCase() === 'unclassified'
-              if (leftIsUnclassified !== rightIsUnclassified) return leftIsUnclassified ? -1 : 1
-
-              return leftLabel.localeCompare(rightLabel, ['ko', 'en'], { numeric: true, sensitivity: 'base' })
-            }}
-            renderIcon={(_node, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
+            onSelect={handleSelectNode}
+            getId={getNodeId}
+            getParentId={getNodeParentId}
+            getLabel={getNodeLabel}
+            sortItems={sortTreeItems}
+            renderIcon={renderTreeIcon}
           />
         ) : null}
       </ExplorerSidebar>
@@ -270,10 +306,8 @@ export function PromptDanbooruBrowserPanel() {
             <div className="flex gap-2">
               <Input
                 value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') handleApplySearch()
-                }}
+                onChange={handleSearchInputChange}
+                onKeyDown={handleSearchInputKeyDown}
                 placeholder={t({ ko: '검색', en: 'Search' })}
               />
               <Button size="sm" variant="outline" onClick={handleApplySearch}>
@@ -284,7 +318,7 @@ export function PromptDanbooruBrowserPanel() {
                   <Button
                     size="sm"
                     variant={relatedTagFilterActive ? 'default' : 'outline'}
-                    onClick={() => setIsRelatedTagOptionsOpen((open) => !open)}
+                    onClick={handleToggleRelatedTagOptionsOpen}
                     title={t({ ko: 'Related tags 표시 옵션', en: 'Related tags display options' })}
                   >
                     <SlidersHorizontal className="h-4 w-4" />
@@ -307,7 +341,7 @@ export function PromptDanbooruBrowserPanel() {
           scoreMinInput={relatedTagScoreMinInput}
           scoreMaxInput={relatedTagScoreMaxInput}
           limitInput={relatedTagLimitInput}
-          onClose={() => setIsRelatedTagOptionsOpen(false)}
+          onClose={handleCloseRelatedTagOptions}
           onToggleCategory={handleToggleRelatedTagCategory}
           onScoreMinInputChange={setRelatedTagScoreMinInput}
           onScoreMaxInputChange={setRelatedTagScoreMaxInput}
@@ -328,9 +362,9 @@ export function PromptDanbooruBrowserPanel() {
 
         {isDanbooruDbAvailable && activeQuery.isLoading ? <TableLoading columns={activeSection === 'characters' ? 6 : activeSection === 'artists' ? 3 : 2} /> : null}
 
-        {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'tags' ? <TagsTable items={tagsQuery.data?.items ?? []} language={language} /> : null}
-        {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'artists' ? <ArtistsTable items={artistsQuery.data?.items ?? []} language={language} /> : null}
-        {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'characters' ? <CharactersTable items={charactersQuery.data?.items ?? []} language={language} /> : null}
+        {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'tags' ? <TagsTable items={tagItems} language={language} /> : null}
+        {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'artists' ? <ArtistsTable items={artistItems} language={language} /> : null}
+        {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'characters' ? <CharactersTable items={characterItems} language={language} /> : null}
 
         {isDanbooruDbAvailable ? <PaginationControls pagination={pagination} visibleCount={activeItemCount} onPageChange={setPage} /> : null}
       </section>
