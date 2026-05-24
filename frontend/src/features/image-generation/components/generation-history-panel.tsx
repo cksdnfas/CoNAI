@@ -236,12 +236,13 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     cancellation: cancellationHistoryCount,
   } = useMemo(() => getHistoryRecordStatusSummary(historyRecords), [historyRecords])
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
+  const historyTotalCount = historyQuery.data?.pages[0]?.total
 
-  const feedProgress = getGenerationHistoryFeedProgressSummary({
+  const feedProgress = useMemo(() => getGenerationHistoryFeedProgressSummary({
     loadedCount: historyRecords.length,
     visibleCount: historyImages.length,
-    totalCount: historyQuery.data?.pages[0]?.total,
-  })
+    totalCount: historyTotalCount,
+  }), [historyImages.length, historyRecords.length, historyTotalCount])
   const historyListLayoutKey = useMemo(
     () => historyRecords
       .map((record) => `${record.id}:${getHistoryMediaVersion(record)}`)
@@ -344,7 +345,16 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     setSelectedHistoryIds((current) => current.filter((id) => historyRecordMap.has(id)))
   }, [historyRecordMap])
 
-  const handleDeleteSelected = async () => {
+  const fetchNextHistoryPage = historyQuery.fetchNextPage
+  const getHistoryItemId = useCallback((image: ImageRecord) => String(image.id), [])
+  const handleLoadMoreHistory = useCallback(() => {
+    void fetchNextHistoryPage()
+  }, [fetchNextHistoryPage])
+  const handleClearSelectedHistory = useCallback(() => {
+    setSelectedHistoryIds([])
+  }, [])
+
+  const handleDeleteSelected = useCallback(async () => {
     if (!isAdmin) {
       showSnackbar({ message: t('image-generation.components.generation.history.panel.only.admin.accounts.can.delete'), tone: 'error' })
       return
@@ -354,7 +364,8 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       return
     }
 
-    const confirmed = window.confirm(t('image-generation.components.generation.history.panel.selected.valueresults.to.the.recycle.bin.and', { count: formatNumber(selectedHistoryRecords.length) }))
+    const selectedCount = selectedHistoryRecords.length
+    const confirmed = window.confirm(t('image-generation.components.generation.history.panel.selected.valueresults.to.the.recycle.bin.and', { count: formatNumber(selectedCount) }))
     if (!confirmed) {
       return
     }
@@ -364,15 +375,15 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
       await Promise.all(selectedHistoryRecords.map((record) => deleteGenerationHistoryRecord(record.id, true)))
       setSelectedHistoryIds([])
       await refreshHistory()
-      showSnackbar({ message: t('image-generation.components.generation.history.panel.valueresults.moved.to.recyclebin', { count: formatNumber(selectedHistoryRecords.length) }), tone: 'info' })
+      showSnackbar({ message: t('image-generation.components.generation.history.panel.valueresults.moved.to.recyclebin', { count: formatNumber(selectedCount) }), tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('image-generation.components.generation.history.panel.failed.to.delete.history')), tone: 'error' })
     } finally {
       setIsDeletingSelection(false)
     }
-  }
+  }, [formatNumber, isAdmin, isDeletingSelection, refreshHistory, selectedHistoryRecords, showSnackbar, t])
 
-  const handleCleanupFailed = async () => {
+  const handleCleanupFailed = useCallback(async () => {
     if (isCleaningFailed) {
       return
     }
@@ -390,9 +401,9 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     } finally {
       setIsCleaningFailed(false)
     }
-  }
+  }, [isCleaningFailed, isPublicView, publicWorkflowSlug, refreshHistory, showSnackbar, t])
 
-  const handleDownloadSelected = async (type: 'thumbnail' | 'original') => {
+  const handleDownloadSelected = useCallback(async (type: 'thumbnail' | 'original') => {
     if (downloadableHistoryIds.length === 0 || isDownloadingSelection) {
       return
     }
@@ -405,7 +416,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     } finally {
       setIsDownloadingSelection(false)
     }
-  }
+  }, [downloadableHistoryIds, isDownloadingSelection, showSnackbar, t])
 
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden' : 'space-y-4')}>
@@ -439,7 +450,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => void handleCleanupFailed()}
+            onClick={handleCleanupFailed}
             disabled={isCleaningFailed || failedHistoryCount === 0}
           >
             <Trash2 className="h-4 w-4" />
@@ -501,7 +512,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               layout="masonry"
               activationMode="modal"
               getItemHref={getHistoryImageHref}
-              getItemId={(image) => String(image.id)}
+              getItemId={getHistoryItemId}
               selectable
               modalAccessOptions={isPublicView ? {
                 allowDetailNavigation: false,
@@ -518,7 +529,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               scrollMode={splitPaneScroll ? 'container' : 'window'}
               hasMore={Boolean(historyQuery.hasNextPage)}
               isLoadingMore={historyQuery.isFetchingNextPage}
-              onLoadMore={historyQuery.fetchNextPage}
+              onLoadMore={handleLoadMoreHistory}
               renderItemOverlay={renderHistoryItemOverlay}
               renderItemPersistentOverlay={renderHistoryPersistentOverlay}
               shouldBlurItemPreview={shouldBlurItemPreview}
@@ -533,13 +544,13 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
               ) : null}
 
               {Boolean(historyQuery.hasNextPage) && !historyQuery.isFetchingNextPage && !historyQuery.isFetchNextPageError ? (
-                <Button size="sm" variant="outline" onClick={() => void historyQuery.fetchNextPage()}>
+                <Button size="sm" variant="outline" onClick={handleLoadMoreHistory}>
                   {t({ ko: '더 보기', en: 'Load more' })}
                 </Button>
               ) : null}
 
               {historyQuery.isFetchNextPageError ? (
-                <Button size="sm" variant="outline" onClick={() => void historyQuery.fetchNextPage()}>
+                <Button size="sm" variant="outline" onClick={handleLoadMoreHistory}>
                   {t({ ko: '다음 기록 다시 시도', en: 'Retry next history batch' })}
                 </Button>
               ) : null}
@@ -570,7 +581,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
         trailingActions={!isPublicView && isAdmin ? (
           <Button
             size="icon-sm"
-            onClick={() => void handleDeleteSelected()}
+            onClick={handleDeleteSelected}
             disabled={selectedHistoryRecords.length === 0 || isDeletingSelection}
             title={isDeletingSelection ? t('image-generation.components.generation.history.panel.deleting') : t('image-generation.components.generation.history.panel.delete.selection')}
             aria-label={isDeletingSelection ? t('image-generation.components.generation.history.panel.deleting') : t('image-generation.components.generation.history.panel.delete.selection')}
@@ -580,7 +591,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           </Button>
         ) : undefined}
         onDownloadSelect={handleDownloadSelected}
-        onClear={() => setSelectedHistoryIds([])}
+        onClear={handleClearSelectedHistory}
       />
     </section>
   )
