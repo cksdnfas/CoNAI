@@ -195,6 +195,7 @@ export function useModuleGraphPageViewModel({
           id: node.id,
           module: node.data.module,
           inputValues: node.data.inputValues ?? {},
+          disabled: node.data.disabled === true,
         })),
         edges: edges
           .map((edge) => ({
@@ -219,6 +220,7 @@ export function useModuleGraphPageViewModel({
         id: node.id,
         module: moduleDefinitionById.get(node.module_id) ?? null,
         inputValues: node.input_values ?? {},
+        disabled: node.disabled === true,
       })),
       edges: selectedGraphRecord.graph.edges.map((edge) => ({
         targetNodeId: edge.target_node_id,

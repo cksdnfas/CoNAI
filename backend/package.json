@@ -51,7 +51,8 @@
     "verify:thumbnail-default-settings-contracts": "tsx src/scripts/verifyThumbnailDefaultSettingsContracts.ts",
     "verify:comfy-server-default-contracts": "tsx src/scripts/verifyComfyServerDefaultContracts.ts",
     "verify:comfy-dropdown-auto-collect-api-contracts": "tsx src/scripts/verifyComfyDropdownAutoCollectApiContracts.ts",
-    "verify:comfy-model-thumbnail-startup-cleanup": "tsx src/scripts/verifyComfyModelThumbnailStartupCleanup.ts"
+    "verify:comfy-model-thumbnail-startup-cleanup": "tsx src/scripts/verifyComfyModelThumbnailStartupCleanup.ts",
+    "verify:graph-workflow-bypass-contracts": "tsx src/scripts/verifyGraphWorkflowBypassContracts.ts"
   },
   "dependencies": {
     "@conai/shared": "file:../shared",

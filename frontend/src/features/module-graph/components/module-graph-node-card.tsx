@@ -164,7 +164,9 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   }, [selected])
 
   const statusLabel =
-    executionStatus === 'completed'
+    data.disabled === true
+      ? t({ ko: '비활성', en: 'Disabled' })
+      : executionStatus === 'completed'
       ? t({ ko: '완료', en: 'Completed' })
       : executionStatus === 'failed'
         ? t({ ko: '실패', en: 'Failed' })
@@ -175,7 +177,9 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             : null
 
   const statusBorderColor =
-    executionStatus === 'completed'
+    data.disabled === true
+      ? '#94a3b8'
+      : executionStatus === 'completed'
       ? '#7bd88f'
       : executionStatus === 'failed'
         ? '#ff8a80'
@@ -366,7 +370,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
 
   return (
     <div
-      className="w-[340px] max-w-[340px] rounded-sm border bg-surface-container px-2.5 py-2 text-foreground shadow-lg"
+      className={`w-[340px] max-w-[340px] rounded-sm border bg-surface-container px-2.5 py-2 text-foreground shadow-lg ${data.disabled === true ? 'opacity-60 grayscale' : ''}`}
       style={{
         borderColor: selected ? accentColor : statusBorderColor,
         boxShadow: selected ? `0 0 0 2px ${accentColor}66, 0 0 0 1px ${accentColor}22` : `0 0 0 1px ${accentColor}22`,

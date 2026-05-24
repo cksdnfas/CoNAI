@@ -271,6 +271,7 @@ export function useModuleGraphEditorInteractions({
         data: {
           module: nodeToDuplicate.data.module,
           label: nodeToDuplicate.data.label,
+          disabled: nodeToDuplicate.data.disabled === true ? true : undefined,
           inputValues: duplicatedInputValues,
         },
       },
@@ -368,6 +369,7 @@ export function useModuleGraphEditorInteractions({
         data: {
           module,
           label: copiedNode.label,
+          disabled: copiedNode.disabled === true ? true : undefined,
           inputValues: cloneModuleGraphValue(copiedNode.inputValues),
         },
       })
@@ -569,6 +571,28 @@ export function useModuleGraphEditorInteractions({
     }
   }, [setEdges, showSnackbar])
 
+  /** Toggle whether one node is skipped during workflow execution. */
+  const handleToggleNodeDisabled = useCallback((nodeId: string) => {
+    let nextDisabled = false
+
+    setNodes((currentNodes) => currentNodes.map((node) => {
+      if (node.id !== nodeId) {
+        return node
+      }
+
+      nextDisabled = node.data.disabled !== true
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          disabled: nextDisabled ? true : undefined,
+        },
+      }
+    }))
+
+    showSnackbar({ message: nextDisabled ? '노드를 비활성화했어.' : '노드 비활성화를 풀었어.', tone: 'info' })
+  }, [setNodes, showSnackbar])
+
   /** Remove one node together with its attached edges and exposed-input metadata. */
   const handleRemoveNodeById = useCallback((nodeId: string) => {
     setNodes((currentNodes) => currentNodes.filter((node) => node.id !== nodeId))
@@ -652,6 +676,7 @@ export function useModuleGraphEditorInteractions({
     handleAutoLayout,
     handleDisconnectNodeInput,
     handleDisconnectAllNodeConnections,
+    handleToggleNodeDisabled,
     handleRemoveNodeById,
     handleRemoveSelectedNode,
     handleRemoveSelectedEdge,

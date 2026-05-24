@@ -110,6 +110,7 @@ export interface GraphWorkflowNode {
   id: string
   module_id: number
   label?: string
+  disabled?: boolean
   position: {
     x: number
     y: number

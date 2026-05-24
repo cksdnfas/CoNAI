@@ -73,6 +73,7 @@ export function useModuleGraphPageEditorPanels({
   onDuplicateNodeById,
   onDisconnectNodeInput,
   onDisconnectAllNodeConnections,
+  onToggleNodeDisabled,
   onRemoveNodeById,
   onRunSelectedWorkflow,
   onEditSelectedWorkflow,
@@ -155,6 +156,7 @@ export function useModuleGraphPageEditorPanels({
   onDuplicateNodeById: (nodeId: string) => void
   onDisconnectNodeInput: (nodeId: string, portKey: string) => void
   onDisconnectAllNodeConnections: (nodeId: string) => void
+  onToggleNodeDisabled: (nodeId: string) => void
   onRemoveNodeById: (nodeId: string) => void
   onRunSelectedWorkflow: () => void
   onEditSelectedWorkflow: () => void
@@ -330,6 +332,7 @@ export function useModuleGraphPageEditorPanels({
         onPasteSelection={onPasteSelection}
         onDuplicateNodeById={onDuplicateNodeById}
         onDisconnectAllNodeConnections={onDisconnectAllNodeConnections}
+        onToggleNodeDisabled={onToggleNodeDisabled}
         onRemoveNodeById={onRemoveNodeById}
         isValidConnection={isValidConnection}
       />

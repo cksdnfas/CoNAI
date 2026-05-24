@@ -215,6 +215,7 @@ export function ModuleGraphCanvas({
   onPasteSelection,
   onDuplicateNodeById,
   onDisconnectAllNodeConnections,
+  onToggleNodeDisabled,
   onRemoveNodeById,
   isValidConnection,
 }: {
@@ -234,6 +235,7 @@ export function ModuleGraphCanvas({
   onPasteSelection: (options?: { position?: { x: number; y: number } }) => Promise<boolean>
   onDuplicateNodeById: (nodeId: string) => void
   onDisconnectAllNodeConnections: (nodeId: string) => void
+  onToggleNodeDisabled: (nodeId: string) => void
   onRemoveNodeById: (nodeId: string) => void
   isValidConnection: (connection: Connection | ModuleGraphEdge) => boolean
 }) {
@@ -345,6 +347,7 @@ export function ModuleGraphCanvas({
       nodeName: getModuleNodeDisplayLabel(node),
       hasAdvancedOutputPorts: hasAdvancedModuleOutputPorts(node.data.module, node.data.inputValues),
       advancedOutputPortsEnabled: isAdvancedOutputPortsEnabled(node.data.inputValues),
+      disabled: node.data.disabled === true,
     })
   }, [reactFlowInstance, suppressNextPaneClick])
 
@@ -555,6 +558,14 @@ export function ModuleGraphCanvas({
 
             closeActionMenu()
             onDisconnectAllNodeConnections(actionMenuState.nodeId)
+          }}
+          onToggleNodeDisabled={() => {
+            if (actionMenuState.kind !== 'node' || !actionMenuState.nodeId) {
+              return
+            }
+
+            closeActionMenu()
+            onToggleNodeDisabled(actionMenuState.nodeId)
           }}
           onRemoveNode={() => {
             if (actionMenuState.kind !== 'node' || !actionMenuState.nodeId) {

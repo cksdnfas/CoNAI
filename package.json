@@ -136,7 +136,9 @@
     "verify:comfy-server-default-contracts": "cd backend && npm run verify:comfy-server-default-contracts",
     "verify:comfy-dropdown-auto-collect-api-contracts": "cd backend && npm run verify:comfy-dropdown-auto-collect-api-contracts",
     "verify:comfy-model-thumbnail-startup-cleanup": "cd backend && npm run verify:comfy-model-thumbnail-startup-cleanup",
-    "verify:lora-auto-collect-contracts": "cd frontend && npm run verify:lora-auto-collect-contracts"
+    "verify:lora-auto-collect-contracts": "cd frontend && npm run verify:lora-auto-collect-contracts",
+    "verify:module-graph-bypass-contracts": "cd frontend && npm run verify:module-graph-bypass-contracts",
+    "verify:graph-workflow-bypass-contracts": "cd backend && npm run verify:graph-workflow-bypass-contracts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

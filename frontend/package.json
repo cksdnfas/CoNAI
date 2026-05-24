@@ -49,7 +49,8 @@
     "verify:comfy-workflow-authoring-contracts": "tsx src/scripts/verifyComfyWorkflowAuthoringContracts.ts",
     "verify:comfy-workflow-entry-contracts": "tsx src/scripts/verifyComfyWorkflowEntryContracts.ts",
     "verify:comfy-dropdown-auto-collect-contracts": "tsx src/scripts/verifyComfyDropdownAutoCollectContracts.ts",
-    "verify:lora-auto-collect-contracts": "tsx src/scripts/verifyLoraAutoCollectContracts.ts"
+    "verify:lora-auto-collect-contracts": "tsx src/scripts/verifyLoraAutoCollectContracts.ts",
+    "verify:module-graph-bypass-contracts": "tsx src/scripts/verifyModuleGraphBypassContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",

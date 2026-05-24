@@ -12,6 +12,7 @@ export type ValidationNodeRecord = {
   id: string
   module: ModuleDefinitionRecord | null
   inputValues: Record<string, unknown>
+  disabled?: boolean
 }
 
 export type ValidationEdgeRecord = {
@@ -74,7 +75,8 @@ export function buildWorkflowValidationIssues(params: {
     connectedInputCountMap.set(edge.targetNodeId, nodeCounts)
   }
 
-  const finalResultNodes = nodes.filter((node) => node.module && isFinalResultModule(node.module))
+  const activeNodes = nodes.filter((node) => node.disabled !== true)
+  const finalResultNodes = activeNodes.filter((node) => node.module && isFinalResultModule(node.module))
   if (finalResultNodes.length === 0) {
     issues.push({
       id: 'missing-final-result-node',
@@ -85,7 +87,7 @@ export function buildWorkflowValidationIssues(params: {
     })
   }
 
-  for (const node of nodes) {
+  for (const node of activeNodes) {
     const nodeLabel = node.module?.name ?? translate({ ko: '알 수 없는 모듈', en: 'Unknown module' })
 
     if (!node.module) {

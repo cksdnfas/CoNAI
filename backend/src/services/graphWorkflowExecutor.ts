@@ -260,16 +260,24 @@ function findInactiveBranchInputReasons(context: ExecutionContext, nodeId: strin
     })
 }
 
+function markNodeOutputsSkipped(
+  context: ExecutionContext,
+  nodeId: string,
+  moduleDefinition: { output_ports: Array<{ key: string }> },
+) {
+  context.skippedNodeIds?.add(nodeId)
+  for (const port of moduleDefinition.output_ports) {
+    context.disabledOutputPorts?.add(buildNodeOutputKey(nodeId, port.key))
+  }
+}
+
 function markNodeSkippedForInactiveBranch(
   context: ExecutionContext,
   nodeId: string,
   moduleDefinition: { output_ports: Array<{ key: string }> },
   reasons: ReturnType<typeof findInactiveBranchInputReasons>,
 ) {
-  context.skippedNodeIds?.add(nodeId)
-  for (const port of moduleDefinition.output_ports) {
-    context.disabledOutputPorts?.add(buildNodeOutputKey(nodeId, port.key))
-  }
+  markNodeOutputsSkipped(context, nodeId, moduleDefinition)
 
   writeExecutionLog({
     executionId: context.executionId,
@@ -472,67 +480,81 @@ export class GraphWorkflowExecutor {
               throw new Error(`Module ${node.module_id} not found during execution`)
             }
 
-          const inactiveBranchInputReasons = findInactiveBranchInputReasons(context, node.id)
-          if (inactiveBranchInputReasons.length > 0) {
-            markNodeSkippedForInactiveBranch(context, node.id, moduleDefinition, inactiveBranchInputReasons)
-            return
-          }
+            if (node.disabled === true) {
+              markNodeOutputsSkipped(context, node.id, moduleDefinition)
+              writeExecutionLog({
+                executionId,
+                nodeId: node.id,
+                eventType: 'node_skipped_disabled',
+                message: `Node skipped because it is disabled: ${node.id}`,
+                details: {
+                  disabledOutputKeys: moduleDefinition.output_ports.map((port) => port.key),
+                },
+              })
+              return
+            }
 
-          if (reusedArtifacts.artifactsByNode.has(node.id)) {
+            const inactiveBranchInputReasons = findInactiveBranchInputReasons(context, node.id)
+            if (inactiveBranchInputReasons.length > 0) {
+              markNodeSkippedForInactiveBranch(context, node.id, moduleDefinition, inactiveBranchInputReasons)
+              return
+            }
+
+            if (reusedArtifacts.artifactsByNode.has(node.id)) {
+              writeExecutionLog({
+                executionId,
+                nodeId: node.id,
+                eventType: 'node_reused',
+                message: `Node reused cached artifacts: ${node.id}`,
+                details: {
+                  reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
+                  artifactPorts: Object.keys(reusedArtifacts.artifactsByNode.get(node.id) || {}),
+                },
+              })
+              return
+            }
+
             writeExecutionLog({
               executionId,
               nodeId: node.id,
-              eventType: 'node_reused',
-              message: `Node reused cached artifacts: ${node.id}`,
+              eventType: 'node_start',
+              message: `Node start: ${node.id}`,
               details: {
-                reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
-                artifactPorts: Object.keys(reusedArtifacts.artifactsByNode.get(node.id) || {}),
+                moduleId: moduleDefinition.id,
+                moduleName: moduleDefinition.name,
+                engineType: moduleDefinition.engine_type,
               },
             })
-            return
-          }
 
-          writeExecutionLog({
-            executionId,
-            nodeId: node.id,
-            eventType: 'node_start',
-            message: `Node start: ${node.id}`,
-            details: {
-              moduleId: moduleDefinition.id,
-              moduleName: moduleDefinition.name,
-              engineType: moduleDefinition.engine_type,
-            },
-          })
+            const incomingArtifacts = await getIncomingArtifacts(context, node.id)
+            const resolvedInputs = resolveNodeInputs(node, moduleDefinition, incomingArtifacts)
 
-          const incomingArtifacts = await getIncomingArtifacts(context, node.id)
-          const resolvedInputs = resolveNodeInputs(node, moduleDefinition, incomingArtifacts)
+            writeExecutionLog({
+              executionId,
+              nodeId: node.id,
+              eventType: 'node_inputs_resolved',
+              message: `Resolved inputs for ${node.id}`,
+              details: {
+                inputKeys: Object.keys(resolvedInputs),
+                upstreamKeys: Object.keys(incomingArtifacts),
+              },
+            })
 
-          writeExecutionLog({
-            executionId,
-            nodeId: node.id,
-            eventType: 'node_inputs_resolved',
-            message: `Resolved inputs for ${node.id}`,
-            details: {
-              inputKeys: Object.keys(resolvedInputs),
-              upstreamKeys: Object.keys(incomingArtifacts),
-            },
-          })
+            validateRequiredInputs(node, moduleDefinition, resolvedInputs)
 
-          validateRequiredInputs(node, moduleDefinition, resolvedInputs)
-
-          if (moduleDefinition.engine_type === 'nai') {
-            await executeNaiModule(context, node, moduleDefinition, resolvedInputs)
-          } else if (moduleDefinition.engine_type === 'codex') {
-            await executeCodexImageGenerationNode(context, node, moduleDefinition, resolvedInputs)
-          } else if (moduleDefinition.engine_type === 'comfyui') {
-            await executeComfyModule(context, node, moduleDefinition, resolvedInputs)
-          } else if (moduleDefinition.engine_type === 'system') {
-            await executeSystemModule(context, node, moduleDefinition, resolvedInputs)
-          } else if (moduleDefinition.engine_type === 'custom_js') {
-            await executeCustomJsModule(context, node, moduleDefinition, resolvedInputs)
-          } else {
-            throw new Error(`Unsupported module engine type: ${moduleDefinition.engine_type}`)
-          }
+            if (moduleDefinition.engine_type === 'nai') {
+              await executeNaiModule(context, node, moduleDefinition, resolvedInputs)
+            } else if (moduleDefinition.engine_type === 'codex') {
+              await executeCodexImageGenerationNode(context, node, moduleDefinition, resolvedInputs)
+            } else if (moduleDefinition.engine_type === 'comfyui') {
+              await executeComfyModule(context, node, moduleDefinition, resolvedInputs)
+            } else if (moduleDefinition.engine_type === 'system') {
+              await executeSystemModule(context, node, moduleDefinition, resolvedInputs)
+            } else if (moduleDefinition.engine_type === 'custom_js') {
+              await executeCustomJsModule(context, node, moduleDefinition, resolvedInputs)
+            } else {
+              throw new Error(`Unsupported module engine type: ${moduleDefinition.engine_type}`)
+            }
 
             writeExecutionLog({
               executionId,

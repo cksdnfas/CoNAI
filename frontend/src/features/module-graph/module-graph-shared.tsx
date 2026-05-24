@@ -29,6 +29,7 @@ export type NodeArtifactGroupPreview = {
 export type ModuleGraphNodeData = {
   module: ModuleDefinitionRecord
   label?: string
+  disabled?: boolean
   inputValues: Record<string, unknown>
   executionStatus?: 'idle' | 'completed' | 'failed' | 'blocked'
   executionArtifactCount?: number
@@ -58,6 +59,7 @@ export type ModuleGraphClipboardNode = {
   moduleId: number
   position: { x: number; y: number }
   label?: string
+  disabled?: boolean
   inputValues: Record<string, unknown>
 }
 
@@ -235,6 +237,7 @@ export function buildModuleGraphClipboardPayload(nodes: ModuleGraphNode[], edges
       moduleId: node.data.module.id,
       position: { x: node.position.x, y: node.position.y },
       label: node.data.label,
+      disabled: node.data.disabled === true ? true : undefined,
       inputValues: cloneModuleGraphValue(node.data.inputValues || {}),
     })),
     edges: edges
@@ -271,6 +274,7 @@ export function parseModuleGraphClipboardPayload(value: string): ModuleGraphClip
       && typeof node?.position?.x === 'number'
       && typeof node?.position?.y === 'number'
       && (node.label === undefined || typeof node.label === 'string')
+      && (node.disabled === undefined || typeof node.disabled === 'boolean')
       && typeof node.inputValues === 'object'
       && node.inputValues !== null
       && !Array.isArray(node.inputValues)
@@ -933,6 +937,10 @@ export function buildFlowFromGraphRecord(graph: GraphWorkflowRecord, modules: Mo
         inputValues: node.input_values || {},
       }
 
+      if (node.disabled === true) {
+        data.disabled = true
+      }
+
       if (typeof node.label === 'string' && node.label.trim().length > 0) {
         data.label = node.label.trim()
       }
@@ -977,6 +985,7 @@ export function buildGraphPayload(nodes: ModuleGraphNode[], edges: ModuleGraphEd
       id: node.id,
       module_id: node.data.module.id,
       label: getModuleNodeDisplayLabel(node),
+      disabled: node.data.disabled === true ? true : undefined,
       position: node.position,
       input_values: node.data.inputValues || {},
     })),

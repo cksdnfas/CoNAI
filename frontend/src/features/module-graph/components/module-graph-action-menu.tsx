@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { Boxes, Copy, SlidersHorizontal, Sparkles, Trash2, Unplug } from 'lucide-react'
+import { Boxes, Copy, PowerOff, SlidersHorizontal, Sparkles, Trash2, Unplug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
@@ -16,6 +16,7 @@ type NodeActionMenuState = {
   nodeName: string
   hasAdvancedOutputPorts?: boolean
   advancedOutputPortsEnabled?: boolean
+  disabled?: boolean
 }
 
 export type ModuleGraphActionMenuState = PaneActionMenuState | NodeActionMenuState
@@ -26,6 +27,7 @@ export function ModuleGraphActionMenu({
   onOpenNodePicker,
   onDuplicateNode,
   onDisconnectAllConnections,
+  onToggleNodeDisabled,
   onRemoveNode,
   onShowRecommendedNodes,
   onToggleAdvancedOutputs,
@@ -35,6 +37,7 @@ export function ModuleGraphActionMenu({
   onOpenNodePicker: () => void
   onDuplicateNode: () => void
   onDisconnectAllConnections: () => void
+  onToggleNodeDisabled: () => void
   onRemoveNode: () => void
   onShowRecommendedNodes: () => void
   onToggleAdvancedOutputs: () => void
@@ -110,6 +113,21 @@ export function ModuleGraphActionMenu({
                 aria-label={t({ ko: '모든 연결 끊기', en: 'Disconnect all connections' })}
               >
                 <Unplug className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className={cn('h-8 w-8', state.disabled ? 'text-amber-300' : undefined)}
+                onClick={onToggleNodeDisabled}
+                title={state.disabled
+                  ? t({ ko: '{name} 비활성화 해제', en: 'Enable {name}' }, { name: state.nodeName })
+                  : t({ ko: '{name} 비활성화', en: 'Disable {name}' }, { name: state.nodeName })}
+                aria-label={state.disabled
+                  ? t({ ko: '노드 비활성화 해제', en: 'Enable node' })
+                  : t({ ko: '노드 비활성화', en: 'Disable node' })}
+              >
+                <PowerOff className="h-4 w-4" />
               </Button>
               {state.hasAdvancedOutputPorts ? (
                 <Button
