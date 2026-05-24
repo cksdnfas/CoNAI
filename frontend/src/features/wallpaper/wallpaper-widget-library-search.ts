@@ -50,7 +50,7 @@ function matchesWallpaperWidgetQuery(widget: WallpaperWidgetDefinition, query: s
   }
 
   const folderTitle = t(WIDGET_FOLDER_TITLE_BY_TYPE.get(widget.type) ?? { ko: '기타', en: 'Misc' })
-  return [widget.title, widget.description, widget.type, folderTitle]
+  return [widget.title, widget.description, widget.type, folderTitle, ...(widget.searchKeywords ?? [])]
     .join(' ')
     .toLowerCase()
     .includes(query)

@@ -33,6 +33,14 @@ const englishFolderSummary = getWallpaperWidgetLibrarySearchSummary(widgets, 'im
 equal(englishFolderSummary.visibleWidgetCount, 4)
 deepEqual(englishFolderSummary.visibleFolders.map((folder) => folder.id), ['images'])
 
+const englishKeywordSummary = getWallpaperWidgetLibrarySearchSummary(widgets, 'slideshow', en)
+equal(englishKeywordSummary.visibleWidgetCount, 1)
+equal(englishKeywordSummary.visibleFolders[0]?.widgets[0]?.type, 'image-showcase')
+
+const englishAliasSummary = getWallpaperWidgetLibrarySearchSummary(widgets, 'memo', en)
+equal(englishAliasSummary.visibleWidgetCount, 1)
+equal(englishAliasSummary.visibleFolders[0]?.widgets[0]?.type, 'text-note')
+
 const emptySummary = getWallpaperWidgetLibrarySearchSummary(widgets, 'missing-widget-query', ko)
 equal(emptySummary.visibleWidgetCount, 0)
 equal(emptySummary.badgeText, '0/8')

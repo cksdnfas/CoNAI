@@ -144,6 +144,7 @@ interface WallpaperWidgetDefinitionBase<T extends WallpaperWidgetType> {
   type: T
   title: string
   description: string
+  searchKeywords?: readonly string[]
   defaultSize: WallpaperWidgetSize
   minSize: WallpaperWidgetSize
   maxSize: WallpaperWidgetSize
