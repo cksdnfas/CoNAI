@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useCallback, useMemo, type ChangeEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
@@ -60,15 +60,26 @@ export function AutoTestCard({
 }: AutoTestCardProps) {
   const { t } = useI18n()
   const { addScopedTextChip } = useHomeSearch()
-  const extractedPromptCards = autoTestImage ? getImageExtractedPromptCards(autoTestImage, t) : []
+  const extractedPromptCards = useMemo(() => (autoTestImage ? getImageExtractedPromptCards(autoTestImage, t) : []), [autoTestImage, t])
 
-  const handleAddExtractedPromptSearchFilter = (scope: ExtractedPromptActionScope, tag: string) => {
+  const handleAddExtractedPromptSearchFilter = useCallback((scope: ExtractedPromptActionScope, tag: string) => {
     addScopedTextChip(getTextSearchScopeForExtractedPrompt(scope), tag, { apply: true })
-  }
+  }, [addScopedTextChip])
 
-  const handleAddAutoPromptSearchFilter = (tag: string) => {
+  const handleAddAutoPromptSearchFilter = useCallback((tag: string) => {
     addScopedTextChip('auto', tag, { apply: true })
-  }
+  }, [addScopedTextChip])
+
+  const handleHashInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    onAutoTestHashInputChange(event.target.value)
+  }, [onAutoTestHashInputChange])
+
+  const handleHashInputKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return
+    if (!autoTestHashInput.trim()) return
+    event.preventDefault()
+    onResolveAutoTestMedia()
+  }, [autoTestHashInput, onResolveAutoTestMedia])
 
   return (
     <SettingsSection heading={heading} actions={actions}>
@@ -77,13 +88,8 @@ export function AutoTestCard({
           variant="settings"
           className="font-mono"
           value={autoTestHashInput}
-          onChange={(event) => onAutoTestHashInputChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return
-            if (!autoTestHashInput.trim()) return
-            event.preventDefault()
-            onResolveAutoTestMedia()
-          }}
+          onChange={handleHashInputChange}
+          onKeyDown={handleHashInputKeyDown}
           placeholder={t({ ko: 'image hash', en: 'image hash' })}
         />
       </SettingsField>
