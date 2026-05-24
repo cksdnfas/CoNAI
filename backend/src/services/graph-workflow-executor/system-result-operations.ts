@@ -1,5 +1,6 @@
 import { GraphExecutionFinalResultModel } from '../../models/GraphExecutionFinalResult'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
+import { promoteFinalResultArtifactToGenerationHistory } from './final-result-promotion'
 import {
   writeExecutionLog,
   type ExecutionContext,
@@ -43,13 +44,23 @@ export async function executeFinalResultNode(
     return
   }
 
-  GraphExecutionFinalResultModel.create({
+  const finalResultId = GraphExecutionFinalResultModel.create({
     execution_id: context.executionId,
     final_node_id: node.id,
     source_artifact_id: sourceArtifact.artifactRecordId,
     source_node_id: sourceEdge.source_node_id,
     source_port_key: sourceEdge.source_port_key,
     artifact_type: sourceArtifact.type,
+  })
+
+  const promotionResult = await promoteFinalResultArtifactToGenerationHistory({
+    executionId: context.executionId,
+    workflowId: context.workflow.id,
+    workflowName: context.workflow.name,
+    finalNodeId: node.id,
+    sourceNodeId: sourceEdge.source_node_id,
+    sourcePortKey: sourceEdge.source_port_key,
+    sourceArtifact,
   })
 
   context.artifactsByNode.set(node.id, {})
@@ -65,7 +76,9 @@ export async function executeFinalResultNode(
       sourceNodeId: sourceEdge.source_node_id,
       sourcePortKey: sourceEdge.source_port_key,
       sourceArtifactId: sourceArtifact.artifactRecordId,
+      finalResultId,
       artifactType: sourceArtifact.type,
+      promotion: promotionResult,
     },
   })
 }
