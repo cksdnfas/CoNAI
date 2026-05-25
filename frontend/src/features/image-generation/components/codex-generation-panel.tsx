@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, RotateCcw, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -186,6 +186,7 @@ export function CodexGenerationPanel({
     queryFn: getCodexGenerationStatus,
     retry: false,
   })
+  const refetchCodexStatus = codexStatusQuery.refetch
 
   const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
 
@@ -205,8 +206,8 @@ export function CodexGenerationPanel({
       return
     }
 
-    void codexStatusQuery.refetch()
-  }, [codexStatusQuery, refreshNonce])
+    void refetchCodexStatus()
+  }, [refetchCodexStatus, refreshNonce])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -256,18 +257,22 @@ export function CodexGenerationPanel({
             ? t({ ko: '로그인 확인 후 생성', en: 'Check login and generate' })
             : t({ ko: 'Codex 확인 후 생성', en: 'Check Codex and generate' })
 
-  const handleFieldChange = <K extends keyof CodexFormDraft>(field: K, value: CodexFormDraft[K]) => {
+  const handleFieldChange = useCallback(<K extends keyof CodexFormDraft>(field: K, value: CodexFormDraft[K]) => {
     setCodexForm((current) => ({
       ...current,
       [field]: value,
     }))
-  }
+  }, [])
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setCodexForm(DEFAULT_CODEX_FORM)
-  }
+  }, [])
 
-  const handleGenerate = async () => {
+  const handleRefreshStatus = useCallback(() => {
+    void refetchCodexStatus()
+  }, [refetchCodexStatus])
+
+  const handleGenerate = useCallback(async () => {
     if (isSubmitting) {
       return
     }
@@ -323,7 +328,24 @@ export function CodexGenerationPanel({
     } finally {
       setIsSubmitting(false)
     }
-  }
+  }, [
+    codexForm,
+    codexStatus?.available,
+    codexStatus?.installed,
+    codexStatusQuery.isSuccess,
+    generationSaveSettings.defaultFormat,
+    generationSaveSettings.maxHeight,
+    generationSaveSettings.maxWidth,
+    generationSaveSettings.quality,
+    generationSaveSettings.resizeEnabled,
+    isSubmitting,
+    onHistoryRefresh,
+    operationLabel,
+    queryClient,
+    queueCount,
+    showSnackbar,
+    t,
+  ])
 
   const headerToolbarContent = (
     <div className="flex items-center justify-between gap-3">
@@ -336,7 +358,7 @@ export function CodexGenerationPanel({
             type="button"
             variant="outline"
             size="icon-sm"
-            onClick={() => void codexStatusQuery.refetch()}
+            onClick={handleRefreshStatus}
             disabled={codexStatusQuery.isPending}
             aria-label={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
             title={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
@@ -355,7 +377,7 @@ export function CodexGenerationPanel({
     <Button
       type="button"
       size={showGenerateLabel ? 'sm' : 'icon-sm'}
-      onClick={() => void handleGenerate()}
+      onClick={handleGenerate}
       disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
       aria-label={showGenerateLabel ? generateButtonLabel : (isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' }))}
       title={showGenerateLabel ? generateButtonLabel : (isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' }))}
@@ -386,7 +408,7 @@ export function CodexGenerationPanel({
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={() => void codexStatusQuery.refetch()}
+          onClick={handleRefreshStatus}
           disabled={codexStatusQuery.isPending}
           aria-label={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
           title={t({ ko: 'Codex 상태 재확인', en: 'Recheck Codex status' })}
@@ -400,7 +422,7 @@ export function CodexGenerationPanel({
         <Button
           type="button"
           size="sm"
-          onClick={() => void handleGenerate()}
+          onClick={handleGenerate}
           disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
           aria-label={generateButtonLabel}
           title={generateButtonLabel}
@@ -413,7 +435,7 @@ export function CodexGenerationPanel({
         <Button
           type="button"
           size="icon-sm"
-          onClick={() => void handleGenerate()}
+          onClick={handleGenerate}
           disabled={isSubmitting || codexForm.prompt.trim().length === 0 || !canGenerateWithCodex}
           aria-label={isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' })}
           title={isSubmitting ? t({ ko: '큐 등록 중', en: 'Adding to queue' }) : t({ ko: '큐에 추가', en: 'Add to queue' })}
