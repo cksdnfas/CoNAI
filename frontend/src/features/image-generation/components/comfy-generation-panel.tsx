@@ -197,7 +197,10 @@ export function ComfyGenerationPanel({
   })
   const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
 
-  const connectedServers = activeServers.filter((server) => comfyServerTests[server.id]?.status?.is_connected === true)
+  const connectedServers = useMemo(
+    () => activeServers.filter((server) => comfyServerTests[server.id]?.status?.is_connected === true),
+    [activeServers, comfyServerTests],
+  )
   const {
     isComfyGenerating,
     handleGenerateSelected,
@@ -302,12 +305,12 @@ export function ComfyGenerationPanel({
     }
   }, [onSelectedWorkflowChange, selectedWorkflow, selectedWorkflowId, workflowsQuery.isSuccess])
 
-  const handleWorkflowFieldChange = (fieldId: string, value: WorkflowFieldDraftValue) => {
+  const handleWorkflowFieldChange = useCallback((fieldId: string, value: WorkflowFieldDraftValue) => {
     setWorkflowDraft((current) => ({
       ...current,
       [fieldId]: value,
     }))
-  }
+  }, [])
 
   useEffect(() => {
     if (!selectedWorkflowId) {
@@ -321,23 +324,23 @@ export function ComfyGenerationPanel({
     return () => window.clearTimeout(timeout)
   }, [selectedWorkflowId, workflowDraft])
 
-  const handleWorkflowImageChange = async (fieldId: string, image?: SelectedImageDraft) => {
+  const handleWorkflowImageChange = useCallback(async (fieldId: string, image?: SelectedImageDraft) => {
     handleWorkflowFieldChange(fieldId, image ?? '')
-  }
+  }, [handleWorkflowFieldChange])
 
-  const handleOpenCreateWorkflow = () => {
+  const handleOpenCreateWorkflow = useCallback(() => {
     setWorkflowEditorState(null)
     setIsAuthoringModalOpen(true)
-  }
+  }, [])
 
-  const handleOpenWorkflow = (workflowId: number) => {
+  const handleOpenWorkflow = useCallback((workflowId: number) => {
     onSelectedWorkflowChange(workflowId)
-  }
+  }, [onSelectedWorkflowChange])
 
-  const handleOpenModuleSave = (workflowId: number) => {
+  const handleOpenModuleSave = useCallback((workflowId: number) => {
     setModuleSaveWorkflowId(workflowId)
     setIsModuleSaveModalOpen(true)
-  }
+  }, [])
 
   const handleAuthoringSaved = async (workflowId: number) => {
     await Promise.all([workflowsQuery.refetch(), dropdownListsQuery.refetch()])
@@ -454,7 +457,7 @@ export function ComfyGenerationPanel({
     }
   }
 
-  const handleScanDropdownLists = async (input: { apiPaths: string[] }) => {
+  const handleScanDropdownLists = useCallback(async (input: { apiPaths: string[] }) => {
     if (isRefreshingDropdownLists) {
       return
     }
@@ -462,16 +465,33 @@ export function ComfyGenerationPanel({
     try {
       setIsRefreshingDropdownLists(true)
       const response = await scanGenerationComfyUIModelDropdownLists(input)
-      await dropdownListsQuery.refetch()
+      await refetchDropdownLists()
       showSnackbar({ message: response.data.message || t({ ko: '자동수집 목록을 갱신했어.', en: 'Refreshed the auto-collect list.' }), tone: 'info' })
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '자동수집 목록 생성에 실패했어.', en: 'Failed to create the auto-collect list.' })), tone: 'error' })
     } finally {
       setIsRefreshingDropdownLists(false)
     }
-  }
+  }, [isRefreshingDropdownLists, refetchDropdownLists, showSnackbar, t])
 
-  const handleRefreshDropdownLists = () => handleScanDropdownLists({ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS })
+  const handleRefreshDropdownLists = useCallback(() => handleScanDropdownLists({ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS }), [handleScanDropdownLists])
+
+  const handleResetWorkflowDraft = useCallback(() => {
+    if (selectedWorkflow) {
+      clearPersistedComfyWorkflowDraft(selectedWorkflow.id)
+    }
+    setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))
+  }, [selectedWorkflow, selectedWorkflowFields])
+
+  const handleOpenSelectedModuleSave = useCallback(() => {
+    if (selectedWorkflow) {
+      handleOpenModuleSave(selectedWorkflow.id)
+    }
+  }, [handleOpenModuleSave, selectedWorkflow])
+
+  const handleGenerateSelectedWorkflow = useCallback(() => {
+    void handleGenerateSelected()
+  }, [handleGenerateSelected])
 
   const handleCreateComfyModule = async () => {
     if (!moduleSaveWorkflow) {
@@ -585,14 +605,9 @@ export function ComfyGenerationPanel({
             onFieldChange={handleWorkflowFieldChange}
             onImageChange={handleWorkflowImageChange}
             onRefreshDropdownLists={handleRefreshDropdownLists}
-            onResetDraft={() => {
-              if (selectedWorkflow) {
-                clearPersistedComfyWorkflowDraft(selectedWorkflow.id)
-              }
-              setWorkflowDraft(buildWorkflowDraft(selectedWorkflowFields))
-            }}
-            onOpenModuleSave={() => selectedWorkflow ? handleOpenModuleSave(selectedWorkflow.id) : undefined}
-            onGenerateSelected={() => void handleGenerateSelected()}
+            onResetDraft={handleResetWorkflowDraft}
+            onOpenModuleSave={handleOpenSelectedModuleSave}
+            onGenerateSelected={handleGenerateSelectedWorkflow}
           />
         ) : null}
       </div>
