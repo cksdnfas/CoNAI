@@ -88,6 +88,8 @@ function startApiServer() {
       const bodyText = await readRequestBody(request)
       assert.match(bodyText, /name="image"; filename="image\.(png|webp)"/)
       assert.match(bodyText, /name="note"/)
+      assert.doesNotMatch(bodyText, /imagePath/)
+      assert.doesNotMatch(bodyText, /"width"/)
       response.setHeader('content-type', 'text/plain')
       response.end('ok')
       return
@@ -176,6 +178,36 @@ async function verifyApiRequestNode(baseUrl: string, tempBasePath: string) {
     }),
     'ok',
   )
+
+  const publicImageRelativePath = path.join('images', '2026', '05', '26', '1aa366d1-8470-418d-845d-cb4db73decac.webp')
+  const publicImagePath = path.join(tempBasePath, 'uploads', publicImageRelativePath)
+  fs.mkdirSync(path.dirname(publicImagePath), { recursive: true })
+  fs.writeFileSync(publicImagePath, Buffer.from('hello'))
+  assert.equal(
+    await executeApi({
+      url: `${baseUrl}/multipart`,
+      method: 'POST',
+      headers: [],
+      'headers.x-upload-token': 'secret',
+      payload: {
+        note: 'public-reference',
+        image: {
+          id: 8,
+          imagePath: '/images/2026/05/26/1aa366d1-8470-418d-845d-cb4db73decac.webp',
+          width: 1440,
+          height: 1440,
+          fileSizeBytes: 180400,
+          model: 'anima_baseV10.safetensors',
+          positiveTags: '(@mikeou:0.9)',
+          negativeTags: '(@hato no suisou:0.9)',
+          positivePrompt: null,
+          negativePrompt: null,
+          createdAt: '2026-05-25 22:43:40',
+        },
+      },
+    }),
+    'ok',
+  )
 }
 
 async function verifyBase64Nodes(tempBasePath: string) {
@@ -194,6 +226,17 @@ async function verifyBase64Nodes(tempBasePath: string) {
     input_mode: 'auto',
   })
   assert.equal(fileReferenceContext.artifactsByNode.get(node.id)?.base64.value, Buffer.from('hello').toString('base64'))
+
+  const publicImageRelativePath = path.join('images', '2026', '05', '26', 'base64-reference.webp')
+  const publicImagePath = path.join(tempBasePath, 'uploads', publicImageRelativePath)
+  fs.mkdirSync(path.dirname(publicImagePath), { recursive: true })
+  fs.writeFileSync(publicImagePath, Buffer.from('hello'))
+  const publicFileReferenceContext = createExecutionContext()
+  await executeBase64EncodeNode(publicFileReferenceContext, node, moduleDefinition, {
+    value: { imagePath: '/images/2026/05/26/base64-reference.webp' },
+    input_mode: 'auto',
+  })
+  assert.equal(publicFileReferenceContext.artifactsByNode.get(node.id)?.base64.value, Buffer.from('hello').toString('base64'))
 
   const decodeContext = createExecutionContext()
   executeBase64DecodeNode(decodeContext, node, moduleDefinition, {

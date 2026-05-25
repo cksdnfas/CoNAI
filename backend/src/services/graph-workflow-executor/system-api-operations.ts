@@ -238,6 +238,45 @@ function inferMimeTypeFromPath(filePath: string) {
   return 'application/octet-stream'
 }
 
+function normalizeUploadsRelativePath(value: string) {
+  return value
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/^uploads\//i, '')
+}
+
+function isUploadsPublicPath(value: string) {
+  const normalizedPath = normalizeUploadsRelativePath(value)
+  return normalizedPath.startsWith('images/')
+    || normalizedPath.startsWith('API/images/')
+    || normalizedPath.startsWith('videos/')
+}
+
+function resolveApiFileReferencePath(rawPath: string) {
+  const trimmedPath = rawPath.trim()
+  if (!trimmedPath) {
+    return trimmedPath
+  }
+
+  try {
+    const url = new URL(trimmedPath)
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      if (isUploadsPublicPath(url.pathname)) {
+        return resolveUploadsPath(normalizeUploadsRelativePath(url.pathname))
+      }
+      return trimmedPath
+    }
+  } catch {
+    // Not a URL; resolve as a filesystem path or uploads-relative public path below.
+  }
+
+  if (isUploadsPublicPath(trimmedPath)) {
+    return resolveUploadsPath(normalizeUploadsRelativePath(trimmedPath))
+  }
+
+  return path.isAbsolute(trimmedPath) ? trimmedPath : resolveUploadsPath(trimmedPath)
+}
+
 function resolveApiFileReference(value: unknown): ApiFileReference | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
@@ -258,7 +297,7 @@ function resolveApiFileReference(value: unknown): ApiFileReference | null {
     return null
   }
 
-  const filePath = path.isAbsolute(rawPath) ? rawPath : resolveUploadsPath(rawPath)
+  const filePath = resolveApiFileReferencePath(rawPath)
   const mimeType = getObjectStringValue(record, ['mimeType', 'mime_type', 'contentType', 'content_type']) ?? inferMimeTypeFromPath(filePath)
   const fileName = getObjectStringValue(record, ['fileName', 'file_name', 'originalFileName', 'original_file_name', 'output_file_name']) ?? path.basename(filePath)
   return { filePath, mimeType, fileName }
