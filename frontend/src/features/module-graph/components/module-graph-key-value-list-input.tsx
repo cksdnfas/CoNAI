@@ -5,7 +5,7 @@ import { useI18n } from '@/i18n'
 import type { ModulePortDataType } from '@/lib/api-module-graph'
 import { buildHandleId, getPortTypeColor } from '../module-graph-shared'
 
-type KeyValueEntry = {
+export type KeyValueEntry = {
   key: string
   value: string
 }

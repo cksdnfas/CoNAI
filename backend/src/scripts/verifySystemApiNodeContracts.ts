@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { ExecutionContext, ParsedModuleDefinition } from '../services/graph-workflow-executor/shared'
+import { validateGraphTypes } from '../services/graph-workflow-executor/validate'
 import type { GraphWorkflowNode } from '../types/moduleGraph'
 
 type SystemApiOperations = typeof import('../services/graph-workflow-executor/system-api-operations')
@@ -172,6 +173,43 @@ function verifyBase64Nodes() {
   assert.equal(decodeContext.artifactsByNode.get(node.id)?.value.value, 'hi')
 }
 
+function verifyDynamicApiInputValidation() {
+  const imageModule: ParsedModuleDefinition = {
+    ...moduleDefinition,
+    id: 2,
+    name: '이미지 출력',
+    exposed_inputs: [],
+    internal_fixed_values: {},
+    output_ports: [
+      { key: 'image', label: '이미지', direction: 'output', data_type: 'image', required: true, multiple: false },
+    ],
+  }
+  const apiModule: ParsedModuleDefinition = {
+    ...moduleDefinition,
+    output_ports: [],
+    exposed_inputs: [
+      { key: 'values', label: '입력 값', direction: 'input', data_type: 'json', required: false, multiple: false },
+      { key: 'headers', label: '헤더', direction: 'input', data_type: 'json', required: false, multiple: false },
+    ],
+  }
+
+  validateGraphTypes(
+    {
+      nodes: [
+        { id: 'image-node', module_id: imageModule.id, position: { x: 0, y: 0 } },
+        { id: 'api-node', module_id: apiModule.id, position: { x: 100, y: 0 } },
+      ],
+      edges: [
+        { id: 'edge-image-api-value', source_node_id: 'image-node', source_port_key: 'image', target_node_id: 'api-node', target_port_key: 'values.image' },
+      ],
+    },
+    new Map([
+      [imageModule.id, imageModule],
+      [apiModule.id, apiModule],
+    ]),
+  )
+}
+
 async function main() {
   const tempBasePath = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-system-api-node-contracts-'))
   process.env.RUNTIME_BASE_PATH = tempBasePath
@@ -201,6 +239,7 @@ async function main() {
 
     await verifyApiRequestNode(baseUrl)
     verifyBase64Nodes()
+    verifyDynamicApiInputValidation()
   } finally {
     server.close()
     closeUserSettingsDb?.()

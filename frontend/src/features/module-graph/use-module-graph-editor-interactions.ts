@@ -101,8 +101,8 @@ export function useModuleGraphEditorInteractions({
         return false
       }
 
-      const sourcePort = sourceNode.data.module.output_ports.find((port) => port.key === sourceHandle.portKey)
-      const targetPort = targetNode.data.module.exposed_inputs.find((port) => port.key === targetHandle.portKey)
+      const sourcePort = findNodePort(sourceNode, 'out', sourceHandle.portKey)
+      const targetPort = findNodePort(targetNode, 'in', targetHandle.portKey)
       if (!sourcePort || !targetPort) {
         return false
       }
@@ -182,7 +182,7 @@ export function useModuleGraphEditorInteractions({
 
       if (existingNode && parsedHandle) {
         if (connectionStart.handleType === 'source') {
-          const sourcePort = existingNode.data.module.output_ports.find((port) => port.key === parsedHandle.portKey)
+          const sourcePort = findNodePort(existingNode, 'out', parsedHandle.portKey)
           const compatibleTargetPort = sourcePort
             ? module.exposed_inputs.find((port) => getModulePortCompatibility(sourcePort.data_type, port.data_type) !== 'incompatible')
             : null
@@ -208,7 +208,7 @@ export function useModuleGraphEditorInteractions({
             }
           }
         } else {
-          const targetPort = existingNode.data.module.exposed_inputs.find((port) => port.key === parsedHandle.portKey)
+          const targetPort = findNodePort(existingNode, 'in', parsedHandle.portKey)
           const compatibleSourcePort = targetPort
             ? module.output_ports.find((port) => getModulePortCompatibility(port.data_type, targetPort.data_type) !== 'incompatible')
             : null

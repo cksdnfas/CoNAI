@@ -887,7 +887,38 @@ export function findNodePort(node: ModuleGraphNode | undefined, direction: 'in' 
   }
 
   const portList = direction === 'out' ? node.data.module.output_ports : node.data.module.exposed_inputs
-  return portList.find((port) => port.key === portKey) ?? null
+  const directPort = portList.find((port) => port.key === portKey)
+  if (directPort) {
+    return directPort
+  }
+
+  if (direction !== 'in' || getModuleOperationKey(node.data.module) !== 'system.api_request') {
+    return null
+  }
+
+  const dynamicParentKey = portKey.startsWith('values.') ? 'values' : portKey.startsWith('headers.') ? 'headers' : null
+  if (!dynamicParentKey) {
+    return null
+  }
+
+  const parentPort = node.data.module.exposed_inputs.find((port) => port.key === dynamicParentKey)
+  const dynamicLabel = portKey.slice(`${dynamicParentKey}.`.length).trim()
+  if (!parentPort || !dynamicLabel) {
+    return null
+  }
+
+  return {
+    ...parentPort,
+    key: portKey,
+    label: dynamicLabel,
+    data_type: dynamicParentKey === 'headers' ? 'text' : 'any',
+    required: false,
+    multiple: false,
+    default_value: undefined,
+    description: dynamicParentKey === 'headers'
+      ? 'API 요청 헤더 항목 값이야.'
+      : 'API 요청 입력 값 항목이야.',
+  }
 }
 
 /** Group prompt/text into one string family so graph users can bridge them intentionally. */

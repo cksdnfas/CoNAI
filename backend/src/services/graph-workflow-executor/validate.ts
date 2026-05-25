@@ -4,6 +4,36 @@ import {
 } from '../../types/moduleGraph'
 import { type ParsedModuleDefinition } from './shared'
 
+function resolveInputPort(moduleDefinition: ParsedModuleDefinition, portKey: string) {
+  const directPort = moduleDefinition.exposed_inputs.find((port) => port.key === portKey)
+  if (directPort) {
+    return directPort
+  }
+
+  if (moduleDefinition.internal_fixed_values?.operation_key !== 'system.api_request') {
+    return null
+  }
+
+  const dynamicParentKey = portKey.startsWith('values.') ? 'values' : portKey.startsWith('headers.') ? 'headers' : null
+  if (!dynamicParentKey || !portKey.slice(`${dynamicParentKey}.`.length).trim()) {
+    return null
+  }
+
+  const parentPort = moduleDefinition.exposed_inputs.find((port) => port.key === dynamicParentKey)
+  if (!parentPort) {
+    return null
+  }
+
+  return {
+    ...parentPort,
+    key: portKey,
+    data_type: dynamicParentKey === 'headers' ? 'text' : 'any',
+    required: false,
+    multiple: false,
+    default_value: undefined,
+  }
+}
+
 /** Ensure every required module input has a resolved value. */
 export function validateRequiredInputs(node: GraphWorkflowNode, moduleDefinition: ParsedModuleDefinition, resolvedInputs: Record<string, any>) {
   const missing = moduleDefinition.exposed_inputs
@@ -110,7 +140,7 @@ export function validateGraphTypes(graph: GraphWorkflowDocument, modulesById: Ma
     }
 
     const sourcePort = sourceModule.output_ports.find((port) => port.key === edge.source_port_key)
-    const targetPort = targetModule.exposed_inputs.find((port) => port.key === edge.target_port_key)
+    const targetPort = resolveInputPort(targetModule, edge.target_port_key)
     if (!sourcePort || !targetPort) {
       throw new Error(`Invalid edge ${edge.id}: source or target port not found`)
     }
