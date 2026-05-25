@@ -301,7 +301,7 @@ export function WallpaperEditorPage() {
             <Select
               value={effectiveActivePresetId ?? '__new__'}
               onChange={(event) => {
-                handleLoadPreset(event.target.value || null)
+                handleLoadPreset(event.target.value === '__new__' ? null : event.target.value)
               }}
             >
               <option value="__new__" hidden>{t({ ko: '미저장 새 캔버스', en: 'Unsaved new canvas' })}</option>

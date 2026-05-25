@@ -50,6 +50,10 @@ assert(
   'wallpaper editor should build one saved-preset id index per preset change',
 )
 assert(
+  wallpaperEditorPageSource.includes("handleLoadPreset(event.target.value === '__new__' ? null : event.target.value)"),
+  'wallpaper editor preset select should map the unsaved canvas option to null instead of treating it as a missing preset id',
+)
+assert(
   wallpaperEditorPageSource.includes('const widgetById = useMemo(() => new Map(layoutPreset.widgets.map((widget) => [widget.id, widget])), [layoutPreset.widgets])'),
   'wallpaper editor should build one widget id index per layout widget change',
 )
