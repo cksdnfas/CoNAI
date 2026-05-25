@@ -217,6 +217,8 @@ export interface ComfyUIServerConnectionStatus {
 }
 
 export interface NAIUserData {
+  connected: boolean
+  reason?: 'missing_token' | 'invalid_token'
   subscription: {
     tier: number
     active: boolean

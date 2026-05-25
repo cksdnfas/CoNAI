@@ -4,6 +4,7 @@ import { AuthAccount, type AuthAccountRecord } from '../models/AuthAccount';
 import { AuthAccessControlService } from '../services/authAccessControlService';
 
 let configuredAuthCache: boolean | null = null;
+const TRUSTED_BOOTSTRAP_USERNAME = 'Bootstrap';
 
 export type SessionAuthAccount = Pick<AuthAccountRecord, 'id' | 'username' | 'account_type'>;
 
@@ -52,6 +53,18 @@ export function setAuthenticatedSession(req: Request, account: SessionAuthAccoun
   req.session.accessCacheUpdatedAt = Date.now();
 }
 
+/** Populate the current session as the trusted personal-mode admin when auth is not configured. */
+export function setTrustedBootstrapSession(req: Request, resolvedAccess: { groupKeys: string[]; permissionKeys: string[] }): void {
+  req.session.authenticated = true;
+  req.session.username = TRUSTED_BOOTSTRAP_USERNAME;
+  delete req.session.accountId;
+  req.session.accountType = 'admin';
+  req.session.groupKeys = resolvedAccess.groupKeys;
+  req.session.permissionKeys = resolvedAccess.permissionKeys;
+  delete req.session.accessCacheAccountId;
+  req.session.accessCacheUpdatedAt = Date.now();
+}
+
 /** Build the current auth-status payload while keeping additive compatibility. */
 export function buildAuthStatusPayload(req: Request): AuthStatusPayload {
   const hasCredentials = hasConfiguredAuth();
@@ -61,6 +74,20 @@ export function buildAuthStatusPayload(req: Request): AuthStatusPayload {
     : hasCredentials
       ? AuthAccessControlService.resolveForGroupKey('anonymous')
       : AuthAccessControlService.resolveBootstrapAccess();
+
+  if (!hasCredentials) {
+    setTrustedBootstrapSession(req, resolvedAccess);
+    return {
+      hasCredentials,
+      authenticated: true,
+      username: TRUSTED_BOOTSTRAP_USERNAME,
+      accountId: null,
+      accountType: 'admin',
+      isAdmin: true,
+      groupKeys: resolvedAccess.groupKeys,
+      permissionKeys: resolvedAccess.permissionKeys,
+    };
+  }
 
   req.session.groupKeys = resolvedAccess.groupKeys;
   req.session.permissionKeys = resolvedAccess.permissionKeys;

@@ -14,7 +14,7 @@ router.get('/data', async (req: Request, res: Response) => {
     const token = authHeader?.replace('Bearer ', '') || getToken();
 
     if (!token) {
-      res.status(401).json({ error: 'NovelAI 인증이 필요합니다. 먼저 로그인하세요.' });
+      res.json(createDisconnectedUserData('missing_token'));
       return;
     }
 
@@ -30,6 +30,12 @@ router.get('/data', async (req: Request, res: Response) => {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[NAI] User data fetch failed:', response.status, errorText);
+
+        if (response.status === 401 || response.status === 403) {
+          res.json(createDisconnectedUserData('invalid_token'));
+          return;
+        }
+
         res.status(response.status).json({
           error: `NovelAI API 오류: ${response.status} - ${errorText}`,
         });
@@ -75,6 +81,7 @@ router.get('/data', async (req: Request, res: Response) => {
       const tierValue = subscription.tier ?? 0;
 
       res.json({
+        connected: true,
         subscription: {
           tier: tierValue,
           active: subscription.active ?? false,
@@ -82,7 +89,7 @@ router.get('/data', async (req: Request, res: Response) => {
         },
         anlasBalance,
       });
-      return;
+
     } catch (error) {
       console.error('[NAI] User data error:', error);
       res.status(500).json({
@@ -96,6 +103,19 @@ router.get('/data', async (req: Request, res: Response) => {
     return;
   }
 });
+
+function createDisconnectedUserData(reason: 'missing_token' | 'invalid_token') {
+  return {
+    connected: false,
+    reason,
+    subscription: {
+      tier: 0,
+      active: false,
+      tierName: getTierName(0),
+    },
+    anlasBalance: 0,
+  };
+}
 
 /**
  * 구독 티어 이름 반환

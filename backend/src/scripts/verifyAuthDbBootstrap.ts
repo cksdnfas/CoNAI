@@ -173,6 +173,47 @@ function assertLegacySyncedAdminCleanup(authDbModule: AuthDbModule) {
   )
 }
 
+function createMockResponse() {
+  return {
+    statusCode: 200,
+    body: null as unknown,
+    status(code: number) {
+      this.statusCode = code
+      return this
+    },
+    json(body: unknown) {
+      this.body = body
+      return this
+    },
+  }
+}
+
+function assertTrustedBootstrapAdminMode() {
+  const authHelpers = require('../routes/auth-route-helpers') as typeof import('../routes/auth-route-helpers')
+  const authMiddleware = require('../middleware/authMiddleware') as typeof import('../middleware/authMiddleware')
+  authHelpers.invalidateConfiguredAuthCache()
+
+  assert.equal(authHelpers.hasConfiguredAuth(), false, 'Auth must be unconfigured after auth.db credentials are removed')
+
+  const statusRequest = { session: {} }
+  const statusPayload = authHelpers.buildAuthStatusPayload(statusRequest as any)
+  assert.equal(statusPayload.hasCredentials, false)
+  assert.equal(statusPayload.authenticated, true, 'Bootstrap mode must behave as an authenticated trusted session')
+  assert.equal(statusPayload.accountType, 'admin', 'Bootstrap mode must advertise admin-equivalent account type')
+  assert.equal(statusPayload.isAdmin, true, 'Bootstrap mode must expose admin-equivalent UI state')
+  assert.ok(statusPayload.permissionKeys.includes('page.settings.view'))
+
+  const adminRequest = { session: {} }
+  const adminResponse = createMockResponse()
+  let nextCalled = false
+  authMiddleware.requireAdmin(adminRequest as any, adminResponse as any, () => {
+    nextCalled = true
+  })
+
+  assert.equal(nextCalled, true, 'requireAdmin must allow trusted bootstrap mode')
+  assert.equal(adminResponse.statusCode, 200)
+}
+
 function main() {
   const tempRoot = process.env.RUNTIME_BASE_PATH
   assert.ok(tempRoot, 'Expected temporary runtime root')
@@ -192,6 +233,7 @@ function main() {
     assertLegacyAdminSynced(db)
     assertIdempotentBootstrap(authDbModule, databaseDir)
     assertLegacySyncedAdminCleanup(authDbModule)
+    assertTrustedBootstrapAdminMode()
   } finally {
     authDbModule.getAuthDb().close()
     fs.rmSync(tempRoot, { recursive: true, force: true })

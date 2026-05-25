@@ -83,7 +83,7 @@ export function NaiGenerationPanel({
     queryFn: getAppSettings,
   })
 
-  const connected = naiUserQuery.isSuccess
+  const connected = naiUserQuery.data?.connected === true
   const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
 
   const {
@@ -155,7 +155,7 @@ export function NaiGenerationPanel({
   } = useNaiAssetLibrary({
     naiForm,
     setNaiForm,
-    naiUserEnabled: naiUserQuery.isSuccess,
+    naiUserEnabled: connected,
     refetchUserData: naiUserQuery.refetch,
     showSnackbar,
   })
@@ -179,7 +179,7 @@ export function NaiGenerationPanel({
         anlasBalance: naiUserQuery.data?.anlasBalance ?? 0,
       }),
     enabled:
-      naiUserQuery.isSuccess &&
+      connected &&
       naiCostInputs.width > 0 &&
       naiCostInputs.height > 0 &&
       naiCostInputs.steps > 0 &&

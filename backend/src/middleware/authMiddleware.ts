@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthAccount } from '../models/AuthAccount';
-import { hasConfiguredAuth } from '../routes/auth-route-helpers';
+import { hasConfiguredAuth, setTrustedBootstrapSession } from '../routes/auth-route-helpers';
 import { AuthAccessControlService } from '../services/authAccessControlService';
 
 const SESSION_ACCESS_CACHE_TTL_MS = 60_000;
@@ -11,6 +11,7 @@ const SESSION_ACCESS_CACHE_TTL_MS = 60_000;
  */
 export const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
   if (!hasConfiguredAuth()) {
+    setTrustedBootstrapSession(req, AuthAccessControlService.resolveBootstrapAccess());
     next();
     return;
   }
@@ -27,6 +28,12 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction): vo
  * Returns 403 when the session is not an admin.
  */
 export const requireAdmin = (req: Request, res: Response, next: NextFunction): void => {
+  if (!hasConfiguredAuth()) {
+    setTrustedBootstrapSession(req, AuthAccessControlService.resolveBootstrapAccess());
+    next();
+    return;
+  }
+
   if (req.session?.authenticated !== true) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
@@ -86,9 +93,8 @@ function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[];
 
   if (!hasCredentials) {
     const resolvedAccess = AuthAccessControlService.resolveBootstrapAccess();
-    req.session.groupKeys = resolvedAccess.groupKeys;
-    req.session.permissionKeys = resolvedAccess.permissionKeys;
-    return { permissionKeys: resolvedAccess.permissionKeys, authenticated: false };
+    setTrustedBootstrapSession(req, resolvedAccess);
+    return { permissionKeys: resolvedAccess.permissionKeys, authenticated: true };
   }
 
   if (req.session?.authenticated === true) {
@@ -110,8 +116,7 @@ export const requirePermission = (permissionKey: string) => (req: Request, res: 
 
   if (!hasCredentials) {
     const resolvedAccess = AuthAccessControlService.resolveBootstrapAccess();
-    req.session.groupKeys = resolvedAccess.groupKeys;
-    req.session.permissionKeys = resolvedAccess.permissionKeys;
+    setTrustedBootstrapSession(req, resolvedAccess);
 
     if (resolvedAccess.permissionKeys.includes(permissionKey)) {
       next();
@@ -165,6 +170,7 @@ export const optionalAuth = (req: Request, res: Response, next: NextFunction): v
   const hasCredentials = hasConfiguredAuth();
 
   if (!hasCredentials) {
+    setTrustedBootstrapSession(req, AuthAccessControlService.resolveBootstrapAccess());
     next();
     return;
   }

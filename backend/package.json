@@ -27,6 +27,7 @@
     "verify:upload-metadata-utilities": "tsx src/scripts/verifyUploadMetadataUtilityContracts.ts",
     "verify:upload-response-contracts": "tsx src/scripts/verifyUploadResponseContracts.ts",
     "verify:auth-db-bootstrap": "tsx src/scripts/verifyAuthDbBootstrap.ts",
+    "verify:nai-user-data-contracts": "tsx src/scripts/verifyNaiUserDataContracts.ts",
     "verify:codex-generation-contracts": "tsx src/scripts/verifyCodexGenerationContracts.ts",
     "verify:watched-folder-route-contracts": "tsx src/scripts/verifyWatchedFolderRouteContracts.ts",
     "verify:graph-workflow-route-contracts": "tsx src/scripts/verifyGraphWorkflowRouteContracts.ts",
