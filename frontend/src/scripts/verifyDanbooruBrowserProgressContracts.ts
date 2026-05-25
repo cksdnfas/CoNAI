@@ -61,4 +61,8 @@ if (panelSource.includes('tagsQuery.data?.items ?? []} language={language}')) {
   throw new Error('Danbooru browser tables should receive memoized empty item arrays')
 }
 
+if (panelSource.includes('MissingDanbooruDatabaseNotice')) {
+  throw new Error('Danbooru browser should stay quiet when the optional Danbooru DB is absent')
+}
+
 console.log('Danbooru browser progress contracts verified')

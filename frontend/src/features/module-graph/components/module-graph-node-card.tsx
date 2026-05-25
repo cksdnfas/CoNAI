@@ -15,6 +15,7 @@ import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiFie
 import type { ComfyUIServer } from '@/lib/api-image-generation-types'
 import { isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
 import {
+  ApiRequestNodeLayout,
   IfBranchNodeLayout,
   InlineWorkflowInputEditor,
   InputPortCell,
@@ -25,6 +26,7 @@ import {
   TextMergeNodeLayout,
   TextTransformNodeLayout,
   buildModuleUiFieldMap,
+  getApiRequestDynamicInputPortKeys,
   getInputPortState,
   stopNodeActionEvent,
   stopNodeInteraction,
@@ -193,6 +195,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const isTextMergeModule = operationKey === 'system.merge_text'
   const isTextTransformModule = operationKey === 'system.regex_text_transform'
   const isIfBranchModule = operationKey === 'system.logic_if_branch'
+  const isApiRequestModule = operationKey === 'system.api_request' || (module.engine_type === 'system' && module.name === 'API 요청')
   const isSystemCallLlmModule = operationKey === 'system.call_llm'
   const isSystemCallCodexMessageModule = operationKey === 'system.call_codex_message'
   const isSystemLoadLlmPresetModule = operationKey === 'system.load_llm_preset'
@@ -302,12 +305,13 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const portRowCount = Math.max(visibleInputPorts.length, visibleOutputPorts.length, 1)
   const renderedInputPorts = isWorkflowInputSource
     ? []
-    : (isTextMergeModule || isTextTransformModule || isIfBranchModule ? inputPorts : visibleInputPorts)
+    : (isTextMergeModule || isTextTransformModule || isIfBranchModule || isApiRequestModule ? inputPorts : visibleInputPorts)
   const renderedOutputPorts = isWorkflowInputSource
     ? sourceOutputPorts
-    : (isTextMergeModule || isTextTransformModule || isIfBranchModule ? outputPorts : visibleOutputPorts)
+    : (isTextMergeModule || isTextTransformModule || isIfBranchModule || isApiRequestModule ? outputPorts : visibleOutputPorts)
   const renderedHandleSignature = [
     ...renderedInputPorts.map((port) => `in:${port.key}`),
+    ...(isApiRequestModule ? getApiRequestDynamicInputPortKeys(data).map((portKey) => `in:${portKey}`) : []),
     ...renderedOutputPorts.map((port) => `out:${port.key}`),
   ].join('|')
 
@@ -619,6 +623,15 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
           />
         ) : isIfBranchModule ? (
           <IfBranchNodeLayout
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
+            uiFieldByKey={uiFieldByKey}
+          />
+        ) : isApiRequestModule ? (
+          <ApiRequestNodeLayout
             id={id}
             data={data}
             accentColor={accentColor}

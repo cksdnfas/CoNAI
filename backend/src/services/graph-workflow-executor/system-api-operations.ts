@@ -17,6 +17,8 @@ type NormalizedDataUrl = {
   buffer: Buffer
 }
 
+const API_VALUES_FIELD_PREFIX = 'values.'
+const API_HEADERS_FIELD_PREFIX = 'headers.'
 const API_REQUEST_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 const DATA_URL_PATTERN = /^data:([^;,]+)?;base64,([a-zA-Z0-9+/=\s]+)$/
 const TEXT_RESPONSE_CONTENT_TYPES = [
@@ -79,6 +81,26 @@ export function normalizeApiKeyValueMap(value: unknown) {
         result[key.trim()] = normalizeApiEntryValue(entryValue)
       }
     }
+  }
+
+  return result
+}
+
+/** Collect dynamic graph inputs such as `values.image` into the parent key/value map. */
+function normalizeApiPrefixedInputMap(resolvedInputs: Record<string, unknown>, prefix: string) {
+  const result: Record<string, unknown> = {}
+
+  for (const [inputKey, inputValue] of Object.entries(resolvedInputs)) {
+    if (!inputKey.startsWith(prefix)) {
+      continue
+    }
+
+    const entryKey = inputKey.slice(prefix.length).trim()
+    if (!entryKey) {
+      continue
+    }
+
+    result[entryKey] = normalizeApiEntryValue(inputValue)
   }
 
   return result
@@ -340,8 +362,14 @@ export async function executeApiRequestNode(
   const method = normalizeApiMethod(resolvedInputs.method)
   const bodyMode = typeof resolvedInputs.body_mode === 'string' ? resolvedInputs.body_mode : 'auto'
   const timeoutMs = Math.max(1000, Math.min(300_000, Number(resolvedInputs.timeout_ms) || 30_000))
-  const entries = normalizeApiKeyValueMap(resolvedInputs.values)
-  const headers = normalizeApiHeaders(resolvedInputs.headers)
+  const entries = {
+    ...normalizeApiKeyValueMap(resolvedInputs.values),
+    ...normalizeApiPrefixedInputMap(resolvedInputs, API_VALUES_FIELD_PREFIX),
+  }
+  const headers = normalizeApiHeaders({
+    ...normalizeApiKeyValueMap(resolvedInputs.headers),
+    ...normalizeApiPrefixedInputMap(resolvedInputs, API_HEADERS_FIELD_PREFIX),
+  })
   const bodyValue = buildApiBodyValue(entries, resolvedInputs.payload)
 
   if (method === 'GET' && bodyValue !== undefined) {

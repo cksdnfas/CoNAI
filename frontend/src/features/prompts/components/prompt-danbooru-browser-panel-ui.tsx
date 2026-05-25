@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import { ExternalLink, Languages, X } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { SettingsResourceTable } from '@/features/settings/components/settings-resource-shared'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -13,7 +12,6 @@ import type {
   DanbooruBrowserArtistRecord,
   DanbooruBrowserCharacterRecord,
   DanbooruBrowserCopyrightRecord,
-  DanbooruBrowserDatabaseInfo,
   DanbooruBrowserPagination,
   DanbooruBrowserRelatedTagCategory,
   DanbooruBrowserRelatedTagRecord,
@@ -31,7 +29,6 @@ export const RELATED_TAG_OPTIONS_STORAGE_KEY = 'conai:prompts:danbooru:character
 export const RELATED_TAG_CATEGORIES: DanbooruBrowserRelatedTagCategory[] = ['general', 'character', 'copyright', 'artist', 'meta']
 export const DEFAULT_RELATED_TAG_CATEGORIES: DanbooruBrowserRelatedTagCategory[] = ['general']
 export const DEFAULT_RELATED_TAG_SCORE_MIN_INPUT = '0.05'
-export const DANBOORU_DB_DOWNLOAD_URL = 'https://github.com/cksdnfas/danbooru-db-viewer'
 
 export interface CharacterRelatedTagOptionsState {
   categories: DanbooruBrowserRelatedTagCategory[]
@@ -211,36 +208,6 @@ export function TableLoading({ columns = 3 }: { columns?: number }) {
 export function EmptyTable() {
   const { t } = useI18n()
   return <div className="rounded-sm border border-border/70 bg-surface-low px-4 py-8 text-center text-sm text-muted-foreground">{t({ ko: '항목 없음', en: 'No items' })}</div>
-}
-
-export function MissingDanbooruDatabaseNotice({ database }: { database?: DanbooruBrowserDatabaseInfo }) {
-  const { t } = useI18n()
-  const downloadUrl = database?.downloadUrl || DANBOORU_DB_DOWNLOAD_URL
-  const expectedDirectory = database?.expectedDirectory || 'user/database'
-  const expectedPath = database?.expectedPath || 'user/database/danbooru.sqlite'
-  const filePatterns = database?.filePatterns?.join(', ') || 'danbooru.sqlite, *danbooru*.sqlite'
-
-  return (
-    <Alert>
-      <AlertTitle>{t({ ko: 'Danbooru DB 파일이 필요해', en: 'Danbooru DB file required' })}</AlertTitle>
-      <AlertDescription className="space-y-3">
-        <p>{t({ ko: '파일명이 danbooru를 포함한 SQLite DB를 아래 위치에 넣으면 이 탭이 자동으로 인식해.', en: 'Place a SQLite DB whose file name includes danbooru in the location below and this tab will detect it automatically.' })}</p>
-        <div className="space-y-1 rounded-sm border border-border/70 bg-surface-container/45 p-3 font-mono text-xs text-foreground">
-          <div>{t({ ko: '폴더', en: 'Folder' })}: {expectedDirectory}</div>
-          <div>{t({ ko: '권장 경로', en: 'Recommended path' })}: {expectedPath}</div>
-          <div>{t({ ko: '인식 패턴', en: 'Detected patterns' })}: {filePatterns}</div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild size="sm" variant="outline">
-            <a href={downloadUrl} target="_blank" rel="noreferrer">
-              {t({ ko: 'DB 다운로드/뷰어 안내 열기', en: 'Open DB download/viewer guide' })}
-              <ExternalLink className="ml-2 h-4 w-4" />
-            </a>
-          </Button>
-        </div>
-      </AlertDescription>
-    </Alert>
-  )
 }
 
 export function TagsTable({ items, language }: { items: DanbooruBrowserTagRecord[]; language: string }) {

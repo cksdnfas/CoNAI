@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent, type SyntheticEvent } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent, type ReactNode, type SyntheticEvent } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,7 @@ import { InlineMediaPreview } from '@/features/images/components/inline-media-pr
 import { SettingsModal } from '@/features/settings/components/settings-modal'
 import { useI18n } from '@/i18n'
 import { ModuleGraphSimpleValueInput, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
+import { ModuleGraphKeyValueListInput, getKeyValueConnectionKeys } from './module-graph-key-value-list-input'
 import { NodeArtifactPreviewBody } from './module-graph-node-artifact-preview'
 import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
@@ -520,6 +521,187 @@ function renderCompactUiField({
         />
       </div>
     </label>
+  )
+}
+
+/** Render one API request input row with its graph handle and inline editor kept together. */
+function ApiRequestInputRow({
+  nodeId,
+  data,
+  port,
+  accentColor,
+  connected,
+  satisfied,
+  requiredMissing,
+  children,
+}: {
+  nodeId: string
+  data: ModuleGraphNode['data']
+  port?: ModulePortDefinition
+  accentColor: string
+  connected: boolean
+  satisfied: boolean
+  requiredMissing: boolean
+  children: ReactNode
+}) {
+  const { t } = useI18n()
+
+  if (!port) {
+    return <div className="min-h-[28px] border-b border-dashed border-border/35" aria-hidden="true" />
+  }
+
+  const portTypeColor = getPortTypeColor(port.data_type)
+  const statusLabel = requiredMissing ? t({ ko: '입력 필요', en: 'Input required' }) : connected ? t({ ko: '연결됨', en: 'Connected' }) : satisfied ? t({ ko: '설정됨', en: 'Configured' }) : t({ ko: '대기', en: 'Waiting' })
+  const borderColor = requiredMissing ? '#f59e0b99' : connected ? `${portTypeColor}88` : `${accentColor}26`
+
+  return (
+    <div className="relative min-h-[28px] border-b py-1 pl-4 pr-1" style={{ borderColor } as CSSProperties} title={buildPortTooltip(t, port, statusLabel)}>
+      <Handle
+        id={buildHandleId('in', port.key)}
+        type="target"
+        position={Position.Left}
+        style={buildHandleStyle({ side: 'input', color: portTypeColor })}
+        title={buildPortTooltip(t, port, statusLabel)}
+        onMouseDown={connected ? () => data.onDisconnectNodeInput?.(nodeId, port.key) : undefined}
+      />
+      <div className="flex min-h-[28px] items-start gap-2">
+        <span className="w-20 shrink-0 truncate pt-1 text-[11px] font-medium text-foreground">
+          {port.label}
+          {port.required ? <span className="ml-1 text-[11px] text-amber-300">*</span> : null}
+        </span>
+        <div className="min-w-0 flex-1">
+          {connected ? <div className="truncate pt-1 text-[10px] text-muted-foreground">{t({ ko: '연결됨', en: 'Linked' })}</div> : children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function getApiRequestKeyValueFieldValue(data: ModuleGraphNode['data'], portKey: string) {
+  const port = data.module.exposed_inputs?.find((candidate) => candidate.key === portKey)
+  const field = data.module.ui_schema?.find((candidate) => candidate.key === portKey)
+  return data.inputValues?.[portKey] ?? port?.default_value ?? field?.default_value
+}
+
+export function getApiRequestDynamicInputPortKeys(data: ModuleGraphNode['data']) {
+  return [
+    ...getKeyValueConnectionKeys(getApiRequestKeyValueFieldValue(data, 'values'), 'values'),
+    ...getKeyValueConnectionKeys(getApiRequestKeyValueFieldValue(data, 'headers'), 'headers'),
+  ]
+}
+
+/** Render an API request node as a small request builder instead of a generic port list. */
+export function ApiRequestNodeLayout({
+  id,
+  data,
+  accentColor,
+  connectedInputKeys,
+  connectedOutputKeys,
+  uiFieldByKey,
+}: {
+  id: string
+  data: ModuleGraphNode['data']
+  accentColor: string
+  connectedInputKeys: Set<string>
+  connectedOutputKeys: Set<string>
+  uiFieldByKey?: ModuleUiFieldMap
+}) {
+  const { t } = useI18n()
+  const fallbackUiFieldByKey = useMemo(() => buildModuleUiFieldMap(data.module.ui_schema), [data.module.ui_schema])
+  const resolvedUiFieldByKey = uiFieldByKey ?? fallbackUiFieldByKey
+  const inputPortByKey = new Map((data.module.exposed_inputs ?? []).map((port) => [port.key, port] as const))
+  const outputPort = data.module.output_ports[0]
+
+  const getKeyValueFieldValue = (portKey: string) => {
+    const port = inputPortByKey.get(portKey)
+    const field = resolvedUiFieldByKey.get(portKey)
+    return data.inputValues?.[portKey] ?? port?.default_value ?? field?.default_value
+  }
+
+  const renderInputRow = (portKey: string, editor: (port: ModulePortDefinition, field: ModuleUiFieldDefinition | null) => ReactNode) => {
+    const port = inputPortByKey.get(portKey)
+    const field = resolvedUiFieldByKey.get(portKey) ?? null
+    const state = getInputPortState(data, port, connectedInputKeys)
+
+    return (
+      <ApiRequestInputRow
+        key={portKey}
+        nodeId={id}
+        data={data}
+        port={port}
+        accentColor={accentColor}
+        connected={state.connected}
+        satisfied={state.satisfied}
+        requiredMissing={state.requiredMissing}
+      >
+        {port ? editor(port, field) : null}
+      </ApiRequestInputRow>
+    )
+  }
+
+  const renderSimpleEditor = (port: ModulePortDefinition, field: ModuleUiFieldDefinition | null) => {
+    const value = data.inputValues?.[port.key] ?? port.default_value ?? field?.default_value
+    const dataType = field?.data_type === 'select'
+      ? 'select'
+      : port.data_type === 'number'
+        ? 'number'
+        : 'text'
+
+    return (
+      <ModuleGraphSimpleValueInput
+        dataType={dataType}
+        value={value}
+        onChange={(nextValue) => data.onNodeValueChange?.(id, port.key, nextValue)}
+        options={field?.options ?? []}
+        placeholder={field?.placeholder || port.label}
+        min={field?.min}
+        max={field?.max}
+        emptyLabel={t({ ko: '기본값', en: 'Default' })}
+        className={`h-7 text-[11px] ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
+      />
+    )
+  }
+
+  const renderKeyValueEditor = (port: ModulePortDefinition, field: ModuleUiFieldDefinition | null) => (
+    <ModuleGraphKeyValueListInput
+      compact
+      value={getKeyValueFieldValue(port.key)}
+      onChange={(nextValue) => data.onNodeValueChange?.(id, port.key, nextValue)}
+      nodeId={id}
+      connectionPrefix={port.key}
+      connectionDataType={port.key === 'headers' ? 'text' : 'any'}
+      connectedInputKeys={connectedInputKeys}
+      onDisconnectInput={data.onDisconnectNodeInput}
+    />
+  )
+
+  const renderPayloadPreview = (port: ModulePortDefinition) => {
+    const preview = getCompactValuePreview(data.inputValues?.[port.key] ?? port.default_value)
+    return <div className="truncate pt-1 text-[10px] text-muted-foreground">{preview || t({ ko: '선택 입력', en: 'Optional input' })}</div>
+  }
+
+  return (
+    <div className="mt-2 grid gap-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
+        <div aria-hidden="true" />
+        <PortCell
+          nodeId={id}
+          port={outputPort}
+          side="output"
+          accentColor={accentColor}
+          connected={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
+          satisfied={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
+          requiredMissing={false}
+        />
+      </div>
+      {renderInputRow('url', renderSimpleEditor)}
+      {renderInputRow('method', renderSimpleEditor)}
+      {renderInputRow('body_mode', renderSimpleEditor)}
+      {renderInputRow('values', renderKeyValueEditor)}
+      {renderInputRow('headers', renderKeyValueEditor)}
+      {renderInputRow('payload', (port) => renderPayloadPreview(port))}
+      {renderInputRow('timeout_ms', renderSimpleEditor)}
+    </div>
   )
 }
 

@@ -116,11 +116,26 @@ function createFixtureDb() {
   db.close();
 }
 
+function assertEmptyListPayload(payload: { items: unknown[]; pagination: { page: number; limit: number; total: number; totalPages: number } }, expectedLimit: number) {
+  assert.deepEqual(payload.items, []);
+  assert.equal(payload.pagination.page, 1);
+  assert.equal(payload.pagination.limit, expectedLimit);
+  assert.equal(payload.pagination.total, 0);
+  assert.equal(payload.pagination.totalPages, 1);
+}
+
 async function main() {
-  createFixtureDb();
   const { danbooruBrowserService } = await import('../services/danbooruBrowserService');
 
   try {
+    assert.equal(danbooruBrowserService.getSummary().database.available, false);
+    assertEmptyListPayload(danbooruBrowserService.listTags({ q: '일반 번역명', page: 1, limit: 10 }), 10);
+    assertEmptyListPayload(danbooruBrowserService.listArtists({ q: '작가 번역명', page: 1, limit: 10 }), 10);
+    assertEmptyListPayload(danbooruBrowserService.listCharacters({ q: '캐릭터 번역명', page: 1, limit: 10 }), 10);
+    assert.equal(danbooruBrowserService.getCharacterImageFilePath(301, 'cover.webp'), null);
+
+    createFixtureDb();
+
     const tags = danbooruBrowserService.listTags({ q: '일반 번역명', page: 1, limit: 10 });
     assert.deepEqual(tags.items.map((item) => item.name), ['general_original']);
     assert.equal(tags.items[0]?.translatedName, '일반 번역명');
@@ -144,12 +159,13 @@ async function main() {
 
     console.log('✅ Danbooru browser locale contracts passed');
   } finally {
-    fs.rmSync(runtimeBase, { recursive: true, force: true });
+    danbooruBrowserService.close();
+    fs.rmSync(runtimeBase, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 }
 
 void main().catch((error) => {
   console.error(error);
-  fs.rmSync(runtimeBase, { recursive: true, force: true });
+  fs.rmSync(runtimeBase, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   process.exit(1);
 });

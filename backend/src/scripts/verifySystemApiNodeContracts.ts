@@ -1,16 +1,21 @@
 import http from 'http'
 import assert from 'node:assert/strict'
-import {
-  executeApiRequestNode,
-  executeBase64DecodeNode,
-  executeBase64EncodeNode,
-} from '../services/graph-workflow-executor/system-api-operations'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import type { ExecutionContext, ParsedModuleDefinition } from '../services/graph-workflow-executor/shared'
 import type { GraphWorkflowNode } from '../types/moduleGraph'
 
+type SystemApiOperations = typeof import('../services/graph-workflow-executor/system-api-operations')
+
+let executeApiRequestNode: SystemApiOperations['executeApiRequestNode']
+let executeBase64DecodeNode: SystemApiOperations['executeBase64DecodeNode']
+let executeBase64EncodeNode: SystemApiOperations['executeBase64EncodeNode']
+let executionId = 0
+
 function createExecutionContext(): ExecutionContext {
   return {
-    executionId: 0,
+    executionId,
     workflow: {
       id: 0,
       name: 'system-api-node-contracts',
@@ -77,6 +82,7 @@ function startApiServer() {
 
     if (url.pathname === '/multipart') {
       assert.equal(request.method, 'POST')
+      assert.equal(request.headers['x-upload-token'], 'secret')
       assert.match(request.headers['content-type'] ?? '', /multipart\/form-data; boundary=/)
       const bodyText = await readRequestBody(request)
       assert.match(bodyText, /name="image"; filename="image\.png"/)
@@ -102,7 +108,9 @@ function startApiServer() {
 async function executeApi(inputs: Record<string, unknown>) {
   const context = createExecutionContext()
   await executeApiRequestNode(context, node, moduleDefinition, inputs)
-  return context.artifactsByNode.get(node.id)?.response.value
+  const responseArtifact = context.artifactsByNode.get(node.id)?.response
+  assert.ok(responseArtifact?.artifactRecordId, 'API response output should persist a graph artifact outside debug mode')
+  return responseArtifact.value
 }
 
 async function verifyApiRequestNode(baseUrl: string) {
@@ -135,10 +143,14 @@ async function verifyApiRequestNode(baseUrl: string) {
     await executeApi({
       url: `${baseUrl}/multipart`,
       method: 'POST',
+      body_mode: 'form',
+      headers: [],
+      'headers.x-upload-token': 'secret',
       values: [
-        { key: 'image', value: 'data:image/png;base64,aGVsbG8=' },
+        { key: 'image', value: '' },
         { key: 'note', value: 'sample' },
       ],
+      'values.image': 'data:image/png;base64,aGVsbG8=',
     }),
     'ok',
   )
@@ -161,12 +173,38 @@ function verifyBase64Nodes() {
 }
 
 async function main() {
+  const tempBasePath = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-system-api-node-contracts-'))
+  process.env.RUNTIME_BASE_PATH = tempBasePath
   const { server, baseUrl } = await startApiServer()
+  let closeUserSettingsDb: (() => void) | null = null
+
   try {
+    const userSettings = await import('../database/userSettingsDb')
+    const operations = await import('../services/graph-workflow-executor/system-api-operations')
+
+    executeApiRequestNode = operations.executeApiRequestNode
+    executeBase64DecodeNode = operations.executeBase64DecodeNode
+    executeBase64EncodeNode = operations.executeBase64EncodeNode
+
+    userSettings.initializeUserSettingsDb()
+    closeUserSettingsDb = userSettings.closeUserSettingsDb
+
+    const db = userSettings.getUserSettingsDb()
+    const workflowId = db.prepare(`
+      INSERT INTO graph_workflows (name, graph_json, version)
+      VALUES (?, ?, ?)
+    `).run('system-api-node-contracts', JSON.stringify({ nodes: [], edges: [] }), 1).lastInsertRowid as number
+    executionId = db.prepare(`
+      INSERT INTO graph_executions (graph_workflow_id, graph_version, status)
+      VALUES (?, ?, ?)
+    `).run(workflowId, 1, 'running').lastInsertRowid as number
+
     await verifyApiRequestNode(baseUrl)
     verifyBase64Nodes()
   } finally {
     server.close()
+    closeUserSettingsDb?.()
+    fs.rmSync(tempBasePath, { recursive: true, force: true })
   }
 
   console.log('System API node contracts verified.')

@@ -6,7 +6,6 @@ import { type GraphWorkflowNode, type ModulePortDefinition, type ModulePortDataT
 import { saveArtifactBuffer } from './artifacts'
 import {
   bufferToDataUrl,
-  isExecutionDebugModeEnabled,
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
@@ -145,15 +144,13 @@ function buildCustomValueArtifact(
   value: unknown,
   metadata?: Record<string, unknown>,
 ): RuntimeArtifact {
-  const artifactRecordId = isExecutionDebugModeEnabled(executionId)
-    ? GraphExecutionArtifactModel.create({
-      execution_id: executionId,
-      node_id: nodeId,
-      port_key: portKey,
-      artifact_type: artifactType,
-      metadata: JSON.stringify({ value, ...(metadata ?? {}) }),
-    })
-    : undefined
+  const artifactRecordId = GraphExecutionArtifactModel.create({
+    execution_id: executionId,
+    node_id: nodeId,
+    port_key: portKey,
+    artifact_type: artifactType,
+    metadata: JSON.stringify({ value, ...(metadata ?? {}) }),
+  })
 
   return {
     type: artifactType,

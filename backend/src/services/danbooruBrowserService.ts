@@ -342,6 +342,18 @@ function displayName(name: string, displayNameValue?: string | null): string {
   return displayNameValue || name.replace(/_/g, ' ');
 }
 
+function buildEmptyListPayload<T>(page: number, limit: number): { items: T[]; pagination: DanbooruBrowserPagination } {
+  return {
+    items: [],
+    pagination: {
+      page,
+      limit,
+      total: 0,
+      totalPages: 1,
+    },
+  };
+}
+
 function sanitizeCharacterImageDirectoryName(name: string): string {
   const sanitized = name
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
@@ -446,6 +458,16 @@ class DanbooruBrowserService {
   private db: Database.Database | null = null;
   private taxonomyDescendantIdsById: Map<number, number[]> | null = null;
 
+  close(): void {
+    this.db?.close();
+    this.db = null;
+    this.taxonomyDescendantIdsById = null;
+  }
+
+  private hasAvailableDb(): boolean {
+    return this.db !== null || resolveDanbooruDbInfo().available;
+  }
+
   private getDb(): Database.Database {
     if (this.db) {
       return this.db;
@@ -510,6 +532,9 @@ class DanbooruBrowserService {
   getCharacterImageFilePath(tagId: unknown, fileName: string): string | null {
     const parsedTagId = Number(tagId);
     if (!Number.isFinite(parsedTagId) || !fileName || fileName.includes('/') || fileName.includes('\\')) {
+      return null;
+    }
+    if (!this.hasAvailableDb()) {
       return null;
     }
 
@@ -655,9 +680,13 @@ class DanbooruBrowserService {
   }
 
   listTags(params: { q?: string; category?: string; taxonomyNodeId?: string; page?: unknown; limit?: unknown }) {
-    const db = this.getDb();
     const page = clampInteger(params.page, 1, 1, 100_000);
     const limit = clampInteger(params.limit, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
+    if (!this.hasAvailableDb()) {
+      return buildEmptyListPayload<DanbooruBrowserTagRecord>(page, limit);
+    }
+
+    const db = this.getDb();
     const offset = (page - 1) * limit;
     const q = normalizeQuery(params.q);
     const clauses = ['is_deprecated = 0'];
@@ -711,9 +740,13 @@ class DanbooruBrowserService {
   }
 
   listArtists(params: { q?: string; page?: unknown; limit?: unknown }) {
-    const db = this.getDb();
     const page = clampInteger(params.page, 1, 1, 100_000);
     const limit = clampInteger(params.limit, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
+    if (!this.hasAvailableDb()) {
+      return buildEmptyListPayload<DanbooruBrowserArtistRecord>(page, limit);
+    }
+
+    const db = this.getDb();
     const offset = (page - 1) * limit;
     const q = normalizeQuery(params.q);
     const clauses: string[] = [];
@@ -752,9 +785,13 @@ class DanbooruBrowserService {
   }
 
   listCharacters(params: { q?: string; copyrightTagId?: string; page?: unknown; limit?: unknown; relatedTagCategories?: unknown; relatedTagScoreMin?: unknown; relatedTagScoreMax?: unknown; relatedTagLimit?: unknown }) {
-    const db = this.getDb();
     const page = clampInteger(params.page, 1, 1, 100_000);
     const limit = clampInteger(params.limit, CHARACTER_PAGE_SIZE, 1, CHARACTER_PAGE_SIZE);
+    if (!this.hasAvailableDb()) {
+      return buildEmptyListPayload<DanbooruBrowserCharacterRecord>(page, limit);
+    }
+
+    const db = this.getDb();
     const relatedTagLimit = clampInteger(params.relatedTagLimit, DEFAULT_RELATED_TAG_LIMIT_PER_CHARACTER, 0, MAX_RELATED_TAG_LIMIT_PER_CHARACTER);
     const offset = (page - 1) * limit;
     const q = normalizeQuery(params.q);

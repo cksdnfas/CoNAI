@@ -28,7 +28,6 @@ import {
   ArtistsTable,
   CharacterRelatedTagOptionsPopup,
   CharactersTable,
-  MissingDanbooruDatabaseNotice,
   PaginationControls,
   TableLoading,
   TagsTable,
@@ -348,10 +347,6 @@ export function PromptDanbooruBrowserPanel() {
           onLimitInputChange={setRelatedTagLimitInput}
           onReset={handleResetRelatedTagOptions}
         />
-
-        {!summaryQuery.isLoading && !summaryQuery.isError && !isDanbooruDbAvailable ? (
-          <MissingDanbooruDatabaseNotice database={database} />
-        ) : null}
 
         {isDanbooruDbAvailable && activeQuery.isError ? (
           <Alert variant="destructive">
