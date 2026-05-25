@@ -102,6 +102,17 @@ assert.doesNotMatch(
 )
 
 assert.match(
+  comfyHomeSectionsSource,
+  /const dropdownListPreviewTextById = useMemo\([\s\S]*new Map\(dropdownLists\.map\(\(list\) => \[list\.id, list\.items\.slice\(0, 6\)\.join\(', '\)\]\)\)[\s\S]*\[dropdownLists\]/,
+  'dropdown list item previews should be memoized instead of sliced and joined during every list render',
+)
+assert.match(
+  comfyHomeSectionsSource,
+  /dropdownListPreviewTextById\.get\(list\.id\)/,
+  'dropdown list rows should reuse the memoized preview text by list id',
+)
+
+assert.match(
   imageGenerationWorkflowsApiSource,
   /export const DEFAULT_COMFY_MODEL_API_PATHS = \[/,
   'default ComfyUI model API paths should be shared by modal and inline refresh controls',

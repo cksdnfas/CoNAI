@@ -426,6 +426,10 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
   const customLists = useMemo(() => dropdownLists.filter((list) => !list.is_auto_collected), [dropdownLists])
   const autoLists = useMemo(() => dropdownLists.filter((list) => list.is_auto_collected), [dropdownLists])
   const visibleLists = activeTab === 'custom' ? customLists : autoLists
+  const dropdownListPreviewTextById = useMemo(
+    () => new Map(dropdownLists.map((list) => [list.id, list.items.slice(0, 6).join(', ')])),
+    [dropdownLists],
+  )
 
   return (
     <section className="space-y-3">
@@ -475,7 +479,7 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
                     </div>
                     {list.description ? <div className="mt-1 line-clamp-2 text-[11px]">{list.description}</div> : null}
                     {list.source_path ? <div className="mt-1 line-clamp-1 text-[11px]">{t({ ko: '소스 {path}', en: 'Source {path}' }, { path: list.source_path })}</div> : null}
-                    {list.items.length > 0 ? <div className="mt-1 line-clamp-1 text-[11px]">{list.items.slice(0, 6).join(', ')}</div> : null}
+                    {list.items.length > 0 ? <div className="mt-1 line-clamp-1 text-[11px]">{dropdownListPreviewTextById.get(list.id)}</div> : null}
                   </button>
                   {!list.is_auto_collected ? (
                     <div className="flex shrink-0 gap-2">
