@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import {
   Activity,
   BarChart3,
@@ -28,6 +28,15 @@ import type { WallpaperWidgetDefinition, WallpaperWidgetType } from './wallpaper
 interface WallpaperWidgetLibrarySidebarProps {
   selectedWidgetType?: WallpaperWidgetType | null
   onAddWidget: (widgetType: WallpaperWidgetType) => void
+}
+
+interface WallpaperWidgetLibraryFolderProps {
+  folder: ReturnType<typeof getWallpaperWidgetLibrarySearchSummary>['visibleFolders'][number]
+  isExpanded: boolean
+  selectedWidgetType?: WallpaperWidgetType | null
+  onAddWidget: (widgetType: WallpaperWidgetType) => void
+  onToggleFolder: (folderId: WallpaperWidgetLibraryFolderId) => void
+  t: ReturnType<typeof useI18n>['t']
 }
 
 function getWallpaperWidgetIcon(widgetType: WallpaperWidgetType) {
@@ -66,6 +75,64 @@ function sortWallpaperWidgetDefinitions(left: WallpaperWidgetDefinition, right: 
   return left.title.localeCompare(right.title, locale, { numeric: true, sensitivity: 'base' })
 }
 
+const WallpaperWidgetLibraryFolder = memo(function WallpaperWidgetLibraryFolder({
+  folder,
+  isExpanded,
+  selectedWidgetType,
+  onAddWidget,
+  onToggleFolder,
+  t,
+}: WallpaperWidgetLibraryFolderProps) {
+  const handleToggleFolder = useCallback(() => onToggleFolder(folder.id), [folder.id, onToggleFolder])
+
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={handleToggleFolder}
+        className={getNavigationItemClassName({
+          active: false,
+          className: 'flex items-center gap-2 px-2 py-2',
+        })}
+      >
+        {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+        <Folder className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{t(folder.title)}</span>
+        <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
+          {folder.widgets.length}
+        </Badge>
+      </button>
+
+      {isExpanded ? (
+        <div className="space-y-1">
+          {folder.widgets.map((widget) => {
+            const Icon = getWallpaperWidgetIcon(widget.type)
+            const isSelected = selectedWidgetType === widget.type
+            return (
+              <button
+                key={widget.type}
+                type="button"
+                onClick={() => onAddWidget(widget.type)}
+                className={getNavigationItemClassName({
+                  active: isSelected,
+                  density: 'sm',
+                  className: 'flex items-center gap-2 pl-10 pr-2',
+                })}
+              >
+                <Icon className={cn('h-4 w-4 shrink-0', isSelected ? 'text-primary' : 'text-muted-foreground')} />
+                <div className={cn('min-w-0 flex-1 truncate text-sm font-medium', isSelected ? 'text-primary' : 'text-foreground')}>
+                  {widget.title}
+                </div>
+                <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+    </div>
+  )
+})
+
 /** Render one explorer-style wallpaper widget library with folder-style grouping. */
 export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget }: WallpaperWidgetLibrarySidebarProps) {
   const { locale, t } = useI18n()
@@ -84,13 +151,13 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
 
   const hasVisibleWidgets = searchSummary.visibleFolders.length > 0
 
-  const toggleFolder = (folderId: WallpaperWidgetLibraryFolderId) => {
+  const toggleFolder = useCallback((folderId: WallpaperWidgetLibraryFolderId) => {
     setCollapsedFolderIds((current) => (
       current.includes(folderId)
         ? current.filter((item) => item !== folderId)
         : [...current, folderId]
     ))
-  }
+  }, [])
 
   return (
     <ExplorerSidebar
@@ -123,55 +190,17 @@ export function WallpaperWidgetLibrarySidebar({ selectedWidgetType, onAddWidget 
         </div>
       }
     >
-      {searchSummary.visibleFolders.map((folder) => {
-        const isExpanded = searchSummary.hasSearch ? true : !collapsedFolderIdSet.has(folder.id)
-
-        return (
-          <div key={folder.id} className="space-y-1">
-            <button
-              type="button"
-              onClick={() => toggleFolder(folder.id)}
-              className={getNavigationItemClassName({
-                active: false,
-                className: 'flex items-center gap-2 px-2 py-2',
-              })}
-            >
-              {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
-              <Folder className="h-4 w-4 shrink-0" />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{t(folder.title)}</span>
-              <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
-                {folder.widgets.length}
-              </Badge>
-            </button>
-
-            {isExpanded ? (
-              <div className="space-y-1">
-                {folder.widgets.map((widget) => {
-                  const Icon = getWallpaperWidgetIcon(widget.type)
-                  return (
-                    <button
-                      key={widget.type}
-                      type="button"
-                      onClick={() => onAddWidget(widget.type)}
-                      className={getNavigationItemClassName({
-                        active: selectedWidgetType === widget.type,
-                        density: 'sm',
-                        className: 'flex items-center gap-2 pl-10 pr-2',
-                      })}
-                    >
-                      <Icon className={cn('h-4 w-4 shrink-0', selectedWidgetType === widget.type ? 'text-primary' : 'text-muted-foreground')} />
-                      <div className={cn('min-w-0 flex-1 truncate text-sm font-medium', selectedWidgetType === widget.type ? 'text-primary' : 'text-foreground')}>
-                        {widget.title}
-                      </div>
-                      <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    </button>
-                  )
-                })}
-              </div>
-            ) : null}
-          </div>
-        )
-      })}
+      {searchSummary.visibleFolders.map((folder) => (
+        <WallpaperWidgetLibraryFolder
+          key={folder.id}
+          folder={folder}
+          isExpanded={searchSummary.hasSearch ? true : !collapsedFolderIdSet.has(folder.id)}
+          selectedWidgetType={selectedWidgetType}
+          onAddWidget={onAddWidget}
+          onToggleFolder={toggleFolder}
+          t={t}
+        />
+      ))}
 
       {!hasVisibleWidgets ? (
         <Alert>
