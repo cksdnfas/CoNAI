@@ -1,4 +1,7 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
+import fs from 'fs'
+import path from 'path'
+import { resolveUploadsPath } from '../../config/runtimePaths'
 import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
 import {
   bufferToDataUrl,
@@ -15,6 +18,12 @@ type NormalizedDataUrl = {
   mimeType: string
   base64: string
   buffer: Buffer
+}
+
+type ApiFileReference = {
+  filePath: string
+  mimeType: string
+  fileName: string
 }
 
 const API_VALUES_FIELD_PREFIX = 'values.'
@@ -204,6 +213,83 @@ function parseDataUrl(value: unknown): NormalizedDataUrl | null {
 }
 
 /** Resolve a stable file extension for common data URL MIME types. */
+function getObjectStringValue(value: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const entryValue = value[key]
+    if (typeof entryValue === 'string' && entryValue.trim().length > 0) {
+      return entryValue.trim()
+    }
+  }
+
+  return null
+}
+
+function inferMimeTypeFromPath(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase()
+  if (extension === '.png') return 'image/png'
+  if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg'
+  if (extension === '.webp') return 'image/webp'
+  if (extension === '.gif') return 'image/gif'
+  if (extension === '.bmp') return 'image/bmp'
+  if (extension === '.avif') return 'image/avif'
+  if (extension === '.mp4') return 'video/mp4'
+  if (extension === '.webm') return 'video/webm'
+  if (extension === '.mov') return 'video/quicktime'
+  return 'application/octet-stream'
+}
+
+function resolveApiFileReference(value: unknown): ApiFileReference | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  const rawPath = getObjectStringValue(record, [
+    'storagePath',
+    'storage_path',
+    'originalFilePath',
+    'original_file_path',
+    'imagePath',
+    'image_path',
+    'filePath',
+    'file_path',
+  ])
+  if (!rawPath) {
+    return null
+  }
+
+  const filePath = path.isAbsolute(rawPath) ? rawPath : resolveUploadsPath(rawPath)
+  const mimeType = getObjectStringValue(record, ['mimeType', 'mime_type', 'contentType', 'content_type']) ?? inferMimeTypeFromPath(filePath)
+  const fileName = getObjectStringValue(record, ['fileName', 'file_name', 'originalFileName', 'original_file_name', 'output_file_name']) ?? path.basename(filePath)
+  return { filePath, mimeType, fileName }
+}
+
+async function materializeApiFileReferenceValue(value: unknown): Promise<unknown> {
+  if (parseDataUrl(value)) {
+    return value
+  }
+
+  const fileReference = resolveApiFileReference(value)
+  if (fileReference) {
+    const buffer = await fs.promises.readFile(fileReference.filePath)
+    return bufferToDataUrl(buffer, fileReference.mimeType)
+  }
+
+  if (Array.isArray(value)) {
+    return Promise.all(value.map((entryValue) => materializeApiFileReferenceValue(entryValue)))
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = await Promise.all(Object.entries(value as Record<string, unknown>).map(async ([key, entryValue]) => [
+      key,
+      await materializeApiFileReferenceValue(entryValue),
+    ] as const))
+    return Object.fromEntries(entries)
+  }
+
+  return value
+}
+
 function getExtensionForMimeType(mimeType: string) {
   const normalizedMimeType = mimeType.toLowerCase()
   if (normalizedMimeType === 'image/jpeg') return 'jpg'
@@ -370,7 +456,7 @@ export async function executeApiRequestNode(
     ...normalizeApiKeyValueMap(resolvedInputs.headers),
     ...normalizeApiPrefixedInputMap(resolvedInputs, API_HEADERS_FIELD_PREFIX),
   })
-  const bodyValue = buildApiBodyValue(entries, resolvedInputs.payload)
+  const bodyValue = await materializeApiFileReferenceValue(buildApiBodyValue(entries, resolvedInputs.payload))
 
   if (method === 'GET' && bodyValue !== undefined) {
     const queryValue = bodyValue && typeof bodyValue === 'object' && !Array.isArray(bodyValue)
@@ -418,14 +504,14 @@ export async function executeApiRequestNode(
 }
 
 /** Convert text, JSON, or data URL values into base64 text. */
-export function executeBase64EncodeNode(
+export async function executeBase64EncodeNode(
   context: ExecutionContext,
   node: GraphWorkflowNode,
   moduleDefinition: ParsedModuleDefinition,
   resolvedInputs: Record<string, any>,
 ) {
   const inputMode = typeof resolvedInputs.input_mode === 'string' ? resolvedInputs.input_mode : 'auto'
-  const value = resolvedInputs.value
+  const value = await materializeApiFileReferenceValue(resolvedInputs.value)
   const dataUrl = inputMode === 'data_url' || inputMode === 'auto' ? parseDataUrl(value) : null
   const base64 = dataUrl
     ? dataUrl.base64

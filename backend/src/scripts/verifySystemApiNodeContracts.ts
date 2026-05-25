@@ -86,7 +86,7 @@ function startApiServer() {
       assert.equal(request.headers['x-upload-token'], 'secret')
       assert.match(request.headers['content-type'] ?? '', /multipart\/form-data; boundary=/)
       const bodyText = await readRequestBody(request)
-      assert.match(bodyText, /name="image"; filename="image\.png"/)
+      assert.match(bodyText, /name="image"; filename="image\.(png|webp)"/)
       assert.match(bodyText, /name="note"/)
       response.setHeader('content-type', 'text/plain')
       response.end('ok')
@@ -114,7 +114,7 @@ async function executeApi(inputs: Record<string, unknown>) {
   return responseArtifact.value
 }
 
-async function verifyApiRequestNode(baseUrl: string) {
+async function verifyApiRequestNode(baseUrl: string, tempBasePath: string) {
   assert.deepEqual(
     await executeApi({
       url: `${baseUrl}/get`,
@@ -155,15 +155,45 @@ async function verifyApiRequestNode(baseUrl: string) {
     }),
     'ok',
   )
+
+  const referencedImagePath = path.join(tempBasePath, 'referenced-image.webp')
+  fs.writeFileSync(referencedImagePath, Buffer.from('hello'))
+  assert.equal(
+    await executeApi({
+      url: `${baseUrl}/multipart`,
+      method: 'POST',
+      body_mode: 'form',
+      headers: [],
+      'headers.x-upload-token': 'secret',
+      values: [
+        { key: 'image', value: '' },
+        { key: 'note', value: 'reference' },
+      ],
+      'values.image': {
+        imagePath: referencedImagePath,
+        mimeType: 'image/webp',
+      },
+    }),
+    'ok',
+  )
 }
 
-function verifyBase64Nodes() {
+async function verifyBase64Nodes(tempBasePath: string) {
   const encodeContext = createExecutionContext()
-  executeBase64EncodeNode(encodeContext, node, moduleDefinition, {
+  await executeBase64EncodeNode(encodeContext, node, moduleDefinition, {
     value: 'data:text/plain;base64,aGk=',
     input_mode: 'auto',
   })
   assert.equal(encodeContext.artifactsByNode.get(node.id)?.base64.value, 'aGk=')
+
+  const referencedImagePath = path.join(tempBasePath, 'base64-reference.webp')
+  fs.writeFileSync(referencedImagePath, Buffer.from('hello'))
+  const fileReferenceContext = createExecutionContext()
+  await executeBase64EncodeNode(fileReferenceContext, node, moduleDefinition, {
+    value: { imagePath: referencedImagePath, mimeType: 'image/webp' },
+    input_mode: 'auto',
+  })
+  assert.equal(fileReferenceContext.artifactsByNode.get(node.id)?.base64.value, Buffer.from('hello').toString('base64'))
 
   const decodeContext = createExecutionContext()
   executeBase64DecodeNode(decodeContext, node, moduleDefinition, {
@@ -237,8 +267,8 @@ async function main() {
       VALUES (?, ?, ?)
     `).run(workflowId, 1, 'running').lastInsertRowid as number
 
-    await verifyApiRequestNode(baseUrl)
-    verifyBase64Nodes()
+    await verifyApiRequestNode(baseUrl, tempBasePath)
+    await verifyBase64Nodes(tempBasePath)
     verifyDynamicApiInputValidation()
   } finally {
     server.close()
