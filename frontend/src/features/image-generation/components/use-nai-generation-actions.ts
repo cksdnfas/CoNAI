@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useI18n } from '@/i18n'
 import { triggerBlobDownload } from '@/lib/api-client'
@@ -47,7 +47,7 @@ export function useNaiGenerationActions({
   const [isUpscaling, setIsUpscaling] = useState(false)
 
   /** Submit one NAI image-generation request from the current form state. */
-  const handleNaiGenerate = async () => {
+  const handleNaiGenerate = useCallback(async () => {
     if (isNaiGenerating) {
       return
     }
@@ -126,10 +126,22 @@ export function useNaiGenerationActions({
     } finally {
       setIsNaiGenerating(false)
     }
-  }
+  }, [
+    connected,
+    ensureEncodedVibes,
+    imageSaveOptions,
+    isNaiGenerating,
+    naiForm,
+    onHistoryRefresh,
+    queryClient,
+    showSnackbar,
+    supportsCharacterPrompts,
+    supportsCharacterReference,
+    t,
+  ])
 
   /** Run one NAI upscale request for the current source image and download the result. */
-  const handleUpscale = async () => {
+  const handleUpscale = useCallback(async () => {
     if (!naiForm.sourceImage || isUpscaling) {
       return
     }
@@ -148,7 +160,7 @@ export function useNaiGenerationActions({
     } finally {
       setIsUpscaling(false)
     }
-  }
+  }, [isUpscaling, naiForm.sourceImage, refetchUserData, showSnackbar, t])
 
   return {
     isNaiGenerating,

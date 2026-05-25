@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
@@ -186,6 +186,20 @@ export function NaiGenerationPanel({
       naiCostInputs.n_samples > 0,
   })
 
+  const generationImageSaveOptions = useMemo(() => ({
+    format: generationSaveSettings.defaultFormat,
+    quality: generationSaveSettings.quality,
+    resizeEnabled: generationSaveSettings.resizeEnabled,
+    maxWidth: generationSaveSettings.maxWidth,
+    maxHeight: generationSaveSettings.maxHeight,
+  }), [
+    generationSaveSettings.defaultFormat,
+    generationSaveSettings.maxHeight,
+    generationSaveSettings.maxWidth,
+    generationSaveSettings.quality,
+    generationSaveSettings.resizeEnabled,
+  ])
+
   const {
     isNaiGenerating,
     isUpscaling,
@@ -199,17 +213,19 @@ export function NaiGenerationPanel({
     ensureEncodedVibes,
     refetchUserData: naiUserQuery.refetch,
     onHistoryRefresh,
-    imageSaveOptions: {
-      format: generationSaveSettings.defaultFormat,
-      quality: generationSaveSettings.quality,
-      resizeEnabled: generationSaveSettings.resizeEnabled,
-      maxWidth: generationSaveSettings.maxWidth,
-      maxHeight: generationSaveSettings.maxHeight,
-    },
+    imageSaveOptions: generationImageSaveOptions,
     showSnackbar,
   })
 
   const refetchNaiUserData = naiUserQuery.refetch
+  const handleOpenNaiAuthModal = useCallback(() => setIsNaiAuthModalOpen(true), [setIsNaiAuthModalOpen])
+  const handleCloseNaiAuthModal = useCallback(() => setIsNaiAuthModalOpen(false), [setIsNaiAuthModalOpen])
+  const handleSubmitNaiAuthModal = useCallback(() => void handleNaiAuthSubmit(), [handleNaiAuthSubmit])
+  const handleCloseImageEditor = useCallback(() => setIsImageEditorOpen(false), [setIsImageEditorOpen])
+  const handleImageEditorSaveOptionsChange = useCallback((patch: Partial<typeof imageEditorSaveOptions>) => {
+    setImageEditorSaveOptions((current) => ({ ...current, ...patch }))
+  }, [setImageEditorSaveOptions])
+  const handleConfirmImageEditorSaveModal = useCallback(() => void handleConfirmImageEditorSave(), [handleConfirmImageEditorSave])
 
   useEffect(() => {
     if (refreshNonce === 0) {
@@ -332,7 +348,7 @@ export function NaiGenerationPanel({
         connected={connected}
         tierName={naiUserQuery.data?.subscription.tierName}
         anlasBalance={naiUserQuery.data?.anlasBalance}
-        onOpenAuth={() => setIsNaiAuthModalOpen(true)}
+        onOpenAuth={handleOpenNaiAuthModal}
         compact
       />
       {useDrawerCompactChrome ? null : actionSection}
@@ -355,7 +371,7 @@ export function NaiGenerationPanel({
               connected={connected}
               tierName={naiUserQuery.data?.subscription.tierName}
               anlasBalance={naiUserQuery.data?.anlasBalance}
-              onOpenAuth={() => setIsNaiAuthModalOpen(true)}
+              onOpenAuth={handleOpenNaiAuthModal}
             />
           )}
 
@@ -378,12 +394,12 @@ export function NaiGenerationPanel({
         token={naiTokenInput}
         connectionHint={naiConnectionHint}
         showStatusHint={naiUserQuery.isError}
-        onClose={() => setIsNaiAuthModalOpen(false)}
+        onClose={handleCloseNaiAuthModal}
         onLoginModeChange={setLoginMode}
         onUsernameChange={setNaiUsernameInput}
         onPasswordChange={setNaiPasswordInput}
         onTokenChange={setNaiTokenInput}
-        onSubmit={() => void handleNaiAuthSubmit()}
+        onSubmit={handleSubmitNaiAuthModal}
       />
 
       <NaiAssetSaveModal
@@ -408,7 +424,7 @@ export function NaiGenerationPanel({
             sourceFileName={naiForm.sourceImage?.fileName}
             maskImageDataUrl={naiForm.maskImage?.dataUrl}
             enableMaskEditing={naiForm.action === 'infill'}
-            onClose={() => setIsImageEditorOpen(false)}
+            onClose={handleCloseImageEditor}
             onSave={handleSaveImageEditor}
           />
         </Suspense>
@@ -421,8 +437,8 @@ export function NaiGenerationPanel({
         sourceInfo={pendingImageEditorSaveInfo}
         isSaving={false}
         onClose={handleCloseImageEditorSaveOptions}
-        onOptionsChange={(patch) => setImageEditorSaveOptions((current) => ({ ...current, ...patch }))}
-        onConfirm={() => void handleConfirmImageEditorSave()}
+        onOptionsChange={handleImageEditorSaveOptionsChange}
+        onConfirm={handleConfirmImageEditorSaveModal}
       />
     </>
   )
