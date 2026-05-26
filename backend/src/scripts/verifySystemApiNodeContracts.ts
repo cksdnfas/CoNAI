@@ -95,6 +95,17 @@ function startApiServer() {
       return
     }
 
+    if (url.pathname === '/multipart-images') {
+      assert.equal(request.method, 'POST')
+      assert.match(request.headers['content-type'] ?? '', /multipart\/form-data; boundary=/)
+      const bodyText = await readRequestBody(request)
+      assert.equal((bodyText.match(/name="images"; filename="images-\d\.webp"/g) ?? []).length, 2)
+      assert.match(bodyText, /name="note"/)
+      response.setHeader('content-type', 'text/plain')
+      response.end('ok')
+      return
+    }
+
     response.statusCode = 404
     response.end('not found')
   })
@@ -224,6 +235,30 @@ async function verifyApiRequestNode(baseUrl: string, tempBasePath: string) {
         image: {
           imagePath: '/uploads/images/2026/05/26/encoded%20reference.webp',
         },
+      },
+    }),
+    'ok',
+  )
+
+  const publicImageArrayPaths = [
+    path.join(tempBasePath, 'uploads', 'images', '2026', '05', '26', 'array-reference-1.webp'),
+    path.join(tempBasePath, 'uploads', 'images', '2026', '05', '26', 'array-reference-2.webp'),
+  ]
+  publicImageArrayPaths.forEach((publicImageArrayPath) => {
+    fs.mkdirSync(path.dirname(publicImageArrayPath), { recursive: true })
+    fs.writeFileSync(publicImageArrayPath, Buffer.from('hello'))
+  })
+  assert.equal(
+    await executeApi({
+      url: `${baseUrl}/multipart-images`,
+      method: 'POST',
+      headers: [],
+      payload: {
+        note: 'array-public-references',
+        images: [
+          { imagePath: '/images/2026/05/26/array-reference-1.webp' },
+          { imagePath: '/images/2026/05/26/array-reference-2.webp' },
+        ],
       },
     }),
     'ok',

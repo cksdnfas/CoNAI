@@ -356,17 +356,30 @@ function hasMultipartValue(value: unknown): boolean {
     return true
   }
 
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    return value.some((entryValue) => hasMultipartValue(entryValue))
+  }
+
+  if (!value || typeof value !== 'object') {
     return false
   }
 
-  return Object.values(value as Record<string, unknown>).some((entryValue) => Boolean(parseDataUrl(entryValue)))
+  return Object.values(value as Record<string, unknown>).some((entryValue) => (
+    Boolean(parseDataUrl(entryValue))
+    || (Array.isArray(entryValue) && entryValue.some((arrayEntryValue) => hasMultipartValue(arrayEntryValue)))
+  ))
 }
 
 function buildBlobPartFromBuffer(buffer: Buffer) {
   const arrayBuffer = new ArrayBuffer(buffer.byteLength)
   new Uint8Array(arrayBuffer).set(buffer)
   return arrayBuffer
+}
+
+function appendMultipartDataUrl(formData: FormData, key: string, parsedDataUrl: NormalizedDataUrl, fileName = key) {
+  const extension = getExtensionForMimeType(parsedDataUrl.mimeType)
+  const blob = new Blob([buildBlobPartFromBuffer(parsedDataUrl.buffer)], { type: parsedDataUrl.mimeType })
+  formData.append(key, blob, `${fileName}.${extension}`)
 }
 
 /** Build a Blob-backed multipart body from top-level API body entries. */
@@ -376,9 +389,22 @@ function buildMultipartBody(value: Record<string, unknown>) {
   for (const [key, entryValue] of Object.entries(value)) {
     const parsedDataUrl = parseDataUrl(entryValue)
     if (parsedDataUrl) {
-      const extension = getExtensionForMimeType(parsedDataUrl.mimeType)
-      const blob = new Blob([buildBlobPartFromBuffer(parsedDataUrl.buffer)], { type: parsedDataUrl.mimeType })
-      formData.append(key, blob, `${key}.${extension}`)
+      appendMultipartDataUrl(formData, key, parsedDataUrl)
+      continue
+    }
+
+    if (Array.isArray(entryValue)) {
+      entryValue.forEach((arrayEntryValue, index) => {
+        const parsedArrayDataUrl = parseDataUrl(arrayEntryValue)
+        if (parsedArrayDataUrl) {
+          appendMultipartDataUrl(formData, key, parsedArrayDataUrl, `${key}-${index}`)
+          return
+        }
+
+        if (arrayEntryValue !== undefined && arrayEntryValue !== null) {
+          formData.append(key, typeof arrayEntryValue === 'string' ? arrayEntryValue : JSON.stringify(arrayEntryValue))
+        }
+      })
       continue
     }
 
