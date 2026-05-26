@@ -131,11 +131,11 @@ export function WorkflowFinalResultsSection({
               layout="grid"
               activationMode="none"
               getItemId={(image) => String(image.id)}
-              minColumnWidth={220}
-              preferredColumnCount={Math.min(visualEntries.length, 4)}
-              gridItemHeight={320}
+              minColumnWidth={160}
+              gridItemHeight={240}
               columnGap={12}
               rowGap={12}
+              className="workflow-final-results-list"
               showDefaultQuickActions={false}
               renderItemPersistentOverlay={(image) => {
                 const entry = visualEntryByImageId.get(String(image.id))

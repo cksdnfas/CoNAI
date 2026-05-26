@@ -679,6 +679,11 @@
     min-width: 0;
   }
 
+  .workflow-final-results-list .image-list-selectable img,
+  .workflow-final-results-list .image-list-selectable video {
+    object-fit: contain;
+  }
+
   .related-image-gallery-grid {
     display: grid;
     grid-template-columns: repeat(var(--related-image-grid-columns-base, 1), minmax(0, 1fr));

@@ -42,6 +42,8 @@ function assertExecutionPanelLookupPolicy() {
   const nodeCardLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts.tsx')
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
+  const finalResultsSource = source('features/module-graph/components/workflow-final-results-section.tsx')
+  const indexCssSource = source('index.css')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
   const buildNodeArtifactPreviewSource = extractFunction(sharedSource, 'buildNodeArtifactPreview')
@@ -196,6 +198,26 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     !canvasSource.includes('const targetNode = nodes.find((node) => node.id === actionMenuState.nodeId)'),
     'node action menu callbacks must not rescan graph nodes by id',
+  )
+  assert(
+    finalResultsSource.includes('className="workflow-final-results-list"'),
+    'final result image list should use the workflow-final-results-list scope class',
+  )
+  assert(
+    finalResultsSource.includes('minColumnWidth={160}'),
+    'final result image list should allow a practical narrow-panel column width',
+  )
+  assert(
+    finalResultsSource.includes('gridItemHeight={240}'),
+    'final result image list should avoid oversized crop-prone preview frames',
+  )
+  assert(
+    !finalResultsSource.includes('preferredColumnCount={Math.min(visualEntries.length, 4)}'),
+    'final result image list must not force multiple columns in narrow runner panels',
+  )
+  assert(
+    indexCssSource.includes('.workflow-final-results-list .image-list-selectable img') && indexCssSource.includes('object-fit: contain;'),
+    'final result preview media should render with object-fit: contain in the scoped result list',
   )
 }
 
