@@ -123,6 +123,26 @@ function verifyDynamicTextInputValidation() {
   )
 }
 
+function verifyPartialRunReusePolicy() {
+  const executorSource = fs.readFileSync(path.join(__dirname, '../services/graphWorkflowExecutor.ts'), 'utf8')
+  assert(
+    executorSource.includes("'system.random_text_choice'"),
+    'random text choice nodes must be classified as volatile for partial-run cache reuse',
+  )
+  assert(
+    executorSource.includes("'system.apply_wildcards'"),
+    'wildcard transform nodes must be classified as volatile because wildcard expansion can be random',
+  )
+  assert(
+    executorSource.includes('collectVolatileAffectedNodeIds'),
+    'partial-run reuse should collect volatile nodes and their downstream dependents',
+  )
+  assert(
+    executorSource.includes('!volatileAffectedNodeIds.has(nodeId)'),
+    'partial-run reusable node list must exclude volatile nodes and downstream dependents',
+  )
+}
+
 async function main() {
   const tempBasePath = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-system-random-text-node-contracts-'))
   process.env.RUNTIME_BASE_PATH = tempBasePath
@@ -145,6 +165,7 @@ async function main() {
 
     verifyRandomTextChoiceExecution()
     verifyDynamicTextInputValidation()
+    verifyPartialRunReusePolicy()
   } finally {
     closeUserSettingsDb?.()
     fs.rmSync(tempBasePath, { recursive: true, force: true })

@@ -21,6 +21,7 @@ import {
   setExecutionDebugMode,
   writeExecutionLog,
   type ExecutionContext,
+  type ParsedModuleDefinition,
   type RuntimeArtifact,
 } from './graph-workflow-executor/shared'
 import { buildExecutionOrder, validateGraphTypes, validateRequiredInputs } from './graph-workflow-executor/validate'
@@ -106,6 +107,14 @@ type GraphExecutionPlan = {
   reusedFromExecutionId?: number | null
   reusedNodeIds?: string[]
 }
+
+const VOLATILE_SYSTEM_OPERATION_KEYS = new Set([
+  'system.random_text_choice',
+  'system.apply_wildcards',
+  'system.random_prompt_from_group',
+  'system.random_image_from_library',
+  'system.random_video_from_library',
+])
 
 function buildNodeOutputKey(nodeId: string, portKey: string) {
   return `${nodeId}:${portKey}`
@@ -214,6 +223,53 @@ function getSystemOperationKey(moduleDefinition: { internal_fixed_values?: Recor
   }
 
   return null
+}
+
+function isVolatileSystemModule(moduleDefinition: { engine_type: string; internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
+  if (moduleDefinition.engine_type !== 'system') {
+    return false
+  }
+
+  const operationKey = getSystemOperationKey(moduleDefinition)
+  return Boolean(operationKey && VOLATILE_SYSTEM_OPERATION_KEYS.has(operationKey))
+}
+
+/** Collect volatile nodes and their downstream dependents so partial runs do not reuse stale random outputs. */
+function collectVolatileAffectedNodeIds(params: {
+  graph: { edges: Array<{ source_node_id: string; target_node_id: string }> }
+  orderedNodeIds: string[]
+  moduleByNodeId: ReadonlyMap<string, ParsedModuleDefinition>
+}) {
+  const orderedNodeIdSet = new Set(params.orderedNodeIds)
+  const adjacency = new Map<string, string[]>()
+  const affectedNodeIds = new Set<string>()
+
+  for (const nodeId of params.orderedNodeIds) {
+    adjacency.set(nodeId, [])
+    const moduleDefinition = params.moduleByNodeId.get(nodeId)
+    if (moduleDefinition && isVolatileSystemModule(moduleDefinition)) {
+      affectedNodeIds.add(nodeId)
+    }
+  }
+
+  for (const edge of params.graph.edges) {
+    if (orderedNodeIdSet.has(edge.source_node_id) && orderedNodeIdSet.has(edge.target_node_id)) {
+      adjacency.get(edge.source_node_id)?.push(edge.target_node_id)
+    }
+  }
+
+  const pendingNodeIds = Array.from(affectedNodeIds)
+  while (pendingNodeIds.length > 0) {
+    const nodeId = pendingNodeIds.pop() as string
+    for (const nextNodeId of adjacency.get(nodeId) ?? []) {
+      if (!affectedNodeIds.has(nextNodeId)) {
+        affectedNodeIds.add(nextNodeId)
+        pendingNodeIds.push(nextNodeId)
+      }
+    }
+  }
+
+  return affectedNodeIds
 }
 
 function isExternalGenerationModule(moduleDefinition: { engine_type: string; internal_fixed_values?: Record<string, any>; template_defaults?: Record<string, any> }) {
@@ -388,11 +444,21 @@ export class GraphWorkflowExecutor {
 
     const modulesById = new Map(modules.map((module) => [module.id, module]))
     validateGraphTypes(workflow.graph, modulesById)
+    const moduleByNodeId = new Map(workflow.graph.nodes.map((node) => {
+      const moduleDefinition = modulesById.get(node.module_id)
+      if (!moduleDefinition) {
+        throw new Error(`Module definition ${node.module_id} not found`)
+      }
+      return [node.id, moduleDefinition] as const
+    }))
     const targetNodeId = options?.targetNodeId
     const forceRerun = options?.forceRerun === true
     const orderedNodeIds = buildExecutionOrder(workflow.graph, targetNodeId)
     const runtimeInputSignature = buildRuntimeInputSignature(runtimeInputValues)
-    const reusableNodeIds = targetNodeId ? orderedNodeIds.filter((nodeId) => nodeId !== targetNodeId) : []
+    const volatileAffectedNodeIds = targetNodeId
+      ? collectVolatileAffectedNodeIds({ graph: workflow.graph, orderedNodeIds, moduleByNodeId })
+      : new Set<string>()
+    const reusableNodeIds = targetNodeId ? orderedNodeIds.filter((nodeId) => nodeId !== targetNodeId && !volatileAffectedNodeIds.has(nodeId)) : []
     const reusedArtifacts = await findReusableExecution({
       workflowId: workflow.id,
       graphVersion: workflow.version,
