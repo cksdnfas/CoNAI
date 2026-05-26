@@ -238,8 +238,16 @@ function inferMimeTypeFromPath(filePath: string) {
   return 'application/octet-stream'
 }
 
+function decodeUploadsRelativePath(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 function normalizeUploadsRelativePath(value: string) {
-  return value
+  return decodeUploadsRelativePath(value)
     .replace(/\\/g, '/')
     .replace(/^\/+/, '')
     .replace(/^uploads\//i, '')

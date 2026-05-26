@@ -208,6 +208,26 @@ async function verifyApiRequestNode(baseUrl: string, tempBasePath: string) {
     }),
     'ok',
   )
+
+  const encodedPublicImageRelativePath = path.join('images', '2026', '05', '26', 'encoded reference.webp')
+  const encodedPublicImagePath = path.join(tempBasePath, 'uploads', encodedPublicImageRelativePath)
+  fs.mkdirSync(path.dirname(encodedPublicImagePath), { recursive: true })
+  fs.writeFileSync(encodedPublicImagePath, Buffer.from('hello'))
+  assert.equal(
+    await executeApi({
+      url: `${baseUrl}/multipart`,
+      method: 'POST',
+      headers: [],
+      'headers.x-upload-token': 'secret',
+      payload: {
+        note: 'encoded-public-reference',
+        image: {
+          imagePath: '/uploads/images/2026/05/26/encoded%20reference.webp',
+        },
+      },
+    }),
+    'ok',
+  )
 }
 
 async function verifyBase64Nodes(tempBasePath: string) {
