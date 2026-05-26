@@ -21,6 +21,7 @@
     "verify:video-optimization": "tsx src/scripts/verifyVideoOptimizationContracts.ts",
     "verify:builtin-system-modules": "tsx src/scripts/verifyBuiltinSystemModuleDefinitions.ts",
     "verify:system-api-node-contracts": "tsx src/scripts/verifySystemApiNodeContracts.ts",
+    "verify:system-random-text-node-contracts": "tsx src/scripts/verifySystemRandomTextNodeContracts.ts",
     "verify:wildcard-chain-parsing": "tsx src/scripts/verifyWildcardChainParsing.ts",
     "verify:complex-filter-search-stats": "tsx src/scripts/verifyComplexFilterSearchStats.ts",
     "verify:route-validation-foundation": "tsx src/scripts/verifyRouteValidationFoundation.ts",

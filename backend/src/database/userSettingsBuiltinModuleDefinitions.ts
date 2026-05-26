@@ -308,6 +308,51 @@ export function seedBuiltinSystemModuleDefinitions(upsertBuiltinModule: UpsertBu
   );
 
   upsertBuiltinModule(
+    '랜덤 텍스트 선택',
+    '연결된 텍스트 후보 중 하나를 무작위로 골라 하나의 텍스트로 내보내.',
+    'utility',
+    [
+      {
+        key: 'options',
+        label: '텍스트 후보',
+        direction: 'input',
+        data_type: 'json',
+        required: false,
+        multiple: false,
+        default_value: [
+          { key: 'text_1', value: '' },
+          { key: 'text_2', value: '' },
+        ],
+        description: '노드 카드에서 후보 행을 추가하고 각 행에 텍스트 노드를 연결해.',
+      },
+    ],
+    [
+      {
+        key: 'text',
+        label: '텍스트',
+        direction: 'output',
+        data_type: 'text',
+        required: true,
+        multiple: false,
+      },
+    ],
+    { operation_key: 'system.random_text_choice' },
+    [
+      {
+        key: 'options',
+        label: '텍스트 후보',
+        data_type: 'json',
+        default_value: [
+          { key: 'text_1', value: '' },
+          { key: 'text_2', value: '' },
+        ],
+        ui_hint: 'random_text_entries',
+      },
+    ],
+    '#4db6ac',
+  );
+
+  upsertBuiltinModule(
     '와일드카드 적용',
     '입력 텍스트의 와일드카드를 General, NAI, ComfyUI 규칙으로 각각 적용해서 포트별로 내보내.',
     'utility',

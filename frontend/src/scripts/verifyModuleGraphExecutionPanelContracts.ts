@@ -144,6 +144,14 @@ function assertExecutionPanelLookupPolicy() {
     'specialized node card layouts should receive the precomputed UI-field map',
   )
   assert(
+    nodeCardSource.includes('isRandomTextChoiceModule') && nodeCardSource.includes('getRandomTextChoiceDynamicInputPortKeys(data)'),
+    'random text choice node should refresh React Flow internals when dynamic candidate inputs change',
+  )
+  assert(
+    nodeCardLayoutsSource.includes('export function RandomTextChoiceNodeLayout'),
+    'random text choice node should expose a dedicated API-style card layout',
+  )
+  assert(
     nodeCardLayoutsSource.includes('const resolvedUiFieldByKey = uiFieldByKey ?? fallbackUiFieldByKey'),
     'specialized node card layouts should reuse the supplied UI-field map with a local fallback',
   )

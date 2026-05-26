@@ -22,12 +22,14 @@ import {
   MODULE_GRAPH_INLINE_CONTROL_CLASS,
   NodeArtifactOutputs,
   PortCell,
+  RandomTextChoiceNodeLayout,
   SourceNodeOutputPorts,
   TextMergeNodeLayout,
   TextTransformNodeLayout,
   buildModuleUiFieldMap,
   getApiRequestDynamicInputPortKeys,
   getInputPortState,
+  getRandomTextChoiceDynamicInputPortKeys,
   stopNodeActionEvent,
   stopNodeInteraction,
 } from './module-graph-node-card-layouts'
@@ -193,6 +195,7 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const operationKey = getModuleOperationKey(module)
   const isFinalResult = isFinalResultModule(module)
   const isTextMergeModule = operationKey === 'system.merge_text'
+  const isRandomTextChoiceModule = operationKey === 'system.random_text_choice'
   const isTextTransformModule = operationKey === 'system.regex_text_transform'
   const isIfBranchModule = operationKey === 'system.logic_if_branch'
   const isApiRequestModule = operationKey === 'system.api_request' || (module.engine_type === 'system' && module.name === 'API 요청')
@@ -305,13 +308,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
   const portRowCount = Math.max(visibleInputPorts.length, visibleOutputPorts.length, 1)
   const renderedInputPorts = isWorkflowInputSource
     ? []
-    : (isTextMergeModule || isTextTransformModule || isIfBranchModule || isApiRequestModule ? inputPorts : visibleInputPorts)
+    : (isTextMergeModule || isRandomTextChoiceModule || isTextTransformModule || isIfBranchModule || isApiRequestModule ? inputPorts : visibleInputPorts)
   const renderedOutputPorts = isWorkflowInputSource
     ? sourceOutputPorts
-    : (isTextMergeModule || isTextTransformModule || isIfBranchModule || isApiRequestModule ? outputPorts : visibleOutputPorts)
+    : (isTextMergeModule || isRandomTextChoiceModule || isTextTransformModule || isIfBranchModule || isApiRequestModule ? outputPorts : visibleOutputPorts)
   const renderedHandleSignature = [
     ...renderedInputPorts.map((port) => `in:${port.key}`),
     ...(isApiRequestModule ? getApiRequestDynamicInputPortKeys(data).map((portKey) => `in:${portKey}`) : []),
+    ...(isRandomTextChoiceModule ? getRandomTextChoiceDynamicInputPortKeys(data).map((portKey) => `in:${portKey}`) : []),
     ...renderedOutputPorts.map((port) => `out:${port.key}`),
   ].join('|')
 
@@ -611,6 +615,14 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
             connectedInputKeys={connectedInputKeys}
             connectedOutputKeys={connectedOutputKeys}
             uiFieldByKey={uiFieldByKey}
+          />
+        ) : isRandomTextChoiceModule ? (
+          <RandomTextChoiceNodeLayout
+            id={id}
+            data={data}
+            accentColor={accentColor}
+            connectedInputKeys={connectedInputKeys}
+            connectedOutputKeys={connectedOutputKeys}
           />
         ) : isTextTransformModule ? (
           <TextTransformNodeLayout

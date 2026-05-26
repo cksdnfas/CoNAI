@@ -400,6 +400,9 @@ export function getModuleBaseDisplayName(module: ModuleDefinitionRecord) {
   if (operationKey === 'system.merge_text') {
     return '텍스트 합치기'
   }
+  if (operationKey === 'system.random_text_choice') {
+    return '랜덤 텍스트 선택'
+  }
 
   return module.name
 }
@@ -892,7 +895,32 @@ export function findNodePort(node: ModuleGraphNode | undefined, direction: 'in' 
     return directPort
   }
 
-  if (direction !== 'in' || getModuleOperationKey(node.data.module) !== 'system.api_request') {
+  const operationKey = getModuleOperationKey(node.data.module)
+
+  if (direction !== 'in') {
+    return null
+  }
+
+  if (operationKey === 'system.random_text_choice') {
+    const dynamicKey = portKey.startsWith('options.') ? portKey.slice('options.'.length).trim() : ''
+    const parentPort = node.data.module.exposed_inputs.find((port) => port.key === 'options')
+    if (!parentPort || !dynamicKey) {
+      return null
+    }
+
+    return {
+      ...parentPort,
+      key: portKey,
+      label: dynamicKey,
+      data_type: 'text',
+      required: false,
+      multiple: false,
+      default_value: undefined,
+      description: '랜덤 선택 후보 텍스트야.',
+    }
+  }
+
+  if (operationKey !== 'system.api_request') {
     return null
   }
 
