@@ -103,6 +103,23 @@ assert.equal(metadataAliasFinal.mimeType, 'image/png')
 assert.equal(metadataAliasFinal.storagePath, 'C:/tmp/metadata-backed.png')
 assert.equal(metadataAliasFinal.originalFileName, 'metadata-backed.png')
 
+const metadataCamelCaseAliasFinal = resolveFinalResultPromotionCandidate(artifact({
+  type: 'file',
+  storagePath: undefined,
+  metadata: {
+    kind: 'codex-queue-image',
+    outputPath: 'C:/tmp/metadata-camel-backed.webp',
+    outputMimeType: 'image/webp',
+    outputFileName: 'metadata-camel-backed.webp',
+  },
+  value: {},
+}))
+assert.equal(metadataCamelCaseAliasFinal.shouldPromote, true)
+assert.equal(metadataCamelCaseAliasFinal.serviceType, 'codex')
+assert.equal(metadataCamelCaseAliasFinal.mimeType, 'image/webp')
+assert.equal(metadataCamelCaseAliasFinal.storagePath, 'C:/tmp/metadata-camel-backed.webp')
+assert.equal(metadataCamelCaseAliasFinal.originalFileName, 'metadata-camel-backed.webp')
+
 const uploadedAliasFinal = resolveFinalResultPromotionCandidate(artifact({
   type: 'file',
   storagePath: undefined,

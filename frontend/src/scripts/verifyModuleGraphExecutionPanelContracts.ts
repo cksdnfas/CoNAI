@@ -53,6 +53,8 @@ function assertExecutionPanelLookupPolicy() {
   const resolveFinalResultMetadataRecordSource = extractFunction(finalResultsSource, 'resolveFinalResultMetadataRecord')
   const buildFinalResultImageRecordSource = extractFunction(finalResultsSource, 'buildFinalResultImageRecord')
   const resolveGraphArtifactPreviewMetadataSource = extractFunction(sharedSource, 'resolveGraphArtifactPreviewMetadata')
+  const getArtifactPreviewUrlSource = extractFunction(sharedSource, 'getArtifactPreviewUrl')
+  const resolveGraphArtifactMimeTypeSource = extractFunction(sharedSource, 'resolveGraphArtifactMimeType')
   const buildNodeArtifactPreviewSource = extractFunction(sharedSource, 'buildNodeArtifactPreview')
   const buildNodeArtifactGroupsSource = extractFunction(sharedSource, 'buildNodeArtifactGroups')
   const recommendationSource = extractFunction(canvasSource, 'getRecommendedModulesFromConnectionStart')
@@ -267,10 +269,16 @@ function assertExecutionPanelLookupPolicy() {
     'final result image records and preview URLs should preserve actual/composite hashes for uploaded media',
   )
   assert(
-    resolveFinalResultOriginalFilePathSource.includes("['originalFileName', 'original_file_name', 'output_file_name', 'fileName', 'file_name']")
+    resolveFinalResultOriginalFilePathSource.includes("['originalFileName', 'original_file_name', 'outputFileName', 'output_file_name', 'fileName', 'file_name']")
       && resolveFinalResultOriginalFilePathSource.includes('?? previewArtifact.source_storage_path')
       && buildFinalResultImageRecordSource.includes('original_file_path: resolveFinalResultOriginalFilePath(metadata, previewArtifact)'),
     'final result image records should preserve filename aliases before path fallbacks for display names',
+  )
+  assert(
+    sharedSource.includes("['storagePath', 'storage_path', 'outputPath', 'output_path', 'originalFilePath', 'original_file_path', 'filePath', 'file_path']")
+      && getArtifactPreviewUrlSource.includes('resolveGraphArtifactStoragePath(artifact, metadata)')
+      && resolveGraphArtifactMimeTypeSource.includes("['mimeType', 'mime_type', 'outputMimeType', 'output_mime_type', 'contentType', 'content_type']"),
+    'final result previews should preserve camelCase output path and MIME aliases before extension fallback',
   )
   assert(
     finalResultsSource.includes('gridItemHeight={240}'),

@@ -556,10 +556,32 @@ function getArtifactCompositeHash(metadata?: Record<string, unknown> | null) {
     : null
 }
 
+function getArtifactMetadataString(metadata: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = metadata?.[key]
+    if (typeof value !== 'string') {
+      continue
+    }
+
+    const trimmedValue = value.trim()
+    if (trimmedValue) {
+      return trimmedValue
+    }
+  }
+
+  return null
+}
+
+function resolveGraphArtifactStoragePath(artifact: GraphArtifactPreviewLike, metadata: Record<string, unknown> | null) {
+  return artifact.source_storage_path
+    ?? artifact.storage_path
+    ?? getArtifactMetadataString(metadata, ['storagePath', 'storage_path', 'outputPath', 'output_path', 'originalFilePath', 'original_file_path', 'filePath', 'file_path'])
+}
+
 /** Map a stored artifact path or media record reference back into a backend-served preview URL. */
 export function getArtifactPreviewUrl(artifact: GraphArtifactPreviewLike) {
-  const storagePath = artifact.source_storage_path ?? artifact.storage_path
   const metadata = resolveGraphArtifactPreviewMetadata(artifact)
+  const storagePath = resolveGraphArtifactStoragePath(artifact, metadata)
   const compositeHash = getArtifactCompositeHash(metadata)
 
   if (compositeHash) {
@@ -651,11 +673,9 @@ function inferArtifactMimeTypeFromPath(path?: string | null) {
 
 /** Resolve the best available MIME type for one stored execution artifact or final-result source. */
 export function resolveGraphArtifactMimeType(artifact: GraphArtifactPreviewLike) {
-  const storagePath = artifact.source_storage_path ?? artifact.storage_path
   const metadata = resolveGraphArtifactPreviewMetadata(artifact)
-  const metadataMimeType = typeof metadata?.mimeType === 'string'
-    ? metadata.mimeType
-    : (typeof metadata?.mime_type === 'string' ? metadata.mime_type : null)
+  const storagePath = resolveGraphArtifactStoragePath(artifact, metadata)
+  const metadataMimeType = getArtifactMetadataString(metadata, ['mimeType', 'mime_type', 'outputMimeType', 'output_mime_type', 'contentType', 'content_type'])
 
   if (metadataMimeType?.trim()) {
     return metadataMimeType

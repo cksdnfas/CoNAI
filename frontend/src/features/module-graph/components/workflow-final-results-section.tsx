@@ -78,7 +78,7 @@ function readMetadataString(metadata: Record<string, unknown> | null, keys: stri
 }
 
 function resolveFinalResultOriginalFilePath(metadata: Record<string, unknown> | null, previewArtifact: FinalResultPreviewArtifact) {
-  return readMetadataString(metadata, ['originalFileName', 'original_file_name', 'output_file_name', 'fileName', 'file_name'])
+  return readMetadataString(metadata, ['originalFileName', 'original_file_name', 'outputFileName', 'output_file_name', 'fileName', 'file_name'])
     ?? previewArtifact.source_storage_path
     ?? previewArtifact.storage_path
     ?? null
