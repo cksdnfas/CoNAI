@@ -3,6 +3,7 @@ import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
 import type { ImageRecord } from '@/types/image'
+import { useMemo } from 'react'
 import {
   getArtifactPreviewUrl,
   isGraphArtifactVisualMedia,
@@ -89,8 +90,8 @@ export function WorkflowFinalResultsSection({
 }) {
   const { t } = useI18n()
   const resolvedEmptyLabel = emptyLabel ?? t({ ko: '최종 결과 노드를 추가하고 원하는 출력에 연결해줘.', en: 'Add a final result node and connect it to the output you want to finalize.' })
-  const artifactsById = new Map(artifacts.map((artifact) => [artifact.id, artifact]))
-  const resolvedEntries: ResolvedFinalResultEntry[] = finalResults.map((finalResult) => {
+  const artifactsById = useMemo(() => new Map(artifacts.map((artifact) => [artifact.id, artifact])), [artifacts])
+  const resolvedEntries = useMemo<ResolvedFinalResultEntry[]>(() => finalResults.map((finalResult) => {
     const finalNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.final_node_id, nodeLabelOverrides)
 
     return {
@@ -99,17 +100,24 @@ export function WorkflowFinalResultsSection({
       nodeLabel: finalNodeLabel,
       overlayLabel: getFinalResultOverlayLabel(finalNodeLabel),
     }
-  })
-  const visualEntries: Array<{ entry: ResolvedFinalResultEntry; image: ImageRecord }> = []
-  for (const entry of resolvedEntries) {
-    const image = buildFinalResultImageRecord(entry)
-    if (image) {
-      visualEntries.push({ entry, image })
+  }), [artifactsById, finalResults, nodeLabelOverrides, selectedGraph])
+  const { visualEntries, visualEntryByImageId, nonVisualEntries } = useMemo(() => {
+    const nextVisualEntries: Array<{ entry: ResolvedFinalResultEntry; image: ImageRecord }> = []
+    for (const entry of resolvedEntries) {
+      const image = buildFinalResultImageRecord(entry)
+      if (image) {
+        nextVisualEntries.push({ entry, image })
+      }
     }
-  }
-  const visualEntryByImageId = new Map(visualEntries.map((item) => [String(item.image.id), item.entry]))
-  const visualArtifactIds = new Set(visualEntries.map((item) => item.entry.artifact.id))
-  const nonVisualEntries = resolvedEntries.filter((entry) => !visualArtifactIds.has(entry.artifact.id))
+
+    const nextVisualArtifactIds = new Set(nextVisualEntries.map((item) => item.entry.artifact.id))
+
+    return {
+      visualEntries: nextVisualEntries,
+      visualEntryByImageId: new Map(nextVisualEntries.map((item) => [String(item.image.id), item.entry])),
+      nonVisualEntries: resolvedEntries.filter((entry) => !nextVisualArtifactIds.has(entry.artifact.id)),
+    }
+  }, [resolvedEntries])
 
   return (
     <div className="space-y-2.5">

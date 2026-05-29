@@ -212,6 +212,12 @@ function assertExecutionPanelLookupPolicy() {
     'final result image list should use the workflow-final-results-list scope class',
   )
   assert(
+    finalResultsSource.includes('const artifactsById = useMemo(')
+      && finalResultsSource.includes('const resolvedEntries = useMemo<ResolvedFinalResultEntry[]>')
+      && finalResultsSource.includes('visualEntryByImageId: new Map'),
+    'final result rendering should memoize artifact lookup, resolved entries, and overlay lookup maps',
+  )
+  assert(
     finalResultsSource.includes('minColumnWidth={160}'),
     'final result image list should allow a practical narrow-panel column width',
   )
