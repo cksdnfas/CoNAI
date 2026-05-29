@@ -288,6 +288,11 @@ function assertExecutionPanelLookupPolicy() {
     'final result image list should avoid oversized crop-prone preview frames',
   )
   assert(
+    finalResultsSource.includes("t({ ko: '미디어 {count}', en: 'Media {count}' }, { count: visualEntries.length })")
+      && finalResultsSource.includes("t({ ko: '파일 {count}', en: 'Files {count}' }, { count: nonVisualEntries.length })"),
+    'final result header should summarize media and non-visual result counts',
+  )
+  assert(
     !finalResultsSource.includes('preferredColumnCount={Math.min(visualEntries.length, 4)}'),
     'final result image list must not force multiple columns in narrow runner panels',
   )
@@ -306,6 +311,12 @@ function assertExecutionPanelLookupPolicy() {
       && workflowRunnerSource.includes('Final result nodes exist, but this run did not finalize any outputs.')
       && workflowRunnerSource.includes('emptyLabel={latestExecutionEmptyResultLabel}'),
     'workflow runner latest-result area should distinguish missing final-result nodes from completed runs with no finalized outputs',
+  )
+  assert(
+    workflowRunnerSource.includes('const latestExecutionResultCountLabel = shouldShowLatestExecutionResults && latestExecutionFinalResults')
+      && workflowRunnerSource.includes('latestExecutionResultCountLabel ? (')
+      && workflowRunnerSource.includes('latestExecutionFinalResults.length > 0'),
+    'workflow runner latest-result header should show loaded final-result count near the run controls',
   )
   assert(
     workflowRunnerSource.includes("'queued'")

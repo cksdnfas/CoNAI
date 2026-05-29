@@ -194,6 +194,12 @@ export function WorkflowFinalResultsSection({
       <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         <span>{t({ ko: '결과물', en: 'Results' })}</span>
         <Badge variant="outline">{resolvedEntries.length}</Badge>
+        {resolvedEntries.length > 0 ? (
+          <>
+            <Badge variant={visualEntries.length > 0 ? 'secondary' : 'outline'}>{t({ ko: '미디어 {count}', en: 'Media {count}' }, { count: visualEntries.length })}</Badge>
+            {nonVisualEntries.length > 0 ? <Badge variant="outline">{t({ ko: '파일 {count}', en: 'Files {count}' }, { count: nonVisualEntries.length })}</Badge> : null}
+          </>
+        ) : null}
       </div>
 
       {resolvedEntries.length === 0 ? (

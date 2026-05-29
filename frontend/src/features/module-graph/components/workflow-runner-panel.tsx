@@ -104,6 +104,9 @@ export function WorkflowRunnerPanel({
               ? t({ ko: '아직 실행되지 않은 기록이야.', en: 'This run has not started yet.' })
               : null
     : null
+  const latestExecutionResultCountLabel = shouldShowLatestExecutionResults && latestExecutionFinalResults
+    ? t({ ko: '결과 {count}', en: 'Results {count}' }, { count: formatNumber(latestExecutionFinalResults.length) })
+    : null
 
   return (
     <Card>
@@ -182,6 +185,9 @@ export function WorkflowRunnerPanel({
                   <span>{t({ ko: '최근 결과', en: 'Latest result' })}</span>
                   <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
                   <Badge variant="outline">{getGraphExecutionStatusLabel(latestExecution.status)}</Badge>
+                  {latestExecutionResultCountLabel ? (
+                    <Badge variant={latestExecutionFinalResults && latestExecutionFinalResults.length > 0 ? 'secondary' : 'outline'}>{latestExecutionResultCountLabel}</Badge>
+                  ) : null}
                 </AlertTitle>
                 <AlertDescription className="pt-3">
                   {shouldShowLatestExecutionResults && latestExecutionArtifacts && latestExecutionFinalResults ? (
