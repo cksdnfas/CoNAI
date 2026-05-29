@@ -288,6 +288,26 @@ export class GenerationHistoryModel {
     stmt.run(errorMessage, id);
   }
 
+  /** Mark in-flight histories linked to terminal queue jobs as failed. */
+  static recordErrorByQueueJobIds(queueJobIds: number[], errorMessage: string): number {
+    const uniqueJobIds = Array.from(new Set(queueJobIds.filter((id) => Number.isInteger(id) && id > 0)));
+    if (uniqueJobIds.length === 0) {
+      return 0;
+    }
+
+    const placeholders = uniqueJobIds.map(() => '?').join(',');
+    const stmt = apiGenDb.prepare(`
+      UPDATE api_generation_history
+      SET generation_status = 'failed',
+          error_message = ?,
+          completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+      WHERE queue_job_id IN (${placeholders})
+        AND generation_status IN ('pending', 'processing')
+    `);
+    const info = stmt.run(errorMessage, ...uniqueJobIds);
+    return info.changes;
+  }
+
   /**
    * Delete history record
    */

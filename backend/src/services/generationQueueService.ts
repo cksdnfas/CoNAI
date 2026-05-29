@@ -8,7 +8,7 @@ import { settingsService } from './settingsService'
 import { updateQueueRequestDebugMeta } from './generation-queue/queueDebugMeta'
 import { executeGenerationQueueJob, isGenerationQueueCancellationError } from './generation-queue/queueJobExecutors'
 import { parseStoredRequestPayload, resolveFailureMessage } from './generation-queue/queuePayloads'
-import type { ServiceType } from '../models/GenerationHistory'
+import { GenerationHistoryModel, type ServiceType } from '../models/GenerationHistory'
 import type { ComfyUIServerRecord } from '../types/comfyuiServer'
 import type {
   GenerationQueueDispatchCandidateRecord,
@@ -524,6 +524,23 @@ export class GenerationQueueService {
     const nowIso = new Date().toISOString()
 
     const recoveryTransaction = db.transaction(() => {
+      const cancelledBeforeDispatchJobIds = db.prepare(`
+        SELECT id
+        FROM generation_queue_jobs
+        WHERE status = 'queued'
+          AND cancel_requested = 1
+      `).all().map((row) => (row as { id: number }).id)
+      const interruptedDispatchingJobIds = db.prepare(`
+        SELECT id
+        FROM generation_queue_jobs
+        WHERE status = 'dispatching'
+      `).all().map((row) => (row as { id: number }).id)
+      const interruptedRunningJobIds = db.prepare(`
+        SELECT id
+        FROM generation_queue_jobs
+        WHERE status = 'running'
+      `).all().map((row) => (row as { id: number }).id)
+
       const cancelledBeforeDispatch = db.prepare(`
         UPDATE generation_queue_jobs
         SET status = 'cancelled',
@@ -553,10 +570,24 @@ export class GenerationQueueService {
         WHERE status = 'running'
       `).run(nowIso).changes
 
+      const cancelledHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+        cancelledBeforeDispatchJobIds,
+        'Cancelled before dispatch.',
+      )
+      const failedDispatchingHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+        interruptedDispatchingJobIds,
+        'Backend restarted while this queue job was dispatching. Retry is required.',
+      )
+      const failedRunningHistoryRecords = GenerationHistoryModel.recordErrorByQueueJobIds(
+        interruptedRunningJobIds,
+        'Backend restarted while this queue job was running. Retry is required.',
+      )
+
       return {
         cancelledBeforeDispatch,
         failedDispatching,
         failedRunning,
+        failedHistoryRecords: cancelledHistoryRecords + failedDispatchingHistoryRecords + failedRunningHistoryRecords,
       }
     })
 

@@ -65,6 +65,20 @@ function assertRestartFailure(job: GenerationQueueJobRecord | null, label: strin
   }
 }
 
+function assertHistoryFailure(history: { generation_status?: string; error_message?: string | null } | null, label: string, messagePart: string) {
+  if (!history) {
+    throw new Error(`Missing ${label}`)
+  }
+
+  if (history.generation_status !== 'failed') {
+    throw new Error(`Expected ${label} to be failed, got ${history.generation_status}`)
+  }
+
+  if (!history.error_message?.includes(messagePart)) {
+    throw new Error(`Expected ${label} to explain ${messagePart}, got ${history.error_message}`)
+  }
+}
+
 async function main() {
   const tempBasePath = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-queue-wakeup-smoke-'))
   process.env.RUNTIME_BASE_PATH = tempBasePath
@@ -76,8 +90,10 @@ async function main() {
   try {
     const { ensureRuntimeDirectories } = await import('../config/runtimePaths')
     const userSettings = await import('../database/userSettingsDb')
+    const { initializeApiGenerationDb } = await import('../database/apiGenerationDb')
     const mainDatabase = await import('../database/init')
     const { GenerationQueueModel } = await import('../models/GenerationQueue')
+    const { GenerationHistoryModel } = await import('../models/GenerationHistory')
     const { GenerationQueueService } = await import('../services/generationQueueService')
     const { settingsService } = await import('../services/settingsService')
 
@@ -86,6 +102,7 @@ async function main() {
 
     ensureRuntimeDirectories()
     userSettings.initializeUserSettingsDb()
+    initializeApiGenerationDb()
     settingsService.updateGenerationThrottleSettings({
       novelai: {
         maxConcurrentJobs: 1,
@@ -156,6 +173,25 @@ async function main() {
       request_summary: 'interrupted running job',
     })
 
+    const cancelledHistoryId = GenerationHistoryModel.create({
+      service_type: 'novelai',
+      generation_status: 'pending',
+      nai_model: 'test',
+      queue_job_id: cancelledQueuedJobId,
+    })
+    const interruptedDispatchingHistoryId = GenerationHistoryModel.create({
+      service_type: 'novelai',
+      generation_status: 'processing',
+      nai_model: 'test',
+      queue_job_id: interruptedDispatchingJobId,
+    })
+    const interruptedRunningHistoryId = GenerationHistoryModel.create({
+      service_type: 'novelai',
+      generation_status: 'processing',
+      nai_model: 'test',
+      queue_job_id: interruptedRunningJobId,
+    })
+
     GenerationQueueService.start()
 
     const cancelledQueuedJob = assertQueueJobStatus(
@@ -168,6 +204,9 @@ async function main() {
     }
     assertRestartFailure(GenerationQueueModel.findById(interruptedDispatchingJobId), 'interrupted dispatching recovery job')
     assertRestartFailure(GenerationQueueModel.findById(interruptedRunningJobId), 'interrupted running recovery job')
+    assertHistoryFailure(GenerationHistoryModel.findById(cancelledHistoryId), 'cancelled queued recovery history', 'Cancelled before dispatch')
+    assertHistoryFailure(GenerationHistoryModel.findById(interruptedDispatchingHistoryId), 'interrupted dispatching recovery history', 'dispatching')
+    assertHistoryFailure(GenerationHistoryModel.findById(interruptedRunningHistoryId), 'interrupted running recovery history', 'running')
 
     await waitFor(() => startedJobs.length === 1, 500)
     if (startedJobs[0] !== firstJobId) {
