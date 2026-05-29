@@ -8,13 +8,50 @@ import { ComfyUIService, ParallelGenerationService } from '../../services/comfyu
 import { GenerationHistoryService } from '../../services/generationHistoryService';
 import { GenerationHistoryModel } from '../../models/GenerationHistory';
 import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
-import { ImageSimilarityService } from '../../services/imageSimilarity';
-import { runtimePaths } from '../../config/runtimePaths';
+import { APIImageProcessor } from '../../services/APIImageProcessor';
+import { BackgroundProcessorService } from '../../services/backgroundProcessorService';
 import { getToken } from '../../utils/nai/auth';
 import { preprocessMetadata } from '../../utils/nai/metadata';
 import axios from 'axios';
 // @ts-ignore - no types available
 import AdmZip from 'adm-zip';
+
+async function cleanupMcpComfyTempFile(filePath: string): Promise<void> {
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') {
+      console.warn(`[MCP ComfyUI] Failed to cleanup temp output ${filePath}:`, error);
+    }
+  }
+}
+
+/** Save one MCP Comfy output through the same media pipeline used by normal generation. */
+async function processMcpComfyOutput(historyId: number, sourceFilePath: string): Promise<string | null> {
+  try {
+    GenerationHistoryModel.updateStatus(historyId, 'processing');
+
+    const processedPaths = await APIImageProcessor.processGeneratedFile(sourceFilePath, 'comfyui', {
+      sourcePathForMetadata: sourceFilePath,
+      originalFileName: path.basename(sourceFilePath),
+    });
+
+    GenerationHistoryModel.updateImagePaths(historyId, {
+      compositeHash: processedPaths.compositeHash,
+    });
+    await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(processedPaths.compositeHash);
+    GenerationHistoryModel.updateStatus(historyId, 'completed');
+
+    return processedPaths.originalPath;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    GenerationHistoryModel.recordError(historyId, errorMessage);
+    console.error(`[MCP ComfyUI] Failed to process generated output for history ${historyId}:`, errorMessage);
+    return null;
+  } finally {
+    await cleanupMcpComfyTempFile(sourceFilePath);
+  }
+}
 
 export function registerGenerationTools(server: McpServer): void {
   // 워크플로우 목록 조회
@@ -124,6 +161,7 @@ export function registerGenerationTools(server: McpServer): void {
           workflowId: workflow_id,
           workflowName: workflow.name,
           groupId: group_id,
+          serverId: server_id,
         });
 
         // 이미지 생성 (temp 폴더에 다운로드)
@@ -138,59 +176,57 @@ export function registerGenerationTools(server: McpServer): void {
           console.error('[MCP ComfyUI] Failed to update history processing status:', e);
         }
 
-        // temp → 영구 저장소로 이동 (웹 UI execution.routes.ts와 동일한 처리)
+        // temp → 영구 저장소로 이동하고 메인 이미지 DB까지 즉시 등록
+        const historyIds: number[] = [historyId];
         const savedPaths: string[] = [];
-        for (const tempPath of result.imagePaths) {
-          try {
-            const imageBuffer = await fs.promises.readFile(tempPath);
+        let failedSaveCount = 0;
+        for (let index = 0; index < result.imagePaths.length; index += 1) {
+          const tempPath = result.imagePaths[index];
+          let outputHistoryId = historyId;
 
-            // 날짜 기반 디렉토리 생성
-            const dateDir = new Date().toISOString().split('T')[0];
-            const targetDir = path.join(runtimePaths.uploadsDir, 'API', 'images', dateDir);
-            if (!fs.existsSync(targetDir)) {
-              fs.mkdirSync(targetDir, { recursive: true });
-            }
-
-            // 고유 파일명 생성
-            const ext = path.extname(tempPath);
-            const filename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
-            const targetPath = path.join(targetDir, filename);
-
-            // 파일 저장
-            fs.writeFileSync(targetPath, imageBuffer);
-
-            // temp 파일 삭제
-            fs.unlinkSync(tempPath);
-
-            const relativePath = `API/images/${dateDir}/${filename}`;
-            savedPaths.push(relativePath);
-
-            // 히스토리 업데이트 (첫 번째 이미지만)
-            if (result.imagePaths.indexOf(tempPath) === 0) {
-              const { hashes } = await ImageSimilarityService.generateHashAndHistogram(targetPath);
-              GenerationHistoryModel.updateImagePaths(historyId, {
-                compositeHash: hashes.compositeHash
+          if (index > 0) {
+            try {
+              outputHistoryId = await GenerationHistoryService.createComfyUIHistory({
+                workflowId: workflow_id,
+                workflowName: workflow.name,
+                groupId: group_id,
+                serverId: server_id,
               });
+              historyIds.push(outputHistoryId);
+            } catch (historyError) {
+              failedSaveCount += 1;
+              console.error(`[MCP ComfyUI] Failed to create history for extra output ${tempPath}:`, historyError);
+              await cleanupMcpComfyTempFile(tempPath);
+              continue;
             }
-          } catch (fileError) {
-            console.error(`[MCP ComfyUI] Failed to save image ${tempPath}:`, fileError);
+          }
+
+          const savedPath = await processMcpComfyOutput(outputHistoryId, tempPath);
+          if (savedPath) {
+            savedPaths.push(savedPath);
+          } else {
+            failedSaveCount += 1;
           }
         }
-
-        // 완료 상태 업데이트
-        GenerationHistoryModel.updateStatus(historyId, 'completed');
+        if (savedPaths.length === 0 && failedSaveCount === 0) {
+          failedSaveCount = 1;
+          GenerationHistoryModel.recordError(historyId, 'ComfyUI generation finished but no output file was returned');
+        }
 
         return {
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
-              success: true,
+              success: savedPaths.length > 0,
               historyId,
+              historyIds,
               promptId: result.promptId,
               imageCount: savedPaths.length,
+              failedSaveCount,
               imagePaths: savedPaths,
               server: serverRecord.name,
               workflow: workflow.name,
+              error: savedPaths.length > 0 ? undefined : 'No generated output could be saved',
             }, null, 2),
           }],
         };
@@ -257,7 +293,9 @@ export function registerGenerationTools(server: McpServer): void {
           serverName: string;
           success: boolean;
           historyId?: number;
+          historyIds?: number[];
           imagePaths?: string[];
+          failedSaveCount?: number;
           error?: string;
         }> = [];
 
@@ -279,6 +317,7 @@ export function registerGenerationTools(server: McpServer): void {
               workflowId: workflow_id,
               workflowName: workflow.name,
               groupId: group_id,
+              serverId: result.serverId,
             });
 
             GenerationHistoryModel.update(historyId, {
@@ -288,50 +327,48 @@ export function registerGenerationTools(server: McpServer): void {
             console.error(`[MCP ComfyUI Parallel] Failed to create history for server ${result.serverName}:`, historyError);
           }
 
-          // temp → 영구 저장소로 이동
+          // temp → 영구 저장소로 이동하고 메인 이미지 DB까지 즉시 등록
+          const historyIds: number[] = historyId ? [historyId] : [];
           const savedPaths: string[] = [];
-          for (const tempPath of result.imagePaths) {
-            try {
-              const imageBuffer = await fs.promises.readFile(tempPath);
+          let failedSaveCount = 0;
+          for (let index = 0; index < result.imagePaths.length; index += 1) {
+            const tempPath = result.imagePaths[index];
+            let outputHistoryId = historyId;
 
-              const dateDir = new Date().toISOString().split('T')[0];
-              const targetDir = path.join(runtimePaths.uploadsDir, 'API', 'images', dateDir);
-              if (!fs.existsSync(targetDir)) {
-                fs.mkdirSync(targetDir, { recursive: true });
-              }
-
-              const ext = path.extname(tempPath);
-              const filename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
-              const targetPath = path.join(targetDir, filename);
-
-              fs.writeFileSync(targetPath, imageBuffer);
-              fs.unlinkSync(tempPath);
-
-              const relativePath = `API/images/${dateDir}/${filename}`;
-              savedPaths.push(relativePath);
-
-              // 히스토리 업데이트 (첫 번째 이미지만)
-              if (historyId && result.imagePaths.indexOf(tempPath) === 0) {
-                const { hashes } = await ImageSimilarityService.generateHashAndHistogram(targetPath);
-                GenerationHistoryModel.updateImagePaths(historyId, {
-                  compositeHash: hashes.compositeHash
+            if (!outputHistoryId || index > 0) {
+              try {
+                outputHistoryId = await GenerationHistoryService.createComfyUIHistory({
+                  workflowId: workflow_id,
+                  workflowName: workflow.name,
+                  groupId: group_id,
+                  serverId: result.serverId,
                 });
+                historyIds.push(outputHistoryId);
+              } catch (historyError) {
+                failedSaveCount += 1;
+                console.error(`[MCP ComfyUI Parallel] Failed to create history for output ${tempPath}:`, historyError);
+                await cleanupMcpComfyTempFile(tempPath);
+                continue;
               }
-            } catch (fileError) {
-              console.error(`[MCP ComfyUI Parallel] Failed to save image ${tempPath}:`, fileError);
             }
-          }
 
-          if (historyId) {
-            GenerationHistoryModel.updateStatus(historyId, 'completed');
+            const savedPath = await processMcpComfyOutput(outputHistoryId, tempPath);
+            if (savedPath) {
+              savedPaths.push(savedPath);
+            } else {
+              failedSaveCount += 1;
+            }
           }
 
           serverResults.push({
             serverId: result.serverId,
             serverName: result.serverName,
-            success: true,
+            success: savedPaths.length > 0,
             historyId,
+            historyIds,
             imagePaths: savedPaths,
+            failedSaveCount,
+            error: savedPaths.length > 0 ? undefined : 'No generated output could be saved',
           });
         }
 
