@@ -234,6 +234,17 @@ function resolveArtifactMimeType(storagePath: string, metadata: Record<string, u
   return inferMimeTypeFromPath(storagePath, artifactType === 'file' ? 'application/octet-stream' : 'image/png')
 }
 
+function optionalMetadataString(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+}
+
+function resolveFileReferenceCompositeHash(metadata: Record<string, unknown>) {
+  return optionalMetadataString(metadata.actualCompositeHash)
+    ?? optionalMetadataString(metadata.actual_composite_hash)
+    ?? optionalMetadataString(metadata.compositeHash)
+    ?? optionalMetadataString(metadata.composite_hash)
+}
+
 function buildFileReferenceValue(storagePath: string, metadata: Record<string, unknown>, artifactType: ModulePortDataType | 'file') {
   const mimeType = resolveArtifactMimeType(storagePath, metadata, artifactType)
   return {
@@ -241,7 +252,7 @@ function buildFileReferenceValue(storagePath: string, metadata: Record<string, u
     fileName: path.basename(storagePath),
     mimeType,
     originalFileName: typeof metadata.originalFileName === 'string' ? metadata.originalFileName : undefined,
-    compositeHash: typeof metadata.compositeHash === 'string' ? metadata.compositeHash : typeof metadata.composite_hash === 'string' ? metadata.composite_hash : undefined,
+    compositeHash: resolveFileReferenceCompositeHash(metadata),
   }
 }
 
