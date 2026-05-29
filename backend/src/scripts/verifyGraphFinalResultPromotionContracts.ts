@@ -120,6 +120,26 @@ assert.equal(metadataCamelCaseAliasFinal.mimeType, 'image/webp')
 assert.equal(metadataCamelCaseAliasFinal.storagePath, 'C:/tmp/metadata-camel-backed.webp')
 assert.equal(metadataCamelCaseAliasFinal.originalFileName, 'metadata-camel-backed.webp')
 
+const generationMetadataFinal = resolveFinalResultPromotionCandidate(artifact({
+  type: 'file',
+  storagePath: undefined,
+  metadata: {
+    kind: 'nai-image',
+    output_path: 'C:/tmp/metadata-parameters.png',
+    output_mime_type: 'image/png',
+    seed: '4242',
+    steps: '31',
+    scale: '6.5',
+    sampler_name: 'k_euler_ancestral',
+    noise_schedule: 'karras',
+  },
+  value: {},
+}))
+assert.equal(generationMetadataFinal.shouldPromote, true)
+assert.equal(generationMetadataFinal.seed, 4242)
+assert.equal(generationMetadataFinal.steps, 31)
+assert.equal(generationMetadataFinal.cfgScale, 6.5)
+
 const uploadedAliasFinal = resolveFinalResultPromotionCandidate(artifact({
   type: 'file',
   storagePath: undefined,
@@ -137,4 +157,4 @@ assert.equal(uploadedAliasFinal.mimeType, 'image/webp')
 assert.equal(uploadedAliasFinal.storagePath, 'C:/tmp/source-alias.webp')
 assert.equal(uploadedAliasFinal.originalFileName, 'source-alias.webp')
 
-console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata alias fallback)')
+console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter alias fallback)')

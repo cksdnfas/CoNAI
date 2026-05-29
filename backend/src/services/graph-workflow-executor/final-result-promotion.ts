@@ -14,6 +14,9 @@ type FinalResultPromotionCandidate = {
   storagePath: string | null
   originalFileName: string | null
   compositeHash: string | null
+  seed: number | null
+  steps: number | null
+  cfgScale: number | null
   reason: string | null
 }
 
@@ -131,6 +134,24 @@ function resolveOriginalFileName(metadata: ArtifactMetadata, valueObject: Artifa
     ?? (storagePath ? path.basename(storagePath) : null)
 }
 
+function resolveGenerationParameters(metadata: ArtifactMetadata) {
+  return {
+    seed: optionalNumber(metadata.seed)
+      ?? optionalNumber(metadata.nai_seed)
+      ?? optionalNumber(metadata.noise_seed)
+      ?? null,
+    steps: optionalNumber(metadata.steps)
+      ?? optionalNumber(metadata.nai_steps)
+      ?? optionalNumber(metadata.steps_total)
+      ?? null,
+    cfgScale: optionalNumber(metadata.cfg_scale)
+      ?? optionalNumber(metadata.scale)
+      ?? optionalNumber(metadata.nai_scale)
+      ?? optionalNumber(metadata.cfg)
+      ?? null,
+  }
+}
+
 function inferServiceType(metadata: ArtifactMetadata): ServiceType {
   const explicitServiceType = optionalString(metadata.graph_result_service_type)
     ?? optionalString(metadata.serviceType)
@@ -156,7 +177,12 @@ function isPromotableMimeType(mimeType: string | null) {
   return Boolean(mimeType && (mimeType.startsWith('image/') || mimeType.startsWith('video/')))
 }
 
-function buildMetadataPatch(params: FinalResultPromotionParams, metadata: ArtifactMetadata, serviceType: ServiceType) {
+function buildMetadataPatch(
+  params: FinalResultPromotionParams,
+  metadata: ArtifactMetadata,
+  serviceType: ServiceType,
+  generationParams: ReturnType<typeof resolveGenerationParameters>,
+) {
   const prompt = optionalString(metadata.prompt)
     ?? optionalString(metadata.positive_prompt)
   const negativePrompt = optionalString(metadata.negative_prompt)
@@ -171,8 +197,11 @@ function buildMetadataPatch(params: FinalResultPromotionParams, metadata: Artifa
     negative_prompt: negativePrompt ?? undefined,
     width: optionalNumber(metadata.width) ?? undefined,
     height: optionalNumber(metadata.height) ?? undefined,
-    sampler: optionalString(metadata.sampler) ?? undefined,
-    scheduler: optionalString(metadata.scheduler) ?? undefined,
+    steps: generationParams.steps ?? undefined,
+    cfg_scale: generationParams.cfgScale ?? undefined,
+    seed: generationParams.seed ?? undefined,
+    sampler: optionalString(metadata.sampler) ?? optionalString(metadata.sampler_name) ?? undefined,
+    scheduler: optionalString(metadata.scheduler) ?? optionalString(metadata.noise_schedule) ?? undefined,
     conai_graph_execution_id: params.executionId,
     conai_graph_workflow_id: params.workflowId,
     conai_graph_workflow_name: params.workflowName,
@@ -190,6 +219,7 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
   const storagePath = resolveStoragePath(sourceArtifact, metadata, valueObject)
   const mimeType = resolveMimeType(metadata, valueObject, storagePath)
   const originalFileName = resolveOriginalFileName(metadata, valueObject, storagePath)
+  const generationParams = resolveGenerationParameters(metadata)
   if (compositeHash) {
     return {
       shouldPromote: false,
@@ -198,6 +228,7 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
       storagePath,
       originalFileName,
       compositeHash,
+      ...generationParams,
       reason: 'already_uploaded',
     }
   }
@@ -210,6 +241,9 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
       storagePath: null,
       originalFileName: null,
       compositeHash: null,
+      seed: null,
+      steps: null,
+      cfgScale: null,
       reason: 'missing_storage_path',
     }
   }
@@ -222,6 +256,7 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
       storagePath,
       originalFileName,
       compositeHash: null,
+      ...generationParams,
       reason: 'not_visual_media',
     }
   }
@@ -233,6 +268,7 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
     storagePath,
     originalFileName,
     compositeHash: null,
+    ...generationParams,
     reason: null,
   }
 }
@@ -255,6 +291,9 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
     workflow_id: params.workflowId,
     workflow_name: params.workflowName,
     nai_model: optionalString(metadata.model) ?? optionalString(metadata.nai_model) ?? (serviceType === 'codex' ? 'codex' : undefined),
+    nai_seed: candidate.seed ?? undefined,
+    nai_steps: candidate.steps ?? undefined,
+    nai_scale: candidate.cfgScale ?? undefined,
     positive_prompt: optionalString(metadata.prompt) ?? optionalString(metadata.positive_prompt) ?? undefined,
     negative_prompt: optionalString(metadata.negative_prompt) ?? optionalString(metadata.uc) ?? undefined,
     width: optionalNumber(metadata.width) ?? undefined,
@@ -275,7 +314,7 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
     sourcePathForMetadata: storagePath,
     sourceMimeType: candidate.mimeType ?? undefined,
     originalFileName: candidate.originalFileName ?? path.basename(storagePath),
-    metadataPatch: buildMetadataPatch(params, metadata, serviceType),
+    metadataPatch: buildMetadataPatch(params, metadata, serviceType, candidate),
   })
 
   const completedHistory = GenerationHistoryModel.findById(historyId)
