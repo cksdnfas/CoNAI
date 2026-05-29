@@ -47,6 +47,9 @@ function assertExecutionPanelLookupPolicy() {
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
   const readMetadataNumberSource = extractFunction(finalResultsSource, 'readMetadataNumber')
+  const buildFinalResultPreviewArtifactSource = extractFunction(finalResultsSource, 'buildFinalResultPreviewArtifact')
+  const resolveFinalResultMetadataRecordSource = extractFunction(finalResultsSource, 'resolveFinalResultMetadataRecord')
+  const buildFinalResultImageRecordSource = extractFunction(finalResultsSource, 'buildFinalResultImageRecord')
   const buildNodeArtifactPreviewSource = extractFunction(sharedSource, 'buildNodeArtifactPreview')
   const buildNodeArtifactGroupsSource = extractFunction(sharedSource, 'buildNodeArtifactGroups')
   const recommendationSource = extractFunction(canvasSource, 'getRecommendedModulesFromConnectionStart')
@@ -227,6 +230,21 @@ function assertExecutionPanelLookupPolicy() {
       && readMetadataNumberSource.includes('const parsed = Number(value)')
       && readMetadataNumberSource.includes('Number.isFinite(parsed) ? parsed : null'),
     'final result image records should preserve finite numeric-string width/height metadata',
+  )
+  assert(
+    buildFinalResultPreviewArtifactSource.includes('source_metadata: entry.artifact.metadata ? undefined : entry.finalResult.source_metadata')
+      && buildFinalResultPreviewArtifactSource.includes('source_storage_path: entry.artifact.storage_path ? undefined : entry.finalResult.source_storage_path'),
+    'final result preview artifact should fall back to source metadata/storage when the artifact row is sparse',
+  )
+  assert(
+    resolveFinalResultMetadataRecordSource.includes('return { ...sourceMetadata, ...artifactMetadata }')
+      && resolveFinalResultMetadataRecordSource.includes('return artifactMetadata ?? sourceMetadata'),
+    'final result metadata should merge source metadata as fallback while preserving artifact metadata precedence',
+  )
+  assert(
+    buildFinalResultImageRecordSource.includes('const previewArtifact = buildFinalResultPreviewArtifact(entry)')
+      && buildFinalResultImageRecordSource.includes('const metadata = resolveFinalResultMetadataRecord(entry)'),
+    'final result image records should render from the fallback-aware artifact and metadata helpers',
   )
   assert(
     finalResultsSource.includes('gridItemHeight={240}'),

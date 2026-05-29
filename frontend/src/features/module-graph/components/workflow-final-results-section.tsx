@@ -42,6 +42,11 @@ type ResolvedFinalResultEntry = {
   overlayLabel?: string
 }
 
+type FinalResultPreviewArtifact = GraphExecutionArtifactRecord & {
+  source_metadata?: string | null
+  source_storage_path?: string | null
+}
+
 function readMetadataNumber(metadata: Record<string, unknown> | null, key: string) {
   const value = metadata?.[key]
   if (typeof value === 'number') {
@@ -56,24 +61,44 @@ function readMetadataNumber(metadata: Record<string, unknown> | null, key: strin
   return null
 }
 
+function buildFinalResultPreviewArtifact(entry: ResolvedFinalResultEntry): FinalResultPreviewArtifact {
+  return {
+    ...entry.artifact,
+    source_metadata: entry.artifact.metadata ? undefined : entry.finalResult.source_metadata,
+    source_storage_path: entry.artifact.storage_path ? undefined : entry.finalResult.source_storage_path,
+  }
+}
+
+function resolveFinalResultMetadataRecord(entry: ResolvedFinalResultEntry) {
+  const sourceMetadata = parseArtifactMetadataRecord(entry.finalResult.source_metadata)
+  const artifactMetadata = parseArtifactMetadataRecord(entry.artifact.metadata)
+
+  if (sourceMetadata && artifactMetadata) {
+    return { ...sourceMetadata, ...artifactMetadata }
+  }
+
+  return artifactMetadata ?? sourceMetadata
+}
+
 function buildFinalResultImageRecord(entry: ResolvedFinalResultEntry): ImageRecord | null {
-  const previewUrl = getArtifactPreviewUrl(entry.artifact)
-  if (!previewUrl || !isGraphArtifactVisualMedia(entry.artifact)) {
+  const previewArtifact = buildFinalResultPreviewArtifact(entry)
+  const previewUrl = getArtifactPreviewUrl(previewArtifact)
+  if (!previewUrl || !isGraphArtifactVisualMedia(previewArtifact)) {
     return null
   }
 
-  const mimeType = resolveGraphArtifactMimeType(entry.artifact)
+  const mimeType = resolveGraphArtifactMimeType(previewArtifact)
   const fileType = mimeType?.startsWith('video/')
     ? 'video'
     : mimeType === 'image/gif'
       ? 'animated'
       : 'image'
-  const metadata = parseArtifactMetadataRecord(entry.artifact.metadata)
+  const metadata = resolveFinalResultMetadataRecord(entry)
 
   return {
     id: `final-result-${entry.finalResult.id}`,
     composite_hash: null,
-    original_file_path: entry.artifact.storage_path,
+    original_file_path: previewArtifact.source_storage_path ?? previewArtifact.storage_path,
     thumbnail_url: previewUrl,
     image_url: previewUrl,
     width: readMetadataNumber(metadata, 'width'),
