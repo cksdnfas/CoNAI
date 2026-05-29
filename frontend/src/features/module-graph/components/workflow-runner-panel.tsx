@@ -81,6 +81,15 @@ export function WorkflowRunnerPanel({
   const latestExecutionStatus = latestExecution?.status ?? null
   const latestExecutionStatusLabel = latestExecutionStatus ? getGraphExecutionStatusLabel(latestExecutionStatus) : null
   const shouldShowLatestExecutionResults = latestExecution?.status === 'completed'
+  const latestExecutionEmptyResultLabel = graphSummary && graphSummary.finalResultNodeCount > 0
+    ? t({
+      ko: '최종 결과 노드는 있지만 이번 실행에서 확정된 출력이 없어. 연결된 출력 노드가 실제 결과를 만들었는지 확인해줘.',
+      en: 'Final result nodes exist, but this run did not finalize any outputs. Check whether the connected output node produced a result.',
+    })
+    : t({
+      ko: '아직 선언된 최종 결과가 없어. 최종 결과 노드를 추가하고 원하는 출력에 연결해줘.',
+      en: 'No final result is declared yet. Add a final result node and connect it to the output you want.',
+    })
   const latestExecutionPendingMessage = latestExecution
     ? latestExecution.status === 'queued'
       ? t({ ko: '큐에서 대기 중이라 아직 결과물이 없어.', en: 'This run is queued, so results are not ready yet.' })
@@ -180,7 +189,7 @@ export function WorkflowRunnerPanel({
                       finalResults={latestExecutionFinalResults}
                       artifacts={latestExecutionArtifacts}
                       selectedGraph={selectedGraph}
-                      emptyLabel={t({ ko: '아직 선언된 최종 결과가 없어. 최종 결과 노드를 추가하고 원하는 출력에 연결해줘.', en: 'No final result is declared yet. Add a final result node and connect it to the output you want.' })}
+                      emptyLabel={latestExecutionEmptyResultLabel}
                     />
                   ) : shouldShowLatestExecutionResults ? (
                     <div className="text-sm text-muted-foreground">{t({ ko: '최종 결과를 불러오는 중…', en: 'Loading final results…' })}</div>

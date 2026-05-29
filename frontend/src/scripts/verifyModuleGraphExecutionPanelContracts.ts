@@ -302,6 +302,12 @@ function assertExecutionPanelLookupPolicy() {
     'workflow runner latest-result area should only wait for final-result detail when the latest execution is completed',
   )
   assert(
+    workflowRunnerSource.includes('const latestExecutionEmptyResultLabel = graphSummary && graphSummary.finalResultNodeCount > 0')
+      && workflowRunnerSource.includes('Final result nodes exist, but this run did not finalize any outputs.')
+      && workflowRunnerSource.includes('emptyLabel={latestExecutionEmptyResultLabel}'),
+    'workflow runner latest-result area should distinguish missing final-result nodes from completed runs with no finalized outputs',
+  )
+  assert(
     workflowRunnerSource.includes("'queued'")
       && workflowRunnerSource.includes("'running'")
       && workflowRunnerSource.includes("'failed'")
