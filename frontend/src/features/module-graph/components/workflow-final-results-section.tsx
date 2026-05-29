@@ -44,7 +44,16 @@ type ResolvedFinalResultEntry = {
 
 function readMetadataNumber(metadata: Record<string, unknown> | null, key: string) {
   const value = metadata?.[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
 }
 
 function buildFinalResultImageRecord(entry: ResolvedFinalResultEntry): ImageRecord | null {

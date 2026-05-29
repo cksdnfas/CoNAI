@@ -46,6 +46,7 @@ function assertExecutionPanelLookupPolicy() {
   const indexCssSource = source('index.css')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
+  const readMetadataNumberSource = extractFunction(finalResultsSource, 'readMetadataNumber')
   const buildNodeArtifactPreviewSource = extractFunction(sharedSource, 'buildNodeArtifactPreview')
   const buildNodeArtifactGroupsSource = extractFunction(sharedSource, 'buildNodeArtifactGroups')
   const recommendationSource = extractFunction(canvasSource, 'getRecommendedModulesFromConnectionStart')
@@ -220,6 +221,12 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     finalResultsSource.includes('minColumnWidth={160}'),
     'final result image list should allow a practical narrow-panel column width',
+  )
+  assert(
+    readMetadataNumberSource.includes("typeof value === 'string' && value.trim()")
+      && readMetadataNumberSource.includes('const parsed = Number(value)')
+      && readMetadataNumberSource.includes('Number.isFinite(parsed) ? parsed : null'),
+    'final result image records should preserve finite numeric-string width/height metadata',
   )
   assert(
     finalResultsSource.includes('gridItemHeight={240}'),
