@@ -149,8 +149,8 @@ function canAccessHistoryRecord(req: Request, record: { requested_by_account_id?
     && record.requested_by_account_type === requesterAccountType;
 }
 
-function getHistoryCompositeHash(record: { actual_composite_hash?: string | null; composite_hash?: string | null }) {
-  return record.actual_composite_hash || record.composite_hash || null;
+function getHistoryCompositeHash(record: { actual_composite_hash?: string | null }) {
+  return record.actual_composite_hash || null;
 }
 
 async function getAccessibleHistoryMediaOrBlock(req: Request, res: Response, idValue: string) {

@@ -7,6 +7,14 @@ const generationHistoryPanelSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/generation-history-panel.tsx'),
   'utf8',
 )
+const imageGenerationSharedSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/image-generation-shared.tsx'),
+  'utf8',
+)
+const generationHistoryRouteSource = readFileSync(
+  resolve(process.cwd(), '../backend/src/routes/generation-history.routes.ts'),
+  'utf8',
+)
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -140,6 +148,21 @@ function assertDownloadReadinessSourcePolicy() {
     generationHistoryPanelSource,
     /Boolean\(record\.actual_composite_hash \|\| record\.composite_hash\)/,
     'postprocess-pending history rows must not be counted as downloadable from legacy composite_hash alone',
+  )
+  match(
+    imageGenerationSharedSource,
+    /function resolveHistoryImageSource\(record: GenerationHistoryRecord\) \{[\s\S]*?const compositeHash = record\.actual_composite_hash \|\| null/,
+    'history image source URLs should require resolved main-image metadata',
+  )
+  match(
+    generationHistoryRouteSource,
+    /function getHistoryCompositeHash\(record: \{ actual_composite_hash\?: string \| null \}\) \{[\s\S]*?return record\.actual_composite_hash \|\| null/,
+    'direct generation-history media routes should require resolved main-image metadata',
+  )
+  doesNotMatch(
+    imageGenerationSharedSource,
+    /record\.actual_composite_hash \|\| record\.composite_hash/,
+    'history image sources must not fall back to legacy hashes before postprocess visibility is ready',
   )
 }
 

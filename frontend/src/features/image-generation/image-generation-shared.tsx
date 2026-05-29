@@ -564,7 +564,7 @@ export function buildWorkflowPromptData(fields: WorkflowMarkedField[], draft: Re
 
 /** Resolve hash-first history image routes from the main image DB only. */
 export function resolveHistoryImageSource(record: GenerationHistoryRecord) {
-  const compositeHash = record.actual_composite_hash || record.composite_hash || null
+  const compositeHash = record.actual_composite_hash || null
 
   return {
     compositeHash,
