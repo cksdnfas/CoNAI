@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 function source(relativePath: string) {
-  return readFileSync(join(process.cwd(), relativePath), 'utf8')
+  return readFileSync(join(process.cwd(), relativePath), 'utf8').replace(/\r\n/g, '\n')
 }
 
 function sliceRequiredSource(sourceText: string, start: string, end: string) {
@@ -18,7 +18,7 @@ function sliceRequiredSource(sourceText: string, start: string, end: string) {
   return sourceText.slice(startIndex, endIndex)
 }
 
-function verifyModalToolbarStaysSingleLine() {
+function verifyModalToolbarKeepsActionsVisible() {
   const imageDetailSource = source('src/features/images/image-detail-view.tsx')
   const modalActionsSource = source('src/features/images/components/detail/image-view-modal-actions.tsx')
   const cssSource = source('src/index.css')
@@ -30,8 +30,18 @@ function verifyModalToolbarStaysSingleLine() {
   )
   match(
     imageDetailSource,
-    /className="shrink-0 flex-nowrap whitespace-nowrap border-white\/14 bg-black\/42 text-white/,
-    'modal image-area tabs should stay on one line instead of wrapping labels',
+    /className="image-detail-modal-image-tabs shrink-0 flex-nowrap whitespace-nowrap border-white\/14 bg-black\/42 text-white/,
+    'modal image-area tabs should stay on one line inside their own scrollable control',
+  )
+  match(
+    imageDetailSource,
+    /\{ value: 'current', label: t\(\{ ko: '이미지', en: 'Image' \}\) \}/,
+    'modal image tab label should stay short enough for the 1-column toolbar',
+  )
+  match(
+    imageDetailSource,
+    /\{ value: 'similar', label: t\(\{ ko: '유사', en: 'Similar' \}\), disabled:/,
+    'modal similar tab label should stay short enough for the 1-column toolbar',
   )
   match(
     modalActionsSource,
@@ -46,7 +56,7 @@ function verifyModalToolbarStaysSingleLine() {
   match(
     cssSource,
     /\.image-detail-modal-toolbar-inner \{[\s\S]*?flex-wrap: nowrap;[\s\S]*?align-items: center;/,
-    'modal toolbar should keep header actions and tabs on the same row',
+    'wide modal toolbar should keep header actions and tabs on the same row',
   )
 
   const singleColumnToolbarCss = sliceRequiredSource(
@@ -55,15 +65,20 @@ function verifyModalToolbarStaysSingleLine() {
     '    .image-detail-modal-info-pane,',
   )
 
-  doesNotMatch(
+  match(
     singleColumnToolbarCss,
-    /flex-direction:\s*column/,
-    '1-column modal toolbar must not force a line break while horizontal space remains',
+    /\.image-detail-modal-toolbar-inner \{[\s\S]*?flex-direction:\s*column;[\s\S]*?align-items:\s*stretch;/,
+    '1-column modal toolbar should split actions and tabs into separate rows so action buttons stay visible',
   )
   match(
     singleColumnToolbarCss,
-    /overflow-x:\s*auto;/,
-    '1-column modal toolbar should scroll horizontally rather than wrap',
+    /\.image-detail-modal-header-actions \{[\s\S]*?width:\s*100%;[\s\S]*?\}/,
+    '1-column modal action row should receive the full toolbar width',
+  )
+  match(
+    singleColumnToolbarCss,
+    /\.image-detail-modal-image-tabs \{[\s\S]*?max-width:\s*100%;[\s\S]*?overflow-x:\s*auto;/,
+    '1-column modal tabs should scroll inside their own row rather than covering action buttons',
   )
 }
 
@@ -71,7 +86,7 @@ function verifyInfoToggleAvoidsImageNavigationControls() {
   const cssSource = source('src/index.css')
   const infoToggleCss = sliceRequiredSource(
     cssSource,
-    '  .image-detail-modal-info-toggle-desktop,\n  .image-detail-modal-info-reopen-desktop {',
+    '.image-detail-modal-info-toggle-desktop,',
     '  .image-detail-modal-info-toggle-desktop {',
   )
 
@@ -449,7 +464,7 @@ function verifyImageModalMediaStartsFromContainedCenter() {
   )
 }
 
-verifyModalToolbarStaysSingleLine()
+verifyModalToolbarKeepsActionsVisible()
 verifyInfoToggleAvoidsImageNavigationControls()
 verifyImageNavigationButtonsUseProjectChrome()
 verifyModalOverlayLoadsOffClickPath()
