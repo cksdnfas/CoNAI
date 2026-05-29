@@ -86,4 +86,38 @@ assert.equal(valueBackedFinal.mimeType, 'image/webp')
 assert.equal(valueBackedFinal.storagePath, 'C:/tmp/value-backed.webp')
 assert.equal(valueBackedFinal.originalFileName, 'value-backed.webp')
 
-console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value metadata fallback)')
+const metadataAliasFinal = resolveFinalResultPromotionCandidate(artifact({
+  type: 'file',
+  storagePath: undefined,
+  metadata: {
+    kind: 'codex-queue-image',
+    storage_path: 'C:/tmp/metadata-backed.png',
+    output_mime_type: 'image/png',
+    output_file_name: 'metadata-backed.png',
+  },
+  value: {},
+}))
+assert.equal(metadataAliasFinal.shouldPromote, true)
+assert.equal(metadataAliasFinal.serviceType, 'codex')
+assert.equal(metadataAliasFinal.mimeType, 'image/png')
+assert.equal(metadataAliasFinal.storagePath, 'C:/tmp/metadata-backed.png')
+assert.equal(metadataAliasFinal.originalFileName, 'metadata-backed.png')
+
+const uploadedAliasFinal = resolveFinalResultPromotionCandidate(artifact({
+  type: 'file',
+  storagePath: undefined,
+  metadata: {
+    actualCompositeHash: 'hash:actual-alias',
+    original_file_path: 'C:/tmp/source-alias.webp',
+    output_mime_type: 'image/webp',
+    file_name: 'source-alias.webp',
+  },
+  value: {},
+}))
+assert.equal(uploadedAliasFinal.shouldPromote, false)
+assert.equal(uploadedAliasFinal.compositeHash, 'hash:actual-alias')
+assert.equal(uploadedAliasFinal.mimeType, 'image/webp')
+assert.equal(uploadedAliasFinal.storagePath, 'C:/tmp/source-alias.webp')
+assert.equal(uploadedAliasFinal.originalFileName, 'source-alias.webp')
+
+console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata alias fallback)')

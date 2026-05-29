@@ -78,6 +78,51 @@ function resolveCompositeHash(metadata: ArtifactMetadata, valueObject: ArtifactM
     ?? null
 }
 
+function resolveStoragePath(sourceArtifact: RuntimeArtifact, metadata: ArtifactMetadata, valueObject: ArtifactMetadata) {
+  return sourceArtifact.storagePath
+    ?? optionalString(metadata.storagePath)
+    ?? optionalString(metadata.storage_path)
+    ?? optionalString(metadata.originalFilePath)
+    ?? optionalString(metadata.original_file_path)
+    ?? optionalString(metadata.filePath)
+    ?? optionalString(metadata.file_path)
+    ?? optionalString(valueObject.storagePath)
+    ?? optionalString(valueObject.storage_path)
+    ?? optionalString(valueObject.originalFilePath)
+    ?? optionalString(valueObject.original_file_path)
+    ?? optionalString(valueObject.filePath)
+    ?? optionalString(valueObject.file_path)
+    ?? null
+}
+
+function resolveMimeType(metadata: ArtifactMetadata, valueObject: ArtifactMetadata, storagePath: string | null) {
+  return optionalString(metadata.mimeType)
+    ?? optionalString(metadata.mime_type)
+    ?? optionalString(metadata.output_mime_type)
+    ?? optionalString(metadata.contentType)
+    ?? optionalString(metadata.content_type)
+    ?? optionalString(valueObject.mimeType)
+    ?? optionalString(valueObject.mime_type)
+    ?? optionalString(valueObject.output_mime_type)
+    ?? optionalString(valueObject.contentType)
+    ?? optionalString(valueObject.content_type)
+    ?? (storagePath ? FileDiscoveryService.getMimeType(storagePath) : null)
+}
+
+function resolveOriginalFileName(metadata: ArtifactMetadata, valueObject: ArtifactMetadata, storagePath: string | null) {
+  return optionalString(metadata.originalFileName)
+    ?? optionalString(metadata.original_file_name)
+    ?? optionalString(metadata.output_file_name)
+    ?? optionalString(metadata.fileName)
+    ?? optionalString(metadata.file_name)
+    ?? optionalString(valueObject.originalFileName)
+    ?? optionalString(valueObject.original_file_name)
+    ?? optionalString(valueObject.output_file_name)
+    ?? optionalString(valueObject.fileName)
+    ?? optionalString(valueObject.file_name)
+    ?? (storagePath ? path.basename(storagePath) : null)
+}
+
 function inferServiceType(metadata: ArtifactMetadata): ServiceType {
   const explicitServiceType = optionalString(metadata.graph_result_service_type)
     ?? optionalString(metadata.serviceType)
@@ -134,19 +179,21 @@ function buildMetadataPatch(params: FinalResultPromotionParams, metadata: Artifa
 export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArtifact): FinalResultPromotionCandidate {
   const { metadata, valueObject } = resolveArtifactMetadata(sourceArtifact)
   const compositeHash = resolveCompositeHash(metadata, valueObject)
+  const storagePath = resolveStoragePath(sourceArtifact, metadata, valueObject)
+  const mimeType = resolveMimeType(metadata, valueObject, storagePath)
+  const originalFileName = resolveOriginalFileName(metadata, valueObject, storagePath)
   if (compositeHash) {
     return {
       shouldPromote: false,
       serviceType: inferServiceType(metadata),
-      mimeType: optionalString(metadata.mimeType) ?? optionalString(metadata.mime_type),
-      storagePath: sourceArtifact.storagePath ?? optionalString(valueObject.storagePath) ?? null,
-      originalFileName: optionalString(metadata.originalFileName) ?? optionalString(valueObject.originalFileName),
+      mimeType,
+      storagePath,
+      originalFileName,
       compositeHash,
       reason: 'already_uploaded',
     }
   }
 
-  const storagePath = sourceArtifact.storagePath ?? optionalString(valueObject.storagePath)
   if (!storagePath) {
     return {
       shouldPromote: false,
@@ -159,19 +206,13 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
     }
   }
 
-  const mimeType = optionalString(metadata.mimeType)
-    ?? optionalString(metadata.mime_type)
-    ?? optionalString(valueObject.mimeType)
-    ?? optionalString(valueObject.mime_type)
-    ?? FileDiscoveryService.getMimeType(storagePath)
-
   if (!isPromotableMimeType(mimeType) && sourceArtifact.type !== 'image' && sourceArtifact.type !== 'mask') {
     return {
       shouldPromote: false,
       serviceType: null,
       mimeType,
       storagePath,
-      originalFileName: optionalString(metadata.originalFileName) ?? optionalString(valueObject.originalFileName),
+      originalFileName,
       compositeHash: null,
       reason: 'not_visual_media',
     }
@@ -182,9 +223,7 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
     serviceType: inferServiceType(metadata),
     mimeType,
     storagePath,
-    originalFileName: optionalString(metadata.originalFileName)
-      ?? optionalString(valueObject.originalFileName)
-      ?? path.basename(storagePath),
+    originalFileName,
     compositeHash: null,
     reason: null,
   }
