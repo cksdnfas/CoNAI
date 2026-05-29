@@ -44,6 +44,8 @@ async function main() {
     const queueReadRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/generation-queue/queue-read-routes.ts'), 'utf8')
     const publicWorkflowRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/public-workflows.routes.ts'), 'utf8')
     const generationHistoryServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationHistoryService.ts'), 'utf8')
+    const apiImageProcessorSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/APIImageProcessor.ts'), 'utf8')
+    const backgroundProcessorServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/backgroundProcessorService.ts'), 'utf8')
     assert.match(
       queueServiceSource,
       /const compatibleServerIdsByJobId = new Map<number, Set<number>>\(\)/,
@@ -117,6 +119,21 @@ async function main() {
       generationHistoryServiceSource,
       /Slow generation postprocess/,
       'generation postprocess should log slow media/group assignment timing for stalled queue diagnosis',
+    )
+    assert.match(
+      apiImageProcessorSource,
+      /metadataMode:\s*'background'/,
+      'generated-image media registration should queue AI metadata extraction instead of blocking queue completion on it',
+    )
+    assert.match(
+      backgroundProcessorServiceSource,
+      /metadataMode\?: 'inline' \| 'background'/,
+      'saved-media processing should expose an explicit metadata scheduling mode',
+    )
+    assert.match(
+      backgroundProcessorServiceSource,
+      /options\.metadataMode === 'background'[\s\S]*?queueMetadataExtraction\(filePath, compositeHash, logLabel\)/,
+      'background metadata mode should hand processed media to the background queue without awaiting extraction',
     )
 
     db.prepare(`

@@ -60,6 +60,7 @@ interface SavedMediaProcessingOptions {
   folderId?: number;
   mimeType?: string;
   triggerAutoTag?: boolean;
+  metadataMode?: 'inline' | 'background';
   quiet?: boolean;
 }
 
@@ -68,6 +69,10 @@ interface SavedMediaProcessingResult {
   compositeHash: string | null;
   fileType: FileType;
   status: 'processed' | 'already_processed';
+}
+
+interface ProcessFileOptions {
+  metadataMode?: 'inline' | 'background';
 }
 
 interface ImageFileProcessingRecord extends UnhashedFile {
@@ -264,6 +269,8 @@ export class BackgroundProcessorService {
       folder_id: folderId,
       mime_type: mimeType,
       file_type: fileType,
+    }, {
+      metadataMode: options.metadataMode,
     });
 
     const processedRecord = db.prepare(`
@@ -305,6 +312,22 @@ export class BackgroundProcessorService {
     }, 0);
   }
 
+  private static queueMetadataExtraction(filePath: string, compositeHash: string, logLabel: string): void {
+    try {
+      BackgroundQueueService.addMetadataExtractionTask(filePath, compositeHash);
+      console.log(`  🧠 Metadata extraction queued: ${logLabel}`);
+    } catch (queueError) {
+      console.warn(
+        `  ⚠️  Failed to queue metadata extraction for ${logLabel}:`,
+        queueError instanceof Error ? queueError.message : queueError
+      );
+      const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
+      if (releasedForVisibility) {
+        QueryCacheService.scheduleGalleryCacheInvalidation();
+      }
+    }
+  }
+
   private static async extractMetadataNowOrQueue(filePath: string, compositeHash: string, logLabel: string): Promise<void> {
     try {
       await BackgroundQueueService.extractAndPersistMetadata(filePath, compositeHash);
@@ -315,19 +338,22 @@ export class BackgroundProcessorService {
         error instanceof Error ? error.message : error
       );
 
-      try {
-        BackgroundQueueService.addMetadataExtractionTask(filePath, compositeHash);
-      } catch (queueError) {
-        console.warn(
-          `  ⚠️  Failed to queue metadata extraction retry for ${logLabel}:`,
-          queueError instanceof Error ? queueError.message : queueError
-        );
-        const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
-        if (releasedForVisibility) {
-          QueryCacheService.scheduleGalleryCacheInvalidation();
-        }
-      }
+      this.queueMetadataExtraction(filePath, compositeHash, logLabel);
     }
+  }
+
+  private static async extractMetadataForProcessedMedia(
+    filePath: string,
+    compositeHash: string,
+    logLabel: string,
+    options: ProcessFileOptions = {},
+  ): Promise<void> {
+    if (options.metadataMode === 'background') {
+      this.queueMetadataExtraction(filePath, compositeHash, logLabel);
+      return;
+    }
+
+    await this.extractMetadataNowOrQueue(filePath, compositeHash, logLabel);
   }
 
   /**
@@ -436,7 +462,7 @@ export class BackgroundProcessorService {
   /**
    * Process a single file: generate hash, check duplicates, create thumbnail
    */
-  private static async processFile(file: UnhashedFile & { file_type: string }): Promise<void> {
+  private static async processFile(file: UnhashedFile & { file_type: string }, options: ProcessFileOptions = {}): Promise<void> {
     const fileName = path.basename(file.original_file_path);
 
     // Check if file still exists and is readable
@@ -472,13 +498,13 @@ export class BackgroundProcessorService {
     }
 
     // 일반 이미지: perceptual hash 생성
-    await this.processImageFile(file);
+    await this.processImageFile(file, options);
   }
 
   /**
    * Process image file: generate hash, check duplicates, create thumbnail
    */
-  private static async processImageFile(file: UnhashedFile): Promise<void> {
+  private static async processImageFile(file: UnhashedFile, options: ProcessFileOptions = {}): Promise<void> {
     const fileName = path.basename(file.original_file_path);
 
     // Generate hashes and color histogram
@@ -495,10 +521,11 @@ export class BackgroundProcessorService {
       linkImageFileToHash(file.id, hashes.compositeHash);
 
       if (shouldBackfillDuplicateMetadata(existing)) {
-        await this.extractMetadataNowOrQueue(
+        await this.extractMetadataForProcessedMedia(
           file.original_file_path,
           hashes.compositeHash,
           `duplicate backfill ${fileName}`,
+          options,
         );
       } else {
         const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(hashes.compositeHash);
@@ -568,12 +595,14 @@ export class BackgroundProcessorService {
     // Process pending API generation group assignments
     await this.processApiGenerationGroupAssignment(hashes.compositeHash);
 
-    // Extract AI metadata immediately so upload/generation/folder-scan results
-    // persist the same prompt/info quality as the upload-page preview route.
-    await this.extractMetadataNowOrQueue(
+    // Extract AI metadata through the selected scheduling mode so upload and
+    // background scans can stay inline while generated-media completion can
+    // hand the heavier work to the background queue.
+    await this.extractMetadataForProcessedMedia(
       file.original_file_path,
       hashes.compositeHash,
       fileName,
+      options,
     );
 
     console.log(`  ✨ Processed image: ${fileName}`);
