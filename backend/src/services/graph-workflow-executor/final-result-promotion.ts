@@ -134,17 +134,68 @@ function resolveOriginalFileName(metadata: ArtifactMetadata, valueObject: Artifa
     ?? (storagePath ? path.basename(storagePath) : null)
 }
 
+function resolveModelName(metadata: ArtifactMetadata) {
+  return optionalString(metadata.model)
+    ?? optionalString(metadata.modelName)
+    ?? optionalString(metadata.model_name)
+    ?? optionalString(metadata.nai_model)
+    ?? optionalString(metadata.checkpoint)
+    ?? optionalString(metadata.ckpt_name)
+    ?? null
+}
+
+function resolvePositivePrompt(metadata: ArtifactMetadata) {
+  return optionalString(metadata.prompt)
+    ?? optionalString(metadata.positivePrompt)
+    ?? optionalString(metadata.positive_prompt)
+    ?? optionalString(metadata.caption)
+    ?? null
+}
+
+function resolveNegativePrompt(metadata: ArtifactMetadata) {
+  return optionalString(metadata.negativePrompt)
+    ?? optionalString(metadata.negative_prompt)
+    ?? optionalString(metadata.negative)
+    ?? optionalString(metadata.uc)
+    ?? null
+}
+
+function resolveSampler(metadata: ArtifactMetadata) {
+  return optionalString(metadata.sampler)
+    ?? optionalString(metadata.samplerName)
+    ?? optionalString(metadata.sampler_name)
+    ?? null
+}
+
+function resolveScheduler(metadata: ArtifactMetadata) {
+  return optionalString(metadata.scheduler)
+    ?? optionalString(metadata.schedulerName)
+    ?? optionalString(metadata.scheduler_name)
+    ?? optionalString(metadata.noiseSchedule)
+    ?? optionalString(metadata.noise_schedule)
+    ?? null
+}
+
 function resolveGenerationParameters(metadata: ArtifactMetadata) {
   return {
     seed: optionalNumber(metadata.seed)
       ?? optionalNumber(metadata.nai_seed)
+      ?? optionalNumber(metadata.noiseSeed)
       ?? optionalNumber(metadata.noise_seed)
       ?? null,
     steps: optionalNumber(metadata.steps)
       ?? optionalNumber(metadata.nai_steps)
+      ?? optionalNumber(metadata.stepCount)
+      ?? optionalNumber(metadata.step_count)
+      ?? optionalNumber(metadata.samplingSteps)
+      ?? optionalNumber(metadata.sampling_steps)
+      ?? optionalNumber(metadata.stepsTotal)
       ?? optionalNumber(metadata.steps_total)
       ?? null,
     cfgScale: optionalNumber(metadata.cfg_scale)
+      ?? optionalNumber(metadata.cfgScale)
+      ?? optionalNumber(metadata.guidance_scale)
+      ?? optionalNumber(metadata.guidanceScale)
       ?? optionalNumber(metadata.scale)
       ?? optionalNumber(metadata.nai_scale)
       ?? optionalNumber(metadata.cfg)
@@ -183,15 +234,13 @@ function buildMetadataPatch(
   serviceType: ServiceType,
   generationParams: ReturnType<typeof resolveGenerationParameters>,
 ) {
-  const prompt = optionalString(metadata.prompt)
-    ?? optionalString(metadata.positive_prompt)
-  const negativePrompt = optionalString(metadata.negative_prompt)
-    ?? optionalString(metadata.uc)
+  const prompt = resolvePositivePrompt(metadata)
+  const negativePrompt = resolveNegativePrompt(metadata)
 
   return {
     ai_tool: serviceType,
     software: 'CoNAI module workflow',
-    model: optionalString(metadata.model) ?? optionalString(metadata.nai_model) ?? undefined,
+    model: resolveModelName(metadata) ?? undefined,
     prompt: prompt ?? undefined,
     positive_prompt: prompt ?? undefined,
     negative_prompt: negativePrompt ?? undefined,
@@ -200,8 +249,8 @@ function buildMetadataPatch(
     steps: generationParams.steps ?? undefined,
     cfg_scale: generationParams.cfgScale ?? undefined,
     seed: generationParams.seed ?? undefined,
-    sampler: optionalString(metadata.sampler) ?? optionalString(metadata.sampler_name) ?? undefined,
-    scheduler: optionalString(metadata.scheduler) ?? optionalString(metadata.noise_schedule) ?? undefined,
+    sampler: resolveSampler(metadata) ?? undefined,
+    scheduler: resolveScheduler(metadata) ?? undefined,
     conai_graph_execution_id: params.executionId,
     conai_graph_workflow_id: params.workflowId,
     conai_graph_workflow_name: params.workflowName,
@@ -290,12 +339,12 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
     generation_status: 'pending',
     workflow_id: params.workflowId,
     workflow_name: params.workflowName,
-    nai_model: optionalString(metadata.model) ?? optionalString(metadata.nai_model) ?? (serviceType === 'codex' ? 'codex' : undefined),
+    nai_model: resolveModelName(metadata) ?? (serviceType === 'codex' ? 'codex' : undefined),
     nai_seed: candidate.seed ?? undefined,
     nai_steps: candidate.steps ?? undefined,
     nai_scale: candidate.cfgScale ?? undefined,
-    positive_prompt: optionalString(metadata.prompt) ?? optionalString(metadata.positive_prompt) ?? undefined,
-    negative_prompt: optionalString(metadata.negative_prompt) ?? optionalString(metadata.uc) ?? undefined,
+    positive_prompt: resolvePositivePrompt(metadata) ?? undefined,
+    negative_prompt: resolveNegativePrompt(metadata) ?? undefined,
     width: optionalNumber(metadata.width) ?? undefined,
     height: optionalNumber(metadata.height) ?? undefined,
     metadata: JSON.stringify({

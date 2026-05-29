@@ -140,6 +140,24 @@ assert.equal(generationMetadataFinal.seed, 4242)
 assert.equal(generationMetadataFinal.steps, 31)
 assert.equal(generationMetadataFinal.cfgScale, 6.5)
 
+const generationCamelCaseMetadataFinal = resolveFinalResultPromotionCandidate(artifact({
+  type: 'file',
+  storagePath: undefined,
+  metadata: {
+    kind: 'nai-image',
+    output_path: 'C:/tmp/metadata-camel-parameters.png',
+    output_mime_type: 'image/png',
+    noiseSeed: '5252',
+    samplingSteps: '28',
+    guidanceScale: '7.25',
+  },
+  value: {},
+}))
+assert.equal(generationCamelCaseMetadataFinal.shouldPromote, true)
+assert.equal(generationCamelCaseMetadataFinal.seed, 5252)
+assert.equal(generationCamelCaseMetadataFinal.steps, 28)
+assert.equal(generationCamelCaseMetadataFinal.cfgScale, 7.25)
+
 const uploadedAliasFinal = resolveFinalResultPromotionCandidate(artifact({
   type: 'file',
   storagePath: undefined,
