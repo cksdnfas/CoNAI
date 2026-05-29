@@ -651,4 +651,22 @@ export class GenerationHistoryModel {
 
     return info.changes;
   }
+
+  /** Find completed history rows outside the retained recent-result window. */
+  static findCompletedOverflowIds(retentionLimit: number): number[] {
+    const safeLimit = Math.max(0, Math.floor(retentionLimit));
+    if (safeLimit === 0) {
+      return [];
+    }
+
+    const stmt = apiGenDb.prepare(`
+      SELECT id
+      FROM api_generation_history
+      WHERE generation_status = 'completed'
+      ORDER BY COALESCE(completed_at, created_at) DESC, id DESC
+      LIMIT -1 OFFSET ?
+    `);
+
+    return (stmt.all(safeLimit) as Array<{ id: number }>).map((row) => row.id);
+  }
 }

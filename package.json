@@ -55,6 +55,7 @@
     "verify:query-cache-debounce-contracts": "cd backend && npm run verify:query-cache-debounce-contracts",
     "verify:graph-comfy-artifacts": "cd backend && npm run verify:graph-comfy-artifacts",
     "verify:graph-artifact-runtime": "cd backend && npm run verify:graph-artifact-runtime",
+    "verify:result-retention-contracts": "cd backend && npm run verify:result-retention-contracts",
     "verify:video-optimization": "cd backend && npm run verify:video-optimization",
     "verify:media-postprocess-visibility": "cd backend && npm run verify:media-postprocess-visibility",
     "verify:wildcard-chain-parsing": "cd backend && npm run verify:wildcard-chain-parsing",
