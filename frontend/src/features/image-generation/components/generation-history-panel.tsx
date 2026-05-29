@@ -45,13 +45,26 @@ type GenerationHistoryPanelProps = {
 }
 
 const GENERATION_HISTORY_PAGE_SIZE = 40
+const GENERATION_HISTORY_ACTIVE_REFRESH_MS = 1_500
+const GENERATION_HISTORY_POSTPROCESS_REFRESH_MS = 5_000
 const GENERATION_HISTORY_REFRESH_WATCH_MS = 30_000
 
-function hasInFlightHistory(records: GenerationHistoryResponse['records']) {
+function hasActiveGenerationHistory(records: GenerationHistoryResponse['records']) {
   return records.some((record) => {
-    const displayStatus = resolveHistoryDisplayStatus(record)
-    return displayStatus === 'pending' || displayStatus === 'processing'
+    return record.generation_status === 'pending'
+      || record.generation_status === 'processing'
+      || record.queue_status === 'queued'
+      || record.queue_status === 'dispatching'
+      || record.queue_status === 'running'
   })
+}
+
+function hasPostprocessPendingHistory(records: GenerationHistoryResponse['records']) {
+  return records.some((record) => (
+    record.generation_status === 'completed'
+    && Boolean(record.composite_hash)
+    && !record.actual_composite_hash
+  ))
 }
 
 function getGenerationHistorySelectionId(record: GenerationHistoryResponse['records'][number]) {
@@ -200,11 +213,15 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     refetchInterval: (query) => {
       const pages = query.state.data?.pages ?? []
       const records = pages.flatMap((page) => page.records)
-      if (hasInFlightHistory(records)) {
-        return 1500
+      if (hasActiveGenerationHistory(records)) {
+        return GENERATION_HISTORY_ACTIVE_REFRESH_MS
       }
 
-      return historyRefreshWatchUntil > Date.now() ? 1500 : false
+      if (historyRefreshWatchUntil > Date.now()) {
+        return GENERATION_HISTORY_ACTIVE_REFRESH_MS
+      }
+
+      return hasPostprocessPendingHistory(records) ? GENERATION_HISTORY_POSTPROCESS_REFRESH_MS : false
     },
   })
   const refetchHistory = historyQuery.refetch

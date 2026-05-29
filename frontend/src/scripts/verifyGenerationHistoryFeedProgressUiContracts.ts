@@ -74,6 +74,34 @@ function assertStatusSummarySourcePolicy() {
   )
 }
 
+function assertRefreshPolicySource() {
+  match(
+    generationHistoryPanelSource,
+    /const GENERATION_HISTORY_ACTIVE_REFRESH_MS = 1_500[\s\S]*?const GENERATION_HISTORY_POSTPROCESS_REFRESH_MS = 5_000/,
+    'generation history should use separate refresh cadences for active generation and postprocess-only waits',
+  )
+  match(
+    generationHistoryPanelSource,
+    /function hasActiveGenerationHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?record\.generation_status === 'pending'[\s\S]*?record\.generation_status === 'processing'[\s\S]*?record\.queue_status === 'running'/,
+    'generation history fast polling should be driven by actual active generation or queue status',
+  )
+  match(
+    generationHistoryPanelSource,
+    /function hasPostprocessPendingHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?Boolean\(record\.composite_hash\)[\s\S]*?!record\.actual_composite_hash/,
+    'completed rows waiting only on postprocess visibility should use the slower refresh path',
+  )
+  match(
+    generationHistoryPanelSource,
+    /if \(hasActiveGenerationHistory\(records\)\) \{[\s\S]*?return GENERATION_HISTORY_ACTIVE_REFRESH_MS[\s\S]*?historyRefreshWatchUntil > Date\.now\(\)[\s\S]*?return GENERATION_HISTORY_ACTIVE_REFRESH_MS[\s\S]*?hasPostprocessPendingHistory\(records\) \? GENERATION_HISTORY_POSTPROCESS_REFRESH_MS : false/,
+    'generation history refresh interval should keep submit-watch fast but slow down completed postprocess waits',
+  )
+  doesNotMatch(
+    generationHistoryPanelSource,
+    /hasInFlightHistory/,
+    'generation history should not fast-poll forever from display-only processing status',
+  )
+}
+
 function assertImageListCallbackSourcePolicy() {
   match(
     generationHistoryPanelSource,
@@ -103,6 +131,7 @@ assertFilteredSummary()
 assertTotalNeverFallsBelowLoaded()
 assertCountNormalization()
 assertStatusSummarySourcePolicy()
+assertRefreshPolicySource()
 assertImageListCallbackSourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')
