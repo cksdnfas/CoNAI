@@ -347,6 +347,8 @@ function resolveApiFileReference(value: unknown): ApiFileReference | null {
   const rawPath = getObjectStringValue(record, [
     'storagePath',
     'storage_path',
+    'outputPath',
+    'output_path',
     'originalFilePath',
     'original_file_path',
     'imagePath',
@@ -359,8 +361,8 @@ function resolveApiFileReference(value: unknown): ApiFileReference | null {
   }
 
   const filePath = resolveApiFileReferencePath(rawPath)
-  const mimeType = getObjectStringValue(record, ['mimeType', 'mime_type', 'contentType', 'content_type']) ?? inferMimeTypeFromPath(filePath)
-  const fileName = getObjectStringValue(record, ['fileName', 'file_name', 'originalFileName', 'original_file_name', 'output_file_name']) ?? path.basename(filePath)
+  const mimeType = getObjectStringValue(record, ['mimeType', 'mime_type', 'outputMimeType', 'output_mime_type', 'contentType', 'content_type']) ?? inferMimeTypeFromPath(filePath)
+  const fileName = getObjectStringValue(record, ['fileName', 'file_name', 'originalFileName', 'original_file_name', 'outputFileName', 'output_file_name']) ?? path.basename(filePath)
   return { filePath, mimeType, fileName }
 }
 

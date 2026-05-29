@@ -258,6 +258,15 @@ async function verifyBase64Nodes(tempBasePath: string) {
   })
   assert.equal(fileReferenceContext.artifactsByNode.get(node.id)?.base64.value, Buffer.from('hello').toString('base64'))
 
+  const outputAliasImagePath = path.join(tempBasePath, 'base64-output-alias.webp')
+  fs.writeFileSync(outputAliasImagePath, Buffer.from('alias'))
+  const outputAliasContext = createExecutionContext()
+  await executeBase64EncodeNode(outputAliasContext, node, moduleDefinition, {
+    value: { outputPath: outputAliasImagePath, outputMimeType: 'image/webp', outputFileName: 'base64-output-alias.webp' },
+    input_mode: 'auto',
+  })
+  assert.equal(outputAliasContext.artifactsByNode.get(node.id)?.base64.value, Buffer.from('alias').toString('base64'))
+
   const publicImageRelativePath = path.join('images', '2026', '05', '26', 'base64-reference.webp')
   const publicImagePath = path.join(tempBasePath, 'uploads', publicImageRelativePath)
   fs.mkdirSync(path.dirname(publicImagePath), { recursive: true })
