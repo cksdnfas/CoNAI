@@ -152,6 +152,10 @@ function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['record
   }
 }
 
+function isHistoryRecordDownloadReady(record: GenerationHistoryResponse['records'][number]) {
+  return resolveHistoryDisplayStatus(record) === 'completed' && Boolean(record.actual_composite_hash)
+}
+
 /** Render generation history using the shared image-list surface instead of per-record cards. */
 export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack }: GenerationHistoryPanelProps) {
   const { showSnackbar } = useSnackbar()
@@ -304,7 +308,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   )
   const downloadableHistoryIds = useMemo(
     () => selectedHistoryRecords
-      .filter((record) => Boolean(record.actual_composite_hash || record.composite_hash))
+      .filter(isHistoryRecordDownloadReady)
       .map((record) => record.id)
       .filter((id): id is number => typeof id === 'number'),
     [selectedHistoryRecords],
@@ -320,7 +324,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
           : 'ComfyUI'
   const getHistoryImageHref = useCallback((image: ImageRecord) => {
     const record = historyRecordMap.get(String(image?.id ?? ''))
-    if (!record || resolveHistoryDisplayStatus(record) !== 'completed' || !image?.composite_hash) {
+    if (!record || !isHistoryRecordDownloadReady(record) || !image?.composite_hash) {
       return undefined
     }
 

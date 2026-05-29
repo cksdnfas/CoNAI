@@ -125,6 +125,24 @@ function assertImageListCallbackSourcePolicy() {
   )
 }
 
+function assertDownloadReadinessSourcePolicy() {
+  match(
+    generationHistoryPanelSource,
+    /function isHistoryRecordDownloadReady\(record: GenerationHistoryResponse\['records'\]\[number\]\) \{[\s\S]*?resolveHistoryDisplayStatus\(record\) === 'completed'[\s\S]*?Boolean\(record\.actual_composite_hash\)/,
+    'generation history downloads should require a completed display status and resolved main-image metadata',
+  )
+  match(
+    generationHistoryPanelSource,
+    /const downloadableHistoryIds = useMemo\([\s\S]*?\.filter\(isHistoryRecordDownloadReady\)[\s\S]*?\[selectedHistoryRecords\]/,
+    'downloadable history ids should use the shared readiness guard',
+  )
+  doesNotMatch(
+    generationHistoryPanelSource,
+    /Boolean\(record\.actual_composite_hash \|\| record\.composite_hash\)/,
+    'postprocess-pending history rows must not be counted as downloadable from legacy composite_hash alone',
+  )
+}
+
 assertEmptySummary()
 assertPagedSummary()
 assertFilteredSummary()
@@ -133,5 +151,6 @@ assertCountNormalization()
 assertStatusSummarySourcePolicy()
 assertRefreshPolicySource()
 assertImageListCallbackSourcePolicy()
+assertDownloadReadinessSourcePolicy()
 
 console.log('Generation history feed progress UI contracts verified.')
