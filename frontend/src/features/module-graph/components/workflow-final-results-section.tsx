@@ -113,7 +113,7 @@ function buildFinalResultImageRecord(entry: ResolvedFinalResultEntry): ImageReco
 
   return {
     id: `final-result-${entry.finalResult.id}`,
-    composite_hash: readMetadataString(metadata, ['compositeHash', 'composite_hash']),
+    composite_hash: readMetadataString(metadata, ['actualCompositeHash', 'actual_composite_hash', 'compositeHash', 'composite_hash']),
     original_file_path: previewArtifact.source_storage_path ?? previewArtifact.storage_path,
     thumbnail_url: previewUrl,
     image_url: previewUrl,

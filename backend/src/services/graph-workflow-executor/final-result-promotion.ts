@@ -67,8 +67,12 @@ function resolveArtifactMetadata(sourceArtifact: RuntimeArtifact) {
 }
 
 function resolveCompositeHash(metadata: ArtifactMetadata, valueObject: ArtifactMetadata) {
-  return optionalString(metadata.compositeHash)
+  return optionalString(metadata.actualCompositeHash)
+    ?? optionalString(metadata.actual_composite_hash)
+    ?? optionalString(metadata.compositeHash)
     ?? optionalString(metadata.composite_hash)
+    ?? optionalString(valueObject.actualCompositeHash)
+    ?? optionalString(valueObject.actual_composite_hash)
     ?? optionalString(valueObject.compositeHash)
     ?? optionalString(valueObject.composite_hash)
     ?? null

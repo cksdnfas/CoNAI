@@ -547,7 +547,10 @@ type GraphArtifactPreviewLike = {
 }
 
 function getArtifactCompositeHash(metadata?: Record<string, unknown> | null) {
-  const compositeHash = metadata?.compositeHash ?? metadata?.composite_hash
+  const compositeHash = metadata?.actualCompositeHash
+    ?? metadata?.actual_composite_hash
+    ?? metadata?.compositeHash
+    ?? metadata?.composite_hash
   return typeof compositeHash === 'string' && compositeHash.trim().length > 0
     ? compositeHash.trim()
     : null

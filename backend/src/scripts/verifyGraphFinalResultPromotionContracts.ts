@@ -38,6 +38,17 @@ assert.equal(alreadyUploadedCodex.serviceType, 'codex')
 assert.equal(alreadyUploadedCodex.compositeHash, 'hash:existing')
 assert.equal(alreadyUploadedCodex.reason, 'already_uploaded')
 
+const actualHashUploaded = resolveFinalResultPromotionCandidate(artifact({
+  metadata: {
+    kind: 'codex-queue-image',
+    actual_composite_hash: 'hash:actual',
+    mimeType: 'image/png',
+  },
+}))
+assert.equal(actualHashUploaded.shouldPromote, false)
+assert.equal(actualHashUploaded.compositeHash, 'hash:actual')
+assert.equal(actualHashUploaded.reason, 'already_uploaded')
+
 const nonVisual = resolveFinalResultPromotionCandidate(artifact({
   type: 'json',
   value: { ok: true },

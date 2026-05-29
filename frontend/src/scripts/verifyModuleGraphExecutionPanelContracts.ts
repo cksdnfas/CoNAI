@@ -260,8 +260,10 @@ function assertExecutionPanelLookupPolicy() {
     'final result image records should render from the fallback-aware artifact and metadata helpers',
   )
   assert(
-    buildFinalResultImageRecordSource.includes("composite_hash: readMetadataString(metadata, ['compositeHash', 'composite_hash'])"),
-    'final result image records should preserve resolved composite hashes for uploaded media',
+    buildFinalResultImageRecordSource.includes("composite_hash: readMetadataString(metadata, ['actualCompositeHash', 'actual_composite_hash', 'compositeHash', 'composite_hash'])")
+      && sharedSource.includes('metadata?.actualCompositeHash')
+      && sharedSource.includes('metadata?.actual_composite_hash'),
+    'final result image records and preview URLs should preserve actual/composite hashes for uploaded media',
   )
   assert(
     finalResultsSource.includes('gridItemHeight={240}'),
