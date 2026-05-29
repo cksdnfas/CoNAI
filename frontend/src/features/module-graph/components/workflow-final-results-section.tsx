@@ -61,6 +61,22 @@ function readMetadataNumber(metadata: Record<string, unknown> | null, key: strin
   return null
 }
 
+function readMetadataString(metadata: Record<string, unknown> | null, keys: string[]) {
+  for (const key of keys) {
+    const value = metadata?.[key]
+    if (typeof value !== 'string') {
+      continue
+    }
+
+    const trimmedValue = value.trim()
+    if (trimmedValue) {
+      return trimmedValue
+    }
+  }
+
+  return null
+}
+
 function buildFinalResultPreviewArtifact(entry: ResolvedFinalResultEntry): FinalResultPreviewArtifact {
   return {
     ...entry.artifact,
@@ -97,7 +113,7 @@ function buildFinalResultImageRecord(entry: ResolvedFinalResultEntry): ImageReco
 
   return {
     id: `final-result-${entry.finalResult.id}`,
-    composite_hash: null,
+    composite_hash: readMetadataString(metadata, ['compositeHash', 'composite_hash']),
     original_file_path: previewArtifact.source_storage_path ?? previewArtifact.storage_path,
     thumbnail_url: previewUrl,
     image_url: previewUrl,

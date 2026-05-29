@@ -47,6 +47,7 @@ function assertExecutionPanelLookupPolicy() {
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
   const readMetadataNumberSource = extractFunction(finalResultsSource, 'readMetadataNumber')
+  const readMetadataStringSource = extractFunction(finalResultsSource, 'readMetadataString')
   const buildFinalResultPreviewArtifactSource = extractFunction(finalResultsSource, 'buildFinalResultPreviewArtifact')
   const resolveFinalResultMetadataRecordSource = extractFunction(finalResultsSource, 'resolveFinalResultMetadataRecord')
   const buildFinalResultImageRecordSource = extractFunction(finalResultsSource, 'buildFinalResultImageRecord')
@@ -233,6 +234,12 @@ function assertExecutionPanelLookupPolicy() {
     'final result image records should preserve finite numeric-string width/height metadata',
   )
   assert(
+    readMetadataStringSource.includes('for (const key of keys)')
+      && readMetadataStringSource.includes('const trimmedValue = value.trim()')
+      && readMetadataStringSource.includes('return trimmedValue'),
+    'final result image records should preserve non-empty string metadata such as composite hashes',
+  )
+  assert(
     buildFinalResultPreviewArtifactSource.includes('source_metadata: entry.finalResult.source_metadata')
       && buildFinalResultPreviewArtifactSource.includes('source_storage_path: entry.artifact.storage_path ? undefined : entry.finalResult.source_storage_path'),
     'final result preview artifact should carry source metadata while falling back to source storage only when artifact storage is sparse',
@@ -251,6 +258,10 @@ function assertExecutionPanelLookupPolicy() {
     buildFinalResultImageRecordSource.includes('const previewArtifact = buildFinalResultPreviewArtifact(entry)')
       && buildFinalResultImageRecordSource.includes('const metadata = resolveFinalResultMetadataRecord(entry)'),
     'final result image records should render from the fallback-aware artifact and metadata helpers',
+  )
+  assert(
+    buildFinalResultImageRecordSource.includes("composite_hash: readMetadataString(metadata, ['compositeHash', 'composite_hash'])"),
+    'final result image records should preserve resolved composite hashes for uploaded media',
   )
   assert(
     finalResultsSource.includes('gridItemHeight={240}'),
