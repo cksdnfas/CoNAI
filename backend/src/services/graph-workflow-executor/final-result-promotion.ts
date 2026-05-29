@@ -17,6 +17,8 @@ type FinalResultPromotionCandidate = {
   seed: number | null
   steps: number | null
   cfgScale: number | null
+  sampler: string | null
+  scheduler: string | null
   reason: string | null
 }
 
@@ -200,6 +202,8 @@ function resolveGenerationParameters(metadata: ArtifactMetadata) {
       ?? optionalNumber(metadata.nai_scale)
       ?? optionalNumber(metadata.cfg)
       ?? null,
+    sampler: resolveSampler(metadata),
+    scheduler: resolveScheduler(metadata),
   }
 }
 
@@ -228,6 +232,32 @@ function isPromotableMimeType(mimeType: string | null) {
   return Boolean(mimeType && (mimeType.startsWith('image/') || mimeType.startsWith('video/')))
 }
 
+function setDefinedParam(target: Record<string, unknown>, key: string, value: unknown) {
+  if (value !== null && value !== undefined) {
+    target[key] = value
+  }
+}
+
+function buildHistoryGenerationParameters(
+  metadata: ArtifactMetadata,
+  generationParams: ReturnType<typeof resolveGenerationParameters>,
+) {
+  const params: Record<string, unknown> = {}
+  setDefinedParam(params, 'prompt', resolvePositivePrompt(metadata))
+  setDefinedParam(params, 'negative_prompt', resolveNegativePrompt(metadata))
+  setDefinedParam(params, 'model', resolveModelName(metadata))
+  setDefinedParam(params, 'width', optionalNumber(metadata.width))
+  setDefinedParam(params, 'height', optionalNumber(metadata.height))
+  setDefinedParam(params, 'steps', generationParams.steps)
+  setDefinedParam(params, 'scale', generationParams.cfgScale)
+  setDefinedParam(params, 'seed', generationParams.seed)
+  setDefinedParam(params, 'sampler', generationParams.sampler)
+  setDefinedParam(params, 'noise_schedule', generationParams.scheduler)
+  setDefinedParam(params, 'scheduler', generationParams.scheduler)
+
+  return Object.keys(params).length > 0 ? JSON.stringify(params) : undefined
+}
+
 function buildMetadataPatch(
   params: FinalResultPromotionParams,
   metadata: ArtifactMetadata,
@@ -249,8 +279,8 @@ function buildMetadataPatch(
     steps: generationParams.steps ?? undefined,
     cfg_scale: generationParams.cfgScale ?? undefined,
     seed: generationParams.seed ?? undefined,
-    sampler: resolveSampler(metadata) ?? undefined,
-    scheduler: resolveScheduler(metadata) ?? undefined,
+    sampler: generationParams.sampler ?? undefined,
+    scheduler: generationParams.scheduler ?? undefined,
     conai_graph_execution_id: params.executionId,
     conai_graph_workflow_id: params.workflowId,
     conai_graph_workflow_name: params.workflowName,
@@ -293,6 +323,8 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
       seed: null,
       steps: null,
       cfgScale: null,
+      sampler: null,
+      scheduler: null,
       reason: 'missing_storage_path',
     }
   }
@@ -331,6 +363,7 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
 
   const { metadata } = resolveArtifactMetadata(params.sourceArtifact)
   const serviceType = candidate.serviceType ?? inferServiceType(metadata)
+  const historyGenerationParameters = buildHistoryGenerationParameters(metadata, candidate)
   const storagePath = candidate.storagePath as string
   await fs.promises.access(storagePath, fs.constants.R_OK)
 
@@ -340,9 +373,11 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
     workflow_id: params.workflowId,
     workflow_name: params.workflowName,
     nai_model: resolveModelName(metadata) ?? (serviceType === 'codex' ? 'codex' : undefined),
+    nai_sampler: candidate.sampler ?? undefined,
     nai_seed: candidate.seed ?? undefined,
     nai_steps: candidate.steps ?? undefined,
     nai_scale: candidate.cfgScale ?? undefined,
+    nai_parameters: historyGenerationParameters,
     positive_prompt: resolvePositivePrompt(metadata) ?? undefined,
     negative_prompt: resolveNegativePrompt(metadata) ?? undefined,
     width: optionalNumber(metadata.width) ?? undefined,

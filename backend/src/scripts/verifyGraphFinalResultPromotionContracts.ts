@@ -139,6 +139,8 @@ assert.equal(generationMetadataFinal.shouldPromote, true)
 assert.equal(generationMetadataFinal.seed, 4242)
 assert.equal(generationMetadataFinal.steps, 31)
 assert.equal(generationMetadataFinal.cfgScale, 6.5)
+assert.equal(generationMetadataFinal.sampler, 'k_euler_ancestral')
+assert.equal(generationMetadataFinal.scheduler, 'karras')
 
 const generationCamelCaseMetadataFinal = resolveFinalResultPromotionCandidate(artifact({
   type: 'file',
@@ -150,6 +152,8 @@ const generationCamelCaseMetadataFinal = resolveFinalResultPromotionCandidate(ar
     noiseSeed: '5252',
     samplingSteps: '28',
     guidanceScale: '7.25',
+    samplerName: 'dpmpp_2m',
+    schedulerName: 'exponential',
   },
   value: {},
 }))
@@ -157,6 +161,8 @@ assert.equal(generationCamelCaseMetadataFinal.shouldPromote, true)
 assert.equal(generationCamelCaseMetadataFinal.seed, 5252)
 assert.equal(generationCamelCaseMetadataFinal.steps, 28)
 assert.equal(generationCamelCaseMetadataFinal.cfgScale, 7.25)
+assert.equal(generationCamelCaseMetadataFinal.sampler, 'dpmpp_2m')
+assert.equal(generationCamelCaseMetadataFinal.scheduler, 'exponential')
 
 const uploadedAliasFinal = resolveFinalResultPromotionCandidate(artifact({
   type: 'file',
