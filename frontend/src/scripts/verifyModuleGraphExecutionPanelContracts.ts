@@ -48,6 +48,7 @@ function assertExecutionPanelLookupPolicy() {
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
   const readMetadataNumberSource = extractFunction(finalResultsSource, 'readMetadataNumber')
   const readMetadataStringSource = extractFunction(finalResultsSource, 'readMetadataString')
+  const resolveFinalResultOriginalFilePathSource = extractFunction(finalResultsSource, 'resolveFinalResultOriginalFilePath')
   const buildFinalResultPreviewArtifactSource = extractFunction(finalResultsSource, 'buildFinalResultPreviewArtifact')
   const resolveFinalResultMetadataRecordSource = extractFunction(finalResultsSource, 'resolveFinalResultMetadataRecord')
   const buildFinalResultImageRecordSource = extractFunction(finalResultsSource, 'buildFinalResultImageRecord')
@@ -264,6 +265,12 @@ function assertExecutionPanelLookupPolicy() {
       && sharedSource.includes('metadata?.actualCompositeHash')
       && sharedSource.includes('metadata?.actual_composite_hash'),
     'final result image records and preview URLs should preserve actual/composite hashes for uploaded media',
+  )
+  assert(
+    resolveFinalResultOriginalFilePathSource.includes("['originalFileName', 'original_file_name', 'output_file_name', 'fileName', 'file_name']")
+      && resolveFinalResultOriginalFilePathSource.includes('?? previewArtifact.source_storage_path')
+      && buildFinalResultImageRecordSource.includes('original_file_path: resolveFinalResultOriginalFilePath(metadata, previewArtifact)'),
+    'final result image records should preserve filename aliases before path fallbacks for display names',
   )
   assert(
     finalResultsSource.includes('gridItemHeight={240}'),

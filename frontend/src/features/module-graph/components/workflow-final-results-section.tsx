@@ -77,6 +77,13 @@ function readMetadataString(metadata: Record<string, unknown> | null, keys: stri
   return null
 }
 
+function resolveFinalResultOriginalFilePath(metadata: Record<string, unknown> | null, previewArtifact: FinalResultPreviewArtifact) {
+  return readMetadataString(metadata, ['originalFileName', 'original_file_name', 'output_file_name', 'fileName', 'file_name'])
+    ?? previewArtifact.source_storage_path
+    ?? previewArtifact.storage_path
+    ?? null
+}
+
 function buildFinalResultPreviewArtifact(entry: ResolvedFinalResultEntry): FinalResultPreviewArtifact {
   return {
     ...entry.artifact,
@@ -114,7 +121,7 @@ function buildFinalResultImageRecord(entry: ResolvedFinalResultEntry): ImageReco
   return {
     id: `final-result-${entry.finalResult.id}`,
     composite_hash: readMetadataString(metadata, ['actualCompositeHash', 'actual_composite_hash', 'compositeHash', 'composite_hash']),
-    original_file_path: previewArtifact.source_storage_path ?? previewArtifact.storage_path,
+    original_file_path: resolveFinalResultOriginalFilePath(metadata, previewArtifact),
     thumbnail_url: previewUrl,
     image_url: previewUrl,
     width: readMetadataNumber(metadata, 'width'),
