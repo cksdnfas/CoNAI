@@ -556,7 +556,7 @@ function getArtifactCompositeHash(metadata?: Record<string, unknown> | null) {
 /** Map a stored artifact path or media record reference back into a backend-served preview URL. */
 export function getArtifactPreviewUrl(artifact: GraphArtifactPreviewLike) {
   const storagePath = artifact.source_storage_path ?? artifact.storage_path
-  const metadata = parseArtifactMetadataRecord(artifact.source_metadata ?? artifact.metadata)
+  const metadata = resolveGraphArtifactPreviewMetadata(artifact)
   const compositeHash = getArtifactCompositeHash(metadata)
 
   if (compositeHash) {
@@ -619,6 +619,18 @@ export function parseArtifactMetadataRecord(value?: string | null) {
     : null
 }
 
+/** Merge source and artifact metadata so source fields fill sparse final-result rows without overriding artifact values. */
+function resolveGraphArtifactPreviewMetadata(artifact: GraphArtifactPreviewLike) {
+  const sourceMetadata = parseArtifactMetadataRecord(artifact.source_metadata)
+  const artifactMetadata = parseArtifactMetadataRecord(artifact.metadata)
+
+  if (sourceMetadata && artifactMetadata) {
+    return { ...sourceMetadata, ...artifactMetadata }
+  }
+
+  return artifactMetadata ?? sourceMetadata
+}
+
 /** Infer one media MIME type from the stored artifact file extension. */
 function inferArtifactMimeTypeFromPath(path?: string | null) {
   if (!path) {
@@ -636,9 +648,8 @@ function inferArtifactMimeTypeFromPath(path?: string | null) {
 
 /** Resolve the best available MIME type for one stored execution artifact or final-result source. */
 export function resolveGraphArtifactMimeType(artifact: GraphArtifactPreviewLike) {
-  const metadataValue = artifact.source_metadata ?? artifact.metadata
   const storagePath = artifact.source_storage_path ?? artifact.storage_path
-  const metadata = parseArtifactMetadataRecord(metadataValue)
+  const metadata = resolveGraphArtifactPreviewMetadata(artifact)
   const metadataMimeType = typeof metadata?.mimeType === 'string'
     ? metadata.mimeType
     : (typeof metadata?.mime_type === 'string' ? metadata.mime_type : null)

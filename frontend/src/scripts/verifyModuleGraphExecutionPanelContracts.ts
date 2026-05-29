@@ -50,6 +50,7 @@ function assertExecutionPanelLookupPolicy() {
   const buildFinalResultPreviewArtifactSource = extractFunction(finalResultsSource, 'buildFinalResultPreviewArtifact')
   const resolveFinalResultMetadataRecordSource = extractFunction(finalResultsSource, 'resolveFinalResultMetadataRecord')
   const buildFinalResultImageRecordSource = extractFunction(finalResultsSource, 'buildFinalResultImageRecord')
+  const resolveGraphArtifactPreviewMetadataSource = extractFunction(sharedSource, 'resolveGraphArtifactPreviewMetadata')
   const buildNodeArtifactPreviewSource = extractFunction(sharedSource, 'buildNodeArtifactPreview')
   const buildNodeArtifactGroupsSource = extractFunction(sharedSource, 'buildNodeArtifactGroups')
   const recommendationSource = extractFunction(canvasSource, 'getRecommendedModulesFromConnectionStart')
@@ -232,9 +233,14 @@ function assertExecutionPanelLookupPolicy() {
     'final result image records should preserve finite numeric-string width/height metadata',
   )
   assert(
-    buildFinalResultPreviewArtifactSource.includes('source_metadata: entry.artifact.metadata ? undefined : entry.finalResult.source_metadata')
+    buildFinalResultPreviewArtifactSource.includes('source_metadata: entry.finalResult.source_metadata')
       && buildFinalResultPreviewArtifactSource.includes('source_storage_path: entry.artifact.storage_path ? undefined : entry.finalResult.source_storage_path'),
-    'final result preview artifact should fall back to source metadata/storage when the artifact row is sparse',
+    'final result preview artifact should carry source metadata while falling back to source storage only when artifact storage is sparse',
+  )
+  assert(
+    resolveGraphArtifactPreviewMetadataSource.includes('return { ...sourceMetadata, ...artifactMetadata }')
+      && sharedSource.includes('const metadata = resolveGraphArtifactPreviewMetadata(artifact)'),
+    'artifact previews should merge source metadata as fallback while preserving artifact metadata precedence',
   )
   assert(
     resolveFinalResultMetadataRecordSource.includes('return { ...sourceMetadata, ...artifactMetadata }')

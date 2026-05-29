@@ -53,7 +53,17 @@ function optionalNumber(value: unknown) {
 }
 
 function readValueObject(value: unknown): ArtifactMetadata {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as ArtifactMetadata : {}
+  return value && typeof value === 'object' && !Array.isArray(value) && !Buffer.isBuffer(value) ? value as ArtifactMetadata : {}
+}
+
+function resolveArtifactMetadata(sourceArtifact: RuntimeArtifact) {
+  const metadata = parseMetadata(sourceArtifact.metadata)
+  const valueObject = readValueObject(sourceArtifact.value)
+
+  return {
+    metadata: { ...valueObject, ...metadata },
+    valueObject,
+  }
 }
 
 function resolveCompositeHash(metadata: ArtifactMetadata, valueObject: ArtifactMetadata) {
@@ -118,8 +128,7 @@ function buildMetadataPatch(params: FinalResultPromotionParams, metadata: Artifa
 
 /** Resolve whether a final-result source artifact should enter the main generation-result index. */
 export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArtifact): FinalResultPromotionCandidate {
-  const metadata = parseMetadata(sourceArtifact.metadata)
-  const valueObject = readValueObject(sourceArtifact.value)
+  const { metadata, valueObject } = resolveArtifactMetadata(sourceArtifact)
   const compositeHash = resolveCompositeHash(metadata, valueObject)
   if (compositeHash) {
     return {
@@ -184,7 +193,7 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
     return candidate
   }
 
-  const metadata = parseMetadata(params.sourceArtifact.metadata)
+  const { metadata } = resolveArtifactMetadata(params.sourceArtifact)
   const serviceType = candidate.serviceType ?? inferServiceType(metadata)
   const storagePath = candidate.storagePath as string
   await fs.promises.access(storagePath, fs.constants.R_OK)

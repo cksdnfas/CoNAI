@@ -64,7 +64,7 @@ function readMetadataNumber(metadata: Record<string, unknown> | null, key: strin
 function buildFinalResultPreviewArtifact(entry: ResolvedFinalResultEntry): FinalResultPreviewArtifact {
   return {
     ...entry.artifact,
-    source_metadata: entry.artifact.metadata ? undefined : entry.finalResult.source_metadata,
+    source_metadata: entry.finalResult.source_metadata,
     source_storage_path: entry.artifact.storage_path ? undefined : entry.finalResult.source_storage_path,
   }
 }

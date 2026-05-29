@@ -56,4 +56,23 @@ assert.equal(videoFinal.shouldPromote, true)
 assert.equal(videoFinal.serviceType, 'comfyui')
 assert.equal(videoFinal.mimeType, 'video/webm')
 
-console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote)')
+const valueBackedFinal = resolveFinalResultPromotionCandidate(artifact({
+  type: 'file',
+  storagePath: undefined,
+  metadata: {},
+  value: {
+    kind: 'codex-queue-image',
+    storagePath: 'C:/tmp/value-backed.webp',
+    mimeType: 'image/webp',
+    originalFileName: 'value-backed.webp',
+    width: '768',
+    height: '512',
+  },
+}))
+assert.equal(valueBackedFinal.shouldPromote, true)
+assert.equal(valueBackedFinal.serviceType, 'codex')
+assert.equal(valueBackedFinal.mimeType, 'image/webp')
+assert.equal(valueBackedFinal.storagePath, 'C:/tmp/value-backed.webp')
+assert.equal(valueBackedFinal.originalFileName, 'value-backed.webp')
+
+console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value metadata fallback)')
