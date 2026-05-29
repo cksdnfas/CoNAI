@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
 import { getGraphWorkflowSchedules, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord } from '@/lib/api-module-graph'
+import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
@@ -78,6 +79,22 @@ export function WorkflowRunnerPanel({
       ].join(' · ')
     : null
   const latestExecutionStatus = latestExecution?.status ?? null
+  const latestExecutionStatusLabel = latestExecutionStatus ? getGraphExecutionStatusLabel(latestExecutionStatus) : null
+  const shouldShowLatestExecutionResults = latestExecution?.status === 'completed'
+  const latestExecutionPendingMessage = latestExecution
+    ? latestExecution.status === 'queued'
+      ? t({ ko: '큐에서 대기 중이라 아직 결과물이 없어.', en: 'This run is queued, so results are not ready yet.' })
+      : latestExecution.status === 'running'
+        ? t({ ko: '실행 중이라 완료 후 결과물이 표시돼.', en: 'This run is still running; results will appear after it completes.' })
+        : latestExecution.status === 'failed'
+          ? localizeGraphWorkflowErrorMessage(latestExecution.error_message, t({ ko: '실행에 실패해서 결과물이 없어.', en: 'This run failed, so there are no results to show.' }))
+            ?? t({ ko: '실행에 실패해서 결과물이 없어.', en: 'This run failed, so there are no results to show.' })
+          : latestExecution.status === 'cancelled'
+            ? t({ ko: '취소된 실행이라 결과물이 없어.', en: 'This run was cancelled, so there are no results to show.' })
+            : latestExecution.status === 'draft'
+              ? t({ ko: '아직 실행되지 않은 기록이야.', en: 'This run has not started yet.' })
+              : null
+    : null
 
   return (
     <Card>
@@ -104,7 +121,7 @@ export function WorkflowRunnerPanel({
                   {graphSummaryLine || latestExecutionStatus ? (
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
                       {graphSummaryLine ? <span title={graphSummaryLine}>{graphSummaryLine}</span> : null}
-                      {latestExecutionStatus ? <Badge variant={latestExecutionStatus === 'completed' ? 'secondary' : 'outline'}>{latestExecutionStatus}</Badge> : null}
+                      {latestExecutionStatusLabel ? <Badge variant={latestExecutionStatus === 'completed' ? 'secondary' : 'outline'}>{latestExecutionStatusLabel}</Badge> : null}
                     </div>
                   ) : null}
                 </div>
@@ -132,7 +149,7 @@ export function WorkflowRunnerPanel({
                 {graphSummaryLine || latestExecutionStatus ? (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
                     {graphSummaryLine ? <span title={graphSummaryLine}>{graphSummaryLine}</span> : null}
-                    {latestExecutionStatus ? <Badge variant={latestExecutionStatus === 'completed' ? 'secondary' : 'outline'}>{latestExecutionStatus}</Badge> : null}
+                    {latestExecutionStatusLabel ? <Badge variant={latestExecutionStatus === 'completed' ? 'secondary' : 'outline'}>{latestExecutionStatusLabel}</Badge> : null}
                   </div>
                 ) : null}
               </div>
@@ -155,18 +172,20 @@ export function WorkflowRunnerPanel({
                 <AlertTitle className="flex flex-wrap items-center gap-1.5">
                   <span>{t({ ko: '최근 결과', en: 'Latest result' })}</span>
                   <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
-                  <Badge variant="outline">{latestExecution.status}</Badge>
+                  <Badge variant="outline">{getGraphExecutionStatusLabel(latestExecution.status)}</Badge>
                 </AlertTitle>
                 <AlertDescription className="pt-3">
-                  {latestExecutionArtifacts && latestExecutionFinalResults ? (
+                  {shouldShowLatestExecutionResults && latestExecutionArtifacts && latestExecutionFinalResults ? (
                     <WorkflowFinalResultsSection
                       finalResults={latestExecutionFinalResults}
                       artifacts={latestExecutionArtifacts}
                       selectedGraph={selectedGraph}
                       emptyLabel={t({ ko: '아직 선언된 최종 결과가 없어. 최종 결과 노드를 추가하고 원하는 출력에 연결해줘.', en: 'No final result is declared yet. Add a final result node and connect it to the output you want.' })}
                     />
-                  ) : (
+                  ) : shouldShowLatestExecutionResults ? (
                     <div className="text-sm text-muted-foreground">{t({ ko: '최종 결과를 불러오는 중…', en: 'Loading final results…' })}</div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">{latestExecutionPendingMessage}</div>
                   )}
                 </AlertDescription>
               </Alert>

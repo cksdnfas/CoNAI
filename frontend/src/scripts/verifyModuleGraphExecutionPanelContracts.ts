@@ -43,6 +43,7 @@ function assertExecutionPanelLookupPolicy() {
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const finalResultsSource = source('features/module-graph/components/workflow-final-results-section.tsx')
+  const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
   const indexCssSource = source('index.css')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
@@ -293,6 +294,25 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     indexCssSource.includes('.workflow-final-results-list .image-list-selectable img') && indexCssSource.includes('object-fit: contain;'),
     'final result preview media should render with object-fit: contain in the scoped result list',
+  )
+  assert(
+    workflowRunnerSource.includes("latestExecution?.status === 'completed'")
+      && workflowRunnerSource.includes('shouldShowLatestExecutionResults && latestExecutionArtifacts && latestExecutionFinalResults')
+      && workflowRunnerSource.includes('shouldShowLatestExecutionResults ? ('),
+    'workflow runner latest-result area should only wait for final-result detail when the latest execution is completed',
+  )
+  assert(
+    workflowRunnerSource.includes("'queued'")
+      && workflowRunnerSource.includes("'running'")
+      && workflowRunnerSource.includes("'failed'")
+      && workflowRunnerSource.includes("'cancelled'")
+      && workflowRunnerSource.includes('latestExecutionPendingMessage'),
+    'workflow runner latest-result area should show terminal/in-progress status messages instead of a stale loading state',
+  )
+  assert(
+    workflowRunnerSource.includes('getGraphExecutionStatusLabel(latestExecution.status)')
+      && workflowRunnerSource.includes('localizeGraphWorkflowErrorMessage(latestExecution.error_message'),
+    'workflow runner latest-result status and failure copy should use localized status/error helpers',
   )
 }
 
