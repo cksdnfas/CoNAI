@@ -95,7 +95,7 @@ function assertRefreshPolicySource() {
   )
   match(
     generationHistoryPanelSource,
-    /function hasPostprocessPendingHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?Boolean\(record\.composite_hash\)[\s\S]*?!record\.actual_composite_hash/,
+    /function hasPostprocessPendingHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?return records\.some\(isHistoryPostprocessPending\)/,
     'completed rows waiting only on postprocess visibility should use the slower refresh path',
   )
   match(
@@ -153,6 +153,26 @@ function assertDownloadReadinessSourcePolicy() {
     imageGenerationSharedSource,
     /function resolveHistoryImageSource\(record: GenerationHistoryRecord\) \{[\s\S]*?const compositeHash = record\.actual_composite_hash \|\| null/,
     'history image source URLs should require resolved main-image metadata',
+  )
+  match(
+    imageGenerationSharedSource,
+    /function isHistoryPostprocessPending\(record: GenerationHistoryRecord\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?Boolean\(record\.composite_hash\)[\s\S]*?!record\.actual_composite_hash/,
+    'history postprocess waits should require a completed row with a result hash but no ready main-image metadata',
+  )
+  match(
+    imageGenerationSharedSource,
+    /function isHistoryMissingLinkedResult\(record: GenerationHistoryRecord\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?!record\.composite_hash/,
+    'completed history rows without any result hash should be classified as missing linked results',
+  )
+  match(
+    imageGenerationSharedSource,
+    /if \(isHistoryMissingLinkedResult\(record\)\) \{[\s\S]*?return 'failed'[\s\S]*?\}[\s\S]*?return isHistoryPostprocessPending\(record\) \? 'processing' : 'completed'/,
+    'completed history rows without a result hash must not stay stuck as display-only processing',
+  )
+  match(
+    imageGenerationSharedSource,
+    /if \(record && isHistoryMissingLinkedResult\(record\)\) return '결과 없음'[\s\S]*?if \(record && isHistoryPostprocessPending\(record\)\) return '후처리 중'/,
+    'history status labels should distinguish missing results from postprocess waits',
   )
   match(
     generationHistoryRouteSource,

@@ -574,9 +574,20 @@ export function resolveHistoryImageSource(record: GenerationHistoryRecord) {
   }
 }
 
+export function isHistoryPostprocessPending(record: GenerationHistoryRecord) {
+  return record.generation_status === 'completed'
+    && Boolean(record.composite_hash)
+    && !record.actual_composite_hash
+}
+
+export function isHistoryMissingLinkedResult(record: GenerationHistoryRecord) {
+  return record.generation_status === 'completed'
+    && !record.composite_hash
+}
+
 /** Resolve the effective history display status for list surfaces.
- * A completed history without a linked main-image record is still treated as in-flight,
- * because thumbnail/detail routes are not ready yet and should not look like a real failure.
+ * A completed history with no result hash is terminally unrenderable, not still in-flight.
+ * A completed history with a result hash but no ready main-image metadata is still waiting on postprocess visibility.
  * If the linked queue already ended in failed/cancelled without an image, prefer the terminal state.
  */
 export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): GenerationHistoryRecord['generation_status'] {
@@ -592,7 +603,11 @@ export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): Ge
     return record.generation_status
   }
 
-  return record.actual_composite_hash ? 'completed' : 'processing'
+  if (isHistoryMissingLinkedResult(record)) {
+    return 'failed'
+  }
+
+  return isHistoryPostprocessPending(record) ? 'processing' : 'completed'
 }
 
 export function getHistoryCancellationBadgeLabel(record: GenerationHistoryRecord) {
@@ -639,7 +654,9 @@ export function getHistoryCancellationDetail(record: GenerationHistoryRecord) {
 }
 
 /** Resolve a compact label for the history status badge. */
-export function getHistoryStatusLabel(status: GenerationHistoryRecord['generation_status']) {
+export function getHistoryStatusLabel(status: GenerationHistoryRecord['generation_status'], record?: GenerationHistoryRecord) {
+  if (record && isHistoryMissingLinkedResult(record)) return '결과 없음'
+  if (record && isHistoryPostprocessPending(record)) return '후처리 중'
   if (status === 'completed') return '완료'
   if (status === 'failed') return '생성 실패'
   if (status === 'processing') return '작업 중'

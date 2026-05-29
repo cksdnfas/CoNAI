@@ -30,6 +30,7 @@ import {
   getHistoryCancellationBadgeLabel,
   getHistoryCancellationDetail,
   getHistoryStatusLabel,
+  isHistoryPostprocessPending,
   resolveHistoryDisplayStatus,
   resolveHistoryImageSource,
 } from '../image-generation-shared'
@@ -60,11 +61,7 @@ function hasActiveGenerationHistory(records: GenerationHistoryResponse['records'
 }
 
 function hasPostprocessPendingHistory(records: GenerationHistoryResponse['records']) {
-  return records.some((record) => (
-    record.generation_status === 'completed'
-    && Boolean(record.composite_hash)
-    && !record.actual_composite_hash
-  ))
+  return records.some(isHistoryPostprocessPending)
 }
 
 function getGenerationHistorySelectionId(record: GenerationHistoryResponse['records'][number]) {
@@ -351,7 +348,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
     return (
       <div className="flex flex-col items-end gap-1">
         <Badge variant="outline">
-          {getHistoryStatusLabel(displayStatus)}
+          {getHistoryStatusLabel(displayStatus, record)}
         </Badge>
         {cancellationLabel ? (
           <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
