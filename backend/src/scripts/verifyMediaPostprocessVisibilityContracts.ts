@@ -161,12 +161,15 @@ async function main() {
       id: number,
       status: 'ready' | 'pending',
       day: string,
-      autoTagsJson: string | null = '{"tagger":{"taglist":"shared"}}'
+      autoTagsJson: string | null = '{"tagger":{"taglist":"shared"}}',
+      addGroup = true,
     ) => {
       const date = `2026-01-${day}T00:00:00.000Z`;
       insertMetadata.run(hash, autoTagsJson, date, date, status, status === 'ready' ? date : null);
       insertFile.run(id, hash, `/tmp/${hash}.png`, date);
-      insertGroupImage.run(hash, id, date);
+      if (addGroup) {
+        insertGroupImage.run(hash, id, date);
+      }
     };
 
     seed('ready-hash', 1, 'ready', '01');
@@ -424,6 +427,27 @@ async function main() {
       readPostprocessStatus(duplicateVideoHash),
       'ready',
       'existing duplicate video rows should be released when no optional auto post-processing is required'
+    );
+
+    seed('group-assignment-hash', 80, 'ready', '08', '{"tagger":{"taglist":"shared"}}', false);
+    const linkedProcessingHistoryId = GenerationHistoryModel.create({
+      service_type: 'novelai',
+      generation_status: 'processing',
+      nai_model: 'model',
+      assigned_group_id: 1,
+    });
+    GenerationHistoryModel.updateImagePaths(linkedProcessingHistoryId, { compositeHash: 'group-assignment-hash' });
+    await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash('group-assignment-hash');
+    const assignedGroupRow = db.prepare(`
+      SELECT group_id, composite_hash
+      FROM image_groups
+      WHERE group_id = 1
+        AND composite_hash = 'group-assignment-hash'
+    `).get() as { group_id: number; composite_hash: string } | undefined;
+    assert.equal(
+      assignedGroupRow?.composite_hash,
+      'group-assignment-hash',
+      'generation group assignment should run after media linkage even before history is marked completed'
     );
 
     console.log('✅ Media postprocess visibility contracts passed');

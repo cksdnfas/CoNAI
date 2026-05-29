@@ -760,16 +760,17 @@ export class BackgroundProcessorService {
       const { apiGenDb } = await import('../database/apiGenerationDb');
       const { ImageGroupModel } = await import('../models/Group');
 
-      // Check if there's a pending group assignment for this hash
-      const pendingAssignment = apiGenDb.prepare(`
-        SELECT id, assigned_group_id
+      // Assign once the history row is linked to saved media; completed status
+      // can be written immediately after this handoff.
+      const pendingAssignments = apiGenDb.prepare(`
+        SELECT DISTINCT assigned_group_id
         FROM api_generation_history
         WHERE composite_hash = ?
           AND assigned_group_id IS NOT NULL
-          AND generation_status = 'completed'
-      `).get(compositeHash) as { id: number; assigned_group_id: number } | undefined;
+          AND generation_status IN ('processing', 'completed')
+      `).all(compositeHash) as Array<{ assigned_group_id: number }>;
 
-      if (pendingAssignment) {
+      for (const pendingAssignment of pendingAssignments) {
         // Add image to the assigned group
         const added = await ImageGroupModel.addImageToGroup(
           pendingAssignment.assigned_group_id,
