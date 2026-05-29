@@ -238,6 +238,11 @@ function assertExecutionPanelLookupPolicy() {
     'final result image records should preserve finite numeric-string width/height metadata',
   )
   assert(
+    buildFinalResultImageRecordSource.includes("width: readMetadataNumber(metadata, ['actualWidth', 'actual_width', 'outputWidth', 'output_width', 'width'])")
+      && buildFinalResultImageRecordSource.includes("height: readMetadataNumber(metadata, ['actualHeight', 'actual_height', 'outputHeight', 'output_height', 'height'])"),
+    'final result image records should preserve generated-media dimension aliases before plain width/height metadata',
+  )
+  assert(
     readMetadataStringSource.includes('for (const key of keys)')
       && readMetadataStringSource.includes('const trimmedValue = value.trim()')
       && readMetadataStringSource.includes('return trimmedValue'),

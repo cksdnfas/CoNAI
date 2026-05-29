@@ -47,15 +47,18 @@ type FinalResultPreviewArtifact = GraphExecutionArtifactRecord & {
   source_storage_path?: string | null
 }
 
-function readMetadataNumber(metadata: Record<string, unknown> | null, key: string) {
-  const value = metadata?.[key]
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null
-  }
+function readMetadataNumber(metadata: Record<string, unknown> | null, keys: string | string[]) {
+  const candidateKeys = Array.isArray(keys) ? keys : [keys]
+  for (const key of candidateKeys) {
+    const value = metadata?.[key]
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null
+    }
 
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : null
+    }
   }
 
   return null
@@ -137,8 +140,8 @@ function buildFinalResultImageRecord(entry: ResolvedFinalResultEntry): ImageReco
     original_file_path: resolveFinalResultOriginalFilePath(metadata, previewArtifact),
     thumbnail_url: previewUrl,
     image_url: previewUrl,
-    width: readMetadataNumber(metadata, 'width'),
-    height: readMetadataNumber(metadata, 'height'),
+    width: readMetadataNumber(metadata, ['actualWidth', 'actual_width', 'outputWidth', 'output_width', 'width']),
+    height: readMetadataNumber(metadata, ['actualHeight', 'actual_height', 'outputHeight', 'output_height', 'height']),
     mime_type: mimeType,
     file_type: fileType,
   }
@@ -230,7 +233,7 @@ export function WorkflowFinalResultsSection({
                 return (
                   <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-black/62 px-2 py-1 text-[11px] text-white shadow-sm backdrop-blur-sm">
                     {entry.overlayLabel ? <span className="truncate font-medium">{entry.overlayLabel}</span> : null}
-                    <Badge variant="secondary" className="h-5 border-white/15 bg-white/14 px-1.5 text-[10px] text-white">{entry.artifact.artifact_type}</Badge>
+                    {entry.artifact.artifact_type ? <Badge variant="secondary" className="h-5 border-white/15 bg-white/14 px-1.5 text-[10px] text-white">{entry.artifact.artifact_type}</Badge> : null}
                   </div>
                 )
               }}
