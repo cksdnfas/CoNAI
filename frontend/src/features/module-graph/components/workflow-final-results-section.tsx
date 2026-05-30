@@ -11,7 +11,7 @@ import {
   resolveGraphArtifactMimeType,
 } from '../module-graph-shared'
 import { ExecutionArtifactCard } from './execution-artifact-card'
-import { getNodeDisplayLabel } from './graph-execution-panel-helpers'
+import { buildNodeDisplayLabelMap, getNodeDisplayLabelFromMap } from './graph-execution-panel-helpers'
 
 function getFinalResultOverlayLabel(nodeLabel: string) {
   const normalizedLabel = nodeLabel.trim().toLowerCase()
@@ -189,9 +189,10 @@ export function WorkflowFinalResultsSection({
   const { t } = useI18n()
   const resolvedEmptyLabel = emptyLabel ?? t({ ko: '최종 결과 노드를 추가하고 원하는 출력에 연결해줘.', en: 'Add a final result node and connect it to the output you want to finalize.' })
   const artifactsById = useMemo(() => new Map(artifacts.map((artifact) => [artifact.id, artifact])), [artifacts])
+  const nodeLabelMap = useMemo(() => buildNodeDisplayLabelMap(selectedGraph), [selectedGraph])
   const resolvedEntries = useMemo<ResolvedFinalResultEntry[]>(() => finalResults.map((finalResult) => {
-    const finalNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.final_node_id, nodeLabelOverrides)
-    const sourceNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.source_node_id, nodeLabelOverrides)
+    const finalNodeLabel = getNodeDisplayLabelFromMap(nodeLabelMap, finalResult.final_node_id, nodeLabelOverrides)
+    const sourceNodeLabel = getNodeDisplayLabelFromMap(nodeLabelMap, finalResult.source_node_id, nodeLabelOverrides)
 
     return {
       finalResult,
@@ -201,7 +202,7 @@ export function WorkflowFinalResultsSection({
       sourceNodeLabel: getFinalResultSourceNodeLabel(sourceNodeLabel, finalResult.source_node_id),
       sourcePortLabel: getFinalResultSourcePortLabel(finalResult.source_port_key, finalResult.artifact_type),
     }
-  }), [artifactsById, finalResults, nodeLabelOverrides, selectedGraph])
+  }), [artifactsById, finalResults, nodeLabelMap, nodeLabelOverrides])
   const { visualEntries, visualEntryByImageId, nonVisualEntries } = useMemo(() => {
     const nextVisualEntries: Array<{ entry: ResolvedFinalResultEntry; image: ImageRecord }> = []
     for (const entry of resolvedEntries) {

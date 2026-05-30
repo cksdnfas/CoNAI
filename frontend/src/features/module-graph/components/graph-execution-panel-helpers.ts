@@ -198,8 +198,8 @@ export function getExecutionInputEntries(plan: ParsedExecutionPlan | null, input
   }))
 }
 
-/** Resolve a human-readable node label from the selected workflow graph. */
-function buildNodeDisplayLabelMap(selectedGraph: GraphWorkflowRecord | null | undefined) {
+/** Build a reusable node-label lookup map for execution summary surfaces. */
+export function buildNodeDisplayLabelMap(selectedGraph: GraphWorkflowRecord | null | undefined) {
   return new Map((selectedGraph?.graph.nodes ?? []).map((node) => [node.id, node.label?.trim() ?? ''] as const))
 }
 
@@ -220,13 +220,21 @@ function resolveNodeDisplayLabel(
   return `노드 ${nodeId}`
 }
 
+/** Resolve a human-readable node label from a precomputed graph-label map. */
+export function getNodeDisplayLabelFromMap(
+  nodeLabelMap: ReadonlyMap<string, string>,
+  nodeId: string,
+  nodeLabelOverrides?: Record<string, string> | null,
+) {
+  return resolveNodeDisplayLabel(nodeId, nodeLabelMap.get(nodeId), nodeLabelOverrides)
+}
+
 export function getNodeDisplayLabel(
   selectedGraph: GraphWorkflowRecord | null | undefined,
   nodeId: string,
   nodeLabelOverrides?: Record<string, string> | null,
 ) {
-  const nodeRecord = selectedGraph?.graph.nodes.find((node) => node.id === nodeId)
-  return resolveNodeDisplayLabel(nodeId, nodeRecord?.label?.trim(), nodeLabelOverrides)
+  return getNodeDisplayLabelFromMap(buildNodeDisplayLabelMap(selectedGraph), nodeId, nodeLabelOverrides)
 }
 
 /** Group artifacts by node so the panel can render per-node outputs. */

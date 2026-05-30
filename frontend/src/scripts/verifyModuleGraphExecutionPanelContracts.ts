@@ -224,9 +224,20 @@ function assertExecutionPanelLookupPolicy() {
   )
   assert(
     finalResultsSource.includes('const artifactsById = useMemo(')
+      && finalResultsSource.includes('const nodeLabelMap = useMemo(() => buildNodeDisplayLabelMap(selectedGraph), [selectedGraph])')
       && finalResultsSource.includes('const resolvedEntries = useMemo<ResolvedFinalResultEntry[]>')
       && finalResultsSource.includes('visualEntryByImageId: new Map'),
-    'final result rendering should memoize artifact lookup, resolved entries, and overlay lookup maps',
+    'final result rendering should memoize artifact lookup, node-label lookup, resolved entries, and overlay lookup maps',
+  )
+  assert(
+    finalResultsSource.includes('getNodeDisplayLabelFromMap(nodeLabelMap, finalResult.final_node_id, nodeLabelOverrides)')
+      && finalResultsSource.includes('getNodeDisplayLabelFromMap(nodeLabelMap, finalResult.source_node_id, nodeLabelOverrides)'),
+    'final result rendering should resolve node labels through the precomputed node-label map',
+  )
+  assert(
+    !finalResultsSource.includes('getNodeDisplayLabel(selectedGraph')
+      && !finalResultsSource.includes('selectedGraph?.graph.nodes.find'),
+    'final result rendering must not rescan graph nodes for every final-result row',
   )
   assert(
     finalResultsSource.includes('minColumnWidth={160}'),
