@@ -92,8 +92,8 @@ const maskFinalResult: GraphExecutionFinalResultRecord = {
   source_node_id: maskArtifact.node_id,
   source_port_key: maskArtifact.port_key,
   artifact_type: 'mask',
-  source_storage_path: maskArtifact.storage_path,
-  source_metadata: maskArtifact.metadata,
+  source_storage_path: null,
+  source_metadata: null,
   created_date: '2026-05-30T02:00:00.000Z',
 }
 const outputCollections = buildModuleWorkflowOutputCollections({
@@ -121,6 +121,14 @@ const outputCollections = buildModuleWorkflowOutputCollections({
 deepEqual(
   outputCollections.outputItems.map((item) => [item.id, item.type, item.workflowName]),
   [[`final-${maskFinalResult.id}`, 'mask', workflow.name]],
+)
+deepEqual(outputCollections.outputItems.map((item) => [item.storagePath, item.downloadName, item.label]), [
+  [maskArtifact.storage_path, 'mask.png', 'Mask preview'],
+])
+match(
+  outputCollections.outputItems[0]?.previewUrl ?? '',
+  /\/temp\/graph-executions\/20\/mask\.png/,
+  'sparse final-result rows should recover preview URLs from their source artifacts',
 )
 deepEqual(
   outputCollections.technicalArtifacts.map((artifact) => artifact.id),

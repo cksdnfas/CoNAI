@@ -63,6 +63,22 @@ function isVisualArtifact(artifact: GraphExecutionArtifactRecord | GraphExecutio
   return artifact.artifact_type === 'image' || artifact.artifact_type === 'mask'
 }
 
+type FinalResultOutputSource = GraphExecutionFinalResultRecord & {
+  storage_path?: string | null
+  metadata?: string | null
+}
+
+function buildFinalResultOutputSource(result: GraphExecutionFinalResultRecord, artifact?: GraphExecutionArtifactRecord): FinalResultOutputSource {
+  // Fill sparse final-result rows from their source artifact so output browsing keeps previews/downloads.
+  return {
+    ...result,
+    storage_path: artifact?.storage_path ?? null,
+    metadata: artifact?.metadata ?? null,
+    source_storage_path: result.source_storage_path ?? artifact?.storage_path ?? null,
+    source_metadata: result.source_metadata ?? artifact?.metadata ?? null,
+  }
+}
+
 function getWorkflowNameForExecution(
   executionId: number,
   executionById: Map<number, GraphExecutionRecord>,
@@ -110,6 +126,7 @@ export function buildModuleWorkflowOutputCollections({
   workflowNameById: Map<number, string>
 }) {
   // Build the browse-ready output and technical artifact collections from raw workflow content.
+  const artifactById = new Map(browseContent.artifacts.map((artifact) => [artifact.id, artifact]))
   const visualFinalResults = browseContent.final_results.filter((result) => isVisualArtifact(result))
   const executionIdsWithVisualFinalResults = new Set(visualFinalResults.map((result) => result.execution_id))
   const fallbackVisualArtifacts = browseContent.artifacts.filter((artifact) => (
@@ -119,20 +136,21 @@ export function buildModuleWorkflowOutputCollections({
   const outputItems: ModuleWorkflowGeneratedOutputItem[] = [
     ...visualFinalResults.map((result) => {
       const { execution, workflowName } = getWorkflowNameForExecution(result.execution_id, executionById, workflowNameById)
-      const downloadUrl = getArtifactPreviewUrl(result)
-      const label = getArtifactLabel(result)
+      const outputSource = buildFinalResultOutputSource(result, artifactById.get(result.source_artifact_id))
+      const downloadUrl = getArtifactPreviewUrl(outputSource)
+      const label = getArtifactLabel(outputSource)
       return {
         id: `final-${result.id}`,
         sourceArtifactId: result.source_artifact_id,
         type: result.artifact_type,
-        mimeType: resolveGraphArtifactMimeType(result),
+        mimeType: resolveGraphArtifactMimeType(outputSource),
         previewUrl: downloadUrl,
         downloadUrl,
-        downloadName: buildDownloadName(result.source_storage_path, label, result.execution_id),
+        downloadName: buildDownloadName(outputSource.source_storage_path ?? outputSource.storage_path, label, result.execution_id),
         createdDate: result.created_date,
         workflowName,
         executionId: result.execution_id,
-        storagePath: result.source_storage_path ?? null,
+        storagePath: outputSource.source_storage_path ?? outputSource.storage_path ?? null,
         label,
         status: execution?.status,
       }
