@@ -46,6 +46,7 @@ function assertExecutionPanelLookupPolicy() {
   const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
   const pageSectionsSource = source('features/module-graph/components/module-graph-page-sections.tsx')
   const pageViewModelSource = source('features/module-graph/use-module-graph-page-view-model.ts')
+  const pageQueriesSource = source('features/module-graph/use-module-graph-page-queries.ts')
   const indexCssSource = source('index.css')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
@@ -385,6 +386,12 @@ function assertExecutionPanelLookupPolicy() {
     workflowRunnerSource.includes('getGraphExecutionStatusLabel(latestExecution.status)')
       && workflowRunnerSource.includes('localizeGraphWorkflowErrorMessage(latestExecution.error_message'),
     'workflow runner latest-result status and failure copy should use localized status/error helpers',
+  )
+  assert(
+    pageQueriesSource.includes('function hasActiveGraphExecution(executions: GraphExecutionRecord[] | undefined)')
+      && pageQueriesSource.includes("execution.status")
+      && pageQueriesSource.includes('refetchInterval: (query) => hasActiveGraphExecution(query.state.data) ? 5_000 : false'),
+    'workflow execution list should poll while the selected workflow has queued/running executions so latest-result status can reach terminal detail loading',
   )
   assert(
     pageViewModelSource.includes('const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])'),
