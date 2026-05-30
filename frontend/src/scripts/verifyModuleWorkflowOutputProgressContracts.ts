@@ -84,6 +84,36 @@ const maskArtifact: GraphExecutionArtifactRecord = {
   metadata: JSON.stringify({ label: 'Mask preview' }),
   created_date: '2026-05-30T02:00:00.000Z',
 }
+const newerSameTimestampMaskArtifact: GraphExecutionArtifactRecord = {
+  id: 31,
+  execution_id: execution.id,
+  node_id: 'mask-node-2',
+  port_key: 'mask',
+  artifact_type: 'mask',
+  storage_path: 'C:/tmp/graph-executions/20/mask-2.png',
+  metadata: JSON.stringify({ label: 'Mask preview 2' }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const textArtifact: GraphExecutionArtifactRecord = {
+  id: 32,
+  execution_id: execution.id,
+  node_id: 'text-node',
+  port_key: 'text',
+  artifact_type: 'text',
+  storage_path: null,
+  metadata: JSON.stringify({ value: 'older same timestamp text' }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const newerSameTimestampTextArtifact: GraphExecutionArtifactRecord = {
+  id: 33,
+  execution_id: execution.id,
+  node_id: 'text-node-2',
+  port_key: 'text',
+  artifact_type: 'text',
+  storage_path: null,
+  metadata: JSON.stringify({ value: 'newer same timestamp text' }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
 const maskFinalResult: GraphExecutionFinalResultRecord = {
   id: 40,
   execution_id: execution.id,
@@ -91,6 +121,18 @@ const maskFinalResult: GraphExecutionFinalResultRecord = {
   source_artifact_id: maskArtifact.id,
   source_node_id: maskArtifact.node_id,
   source_port_key: maskArtifact.port_key,
+  artifact_type: 'mask',
+  source_storage_path: null,
+  source_metadata: null,
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const newerSameTimestampMaskFinalResult: GraphExecutionFinalResultRecord = {
+  id: 41,
+  execution_id: execution.id,
+  final_node_id: 'final-mask-2',
+  source_artifact_id: newerSameTimestampMaskArtifact.id,
+  source_node_id: newerSameTimestampMaskArtifact.node_id,
+  source_port_key: newerSameTimestampMaskArtifact.port_key,
   artifact_type: 'mask',
   source_storage_path: null,
   source_metadata: null,
@@ -104,15 +146,15 @@ const outputCollections = buildModuleWorkflowOutputCollections({
       workflow_count: 1,
       execution_count: 1,
       schedule_count: 0,
-      artifact_count: 1,
-      final_result_count: 1,
+      artifact_count: 4,
+      final_result_count: 2,
       empty_execution_count: 0,
     },
     workflows: [workflow],
     schedules: [],
     executions: [execution],
-    artifacts: [maskArtifact],
-    final_results: [maskFinalResult],
+    artifacts: [maskArtifact, newerSameTimestampMaskArtifact, textArtifact, newerSameTimestampTextArtifact],
+    final_results: [maskFinalResult, newerSameTimestampMaskFinalResult],
     empty_executions: [],
   } satisfies GraphWorkflowBrowseContentRecord,
   executionById: new Map([[execution.id, execution]]),
@@ -120,19 +162,23 @@ const outputCollections = buildModuleWorkflowOutputCollections({
 })
 deepEqual(
   outputCollections.outputItems.map((item) => [item.id, item.type, item.workflowName]),
-  [[`final-${maskFinalResult.id}`, 'mask', workflow.name]],
+  [
+    [`final-${newerSameTimestampMaskFinalResult.id}`, 'mask', workflow.name],
+    [`final-${maskFinalResult.id}`, 'mask', workflow.name],
+  ],
 )
 deepEqual(outputCollections.outputItems.map((item) => [item.storagePath, item.downloadName, item.label]), [
+  [newerSameTimestampMaskArtifact.storage_path, 'mask-2.png', 'Mask preview 2'],
   [maskArtifact.storage_path, 'mask.png', 'Mask preview'],
 ])
 match(
   outputCollections.outputItems[0]?.previewUrl ?? '',
-  /\/temp\/graph-executions\/20\/mask\.png/,
+  /\/temp\/graph-executions\/20\/mask-2\.png/,
   'sparse final-result rows should recover preview URLs from their source artifacts',
 )
 deepEqual(
   outputCollections.technicalArtifacts.map((artifact) => artifact.id),
-  [],
+  [newerSameTimestampTextArtifact.id, textArtifact.id],
 )
 
 const outputManagementSource = source('features/module-graph/components/module-workflow-output-management-panel.tsx')
@@ -272,6 +318,16 @@ match(
   outputManagementHelpersSource,
   /artifact\.artifact_type === 'image' \|\| artifact\.artifact_type === 'mask'/,
   'workflow output management should classify final-result masks as generated visual outputs',
+)
+match(
+  outputManagementHelpersSource,
+  /\.sort\(compareNewestDateThenId\)/,
+  'workflow generated outputs should break same-timestamp ordering ties by stable output id',
+)
+match(
+  outputManagementHelpersSource,
+  /\.sort\(compareNewestArtifactDateThenId\)/,
+  'workflow technical artifacts should break same-timestamp ordering ties by artifact id',
 )
 match(
   workflowFinalResultsSectionSource,

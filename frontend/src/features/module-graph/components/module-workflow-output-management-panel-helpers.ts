@@ -116,6 +116,30 @@ function buildOutputImageRecord(item: ModuleWorkflowGeneratedOutputItem): ImageR
   }
 }
 
+function compareNewestDateThenId(left: { createdDate: string; id: string }, right: { createdDate: string; id: string }) {
+  const dateDelta = Date.parse(right.createdDate) - Date.parse(left.createdDate)
+  if (Number.isFinite(dateDelta) && dateDelta !== 0) {
+    return dateDelta
+  }
+
+  const leftId = Number(left.id.slice(left.id.lastIndexOf('-') + 1))
+  const rightId = Number(right.id.slice(right.id.lastIndexOf('-') + 1))
+  if (Number.isFinite(leftId) && Number.isFinite(rightId) && leftId !== rightId) {
+    return rightId - leftId
+  }
+
+  return right.id.localeCompare(left.id, 'en')
+}
+
+function compareNewestArtifactDateThenId(left: GraphExecutionArtifactRecord, right: GraphExecutionArtifactRecord) {
+  const dateDelta = Date.parse(right.created_date) - Date.parse(left.created_date)
+  if (Number.isFinite(dateDelta) && dateDelta !== 0) {
+    return dateDelta
+  }
+
+  return right.id - left.id
+}
+
 export function buildModuleWorkflowOutputCollections({
   browseContent,
   executionById,
@@ -175,7 +199,7 @@ export function buildModuleWorkflowOutputCollections({
         status: execution?.status,
       }
     }),
-  ].sort((left, right) => new Date(right.createdDate).getTime() - new Date(left.createdDate).getTime())
+  ].sort(compareNewestDateThenId)
 
   const representedArtifactIds = new Set<number>([
     ...visualFinalResults.map((result) => result.source_artifact_id),
@@ -184,7 +208,7 @@ export function buildModuleWorkflowOutputCollections({
 
   const technicalArtifacts = [...browseContent.artifacts]
     .filter((artifact) => !representedArtifactIds.has(artifact.id))
-    .sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
+    .sort(compareNewestArtifactDateThenId)
 
   return {
     outputItems,
