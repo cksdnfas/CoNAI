@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { resolveFinalResultPromotionCandidate, tryPromoteFinalResultArtifactToGenerationHistory } from '../services/graph-workflow-executor/final-result-promotion'
 import type { RuntimeArtifact } from '../services/graph-workflow-executor/shared'
 
@@ -218,6 +220,33 @@ async function verifyPromotionFailureIsolation() {
     assert.match(result.errorMessage, /ENOENT|no such file|cannot find/i)
   }
 }
+
+function verifyMissingSourceArtifactWarningContract() {
+  const source = readFileSync(resolve(process.cwd(), 'src/services/graph-workflow-executor/system-result-operations.ts'), 'utf8')
+
+  assert.match(
+    source,
+    /skippedReason: 'source_artifact_not_persisted'[\s\S]*?eventType: 'final_result_source_artifact_missing'/,
+    'final-result nodes with non-persisted source outputs should emit a dedicated warning event',
+  )
+  assert.match(
+    source,
+    /level: 'warn'[\s\S]*?eventType: 'final_result_source_artifact_missing'/,
+    'missing source artifact final-result events should be warning-level logs',
+  )
+  assert.match(
+    source,
+    /eventType: 'final_result_source_artifact_missing'[\s\S]*?always: true/,
+    'missing source artifact final-result warnings should persist even when verbose execution debug logs are disabled',
+  )
+  assert.match(
+    source,
+    /eventType: 'final_result_promotion_failed'[\s\S]*?always: true/,
+    'promotion failure final-result warnings should persist even when verbose execution debug logs are disabled',
+  )
+}
+
+verifyMissingSourceArtifactWarningContract()
 
 void verifyPromotionFailureIsolation()
   .then(() => {

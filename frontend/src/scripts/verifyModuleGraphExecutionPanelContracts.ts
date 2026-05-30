@@ -383,20 +383,35 @@ function assertExecutionPanelLookupPolicy() {
   )
   assert(
     executionLogAlertsSource.includes("FINAL_RESULT_PROMOTION_FAILED_EVENT = 'final_result_promotion_failed'")
-      && executionLogAlertsSource.includes('findFinalResultPromotionWarningLog')
+      && executionLogAlertsSource.includes("FINAL_RESULT_SOURCE_ARTIFACT_MISSING_EVENT = 'final_result_source_artifact_missing'")
+      && executionLogAlertsSource.includes('findFinalResultLifecycleWarning')
       && executionLogAlertsSource.includes('log.event_type === FINAL_RESULT_PROMOTION_FAILED_EVENT'),
-    'workflow execution log alerts should recognize non-fatal final-result promotion failures from execution logs',
+    'workflow execution log alerts should recognize non-fatal final-result lifecycle warnings from execution logs',
+  )
+  assert(
+    executionLogAlertsSource.includes("details?.operationKey === 'system.final_result'")
+      && executionLogAlertsSource.includes("details?.skippedReason === 'source_artifact_not_persisted'")
+      && executionLogAlertsSource.includes("kind: 'source_artifact_missing'"),
+    'workflow execution log alerts should recognize final-result nodes whose source output was not persisted',
   )
   assert(
     workflowRunnerSource.includes('latestExecutionLogs?: GraphExecutionLogRecord[] | null')
-      && workflowRunnerSource.includes('const latestExecutionPromotionWarningLog = useMemo(() => findFinalResultPromotionWarningLog(latestExecutionLogs), [latestExecutionLogs])')
+      && workflowRunnerSource.includes('const latestExecutionFinalResultWarning = useMemo(() => findFinalResultLifecycleWarning(latestExecutionLogs), [latestExecutionLogs])')
       && workflowRunnerSource.includes('최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 실행 상세 로그에서 원인을 확인해줘.'),
-    'workflow runner latest-result area should surface final-result promotion warning logs near the run controls',
+    'workflow runner latest-result area should surface final-result lifecycle warning logs near the run controls',
   )
   assert(
-    executionPanelSource.includes('const finalResultPromotionWarningLog = useMemo(() => findFinalResultPromotionWarningLog(executionDetail.logs), [executionDetail.logs])')
+    workflowRunnerSource.includes('최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.'),
+    'workflow runner latest-result area should explain final-result source outputs that were not persisted',
+  )
+  assert(
+    executionPanelSource.includes('const finalResultLifecycleWarning = useMemo(() => findFinalResultLifecycleWarning(executionDetail.logs), [executionDetail.logs])')
       && executionPanelSource.includes('최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.'),
-    'selected execution summary should surface final-result promotion warning logs before opening detailed logs',
+    'selected execution summary should surface final-result lifecycle warning logs before opening detailed logs',
+  )
+  assert(
+    executionPanelSource.includes('최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.'),
+    'selected execution summary should explain final-result source outputs that were not persisted',
   )
   assert(
     pageSectionsSource.includes('latestExecutionLogs={latestExecutionDetail?.logs}'),

@@ -36,7 +36,7 @@ import {
 } from './graph-execution-panel-helpers'
 import { TechnicalReferenceHint } from './module-graph-field-shared'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
-import { findFinalResultPromotionWarningLog } from './workflow-execution-log-alerts'
+import { findFinalResultLifecycleWarning } from './workflow-execution-log-alerts'
 
 type GraphExecutionDetail = {
   execution: GraphExecutionRecord
@@ -155,7 +155,7 @@ function SelectedExecutionSummary({
   onOpenDetail: () => void
 }) {
   const { t, formatNumber, formatDateTime } = useI18n()
-  const finalResultPromotionWarningLog = useMemo(() => findFinalResultPromotionWarningLog(executionDetail.logs), [executionDetail.logs])
+  const finalResultLifecycleWarning = useMemo(() => findFinalResultLifecycleWarning(executionDetail.logs), [executionDetail.logs])
 
   return (
     <div className="space-y-4 rounded-sm border border-border bg-surface-low p-3">
@@ -181,9 +181,11 @@ function SelectedExecutionSummary({
         </div>
       ) : null}
 
-      {finalResultPromotionWarningLog ? (
+      {finalResultLifecycleWarning ? (
         <div className="rounded-sm border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-          {t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.', en: 'The final result was saved, but linking it into generation history failed. Check the detailed logs for the cause.' })}
+          {finalResultLifecycleWarning.kind === 'source_artifact_missing'
+            ? t({ ko: '최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.', en: 'The final result node ran, but the connected output did not create a saved result. Check the connected output port.' })
+            : t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.', en: 'The final result was saved, but linking it into generation history failed. Check the detailed logs for the cause.' })}
         </div>
       ) : null}
 
