@@ -44,7 +44,9 @@ function assertExecutionPanelLookupPolicy() {
   const nodeInspectorHelpersSource = source('features/module-graph/components/node-inspector-panel-helpers.tsx')
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const finalResultsSource = source('features/module-graph/components/workflow-final-results-section.tsx')
+  const executionLogAlertsSource = source('features/module-graph/components/workflow-execution-log-alerts.ts')
   const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
+  const executionPanelSource = source('features/module-graph/components/graph-execution-panel.tsx')
   const pageSectionsSource = source('features/module-graph/components/module-graph-page-sections.tsx')
   const pageViewModelSource = source('features/module-graph/use-module-graph-page-view-model.ts')
   const pageQueriesSource = source('features/module-graph/use-module-graph-page-queries.ts')
@@ -378,6 +380,27 @@ function assertExecutionPanelLookupPolicy() {
       && workflowRunnerSource.includes("latestExecutionDetailError ? 'text-destructive' : 'text-muted-foreground'")
       && workflowRunnerSource.includes('Could not load final result details.'),
     'workflow runner latest-result area should show detail load failures instead of a stale loading message',
+  )
+  assert(
+    executionLogAlertsSource.includes("FINAL_RESULT_PROMOTION_FAILED_EVENT = 'final_result_promotion_failed'")
+      && executionLogAlertsSource.includes('findFinalResultPromotionWarningLog')
+      && executionLogAlertsSource.includes('log.event_type === FINAL_RESULT_PROMOTION_FAILED_EVENT'),
+    'workflow execution log alerts should recognize non-fatal final-result promotion failures from execution logs',
+  )
+  assert(
+    workflowRunnerSource.includes('latestExecutionLogs?: GraphExecutionLogRecord[] | null')
+      && workflowRunnerSource.includes('const latestExecutionPromotionWarningLog = useMemo(() => findFinalResultPromotionWarningLog(latestExecutionLogs), [latestExecutionLogs])')
+      && workflowRunnerSource.includes('최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 실행 상세 로그에서 원인을 확인해줘.'),
+    'workflow runner latest-result area should surface final-result promotion warning logs near the run controls',
+  )
+  assert(
+    executionPanelSource.includes('const finalResultPromotionWarningLog = useMemo(() => findFinalResultPromotionWarningLog(executionDetail.logs), [executionDetail.logs])')
+      && executionPanelSource.includes('최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.'),
+    'selected execution summary should surface final-result promotion warning logs before opening detailed logs',
+  )
+  assert(
+    pageSectionsSource.includes('latestExecutionLogs={latestExecutionDetail?.logs}'),
+    'workflow runner latest-result detail logs should be passed into the browse side panel warning surface',
   )
   assert(
     workflowRunnerSource.includes('const latestExecutionEmptyResultLabel = graphSummary && graphSummary.finalResultNodeCount > 0')

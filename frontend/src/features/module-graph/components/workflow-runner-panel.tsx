@@ -8,12 +8,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
-import { getGraphWorkflowSchedules, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord } from '@/lib/api-module-graph'
+import { getGraphWorkflowSchedules, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
+import { findFinalResultPromotionWarningLog } from './workflow-execution-log-alerts'
 import { WorkflowInputFields } from './workflow-input-fields'
 
 type WorkflowRunnerPanelProps = {
@@ -24,6 +25,7 @@ type WorkflowRunnerPanelProps = {
   latestExecution?: GraphExecutionRecord | null
   latestExecutionArtifacts?: GraphExecutionArtifactRecord[] | null
   latestExecutionFinalResults?: GraphExecutionFinalResultRecord[] | null
+  latestExecutionLogs?: GraphExecutionLogRecord[] | null
   latestExecutionDetailIsLoading?: boolean
   latestExecutionDetailError?: string | null
   graphSummary?: SavedGraphWorkflowSummary | null
@@ -49,6 +51,7 @@ export function WorkflowRunnerPanel({
   latestExecution,
   latestExecutionArtifacts,
   latestExecutionFinalResults,
+  latestExecutionLogs,
   latestExecutionDetailIsLoading = false,
   latestExecutionDetailError = null,
   graphSummary,
@@ -86,6 +89,7 @@ export function WorkflowRunnerPanel({
   const latestExecutionStatus = latestExecution?.status ?? null
   const latestExecutionStatusLabel = latestExecutionStatus ? getGraphExecutionStatusLabel(latestExecutionStatus) : null
   const shouldShowLatestExecutionResults = latestExecution?.status === 'completed'
+  const latestExecutionPromotionWarningLog = useMemo(() => findFinalResultPromotionWarningLog(latestExecutionLogs), [latestExecutionLogs])
   const latestExecutionArtifactCount = shouldShowLatestExecutionResults && latestExecutionArtifacts ? latestExecutionArtifacts.length : null
   const latestExecutionEmptyResultLabel = graphSummary && graphSummary.finalResultNodeCount > 0
     ? latestExecutionArtifactCount && latestExecutionArtifactCount > 0
@@ -209,6 +213,11 @@ export function WorkflowRunnerPanel({
                   ) : null}
                 </AlertTitle>
                 <AlertDescription className="pt-3">
+                  {latestExecutionPromotionWarningLog ? (
+                    <div className="mb-3 rounded-sm border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+                      {t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 실행 상세 로그에서 원인을 확인해줘.', en: 'The final result was saved, but linking it into generation history failed. Check the run logs for the cause.' })}
+                    </div>
+                  ) : null}
                   {shouldShowLatestExecutionResults && latestExecutionArtifacts && latestExecutionFinalResults ? (
                     <WorkflowFinalResultsSection
                       finalResults={latestExecutionFinalResults}
