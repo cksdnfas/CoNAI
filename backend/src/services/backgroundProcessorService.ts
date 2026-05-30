@@ -180,8 +180,10 @@ function yieldToHttpRequests(): Promise<void> {
  */
 export class BackgroundProcessorService {
   private static processing = false;
+  private static lockRetryScheduled = false;
   private static readonly BATCH_SIZE = 50;
   private static readonly CONCURRENCY = resolveBackgroundMediaConcurrency();
+  private static readonly LOCK_RETRY_DELAY_MS = 5000;
 
   /**
    * Register and process a media file that this backend just saved.
@@ -361,6 +363,9 @@ export class BackgroundProcessorService {
    */
   static async processUnhashedImages(options: BackgroundProcessorOptions = {}): Promise<ProcessingResult> {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
+      if (this.getUnprocessedCount() > 0) {
+        this.scheduleHashGenerationAfterMaintenanceLock(options);
+      }
       if (!options.quietIfIdle) {
         console.log('⏸️  Background processor paused by system maintenance lock');
       }
@@ -434,6 +439,15 @@ export class BackgroundProcessorService {
       );
 
       await Promise.all(tasks);
+
+      if (SystemMaintenanceLockService.isExclusiveActive() && this.getUnprocessedCount() > 0) {
+        this.scheduleHashGenerationAfterMaintenanceLock(options);
+        this.processing = false;
+        if (!options.quietIfIdle) {
+          console.log('⏸️  Background processor retry scheduled after system maintenance lock');
+        }
+        return result;
+      }
 
       console.log(
         `✅ Batch complete: ${result.processed} processed, ${result.errors} errors`
@@ -720,6 +734,9 @@ export class BackgroundProcessorService {
    */
   static triggerHashGeneration(options: BackgroundProcessorOptions = {}): void {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
+      if (this.getUnprocessedCount() > 0) {
+        this.scheduleHashGenerationAfterMaintenanceLock(options);
+      }
       return;
     }
 
@@ -735,6 +752,19 @@ export class BackgroundProcessorService {
         this.processUnhashedImages(options);
       }, 2000); // 2 second delay to allow scan to complete
     }
+  }
+
+  /** Retry hash generation promptly after an exclusive maintenance lock can clear. */
+  private static scheduleHashGenerationAfterMaintenanceLock(options: BackgroundProcessorOptions = {}): void {
+    if (this.lockRetryScheduled) {
+      return;
+    }
+
+    this.lockRetryScheduled = true;
+    setTimeout(() => {
+      this.lockRetryScheduled = false;
+      this.triggerHashGeneration({ ...options, quietIfIdle: true });
+    }, this.LOCK_RETRY_DELAY_MS);
   }
 
   /**

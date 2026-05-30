@@ -35,8 +35,10 @@ class AutoTagScheduler {
   private isRunning = false;
   private isProcessing = false;
   private rerunRequested = false;
+  private lockRetryScheduled = false;
   private pollingTimer: NodeJS.Timeout | null = null;
   private readonly PROCESSING_DELAY_MS = 1000;
+  private readonly LOCK_RETRY_DELAY_MS = 5000;
 
   private getPollingIntervalMs(): number {
     return SystemSettingsService.getAutoTagPollingInterval() * 1000;
@@ -168,6 +170,7 @@ class AutoTagScheduler {
 
   private async processPendingMedia(): Promise<void> {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
+      this.scheduleProcessPendingAfterMaintenanceLock();
       return;
     }
 
@@ -195,6 +198,7 @@ class AutoTagScheduler {
         }
 
         if (SystemMaintenanceLockService.isExclusiveActive()) {
+          this.scheduleProcessPendingAfterMaintenanceLock();
           break;
         }
 
@@ -334,6 +338,19 @@ class AutoTagScheduler {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Retry postprocess tagging promptly after an exclusive maintenance lock can clear. */
+  private scheduleProcessPendingAfterMaintenanceLock(): void {
+    if (this.lockRetryScheduled) {
+      return;
+    }
+
+    this.lockRetryScheduled = true;
+    setTimeout(() => {
+      this.lockRetryScheduled = false;
+      void this.processPendingMedia();
+    }, this.LOCK_RETRY_DELAY_MS);
   }
 
   getStatus(): {

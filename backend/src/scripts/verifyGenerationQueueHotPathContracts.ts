@@ -47,6 +47,7 @@ async function main() {
     const apiImageProcessorSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/APIImageProcessor.ts'), 'utf8')
     const backgroundQueueSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/backgroundQueue.ts'), 'utf8')
     const backgroundProcessorServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/backgroundProcessorService.ts'), 'utf8')
+    const autoTagSchedulerSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/autoTagScheduler.ts'), 'utf8')
     assert.match(
       queueServiceSource,
       /const compatibleServerIdsByJobId = new Map<number, Set<number>>\(\)/,
@@ -175,6 +176,26 @@ async function main() {
       backgroundQueueSource,
       /private static scheduleProcessQueueAfterMaintenanceLock\(\): void \{[\s\S]*?if \(this\.lockRetryScheduled\) \{[\s\S]*?return;[\s\S]*?this\.lockRetryScheduled = true;[\s\S]*?setTimeout/,
       'background queue maintenance-lock retry scheduling should be coalesced',
+    )
+    assert.match(
+      backgroundProcessorServiceSource,
+      /private static scheduleHashGenerationAfterMaintenanceLock\(options: BackgroundProcessorOptions = \{\}\): void \{[\s\S]*?if \(this\.lockRetryScheduled\) \{[\s\S]*?return;[\s\S]*?this\.lockRetryScheduled = true;[\s\S]*?setTimeout[\s\S]*?this\.triggerHashGeneration\(\{ \.\.\.options, quietIfIdle: true \}\)/,
+      'background hash generation should coalesce maintenance-lock retries without waiting for another scan event',
+    )
+    assert.match(
+      backgroundProcessorServiceSource,
+      /if \(SystemMaintenanceLockService\.isExclusiveActive\(\)\) \{[\s\S]*?this\.scheduleHashGenerationAfterMaintenanceLock\(options\);[\s\S]*?return;/,
+      'background hash generation trigger should schedule a retry when maintenance lock blocks processing',
+    )
+    assert.match(
+      autoTagSchedulerSource,
+      /private scheduleProcessPendingAfterMaintenanceLock\(\): void \{[\s\S]*?if \(this\.lockRetryScheduled\) \{[\s\S]*?return;[\s\S]*?this\.lockRetryScheduled = true;[\s\S]*?setTimeout[\s\S]*?void this\.processPendingMedia\(\)/,
+      'auto-tag postprocess scheduler should coalesce maintenance-lock retries',
+    )
+    assert.match(
+      autoTagSchedulerSource,
+      /if \(SystemMaintenanceLockService\.isExclusiveActive\(\)\) \{[\s\S]*?this\.scheduleProcessPendingAfterMaintenanceLock\(\);[\s\S]*?return;/,
+      'auto-tag postprocess scheduler should retry when maintenance lock blocks processing',
     )
 
     db.prepare(`
