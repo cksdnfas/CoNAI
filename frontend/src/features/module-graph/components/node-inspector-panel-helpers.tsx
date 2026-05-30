@@ -5,7 +5,7 @@ import type { LlmPresetOptionCollections, LlmPresetOptionRecord } from '@/lib/ap
 import type { GraphExecutionArtifactRecord, ModulePortDefinition } from '@/lib/api-module-graph'
 import { hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import { TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
-import { getModuleNodeDisplayLabel, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, parseHandleId, type ModuleGraphNode } from '../module-graph-shared'
+import { compareGraphArtifactsNewestFirst, getModuleNodeDisplayLabel, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, parseHandleId, type ModuleGraphNode } from '../module-graph-shared'
 
 export type ResolvedEdgeEndpoint = {
   node: ModuleGraphNode | null
@@ -213,7 +213,7 @@ export function groupNodeOutputArtifacts(node: ModuleGraphNode, artifacts: Graph
         portKey,
         portLabel: outputPort?.label ?? portKey,
         portType: outputPort?.data_type ?? (portArtifacts[0]?.artifact_type === 'file' ? null : portArtifacts[0]?.artifact_type ?? null),
-        artifacts: [...portArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime()),
+        artifacts: [...portArtifacts].sort(compareGraphArtifactsNewestFirst),
       } satisfies NodeOutputArtifactGroup
     })
     .sort((left, right) => {

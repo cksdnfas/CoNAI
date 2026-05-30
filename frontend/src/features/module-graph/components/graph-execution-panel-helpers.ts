@@ -6,6 +6,7 @@ import type {
 import {
   buildArtifactTextPreview,
   buildArtifactTextValue,
+  compareGraphArtifactsNewestFirst,
   getArtifactStoredValue,
   hasGraphArtifactVisualPreview,
   isEmptyLlmJsonArtifact,
@@ -256,12 +257,16 @@ export function groupArtifactsByNode(
     .map(([nodeId, nodeArtifacts]) => ({
       nodeId,
       nodeLabel: resolveNodeDisplayLabel(nodeId, nodeLabelMap.get(nodeId), nodeLabelOverrides),
-      artifacts: [...nodeArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime()),
+      artifacts: [...nodeArtifacts].sort(compareGraphArtifactsNewestFirst),
     }))
     .sort((left, right) => {
-      const leftTime = new Date(left.artifacts[0]?.created_date ?? 0).getTime()
-      const rightTime = new Date(right.artifacts[0]?.created_date ?? 0).getTime()
-      return rightTime - leftTime
+      const leftArtifact = left.artifacts[0]
+      const rightArtifact = right.artifacts[0]
+      if (leftArtifact && rightArtifact) {
+        return compareGraphArtifactsNewestFirst(leftArtifact, rightArtifact)
+      }
+
+      return leftArtifact ? -1 : rightArtifact ? 1 : 0
     })
 }
 
@@ -269,7 +274,7 @@ export function groupArtifactsByNode(
 function pickHighlightedArtifacts(artifacts: GraphExecutionArtifactRecord[]) {
   const sortedArtifacts = [...artifacts]
     .filter((artifact) => !isEmptyLlmJsonArtifact(artifact))
-    .sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
+    .sort(compareGraphArtifactsNewestFirst)
   const visualArtifacts = sortedArtifacts.filter((artifact) => hasGraphArtifactVisualPreview(artifact))
 
   if (visualArtifacts.length > 0) {

@@ -41,6 +41,7 @@ function assertExecutionPanelLookupPolicy() {
   const nodeCardSource = source('features/module-graph/components/module-graph-node-card.tsx')
   const nodeCardLayoutsSource = source('features/module-graph/components/module-graph-node-card-layouts.tsx')
   const nodeInspectorSource = source('features/module-graph/components/node-inspector-panel.tsx')
+  const nodeInspectorHelpersSource = source('features/module-graph/components/node-inspector-panel-helpers.tsx')
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const finalResultsSource = source('features/module-graph/components/workflow-final-results-section.tsx')
   const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
@@ -61,6 +62,7 @@ function assertExecutionPanelLookupPolicy() {
   const resolveGraphArtifactMimeTypeSource = extractFunction(sharedSource, 'resolveGraphArtifactMimeType')
   const buildNodeArtifactPreviewSource = extractFunction(sharedSource, 'buildNodeArtifactPreview')
   const buildNodeArtifactGroupsSource = extractFunction(sharedSource, 'buildNodeArtifactGroups')
+  const compareGraphArtifactsNewestFirstSource = extractFunction(sharedSource, 'compareGraphArtifactsNewestFirst')
   const recommendationSource = extractFunction(canvasSource, 'getRecommendedModulesFromConnectionStart')
   const actionMenuLookupCount = canvasSource.match(/const targetNode = nodeById\.get\(actionMenuState\.nodeId\)/g)?.length ?? 0
 
@@ -77,6 +79,10 @@ function assertExecutionPanelLookupPolicy() {
     'grouped artifact rendering should build the node-label map once per grouping pass',
   )
   assert(
+    groupArtifactsByNodeSource.includes('sort(compareGraphArtifactsNewestFirst)'),
+    'grouped artifact rendering should use deterministic newest-first artifact ordering',
+  )
+  assert(
     groupArtifactsByNodeSource.includes('resolveNodeDisplayLabel(nodeId, nodeLabelMap.get(nodeId), nodeLabelOverrides)'),
     'grouped artifact rendering should use the precomputed node-label map for each node group',
   )
@@ -91,6 +97,10 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     pickHighlightedArtifactsSource.includes('const textArtifacts: GraphExecutionArtifactRecord[] = []'),
     'compact artifact picking should partition text artifacts in one pass',
+  )
+  assert(
+    pickHighlightedArtifactsSource.includes('sort(compareGraphArtifactsNewestFirst)'),
+    'compact artifact picking should use deterministic newest-first artifact ordering',
   )
   assert(
     pickHighlightedArtifactsSource.includes('const structuredArtifacts: GraphExecutionArtifactRecord[] = []'),
@@ -127,6 +137,15 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     buildNodeArtifactGroupsSource.includes('const groupedArtifacts = new Map<string, GraphExecutionArtifactRecord[]>()'),
     'node artifact grouping should build its port groups directly in a map',
+  )
+  assert(
+    compareGraphArtifactsNewestFirstSource.includes('Date.parse(right.created_date) - Date.parse(left.created_date)')
+      && compareGraphArtifactsNewestFirstSource.includes('return right.id - left.id'),
+    'workflow artifact ordering should break same-timestamp ties by newest artifact id',
+  )
+  assert(
+    buildNodeArtifactGroupsSource.includes('sort(compareGraphArtifactsNewestFirst)'),
+    'node artifact groups should use deterministic newest-first artifact ordering',
   )
   assert(
     buildNodeArtifactGroupsSource.includes('for (const artifact of artifacts)'),
@@ -183,6 +202,10 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     nodeInspectorSource.includes('collapsedOutputGroupKeySet.has(group.portKey)'),
     'node inspector should use Set.has while rendering output groups',
+  )
+  assert(
+    nodeInspectorHelpersSource.includes('sort(compareGraphArtifactsNewestFirst)'),
+    'node inspector output groups should use deterministic newest-first artifact ordering',
   )
   assert(
     !nodeInspectorSource.includes('const isCollapsed = collapsedOutputGroupKeys.includes(group.portKey)'),

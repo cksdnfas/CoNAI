@@ -820,6 +820,16 @@ export function buildNodeArtifactPreview(artifacts: GraphExecutionArtifactRecord
   }
 }
 
+/** Keep rapid same-timestamp outputs newest-first across compact workflow result surfaces. */
+export function compareGraphArtifactsNewestFirst(left: GraphExecutionArtifactRecord, right: GraphExecutionArtifactRecord) {
+  const dateDelta = Date.parse(right.created_date) - Date.parse(left.created_date)
+  if (Number.isFinite(dateDelta) && dateDelta !== 0) {
+    return dateDelta
+  }
+
+  return right.id - left.id
+}
+
 /** Build compact per-port artifact previews so node cards can expose outputs without opening the results panel. */
 export function buildNodeArtifactGroups(
   artifacts: GraphExecutionArtifactRecord[],
@@ -843,7 +853,7 @@ export function buildNodeArtifactGroups(
 
   return Array.from(groupedArtifacts.entries())
     .map(([portKey, portArtifacts]) => {
-      const sortedArtifacts = [...portArtifacts].sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
+      const sortedArtifacts = [...portArtifacts].sort(compareGraphArtifactsNewestFirst)
       const artifactPreview = buildNodeArtifactPreview(sortedArtifacts)
       const outputPort = outputPortMap.get(portKey)?.port ?? null
 
