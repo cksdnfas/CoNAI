@@ -348,6 +348,12 @@ function assertExecutionPanelLookupPolicy() {
     'workflow runner latest-result header should show loaded final-result count near the run controls',
   )
   assert(
+    workflowRunnerSource.includes('const latestExecutionArtifactCount = shouldShowLatestExecutionResults && latestExecutionArtifacts ? latestExecutionArtifacts.length : null')
+      && workflowRunnerSource.includes('const latestExecutionArtifactCountLabel = latestExecutionArtifactCount !== null')
+      && workflowRunnerSource.includes('latestExecutionArtifactCountLabel ? ('),
+    'workflow runner latest-result header should show source artifact count before final-result diagnosis',
+  )
+  assert(
     workflowRunnerSource.includes("'queued'")
       && workflowRunnerSource.includes("'running'")
       && workflowRunnerSource.includes("'failed'")

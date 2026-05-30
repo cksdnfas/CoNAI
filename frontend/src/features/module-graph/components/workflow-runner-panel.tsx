@@ -81,11 +81,17 @@ export function WorkflowRunnerPanel({
   const latestExecutionStatus = latestExecution?.status ?? null
   const latestExecutionStatusLabel = latestExecutionStatus ? getGraphExecutionStatusLabel(latestExecutionStatus) : null
   const shouldShowLatestExecutionResults = latestExecution?.status === 'completed'
+  const latestExecutionArtifactCount = shouldShowLatestExecutionResults && latestExecutionArtifacts ? latestExecutionArtifacts.length : null
   const latestExecutionEmptyResultLabel = graphSummary && graphSummary.finalResultNodeCount > 0
-    ? t({
-      ko: '최종 결과 노드는 있지만 이번 실행에서 확정된 출력이 없어. 연결된 출력 노드가 실제 결과를 만들었는지 확인해줘.',
-      en: 'Final result nodes exist, but this run did not finalize any outputs. Check whether the connected output node produced a result.',
-    })
+    ? latestExecutionArtifactCount && latestExecutionArtifactCount > 0
+      ? t({
+        ko: '원본 산출물 {count}개는 있지만 최종 결과로 확정된 출력은 없어. 최종 결과 노드가 원하는 출력 포트에 연결됐는지 확인해줘.',
+        en: 'Final result nodes exist and {count} source artifacts were created, but this run did not finalize any outputs. Check whether the final result node is connected to the intended output port.',
+      }, { count: formatNumber(latestExecutionArtifactCount) })
+      : t({
+        ko: '최종 결과 노드는 있지만 이번 실행에서 확정된 출력이 없어. 연결된 출력 노드가 실제 결과를 만들었는지 확인해줘.',
+        en: 'Final result nodes exist, but this run did not finalize any outputs. Check whether the connected output node produced a result.',
+      })
     : t({
       ko: '아직 선언된 최종 결과가 없어. 최종 결과 노드를 추가하고 원하는 출력에 연결해줘.',
       en: 'No final result is declared yet. Add a final result node and connect it to the output you want.',
@@ -106,6 +112,9 @@ export function WorkflowRunnerPanel({
     : null
   const latestExecutionResultCountLabel = shouldShowLatestExecutionResults && latestExecutionFinalResults
     ? t({ ko: '결과 {count}', en: 'Results {count}' }, { count: formatNumber(latestExecutionFinalResults.length) })
+    : null
+  const latestExecutionArtifactCountLabel = latestExecutionArtifactCount !== null
+    ? t({ ko: '원본 {count}', en: 'Source {count}' }, { count: formatNumber(latestExecutionArtifactCount) })
     : null
 
   return (
@@ -185,6 +194,9 @@ export function WorkflowRunnerPanel({
                   <span>{t({ ko: '최근 결과', en: 'Latest result' })}</span>
                   <Badge variant={latestExecution.status === 'completed' ? 'secondary' : 'outline'}>#{latestExecution.id}</Badge>
                   <Badge variant="outline">{getGraphExecutionStatusLabel(latestExecution.status)}</Badge>
+                  {latestExecutionArtifactCountLabel ? (
+                    <Badge variant={latestExecutionArtifactCount && latestExecutionArtifactCount > 0 ? 'secondary' : 'outline'}>{latestExecutionArtifactCountLabel}</Badge>
+                  ) : null}
                   {latestExecutionResultCountLabel ? (
                     <Badge variant={latestExecutionFinalResults && latestExecutionFinalResults.length > 0 ? 'secondary' : 'outline'}>{latestExecutionResultCountLabel}</Badge>
                   ) : null}
