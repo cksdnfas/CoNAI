@@ -22,6 +22,20 @@ function getFinalResultOverlayLabel(nodeLabel: string) {
   return nodeLabel
 }
 
+function getFinalResultSourcePortLabel(portKey: string | null | undefined, artifactType: string | null | undefined) {
+  const normalizedPortKey = portKey?.trim()
+  if (!normalizedPortKey) {
+    return undefined
+  }
+
+  const normalizedArtifactType = artifactType?.trim().toLowerCase()
+  if (normalizedArtifactType && normalizedPortKey.toLowerCase() === normalizedArtifactType) {
+    return undefined
+  }
+
+  return normalizedPortKey
+}
+
 function buildFallbackArtifact(finalResult: GraphExecutionFinalResultRecord): GraphExecutionArtifactRecord {
   return {
     id: finalResult.source_artifact_id,
@@ -40,6 +54,7 @@ type ResolvedFinalResultEntry = {
   artifact: GraphExecutionArtifactRecord
   nodeLabel: string
   overlayLabel?: string
+  sourcePortLabel?: string
 }
 
 type FinalResultPreviewArtifact = GraphExecutionArtifactRecord & {
@@ -172,6 +187,7 @@ export function WorkflowFinalResultsSection({
       artifact: artifactsById.get(finalResult.source_artifact_id) ?? buildFallbackArtifact(finalResult),
       nodeLabel: finalNodeLabel,
       overlayLabel: getFinalResultOverlayLabel(finalNodeLabel),
+      sourcePortLabel: getFinalResultSourcePortLabel(finalResult.source_port_key, finalResult.artifact_type),
     }
   }), [artifactsById, finalResults, nodeLabelOverrides, selectedGraph])
   const { visualEntries, visualEntryByImageId, nonVisualEntries } = useMemo(() => {
@@ -226,13 +242,14 @@ export function WorkflowFinalResultsSection({
               showDefaultQuickActions={false}
               renderItemPersistentOverlay={(image) => {
                 const entry = visualEntryByImageId.get(String(image.id))
-                if (!entry?.overlayLabel && !entry?.artifact.artifact_type) {
+                if (!entry?.overlayLabel && !entry?.sourcePortLabel && !entry?.artifact.artifact_type) {
                   return null
                 }
 
                 return (
                   <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-black/62 px-2 py-1 text-[11px] text-white shadow-sm backdrop-blur-sm">
                     {entry.overlayLabel ? <span className="truncate font-medium">{entry.overlayLabel}</span> : null}
+                    {entry.sourcePortLabel ? <span className="truncate text-white/82">{entry.sourcePortLabel}</span> : null}
                     {entry.artifact.artifact_type ? <Badge variant="secondary" className="h-5 border-white/15 bg-white/14 px-1.5 text-[10px] text-white">{entry.artifact.artifact_type}</Badge> : null}
                   </div>
                 )
@@ -248,7 +265,7 @@ export function WorkflowFinalResultsSection({
                   artifact={artifact}
                   compact
                   hideTitle
-                  overlayLabel={overlayLabel}
+                  overlayLabel={[overlayLabel, getFinalResultSourcePortLabel(finalResult.source_port_key, artifact.artifact_type)].filter(Boolean).join(' · ') || undefined}
                 />
               ))}
             </div>

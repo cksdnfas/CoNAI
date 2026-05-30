@@ -139,6 +139,7 @@ const outputManagementSource = source('features/module-graph/components/module-w
 const artifactRecordsSource = source('features/module-graph/components/module-workflow-artifact-records-tab.tsx')
 const generatedOutputsSource = source('features/module-graph/components/module-workflow-generated-outputs-tab.tsx')
 const outputManagementHelpersSource = source('features/module-graph/components/module-workflow-output-management-panel-helpers.ts')
+const workflowFinalResultsSectionSource = source('features/module-graph/components/workflow-final-results-section.tsx')
 
 match(
   outputManagementSource,
@@ -271,6 +272,16 @@ match(
   outputManagementHelpersSource,
   /artifact\.artifact_type === 'image' \|\| artifact\.artifact_type === 'mask'/,
   'workflow output management should classify final-result masks as generated visual outputs',
+)
+match(
+  workflowFinalResultsSectionSource,
+  /sourcePortLabel: getFinalResultSourcePortLabel\(finalResult\.source_port_key, finalResult\.artifact_type\)/,
+  'workflow final-result cards should keep the source output port in visual overlays',
+)
+match(
+  workflowFinalResultsSectionSource,
+  /getFinalResultSourcePortLabel\(finalResult\.source_port_key, artifact\.artifact_type\)/,
+  'workflow final-result file cards should keep the source output port in non-visual overlays',
 )
 
 console.log('Module workflow output progress contracts verified')
