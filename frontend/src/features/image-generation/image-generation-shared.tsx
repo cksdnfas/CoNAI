@@ -577,12 +577,14 @@ export function resolveHistoryImageSource(record: GenerationHistoryRecord) {
 export function isHistoryPostprocessPending(record: GenerationHistoryRecord) {
   return record.generation_status === 'completed'
     && Boolean(record.composite_hash)
+    && record.result_file_status === 'active'
     && !record.actual_composite_hash
 }
 
 export function isHistoryMissingLinkedResult(record: GenerationHistoryRecord) {
   return record.generation_status === 'completed'
-    && !record.composite_hash
+    && !record.actual_composite_hash
+    && (!record.composite_hash || record.result_file_status !== 'active')
 }
 
 /** Resolve the effective history display status for list surfaces.

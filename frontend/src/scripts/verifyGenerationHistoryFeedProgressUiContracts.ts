@@ -15,6 +15,10 @@ const generationHistoryRouteSource = readFileSync(
   resolve(process.cwd(), '../backend/src/routes/generation-history.routes.ts'),
   'utf8',
 )
+const generationHistoryModelSource = readFileSync(
+  resolve(process.cwd(), '../backend/src/models/GenerationHistory.ts'),
+  'utf8',
+)
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -156,13 +160,23 @@ function assertDownloadReadinessSourcePolicy() {
   )
   match(
     imageGenerationSharedSource,
-    /function isHistoryPostprocessPending\(record: GenerationHistoryRecord\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?Boolean\(record\.composite_hash\)[\s\S]*?!record\.actual_composite_hash/,
-    'history postprocess waits should require a completed row with a result hash but no ready main-image metadata',
+    /function isHistoryPostprocessPending\(record: GenerationHistoryRecord\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?Boolean\(record\.composite_hash\)[\s\S]*?record\.result_file_status === 'active'[\s\S]*?!record\.actual_composite_hash/,
+    'history postprocess waits should require a completed row with an active result file and no ready main-image metadata',
   )
   match(
     imageGenerationSharedSource,
-    /function isHistoryMissingLinkedResult\(record: GenerationHistoryRecord\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?!record\.composite_hash/,
-    'completed history rows without any result hash should be classified as missing linked results',
+    /function isHistoryMissingLinkedResult\(record: GenerationHistoryRecord\) \{[\s\S]*?record\.generation_status === 'completed'[\s\S]*?!record\.actual_composite_hash[\s\S]*?!record\.composite_hash \|\| record\.result_file_status !== 'active'/,
+    'completed history rows without any active ready result file should be classified as missing linked results',
+  )
+  match(
+    generationHistoryModelSource,
+    /CASE WHEN matched_file\.file_status = 'active' THEN im\.composite_hash ELSE NULL END as actual_composite_hash/,
+    'generation history should expose ready media hashes only for active backing files',
+  )
+  match(
+    generationHistoryModelSource,
+    /matched_file\.file_status as result_file_status/,
+    'generation history should return backing file state for display classification',
   )
   match(
     imageGenerationSharedSource,

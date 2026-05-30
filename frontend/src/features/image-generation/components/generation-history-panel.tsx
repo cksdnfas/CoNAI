@@ -117,6 +117,7 @@ function getHistoryRecordStatusSummary(records: GenerationHistoryResponse['recor
 function getHistoryMediaVersion(record: GenerationHistoryResponse['records'][number]) {
   return [
     record.actual_composite_hash ?? record.composite_hash ?? '',
+    record.result_file_status ?? '',
     record.actual_width ?? record.width ?? '',
     record.actual_height ?? record.height ?? '',
     resolveHistoryDisplayStatus(record),

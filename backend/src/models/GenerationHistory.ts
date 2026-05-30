@@ -52,6 +52,7 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
   actual_width?: number | null;
   actual_height?: number | null;
   actual_mime_type?: string | null;
+  result_file_status?: 'active' | 'missing' | 'deleted' | null;
   rating_score?: number | null;
   requested_server_id?: number | null;
   requested_server_name?: string | null;
@@ -70,6 +71,7 @@ export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
   actual_width?: number | null;
   actual_height?: number | null;
   actual_mime_type?: string | null;
+  result_file_status?: 'active' | 'missing' | 'deleted' | null;
   rating_score?: number | null;
   requested_server_id?: number | null;
   requested_server_name?: string | null;
@@ -225,7 +227,7 @@ export class GenerationHistoryModel {
    */
   static update(id: number, data: Partial<GenerationHistoryRecord>): void {
     // JOIN으로 계산된 필드 필터링 (actual_* 필드는 테이블에 없음)
-    const computedFields = ['actual_composite_hash', 'actual_width', 'actual_height'];
+    const computedFields = ['actual_composite_hash', 'actual_width', 'actual_height', 'actual_mime_type', 'result_file_status', 'rating_score'];
 
     // id와 computed fields 제거
     const cleanData = Object.fromEntries(
@@ -411,11 +413,12 @@ export class GenerationHistoryModel {
         qj.status as queue_status,
         qj.cancel_requested as queue_cancel_requested,
         qj.provider_job_id,
-        im.composite_hash as actual_composite_hash,
-        im.width as actual_width,
-        im.height as actual_height,
-        matched_file.mime_type as actual_mime_type,
-        im.rating_score as rating_score
+        CASE WHEN matched_file.file_status = 'active' THEN im.composite_hash ELSE NULL END as actual_composite_hash,
+        CASE WHEN matched_file.file_status = 'active' THEN im.width ELSE NULL END as actual_width,
+        CASE WHEN matched_file.file_status = 'active' THEN im.height ELSE NULL END as actual_height,
+        CASE WHEN matched_file.file_status = 'active' THEN matched_file.mime_type ELSE NULL END as actual_mime_type,
+        matched_file.file_status as result_file_status,
+        CASE WHEN matched_file.file_status = 'active' THEN im.rating_score ELSE NULL END as rating_score
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
       LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id
@@ -469,11 +472,12 @@ export class GenerationHistoryModel {
         qj.status as queue_status,
         qj.cancel_requested as queue_cancel_requested,
         qj.provider_job_id,
-        im.composite_hash as actual_composite_hash,
-        im.width as actual_width,
-        im.height as actual_height,
-        matched_file.mime_type as actual_mime_type,
-        im.rating_score as rating_score
+        CASE WHEN matched_file.file_status = 'active' THEN im.composite_hash ELSE NULL END as actual_composite_hash,
+        CASE WHEN matched_file.file_status = 'active' THEN im.width ELSE NULL END as actual_width,
+        CASE WHEN matched_file.file_status = 'active' THEN im.height ELSE NULL END as actual_height,
+        CASE WHEN matched_file.file_status = 'active' THEN matched_file.mime_type ELSE NULL END as actual_mime_type,
+        matched_file.file_status as result_file_status,
+        CASE WHEN matched_file.file_status = 'active' THEN im.rating_score ELSE NULL END as rating_score
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
       LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id

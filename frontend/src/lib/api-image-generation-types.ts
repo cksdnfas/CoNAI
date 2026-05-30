@@ -88,6 +88,7 @@ export interface GenerationHistoryRecord {
   actual_width?: number | null
   actual_height?: number | null
   actual_mime_type?: string | null
+  result_file_status?: 'active' | 'missing' | 'deleted' | null
   rating_score?: number | null
 
   // Detail/compat-only legacy fields
