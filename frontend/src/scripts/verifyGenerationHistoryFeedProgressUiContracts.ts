@@ -94,8 +94,8 @@ function assertRefreshPolicySource() {
   )
   match(
     generationHistoryPanelSource,
-    /function hasActiveGenerationHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?record\.generation_status === 'pending'[\s\S]*?record\.generation_status === 'processing'[\s\S]*?record\.queue_status === 'running'/,
-    'generation history fast polling should be driven by actual active generation or queue status',
+    /function hasActiveGenerationHistory\(records: GenerationHistoryResponse\['records'\]\) \{[\s\S]*?const displayStatus = resolveHistoryDisplayStatus\(record\)[\s\S]*?displayStatus === 'failed' \|\| isHistoryPostprocessPending\(record\)[\s\S]*?return displayStatus === 'pending' \|\| displayStatus === 'processing'/,
+    'generation history fast polling should be driven by effective active display status and skip terminal/postprocess rows',
   )
   match(
     generationHistoryPanelSource,

@@ -52,11 +52,12 @@ const GENERATION_HISTORY_REFRESH_WATCH_MS = 30_000
 
 function hasActiveGenerationHistory(records: GenerationHistoryResponse['records']) {
   return records.some((record) => {
-    return record.generation_status === 'pending'
-      || record.generation_status === 'processing'
-      || record.queue_status === 'queued'
-      || record.queue_status === 'dispatching'
-      || record.queue_status === 'running'
+    const displayStatus = resolveHistoryDisplayStatus(record)
+    if (displayStatus === 'failed' || isHistoryPostprocessPending(record)) {
+      return false
+    }
+
+    return displayStatus === 'pending' || displayStatus === 'processing'
   })
 }
 
