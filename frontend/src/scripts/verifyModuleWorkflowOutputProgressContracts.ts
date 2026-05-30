@@ -2,6 +2,7 @@ import { deepEqual, doesNotMatch, match } from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { resolveModuleWorkflowOutputProgress } from '../features/module-graph/module-workflow-output-progress'
+import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphExecutionRecord, GraphWorkflowBrowseContentRecord, GraphWorkflowRecord } from '../lib/api-module-graph'
 
 const root = resolve(process.cwd(), 'src')
 
@@ -54,9 +55,82 @@ deepEqual(clamped, {
   hiddenCount: 0,
 })
 
+const { buildModuleWorkflowOutputCollections } = await import('../features/module-graph/components/module-workflow-output-management-panel-helpers')
+
+const workflow: GraphWorkflowRecord = {
+  id: 10,
+  name: 'Mask workflow',
+  graph: { nodes: [], edges: [] },
+  version: 1,
+  is_active: true,
+  created_date: '2026-05-30T02:00:00.000Z',
+  updated_date: '2026-05-30T02:00:00.000Z',
+}
+const execution: GraphExecutionRecord = {
+  id: 20,
+  graph_workflow_id: workflow.id,
+  graph_version: 1,
+  status: 'completed',
+  created_date: '2026-05-30T02:00:00.000Z',
+  updated_date: '2026-05-30T02:00:00.000Z',
+}
+const maskArtifact: GraphExecutionArtifactRecord = {
+  id: 30,
+  execution_id: execution.id,
+  node_id: 'mask-node',
+  port_key: 'mask',
+  artifact_type: 'mask',
+  storage_path: 'C:/tmp/graph-executions/20/mask.png',
+  metadata: JSON.stringify({ label: 'Mask preview' }),
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const maskFinalResult: GraphExecutionFinalResultRecord = {
+  id: 40,
+  execution_id: execution.id,
+  final_node_id: 'final-mask',
+  source_artifact_id: maskArtifact.id,
+  source_node_id: maskArtifact.node_id,
+  source_port_key: maskArtifact.port_key,
+  artifact_type: 'mask',
+  source_storage_path: maskArtifact.storage_path,
+  source_metadata: maskArtifact.metadata,
+  created_date: '2026-05-30T02:00:00.000Z',
+}
+const outputCollections = buildModuleWorkflowOutputCollections({
+  browseContent: {
+    scope: {
+      folder_id: null,
+      folder_ids: null,
+      workflow_count: 1,
+      execution_count: 1,
+      schedule_count: 0,
+      artifact_count: 1,
+      final_result_count: 1,
+      empty_execution_count: 0,
+    },
+    workflows: [workflow],
+    schedules: [],
+    executions: [execution],
+    artifacts: [maskArtifact],
+    final_results: [maskFinalResult],
+    empty_executions: [],
+  } satisfies GraphWorkflowBrowseContentRecord,
+  executionById: new Map([[execution.id, execution]]),
+  workflowNameById: new Map([[workflow.id, workflow.name]]),
+})
+deepEqual(
+  outputCollections.outputItems.map((item) => [item.id, item.type, item.workflowName]),
+  [[`final-${maskFinalResult.id}`, 'mask', workflow.name]],
+)
+deepEqual(
+  outputCollections.technicalArtifacts.map((artifact) => artifact.id),
+  [],
+)
+
 const outputManagementSource = source('features/module-graph/components/module-workflow-output-management-panel.tsx')
 const artifactRecordsSource = source('features/module-graph/components/module-workflow-artifact-records-tab.tsx')
 const generatedOutputsSource = source('features/module-graph/components/module-workflow-generated-outputs-tab.tsx')
+const outputManagementHelpersSource = source('features/module-graph/components/module-workflow-output-management-panel-helpers.ts')
 
 match(
   outputManagementSource,
@@ -184,6 +258,11 @@ doesNotMatch(
   generatedOutputsSource,
   /\{watchedFolders\.find\(\(folder\) => String\(folder\.id\) === copyTargetFolderId\)\?\.folder_path\}/,
   'generated outputs copy panel must not scan watched folders inside render output',
+)
+match(
+  outputManagementHelpersSource,
+  /artifact\.artifact_type === 'image' \|\| artifact\.artifact_type === 'mask'/,
+  'workflow output management should classify final-result masks as generated visual outputs',
 )
 
 console.log('Module workflow output progress contracts verified')

@@ -60,7 +60,7 @@ function isVisualArtifact(artifact: GraphExecutionArtifactRecord | GraphExecutio
     return true
   }
 
-  return artifact.artifact_type === 'image'
+  return artifact.artifact_type === 'image' || artifact.artifact_type === 'mask'
 }
 
 function getWorkflowNameForExecution(
