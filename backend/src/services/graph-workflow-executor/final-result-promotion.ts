@@ -14,6 +14,8 @@ type FinalResultPromotionCandidate = {
   storagePath: string | null
   originalFileName: string | null
   compositeHash: string | null
+  width: number | null
+  height: number | null
   seed: number | null
   steps: number | null
   cfgScale: number | null
@@ -180,6 +182,18 @@ function resolveScheduler(metadata: ArtifactMetadata) {
 
 function resolveGenerationParameters(metadata: ArtifactMetadata) {
   return {
+    width: optionalNumber(metadata.actualWidth)
+      ?? optionalNumber(metadata.actual_width)
+      ?? optionalNumber(metadata.outputWidth)
+      ?? optionalNumber(metadata.output_width)
+      ?? optionalNumber(metadata.width)
+      ?? null,
+    height: optionalNumber(metadata.actualHeight)
+      ?? optionalNumber(metadata.actual_height)
+      ?? optionalNumber(metadata.outputHeight)
+      ?? optionalNumber(metadata.output_height)
+      ?? optionalNumber(metadata.height)
+      ?? null,
     seed: optionalNumber(metadata.seed)
       ?? optionalNumber(metadata.nai_seed)
       ?? optionalNumber(metadata.noiseSeed)
@@ -246,8 +260,8 @@ function buildHistoryGenerationParameters(
   setDefinedParam(params, 'prompt', resolvePositivePrompt(metadata))
   setDefinedParam(params, 'negative_prompt', resolveNegativePrompt(metadata))
   setDefinedParam(params, 'model', resolveModelName(metadata))
-  setDefinedParam(params, 'width', optionalNumber(metadata.width))
-  setDefinedParam(params, 'height', optionalNumber(metadata.height))
+  setDefinedParam(params, 'width', generationParams.width)
+  setDefinedParam(params, 'height', generationParams.height)
   setDefinedParam(params, 'steps', generationParams.steps)
   setDefinedParam(params, 'scale', generationParams.cfgScale)
   setDefinedParam(params, 'seed', generationParams.seed)
@@ -274,8 +288,8 @@ function buildMetadataPatch(
     prompt: prompt ?? undefined,
     positive_prompt: prompt ?? undefined,
     negative_prompt: negativePrompt ?? undefined,
-    width: optionalNumber(metadata.width) ?? undefined,
-    height: optionalNumber(metadata.height) ?? undefined,
+    width: generationParams.width ?? undefined,
+    height: generationParams.height ?? undefined,
     steps: generationParams.steps ?? undefined,
     cfg_scale: generationParams.cfgScale ?? undefined,
     seed: generationParams.seed ?? undefined,
@@ -320,11 +334,7 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
       storagePath: null,
       originalFileName: null,
       compositeHash: null,
-      seed: null,
-      steps: null,
-      cfgScale: null,
-      sampler: null,
-      scheduler: null,
+      ...generationParams,
       reason: 'missing_storage_path',
     }
   }
@@ -380,8 +390,8 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
     nai_parameters: historyGenerationParameters,
     positive_prompt: resolvePositivePrompt(metadata) ?? undefined,
     negative_prompt: resolveNegativePrompt(metadata) ?? undefined,
-    width: optionalNumber(metadata.width) ?? undefined,
-    height: optionalNumber(metadata.height) ?? undefined,
+    width: candidate.width ?? undefined,
+    height: candidate.height ?? undefined,
     metadata: JSON.stringify({
       graph_execution_id: params.executionId,
       graph_workflow_id: params.workflowId,

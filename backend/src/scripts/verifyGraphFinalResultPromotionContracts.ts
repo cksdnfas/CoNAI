@@ -164,6 +164,22 @@ assert.equal(generationCamelCaseMetadataFinal.cfgScale, 7.25)
 assert.equal(generationCamelCaseMetadataFinal.sampler, 'dpmpp_2m')
 assert.equal(generationCamelCaseMetadataFinal.scheduler, 'exponential')
 
+const generationDimensionAliasFinal = resolveFinalResultPromotionCandidate(artifact({
+  type: 'file',
+  storagePath: undefined,
+  metadata: {
+    kind: 'nai-image',
+    output_path: 'C:/tmp/metadata-dimensions.png',
+    output_mime_type: 'image/png',
+    actualWidth: '1536',
+    actual_height: '1024',
+  },
+  value: {},
+}))
+assert.equal(generationDimensionAliasFinal.shouldPromote, true)
+assert.equal(generationDimensionAliasFinal.width, 1536)
+assert.equal(generationDimensionAliasFinal.height, 1024)
+
 const uploadedAliasFinal = resolveFinalResultPromotionCandidate(artifact({
   type: 'file',
   storagePath: undefined,
@@ -181,4 +197,4 @@ assert.equal(uploadedAliasFinal.mimeType, 'image/webp')
 assert.equal(uploadedAliasFinal.storagePath, 'C:/tmp/source-alias.webp')
 assert.equal(uploadedAliasFinal.originalFileName, 'source-alias.webp')
 
-console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter alias fallback)')
+console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter/dimension alias fallback)')
