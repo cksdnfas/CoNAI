@@ -124,7 +124,7 @@ export class GraphExecutionFinalResultModel {
       INNER JOIN graph_execution_artifacts ga
         ON ga.id = fr.source_artifact_id
       WHERE fr.execution_id = ?
-      ORDER BY fr.id ASC
+      ORDER BY fr.created_date DESC, fr.id DESC
     `).all(executionId) as GraphExecutionFinalResultRecord[]
   }
 

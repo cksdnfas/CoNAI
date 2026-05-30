@@ -170,6 +170,22 @@ function verifyExecutionListNewestTieBreaker() {
   )
 }
 
+function verifyExecutionDetailNewestTieBreakers() {
+  const artifactModelSource = source('models/GraphExecutionArtifact.ts')
+  const finalResultModelSource = source('models/GraphExecutionFinalResult.ts')
+
+  assert.match(
+    artifactModelSource,
+    /static findByExecution\(executionId: number\)[\s\S]*ORDER BY created_date DESC, id DESC/,
+    'single-execution artifact details must use the same newest-first id tie breaker as browse/output lists',
+  )
+  assert.match(
+    finalResultModelSource,
+    /static findByExecution\(executionId: number\)[\s\S]*ORDER BY fr\.created_date DESC, fr\.id DESC/,
+    'single-execution final-result details must use newest-first id tie breaker for rapid same-timestamp outputs',
+  )
+}
+
 verifyGraphRouteIntegerParsing()
 verifyOptionalGraphFolderIdParsing()
 verifyRequiredIdBadRequestShape()
@@ -178,5 +194,6 @@ verifyScheduleEnumParsers()
 verifyScheduleValueParsers()
 verifyScheduleEnqueueCountParsers()
 verifyExecutionListNewestTieBreaker()
+verifyExecutionDetailNewestTieBreakers()
 
 console.log('✅ Graph workflow route contracts verified')

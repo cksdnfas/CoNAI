@@ -98,7 +98,7 @@ export class GraphExecutionArtifactModel {
     return db.prepare(`
       SELECT * FROM graph_execution_artifacts
       WHERE execution_id = ?
-      ORDER BY id ASC
+      ORDER BY created_date DESC, id DESC
     `).all(executionId) as GraphExecutionArtifactRecord[]
   }
 
