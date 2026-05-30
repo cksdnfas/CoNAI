@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import type { Response } from 'express'
 import {
   MAX_BULK_SCHEDULE_ENQUEUE_COUNT,
@@ -31,6 +32,10 @@ class CapturedResponse {
     this.payload = payload
     return this
   }
+}
+
+function source(path: string) {
+  return readFileSync(`src/${path}`, 'utf8')
 }
 
 function createResponse() {
@@ -155,6 +160,16 @@ function verifyScheduleEnqueueCountParsers() {
   assert.equal(parseScheduleRunEnqueueCount(0), null)
 }
 
+function verifyExecutionListNewestTieBreaker() {
+  const graphExecutionModelSource = source('models/GraphExecution.ts')
+
+  assert.match(
+    graphExecutionModelSource,
+    /static findByWorkflow\([\s\S]*ORDER BY created_date DESC, id DESC[\s\S]*LIMIT \?/,
+    'workflow execution list must break same-timestamp ties by id so latest-result selection is deterministic',
+  )
+}
+
 verifyGraphRouteIntegerParsing()
 verifyOptionalGraphFolderIdParsing()
 verifyRequiredIdBadRequestShape()
@@ -162,5 +177,6 @@ verifyNotFoundShape()
 verifyScheduleEnumParsers()
 verifyScheduleValueParsers()
 verifyScheduleEnqueueCountParsers()
+verifyExecutionListNewestTieBreaker()
 
 console.log('✅ Graph workflow route contracts verified')

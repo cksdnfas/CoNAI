@@ -170,7 +170,7 @@ export class GraphExecutionModel {
     return db.prepare(`
       SELECT * FROM graph_executions
       WHERE graph_workflow_id = ?
-      ORDER BY created_date DESC
+      ORDER BY created_date DESC, id DESC
       LIMIT ?
     `).all(workflowId, limit) as GraphExecutionRecord[]
   }
