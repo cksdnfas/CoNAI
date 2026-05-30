@@ -65,6 +65,7 @@ function assertExecutionPanelLookupPolicy() {
   const buildNodeArtifactPreviewSource = extractFunction(sharedSource, 'buildNodeArtifactPreview')
   const buildNodeArtifactGroupsSource = extractFunction(sharedSource, 'buildNodeArtifactGroups')
   const compareGraphArtifactsNewestFirstSource = extractFunction(sharedSource, 'compareGraphArtifactsNewestFirst')
+  const buildFinalResultLifecycleWarningSourceLabelSource = extractFunction(executionLogAlertsSource, 'buildFinalResultLifecycleWarningSourceLabel')
   const recommendationSource = extractFunction(canvasSource, 'getRecommendedModulesFromConnectionStart')
   const actionMenuLookupCount = canvasSource.match(/const targetNode = nodeById\.get\(actionMenuState\.nodeId\)/g)?.length ?? 0
 
@@ -391,14 +392,33 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     executionLogAlertsSource.includes("details?.operationKey === 'system.final_result'")
       && executionLogAlertsSource.includes("details?.skippedReason === 'source_artifact_not_persisted'")
-      && executionLogAlertsSource.includes("kind: 'source_artifact_missing'"),
+      && executionLogAlertsSource.includes("buildFinalResultLifecycleWarning('source_artifact_missing'"),
     'workflow execution log alerts should recognize final-result nodes whose source output was not persisted',
+  )
+  assert(
+    executionLogAlertsSource.includes("sourceNodeId: readDetailsString(details, 'sourceNodeId')")
+      && executionLogAlertsSource.includes("sourcePortKey: readDetailsString(details, 'sourcePortKey')")
+      && executionLogAlertsSource.includes("errorMessage: readDetailsString(details, 'errorMessage')"),
+    'workflow execution log alerts should preserve source output context from final-result warning details',
+  )
+  assert(
+    buildFinalResultLifecycleWarningSourceLabelSource.includes('const nodeLabel = sourceNodeLabel?.trim() || warning.sourceNodeId || null')
+      && buildFinalResultLifecycleWarningSourceLabelSource.includes('const portLabel = warning.sourcePortKey?.trim() || null')
+      && buildFinalResultLifecycleWarningSourceLabelSource.includes("[nodeLabel, portLabel].filter(Boolean).join(' · ')"),
+    'final-result warning source labels should combine source node and output port context',
   )
   assert(
     workflowRunnerSource.includes('latestExecutionLogs?: GraphExecutionLogRecord[] | null')
       && workflowRunnerSource.includes('const latestExecutionFinalResultWarning = useMemo(() => findFinalResultLifecycleWarning(latestExecutionLogs), [latestExecutionLogs])')
       && workflowRunnerSource.includes('최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 실행 상세 로그에서 원인을 확인해줘.'),
     'workflow runner latest-result area should surface final-result lifecycle warning logs near the run controls',
+  )
+  assert(
+    workflowRunnerSource.includes('const nodeLabelMap = useMemo(() => buildNodeDisplayLabelMap(selectedGraph), [selectedGraph])')
+      && workflowRunnerSource.includes('getNodeDisplayLabelFromMap(nodeLabelMap, latestExecutionFinalResultWarning.sourceNodeId)')
+      && workflowRunnerSource.includes('최종 결과 노드는 실행됐지만 {source} 출력이 저장된 결과물을 만들지 못했어.')
+      && workflowRunnerSource.includes('최종 결과는 저장됐지만 {source} 출력의 생성 기록 연결은 실패했어.'),
+    'workflow runner final-result warnings should include source node/output context when logs provide it',
   )
   assert(
     workflowRunnerSource.includes('최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.'),
@@ -408,6 +428,13 @@ function assertExecutionPanelLookupPolicy() {
     executionPanelSource.includes('const finalResultLifecycleWarning = useMemo(() => findFinalResultLifecycleWarning(executionDetail.logs), [executionDetail.logs])')
       && executionPanelSource.includes('최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.'),
     'selected execution summary should surface final-result lifecycle warning logs before opening detailed logs',
+  )
+  assert(
+    executionPanelSource.includes('const nodeLabelMap = useMemo(() => buildNodeDisplayLabelMap(selectedGraph), [selectedGraph])')
+      && executionPanelSource.includes('getNodeDisplayLabelFromMap(nodeLabelMap, finalResultLifecycleWarning.sourceNodeId, nodeLabelOverrides)')
+      && executionPanelSource.includes('최종 결과 노드는 실행됐지만 {source} 출력이 저장된 결과물을 만들지 못했어.')
+      && executionPanelSource.includes('최종 결과는 저장됐지만 {source} 출력의 생성 기록 연결은 실패했어.'),
+    'selected execution summary final-result warnings should include source node/output context when logs provide it',
   )
   assert(
     executionPanelSource.includes('최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.'),

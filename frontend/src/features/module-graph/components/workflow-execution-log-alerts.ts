@@ -8,6 +8,10 @@ export type FinalResultLifecycleWarningKind = 'promotion_failed' | 'source_artif
 export type FinalResultLifecycleWarning = {
   kind: FinalResultLifecycleWarningKind
   log: GraphExecutionLogRecord
+  sourceNodeId?: string | null
+  sourcePortKey?: string | null
+  sourceArtifactId?: number | null
+  errorMessage?: string | null
 }
 
 function parseLogDetails(log: GraphExecutionLogRecord) {
@@ -36,6 +40,43 @@ function isFinalResultSourceArtifactMissingLog(log: GraphExecutionLogRecord) {
     && details?.skippedReason === 'source_artifact_not_persisted'
 }
 
+function readDetailsString(details: Record<string, unknown> | null, key: string) {
+  const value = details?.[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function readDetailsNumber(details: Record<string, unknown> | null, key: string) {
+  const value = details?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function buildFinalResultLifecycleWarning(kind: FinalResultLifecycleWarningKind, log: GraphExecutionLogRecord): FinalResultLifecycleWarning {
+  const details = parseLogDetails(log)
+  return {
+    kind,
+    log,
+    sourceNodeId: readDetailsString(details, 'sourceNodeId'),
+    sourcePortKey: readDetailsString(details, 'sourcePortKey'),
+    sourceArtifactId: readDetailsNumber(details, 'sourceArtifactId'),
+    errorMessage: readDetailsString(details, 'errorMessage'),
+  }
+}
+
+/** Build a compact source label for final-result warning copy from log details. */
+export function buildFinalResultLifecycleWarningSourceLabel(
+  warning: FinalResultLifecycleWarning | null | undefined,
+  sourceNodeLabel?: string | null,
+) {
+  if (!warning) {
+    return null
+  }
+
+  const nodeLabel = sourceNodeLabel?.trim() || warning.sourceNodeId || null
+  const portLabel = warning.sourcePortKey?.trim() || null
+  const label = [nodeLabel, portLabel].filter(Boolean).join(' · ')
+  return label || null
+}
+
 export function findFinalResultPromotionWarningLog(logs?: readonly GraphExecutionLogRecord[] | null) {
   return logs?.find((log) => log.event_type === FINAL_RESULT_PROMOTION_FAILED_EVENT) ?? null
 }
@@ -43,9 +84,9 @@ export function findFinalResultPromotionWarningLog(logs?: readonly GraphExecutio
 export function findFinalResultLifecycleWarning(logs?: readonly GraphExecutionLogRecord[] | null): FinalResultLifecycleWarning | null {
   const promotionFailureLog = findFinalResultPromotionWarningLog(logs)
   if (promotionFailureLog) {
-    return { kind: 'promotion_failed', log: promotionFailureLog }
+    return buildFinalResultLifecycleWarning('promotion_failed', promotionFailureLog)
   }
 
   const missingSourceArtifactLog = logs?.find(isFinalResultSourceArtifactMissingLog)
-  return missingSourceArtifactLog ? { kind: 'source_artifact_missing', log: missingSourceArtifactLog } : null
+  return missingSourceArtifactLog ? buildFinalResultLifecycleWarning('source_artifact_missing', missingSourceArtifactLog) : null
 }
