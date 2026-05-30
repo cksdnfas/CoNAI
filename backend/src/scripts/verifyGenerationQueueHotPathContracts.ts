@@ -45,6 +45,7 @@ async function main() {
     const publicWorkflowRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/public-workflows.routes.ts'), 'utf8')
     const generationHistoryServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationHistoryService.ts'), 'utf8')
     const apiImageProcessorSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/APIImageProcessor.ts'), 'utf8')
+    const backgroundQueueSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/backgroundQueue.ts'), 'utf8')
     const backgroundProcessorServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/backgroundProcessorService.ts'), 'utf8')
     assert.match(
       queueServiceSource,
@@ -139,6 +140,16 @@ async function main() {
       backgroundProcessorServiceSource.match(/const processedRecord =[\s\S]*?if \(!options\.quiet\)/)?.[0] ?? '',
       /processApiGenerationGroupAssignment\(compositeHash\)/,
       'saved-media processing must not rerun API generation group assignment after processFile already handled the hash-level handoff',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /hasQueuedMetadataExtractionTask\(filePath: string, compositeHash: string\)/,
+      'background queue should check for exact queued metadata tasks before adding duplicate work',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /task\.type === TaskType\.METADATA_EXTRACTION[\s\S]*task\.compositeHash === compositeHash[\s\S]*path\.resolve\(task\.filePath\) === normalizedFilePath/,
+      'background metadata task coalescing should be scoped by type, hash, and resolved file path',
     )
 
     db.prepare(`

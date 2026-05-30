@@ -99,14 +99,30 @@ export class BackgroundQueueService {
   private static readonly MAX_RETRIES = 3;
   private static readonly BATCH_SIZE = resolveBackgroundQueueBatchSize(); // 동시 처리 작업 수
 
+  /** Check for an exact queued metadata task before adding duplicate work. */
+  private static hasQueuedMetadataExtractionTask(filePath: string, compositeHash: string): boolean {
+    const normalizedFilePath = path.resolve(filePath);
+    return this.queue.some((task) => (
+      task.type === TaskType.METADATA_EXTRACTION
+      && task.compositeHash === compositeHash
+      && path.resolve(task.filePath) === normalizedFilePath
+    ));
+  }
+
   /**
    * 메타데이터 추출 작업 추가
    */
   static addMetadataExtractionTask(filePath: string, compositeHash: string): void {
+    const resolvedFilePath = path.resolve(filePath);
+    if (this.hasQueuedMetadataExtractionTask(resolvedFilePath, compositeHash)) {
+      logger.debug(`  ⏭️  백그라운드 메타데이터 작업 이미 대기 중: ${path.basename(resolvedFilePath)}`);
+      return;
+    }
+
     const task: BackgroundTask = {
       id: `${compositeHash}_metadata_${Date.now()}`,
       type: TaskType.METADATA_EXTRACTION,
-      filePath,
+      filePath: resolvedFilePath,
       compositeHash,
       priority: 1,
       retries: 0,
