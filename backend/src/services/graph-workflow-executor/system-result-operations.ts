@@ -1,6 +1,6 @@
 import { GraphExecutionFinalResultModel } from '../../models/GraphExecutionFinalResult'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
-import { promoteFinalResultArtifactToGenerationHistory } from './final-result-promotion'
+import { tryPromoteFinalResultArtifactToGenerationHistory } from './final-result-promotion'
 import {
   writeExecutionLog,
   type ExecutionContext,
@@ -53,7 +53,7 @@ export async function executeFinalResultNode(
     artifact_type: sourceArtifact.type,
   })
 
-  const promotionResult = await promoteFinalResultArtifactToGenerationHistory({
+  const promotionResult = await tryPromoteFinalResultArtifactToGenerationHistory({
     executionId: context.executionId,
     workflowId: context.workflow.id,
     workflowName: context.workflow.name,
@@ -64,6 +64,24 @@ export async function executeFinalResultNode(
   })
 
   context.artifactsByNode.set(node.id, {})
+
+  if (promotionResult.reason === 'promotion_failed') {
+    writeExecutionLog({
+      executionId: context.executionId,
+      nodeId: node.id,
+      level: 'warn',
+      eventType: 'final_result_promotion_failed',
+      message: 'Final result was saved, but generation history promotion failed',
+      details: {
+        engine: 'system',
+        operationKey: 'system.final_result',
+        sourceNodeId: sourceEdge.source_node_id,
+        sourcePortKey: sourceEdge.source_port_key,
+        sourceArtifactId: sourceArtifact.artifactRecordId,
+        errorMessage: 'errorMessage' in promotionResult ? promotionResult.errorMessage : null,
+      },
+    })
+  }
 
   writeExecutionLog({
     executionId: context.executionId,

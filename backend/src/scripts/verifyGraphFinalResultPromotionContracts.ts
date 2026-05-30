@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { resolveFinalResultPromotionCandidate } from '../services/graph-workflow-executor/final-result-promotion'
+import { resolveFinalResultPromotionCandidate, tryPromoteFinalResultArtifactToGenerationHistory } from '../services/graph-workflow-executor/final-result-promotion'
 import type { RuntimeArtifact } from '../services/graph-workflow-executor/shared'
 
 function artifact(overrides: Partial<RuntimeArtifact>): RuntimeArtifact {
@@ -197,4 +197,33 @@ assert.equal(uploadedAliasFinal.mimeType, 'image/webp')
 assert.equal(uploadedAliasFinal.storagePath, 'C:/tmp/source-alias.webp')
 assert.equal(uploadedAliasFinal.originalFileName, 'source-alias.webp')
 
-console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter/dimension alias fallback)')
+async function verifyPromotionFailureIsolation() {
+  const result = await tryPromoteFinalResultArtifactToGenerationHistory({
+    executionId: 1,
+    workflowId: 1,
+    workflowName: 'Missing file contract',
+    finalNodeId: 'final',
+    sourceNodeId: 'source',
+    sourcePortKey: 'image',
+    sourceArtifact: artifact({
+      storagePath: 'C:/__conai_missing_final_result_promotion_contract__/missing.png',
+      metadata: { mimeType: 'image/png' },
+    }),
+  })
+
+  assert.equal(result.shouldPromote, false)
+  assert.equal(result.reason, 'promotion_failed')
+  assert.equal('errorMessage' in result, true)
+  if ('errorMessage' in result) {
+    assert.match(result.errorMessage, /ENOENT|no such file|cannot find/i)
+  }
+}
+
+void verifyPromotionFailureIsolation()
+  .then(() => {
+    console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter/dimension alias fallback, promotion failure isolation)')
+  })
+  .catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })

@@ -419,3 +419,18 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
     compositeHash: completedHistory?.composite_hash ?? null,
   }
 }
+
+/** Promote final-result media when possible without letting history indexing fail the workflow execution. */
+export async function tryPromoteFinalResultArtifactToGenerationHistory(params: FinalResultPromotionParams) {
+  try {
+    return await promoteFinalResultArtifactToGenerationHistory(params)
+  } catch (error) {
+    const candidate = resolveFinalResultPromotionCandidate(params.sourceArtifact)
+    return {
+      ...candidate,
+      shouldPromote: false,
+      reason: 'promotion_failed',
+      errorMessage: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
