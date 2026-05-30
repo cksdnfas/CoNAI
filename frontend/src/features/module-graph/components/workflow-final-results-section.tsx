@@ -257,9 +257,10 @@ export function WorkflowFinalResultsSection({
                 if (!entry?.overlayLabel && !entry?.sourceNodeLabel && !entry?.sourcePortLabel && !entry?.artifact.artifact_type) {
                   return null
                 }
+                const overlayText = [entry.overlayLabel, entry.sourceNodeLabel, entry.sourcePortLabel, entry.artifact.artifact_type].filter(Boolean).join(' · ')
 
                 return (
-                  <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-black/62 px-2 py-1 text-[11px] text-white shadow-sm backdrop-blur-sm">
+                  <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-black/62 px-2 py-1 text-[11px] text-white shadow-sm backdrop-blur-sm" title={overlayText} aria-label={overlayText}>
                     {entry.overlayLabel ? <span className="truncate font-medium">{entry.overlayLabel}</span> : null}
                     {entry.sourceNodeLabel ? <span className="truncate text-white/92">{entry.sourceNodeLabel}</span> : null}
                     {entry.sourcePortLabel ? <span className="truncate text-white/82">{entry.sourcePortLabel}</span> : null}
@@ -272,15 +273,20 @@ export function WorkflowFinalResultsSection({
 
           {nonVisualEntries.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {nonVisualEntries.map(({ finalResult, artifact, overlayLabel, sourceNodeLabel }) => (
-                <ExecutionArtifactCard
-                  key={finalResult.id}
-                  artifact={artifact}
-                  compact
-                  hideTitle
-                  overlayLabel={[overlayLabel, sourceNodeLabel, getFinalResultSourcePortLabel(finalResult.source_port_key, artifact.artifact_type)].filter(Boolean).join(' · ') || undefined}
-                />
-              ))}
+              {nonVisualEntries.map(({ finalResult, artifact, overlayLabel, sourceNodeLabel, sourcePortLabel }) => {
+                const overlayText = [overlayLabel, sourceNodeLabel, sourcePortLabel].filter(Boolean).join(' · ') || undefined
+
+                return (
+                  <ExecutionArtifactCard
+                    key={finalResult.id}
+                    artifact={artifact}
+                    compact
+                    hideTitle
+                    title={overlayText}
+                    overlayLabel={overlayText}
+                  />
+                )
+              })}
             </div>
           ) : null}
         </div>

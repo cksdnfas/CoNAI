@@ -301,8 +301,14 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     finalResultsSource.includes('sourceNodeLabel: getFinalResultSourceNodeLabel(sourceNodeLabel, finalResult.source_node_id)')
       && finalResultsSource.includes('entry.sourceNodeLabel ? <span className="truncate text-white/92">{entry.sourceNodeLabel}</span> : null')
-      && finalResultsSource.includes('[overlayLabel, sourceNodeLabel, getFinalResultSourcePortLabel(finalResult.source_port_key, artifact.artifact_type)]'),
+      && finalResultsSource.includes('[overlayLabel, sourceNodeLabel, sourcePortLabel].filter(Boolean).join'),
     'final result overlays should include the source node label alongside the output port',
+  )
+  assert(
+    finalResultsSource.includes("const overlayText = [entry.overlayLabel, entry.sourceNodeLabel, entry.sourcePortLabel, entry.artifact.artifact_type].filter(Boolean).join(' · ')")
+      && finalResultsSource.includes('title={overlayText}')
+      && finalResultsSource.includes('aria-label={overlayText}'),
+    'final result visual overlays should expose the full source context when compact labels truncate',
   )
   assert(
     !finalResultsSource.includes('preferredColumnCount={Math.min(visualEntries.length, 4)}'),

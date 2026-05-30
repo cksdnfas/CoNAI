@@ -285,7 +285,7 @@ match(
 )
 match(
   workflowFinalResultsSectionSource,
-  /\[overlayLabel, sourceNodeLabel, getFinalResultSourcePortLabel\(finalResult\.source_port_key, artifact\.artifact_type\)\]/,
+  /\[overlayLabel, sourceNodeLabel, sourcePortLabel\]\.filter\(Boolean\)\.join/,
   'workflow final-result file cards should keep the source node and output port in non-visual overlays',
 )
 
