@@ -41,12 +41,23 @@ function assertSafeSqlAlias(alias: string): void {
 }
 
 export class MediaPostprocessVisibilityService {
-  private static invalidateVisibilityCaches(compositeHash: string): void {
+  private static scheduleGalleryCacheInvalidation(): void {
+    try {
+      const { QueryCacheService } = require('./QueryCacheService') as typeof import('./QueryCacheService');
+      QueryCacheService.scheduleGalleryCacheInvalidation();
+    } catch (error) {
+      console.warn('⚠️ Postprocess visibility gallery invalidation failed:', error instanceof Error ? error.message : error);
+    }
+  }
+
+  private static invalidateVisibilityCaches(compositeHash: string, options: { scheduleGallery?: boolean } = {}): void {
     try {
       const { QueryCacheService } = require('./QueryCacheService') as typeof import('./QueryCacheService');
       QueryCacheService.invalidateMetadataCache(compositeHash);
       QueryCacheService.invalidateThumbnailCache(compositeHash);
-      QueryCacheService.scheduleGalleryCacheInvalidation();
+      if (options.scheduleGallery !== false) {
+        QueryCacheService.scheduleGalleryCacheInvalidation();
+      }
     } catch (error) {
       console.warn('⚠️ Postprocess visibility cache invalidation failed:', error instanceof Error ? error.message : error);
     }
@@ -153,14 +164,36 @@ export class MediaPostprocessVisibilityService {
       WHERE COALESCE(postprocess_status, 'ready') = 'pending'
     `).all() as PendingPostprocessRow[];
 
-    let released = 0;
+    const releasedHashes: string[] = [];
     for (const row of rows) {
       if (!this.getImmediatePostprocessRequirements(row.auto_tags).hasPendingWork) {
-        this.markReady(row.composite_hash);
-        released += 1;
+        releasedHashes.push(row.composite_hash);
       }
     }
 
-    return released;
+    if (releasedHashes.length === 0) {
+      return 0;
+    }
+
+    const markReady = db.prepare(`
+      UPDATE media_metadata
+      SET postprocess_status = 'ready',
+          postprocess_completed_at = CURRENT_TIMESTAMP,
+          metadata_updated_date = CURRENT_TIMESTAMP
+      WHERE composite_hash = ?
+    `);
+    const markReadyBatch = db.transaction((hashes: string[]) => {
+      for (const hash of hashes) {
+        markReady.run(hash);
+      }
+    });
+
+    markReadyBatch(releasedHashes);
+    for (const hash of releasedHashes) {
+      this.invalidateVisibilityCaches(hash, { scheduleGallery: false });
+    }
+    this.scheduleGalleryCacheInvalidation();
+
+    return releasedHashes.length;
   }
 }

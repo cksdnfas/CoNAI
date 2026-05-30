@@ -25,6 +25,23 @@ async function main() {
   const { GenerationHistoryModel } = await import('../models/GenerationHistory');
 
   try {
+    const visibilityServiceSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/services/mediaPostprocessVisibilityService.ts'),
+      'utf8',
+    );
+    const batchReleaseStart = visibilityServiceSource.indexOf('static markReadyRowsWithoutPendingImmediateWork');
+    const batchReleaseSource = visibilityServiceSource.slice(batchReleaseStart);
+    assert.match(
+      batchReleaseSource,
+      /db\.transaction/,
+      'postprocess batch release should update releasable rows in one transaction'
+    );
+    assert.doesNotMatch(
+      batchReleaseSource,
+      /this\.markReady\(row\.composite_hash\)/,
+      'postprocess batch release must not schedule gallery invalidation once per released row'
+    );
+
     db.exec(`
       CREATE TABLE rating_weights (
         id INTEGER PRIMARY KEY,
@@ -390,6 +407,7 @@ async function main() {
     assert.equal(readPostprocessStatus('artist-failed-hash'), 'ready');
 
     seed('disabled-release-hash', 5, 'pending', '05');
+    seed('disabled-release-hash-2', 8, 'pending', '08');
     settingsService.saveSettings({
       ...defaultSettings,
       tagger: { ...defaultSettings.tagger, enabled: false, autoTagOnUpload: false },
@@ -397,10 +415,11 @@ async function main() {
     });
     assert.equal(
       MediaPostprocessVisibilityService.markReadyRowsWithoutPendingImmediateWork(),
-      1,
+      2,
       'turning off optional auto processors should release pending rows that no longer have required work'
     );
     assert.equal(readPostprocessStatus('disabled-release-hash'), 'ready');
+    assert.equal(readPostprocessStatus('disabled-release-hash-2'), 'ready');
 
     const duplicateVideoContent = Buffer.from('duplicate video payload');
     const duplicateVideoPath = path.join(runtimeBase, 'duplicate-existing.mp4');
