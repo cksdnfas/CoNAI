@@ -44,6 +44,7 @@ function assertExecutionPanelLookupPolicy() {
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const finalResultsSource = source('features/module-graph/components/workflow-final-results-section.tsx')
   const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
+  const pageViewModelSource = source('features/module-graph/use-module-graph-page-view-model.ts')
   const indexCssSource = source('index.css')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
@@ -335,6 +336,32 @@ function assertExecutionPanelLookupPolicy() {
     workflowRunnerSource.includes('getGraphExecutionStatusLabel(latestExecution.status)')
       && workflowRunnerSource.includes('localizeGraphWorkflowErrorMessage(latestExecution.error_message'),
     'workflow runner latest-result status and failure copy should use localized status/error helpers',
+  )
+  assert(
+    pageViewModelSource.includes('const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])'),
+    'module graph page view model should build one node-id map per node snapshot',
+  )
+  assert(
+    pageViewModelSource.includes('const uiFieldByKey = new Map((node.data.module.ui_schema ?? []).map((field) => [field.key, field]))')
+      && pageViewModelSource.includes('const uiField = uiFieldByKey.get(port.key)'),
+    'workflow input candidate derivation should index module UI fields per node instead of scanning per exposed port',
+  )
+  assert(
+    !pageViewModelSource.includes('node.data.module.ui_schema?.find((field) => field.key === port.key)'),
+    'workflow input candidate derivation must not scan module UI fields for every exposed port',
+  )
+  assert(
+    pageViewModelSource.includes('const currentNode = nodeById.get(nodeId)')
+      && pageViewModelSource.includes('executionOutputGroups: buildNodeArtifactGroups(nodeArtifacts, currentNode?.data.module.output_ports ?? [])'),
+    'latest execution previews should use the node lookup map when resolving artifact output ports',
+  )
+  assert(
+    !pageViewModelSource.includes('const currentNode = nodes.find((node) => node.id === nodeId)'),
+    'latest execution previews must not rescan graph nodes for every artifact node group',
+  )
+  assert(
+    pageViewModelSource.includes('const selectedNode = useMemo(() => selectedNodeId ? nodeById.get(selectedNodeId) ?? null : null, [nodeById, selectedNodeId])'),
+    'selected node lookup should reuse the node-id map',
   )
 }
 
