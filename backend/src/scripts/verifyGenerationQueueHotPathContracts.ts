@@ -143,13 +143,28 @@ async function main() {
     )
     assert.match(
       backgroundQueueSource,
-      /hasQueuedMetadataExtractionTask\(filePath: string, compositeHash: string\)/,
-      'background queue should check for exact queued metadata tasks before adding duplicate work',
+      /hasQueuedOrActiveMetadataExtractionTask\(filePath: string, compositeHash: string\)/,
+      'background queue should check for exact queued or active metadata tasks before adding duplicate work',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /activeMetadataTaskKeys = new Set<string>\(\)/,
+      'background metadata task coalescing should track in-flight work after a task leaves the queued list',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /activeMetadataTaskKeys\.has\(metadataTaskKey\)/,
+      'background metadata task coalescing should suppress duplicates while an exact task is active',
     )
     assert.match(
       backgroundQueueSource,
       /task\.type === TaskType\.METADATA_EXTRACTION[\s\S]*task\.compositeHash === compositeHash[\s\S]*path\.resolve\(task\.filePath\) === normalizedFilePath/,
       'background metadata task coalescing should be scoped by type, hash, and resolved file path',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /activeCount: number;[\s\S]*activeTasksByType: Record<TaskType, number>;/,
+      'background queue status should expose active work separately from queued work',
     )
 
     db.prepare(`
