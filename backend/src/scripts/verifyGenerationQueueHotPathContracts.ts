@@ -166,6 +166,16 @@ async function main() {
       /activeCount: number;[\s\S]*activeTasksByType: Record<TaskType, number>;/,
       'background queue status should expose active work separately from queued work',
     )
+    assert.match(
+      backgroundQueueSource,
+      /if \(SystemMaintenanceLockService\.isExclusiveActive\(\)\) \{[\s\S]*?this\.scheduleProcessQueueAfterMaintenanceLock\(\);[\s\S]*?return;/,
+      'background queue should schedule a retry when queued work arrives during an exclusive maintenance lock',
+    )
+    assert.match(
+      backgroundQueueSource,
+      /private static scheduleProcessQueueAfterMaintenanceLock\(\): void \{[\s\S]*?if \(this\.lockRetryScheduled\) \{[\s\S]*?return;[\s\S]*?this\.lockRetryScheduled = true;[\s\S]*?setTimeout/,
+      'background queue maintenance-lock retry scheduling should be coalesced',
+    )
 
     db.prepare(`
       INSERT INTO workflows (id, name, workflow_json)

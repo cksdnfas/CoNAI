@@ -98,6 +98,7 @@ export class BackgroundQueueService {
   private static activeTasks: BackgroundTask[] = [];
   private static activeMetadataTaskKeys = new Set<string>();
   private static processing = false;
+  private static lockRetryScheduled = false;
   private static readonly MAX_RETRIES = 3;
   private static readonly BATCH_SIZE = resolveBackgroundQueueBatchSize(); // 동시 처리 작업 수
 
@@ -208,7 +209,12 @@ export class BackgroundQueueService {
    * 큐 처리 (배치 병렬 처리)
    */
   private static async processQueue(): Promise<void> {
-    if (this.processing || this.queue.length === 0 || SystemMaintenanceLockService.isExclusiveActive()) {
+    if (this.processing || this.queue.length === 0) {
+      return;
+    }
+
+    if (SystemMaintenanceLockService.isExclusiveActive()) {
+      this.scheduleProcessQueueAfterMaintenanceLock();
       return;
     }
 
@@ -269,14 +275,24 @@ export class BackgroundQueueService {
     this.processing = false;
 
     if (this.queue.length > 0 && SystemMaintenanceLockService.isExclusiveActive()) {
-      setTimeout(() => {
-        void this.processQueue();
-      }, 5000);
+      this.scheduleProcessQueueAfterMaintenanceLock();
       logger.info('⏸️  백그라운드 큐 처리 대기: 시스템 유지보수 잠금 활성\n');
       return;
     }
 
     logger.info('✅ 백그라운드 큐 처리 완료\n');
+  }
+
+  private static scheduleProcessQueueAfterMaintenanceLock(): void {
+    if (this.lockRetryScheduled) {
+      return;
+    }
+
+    this.lockRetryScheduled = true;
+    setTimeout(() => {
+      this.lockRetryScheduled = false;
+      void this.processQueue();
+    }, 5000);
   }
 
   /**
