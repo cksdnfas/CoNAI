@@ -299,6 +299,12 @@ function assertExecutionPanelLookupPolicy() {
     'final result header should summarize media and non-visual result counts',
   )
   assert(
+    finalResultsSource.includes('sourceNodeLabel: getFinalResultSourceNodeLabel(sourceNodeLabel, finalResult.source_node_id)')
+      && finalResultsSource.includes('entry.sourceNodeLabel ? <span className="truncate text-white/92">{entry.sourceNodeLabel}</span> : null')
+      && finalResultsSource.includes('[overlayLabel, sourceNodeLabel, getFinalResultSourcePortLabel(finalResult.source_port_key, artifact.artifact_type)]'),
+    'final result overlays should include the source node label alongside the output port',
+  )
+  assert(
     !finalResultsSource.includes('preferredColumnCount={Math.min(visualEntries.length, 4)}'),
     'final result image list must not force multiple columns in narrow runner panels',
   )

@@ -36,6 +36,15 @@ function getFinalResultSourcePortLabel(portKey: string | null | undefined, artif
   return normalizedPortKey
 }
 
+function getFinalResultSourceNodeLabel(nodeLabel: string, sourceNodeId: string) {
+  const normalizedLabel = nodeLabel.trim()
+  if (!normalizedLabel || normalizedLabel === sourceNodeId || normalizedLabel === `노드 ${sourceNodeId}`) {
+    return undefined
+  }
+
+  return normalizedLabel
+}
+
 function buildFallbackArtifact(finalResult: GraphExecutionFinalResultRecord): GraphExecutionArtifactRecord {
   return {
     id: finalResult.source_artifact_id,
@@ -54,6 +63,7 @@ type ResolvedFinalResultEntry = {
   artifact: GraphExecutionArtifactRecord
   nodeLabel: string
   overlayLabel?: string
+  sourceNodeLabel?: string
   sourcePortLabel?: string
 }
 
@@ -181,12 +191,14 @@ export function WorkflowFinalResultsSection({
   const artifactsById = useMemo(() => new Map(artifacts.map((artifact) => [artifact.id, artifact])), [artifacts])
   const resolvedEntries = useMemo<ResolvedFinalResultEntry[]>(() => finalResults.map((finalResult) => {
     const finalNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.final_node_id, nodeLabelOverrides)
+    const sourceNodeLabel = getNodeDisplayLabel(selectedGraph, finalResult.source_node_id, nodeLabelOverrides)
 
     return {
       finalResult,
       artifact: artifactsById.get(finalResult.source_artifact_id) ?? buildFallbackArtifact(finalResult),
       nodeLabel: finalNodeLabel,
       overlayLabel: getFinalResultOverlayLabel(finalNodeLabel),
+      sourceNodeLabel: getFinalResultSourceNodeLabel(sourceNodeLabel, finalResult.source_node_id),
       sourcePortLabel: getFinalResultSourcePortLabel(finalResult.source_port_key, finalResult.artifact_type),
     }
   }), [artifactsById, finalResults, nodeLabelOverrides, selectedGraph])
@@ -242,13 +254,14 @@ export function WorkflowFinalResultsSection({
               showDefaultQuickActions={false}
               renderItemPersistentOverlay={(image) => {
                 const entry = visualEntryByImageId.get(String(image.id))
-                if (!entry?.overlayLabel && !entry?.sourcePortLabel && !entry?.artifact.artifact_type) {
+                if (!entry?.overlayLabel && !entry?.sourceNodeLabel && !entry?.sourcePortLabel && !entry?.artifact.artifact_type) {
                   return null
                 }
 
                 return (
                   <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-black/62 px-2 py-1 text-[11px] text-white shadow-sm backdrop-blur-sm">
                     {entry.overlayLabel ? <span className="truncate font-medium">{entry.overlayLabel}</span> : null}
+                    {entry.sourceNodeLabel ? <span className="truncate text-white/92">{entry.sourceNodeLabel}</span> : null}
                     {entry.sourcePortLabel ? <span className="truncate text-white/82">{entry.sourcePortLabel}</span> : null}
                     {entry.artifact.artifact_type ? <Badge variant="secondary" className="h-5 border-white/15 bg-white/14 px-1.5 text-[10px] text-white">{entry.artifact.artifact_type}</Badge> : null}
                   </div>
@@ -259,13 +272,13 @@ export function WorkflowFinalResultsSection({
 
           {nonVisualEntries.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {nonVisualEntries.map(({ finalResult, artifact, overlayLabel }) => (
+              {nonVisualEntries.map(({ finalResult, artifact, overlayLabel, sourceNodeLabel }) => (
                 <ExecutionArtifactCard
                   key={finalResult.id}
                   artifact={artifact}
                   compact
                   hideTitle
-                  overlayLabel={[overlayLabel, getFinalResultSourcePortLabel(finalResult.source_port_key, artifact.artifact_type)].filter(Boolean).join(' · ') || undefined}
+                  overlayLabel={[overlayLabel, sourceNodeLabel, getFinalResultSourcePortLabel(finalResult.source_port_key, artifact.artifact_type)].filter(Boolean).join(' · ') || undefined}
                 />
               ))}
             </div>

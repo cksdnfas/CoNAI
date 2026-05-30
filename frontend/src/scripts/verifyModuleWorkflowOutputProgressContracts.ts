@@ -280,8 +280,13 @@ match(
 )
 match(
   workflowFinalResultsSectionSource,
-  /getFinalResultSourcePortLabel\(finalResult\.source_port_key, artifact\.artifact_type\)/,
-  'workflow final-result file cards should keep the source output port in non-visual overlays',
+  /sourceNodeLabel: getFinalResultSourceNodeLabel\(sourceNodeLabel, finalResult\.source_node_id\)/,
+  'workflow final-result cards should keep the source node label in visual overlays',
+)
+match(
+  workflowFinalResultsSectionSource,
+  /\[overlayLabel, sourceNodeLabel, getFinalResultSourcePortLabel\(finalResult\.source_port_key, artifact\.artifact_type\)\]/,
+  'workflow final-result file cards should keep the source node and output port in non-visual overlays',
 )
 
 console.log('Module workflow output progress contracts verified')
