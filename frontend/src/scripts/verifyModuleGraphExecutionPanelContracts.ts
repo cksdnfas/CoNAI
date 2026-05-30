@@ -44,6 +44,7 @@ function assertExecutionPanelLookupPolicy() {
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const finalResultsSource = source('features/module-graph/components/workflow-final-results-section.tsx')
   const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
+  const pageSectionsSource = source('features/module-graph/components/module-graph-page-sections.tsx')
   const pageViewModelSource = source('features/module-graph/use-module-graph-page-view-model.ts')
   const indexCssSource = source('index.css')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
@@ -334,6 +335,25 @@ function assertExecutionPanelLookupPolicy() {
       && workflowRunnerSource.includes('shouldShowLatestExecutionResults && latestExecutionArtifacts && latestExecutionFinalResults')
       && workflowRunnerSource.includes('shouldShowLatestExecutionResults ? ('),
     'workflow runner latest-result area should only wait for final-result detail when the latest execution is completed',
+  )
+  assert(
+    pageViewModelSource.includes('const latestExecutionDetailQueryIndex = useMemo(')
+      && pageViewModelSource.includes("latestExecution?.status === 'completed'")
+      && pageViewModelSource.includes('previewExecutionCandidates.findIndex((execution) => execution.id === latestExecution.id)')
+      && pageViewModelSource.includes('const latestExecutionDetailIsLoading = latestExecution?.status === \'completed\'')
+      && pageViewModelSource.includes('const latestExecutionDetailError = latestExecution?.status === \'completed\' && latestExecutionDetailQuery?.isError'),
+    'workflow runner latest-result detail state should be derived from the matching latest completed execution query',
+  )
+  assert(
+    pageSectionsSource.includes('latestExecutionDetailIsLoading={latestExecutionDetailIsLoading}')
+      && pageSectionsSource.includes('latestExecutionDetailError={latestExecutionDetailError}'),
+    'workflow runner latest-result detail loading and error state should be passed into the browse side panel',
+  )
+  assert(
+    workflowRunnerSource.includes('const latestExecutionDetailLoadMessage = latestExecutionDetailError')
+      && workflowRunnerSource.includes("latestExecutionDetailError ? 'text-destructive' : 'text-muted-foreground'")
+      && workflowRunnerSource.includes('Could not load final result details.'),
+    'workflow runner latest-result area should show detail load failures instead of a stale loading message',
   )
   assert(
     workflowRunnerSource.includes('const latestExecutionEmptyResultLabel = graphSummary && graphSummary.finalResultNodeCount > 0')

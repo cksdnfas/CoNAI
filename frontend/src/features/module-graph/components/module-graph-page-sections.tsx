@@ -82,6 +82,8 @@ export function ModuleGraphWorkflowBrowseSidePanel({
   isExecuting,
   latestExecution,
   latestExecutionDetail,
+  latestExecutionDetailIsLoading,
+  latestExecutionDetailError,
   selectedWorkflowCanExecute,
   selectedWorkflowValidationIssues,
   onInputValueChange,
@@ -100,6 +102,8 @@ export function ModuleGraphWorkflowBrowseSidePanel({
   isExecuting: boolean
   latestExecution: GraphExecutionRecord | null
   latestExecutionDetail: GraphExecutionDetailRecord | null
+  latestExecutionDetailIsLoading: boolean
+  latestExecutionDetailError: string | null
   selectedWorkflowCanExecute: boolean
   selectedWorkflowValidationIssues: WorkflowValidationIssue[]
   onInputValueChange: (inputId: string, value: unknown) => void
@@ -129,6 +133,8 @@ export function ModuleGraphWorkflowBrowseSidePanel({
       latestExecution={latestExecution}
       latestExecutionArtifacts={latestExecutionDetail?.artifacts}
       latestExecutionFinalResults={latestExecutionDetail?.final_results}
+      latestExecutionDetailIsLoading={latestExecutionDetailIsLoading}
+      latestExecutionDetailError={latestExecutionDetailError}
       onInputValueChange={onInputValueChange}
       onInputValueClear={onInputValueClear}
       onInputImageChange={onInputImageChange}

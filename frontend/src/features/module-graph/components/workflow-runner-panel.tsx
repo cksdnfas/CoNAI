@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
 import { getGraphWorkflowSchedules, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord } from '@/lib/api-module-graph'
+import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
@@ -23,6 +24,8 @@ type WorkflowRunnerPanelProps = {
   latestExecution?: GraphExecutionRecord | null
   latestExecutionArtifacts?: GraphExecutionArtifactRecord[] | null
   latestExecutionFinalResults?: GraphExecutionFinalResultRecord[] | null
+  latestExecutionDetailIsLoading?: boolean
+  latestExecutionDetailError?: string | null
   graphSummary?: SavedGraphWorkflowSummary | null
   onInputValueChange: (inputId: string, value: unknown) => void
   onInputValueClear: (inputId: string) => void
@@ -46,6 +49,8 @@ export function WorkflowRunnerPanel({
   latestExecution,
   latestExecutionArtifacts,
   latestExecutionFinalResults,
+  latestExecutionDetailIsLoading = false,
+  latestExecutionDetailError = null,
   graphSummary,
   onInputValueChange,
   onInputValueClear,
@@ -116,6 +121,8 @@ export function WorkflowRunnerPanel({
   const latestExecutionArtifactCountLabel = latestExecutionArtifactCount !== null
     ? t({ ko: '원본 {count}', en: 'Source {count}' }, { count: formatNumber(latestExecutionArtifactCount) })
     : null
+  const latestExecutionDetailLoadMessage = latestExecutionDetailError
+    ?? (latestExecutionDetailIsLoading ? t({ ko: '최종 결과를 불러오는 중...', en: 'Loading final results...' }) : t({ ko: '최종 결과 정보를 불러오지 못했어.', en: 'Could not load final result details.' }))
 
   return (
     <Card>
@@ -210,7 +217,7 @@ export function WorkflowRunnerPanel({
                       emptyLabel={latestExecutionEmptyResultLabel}
                     />
                   ) : shouldShowLatestExecutionResults ? (
-                    <div className="text-sm text-muted-foreground">{t({ ko: '최종 결과를 불러오는 중…', en: 'Loading final results…' })}</div>
+                    <div className={cn('text-sm', latestExecutionDetailError ? 'text-destructive' : 'text-muted-foreground')}>{latestExecutionDetailLoadMessage}</div>
                   ) : (
                     <div className="text-sm text-muted-foreground">{latestExecutionPendingMessage}</div>
                   )}

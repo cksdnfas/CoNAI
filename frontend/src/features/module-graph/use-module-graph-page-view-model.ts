@@ -123,6 +123,15 @@ export function useModuleGraphPageViewModel({
       staleTime: 30_000,
     })),
   })
+  const latestExecutionDetailQueryIndex = useMemo(
+    () => latestExecution?.status === 'completed'
+      ? previewExecutionCandidates.findIndex((execution) => execution.id === latestExecution.id)
+      : -1,
+    [latestExecution, previewExecutionCandidates],
+  )
+  const latestExecutionDetailQuery = latestExecutionDetailQueryIndex >= 0
+    ? previewExecutionDetailQueries[latestExecutionDetailQueryIndex]
+    : undefined
 
   const latestArtifactPreviewByNode = useMemo(() => {
     const previewByNode = new Map<string, {
@@ -175,13 +184,20 @@ export function useModuleGraphPageViewModel({
   }, [nodeById, previewExecutionCandidates, previewExecutionDetailQueries])
 
   const latestExecutionDetail = useMemo(() => {
-    const latestPreviewDetail = previewExecutionDetailQueries[0]?.data
+    const latestPreviewDetail = latestExecutionDetailQuery?.data
     if (!latestExecution || !latestPreviewDetail || latestPreviewDetail.execution.id !== latestExecution.id) {
       return null
     }
 
     return latestPreviewDetail
-  }, [latestExecution, previewExecutionDetailQueries])
+  }, [latestExecution, latestExecutionDetailQuery?.data])
+  const latestExecutionDetailIsLoading = latestExecution?.status === 'completed'
+    && latestExecutionDetailQuery?.isPending === true
+  const latestExecutionDetailError = latestExecution?.status === 'completed' && latestExecutionDetailQuery?.isError
+    ? latestExecutionDetailQuery.error instanceof Error
+      ? latestExecutionDetailQuery.error.message
+      : t({ ko: '최종 결과 정보를 불러오지 못했어.', en: 'Could not load final result details.' })
+    : null
 
   const selectedExecution = useMemo(
     () => executionList.find((execution) => execution.id === selectedExecutionId) ?? executionDetail?.execution ?? null,
@@ -248,6 +264,8 @@ export function useModuleGraphPageViewModel({
     latestExecution,
     latestArtifactPreviewByNode,
     latestExecutionDetail,
+    latestExecutionDetailIsLoading,
+    latestExecutionDetailError,
     selectedExecution,
     selectedNode,
     selectedEdge,
