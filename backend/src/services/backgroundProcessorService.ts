@@ -281,7 +281,6 @@ export class BackgroundProcessorService {
 
     const compositeHash = processedRecord?.composite_hash ?? null;
     if (compositeHash) {
-      await this.processApiGenerationGroupAssignment(compositeHash);
       this.triggerAutoTagProcessing(compositeHash, resolvedPath, options);
     }
 

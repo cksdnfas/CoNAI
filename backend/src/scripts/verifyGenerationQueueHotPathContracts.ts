@@ -135,6 +135,11 @@ async function main() {
       /options\.metadataMode === 'background'[\s\S]*?queueMetadataExtraction\(filePath, compositeHash, logLabel\)/,
       'background metadata mode should hand processed media to the background queue without awaiting extraction',
     )
+    assert.doesNotMatch(
+      backgroundProcessorServiceSource.match(/const processedRecord =[\s\S]*?if \(!options\.quiet\)/)?.[0] ?? '',
+      /processApiGenerationGroupAssignment\(compositeHash\)/,
+      'saved-media processing must not rerun API generation group assignment after processFile already handled the hash-level handoff',
+    )
 
     db.prepare(`
       INSERT INTO workflows (id, name, workflow_json)
