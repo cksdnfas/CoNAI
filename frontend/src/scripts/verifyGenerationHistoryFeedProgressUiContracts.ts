@@ -76,8 +76,18 @@ function assertStatusSummarySourcePolicy() {
   )
   match(
     generationHistoryPanelSource,
-    /inFlight: inFlightHistoryCount,[\s\S]*?completed: completedHistoryCount,[\s\S]*?failed: failedHistoryCount,[\s\S]*?cancellation: cancellationHistoryCount,[\s\S]*?\} = useMemo\(\(\) => getHistoryRecordStatusSummary\(historyRecords\), \[historyRecords\]\)/,
+    /inFlight: inFlightHistoryCount,[\s\S]*?completed: completedHistoryCount,[\s\S]*?cleanupFailed: cleanupFailedHistoryCount,[\s\S]*?cancellation: cancellationHistoryCount,[\s\S]*?\} = useMemo\(\(\) => getHistoryRecordStatusSummary\(historyRecords\), \[historyRecords\]\)/,
     'generation history panel should memoize one status summary for badge counts',
+  )
+  match(
+    generationHistoryPanelSource,
+    /if \(record\.generation_status === 'failed'\) \{[\s\S]*?summary\.cleanupFailed \+= 1/,
+    'generation history cleanup should only enable from raw failed history rows that the cleanup endpoint removes',
+  )
+  match(
+    generationHistoryPanelSource,
+    /disabled=\{isCleaningFailed \|\| cleanupFailedHistoryCount === 0\}/,
+    'clean failed action should not enable from display-only missing/postprocess result states',
   )
   doesNotMatch(
     generationHistoryPanelSource,

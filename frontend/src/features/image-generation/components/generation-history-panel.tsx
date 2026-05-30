@@ -85,6 +85,7 @@ type HistoryRecordStatusSummary = {
   inFlight: number
   completed: number
   failed: number
+  cleanupFailed: number
   cancellation: number
 }
 
@@ -93,11 +94,15 @@ function getHistoryRecordStatusSummary(records: GenerationHistoryResponse['recor
     inFlight: 0,
     completed: 0,
     failed: 0,
+    cleanupFailed: 0,
     cancellation: 0,
   }
 
   for (const record of records) {
     const displayStatus = resolveHistoryDisplayStatus(record)
+    if (record.generation_status === 'failed') {
+      summary.cleanupFailed += 1
+    }
 
     if (displayStatus === 'pending' || displayStatus === 'processing') {
       summary.inFlight += 1
@@ -252,7 +257,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
   const {
     inFlight: inFlightHistoryCount,
     completed: completedHistoryCount,
-    failed: failedHistoryCount,
+    cleanupFailed: cleanupFailedHistoryCount,
     cancellation: cancellationHistoryCount,
   } = useMemo(() => getHistoryRecordStatusSummary(historyRecords), [historyRecords])
   const historyImages = useMemo(() => historyRecords.map((record) => mapHistoryRecordToImageRecord(record)), [historyRecords])
@@ -471,7 +476,7 @@ export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, 
             size="sm"
             variant="outline"
             onClick={handleCleanupFailed}
-            disabled={isCleaningFailed || failedHistoryCount === 0}
+            disabled={isCleaningFailed || cleanupFailedHistoryCount === 0}
           >
             <Trash2 className="h-4 w-4" />
             {isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
