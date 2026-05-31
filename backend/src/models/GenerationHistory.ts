@@ -606,6 +606,40 @@ export class GenerationHistoryModel {
   }
 
   /**
+   * Get workflow statistics for compact history-list surfaces.
+   */
+  static getWorkflowListStatistics(workflowId: number): {
+    total: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    processing: number;
+  } {
+    let sql = `
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN gh.generation_status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN gh.generation_status = 'failed' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN gh.generation_status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN gh.generation_status = 'processing' THEN 1 ELSE 0 END) as processing
+      FROM api_generation_history gh
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
+      WHERE gh.workflow_id = ?
+    `;
+    sql = this.appendHistoryListVisibilityFilter(sql);
+
+    const stmt = apiGenDb.prepare(sql);
+    const result = stmt.get(workflowId) as any;
+    return {
+      total: result?.total || 0,
+      completed: result?.completed || 0,
+      failed: result?.failed || 0,
+      pending: result?.pending || 0,
+      processing: result?.processing || 0
+    };
+  }
+
+  /**
    * Find records by status with optional time filter
    * Used by cleanup service to find old failed records
    * @param status - Generation status to filter by

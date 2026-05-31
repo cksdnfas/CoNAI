@@ -249,6 +249,8 @@ function verifyMissingSourceArtifactWarningContract() {
 function verifyArtifactOnlyHistoryListContract() {
   const modelSource = readFileSync(resolve(process.cwd(), 'src/models/GenerationHistory.ts'), 'utf8')
   const serviceSource = readFileSync(resolve(process.cwd(), 'src/services/generationHistoryService.ts'), 'utf8')
+  const mcpImageToolsSource = readFileSync(resolve(process.cwd(), 'src/mcp/tools/imageTools.ts'), 'utf8')
+  const workflowExecutionRoutesSource = readFileSync(resolve(process.cwd(), 'src/routes/workflows/execution.routes.ts'), 'utf8')
 
   assert.match(
     modelSource,
@@ -265,6 +267,26 @@ function verifyArtifactOnlyHistoryListContract() {
     /GenerationHistoryModel\.countListRecords\(/,
     'generation history list totals should use the same visibility filter as history list rows',
   )
+  assert.match(
+    modelSource,
+    /static getWorkflowListStatistics\([\s\S]*?appendHistoryListVisibilityFilter\(/,
+    'workflow history stats should have a list-visible variant for artifact-explorer placeholders',
+  )
+  assert.match(
+    mcpImageToolsSource,
+    /get_generation_history[\s\S]*?GenerationHistoryModel\.findAllWithMetadata\(filters\)[\s\S]*?GenerationHistoryModel\.countListRecords\(filters\)/,
+    'MCP generation-history tool should keep records and totals aligned with list visibility',
+  )
+  assert.match(
+    mcpImageToolsSource,
+    /z\.enum\(\['comfyui', 'novelai', 'codex'\]\)/,
+    'MCP generation-history filter should allow every supported generation history service type',
+  )
+  assert.match(
+    workflowExecutionRoutesSource,
+    /findAllWithMetadata\(\{ workflow_id: id, limit, offset \}\)[\s\S]*?countListRecords\(\{ workflow_id: id \}\)[\s\S]*?getWorkflowListStatistics\(id\)/,
+    'legacy workflow history route should align rows, pagination totals, and stats with list visibility',
+  )
 }
 
 verifyMissingSourceArtifactWarningContract()
@@ -272,7 +294,7 @@ verifyArtifactOnlyHistoryListContract()
 
 void verifyPromotionFailureIsolation()
   .then(() => {
-    console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter/dimension alias fallback, promotion failure isolation, artifact-only history visibility)')
+    console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter/dimension alias fallback, promotion failure isolation, artifact-only history visibility, MCP/workflow history totals)')
   })
   .catch((error) => {
     console.error(error)

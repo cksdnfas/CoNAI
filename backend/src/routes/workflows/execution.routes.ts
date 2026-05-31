@@ -238,9 +238,9 @@ router.get('/:id/history', asyncHandler(async (req: Request, res: Response) => {
   try {
     // API Generation History에서 조회
     const offset = (page - 1) * limit;
-    const histories = GenerationHistoryModel.findByWorkflow(id, { limit, offset });
-    const total = GenerationHistoryModel.count({ workflow_id: id });
-    const stats = GenerationHistoryModel.getWorkflowStatistics(id);
+    const histories = GenerationHistoryModel.findAllWithMetadata({ workflow_id: id, limit, offset });
+    const total = GenerationHistoryModel.countListRecords({ workflow_id: id });
+    const stats = GenerationHistoryModel.getWorkflowListStatistics(id);
 
     const response: WorkflowResponse = {
       success: true,

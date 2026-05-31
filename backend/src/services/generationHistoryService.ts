@@ -373,4 +373,17 @@ export class GenerationHistoryService {
   }> {
     return GenerationHistoryModel.getWorkflowStatistics(workflowId);
   }
+
+  /**
+   * Get workflow statistics aligned with compact history-list visibility.
+   */
+  static async getWorkflowListStatistics(workflowId: number): Promise<{
+    total: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    processing: number;
+  }> {
+    return GenerationHistoryModel.getWorkflowListStatistics(workflowId);
+  }
 }

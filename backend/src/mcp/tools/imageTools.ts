@@ -117,7 +117,7 @@ export function registerImageTools(server: McpServer): void {
     'get_generation_history',
     'Get image generation history records. Supports filtering by service type (comfyui/novelai) and generation status.',
     {
-      service_type: z.enum(['comfyui', 'novelai']).optional().describe('Filter by service type'),
+      service_type: z.enum(['comfyui', 'novelai', 'codex']).optional().describe('Filter by service type'),
       generation_status: z.enum(['pending', 'processing', 'completed', 'failed']).optional().describe('Filter by generation status'),
       limit: z.number().int().min(1).max(100).default(20).describe('Number of records to return'),
       offset: z.number().int().min(0).default(0).describe('Offset for pagination'),
@@ -129,7 +129,7 @@ export function registerImageTools(server: McpServer): void {
         if (generation_status) filters.generation_status = generation_status;
 
         const records = GenerationHistoryModel.findAllWithMetadata(filters);
-        const total = GenerationHistoryModel.count(filters);
+        const total = GenerationHistoryModel.countListRecords(filters);
 
         // 응답 크기를 줄이기 위해 핵심 필드만 추출
         const summary = records.map(r => ({
