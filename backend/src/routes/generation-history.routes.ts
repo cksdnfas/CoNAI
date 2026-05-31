@@ -606,7 +606,7 @@ router.get(
   '/workflow/:workflowId/statistics',
   asyncHandler(async (req: Request, res: Response) => {
     const workflowId = routeParam(req.params.workflowId);
-    const stats = await GenerationHistoryService.getWorkflowStatistics(parseInt(workflowId));
+    const stats = await GenerationHistoryService.getWorkflowListStatistics(parseInt(workflowId));
 
     res.json({
       success: true,

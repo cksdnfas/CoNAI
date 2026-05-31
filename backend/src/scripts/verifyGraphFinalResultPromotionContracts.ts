@@ -292,6 +292,11 @@ function verifyArtifactOnlyHistoryListContract() {
     /findAllWithMetadata\(\{ workflow_id: id, limit, offset \}\)[\s\S]*?countListRecords\(\{ workflow_id: id \}\)[\s\S]*?getWorkflowListStatistics\(id\)/,
     'legacy workflow history route should align rows, pagination totals, and stats with list visibility',
   )
+  assert.match(
+    readFileSync(resolve(process.cwd(), 'src/routes/generation-history.routes.ts'), 'utf8'),
+    /\/workflow\/:workflowId\/statistics[\s\S]*?GenerationHistoryService\.getWorkflowListStatistics\(parseInt\(workflowId\)\)/,
+    'workflow generation-history statistics endpoint should use the same list-visible stats as workflow history rows',
+  )
 }
 
 verifyMissingSourceArtifactWarningContract()
