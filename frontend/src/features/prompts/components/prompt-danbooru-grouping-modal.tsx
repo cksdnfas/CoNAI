@@ -91,6 +91,7 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
   })
 
   const preview = previewQuery.data
+  const isDanbooruDbAvailable = preview?.database.available !== false
 
   return (
     <SettingsModal
@@ -118,6 +119,20 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
 
         {preview ? (
           <>
+            {!isDanbooruDbAvailable ? (
+              <Alert>
+                <AlertTitle>{t({ ko: 'Danbooru DB 파일 없음', en: 'Danbooru DB file missing' })}</AlertTitle>
+                <AlertDescription>
+                  <div className="space-y-1">
+                    <p>{t({ ko: '자동 그룹 구성은 DB 파일이 있어야 실행돼.', en: 'Auto grouping requires the DB file.' })}</p>
+                    <p className="break-all font-mono text-xs text-foreground">{preview.database.expectedPath}</p>
+                    <a className="block break-all text-xs text-primary underline-offset-4 hover:underline" href={preview.database.downloadUrl} target="_blank" rel="noreferrer">{preview.database.downloadUrl}</a>
+                    <p className="text-xs">{t({ ko: '다른 위치는 DANBOORU_SQLITE_PATH 환경변수로 지정 가능해.', en: 'Set DANBOORU_SQLITE_PATH to use another location.' })}</p>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <PreviewMetricCard label={t({ ko: '대상 프롬프트', en: 'Eligible prompts' })} value={formatNumber(preview.totals.eligiblePrompts)} />
               <PreviewMetricCard label={t({ ko: '매칭 프롬프트', en: 'Matched prompts' })} value={formatNumber(preview.totals.matchedPrompts)} />
@@ -131,7 +146,7 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
 
             <div className="flex justify-end gap-2 border-t border-border/70 pt-4">
               <Button type="button" variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-              <Button type="button" onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending || preview.totals.matchedPrompts === 0}>
+              <Button type="button" onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending || !isDanbooruDbAvailable || preview.totals.matchedPrompts === 0}>
                 <WandSparkles className="h-4 w-4" />
                 {applyMutation.isPending ? t({ ko: '적용 중...', en: 'Applying...' }) : t({ ko: '자동 그룹 구성 적용', en: 'Apply auto grouping' })}
               </Button>

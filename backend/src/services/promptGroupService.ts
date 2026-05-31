@@ -858,6 +858,26 @@ export class PromptGroupService {
     };
   }
 
+  private static getUnavailableDanbooruGroupingTypePreview(type: PromptCollectionType, options: Required<DanbooruGroupingOptions>): DanbooruGroupingTypeResult {
+    const tableName = getPromptTableName(type);
+    const assignmentFilter = this.buildDanbooruAssignmentFilter(type, options);
+    const totalRow = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get() as { count: number };
+    const eligibleRow = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName} pc WHERE 1=1 ${assignmentFilter.sql}`).get(...assignmentFilter.params) as { count: number };
+
+    return {
+      type,
+      totalPrompts: totalRow.count,
+      eligiblePrompts: eligibleRow.count,
+      matchedPrompts: 0,
+      assignedPrompts: 0,
+      createdGroups: 0,
+      reusedGroups: 0,
+      matchedGroups: 0,
+      skippedAssignedPrompts: options.includeAssignedPrompts ? 0 : Math.max(totalRow.count - eligibleRow.count, 0),
+      sampleUnmatchedPrompts: [],
+    };
+  }
+
   private static summarizeDanbooruGrouping(options: Required<DanbooruGroupingOptions>, database: ReturnType<typeof resolveDanbooruDbInfo>, byType: DanbooruGroupingTypeResult[]): DanbooruGroupingPreviewResult {
     const totals = byType.reduce((acc, item) => ({
       totalPrompts: acc.totalPrompts + item.totalPrompts,
@@ -884,7 +904,12 @@ export class PromptGroupService {
 
   static previewDanbooruGrouping(optionsOrMode?: DanbooruGroupingOptions | DanbooruGroupingMode): DanbooruGroupingPreviewResult {
     const options = normalizeDanbooruGroupingOptions(optionsOrMode);
-    const database = this.ensureDanbooruDbAttached();
+    const database = resolveDanbooruDbInfo();
+    if (!database.available) {
+      const byType = PROMPT_TYPES.map((type) => this.getUnavailableDanbooruGroupingTypePreview(type, options));
+      return this.summarizeDanbooruGrouping(options, database, byType);
+    }
+    this.ensureDanbooruDbAttached();
     const byType = PROMPT_TYPES.map((type) => this.getDanbooruGroupingTypePreview(type, options));
     return this.summarizeDanbooruGrouping(options, database, byType);
   }
@@ -934,7 +959,12 @@ export class PromptGroupService {
 
   static applyDanbooruGrouping(optionsOrMode?: DanbooruGroupingOptions | DanbooruGroupingMode): DanbooruGroupingPreviewResult {
     const options = normalizeDanbooruGroupingOptions(optionsOrMode);
-    const database = this.ensureDanbooruDbAttached();
+    const database = resolveDanbooruDbInfo();
+    if (!database.available) {
+      const byType = PROMPT_TYPES.map((type) => this.getUnavailableDanbooruGroupingTypePreview(type, options));
+      return this.summarizeDanbooruGrouping(options, database, byType);
+    }
+    this.ensureDanbooruDbAttached();
     const taxonomyRows = this.getDanbooruTaxonomyRows();
     const taxonomyByKey = new Map(taxonomyRows.map((row) => [row.node_key, row] as const));
     const parentKeyByKey = buildDanbooruParentKeyByKey(taxonomyRows);

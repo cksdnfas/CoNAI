@@ -126,6 +126,7 @@ function assertEmptyListPayload(payload: { items: unknown[]; pagination: { page:
 
 async function main() {
   const { danbooruBrowserService } = await import('../services/danbooruBrowserService');
+  const { PromptGroupService } = await import('../services/promptGroupService');
 
   try {
     assert.equal(danbooruBrowserService.getSummary().database.available, false);
@@ -133,6 +134,10 @@ async function main() {
     assertEmptyListPayload(danbooruBrowserService.listArtists({ q: '작가 번역명', page: 1, limit: 10 }), 10);
     assertEmptyListPayload(danbooruBrowserService.listCharacters({ q: '캐릭터 번역명', page: 1, limit: 10 }), 10);
     assert.equal(danbooruBrowserService.getCharacterImageFilePath(301, 'cover.webp'), null);
+    const missingGroupingPreview = PromptGroupService.previewDanbooruGrouping({ language: 'ko' });
+    assert.equal(missingGroupingPreview.database.available, false);
+    assert.equal(missingGroupingPreview.totals.matchedPrompts, 0);
+    assert.equal(PromptGroupService.applyDanbooruGrouping({ language: 'ko' }).database.available, false);
 
     createFixtureDb();
 

@@ -61,8 +61,12 @@ if (panelSource.includes('tagsQuery.data?.items ?? []} language={language}')) {
   throw new Error('Danbooru browser tables should receive memoized empty item arrays')
 }
 
-if (panelSource.includes('MissingDanbooruDatabaseNotice')) {
-  throw new Error('Danbooru browser should stay quiet when the optional Danbooru DB is absent')
+if (!panelSource.includes('function DanbooruDatabaseMissingNotice')) {
+  throw new Error('Danbooru browser should explain where to place the optional Danbooru DB')
+}
+
+if (!panelSource.includes('DANBOORU_SQLITE_PATH')) {
+  throw new Error('Danbooru browser missing-DB copy should mention the override environment variable')
 }
 
 console.log('Danbooru browser progress contracts verified')
