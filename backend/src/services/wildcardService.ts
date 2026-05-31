@@ -1,4 +1,5 @@
 import { WildcardModel, WildcardWithItems, WildcardItem, type WildcardTool } from '../models/Wildcard';
+import { danbooruBrowserService } from './danbooruBrowserService';
 
 type WildcardStoredTool = WildcardTool
 type WildcardResolutionTool = WildcardStoredTool | 'codex'
@@ -27,11 +28,16 @@ export class WildcardService {
     // 재귀 파싱 시작
     let result = text;
 
-    // 1. 체인 처리 (전역 토큰 변환)
+    // 1. Danbooru 태그 그룹 처리 (__Group__)
+    result = danbooruBrowserService.expandPromptGroups(result);
+
+    // 2. 체인 처리 (전역 토큰 변환)
     result = this.parseChains(result, wildcardMap, tool);
 
-    // 2. 와일드카드 처리 (++name++)
-    return this.parseRecursive(result, wildcardMap, tool, new Set());
+    // 3. 와일드카드 처리 (++name++)
+    result = this.parseRecursive(result, wildcardMap, tool, new Set());
+
+    return this.compactPromptSegments(result);
   }
 
   /**
@@ -94,6 +100,13 @@ export class WildcardService {
 
     tokens.push(current.trim());
     return tokens;
+  }
+
+  private static compactPromptSegments(text: string): string {
+    return this.splitChainTokens(text)
+      .map(token => token.trim())
+      .filter(token => token.length > 0)
+      .join(', ');
   }
 
   private static parseChains(

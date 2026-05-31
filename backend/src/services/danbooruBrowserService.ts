@@ -8,6 +8,7 @@ const MAX_PAGE_SIZE = 100;
 const CHARACTER_PAGE_SIZE = 30;
 const DEFAULT_RELATED_TAG_LIMIT_PER_CHARACTER = 100;
 const MAX_RELATED_TAG_LIMIT_PER_CHARACTER = 500;
+const MAX_PROMPT_GROUP_PICK_COUNT = 50;
 const RELATED_TAG_CATEGORY_NAMES = ['general', 'artist', 'copyright', 'character', 'meta'] as const;
 const DANBOORU_DB_DOWNLOAD_URL = 'https://github.com/cksdnfas/danbooru-db-viewer';
 const DANBOORU_DB_FILE_PATTERNS = ['danbooru.sqlite', '*danbooru*.sqlite', '*danbooru*.sqlite3', '*danbooru*.db'];
@@ -183,6 +184,27 @@ interface CharacterRelatedTagRow {
   score: number | null;
 }
 
+interface PromptGroupTagRow {
+  name: string;
+  post_count: number;
+}
+
+interface PromptGroupPickRange {
+  min: number;
+  max: number;
+}
+
+interface PromptGroupUsageFilter {
+  min?: number;
+  max?: number;
+}
+
+interface PromptGroupSyntax {
+  groupName: string;
+  pickRange: PromptGroupPickRange;
+  usageFilter: PromptGroupUsageFilter;
+}
+
 function isDanbooruDbCandidate(fileName: string): boolean {
   const lowerFileName = fileName.toLowerCase();
   const extension = path.extname(lowerFileName);
@@ -328,6 +350,80 @@ function parseRelatedTagScore(value: unknown): number | undefined {
 
 function normalizeQuery(value?: string | null): string {
   return (value ?? '').trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function normalizePromptGroupLookup(value?: string | null): string {
+  return normalizeQuery(value).replace(/[^a-z0-9_가-힣ぁ-んァ-ン一-龥]/g, '');
+}
+
+function parseCompactCount(value: string): number | null {
+  const match = value.trim().toLowerCase().match(/^([+-]?)(\d+(?:\.\d+)?)([km]?)$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, sign, numericValue, suffix] = match;
+  const multiplier = suffix === 'm' ? 1_000_000 : suffix === 'k' ? 1_000 : 1;
+  const parsed = Number(numericValue);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  const magnitude = Math.trunc(parsed * multiplier);
+  return sign === '-' ? -magnitude : magnitude;
+}
+
+function parsePromptGroupSyntax(rawValue: string): PromptGroupSyntax | null {
+  let remaining = rawValue.trim();
+  if (!remaining) {
+    return null;
+  }
+
+  const usageFilter: PromptGroupUsageFilter = {};
+  const usageMatch = remaining.match(/<\s*([+-]?\d+(?:\.\d+)?[kKmM]?)\s*>/);
+  if (usageMatch) {
+    const parsedUsage = parseCompactCount(usageMatch[1]);
+    if (parsedUsage === null) {
+      return null;
+    }
+    if (parsedUsage < 0) {
+      usageFilter.max = Math.abs(parsedUsage);
+    } else {
+      usageFilter.min = parsedUsage;
+    }
+    remaining = remaining.replace(usageMatch[0], '').trim();
+  }
+
+  let pickRange: PromptGroupPickRange = { min: 1, max: 1 };
+  const pickMatch = remaining.match(/\[\s*(\d+)(?:\s*~\s*(\d+))?\s*\]/);
+  if (pickMatch) {
+    const first = Math.trunc(Number(pickMatch[1]));
+    const second = pickMatch[2] !== undefined ? Math.trunc(Number(pickMatch[2])) : first;
+    if (!Number.isFinite(first) || !Number.isFinite(second)) {
+      return null;
+    }
+    const lower = Math.max(0, Math.min(first, second));
+    const upper = Math.max(0, Math.max(first, second));
+    pickRange = {
+      min: Math.min(MAX_PROMPT_GROUP_PICK_COUNT, lower),
+      max: Math.min(MAX_PROMPT_GROUP_PICK_COUNT, upper),
+    };
+    remaining = remaining.replace(pickMatch[0], '').trim();
+  }
+
+  const groupName = remaining.trim();
+  if (!groupName) {
+    return null;
+  }
+
+  return { groupName, pickRange, usageFilter };
+}
+
+function resolvePromptGroupPickCount(range: PromptGroupPickRange): number {
+  if (range.max <= range.min) {
+    return range.min;
+  }
+  return range.min + Math.floor(Math.random() * (range.max - range.min + 1));
 }
 
 function escapeLike(value: string): string {
@@ -677,6 +773,94 @@ class DanbooruBrowserService {
     }
 
     return this.taxonomyDescendantIdsById.get(taxonomyNodeId) ?? [taxonomyNodeId];
+  }
+
+  private findPromptGroupNode(groupName: string): TaxonomyNodeRow | null {
+    const normalizedGroupName = normalizePromptGroupLookup(groupName);
+    if (!normalizedGroupName) {
+      return null;
+    }
+
+    for (const row of this.getTaxonomyRows()) {
+      const nodeKeyLeaf = row.node_key.split('__').at(-1) ?? row.node_key;
+      const candidates = [
+        row.title,
+        row.translated_title,
+        row.node_key,
+        nodeKeyLeaf,
+        row.title.replace(/_/g, ' '),
+      ];
+
+      if (candidates.some((candidate) => normalizePromptGroupLookup(candidate) === normalizedGroupName)) {
+        return row;
+      }
+    }
+
+    return null;
+  }
+
+  private listPromptGroupTags(node: TaxonomyNodeRow, syntax: PromptGroupSyntax, limit: number): string[] {
+    if (limit <= 0) {
+      return [];
+    }
+
+    const taxonomyNodeIds = this.getTaxonomyDescendantIds(node.id);
+    const placeholders = taxonomyNodeIds.map(() => '?').join(',');
+    const clauses = [
+      'tags.is_deprecated = 0',
+      `EXISTS (SELECT 1 FROM taxonomy_tag_memberships tm WHERE tm.tag_id = tags.id AND tm.taxonomy_node_id IN (${placeholders}))`,
+    ];
+    const values: Array<number | string> = [...taxonomyNodeIds];
+
+    if (syntax.usageFilter.min !== undefined) {
+      clauses.push('tags.post_count >= ?');
+      values.push(syntax.usageFilter.min);
+    }
+    if (syntax.usageFilter.max !== undefined) {
+      clauses.push('tags.post_count <= ?');
+      values.push(syntax.usageFilter.max);
+    }
+
+    const rows = this.getDb().prepare(`
+      SELECT tags.name, tags.post_count
+      FROM tags
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY RANDOM()
+      LIMIT ?
+    `).all(...values, limit) as PromptGroupTagRow[];
+
+    return rows.map((row) => row.name);
+  }
+
+  expandPromptGroups(text: string): string {
+    if (!text) {
+      return text;
+    }
+
+    const hasDb = this.hasAvailableDb();
+    return text.replace(/__([^_\r\n][^\r\n]*?)__/g, (match, rawGroup: string) => {
+      if (!hasDb) {
+        return '';
+      }
+
+      const syntax = parsePromptGroupSyntax(rawGroup);
+      if (!syntax) {
+        return '';
+      }
+
+      const node = this.findPromptGroupNode(syntax.groupName);
+      if (!node) {
+        return '';
+      }
+
+      const pickCount = resolvePromptGroupPickCount(syntax.pickRange);
+      if (pickCount === 0) {
+        return '';
+      }
+
+      const tags = this.listPromptGroupTags(node, syntax, pickCount);
+      return tags.length > 0 ? tags.join(', ') : '';
+    });
   }
 
   listTags(params: { q?: string; category?: string; taxonomyNodeId?: string; page?: unknown; limit?: unknown }) {

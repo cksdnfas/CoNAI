@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type SyntheticEvent, type UIEvent } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { inputVariants } from '@/components/ui/input'
 import { textareaVariants } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
+import { getDanbooruBrowserCharacters, getDanbooruBrowserSummary } from '@/lib/api-danbooru-browser'
 import { getWildcards } from '@/lib/api-wildcards'
 import { cn } from '@/lib/utils'
 import type { PromptTypeFilter } from '@/types/prompt'
@@ -39,9 +40,13 @@ import { WildcardInlinePickerExplorer } from './wildcard-inline-picker-explorer'
 import { resolveFloatingDropdownRectFromRect } from './floating-dropdown-utils'
 import {
   buildPromptAutocompleteInsertion,
+  normalizeAutocompleteText,
+  resolvePromptDetectedCharacterCandidates,
   usePromptInlineAutocomplete,
   type PromptAutocompleteSuggestion,
 } from './use-prompt-inline-autocomplete'
+import { usePromptInlineSyntaxSettings, type PromptInlineSyntaxSource } from './prompt-inline-syntax-settings'
+import { resolveActiveDanbooruGroupQuery, resolveActivePromptTextQuery, type ActivePromptTokenQuery } from './prompt-inline-token-scanner'
 import {
   getPromptSyntaxChipClass,
   getTextFieldCaretClientRect,
@@ -87,6 +92,7 @@ export function WildcardInlinePickerField({
   const detectedPopupCloseTimerRef = useRef<number | null>(null)
   const detectedPopupRef = useRef<HTMLDivElement | null>(null)
   const detectedTokenButtonRefs = useRef(new Map<string, HTMLButtonElement | null>())
+  const detectedCharacterButtonRefs = useRef(new Map<string, HTMLButtonElement | null>())
   const [caretPosition, setCaretPosition] = useState(0)
   const [activeIndex, setActiveIndex] = useState(0)
   const [isFocused, setIsFocused] = useState(false)
@@ -98,9 +104,12 @@ export function WildcardInlinePickerField({
   const [fieldScrollTop, setFieldScrollTop] = useState(0)
   const [fieldScrollLeft, setFieldScrollLeft] = useState(0)
   const [activeDetectedTokenKey, setActiveDetectedTokenKey] = useState<string | null>(null)
+  const [activeDetectedCharacterKey, setActiveDetectedCharacterKey] = useState<string | null>(null)
   const [detectedPopupPosition, setDetectedPopupPosition] = useState<PromptSyntaxPopupPosition | null>(null)
+  const [detectedCharacterPopupPosition, setDetectedCharacterPopupPosition] = useState<InlinePickerPopupPosition | null>(null)
   const [inlinePopupPosition, setInlinePopupPosition] = useState<InlinePickerPopupPosition | null>(null)
   const [promptAutocompletePopupPosition, setPromptAutocompletePopupPosition] = useState<InlinePickerPopupPosition | null>(null)
+  const { settings: syntaxSettings } = usePromptInlineSyntaxSettings()
 
   const wildcardsQuery = useQuery({
     queryKey: ['wildcards', 'inline-picker'],
@@ -110,7 +119,26 @@ export function WildcardInlinePickerField({
 
   const wildcards = useMemo(() => wildcardsQuery.data ?? [], [wildcardsQuery.data])
   const flattenedWildcards = useMemo(() => flattenWildcardRecords(wildcards), [wildcards])
-  const activeQuery = useMemo(() => resolveActiveWildcardQuery(value, caretPosition), [value, caretPosition])
+  const activeGroupQuery = useMemo(
+    () => (syntaxSettings.triggers['danbooru-group'] ? resolveActiveDanbooruGroupQuery(value, caretPosition) : null),
+    [caretPosition, syntaxSettings.triggers, value],
+  )
+  const activeWildcardQuery = useMemo(
+    () => (syntaxSettings.triggers.wildcard ? resolveActiveWildcardQuery(value, caretPosition) : null),
+    [caretPosition, syntaxSettings.triggers.wildcard, value],
+  )
+  const activeTextQuery = useMemo(
+    () => ((syntaxSettings.triggers.preprocess || syntaxSettings.triggers.tag) ? resolveActivePromptTextQuery(value, caretPosition) : null),
+    [caretPosition, syntaxSettings.triggers.preprocess, syntaxSettings.triggers.tag, value],
+  )
+
+  const danbooruSummaryQuery = useQuery({
+    queryKey: ['danbooru-browser-summary', 'inline-group-picker'],
+    queryFn: getDanbooruBrowserSummary,
+    enabled: activeGroupQuery !== null,
+    staleTime: 60_000,
+    retry: false,
+  })
   const {
     treeNodes: explorerTreeNodes,
     entries: explorerEntries,
@@ -137,6 +165,140 @@ export function WildcardInlinePickerField({
     () => detectedTokenSummaries.find((token) => token.key === activeDetectedTokenKey) ?? null,
     [activeDetectedTokenKey, detectedTokenSummaries],
   )
+  const detectedCharacterCandidates = useMemo(
+    () => (syntaxSettings.characterRelatedTags ? resolvePromptDetectedCharacterCandidates(value) : []),
+    [syntaxSettings.characterRelatedTags, value],
+  )
+  const detectedCharacterQueries = useQueries({
+    queries: detectedCharacterCandidates.map((candidate) => ({
+      queryKey: ['prompt-inline-detected-character', candidate.normalizedQuery],
+      queryFn: () => getDanbooruBrowserCharacters({
+        query: candidate.query,
+        page: 1,
+        limit: 5,
+        relatedTagLimit: 42,
+      }),
+      enabled: candidate.normalizedQuery.length >= 2,
+      staleTime: 60_000,
+      retry: false,
+    })),
+  })
+  const detectedCharacters = useMemo(() => detectedCharacterCandidates.flatMap((candidate, index) => {
+    const items = detectedCharacterQueries[index]?.data?.items ?? []
+    const matchedCharacter = items.find((item) => {
+      const normalizedName = normalizeAutocompleteText(item.name).replace(/ /g, '_')
+      const normalizedDisplayName = normalizeAutocompleteText(item.displayName).replace(/ /g, '_')
+      return normalizedName === candidate.normalizedQuery || normalizedDisplayName === candidate.normalizedQuery
+    })
+    if (!matchedCharacter) {
+      return []
+    }
+
+    const suggestion: PromptAutocompleteSuggestion = {
+      id: `detected-character:${matchedCharacter.tagId}:${candidate.key}`,
+      kind: 'character',
+      label: matchedCharacter.displayName,
+      insertText: matchedCharacter.name,
+      translatedName: matchedCharacter.translatedName,
+      secondaryText: matchedCharacter.copyrights.map((copyright) => copyright.displayName).slice(0, 2).join(' · '),
+      usageCount: matchedCharacter.worksCount,
+      relatedTags: matchedCharacter.relatedTags
+        .slice()
+        .sort((left, right) => right.usageCount - left.usageCount)
+        .slice(0, 42),
+    }
+
+    return [{ candidate, suggestion }]
+  }), [detectedCharacterCandidates, detectedCharacterQueries])
+  const activeDetectedCharacter = useMemo(
+    () => detectedCharacters.find((character) => character.candidate.key === activeDetectedCharacterKey) ?? null,
+    [activeDetectedCharacterKey, detectedCharacters],
+  )
+
+  const preprocessSuggestions = useMemo(() => {
+    if (!activeTextQuery) {
+      return []
+    }
+
+    const normalizedQuery = activeTextQuery.query.trim().toLowerCase()
+    if (!normalizedQuery) {
+      return []
+    }
+
+    return flattenedWildcards
+      .filter((record) => record.type === 'chain' && !record.isAutoCollected)
+      .map((record) => ({
+        record,
+        score: scoreWildcardMatch(record, normalizedQuery),
+        toolItemCount: countWildcardItemsForTool(record.items, tool),
+        generalItemCount: countStoredWildcardItemsForTool(record.items, 'general'),
+        naiItemCount: countStoredWildcardItemsForTool(record.items, 'nai'),
+        comfyuiItemCount: countStoredWildcardItemsForTool(record.items, 'comfyui'),
+        recentIndex: Number.POSITIVE_INFINITY,
+      }))
+      .filter(({ score }) => score >= 0)
+      .sort((left, right) => right.score - left.score || left.record.path.join('/').localeCompare(right.record.path.join('/')))
+      .slice(0, 8)
+  }, [activeTextQuery, flattenedWildcards, tool])
+
+  const groupSuggestions = useMemo(() => {
+    if (!activeGroupQuery) {
+      return []
+    }
+
+    const normalizedQuery = activeGroupQuery.query.trim().toLowerCase().replace(/\s+/g, '_')
+    return (danbooruSummaryQuery.data?.tree ?? [])
+      .filter((node) => node.section === 'tags' && node.filter?.taxonomyNodeId !== undefined)
+      .map((node) => {
+        const label = node.label
+        const translatedLabel = node.translatedLabel ?? null
+        const searchable = `${label} ${translatedLabel ?? ''}`.toLowerCase().replace(/\s+/g, '_')
+        const score = !normalizedQuery
+          ? node.count
+          : searchable.startsWith(normalizedQuery)
+            ? 1_000_000 + node.count
+            : searchable.includes(normalizedQuery)
+              ? 500_000 + node.count
+              : -1
+
+        return {
+          id: node.id,
+          label,
+          translatedLabel,
+          count: node.count,
+          taxonomyNodeId: node.filter?.taxonomyNodeId ?? 0,
+          score,
+        }
+      })
+      .filter((suggestion) => suggestion.score >= 0)
+      .sort((left, right) => right.score - left.score || left.label.localeCompare(right.label))
+      .slice(0, 10)
+  }, [activeGroupQuery, danbooruSummaryQuery.data?.tree])
+
+  const activeSource = useMemo<PromptInlineSyntaxSource | null>(() => {
+    for (const source of syntaxSettings.priority) {
+      if (!syntaxSettings.triggers[source]) {
+        continue
+      }
+      if (source === 'danbooru-group' && activeGroupQuery) {
+        return source
+      }
+      if (source === 'preprocess' && activeTextQuery && preprocessSuggestions.length > 0) {
+        return source
+      }
+      if (source === 'wildcard' && activeWildcardQuery) {
+        return source
+      }
+      if (source === 'tag' && activeTextQuery) {
+        return source
+      }
+    }
+    return null
+  }, [activeGroupQuery, activeTextQuery, activeWildcardQuery, preprocessSuggestions.length, syntaxSettings.priority, syntaxSettings.triggers])
+
+  const activeQuery = activeSource === 'wildcard' ? activeWildcardQuery : null
+  const activePreprocessQuery: ActivePromptTokenQuery | null = activeSource === 'preprocess' ? activeTextQuery : null
+  const activeDanbooruGroupQuery: ActivePromptTokenQuery | null = activeSource === 'danbooru-group' ? activeGroupQuery : null
 
   const suggestions = useMemo(() => {
     if (!activeQuery) {
@@ -190,8 +352,8 @@ export function WildcardInlinePickerField({
     return records
   }, [activeQuery, filterMode, flattenedWildcards, recentWildcardNames, tool])
 
-  const isTreeExplorerMode = filterMode === 'all' && (activeQuery === null || (activeQuery?.query.trim().length ?? 0) === 0)
-  const isPopupOpen = isFocused && (activeQuery !== null || isExplorerPinned) && !disabled
+  const isTreeExplorerMode = activeSource === 'wildcard' && filterMode === 'all' && (activeQuery === null || (activeQuery?.query.trim().length ?? 0) === 0)
+  const isPopupOpen = isFocused && !disabled && (activeSource === 'danbooru-group' || activeSource === 'preprocess' || activeSource === 'wildcard' || isExplorerPinned)
   const {
     activeQuery: activePromptAutocompleteQuery,
     isOpen: isPromptAutocompleteOpen,
@@ -202,19 +364,20 @@ export function WildcardInlinePickerField({
   } = usePromptInlineAutocomplete({
     value,
     caretPosition,
-    activeWildcardQuery: activeQuery,
+    activeWildcardQuery: activeSource === 'tag' ? null : (activeWildcardQuery ?? activeGroupQuery),
     isExplorerPinned,
     isFocused,
-    disabled,
+    disabled: disabled || activeSource !== 'tag',
     isWildcardPopupOpen: isPopupOpen,
     autocompletePromptType,
   })
-  const normalizedActiveQuery = activeQuery?.query.trim() ?? ''
-  const indexedSuggestions = suggestions.map((suggestion, index) => ({ ...suggestion, index }))
-  const recentSuggestions = normalizedActiveQuery.length === 0
+  const normalizedActiveQuery = activePreprocessQuery?.query.trim() ?? activeDanbooruGroupQuery?.query.trim() ?? activeQuery?.query.trim() ?? ''
+  const activeListSuggestions = activeSource === 'preprocess' ? preprocessSuggestions : suggestions
+  const indexedSuggestions = activeListSuggestions.map((suggestion, index) => ({ ...suggestion, index }))
+  const recentSuggestions = activeSource === 'wildcard' && normalizedActiveQuery.length === 0
     ? indexedSuggestions.filter((suggestion) => Number.isFinite(suggestion.recentIndex))
     : []
-  const remainingSuggestions = normalizedActiveQuery.length === 0
+  const remainingSuggestions = activeSource === 'wildcard' && normalizedActiveQuery.length === 0
     ? indexedSuggestions.filter((suggestion) => !Number.isFinite(suggestion.recentIndex))
     : indexedSuggestions
 
@@ -230,7 +393,7 @@ export function WildcardInlinePickerField({
 
   useEffect(() => {
     setActiveIndex(0)
-  }, [activeQuery?.query, filterMode, tool])
+  }, [activeDanbooruGroupQuery?.query, activePreprocessQuery?.query, activeQuery?.query, activeSource, filterMode, tool])
 
   useEffect(() => {
     setFilterMode(readStoredWildcardFilterMode(tool))
@@ -296,6 +459,43 @@ export function WildcardInlinePickerField({
       window.removeEventListener('scroll', updatePosition, true)
     }
   }, [activeDetectedTokenKey])
+
+  useEffect(() => {
+    if (activeDetectedCharacterKey && !detectedCharacters.some((character) => character.candidate.key === activeDetectedCharacterKey)) {
+      setActiveDetectedCharacterKey(null)
+    }
+  }, [activeDetectedCharacterKey, detectedCharacters])
+
+  useEffect(() => {
+    if (!activeDetectedCharacter || typeof window === 'undefined') {
+      setDetectedCharacterPopupPosition(null)
+      return
+    }
+
+    const updatePosition = () => {
+      const anchor = detectedCharacterButtonRefs.current.get(activeDetectedCharacter.candidate.key)
+      if (!anchor) {
+        setDetectedCharacterPopupPosition(null)
+        return
+      }
+
+      setDetectedCharacterPopupPosition(resolveFloatingDropdownRectFromRect(anchor.getBoundingClientRect(), {
+        minWidth: 280,
+        preferredMaxHeight: 220,
+        minUsableHeight: 120,
+        gap: 8,
+      }))
+    }
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [activeDetectedCharacter])
 
   useEffect(() => {
     if (!isPopupOpen || typeof window === 'undefined') {
@@ -462,6 +662,40 @@ export function WildcardInlinePickerField({
     })
   }
 
+  const handleInsertPreprocess = (preprocessName: string) => {
+    if (!fieldRef.current || !activePreprocessQuery) {
+      return
+    }
+
+    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, preprocessName, activePreprocessQuery)
+
+    onChange(nextValue)
+    setCaretPosition(nextCaretPosition)
+    setActiveIndex(0)
+
+    window.requestAnimationFrame(() => {
+      fieldRef.current?.focus()
+      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
+    })
+  }
+
+  const handleInsertDanbooruGroup = (groupName: string) => {
+    if (!fieldRef.current || !activeDanbooruGroupQuery) {
+      return
+    }
+
+    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, `__${groupName}__`, activeDanbooruGroupQuery)
+
+    onChange(nextValue)
+    setCaretPosition(nextCaretPosition)
+    setActiveIndex(0)
+
+    window.requestAnimationFrame(() => {
+      fieldRef.current?.focus()
+      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
+    })
+  }
+
   const handleInsertPromptAutocomplete = (suggestion: PromptAutocompleteSuggestion) => {
     if (!fieldRef.current || !activePromptAutocompleteQuery) {
       return
@@ -495,8 +729,65 @@ export function WildcardInlinePickerField({
     })
   }
 
+  const handleInsertDetectedCharacterRelatedTag = (tagName: string) => {
+    if (!fieldRef.current || !activeDetectedCharacter) {
+      return
+    }
+
+    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, tagName, activeDetectedCharacter.candidate, 'append')
+
+    onChange(nextValue)
+    setCaretPosition(nextCaretPosition)
+    setActiveDetectedCharacterKey(null)
+
+    window.requestAnimationFrame(() => {
+      fieldRef.current?.focus()
+      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
+    })
+  }
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (isPopupOpen && !isTreeExplorerMode && suggestions.length > 0) {
+    if (isPopupOpen && activeSource === 'danbooru-group' && groupSuggestions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setActiveIndex((current) => (current + 1) % groupSuggestions.length)
+        return
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setActiveIndex((current) => (current - 1 + groupSuggestions.length) % groupSuggestions.length)
+        return
+      }
+
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault()
+        handleInsertDanbooruGroup(groupSuggestions[activeIndex]?.label ?? groupSuggestions[0].label)
+        return
+      }
+    }
+
+    if (isPopupOpen && activeSource === 'preprocess' && preprocessSuggestions.length > 0) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setActiveIndex((current) => (current + 1) % preprocessSuggestions.length)
+        return
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setActiveIndex((current) => (current - 1 + preprocessSuggestions.length) % preprocessSuggestions.length)
+        return
+      }
+
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault()
+        handleInsertPreprocess(preprocessSuggestions[activeIndex]?.record.name ?? preprocessSuggestions[0].record.name)
+        return
+      }
+    }
+
+    if (isPopupOpen && activeSource === 'wildcard' && !isTreeExplorerMode && suggestions.length > 0) {
       if (event.key === 'ArrowDown') {
         event.preventDefault()
         setActiveIndex((current) => (current + 1) % suggestions.length)
@@ -610,7 +901,11 @@ export function WildcardInlinePickerField({
         type="button"
         onMouseDown={(event) => {
           event.preventDefault()
-          handleInsertWildcard(record.name)
+          if (activeSource === 'preprocess') {
+            handleInsertPreprocess(record.name)
+          } else {
+            handleInsertWildcard(record.name)
+          }
         }}
         className={cn(
           'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left transition-colors',
@@ -724,6 +1019,35 @@ export function WildcardInlinePickerField({
         </div>
       ) : null}
 
+      {showDetectedSyntax && detectedCharacters.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 text-[11px] text-muted-foreground">
+          <span>{t({ ko: '캐릭터', en: 'Characters' })}</span>
+          {detectedCharacters.map(({ candidate, suggestion }) => {
+            const isActive = candidate.key === activeDetectedCharacterKey
+            return (
+              <button
+                key={candidate.key}
+                ref={(node) => {
+                  detectedCharacterButtonRefs.current.set(candidate.key, node)
+                }}
+                type="button"
+                className={cn(
+                  'inline-flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition-colors',
+                  isActive ? 'border-cyan-300/60 bg-cyan-400/18 text-foreground' : 'border-cyan-400/20 bg-cyan-400/10 text-foreground/90 hover:bg-cyan-400/16',
+                )}
+                onClick={() => {
+                  setActiveDetectedCharacterKey((current) => current === candidate.key ? null : candidate.key)
+                }}
+              >
+                <span className="max-w-[12rem] truncate">{suggestion.label}</span>
+                {suggestion.translatedName ? <span className="max-w-[8rem] truncate text-muted-foreground">{suggestion.translatedName}</span> : null}
+                {suggestion.relatedTags?.length ? <Badge variant="secondary">{suggestion.relatedTags.length}</Badge> : null}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
       {showDetectedSyntax && activeDetectedToken && detectedPopupPosition ? (
         <PromptSyntaxTokenPopup
           token={activeDetectedToken}
@@ -735,6 +1059,17 @@ export function WildcardInlinePickerField({
           onMouseLeave={() => {
             scheduleDetectedPopupClose()
           }}
+        />
+      ) : null}
+
+      {showDetectedSyntax && activeDetectedCharacter && detectedCharacterPopupPosition ? (
+        <PromptAutocompletePopup
+          position={detectedCharacterPopupPosition}
+          suggestions={[]}
+          activeCharacter={activeDetectedCharacter.suggestion}
+          isLoading={false}
+          onSelect={() => undefined}
+          onSelectRelatedTag={handleInsertDetectedCharacterRelatedTag}
         />
       ) : null}
 
@@ -753,7 +1088,8 @@ export function WildcardInlinePickerField({
         <WildcardInlinePickerPopup position={inlinePopupPosition}>
           <div className="space-y-2 border-b border-border/70 px-3 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
+              {activeSource === 'wildcard' ? (
+                <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onMouseDown={(event) => {
@@ -785,11 +1121,52 @@ export function WildcardInlinePickerField({
                   {t('image-generation.components.wildcard.inline.picker.field.browse.all')}
                 </button>
               </div>
-              <Badge variant="outline">{isTreeExplorerMode ? explorerEntries.length : suggestions.length}</Badge>
+              ) : (
+                <div className="text-xs font-medium text-muted-foreground">
+                  {activeSource === 'danbooru-group' ? t({ ko: '태그 그룹', en: 'Tag Groups' }) : t({ ko: '전처리', en: 'Preprocess' })}
+                </div>
+              )}
+              <Badge variant="outline">{activeSource === 'danbooru-group' ? groupSuggestions.length : isTreeExplorerMode ? explorerEntries.length : activeListSuggestions.length}</Badge>
             </div>
           </div>
 
-          {wildcardsQuery.isLoading ? (
+          {activeSource === 'danbooru-group' ? (
+            danbooruSummaryQuery.isLoading ? (
+              <div className="px-3 py-3 text-sm text-muted-foreground">{t({ ko: '태그 그룹을 불러오는 중', en: 'Loading tag groups' })}</div>
+            ) : groupSuggestions.length > 0 ? (
+              <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+                {groupSuggestions.map((group, index) => {
+                  const isActive = index === activeIndex
+                  return (
+                    <button
+                      key={group.id}
+                      type="button"
+                      onMouseDown={(event) => {
+                        event.preventDefault()
+                        handleInsertDanbooruGroup(group.label)
+                      }}
+                      className={cn(
+                        'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left transition-colors',
+                        isActive ? 'bg-surface-high' : 'hover:bg-surface-lowest',
+                      )}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-foreground">{renderHighlightedText(group.label, normalizedActiveQuery)}</span>
+                        {group.translatedLabel ? <span className="block truncate text-xs text-muted-foreground">{group.translatedLabel}</span> : null}
+                      </span>
+                      <Badge variant="outline">{group.count}</Badge>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="px-3 py-3 text-sm text-muted-foreground">
+                {danbooruSummaryQuery.data?.database.available === false
+                  ? t({ ko: 'Danbooru DB가 없어서 태그 그룹을 사용할 수 없어.', en: 'Danbooru DB is missing, so tag groups are unavailable.' })
+                  : t({ ko: '일치하는 태그 그룹 없음', en: 'No matching tag groups' })}
+              </div>
+            )
+          ) : wildcardsQuery.isLoading ? (
             <div className="px-3 py-3 text-sm text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.loading.wildcards')}</div>
           ) : isTreeExplorerMode ? (
             <WildcardInlinePickerExplorer
@@ -803,7 +1180,7 @@ export function WildcardInlinePickerField({
               onSelectWildcard={setSelectedExplorerId}
               onToggleExpanded={toggleExplorerExpanded}
             />
-          ) : suggestions.length > 0 ? (
+          ) : activeListSuggestions.length > 0 ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
               {recentSuggestions.length > 0 ? (
                 <div className="space-y-1">
@@ -825,8 +1202,8 @@ export function WildcardInlinePickerField({
             </div>
           ) : (
             <div className="space-y-2 px-3 py-3 text-sm text-muted-foreground">
-              <div>{t('image-generation.components.wildcard.inline.picker.field.no.matching.wildcards')}</div>
-              {filterMode === 'available-only' ? <div className="text-xs">{t('image-generation.components.wildcard.inline.picker.field.search.mode.may.hide.wildcards.dedicated.to')}</div> : null}
+              <div>{activeSource === 'preprocess' ? t({ ko: '일치하는 전처리 없음', en: 'No matching preprocess entries' }) : t('image-generation.components.wildcard.inline.picker.field.no.matching.wildcards')}</div>
+              {activeSource === 'wildcard' && filterMode === 'available-only' ? <div className="text-xs">{t('image-generation.components.wildcard.inline.picker.field.search.mode.may.hide.wildcards.dedicated.to')}</div> : null}
             </div>
           )}
         </WildcardInlinePickerPopup>

@@ -26,6 +26,7 @@ import { WildcardEditorModal, type WildcardEditorModalInput } from './wildcard-e
 import { LoraScanLogCard, WildcardDetailCard } from './wildcard-browser-cards'
 import { WildcardExplorerSidebarPanel } from './wildcard-explorer-sidebar-panel'
 import { WildcardPreviewModal } from './wildcard-preview-modal'
+import { WildcardSyntaxSettingsPanel } from './wildcard-syntax-settings-panel'
 import {
   canCreateWorkspaceTabItem,
   copyWildcardText,
@@ -59,6 +60,7 @@ function getWorkspaceTabs(t: ReturnType<typeof useI18n>['t']): Array<{ value: Wi
     { value: 'wildcards', label: t('image-generation.components.wildcard.generation.panel.wildcard') },
     { value: 'preprocess', label: t('image-generation.components.wildcard.generation.panel.preprocess') },
     { value: 'lora', label: t('image-generation.components.wildcard.generation.panel.lora') },
+    { value: 'settings', label: t({ ko: '설정', en: 'Settings' }) },
   ]
 }
 
@@ -161,6 +163,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     activeTab: activeWorkspaceTab,
     searchQuery: searchInput,
   })
+  const isSettingsTab = activeWorkspaceTab === 'settings'
   const selectedWildcard = selectedEntry?.wildcard ?? null
   const selectedWildcardSyntax = selectedEntry
     ? getWildcardPromptSyntax(selectedEntry.wildcard.name, { type: selectedEntry.wildcard.type, tab: activeWorkspaceTab })
@@ -339,6 +342,9 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
         )}
       />
 
+      {isSettingsTab ? (
+        <WildcardSyntaxSettingsPanel />
+      ) : (
       <div className={cn('grid gap-8', isWideLayout ? 'grid-cols-[280px_minmax(0,1fr)]' : 'grid-cols-1')}>
         <WildcardExplorerSidebarPanel
           isWideLayout={isWideLayout}
@@ -407,6 +413,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
           ) : null}
         </section>
       </div>
+      )}
 
       <LoraAutoCollectModal
         open={isLoraCollectModalOpen}

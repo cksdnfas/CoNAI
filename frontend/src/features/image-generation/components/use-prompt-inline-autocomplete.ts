@@ -5,6 +5,7 @@ import { searchPromptCollection } from '@/lib/api-prompts'
 import type { DanbooruBrowserCharacterRecord, DanbooruBrowserRelatedTagRecord, DanbooruBrowserTagRecord } from '@/types/danbooru-browser'
 import type { PromptCollectionItem, PromptTypeFilter } from '@/types/prompt'
 import type { ActiveWildcardQuery } from './wildcard-inline-picker-helpers'
+import { resolveActivePromptTextQuery } from './prompt-inline-token-scanner'
 
 export type PromptAutocompleteQuery = {
   query: string
@@ -23,9 +24,16 @@ export type PromptAutocompleteSuggestion = {
   relatedTags?: DanbooruBrowserRelatedTagRecord[]
 }
 
+export type PromptDetectedCharacterCandidate = {
+  key: string
+  query: string
+  normalizedQuery: string
+  start: number
+  end: number
+}
+
 export type PromptRelatedTagTab = 'general' | 'character' | 'other'
 
-const PROMPT_AUTOCOMPLETE_SEPARATOR_PATTERN = /[,\n]/
 export const PROMPT_AUTOCOMPLETE_PAGE_SIZE = 7
 const PROMPT_AUTOCOMPLETE_RELATED_TAG_LIMIT = 42
 const PROMPT_AUTOCOMPLETE_LABEL_MAX_LENGTH = 48
@@ -35,38 +43,56 @@ export const PROMPT_RELATED_TAG_TABS: Array<{ id: PromptRelatedTagTab; label: st
   { id: 'other', label: '그외' },
 ]
 
-function normalizeAutocompleteText(value: string) {
+export function normalizeAutocompleteText(value: string) {
   return value.trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
-function resolvePromptAutocompleteQuery(value: string, caretPosition: number): PromptAutocompleteQuery | null {
-  if (caretPosition < 0) {
-    return null
+function normalizeAutocompleteLookup(value: string) {
+  return normalizeAutocompleteText(value).replace(/ /g, '_')
+}
+
+export function resolvePromptDetectedCharacterCandidates(value: string, limit = 8): PromptDetectedCharacterCandidate[] {
+  const candidates: PromptDetectedCharacterCandidate[] = []
+  const seen = new Set<string>()
+  let segmentStart = 0
+
+  const flushSegment = (segmentEnd: number) => {
+    let start = segmentStart
+    let end = segmentEnd
+    while (start < end && /\s/.test(value[start] ?? '')) start += 1
+    while (end > start && /\s/.test(value[end - 1] ?? '')) end -= 1
+    const query = value.slice(start, end)
+    if (!query || query.includes('__') || query.includes('++') || /[()[\]{}<>]/.test(query)) {
+      return
+    }
+
+    const normalizedQuery = normalizeAutocompleteLookup(query)
+    if (!normalizedQuery || seen.has(normalizedQuery)) {
+      return
+    }
+
+    seen.add(normalizedQuery)
+    candidates.push({
+      key: `${start}:${end}:${normalizedQuery}`,
+      query,
+      normalizedQuery,
+      start,
+      end,
+    })
   }
 
-  const caret = Math.max(0, Math.min(caretPosition, value.length))
-  let segmentStart = caret
-  while (segmentStart > 0 && !PROMPT_AUTOCOMPLETE_SEPARATOR_PATTERN.test(value[segmentStart - 1])) {
-    segmentStart -= 1
+  for (let index = 0; index <= value.length; index += 1) {
+    const character = value[index] ?? ','
+    if (character === ',' || character === '\n' || character === '\r') {
+      flushSegment(index)
+      segmentStart = index + 1
+      if (candidates.length >= limit) {
+        break
+      }
+    }
   }
 
-  let segmentEnd = caret
-  while (segmentEnd < value.length && !PROMPT_AUTOCOMPLETE_SEPARATOR_PATTERN.test(value[segmentEnd])) {
-    segmentEnd += 1
-  }
-
-  while (segmentStart < segmentEnd && /\s/.test(value[segmentStart])) {
-    segmentStart += 1
-  }
-  while (segmentEnd > segmentStart && /\s/.test(value[segmentEnd - 1])) {
-    segmentEnd -= 1
-  }
-
-  return {
-    query: value.slice(segmentStart, caret).trim(),
-    start: segmentStart,
-    end: segmentEnd,
-  }
+  return candidates.slice(0, limit)
 }
 
 export function buildPromptAutocompleteInsertion(value: string, insertionText: string, range: PromptAutocompleteQuery, mode: 'replace' | 'append' = 'replace') {
@@ -218,7 +244,7 @@ export function usePromptInlineAutocomplete({
 }) {
   const [selectedCharacter, setSelectedCharacter] = useState<PromptAutocompleteSuggestion | null>(null)
   const activeQuery = useMemo(
-    () => (activeWildcardQuery === null && !isExplorerPinned ? resolvePromptAutocompleteQuery(value, caretPosition) : null),
+    () => (activeWildcardQuery === null && !isExplorerPinned ? resolveActivePromptTextQuery(value, caretPosition) : null),
     [activeWildcardQuery, caretPosition, isExplorerPinned, value],
   )
   const searchText = activeQuery?.query.trim() ?? ''
@@ -265,14 +291,14 @@ export function usePromptInlineAutocomplete({
     [charactersQuery.data?.items, promptsQuery.data?.items, tagsQuery.data?.items],
   )
   const exactCharacter = useMemo(() => {
-    const normalizedQuery = normalizeAutocompleteText(searchText).replace(/ /g, '_')
+    const normalizedQuery = normalizeAutocompleteLookup(searchText)
     if (!normalizedQuery) {
       return null
     }
 
     return suggestions.find((suggestion) => (
       suggestion.kind === 'character'
-        && (normalizeAutocompleteText(suggestion.insertText) === normalizedQuery || normalizeAutocompleteText(suggestion.label).replace(/ /g, '_') === normalizedQuery)
+        && (normalizeAutocompleteLookup(suggestion.insertText) === normalizedQuery || normalizeAutocompleteLookup(suggestion.label) === normalizedQuery)
     )) ?? null
   }, [searchText, suggestions])
   const activeCharacter = isSameAutocompleteCharacter(selectedCharacter, exactCharacter)

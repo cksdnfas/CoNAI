@@ -33,6 +33,7 @@
     "verify:upload-result-links": "tsx src/scripts/verifyUploadResultLinks.ts",
     "verify:prompt-tag-links": "tsx src/scripts/verifyPromptTagLinks.ts",
     "verify:prompt-weight-display-contracts": "tsx src/scripts/verifyPromptWeightDisplayContracts.ts",
+    "verify:prompt-inline-syntax-contracts": "tsx src/scripts/verifyPromptInlineSyntaxContracts.ts",
     "verify:wildcard-guest-access-contracts": "tsx src/scripts/verifyWildcardGuestAccessContracts.ts",
     "verify:image-editor-tool-contracts": "tsx src/scripts/verifyImageEditorToolContracts.ts",
     "verify:image-similarity-policy-contracts": "tsx src/scripts/verifyImageSimilarityPolicyContracts.ts",

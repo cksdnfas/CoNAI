@@ -2,7 +2,7 @@ import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import type { WildcardRecord } from '@/lib/api-wildcards'
 import { copyTextToClipboard } from '@/lib/clipboard'
 
-export type WildcardWorkspaceTab = 'wildcards' | 'preprocess' | 'lora'
+export type WildcardWorkspaceTab = 'wildcards' | 'preprocess' | 'lora' | 'settings'
 
 export interface WildcardWorkspacePermissionState {
   canEditWildcardEntries: boolean
@@ -77,6 +77,10 @@ export function filterWildcardTree(nodes: WildcardRecord[], predicate: (node: Wi
 
 /** Check whether one wildcard record belongs to the active workspace tab. */
 export function matchesWorkspaceTab(node: WildcardRecord, tab: WildcardWorkspaceTab) {
+  if (tab === 'settings') {
+    return false
+  }
+
   if (tab === 'preprocess') {
     return node.type === 'chain' && node.is_auto_collected !== 1
   }
@@ -95,12 +99,12 @@ export function getWorkspaceTabRecordType(tab: WildcardWorkspaceTab) {
 
 /** Guard create actions for tabs backed by auto-collected data. */
 export function canCreateWorkspaceTabItem(tab: WildcardWorkspaceTab) {
-  return tab !== 'lora'
+  return tab !== 'lora' && tab !== 'settings'
 }
 
 /** Mark workspace tabs backed by read-only auto-collected records. */
 export function isReadonlyWorkspaceTab(tab: WildcardWorkspaceTab) {
-  return tab === 'lora'
+  return tab === 'lora' || tab === 'settings'
 }
 
 /** Format one timestamp for the wildcard workspace cards and logs. */
