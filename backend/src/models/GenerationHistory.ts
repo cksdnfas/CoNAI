@@ -155,7 +155,7 @@ export class GenerationHistoryModel {
       AND NOT (
         gh.generation_status = 'completed'
         AND gh.composite_hash IS NULL
-        AND workflow.result_view_mode = 'artifact_explorer'
+        AND COALESCE(workflow.result_view_mode, '') = 'artifact_explorer'
       )`;
   }
 

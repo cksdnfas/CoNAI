@@ -259,8 +259,13 @@ function verifyArtifactOnlyHistoryListContract() {
   )
   assert.match(
     modelSource,
-    /AND NOT \([\s\S]*?gh\.generation_status = 'completed'[\s\S]*?gh\.composite_hash IS NULL[\s\S]*?workflow\.result_view_mode = 'artifact_explorer'[\s\S]*?\)/,
+    /AND NOT \([\s\S]*?gh\.generation_status = 'completed'[\s\S]*?gh\.composite_hash IS NULL[\s\S]*?COALESCE\(workflow\.result_view_mode, ''\) = 'artifact_explorer'[\s\S]*?\)/,
     'completed artifact-only workflow placeholders must not appear as missing image results in history lists',
+  )
+  assert.doesNotMatch(
+    modelSource,
+    /AND NOT \([\s\S]*?gh\.composite_hash IS NULL[\s\S]*?AND workflow\.result_view_mode = 'artifact_explorer'[\s\S]*?\)/,
+    'history list visibility filter must keep NULL workflow modes visible instead of letting SQL NULL exclude rows',
   )
   assert.match(
     modelSource,
