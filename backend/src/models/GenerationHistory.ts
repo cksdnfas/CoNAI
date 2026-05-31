@@ -419,6 +419,62 @@ export class GenerationHistoryModel {
   }
 
   /**
+   * Aggregate rows visible in compact history-list surfaces.
+   */
+  static getListStatistics(filters: Omit<FilterOptions, 'limit' | 'offset'> = {}): {
+    total: number;
+    comfyui: number;
+    novelai: number;
+    codex: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    processing: number;
+  } {
+    let sql = `
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN gh.service_type = 'comfyui' THEN 1 ELSE 0 END) as comfyui,
+        SUM(CASE WHEN gh.service_type = 'novelai' THEN 1 ELSE 0 END) as novelai,
+        SUM(CASE WHEN gh.service_type = 'codex' THEN 1 ELSE 0 END) as codex,
+        SUM(CASE WHEN gh.generation_status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN gh.generation_status = 'failed' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN gh.generation_status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN gh.generation_status = 'processing' THEN 1 ELSE 0 END) as processing
+      FROM api_generation_history gh
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    sql = this.appendFilterConditions(sql, params, filters, 'gh');
+    sql = this.appendHistoryListVisibilityFilter(sql);
+
+    const stmt = apiGenDb.prepare(sql);
+    const result = stmt.get(...params) as {
+      total?: number | null;
+      comfyui?: number | null;
+      novelai?: number | null;
+      codex?: number | null;
+      completed?: number | null;
+      failed?: number | null;
+      pending?: number | null;
+      processing?: number | null;
+    } | undefined;
+
+    return {
+      total: result?.total || 0,
+      comfyui: result?.comfyui || 0,
+      novelai: result?.novelai || 0,
+      codex: result?.codex || 0,
+      completed: result?.completed || 0,
+      failed: result?.failed || 0,
+      pending: result?.pending || 0,
+      processing: result?.processing || 0,
+    };
+  }
+
+  /**
    * Get recent history (last 50 records)
    */
   static getRecent(limit: number = 50): GenerationHistoryListRecord[] {

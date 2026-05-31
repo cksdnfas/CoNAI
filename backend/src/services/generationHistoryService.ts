@@ -318,17 +318,7 @@ export class GenerationHistoryService {
     pending: number;
     processing: number;
   }> {
-    // All model calls are now synchronous
-    const total = GenerationHistoryModel.count();
-    const comfyui = GenerationHistoryModel.count({ service_type: 'comfyui' });
-    const novelai = GenerationHistoryModel.count({ service_type: 'novelai' });
-    const codex = GenerationHistoryModel.count({ service_type: 'codex' });
-    const completed = GenerationHistoryModel.count({ generation_status: 'completed' });
-    const failed = GenerationHistoryModel.count({ generation_status: 'failed' });
-    const pending = GenerationHistoryModel.count({ generation_status: 'pending' });
-    const processing = GenerationHistoryModel.count({ generation_status: 'processing' });
-
-    return { total, comfyui, novelai, codex, completed, failed, pending, processing };
+    return GenerationHistoryModel.getListStatistics();
   }
 
   /**

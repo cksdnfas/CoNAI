@@ -278,6 +278,16 @@ function verifyArtifactOnlyHistoryListContract() {
     'workflow history stats should have a list-visible variant for artifact-explorer placeholders',
   )
   assert.match(
+    modelSource,
+    /static getListStatistics\([\s\S]*?SUM\(CASE WHEN gh\.service_type = 'comfyui'[\s\S]*?SUM\(CASE WHEN gh\.generation_status = 'completed'[\s\S]*?appendHistoryListVisibilityFilter\(/,
+    'global generation-history statistics should aggregate the same list-visible rows as history lists',
+  )
+  assert.match(
+    serviceSource,
+    /static async getStatistics\([\s\S]*?return GenerationHistoryModel\.getListStatistics\(\)/,
+    'generation-history statistics endpoint should use list-visible aggregate statistics',
+  )
+  assert.match(
     mcpImageToolsSource,
     /get_generation_history[\s\S]*?GenerationHistoryModel\.findAllWithMetadata\(filters\)[\s\S]*?GenerationHistoryModel\.countListRecords\(filters\)/,
     'MCP generation-history tool should keep records and totals aligned with list visibility',
@@ -304,7 +314,7 @@ verifyArtifactOnlyHistoryListContract()
 
 void verifyPromotionFailureIsolation()
   .then(() => {
-    console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter/dimension alias fallback, promotion failure isolation, artifact-only history visibility, MCP/workflow history totals)')
+    console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter/dimension alias fallback, promotion failure isolation, artifact-only history visibility, global/MCP/workflow history totals)')
   })
   .catch((error) => {
     console.error(error)
