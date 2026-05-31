@@ -523,6 +523,7 @@ export class GenerationHistoryModel {
         CASE WHEN matched_file.file_status = 'active' THEN im.rating_score ELSE NULL END as rating_score
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
       LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id
       LEFT JOIN comfyui_servers assigned_server ON assigned_server.id = qj.assigned_server_id
       LEFT JOIN main_db.image_files matched_file ON matched_file.id = (

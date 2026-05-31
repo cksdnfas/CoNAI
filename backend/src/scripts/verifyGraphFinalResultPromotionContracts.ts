@@ -263,6 +263,11 @@ function verifyArtifactOnlyHistoryListContract() {
     'completed artifact-only workflow placeholders must not appear as missing image results in history lists',
   )
   assert.match(
+    modelSource,
+    /static findAllWithMetadata\([\s\S]*?FROM api_generation_history gh[\s\S]*?LEFT JOIN workflows workflow ON workflow\.id = gh\.workflow_id[\s\S]*?appendHistoryListVisibilityFilter\(sql\)/,
+    'generation history metadata list query should join workflow metadata before applying the list visibility filter',
+  )
+  assert.match(
     serviceSource,
     /GenerationHistoryModel\.countListRecords\(/,
     'generation history list totals should use the same visibility filter as history list rows',
