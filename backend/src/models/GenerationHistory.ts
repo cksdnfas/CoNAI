@@ -104,6 +104,61 @@ export interface FilterOptions {
  * Uses better-sqlite3 synchronous API
  */
 export class GenerationHistoryModel {
+  private static appendFilterConditions(
+    sql: string,
+    params: any[],
+    filters: Omit<FilterOptions, 'limit' | 'offset'>,
+    tableAlias = '',
+  ): string {
+    const columnPrefix = tableAlias ? `${tableAlias}.` : '';
+
+    if (filters.service_type) {
+      sql += ` AND ${columnPrefix}service_type = ?`;
+      params.push(filters.service_type);
+    }
+
+    if (filters.generation_status) {
+      sql += ` AND ${columnPrefix}generation_status = ?`;
+      params.push(filters.generation_status);
+    }
+
+    if (filters.workflow_id !== undefined) {
+      sql += ` AND ${columnPrefix}workflow_id = ?`;
+      params.push(filters.workflow_id);
+    }
+
+    if (filters.queue_job_id !== undefined) {
+      sql += ` AND ${columnPrefix}queue_job_id = ?`;
+      params.push(filters.queue_job_id);
+    }
+
+    if (filters.requested_by_account_id !== undefined) {
+      sql += ` AND ${columnPrefix}requested_by_account_id = ?`;
+      params.push(filters.requested_by_account_id);
+    }
+
+    if (filters.requested_by_account_type !== undefined) {
+      sql += ` AND ${columnPrefix}requested_by_account_type = ?`;
+      params.push(filters.requested_by_account_type);
+    }
+
+    if (filters.server_id !== undefined) {
+      sql += ` AND ${columnPrefix}server_id = ?`;
+      params.push(filters.server_id);
+    }
+
+    return sql;
+  }
+
+  private static appendHistoryListVisibilityFilter(sql: string): string {
+    return `${sql}
+      AND NOT (
+        gh.generation_status = 'completed'
+        AND gh.composite_hash IS NULL
+        AND workflow.result_view_mode = 'artifact_explorer'
+      )`;
+  }
+
   /**
    * Create a new generation history record
    */
@@ -336,40 +391,27 @@ export class GenerationHistoryModel {
     let sql = 'SELECT COUNT(*) as total FROM api_generation_history WHERE 1=1';
     const params: any[] = [];
 
-    if (filters.service_type) {
-      sql += ' AND service_type = ?';
-      params.push(filters.service_type);
-    }
+    sql = this.appendFilterConditions(sql, params, filters);
 
-    if (filters.generation_status) {
-      sql += ' AND generation_status = ?';
-      params.push(filters.generation_status);
-    }
+    const stmt = apiGenDb.prepare(sql);
+    const result = stmt.get(...params) as { total: number } | undefined;
+    return result?.total || 0;
+  }
 
-    if (filters.workflow_id !== undefined) {
-      sql += ' AND workflow_id = ?';
-      params.push(filters.workflow_id);
-    }
+  /**
+   * Count rows visible in compact history-list surfaces.
+   */
+  static countListRecords(filters: Omit<FilterOptions, 'limit' | 'offset'> = {}): number {
+    let sql = `
+      SELECT COUNT(*) as total
+      FROM api_generation_history gh
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
 
-    if (filters.queue_job_id !== undefined) {
-      sql += ' AND queue_job_id = ?';
-      params.push(filters.queue_job_id);
-    }
-
-    if (filters.requested_by_account_id !== undefined) {
-      sql += ' AND requested_by_account_id = ?';
-      params.push(filters.requested_by_account_id);
-    }
-
-    if (filters.requested_by_account_type !== undefined) {
-      sql += ' AND requested_by_account_type = ?';
-      params.push(filters.requested_by_account_type);
-    }
-
-    if (filters.server_id !== undefined) {
-      sql += ' AND server_id = ?';
-      params.push(filters.server_id);
-    }
+    sql = this.appendFilterConditions(sql, params, filters, 'gh');
+    sql = this.appendHistoryListVisibilityFilter(sql);
 
     const stmt = apiGenDb.prepare(sql);
     const result = stmt.get(...params) as { total: number } | undefined;
@@ -421,6 +463,7 @@ export class GenerationHistoryModel {
         CASE WHEN matched_file.file_status = 'active' THEN im.rating_score ELSE NULL END as rating_score
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
+      LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
       LEFT JOIN comfyui_servers requested_server ON requested_server.id = qj.requested_server_id
       LEFT JOIN comfyui_servers assigned_server ON assigned_server.id = qj.assigned_server_id
       LEFT JOIN main_db.image_files matched_file ON matched_file.id = (
@@ -498,40 +541,8 @@ export class GenerationHistoryModel {
     `;
     const params: any[] = [];
 
-    if (filters.service_type) {
-      sql += ' AND gh.service_type = ?';
-      params.push(filters.service_type);
-    }
-
-    if (filters.generation_status) {
-      sql += ' AND gh.generation_status = ?';
-      params.push(filters.generation_status);
-    }
-
-    if (filters.workflow_id !== undefined) {
-      sql += ' AND gh.workflow_id = ?';
-      params.push(filters.workflow_id);
-    }
-
-    if (filters.queue_job_id !== undefined) {
-      sql += ' AND gh.queue_job_id = ?';
-      params.push(filters.queue_job_id);
-    }
-
-    if (filters.requested_by_account_id !== undefined) {
-      sql += ' AND gh.requested_by_account_id = ?';
-      params.push(filters.requested_by_account_id);
-    }
-
-    if (filters.requested_by_account_type !== undefined) {
-      sql += ' AND gh.requested_by_account_type = ?';
-      params.push(filters.requested_by_account_type);
-    }
-
-    if (filters.server_id !== undefined) {
-      sql += ' AND gh.server_id = ?';
-      params.push(filters.server_id);
-    }
+    sql = this.appendFilterConditions(sql, params, filters, 'gh');
+    sql = this.appendHistoryListVisibilityFilter(sql);
 
     // Order by
     const orderBy = filters.order_by || 'created_at';

@@ -246,11 +246,33 @@ function verifyMissingSourceArtifactWarningContract() {
   )
 }
 
+function verifyArtifactOnlyHistoryListContract() {
+  const modelSource = readFileSync(resolve(process.cwd(), 'src/models/GenerationHistory.ts'), 'utf8')
+  const serviceSource = readFileSync(resolve(process.cwd(), 'src/services/generationHistoryService.ts'), 'utf8')
+
+  assert.match(
+    modelSource,
+    /LEFT JOIN workflows workflow ON workflow\.id = gh\.workflow_id/,
+    'generation history list reads should recognize artifact-explorer placeholder rows',
+  )
+  assert.match(
+    modelSource,
+    /AND NOT \([\s\S]*?gh\.generation_status = 'completed'[\s\S]*?gh\.composite_hash IS NULL[\s\S]*?workflow\.result_view_mode = 'artifact_explorer'[\s\S]*?\)/,
+    'completed artifact-only workflow placeholders must not appear as missing image results in history lists',
+  )
+  assert.match(
+    serviceSource,
+    /GenerationHistoryModel\.countListRecords\(/,
+    'generation history list totals should use the same visibility filter as history list rows',
+  )
+}
+
 verifyMissingSourceArtifactWarningContract()
+verifyArtifactOnlyHistoryListContract()
 
 void verifyPromotionFailureIsolation()
   .then(() => {
-    console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter/dimension alias fallback, promotion failure isolation)')
+    console.log('✅ Graph final-result promotion contracts verified (NAI promote, uploaded dedupe, non-visual skip, video promote, value/metadata/generation-parameter/dimension alias fallback, promotion failure isolation, artifact-only history visibility)')
   })
   .catch((error) => {
     console.error(error)

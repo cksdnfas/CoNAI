@@ -265,7 +265,7 @@ export class GenerationHistoryService {
   }): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
     // Use JOIN query to get actual thumbnails and metadata
     const records = GenerationHistoryModel.findAllWithMetadata(filters);
-    const total = GenerationHistoryModel.count({
+    const total = GenerationHistoryModel.countListRecords({
       service_type: filters?.service_type,
       generation_status: filters?.generation_status,
       queue_job_id: filters?.queue_job_id,
@@ -349,7 +349,7 @@ export class GenerationHistoryService {
   ): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
     // Use JOIN query to get actual thumbnails and metadata
     const records = GenerationHistoryModel.findAllWithMetadata({ ...filters, workflow_id: workflowId });
-    const total = GenerationHistoryModel.count({
+    const total = GenerationHistoryModel.countListRecords({
       workflow_id: workflowId,
       generation_status: filters?.generation_status,
       queue_job_id: filters?.queue_job_id,
