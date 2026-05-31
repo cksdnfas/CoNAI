@@ -81,12 +81,26 @@ export function findFinalResultPromotionWarningLog(logs?: readonly GraphExecutio
   return logs?.find((log) => log.event_type === FINAL_RESULT_PROMOTION_FAILED_EVENT) ?? null
 }
 
-export function findFinalResultLifecycleWarning(logs?: readonly GraphExecutionLogRecord[] | null): FinalResultLifecycleWarning | null {
-  const promotionFailureLog = findFinalResultPromotionWarningLog(logs)
-  if (promotionFailureLog) {
-    return buildFinalResultLifecycleWarning('promotion_failed', promotionFailureLog)
+/** Return final-result lifecycle warnings in the same priority order used by the summary banner. */
+export function listFinalResultLifecycleWarnings(logs?: readonly GraphExecutionLogRecord[] | null): FinalResultLifecycleWarning[] {
+  if (!logs || logs.length === 0) {
+    return []
   }
 
-  const missingSourceArtifactLog = logs?.find(isFinalResultSourceArtifactMissingLog)
-  return missingSourceArtifactLog ? buildFinalResultLifecycleWarning('source_artifact_missing', missingSourceArtifactLog) : null
+  const promotionWarnings = logs
+    .filter((log) => log.event_type === FINAL_RESULT_PROMOTION_FAILED_EVENT)
+    .map((log) => buildFinalResultLifecycleWarning('promotion_failed', log))
+  const explicitMissingLogs = logs.filter((log) => log.event_type === FINAL_RESULT_SOURCE_ARTIFACT_MISSING_EVENT)
+  const missingSourceLogs = explicitMissingLogs.length > 0
+    ? explicitMissingLogs
+    : logs.filter(isFinalResultSourceArtifactMissingLog)
+
+  return [
+    ...promotionWarnings,
+    ...missingSourceLogs.map((log) => buildFinalResultLifecycleWarning('source_artifact_missing', log)),
+  ]
+}
+
+export function findFinalResultLifecycleWarning(logs?: readonly GraphExecutionLogRecord[] | null): FinalResultLifecycleWarning | null {
+  return listFinalResultLifecycleWarnings(logs)[0] ?? null
 }

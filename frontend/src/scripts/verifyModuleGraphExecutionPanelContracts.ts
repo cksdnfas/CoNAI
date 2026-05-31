@@ -385,9 +385,15 @@ function assertExecutionPanelLookupPolicy() {
   assert(
     executionLogAlertsSource.includes("FINAL_RESULT_PROMOTION_FAILED_EVENT = 'final_result_promotion_failed'")
       && executionLogAlertsSource.includes("FINAL_RESULT_SOURCE_ARTIFACT_MISSING_EVENT = 'final_result_source_artifact_missing'")
-      && executionLogAlertsSource.includes('findFinalResultLifecycleWarning')
+      && executionLogAlertsSource.includes('listFinalResultLifecycleWarnings')
       && executionLogAlertsSource.includes('log.event_type === FINAL_RESULT_PROMOTION_FAILED_EVENT'),
     'workflow execution log alerts should recognize non-fatal final-result lifecycle warnings from execution logs',
+  )
+  assert(
+    executionLogAlertsSource.includes('const explicitMissingLogs = logs.filter((log) => log.event_type === FINAL_RESULT_SOURCE_ARTIFACT_MISSING_EVENT)')
+      && executionLogAlertsSource.includes('explicitMissingLogs.length > 0')
+      && executionLogAlertsSource.includes('return listFinalResultLifecycleWarnings(logs)[0] ?? null'),
+    'workflow execution log alerts should list multiple warnings without duplicating legacy missing-source fallback logs',
   )
   assert(
     executionLogAlertsSource.includes("details?.operationKey === 'system.final_result'")
@@ -409,9 +415,15 @@ function assertExecutionPanelLookupPolicy() {
   )
   assert(
     workflowRunnerSource.includes('latestExecutionLogs?: GraphExecutionLogRecord[] | null')
-      && workflowRunnerSource.includes('const latestExecutionFinalResultWarning = useMemo(() => findFinalResultLifecycleWarning(latestExecutionLogs), [latestExecutionLogs])')
+      && workflowRunnerSource.includes('const latestExecutionFinalResultWarnings = useMemo(() => listFinalResultLifecycleWarnings(latestExecutionLogs), [latestExecutionLogs])')
+      && workflowRunnerSource.includes('const latestExecutionFinalResultWarning = latestExecutionFinalResultWarnings[0] ?? null')
       && workflowRunnerSource.includes('최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 실행 상세 로그에서 원인을 확인해줘.'),
     'workflow runner latest-result area should surface final-result lifecycle warning logs near the run controls',
+  )
+  assert(
+    workflowRunnerSource.includes('const latestExecutionAdditionalWarningCount = Math.max(0, latestExecutionFinalResultWarnings.length - 1)')
+      && workflowRunnerSource.includes('추가 최종 결과 경고 {count}개가 더 있어. 실행 상세 로그에서 함께 확인해줘.'),
+    'workflow runner latest-result area should summarize additional final-result lifecycle warnings',
   )
   assert(
     workflowRunnerSource.includes('const nodeLabelMap = useMemo(() => buildNodeDisplayLabelMap(selectedGraph), [selectedGraph])')
@@ -425,9 +437,15 @@ function assertExecutionPanelLookupPolicy() {
     'workflow runner latest-result area should explain final-result source outputs that were not persisted',
   )
   assert(
-    executionPanelSource.includes('const finalResultLifecycleWarning = useMemo(() => findFinalResultLifecycleWarning(executionDetail.logs), [executionDetail.logs])')
+    executionPanelSource.includes('const finalResultLifecycleWarnings = useMemo(() => listFinalResultLifecycleWarnings(executionDetail.logs), [executionDetail.logs])')
+      && executionPanelSource.includes('const finalResultLifecycleWarning = finalResultLifecycleWarnings[0] ?? null')
       && executionPanelSource.includes('최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.'),
     'selected execution summary should surface final-result lifecycle warning logs before opening detailed logs',
+  )
+  assert(
+    executionPanelSource.includes('const additionalFinalResultWarningCount = Math.max(0, finalResultLifecycleWarnings.length - 1)')
+      && executionPanelSource.includes('추가 최종 결과 경고 {count}개가 더 있어. 상세 로그에서 함께 확인해줘.'),
+    'selected execution summary should summarize additional final-result lifecycle warnings',
   )
   assert(
     executionPanelSource.includes('const nodeLabelMap = useMemo(() => buildNodeDisplayLabelMap(selectedGraph), [selectedGraph])')
