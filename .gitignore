@@ -142,6 +142,12 @@ shared/tsconfig.tsbuildinfo
 /.graphify_detect.json
 /.graphifyignore
 /AGENTS.md
+/.openclaw/
+/HEARTBEAT.md
+/IDENTITY.md
+/SOUL.md
+/TOOLS.md
+/USER.md
 
 # Generated verification reports
 /docs/i18n-gap-report.json
