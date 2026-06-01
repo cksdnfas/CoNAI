@@ -1,16 +1,7 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionRecord, GraphExecutionStatus, GraphExecutionTriggerType } from '../types/moduleGraph'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
-
-const SQLITE_BIND_BATCH_SIZE = 500
-
-function chunkIds(ids: number[], chunkSize = SQLITE_BIND_BATCH_SIZE) {
-  const chunks: number[][] = []
-  for (let index = 0; index < ids.length; index += chunkSize) {
-    chunks.push(ids.slice(index, index + chunkSize))
-  }
-  return chunks
-}
+import { chunkSqliteValues, compareNewestFirst, sqliteInPlaceholders } from '../utils/sqliteBatch'
 
 export type GraphExecutionStatusCounts = {
   completed: number
@@ -39,8 +30,8 @@ export class GraphExecutionModel {
 
     const db = getUserSettingsDb()
     let deletedCount = 0
-    for (const batch of chunkIds(executionIds)) {
-      const placeholders = batch.map(() => '?').join(', ')
+    for (const batch of chunkSqliteValues(executionIds)) {
+      const placeholders = sqliteInPlaceholders(batch)
       const result = db.prepare(`DELETE FROM graph_executions WHERE id IN (${placeholders})`).run(...batch)
       deletedCount += result.changes
     }
@@ -54,17 +45,14 @@ export class GraphExecutionModel {
     }
 
     const db = getUserSettingsDb()
-    const records = chunkIds(executionIds).flatMap((batch) => {
-      const placeholders = batch.map(() => '?').join(', ')
+    const records = chunkSqliteValues(executionIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
       return db.prepare(`
         SELECT * FROM graph_executions
         WHERE id IN (${placeholders})
       `).all(...batch) as GraphExecutionRecord[]
     })
-    return records.sort((left, right) => {
-      const dateOrder = String(right.created_date ?? '').localeCompare(String(left.created_date ?? ''))
-      return dateOrder !== 0 ? dateOrder : right.id - left.id
-    })
+    return records.sort(compareNewestFirst)
   }
 
   /** List executions for a workflow id set, newest first. */
@@ -253,8 +241,8 @@ export class GraphExecutionModel {
 
     const db = getUserSettingsDb()
     let cancelledCount = 0
-    for (const batch of chunkIds(scheduleIds)) {
-      const placeholders = batch.map(() => '?').join(', ')
+    for (const batch of chunkSqliteValues(scheduleIds)) {
+      const placeholders = sqliteInPlaceholders(batch)
       const result = db.prepare(`
         UPDATE graph_executions
         SET status = 'cancelled',

@@ -1,15 +1,6 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionArtifactRecord } from '../types/moduleGraph'
-
-const SQLITE_BIND_BATCH_SIZE = 500
-
-function chunkIds(ids: number[], chunkSize = SQLITE_BIND_BATCH_SIZE) {
-  const chunks: number[][] = []
-  for (let index = 0; index < ids.length; index += chunkSize) {
-    chunks.push(ids.slice(index, index + chunkSize))
-  }
-  return chunks
-}
+import { chunkSqliteValues, compareNewestFirst, sqliteInPlaceholders } from '../utils/sqliteBatch'
 
 export class GraphExecutionArtifactModel {
   /** Find artifacts for a specific id set. */
@@ -19,17 +10,14 @@ export class GraphExecutionArtifactModel {
     }
 
     const db = getUserSettingsDb()
-    const records = chunkIds(artifactIds).flatMap((batch) => {
-      const placeholders = batch.map(() => '?').join(', ')
+    const records = chunkSqliteValues(artifactIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
       return db.prepare(`
         SELECT * FROM graph_execution_artifacts
         WHERE id IN (${placeholders})
       `).all(...batch) as GraphExecutionArtifactRecord[]
     })
-    return records.sort((left, right) => {
-      const dateOrder = String(right.created_date ?? '').localeCompare(String(left.created_date ?? ''))
-      return dateOrder !== 0 ? dateOrder : right.id - left.id
-    })
+    return records.sort(compareNewestFirst)
   }
 
   /** List artifacts for an execution id set. */
@@ -39,17 +27,14 @@ export class GraphExecutionArtifactModel {
     }
 
     const db = getUserSettingsDb()
-    const records = chunkIds(executionIds).flatMap((batch) => {
-      const placeholders = batch.map(() => '?').join(', ')
+    const records = chunkSqliteValues(executionIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
       return db.prepare(`
         SELECT * FROM graph_execution_artifacts
         WHERE execution_id IN (${placeholders})
       `).all(...batch) as GraphExecutionArtifactRecord[]
     })
-    return records.sort((left, right) => {
-      const dateOrder = String(right.created_date ?? '').localeCompare(String(left.created_date ?? ''))
-      return dateOrder !== 0 ? dateOrder : right.id - left.id
-    })
+    return records.sort(compareNewestFirst)
   }
 
   /** Count artifacts by execution id without loading heavy metadata payloads. */
@@ -59,8 +44,8 @@ export class GraphExecutionArtifactModel {
     }
 
     const db = getUserSettingsDb()
-    const rows = chunkIds(executionIds).flatMap((batch) => {
-      const placeholders = batch.map(() => '?').join(', ')
+    const rows = chunkSqliteValues(executionIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
       return db.prepare(`
         SELECT execution_id, COUNT(*) as count
         FROM graph_execution_artifacts
@@ -79,8 +64,8 @@ export class GraphExecutionArtifactModel {
     }
 
     const db = getUserSettingsDb()
-    const records = chunkIds(workflowIds).flatMap((batch) => {
-      const placeholders = batch.map(() => '?').join(', ')
+    const records = chunkSqliteValues(workflowIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
       return db.prepare(`
         SELECT ga.*
         FROM graph_execution_artifacts ga
@@ -89,10 +74,7 @@ export class GraphExecutionArtifactModel {
         WHERE ge.graph_workflow_id IN (${placeholders})
       `).all(...batch) as GraphExecutionArtifactRecord[]
     })
-    return records.sort((left, right) => {
-      const dateOrder = String(right.created_date ?? '').localeCompare(String(left.created_date ?? ''))
-      return dateOrder !== 0 ? dateOrder : right.id - left.id
-    })
+    return records.sort(compareNewestFirst)
   }
 
   /** Scan artifacts for one workflow in newest-first pages without hydrating the whole workflow. */
@@ -163,8 +145,8 @@ export class GraphExecutionArtifactModel {
 
     const db = getUserSettingsDb()
     let deletedCount = 0
-    for (const batch of chunkIds(artifactIds)) {
-      const placeholders = batch.map(() => '?').join(', ')
+    for (const batch of chunkSqliteValues(artifactIds)) {
+      const placeholders = sqliteInPlaceholders(batch)
       const result = db.prepare(`DELETE FROM graph_execution_artifacts WHERE id IN (${placeholders})`).run(...batch)
       deletedCount += result.changes
     }

@@ -1,15 +1,6 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionFinalResultRecord } from '../types/moduleGraph'
-
-const SQLITE_BIND_BATCH_SIZE = 500
-
-function chunkIds(ids: number[], chunkSize = SQLITE_BIND_BATCH_SIZE) {
-  const chunks: number[][] = []
-  for (let index = 0; index < ids.length; index += chunkSize) {
-    chunks.push(ids.slice(index, index + chunkSize))
-  }
-  return chunks
-}
+import { chunkSqliteValues, compareNewestFirst, sqliteInPlaceholders } from '../utils/sqliteBatch'
 
 export class GraphExecutionFinalResultModel {
   /** List final results for an execution id set. */
@@ -19,8 +10,8 @@ export class GraphExecutionFinalResultModel {
     }
 
     const db = getUserSettingsDb()
-    const records = chunkIds(executionIds).flatMap((batch) => {
-      const placeholders = batch.map(() => '?').join(', ')
+    const records = chunkSqliteValues(executionIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
       return db.prepare(`
         SELECT
           fr.id,
@@ -40,10 +31,7 @@ export class GraphExecutionFinalResultModel {
         WHERE fr.execution_id IN (${placeholders})
       `).all(...batch) as GraphExecutionFinalResultRecord[]
     })
-    return records.sort((left, right) => {
-      const dateOrder = String(right.created_date ?? '').localeCompare(String(left.created_date ?? ''))
-      return dateOrder !== 0 ? dateOrder : right.id - left.id
-    })
+    return records.sort(compareNewestFirst)
   }
 
   /** Count final-result rows by execution id without joining heavy artifact metadata. */
@@ -53,8 +41,8 @@ export class GraphExecutionFinalResultModel {
     }
 
     const db = getUserSettingsDb()
-    const rows = chunkIds(executionIds).flatMap((batch) => {
-      const placeholders = batch.map(() => '?').join(', ')
+    const rows = chunkSqliteValues(executionIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
       return db.prepare(`
         SELECT execution_id, COUNT(*) as count
         FROM graph_execution_final_results
@@ -73,8 +61,8 @@ export class GraphExecutionFinalResultModel {
     }
 
     const db = getUserSettingsDb()
-    const records = chunkIds(workflowIds).flatMap((batch) => {
-      const placeholders = batch.map(() => '?').join(', ')
+    const records = chunkSqliteValues(workflowIds).flatMap((batch) => {
+      const placeholders = sqliteInPlaceholders(batch)
       return db.prepare(`
         SELECT
           fr.id,
@@ -96,10 +84,7 @@ export class GraphExecutionFinalResultModel {
         WHERE ge.graph_workflow_id IN (${placeholders})
       `).all(...batch) as GraphExecutionFinalResultRecord[]
     })
-    return records.sort((left, right) => {
-      const dateOrder = String(right.created_date ?? '').localeCompare(String(left.created_date ?? ''))
-      return dateOrder !== 0 ? dateOrder : right.id - left.id
-    })
+    return records.sort(compareNewestFirst)
   }
 
   /** Scan final results for one workflow in newest-first pages without hydrating the whole workflow. */
@@ -197,8 +182,8 @@ export class GraphExecutionFinalResultModel {
 
     const db = getUserSettingsDb()
     let deletedCount = 0
-    for (const batch of chunkIds(sourceArtifactIds)) {
-      const placeholders = batch.map(() => '?').join(', ')
+    for (const batch of chunkSqliteValues(sourceArtifactIds)) {
+      const placeholders = sqliteInPlaceholders(batch)
       const result = db.prepare(`DELETE FROM graph_execution_final_results WHERE source_artifact_id IN (${placeholders})`).run(...batch)
       deletedCount += result.changes
     }

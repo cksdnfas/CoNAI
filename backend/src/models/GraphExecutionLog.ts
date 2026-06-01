@@ -1,15 +1,6 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionLogLevel, GraphExecutionLogRecord } from '../types/moduleGraph'
-
-const SQLITE_BIND_BATCH_SIZE = 500
-
-function chunkIds(ids: number[], chunkSize = SQLITE_BIND_BATCH_SIZE) {
-  const chunks: number[][] = []
-  for (let index = 0; index < ids.length; index += chunkSize) {
-    chunks.push(ids.slice(index, index + chunkSize))
-  }
-  return chunks
-}
+import { chunkSqliteValues, sqliteInPlaceholders } from '../utils/sqliteBatch'
 
 export class GraphExecutionLogModel {
   /** Delete execution logs for a specific execution id set. */
@@ -20,8 +11,8 @@ export class GraphExecutionLogModel {
 
     const db = getUserSettingsDb()
     let deletedCount = 0
-    for (const batch of chunkIds(executionIds)) {
-      const placeholders = batch.map(() => '?').join(', ')
+    for (const batch of chunkSqliteValues(executionIds)) {
+      const placeholders = sqliteInPlaceholders(batch)
       const result = db.prepare(`DELETE FROM graph_execution_logs WHERE execution_id IN (${placeholders})`).run(...batch)
       deletedCount += result.changes
     }

@@ -22,7 +22,7 @@ async function main() {
       pruneGraphWorkflowOutputRetention,
     } = await import('../services/graphWorkflowOutputRetentionService')
     const graphWorkflowExecutorSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/graphWorkflowExecutor.ts'), 'utf8')
-    const graphWorkflowRetentionSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/graphWorkflowOutputRetentionService.ts'), 'utf8')
+    const graphWorkflowRetentionScannerSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/graphWorkflowRetentionScanner.ts'), 'utf8')
 
     closeUserSettingsDb = userSettings.closeUserSettingsDb
     closeMainDatabase = mainDatabase.closeDatabase
@@ -186,12 +186,12 @@ async function main() {
       'graph workflow completion should schedule retention cleanup instead of awaiting workflow-wide pruning inline',
     )
     assert.match(
-      graphWorkflowRetentionSource,
+      graphWorkflowRetentionScannerSource,
       /findByWorkflowIdPage\(workflowId, RETENTION_SCAN_PAGE_SIZE/,
       'graph workflow retention should scan workflow rows in pages instead of hydrating the full workflow',
     )
     assert.doesNotMatch(
-      graphWorkflowRetentionSource,
+      graphWorkflowRetentionScannerSource,
       /GraphExecutionArtifactModel\.findByWorkflowIds\(\[workflowId\]\)/,
       'graph workflow retention must not load all workflow artifacts at once',
     )
