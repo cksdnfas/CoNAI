@@ -56,12 +56,13 @@ for (const table of [
 
 const serviceSource = readFileSync(resolve(process.cwd(), 'src/services/dataRematchService.ts'), 'utf8');
 for (const table of ['image_groups', 'auto_folder_group_images', 'image_models', 'civitai_temp_urls', 'image_metadata_edit_revisions']) {
-  assert.ok(serviceSource.includes(`this.deleteHashRefTableRows('${table}', oldHash)`), `hash regeneration must detach ${table}`);
+  assert.ok(serviceSource.includes(`this.remapHashRefTableRows('${table}', oldHash, newHash)`), `hash regeneration must remap ${table}`);
 }
-assert.ok(serviceSource.includes('DELETE FROM api_generation_history'), 'hash regeneration must detach generation-history links');
-assert.equal(serviceSource.includes('INSERT OR IGNORE INTO image_groups'), false, 'hash regeneration must not preserve manual group links');
-assert.equal(serviceSource.includes('INSERT OR IGNORE INTO auto_folder_group_images'), false, 'hash regeneration must not preserve auto-folder group links');
-assert.equal(serviceSource.includes('INSERT OR IGNORE INTO image_models'), false, 'hash regeneration must not preserve model links');
-assert.equal(serviceSource.includes('SET composite_hash = ?\n        WHERE composite_hash = ?'), false, 'hash regeneration must not update stale relation rows onto the new hash');
+assert.ok(serviceSource.includes('UPDATE OR IGNORE api_generation_history'), 'hash regeneration must remap generation-history links');
+assert.ok(serviceSource.includes('UPDATE OR IGNORE ${quoteIdentifier(tableName)}'), 'hash regeneration must remap existing relation rows onto the new hash');
+assert.ok(serviceSource.includes('DELETE FROM ${quoteIdentifier(tableName)}'), 'hash regeneration must remove only old-hash rows left after remap conflicts');
+assert.ok(serviceSource.includes('중복 충돌만 해제'), 'hash regeneration warning must describe conflict-only detachment');
+assert.equal(serviceSource.includes('deleteHashRefTableRows'), false, 'hash regeneration must not use delete-only rematching');
+assert.equal(serviceSource.includes('deleteApiGenerationHistory'), false, 'hash regeneration must not delete generation history without remapping first');
 
 console.log('✅ Data rematch backend contracts verified');

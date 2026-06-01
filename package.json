@@ -124,6 +124,7 @@
     "verify:danbooru-browser-locale-contracts": "cd backend && npm run verify:danbooru-browser-locale-contracts",
     "verify:danbooru-prompt-group-contracts": "cd backend && npm run verify:danbooru-prompt-group-contracts",
     "verify:group-image-route-contracts": "cd backend && npm run verify:group-image-route-contracts",
+    "verify:group-wal-hot-path-contracts": "cd backend && npm run verify:group-wal-hot-path-contracts",
     "verify:supported-extension-contracts": "cd backend && npm run verify:supported-extension-contracts",
     "verify:recycle-bin-deletion-contracts": "cd backend && npm run verify:recycle-bin-deletion-contracts",
     "verify:deletion-lock-contracts": "cd backend && npm run verify:deletion-lock-contracts",

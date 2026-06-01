@@ -88,11 +88,8 @@ export class AutoCollectionOrchestrator {
     conditions: AutoCollectCondition[],
     startTime: number
   ): Promise<AutoCollectResult> {
-    // Remove existing auto-collected images
-    const removedCount = await ImageGroupModel.removeAutoCollectedImages(groupId);
-
     // Process all images in batches
-    let addedCount = 0;
+    const matchingHashes: string[] = [];
     let page = 1;
     const limit = 100;
     let hasMore = true;
@@ -109,25 +106,15 @@ export class AutoCollectionOrchestrator {
       for (const image of images) {
         const matches = await checkImageMatchesConditions(image, conditions);
         if (matches) {
-          const alreadyInGroup = await ImageGroupModel.isImageInGroup(
-            groupId,
-            image.composite_hash
-          );
-
-          if (!alreadyInGroup) {
-            try {
-              await ImageGroupModel.addImageToGroup(groupId, image.composite_hash, 'auto');
-              addedCount++;
-            } catch (err) {
-              console.warn('Error adding image to group:', err);
-            }
-          }
+          matchingHashes.push(image.composite_hash);
         }
       }
 
       page++;
       hasMore = images.length === limit;
     }
+
+    const { removedCount, addedCount } = ImageGroupModel.replaceAutoCollectedImages(groupId, matchingHashes);
 
     // Update last run time
     await GroupModel.updateAutoCollectLastRun(groupId);
@@ -153,9 +140,6 @@ export class AutoCollectionOrchestrator {
     startTime: number
   ): Promise<AutoCollectResult> {
     try {
-      // Remove existing auto-collected images
-      const removedCount = await ImageGroupModel.removeAutoCollectedImages(groupId);
-
       // Use ComplexFilterService for efficient querying
       const searchResult = await ComplexFilterService.executeComplexSearch(
         complexFilter,
@@ -164,24 +148,10 @@ export class AutoCollectionOrchestrator {
       );
 
       const matchingImages = searchResult.images;
-      let addedCount = 0;
-
-      // Add matching images to group
-      for (const image of matchingImages) {
-        try {
-          const alreadyInGroup = await ImageGroupModel.isImageInGroup(
-            groupId,
-            image.composite_hash
-          );
-
-          if (!alreadyInGroup) {
-            await ImageGroupModel.addImageToGroup(groupId, image.composite_hash, 'auto');
-            addedCount++;
-          }
-        } catch (err) {
-          console.warn('Error adding image to group:', err);
-        }
-      }
+      const { removedCount, addedCount } = ImageGroupModel.replaceAutoCollectedImages(
+        groupId,
+        matchingImages.map((image) => image.composite_hash)
+      );
 
       // Update last run time
       await GroupModel.updateAutoCollectLastRun(groupId);

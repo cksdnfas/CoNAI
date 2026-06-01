@@ -138,13 +138,13 @@ export class AutoFolderGroupService {
     }
   }
 
-  /** Rebuild when there are no folder groups yet or the stored format is legacy. */
+  /** Report unreadable stored shape without mutating DB from read routes. */
   private static async ensureReadableGroups() {
     const groups = await AutoFolderGroupModel.findAllWithStats();
     const hasLegacyShape = groups.length > 0 && groups.some((group) => !group.folder_path.startsWith('watch:'));
 
-    if (groups.length === 0 || hasLegacyShape) {
-      await this.rebuildAllFolderGroups();
+    if (hasLegacyShape) {
+      console.warn('[AutoFolderGroupService] Legacy folder group rows found; use explicit rebuild to refresh watched-folder groups.');
     }
   }
 
@@ -184,7 +184,7 @@ export class AutoFolderGroupService {
   }
 
   /** Persist one watched folder tree in stable parent-first order. */
-  private static async createGroupsFromNodes(
+  private static createGroupsFromNodes(
     nodes: Map<string, FolderNode>,
     pathToGroupId: Map<string, number>,
   ) {
@@ -196,7 +196,7 @@ export class AutoFolderGroupService {
 
     for (const node of sortedNodes) {
       const parentId = node.parentKey ? pathToGroupId.get(node.parentKey) : null;
-      const group = await AutoFolderGroupModel.create({
+      const group = AutoFolderGroupModel.create({
         folder_path: node.key,
         absolute_path: node.absolutePath,
         display_name: node.displayName,
@@ -210,8 +210,9 @@ export class AutoFolderGroupService {
       groupsCreated++;
 
       for (const hash of node.compositeHashes) {
-        await AutoFolderGroupImageModel.addImageToGroup(group.id, hash);
-        imagesAssigned++;
+        if (AutoFolderGroupImageModel.addImageToGroup(group.id, hash)) {
+          imagesAssigned++;
+        }
       }
     }
 
@@ -232,39 +233,45 @@ export class AutoFolderGroupService {
     try {
       console.log('🔄 자동 폴더 그룹 재구축 시작...');
 
-      await AutoFolderGroupModel.deleteAll();
-      console.log('  ✅ 기존 그룹 삭제 완료');
-
       const watchedFolders = this.loadReadableWatchedFolders();
-
-      if (watchedFolders.length === 0) {
-        return {
-          success: true,
-          groups_created: 0,
-          images_assigned: 0,
-          duration_ms: Date.now() - startTime
-        };
-      }
 
       const activeImages = db.prepare(`
         SELECT composite_hash, original_file_path, folder_id
         FROM image_files
         WHERE file_status = 'active'
       `).all() as ActiveImageRow[];
+      const imagesByFolderId = new Map<number, ActiveImageRow[]>();
 
-      const pathToGroupId = new Map<string, number>();
+      for (const image of activeImages) {
+        const folderImages = imagesByFolderId.get(image.folder_id) ?? [];
+        folderImages.push(image);
+        imagesByFolderId.set(image.folder_id, folderImages);
+      }
 
-      for (const watchedFolder of watchedFolders) {
+      const folderNodeMaps = watchedFolders.map((watchedFolder) => {
         const nodes = new Map<string, FolderNode>();
-        const folderImages = activeImages.filter((image) => image.folder_id === watchedFolder.id);
+        const folderImages = imagesByFolderId.get(watchedFolder.id) ?? [];
 
         this.collectDirectoryNodes(watchedFolder, nodes);
         this.attachImagesToNodes(watchedFolder, nodes, folderImages);
 
-        const result = await this.createGroupsFromNodes(nodes, pathToGroupId);
-        groupsCreated += result.groupsCreated;
-        imagesAssigned += result.imagesAssigned;
-      }
+        return nodes;
+      });
+
+      const pathToGroupId = new Map<string, number>();
+
+      const persistRebuild = db.transaction(() => {
+        AutoFolderGroupModel.deleteAll();
+
+        for (const nodes of folderNodeMaps) {
+          const result = this.createGroupsFromNodes(nodes, pathToGroupId);
+          groupsCreated += result.groupsCreated;
+          imagesAssigned += result.imagesAssigned;
+        }
+      });
+
+      persistRebuild();
+      console.log('  ✅ 기존 그룹 삭제 및 재구축 반영 완료');
 
       const durationMs = Date.now() - startTime;
       console.log(`  ✅ 재구축 완료: ${groupsCreated}개 그룹, ${imagesAssigned}개 이미지 할당`);

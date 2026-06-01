@@ -180,16 +180,11 @@ export class AutoFolderGroupImageModel {
    * 이미지를 폴더 그룹에 추가 (composite_hash 기반)
    */
   static addImageToGroup(groupId: number, compositeHash: string): boolean {
-    try {
-      db.prepare(`
-        INSERT INTO auto_folder_group_images (group_id, composite_hash)
-        VALUES (?, ?)
-      `).run(groupId, compositeHash);
-      return true;
-    } catch (error) {
-      // UNIQUE 제약 위반 시 (이미 추가됨)
-      return false;
-    }
+    const result = db.prepare(`
+      INSERT OR IGNORE INTO auto_folder_group_images (group_id, composite_hash)
+      VALUES (?, ?)
+    `).run(groupId, compositeHash);
+    return result.changes > 0;
   }
 
   /**

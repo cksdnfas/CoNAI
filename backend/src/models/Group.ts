@@ -282,6 +282,34 @@ export class ImageGroupModel {
   }
 
   /**
+   * Replace one group's auto-collected memberships in a single transaction.
+   */
+  static replaceAutoCollectedImages(groupId: number, compositeHashes: string[]): { removedCount: number; addedCount: number } {
+    const uniqueHashes = Array.from(new Set(compositeHashes.filter(Boolean)));
+    const deleteAuto = db.prepare(
+      'DELETE FROM image_groups WHERE group_id = ? AND collection_type = ?'
+    );
+    const insertAuto = db.prepare(`
+      INSERT OR IGNORE INTO image_groups (
+        group_id, composite_hash, order_index, collection_type
+      ) VALUES (?, ?, 0, 'auto')
+    `);
+
+    const replace = db.transaction(() => {
+      const removedCount = deleteAuto.run(groupId, 'auto').changes;
+      let addedCount = 0;
+
+      for (const compositeHash of uniqueHashes) {
+        addedCount += insertAuto.run(groupId, compositeHash).changes;
+      }
+
+      return { removedCount, addedCount };
+    });
+
+    return replace();
+  }
+
+  /**
    * 특정 그룹의 이미지 목록 조회 (메타데이터만)
    */
   static findImagesByGroup(

@@ -109,7 +109,7 @@ export const DATA_REMATCH_HASH_REFERENCE_TABLES = [
 
 export const HASH_REGENERATION_WARNINGS = [
   '해시 재생성은 composite_hash 기반 미디어 identity를 다시 쓰는 작업입니다.',
-  '기존 그룹, 자동 폴더 그룹, 모델, 임시 URL, 생성 히스토리 연결은 새 해시에 복사하지 않고 해제합니다.',
+  '기존 그룹, 자동 폴더 그룹, 모델, 임시 URL, 생성 히스토리 연결은 가능한 경우 새 해시로 재매칭하고 중복 충돌만 해제합니다.',
   '작업 중 자동 스캔, 백그라운드 해시 생성, 자동 태그/작가 추출은 대기합니다.',
   '해시 재생성은 자동 태그 추출이나 작가 추출을 직접 실행하지 않습니다. 완료 후 시스템 스케줄러가 DB를 확인해 순차 처리합니다.',
   '비디오는 제외하고 이미지/GIF 계열만 처리합니다.',
@@ -591,7 +591,7 @@ export class DataRematchService {
         return;
       }
 
-      this.detachHashReferenceTables(input.oldHash);
+      this.remapHashReferenceTables(input.oldHash, input.newHash);
 
       if (input.oldHash === input.newHash) {
         this.updateMediaMetadataTechnicalFields(input.newHash, input.payload);
@@ -624,7 +624,7 @@ export class DataRematchService {
     });
 
     transaction();
-    this.deleteApiGenerationHistory(input.oldHash);
+    this.remapApiGenerationHistory(input.oldHash, input.newHash);
   }
 
   private static ensureMediaMetadataForHash(input: HashRemapInput): void {
@@ -694,16 +694,24 @@ export class DataRematchService {
     );
   }
 
-  private static detachHashReferenceTables(oldHash: string): void {
-    this.deleteHashRefTableRows('image_groups', oldHash);
-    this.deleteHashRefTableRows('auto_folder_group_images', oldHash);
-    this.deleteHashRefTableRows('image_models', oldHash);
-    this.deleteHashRefTableRows('civitai_temp_urls', oldHash);
-    this.deleteHashRefTableRows('image_metadata_edit_revisions', oldHash);
+  private static remapHashReferenceTables(oldHash: string, newHash: string): void {
+    if (oldHash === newHash) return;
+
+    this.remapHashRefTableRows('image_groups', oldHash, newHash);
+    this.remapHashRefTableRows('auto_folder_group_images', oldHash, newHash);
+    this.remapHashRefTableRows('image_models', oldHash, newHash);
+    this.remapHashRefTableRows('civitai_temp_urls', oldHash, newHash);
+    this.remapHashRefTableRows('image_metadata_edit_revisions', oldHash, newHash);
   }
 
-  private static deleteHashRefTableRows(tableName: string, oldHash: string): void {
+  private static remapHashRefTableRows(tableName: string, oldHash: string, newHash: string): void {
     if (!tableExists(tableName)) return;
+
+    db.prepare(`
+      UPDATE OR IGNORE ${quoteIdentifier(tableName)}
+      SET composite_hash = ?
+      WHERE composite_hash = ?
+    `).run(newHash, oldHash);
 
     db.prepare(`
       DELETE FROM ${quoteIdentifier(tableName)}
@@ -711,13 +719,21 @@ export class DataRematchService {
     `).run(oldHash);
   }
 
-  private static deleteApiGenerationHistory(oldHash: string | null): void {
+  private static remapApiGenerationHistory(oldHash: string | null, newHash: string): void {
     if (!oldHash || !userTableExists('api_generation_history')) {
       return;
     }
 
     try {
       const userDb = getUserSettingsDb();
+      if (oldHash !== newHash) {
+        userDb.prepare(`
+          UPDATE OR IGNORE api_generation_history
+          SET composite_hash = ?
+          WHERE composite_hash = ?
+        `).run(newHash, oldHash);
+      }
+
       userDb.prepare(`
         DELETE FROM api_generation_history
         WHERE composite_hash = ?
