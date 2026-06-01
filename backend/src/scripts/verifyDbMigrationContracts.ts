@@ -197,6 +197,39 @@ function assertWildcardLegacyMigrationDropsStaleScratchTable() {
   }
 }
 
+function assertMigrationStartupLockContracts() {
+  const migrationManagerSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/database/migrationManager.ts'),
+    'utf8',
+  )
+  const sqlitePragmasSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/database/sqlitePragmas.ts'),
+    'utf8',
+  )
+  const homeFeedMigrationSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/database/migrations/019_add_home_feed_cursor_index.ts'),
+    'utf8',
+  )
+
+  assert.match(
+    migrationManagerSource,
+    /BEGIN IMMEDIATE/,
+    'startup migrations should serialize across split API and worker processes',
+  )
+  assert.match(migrationManagerSource, /COMMIT/, 'startup migration lock should commit after pending migrations finish')
+  assert.match(migrationManagerSource, /ROLLBACK/, 'startup migration lock should roll back on migration failure')
+  assert.match(
+    sqlitePragmasSource,
+    /busy_timeout = 60000/,
+    'SQLite connections should wait long enough for startup migration/index locks',
+  )
+  assert.doesNotMatch(
+    homeFeedMigrationSource,
+    /Index creation warning/,
+    'home feed index migration must fail instead of marking a missing performance index as applied',
+  )
+}
+
 async function assertLegacyApiHistoryCollisionIsRemapped() {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-api-history-migration-'))
   process.env.RUNTIME_BASE_PATH = tempRoot
@@ -352,6 +385,7 @@ async function main() {
   assertModuleDefinitionRebuildPreservesExternalSourceColumns()
   assertWildcardLegacyMigrationDropsStaleScratchTable()
   assertWildcardLegacyMigrationFailsAtomically()
+  assertMigrationStartupLockContracts()
   await assertLegacyApiHistoryCollisionIsRemapped()
   await assertMigrationManagerFailsFastAndRollsBack()
 

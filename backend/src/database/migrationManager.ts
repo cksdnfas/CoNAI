@@ -103,8 +103,11 @@ export class MigrationManager {
 
   // 마이그레이션 실행 (up)
   async migrate(): Promise<void> {
+    let transactionStarted = false;
     try {
       this.createMigrationsTable();
+      this.db.exec('BEGIN IMMEDIATE');
+      transactionStarted = true;
 
       const appliedMigrations = this.getAppliedMigrations();
       const availableMigrations = await this.getAvailableMigrations();
@@ -115,6 +118,8 @@ export class MigrationManager {
 
       if (pendingMigrations.length === 0) {
         console.log('✅ 모든 마이그레이션이 이미 적용되었습니다.');
+        this.db.exec('COMMIT');
+        transactionStarted = false;
         return;
       }
 
@@ -141,8 +146,17 @@ export class MigrationManager {
         }
       }
 
+      this.db.exec('COMMIT');
+      transactionStarted = false;
       console.log('🎉 모든 마이그레이션이 성공적으로 완료되었습니다!');
     } catch (error) {
+      if (transactionStarted) {
+        try {
+          this.db.exec('ROLLBACK');
+        } catch {
+          // The connection may already have unwound the transaction.
+        }
+      }
       console.error('❌ 마이그레이션 실행 중 오류 발생:', error);
       throw error;
     }

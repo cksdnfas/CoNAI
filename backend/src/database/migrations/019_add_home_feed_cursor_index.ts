@@ -10,7 +10,8 @@ export const up = async (db: Database): Promise<void> => {
     `).run();
     console.log('✅ Created index: idx_metadata_first_seen_hash_desc');
   } catch (error: any) {
-    console.warn('⚠️  Index creation warning:', error.message);
+    console.error('❌ Failed to create idx_metadata_first_seen_hash_desc:', error.message);
+    throw error;
   }
 };
 
