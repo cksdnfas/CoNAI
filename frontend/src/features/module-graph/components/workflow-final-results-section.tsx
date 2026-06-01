@@ -203,7 +203,7 @@ export function WorkflowFinalResultsSection({
       sourcePortLabel: getFinalResultSourcePortLabel(finalResult.source_port_key, finalResult.artifact_type),
     }
   }), [artifactsById, finalResults, nodeLabelMap, nodeLabelOverrides])
-  const { visualEntries, visualEntryByImageId, nonVisualEntries } = useMemo(() => {
+  const { visualEntries, registeredVisualEntries, previewOnlyVisualEntries, visualEntryByImageId, nonVisualEntries } = useMemo(() => {
     const nextVisualEntries: Array<{ entry: ResolvedFinalResultEntry; image: ImageRecord }> = []
     for (const entry of resolvedEntries) {
       const image = buildFinalResultImageRecord(entry)
@@ -212,11 +212,15 @@ export function WorkflowFinalResultsSection({
       }
     }
 
+    const nextRegisteredVisualEntries = nextVisualEntries.filter((item) => typeof item.image.composite_hash === 'string' && item.image.composite_hash.trim().length > 0)
+    const nextPreviewOnlyVisualEntries = nextVisualEntries.filter((item) => !item.image.composite_hash?.trim())
     const nextVisualArtifactIds = new Set(nextVisualEntries.map((item) => item.entry.artifact.id))
 
     return {
       visualEntries: nextVisualEntries,
-      visualEntryByImageId: new Map(nextVisualEntries.map((item) => [String(item.image.id), item.entry])),
+      registeredVisualEntries: nextRegisteredVisualEntries,
+      previewOnlyVisualEntries: nextPreviewOnlyVisualEntries,
+      visualEntryByImageId: new Map(nextRegisteredVisualEntries.map((item) => [String(item.image.id), item.entry])),
       nonVisualEntries: resolvedEntries.filter((entry) => !nextVisualArtifactIds.has(entry.artifact.id)),
     }
   }, [resolvedEntries])
@@ -241,9 +245,9 @@ export function WorkflowFinalResultsSection({
         </div>
       ) : (
         <div className="space-y-3">
-          {visualEntries.length > 0 ? (
+          {registeredVisualEntries.length > 0 ? (
             <ImageList
-              items={visualEntries.map((item) => item.image)}
+              items={registeredVisualEntries.map((item) => item.image)}
               layout="grid"
               activationMode="modal"
               getItemId={(image) => String(image.id)}
@@ -274,6 +278,25 @@ export function WorkflowFinalResultsSection({
                 )
               }}
             />
+          ) : null}
+
+          {previewOnlyVisualEntries.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {previewOnlyVisualEntries.map(({ entry }) => {
+                const overlayText = [entry.overlayLabel, entry.sourceNodeLabel, entry.sourcePortLabel, entry.artifact.artifact_type].filter(Boolean).join(' · ') || undefined
+
+                return (
+                  <ExecutionArtifactCard
+                    key={entry.finalResult.id}
+                    artifact={buildFinalResultPreviewArtifact(entry)}
+                    compact
+                    hideTitle
+                    title={overlayText}
+                    overlayLabel={overlayText}
+                  />
+                )
+              })}
+            </div>
           ) : null}
 
           {nonVisualEntries.length > 0 ? (

@@ -339,6 +339,15 @@ function assertExecutionPanelLookupPolicy() {
     'final result image list should open visual results in the existing image modal without edit/group quick actions',
   )
   assert(
+    finalResultsSource.includes('const nextRegisteredVisualEntries = nextVisualEntries.filter')
+      && finalResultsSource.includes("typeof item.image.composite_hash === 'string'")
+      && finalResultsSource.includes('const nextPreviewOnlyVisualEntries = nextVisualEntries.filter')
+      && finalResultsSource.includes('items={registeredVisualEntries.map((item) => item.image)}')
+      && finalResultsSource.includes('previewOnlyVisualEntries.map(({ entry }) => {')
+      && finalResultsSource.includes('artifact={buildFinalResultPreviewArtifact(entry)}'),
+    'final result preview-only visual artifacts should use the artifact preview modal instead of no-op image-list activation',
+  )
+  assert(
     finalResultsSource.includes("t({ ko: '미디어 {count}', en: 'Media {count}' }, { count: visualEntries.length })")
       && finalResultsSource.includes("t({ ko: '파일 {count}', en: 'Files {count}' }, { count: nonVisualEntries.length })"),
     'final result header should summarize media and non-visual result counts',
