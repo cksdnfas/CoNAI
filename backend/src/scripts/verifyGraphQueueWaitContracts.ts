@@ -1,4 +1,6 @@
 import { type GenerationQueueJobRecord, type GenerationQueueJobStatus } from '../types/generationQueue'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   GRAPH_EXECUTION_CANCELLED_MESSAGE,
   isGraphQueueTerminalStatus,
@@ -94,8 +96,23 @@ function assertTerminalOutcomeContract() {
   )
 }
 
+function assertGraphExecutionQueueColdBacklogContract() {
+  const queueSource = readFileSync(resolve(process.cwd(), 'src/services/graphWorkflowExecutionQueue.ts'), 'utf8')
+  assertTerminalStatusContract()
+  if (!/claimNextQueued\('manual'\)/.test(queueSource) || !/claimNextQueued\('schedule'\)/.test(queueSource)) {
+    throw new Error('graph workflow execution queue should claim bounded queued rows from DB by trigger type')
+  }
+  if (/private static queue: QueuedExecutionJob\[\]/.test(queueSource) || /this\.queue\./.test(queueSource)) {
+    throw new Error('graph workflow execution queue must not keep the whole waiting backlog in an in-memory array')
+  }
+  if (!/findQueuedPositions\(Array\.from\(targetIds\)\)/.test(queueSource)) {
+    throw new Error('graph workflow queue positions should be resolved from DB for the visible execution set')
+  }
+}
+
 assertTerminalStatusContract()
 assertCancellationGateContract()
 assertTerminalOutcomeContract()
+assertGraphExecutionQueueColdBacklogContract()
 
 console.log('Graph queue wait contracts verified.')

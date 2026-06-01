@@ -27,6 +27,8 @@ const ALLOWED_TRANSITIONS: Record<GenerationQueueJobStatus, GenerationQueueJobSt
 }
 
 const DISPATCH_INTERVAL_MS = 3000
+const COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT = 24
+const COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT = 240
 const NAI_WORKER_KEY = 'novelai'
 const CODEX_WORKER_KEY = 'codex'
 
@@ -700,7 +702,16 @@ export class GenerationQueueService {
       return
     }
 
-    const queuedJobs = GenerationQueueModel.findQueuedComfyDispatchCandidates()
+    const availableLocalSlotCount = serversWithLocalCapacity.reduce((sum, server) => {
+      const capacity = getGenerationQueueServerCapacity(server)
+      const localRunning = this.getActiveComfyWorkerCount(server.id)
+      return sum + Math.max(0, capacity - localRunning)
+    }, 0)
+    const candidateLimit = Math.min(
+      COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT,
+      Math.max(COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT, availableLocalSlotCount * COMFY_DISPATCH_CANDIDATE_OVERFETCH_PER_SLOT),
+    )
+    const queuedJobs = GenerationQueueModel.findQueuedComfyDispatchCandidates(candidateLimit)
     if (queuedJobs.length === 0) {
       return
     }

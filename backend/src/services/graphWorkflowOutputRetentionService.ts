@@ -10,6 +10,16 @@ import { deleteFile as recycleBinDeleteFile } from '../utils/recycleBin'
 import { settingsService } from './settingsService'
 
 export const DEFAULT_GRAPH_WORKFLOW_OUTPUT_RETENTION_LIMIT = 200
+const RETENTION_PRUNE_DEBOUNCE_MS = 1_500
+const RETENTION_FILE_DELETE_YIELD_INTERVAL = 50
+const RETENTION_SCAN_PAGE_SIZE = 1_000
+
+const pendingRetentionPrunes = new Map<number, number>()
+let retentionPruneTimer: ReturnType<typeof setTimeout> | null = null
+
+function yieldToEventLoop() {
+  return new Promise<void>((resolve) => setTimeout(resolve, 0))
+}
 
 const GRAPH_ARTIFACT_MEDIA_EXTENSION_MIME_MAP: Record<string, string> = {
   '.png': 'image/png',
@@ -97,52 +107,89 @@ function isPathInsideRoot(rootPath: string, candidatePath: string) {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
-function compareArtifactsNewestFirst(left: GraphExecutionArtifactRecord, right: GraphExecutionArtifactRecord) {
-  const dateOrder = String(right.created_date ?? '').localeCompare(String(left.created_date ?? ''))
-  return dateOrder !== 0 ? dateOrder : right.id - left.id
-}
-
-function sliceOverflowArtifactIds(artifacts: GraphExecutionArtifactRecord[], retentionLimit: number) {
-  const safeLimit = Math.max(0, Math.floor(retentionLimit))
-  if (safeLimit === 0) {
-    return []
-  }
-
-  return artifacts
-    .slice()
-    .sort(compareArtifactsNewestFirst)
-    .slice(safeLimit)
-    .map((artifact) => artifact.id)
-}
-
 /** Resolve how many generated outputs and technical artifacts each graph workflow should retain. */
 export function getGraphWorkflowOutputRetentionLimit() {
   return parseRetentionLimit(process.env.CONAI_GRAPH_WORKFLOW_OUTPUT_RETENTION_LIMIT, DEFAULT_GRAPH_WORKFLOW_OUTPUT_RETENTION_LIMIT)
 }
 
+function collectVisualFinalResultKeys(workflowId: number) {
+  const sourceArtifactIds = new Set<number>()
+  const executionIds = new Set<number>()
+  let cursor: { created_date: string; id: number } | undefined
+
+  while (true) {
+    const page = GraphExecutionFinalResultModel.findByWorkflowIdPage(workflowId, RETENTION_SCAN_PAGE_SIZE, cursor)
+    if (page.length === 0) {
+      break
+    }
+
+    for (const result of page) {
+      if (isVisualArtifact(result)) {
+        sourceArtifactIds.add(result.source_artifact_id)
+        executionIds.add(result.execution_id)
+      }
+    }
+
+    const lastResult = page[page.length - 1]
+    cursor = { created_date: lastResult.created_date, id: lastResult.id }
+  }
+
+  return { sourceArtifactIds, executionIds }
+}
+
 /** Find graph workflow output/artifact rows outside the retained recent windows. */
 export function findGraphWorkflowRetentionOverflowArtifactIds(workflowId: number, retentionLimit = getGraphWorkflowOutputRetentionLimit()) {
-  const artifacts = GraphExecutionArtifactModel.findByWorkflowIds([workflowId])
-  const finalResults = GraphExecutionFinalResultModel.findByWorkflowIds([workflowId])
-  const artifactById = new Map(artifacts.map((artifact) => [artifact.id, artifact]))
-  const visualFinalResults = finalResults.filter((result) => isVisualArtifact(result))
-  const executionIdsWithVisualFinalResults = new Set(visualFinalResults.map((result) => result.execution_id))
-  const fallbackVisualArtifacts = artifacts.filter((artifact) => (
-    isVisualArtifact(artifact) && !executionIdsWithVisualFinalResults.has(artifact.execution_id)
-  ))
-  const outputArtifactIds = new Set<number>([
-    ...visualFinalResults.map((result) => result.source_artifact_id),
-    ...fallbackVisualArtifacts.map((artifact) => artifact.id),
-  ])
-  const generatedOutputArtifacts = Array.from(outputArtifactIds)
-    .map((artifactId) => artifactById.get(artifactId))
-    .filter((artifact): artifact is GraphExecutionArtifactRecord => Boolean(artifact))
-  const technicalArtifacts = artifacts.filter((artifact) => !outputArtifactIds.has(artifact.id))
+  const safeLimit = Math.max(0, Math.floor(retentionLimit))
+  if (safeLimit === 0) {
+    return {
+      retention_limit: retentionLimit,
+      generated_output_artifact_ids: [],
+      technical_artifact_ids: [],
+    }
+  }
+
+  const visualFinalResultKeys = collectVisualFinalResultKeys(workflowId)
+  const generatedOutputArtifactIds: number[] = []
+  const technicalArtifactIds: number[] = []
+  let generatedOutputCount = 0
+  let technicalArtifactCount = 0
+  let cursor: { created_date: string; id: number } | undefined
+
+  while (true) {
+    const page = GraphExecutionArtifactModel.findByWorkflowIdPage(workflowId, RETENTION_SCAN_PAGE_SIZE, cursor)
+    if (page.length === 0) {
+      break
+    }
+
+    for (const artifact of page) {
+      const isGeneratedOutput = visualFinalResultKeys.sourceArtifactIds.has(artifact.id)
+        || (
+          isVisualArtifact(artifact)
+          && !visualFinalResultKeys.executionIds.has(artifact.execution_id)
+        )
+
+      if (isGeneratedOutput) {
+        generatedOutputCount += 1
+        if (generatedOutputCount > safeLimit) {
+          generatedOutputArtifactIds.push(artifact.id)
+        }
+        continue
+      }
+
+      technicalArtifactCount += 1
+      if (technicalArtifactCount > safeLimit) {
+        technicalArtifactIds.push(artifact.id)
+      }
+    }
+
+    const lastArtifact = page[page.length - 1]
+    cursor = { created_date: lastArtifact.created_date, id: lastArtifact.id }
+  }
 
   return {
     retention_limit: retentionLimit,
-    generated_output_artifact_ids: sliceOverflowArtifactIds(generatedOutputArtifacts, retentionLimit),
-    technical_artifact_ids: sliceOverflowArtifactIds(technicalArtifacts, retentionLimit),
+    generated_output_artifact_ids: generatedOutputArtifactIds,
+    technical_artifact_ids: technicalArtifactIds,
   }
 }
 
@@ -180,7 +227,12 @@ async function deleteRetiredArtifacts(artifactIds: number[]) {
     return execution?.status !== 'queued' && execution?.status !== 'running'
   })
 
-  for (const artifact of deletableArtifacts) {
+  for (let index = 0; index < deletableArtifacts.length; index += 1) {
+    const artifact = deletableArtifacts[index]
+    if (index > 0 && index % RETENTION_FILE_DELETE_YIELD_INTERVAL === 0) {
+      await yieldToEventLoop()
+    }
+
     if (!artifact.storage_path) {
       continue
     }
@@ -225,4 +277,32 @@ export async function pruneGraphWorkflowOutputRetention(workflowId: number, rete
     requested_count: targetArtifactIds.length,
     ...deletion,
   }
+}
+
+async function flushPendingRetentionPrunes() {
+  const entries = Array.from(pendingRetentionPrunes.entries())
+  pendingRetentionPrunes.clear()
+
+  for (const [workflowId, retentionLimit] of entries) {
+    try {
+      await pruneGraphWorkflowOutputRetention(workflowId, retentionLimit)
+    } catch (error) {
+      console.warn('[GraphWorkflowOutputRetention] Failed to prune graph workflow outputs:', error instanceof Error ? error.message : error)
+    }
+
+    await yieldToEventLoop()
+  }
+}
+
+/** Debounce retention work so execution completion does not run workflow-wide cleanup inline. */
+export function requestGraphWorkflowOutputRetentionPrune(workflowId: number, retentionLimit = getGraphWorkflowOutputRetentionLimit()) {
+  pendingRetentionPrunes.set(workflowId, retentionLimit)
+  if (retentionPruneTimer) {
+    return
+  }
+
+  retentionPruneTimer = setTimeout(() => {
+    retentionPruneTimer = null
+    void flushPendingRetentionPrunes()
+  }, RETENTION_PRUNE_DEBOUNCE_MS)
 }

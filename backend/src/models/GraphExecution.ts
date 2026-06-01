@@ -2,6 +2,16 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionRecord, GraphExecutionStatus, GraphExecutionTriggerType } from '../types/moduleGraph'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
 
+const SQLITE_BIND_BATCH_SIZE = 500
+
+function chunkIds(ids: number[], chunkSize = SQLITE_BIND_BATCH_SIZE) {
+  const chunks: number[][] = []
+  for (let index = 0; index < ids.length; index += chunkSize) {
+    chunks.push(ids.slice(index, index + chunkSize))
+  }
+  return chunks
+}
+
 export type GraphExecutionStatusCounts = {
   completed: number
   queued: number
@@ -28,9 +38,13 @@ export class GraphExecutionModel {
     }
 
     const db = getUserSettingsDb()
-    const placeholders = executionIds.map(() => '?').join(', ')
-    const result = db.prepare(`DELETE FROM graph_executions WHERE id IN (${placeholders})`).run(...executionIds)
-    return result.changes
+    let deletedCount = 0
+    for (const batch of chunkIds(executionIds)) {
+      const placeholders = batch.map(() => '?').join(', ')
+      const result = db.prepare(`DELETE FROM graph_executions WHERE id IN (${placeholders})`).run(...batch)
+      deletedCount += result.changes
+    }
+    return deletedCount
   }
 
   /** Find executions for a specific id set. */
@@ -40,12 +54,17 @@ export class GraphExecutionModel {
     }
 
     const db = getUserSettingsDb()
-    const placeholders = executionIds.map(() => '?').join(', ')
-    return db.prepare(`
-      SELECT * FROM graph_executions
-      WHERE id IN (${placeholders})
-      ORDER BY created_date DESC, id DESC
-    `).all(...executionIds) as GraphExecutionRecord[]
+    const records = chunkIds(executionIds).flatMap((batch) => {
+      const placeholders = batch.map(() => '?').join(', ')
+      return db.prepare(`
+        SELECT * FROM graph_executions
+        WHERE id IN (${placeholders})
+      `).all(...batch) as GraphExecutionRecord[]
+    })
+    return records.sort((left, right) => {
+      const dateOrder = String(right.created_date ?? '').localeCompare(String(left.created_date ?? ''))
+      return dateOrder !== 0 ? dateOrder : right.id - left.id
+    })
   }
 
   /** List executions for a workflow id set, newest first. */
@@ -173,6 +192,115 @@ export class GraphExecutionModel {
       ORDER BY created_date DESC, id DESC
       LIMIT ?
     `).all(workflowId, limit) as GraphExecutionRecord[]
+  }
+
+  /** Check whether queued graph execution work exists. */
+  static hasQueued(triggerType?: GraphExecutionTriggerType) {
+    const db = getUserSettingsDb()
+    const row = triggerType
+      ? db.prepare(`
+        SELECT 1 FROM graph_executions
+        WHERE status = 'queued'
+          AND trigger_type = ?
+        LIMIT 1
+      `).get(triggerType) as { 1: number } | undefined
+      : db.prepare(`
+        SELECT 1 FROM graph_executions
+        WHERE status = 'queued'
+        LIMIT 1
+      `).get() as { 1: number } | undefined
+
+    return Boolean(row)
+  }
+
+  /** Atomically claim the next queued graph execution for a trigger class. */
+  static claimNextQueued(triggerType: GraphExecutionTriggerType) {
+    const db = getUserSettingsDb()
+    const claimTransaction = db.transaction(() => {
+      const row = db.prepare(`
+        SELECT id
+        FROM graph_executions
+        WHERE status = 'queued'
+          AND trigger_type = ?
+        ORDER BY created_date ASC, id ASC
+        LIMIT 1
+      `).get(triggerType) as { id: number } | undefined
+
+      if (!row) {
+        return null
+      }
+
+      const update = db.prepare(`
+        UPDATE graph_executions
+        SET status = 'running',
+            updated_date = CURRENT_TIMESTAMP,
+            started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
+        WHERE id = ?
+          AND status = 'queued'
+      `).run(row.id)
+
+      return update.changes > 0 ? GraphExecutionModel.findById(row.id) : null
+    })
+
+    return claimTransaction()
+  }
+
+  /** Cancel queued graph executions for schedule ids without loading the whole backlog. */
+  static cancelQueuedByScheduleIds(scheduleIds: number[]) {
+    if (scheduleIds.length === 0) {
+      return 0
+    }
+
+    const db = getUserSettingsDb()
+    let cancelledCount = 0
+    for (const batch of chunkIds(scheduleIds)) {
+      const placeholders = batch.map(() => '?').join(', ')
+      const result = db.prepare(`
+        UPDATE graph_executions
+        SET status = 'cancelled',
+            updated_date = CURRENT_TIMESTAMP,
+            completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+        WHERE status = 'queued'
+          AND schedule_id IN (${placeholders})
+      `).run(...batch)
+      cancelledCount += result.changes
+    }
+    return cancelledCount
+  }
+
+  /** Resolve queued positions for a visible execution set without hydrating the full queue. */
+  static findQueuedPositions(executionIds: number[]) {
+    const positions = new Map<number, number>()
+    if (executionIds.length === 0) {
+      return positions
+    }
+
+    const db = getUserSettingsDb()
+    for (const executionId of executionIds) {
+      const row = db.prepare(`
+        SELECT created_date, id
+        FROM graph_executions
+        WHERE id = ?
+          AND status = 'queued'
+      `).get(executionId) as { created_date: string; id: number } | undefined
+
+      if (!row) {
+        continue
+      }
+
+      const position = db.prepare(`
+        SELECT COUNT(*) as total
+        FROM graph_executions
+        WHERE status = 'queued'
+          AND (
+            created_date < ?
+            OR (created_date = ? AND id <= ?)
+          )
+      `).get(row.created_date, row.created_date, row.id) as { total: number } | undefined
+      positions.set(executionId, position?.total ?? 1)
+    }
+
+    return positions
   }
 
   /** List executions linked to one schedule id set, newest first. */

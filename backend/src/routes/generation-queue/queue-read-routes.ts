@@ -18,6 +18,10 @@ import {
 } from './queue-route-helpers'
 import { computeQueueEtas, computeQueuePositions } from './queue-eta'
 
+const DEFAULT_QUEUE_LIST_LIMIT = 200
+const MAX_QUEUE_LIST_LIMIT = 500
+const QUEUE_ETA_WINDOW_LIMIT = 300
+
 function matchesActiveQueueStatusFilter(statuses: GenerationQueueJobStatus[] | undefined) {
   if (!statuses || statuses.length !== ACTIVE_QUEUE_STATUSES.length) {
     return false
@@ -25,6 +29,24 @@ function matchesActiveQueueStatusFilter(statuses: GenerationQueueJobStatus[] | u
 
   const statusSet = new Set(statuses)
   return ACTIVE_QUEUE_STATUSES.every((status) => statusSet.has(status))
+}
+
+function parseQueueListLimit(value: unknown) {
+  const parsed = parsePositiveIntegerQuery(value, 'limit')
+  return Math.min(parsed ?? DEFAULT_QUEUE_LIST_LIMIT, MAX_QUEUE_LIST_LIMIT)
+}
+
+function parseQueueListOffset(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return 0
+  }
+
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error('offset must be a non-negative integer')
+  }
+
+  return parsed
 }
 
 export function createGenerationQueueReadRoutes() {
@@ -95,6 +117,10 @@ export function createGenerationQueueReadRoutes() {
 
     let workflowId: number | undefined
 
+    let limit = DEFAULT_QUEUE_LIST_LIMIT
+
+    let offset = 0
+
     try {
 
       statuses = parseStatusList(req.query.status)
@@ -102,6 +128,10 @@ export function createGenerationQueueReadRoutes() {
       serviceType = parseServiceType(req.query.service_type)
 
       workflowId = parsePositiveIntegerQuery(req.query.workflow_id, 'workflow_id')
+
+      limit = parseQueueListLimit(req.query.limit)
+
+      offset = parseQueueListOffset(req.query.offset)
 
     } catch (error) {
 
@@ -115,25 +145,30 @@ export function createGenerationQueueReadRoutes() {
 
     const requesterAccountId = getRequesterAccountId(req)
 
-    const filteredRecords = GenerationQueueModel.findAllListRecords({
+    const listFilters = {
       statuses,
       serviceType,
       workflowId,
-    })
-
-    let records = filteredRecords
-    if (mineOnly) {
-      records = requesterAccountId === null
-        ? []
-        : records.filter((record) => record.requested_by_account_id === requesterAccountId)
+      requesterAccountId: mineOnly ? requesterAccountId ?? -1 : undefined,
     }
 
+    const total = GenerationQueueModel.countListRecords(listFilters)
+    const records = total === 0
+      ? []
+      : GenerationQueueModel.findAllListRecords({
+        ...listFilters,
+        limit,
+        offset,
+      })
+
     const activeRelevantRecords = matchesActiveQueueStatusFilter(statuses)
-      ? filteredRecords
+      ? records
       : GenerationQueueModel.findAllListRecords({
         statuses: ACTIVE_QUEUE_STATUSES,
         serviceType,
         workflowId,
+        requesterAccountId: listFilters.requesterAccountId,
+        limit: QUEUE_ETA_WINDOW_LIMIT,
       })
     const hasActiveRelevantRecords = activeRelevantRecords.length > 0
     const completedRelevantRecords = hasActiveRelevantRecords
@@ -187,7 +222,11 @@ export function createGenerationQueueReadRoutes() {
 
       }),
 
-      total: records.length,
+      total,
+
+      limit,
+
+      offset,
 
     })
 

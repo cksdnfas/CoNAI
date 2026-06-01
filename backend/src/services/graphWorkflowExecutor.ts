@@ -10,7 +10,7 @@ import { executeCustomJsModule } from './graph-workflow-executor/execute-custom-
 import { executeNaiModule } from './graph-workflow-executor/execute-nai'
 import { executeCodexImageGenerationNode } from './graph-workflow-executor/system-codex-operations'
 import { executeSystemModule } from './graph-workflow-executor/execute-system'
-import { pruneGraphWorkflowOutputRetention } from './graphWorkflowOutputRetentionService'
+import { requestGraphWorkflowOutputRetentionPrune } from './graphWorkflowOutputRetentionService'
 import {
   applyWorkflowRuntimeInputs,
   buildRuntimeInputSignature,
@@ -651,11 +651,7 @@ export class GraphWorkflowExecutor {
           reusedNodeIds: reusedArtifacts.reusedNodeIds,
         },
       })
-      try {
-        await pruneGraphWorkflowOutputRetention(workflow.id)
-      } catch (retentionError) {
-        console.warn('[GraphWorkflowExecutor] Failed to prune graph workflow outputs:', retentionError instanceof Error ? retentionError.message : retentionError)
-      }
+      requestGraphWorkflowOutputRetentionPrune(workflow.id)
 
       return {
         executionId,

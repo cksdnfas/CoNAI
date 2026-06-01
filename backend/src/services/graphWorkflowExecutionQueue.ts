@@ -28,23 +28,64 @@ type CancelExecutionResult = {
 }
 
 type InterruptedExecutionRecoverySummary = {
-  failedQueued: number
+  queuedBacklog: number
   failedRunning: number
 }
 
-const QUEUED_EXECUTION_RESTART_MESSAGE = 'Backend restarted before this queued graph execution could begin. Re-run is required.'
 const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
 const STRANDED_RUNNING_EXECUTION_MESSAGE = 'Execution process is no longer active. Re-run is required.'
 const QUEUE_RECHECK_INTERVAL_MS = 5000
+const QUEUED_EXECUTION_METADATA_KIND = 'graph_execution_queue_job'
+
+type PersistedQueuedExecutionMetadata = {
+  kind: typeof QUEUED_EXECUTION_METADATA_KIND
+  inputValues?: Record<string, unknown>
+  targetNodeId?: string
+  forceRerun?: boolean
+}
 
 function formatExecutionError(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown execution error'
 }
 
-/** Manage graph workflow executions through an in-memory background queue. */
+function encodeQueuedExecutionMetadata(job: Pick<QueuedExecutionJob, 'inputValues' | 'targetNodeId' | 'forceRerun'>) {
+  return JSON.stringify({
+    kind: QUEUED_EXECUTION_METADATA_KIND,
+    inputValues: job.inputValues,
+    targetNodeId: job.targetNodeId,
+    forceRerun: job.forceRerun,
+  } satisfies PersistedQueuedExecutionMetadata)
+}
+
+function parseQueuedExecutionMetadata(value?: string | null): Partial<PersistedQueuedExecutionMetadata> {
+  if (!value) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Partial<PersistedQueuedExecutionMetadata>
+    return parsed.kind === QUEUED_EXECUTION_METADATA_KIND ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function buildQueuedJobFromExecution(execution: NonNullable<ReturnType<typeof GraphExecutionModel.findById>>): QueuedExecutionJob {
+  const metadata = parseQueuedExecutionMetadata(execution.execution_plan)
+  return {
+    executionId: execution.id,
+    workflowId: execution.graph_workflow_id,
+    inputValues: metadata.inputValues,
+    targetNodeId: metadata.targetNodeId,
+    forceRerun: metadata.forceRerun,
+    triggerType: execution.trigger_type === 'schedule' ? 'schedule' : 'manual',
+    scheduleId: execution.schedule_id ?? null,
+  }
+}
+
+/** Manage graph workflow executions through a DB-backed cold backlog and a small in-process running set. */
 export class GraphWorkflowExecutionQueue {
   private static initialized = false
-  private static queue: QueuedExecutionJob[] = []
   private static runningJobs = new Map<number, QueuedExecutionJob>()
   private static cancelRequestedExecutionIds = new Set<number>()
   private static processRetryTimer: NodeJS.Timeout | null = null
@@ -57,23 +98,21 @@ export class GraphWorkflowExecutionQueue {
 
     const recovery = this.recoverInterruptedExecutions()
     this.initialized = true
-    console.log(`🧩 Graph workflow execution queue ready (failed_queued=${recovery.failedQueued}, failed_running=${recovery.failedRunning})`)
+    console.log(`🧩 Graph workflow execution queue ready (queued_backlog=${recovery.queuedBacklog}, failed_running=${recovery.failedRunning})`)
+    this.processQueue()
     return true
   }
 
-  /** Fail stale queued/running executions after backend restart instead of leaving them stranded. */
+  /** Keep queued backlog durable while failing only work that was actively running during restart. */
   static recoverInterruptedExecutions(): InterruptedExecutionRecoverySummary {
     const db = getUserSettingsDb()
 
     const recoverTransaction = db.transaction(() => {
-      const failedQueued = db.prepare(`
-        UPDATE graph_executions
-        SET status = 'failed',
-            error_message = COALESCE(error_message, ?),
-            updated_date = CURRENT_TIMESTAMP,
-            completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+      const queuedBacklog = db.prepare(`
+        SELECT COUNT(*) as total
+        FROM graph_executions
         WHERE status = 'queued'
-      `).run(QUEUED_EXECUTION_RESTART_MESSAGE).changes
+      `).get() as { total: number } | undefined
 
       const failedRunning = db.prepare(`
         UPDATE graph_executions
@@ -85,7 +124,7 @@ export class GraphWorkflowExecutionQueue {
       `).run(RUNNING_EXECUTION_RESTART_MESSAGE).changes
 
       return {
-        failedQueued,
+        queuedBacklog: queuedBacklog?.total ?? 0,
         failedRunning,
       }
     })
@@ -102,15 +141,17 @@ export class GraphWorkflowExecutionQueue {
     executionMeta?: EnqueueExecutionMetadata,
   ) {
     const triggerType = executionMeta?.triggerType ?? 'manual'
+    const job = { executionId: 0, workflowId: workflow.id, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null }
     const executionId = GraphExecutionModel.create({
       graph_workflow_id: workflow.id,
       graph_version: workflow.version,
       status: 'queued',
       trigger_type: triggerType,
       schedule_id: executionMeta?.scheduleId ?? null,
-      execution_plan: null,
+      execution_plan: encodeQueuedExecutionMetadata(job),
       started_at: null,
     })
+    job.executionId = executionId
 
     writeExecutionLog({
       executionId,
@@ -127,8 +168,6 @@ export class GraphWorkflowExecutionQueue {
       },
     })
 
-    const job = { executionId, workflowId: workflow.id, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null }
-    this.queue.push(job)
     return job
   }
 
@@ -201,9 +240,7 @@ export class GraphWorkflowExecutionQueue {
       }
     }
 
-    const queuedIndex = this.queue.findIndex((job) => job.executionId === executionId)
-    if (queuedIndex !== -1) {
-      this.queue.splice(queuedIndex, 1)
+    if (execution.status === 'queued') {
       GraphExecutionModel.updateStatus(executionId, 'cancelled')
       writeExecutionLog({
         executionId,
@@ -260,18 +297,8 @@ export class GraphWorkflowExecutionQueue {
       return { cancelled: 0, runningCancellationRequested: 0 }
     }
 
+    const cancelled = GraphExecutionModel.cancelQueuedByScheduleIds(scheduleIds)
     const scheduleIdSet = new Set(scheduleIds)
-    const queuedExecutionIds = this.queue
-      .filter((job) => job.scheduleId !== null && job.scheduleId !== undefined && scheduleIdSet.has(job.scheduleId))
-      .map((job) => job.executionId)
-
-    let cancelled = 0
-    for (const executionId of queuedExecutionIds) {
-      const result = this.cancel(executionId)
-      if (result.success) {
-        cancelled += 1
-      }
-    }
 
     let runningCancellationRequested = 0
     for (const runningJob of this.runningJobs.values()) {
@@ -310,14 +337,12 @@ export class GraphWorkflowExecutionQueue {
       return runtimeStateById
     }
 
-    for (let index = 0; index < this.queue.length; index += 1) {
-      const job = this.queue[index]
-      if (job && targetIds.has(job.executionId)) {
-        runtimeStateById.set(job.executionId, {
-          queue_position: index + 1,
-          cancel_requested: this.cancelRequestedExecutionIds.has(job.executionId),
-        })
-      }
+    const queuedPositions = GraphExecutionModel.findQueuedPositions(Array.from(targetIds))
+    for (const [executionId, queuePosition] of queuedPositions) {
+      runtimeStateById.set(executionId, {
+        queue_position: queuePosition,
+        cancel_requested: this.cancelRequestedExecutionIds.has(executionId),
+      })
     }
 
     return runtimeStateById
@@ -337,7 +362,7 @@ export class GraphWorkflowExecutionQueue {
       startedAny = true
     }
 
-    if (!startedAny && this.queue.length > 0) {
+    if (!startedAny && GraphExecutionModel.hasQueued()) {
       this.scheduleProcessRetry()
     }
   }
@@ -346,13 +371,10 @@ export class GraphWorkflowExecutionQueue {
   private static tryStartNextJob() {
     const manualRunning = this.countRunningJobs('manual')
     if (manualRunning === 0) {
-      const manualIndex = this.queue.findIndex((job) => job.triggerType === 'manual')
-      if (manualIndex !== -1) {
-        const [manualJob] = this.queue.splice(manualIndex, 1)
-        if (manualJob) {
-          this.startJob(manualJob)
-          return true
-        }
+      const manualExecution = GraphExecutionModel.claimNextQueued('manual')
+      if (manualExecution) {
+        this.startJob(buildQueuedJobFromExecution(manualExecution))
+        return true
       }
     }
 
@@ -361,17 +383,12 @@ export class GraphWorkflowExecutionQueue {
       return false
     }
 
-    const scheduleIndex = this.queue.findIndex((job) => job.triggerType === 'schedule')
-    if (scheduleIndex === -1) {
+    const scheduleExecution = GraphExecutionModel.claimNextQueued('schedule')
+    if (!scheduleExecution) {
       return false
     }
 
-    const [scheduleJob] = this.queue.splice(scheduleIndex, 1)
-    if (!scheduleJob) {
-      return false
-    }
-
-    this.startJob(scheduleJob)
+    this.startJob(buildQueuedJobFromExecution(scheduleExecution))
     return true
   }
 
@@ -394,7 +411,7 @@ export class GraphWorkflowExecutionQueue {
 
   /** Treat manual graph executions and user-submitted generation queue jobs as foreground work. */
   private static hasManualGraphWorkPendingOrRunning() {
-    if (this.queue.some((job) => job.triggerType === 'manual')) {
+    if (GraphExecutionModel.hasQueued('manual')) {
       return true
     }
 
@@ -462,7 +479,7 @@ export class GraphWorkflowExecutionQueue {
 
   /** Retry held queued work so reservations resume after foreground queue pressure clears. */
   private static scheduleProcessRetry() {
-    if (this.processRetryTimer || this.queue.length === 0) {
+    if (this.processRetryTimer || !GraphExecutionModel.hasQueued()) {
       return
     }
 

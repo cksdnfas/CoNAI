@@ -80,11 +80,16 @@ async function main() {
     )
     assert.match(
       queueServiceSource,
-      /GenerationQueueModel\.findQueuedComfyDispatchCandidates\(\)/,
-      'ComfyUI dispatcher should read lean queued candidates before hydrating a claimed queue job payload',
+      /GenerationQueueModel\.findQueuedComfyDispatchCandidates\(candidateLimit\)/,
+      'ComfyUI dispatcher should read a bounded lean queued-candidate window before hydrating a claimed queue job payload',
+    )
+    assert.match(
+      queueServiceSource,
+      /COMFY_DISPATCH_CANDIDATE_BATCH_LIMIT/,
+      'ComfyUI dispatcher must cap queued candidate scans so cold backlog size cannot dominate each dispatch tick',
     )
     assert.ok(
-      queueServiceSource.indexOf('const serversWithLocalCapacity = activeServers.filter') < queueServiceSource.indexOf('GenerationQueueModel.findQueuedComfyDispatchCandidates()'),
+      queueServiceSource.indexOf('const serversWithLocalCapacity = activeServers.filter') < queueServiceSource.indexOf('GenerationQueueModel.findQueuedComfyDispatchCandidates(candidateLimit)'),
       'ComfyUI dispatcher should return early on zero local capacity before reading queued candidates',
     )
     assert.doesNotMatch(
@@ -104,13 +109,23 @@ async function main() {
     )
     assert.match(
       generationQueueModelSource,
-      /findQueuedComfyDispatchCandidates\(\)[\s\S]*SELECT \$\{GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS\}/,
-      'queued ComfyUI dispatch candidates should use a lean explicit column set',
+      /findQueuedComfyDispatchCandidates\(limit = 200\)[\s\S]*SELECT \$\{GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS\}[\s\S]*LIMIT \?/,
+      'queued ComfyUI dispatch candidates should use a lean explicit column set with a bounded LIMIT',
     )
     assert.match(
       queueReadRoutesSource,
       /GenerationQueueModel\.findAllListRecords\(/,
       'queue list route should use lean list records without request_payload',
+    )
+    assert.match(
+      queueReadRoutesSource,
+      /DEFAULT_QUEUE_LIST_LIMIT/,
+      'queue list route should default to a bounded page instead of returning the whole active backlog',
+    )
+    assert.match(
+      queueReadRoutesSource,
+      /QUEUE_ETA_WINDOW_LIMIT/,
+      'queue list route should compute ETA over a bounded active window instead of the entire waiting backlog',
     )
     assert.doesNotMatch(
       publicWorkflowRoutesSource,
@@ -268,8 +283,12 @@ async function main() {
       'queue list records must not hydrate heavyweight request_payload columns',
     )
 
-    const dispatchCandidates = GenerationQueueModel.findQueuedComfyDispatchCandidates()
-    assert.ok(dispatchCandidates.length > 0)
+    for (let index = 0; index < 8; index += 1) {
+      createJob({ service_type: 'comfyui', status: 'queued', workflow_id: 7, requested_server_id: 1 })
+    }
+
+    const dispatchCandidates = GenerationQueueModel.findQueuedComfyDispatchCandidates(3)
+    assert.equal(dispatchCandidates.length, 3)
     assert.ok(
       dispatchCandidates.every((job) => !('request_payload' in job) && !('request_summary' in job)),
       'dispatch candidates must not hydrate heavyweight request payload/summary columns',
