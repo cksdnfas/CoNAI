@@ -23,7 +23,22 @@ if not "%EXIT_CODE%"=="0" (
 )
 
 echo.
-echo [2/3] Preparing integrated build...
+echo [2/4] Truncating SQLite WAL files...
+node "%~dp0scripts\checkpoint-runtime-databases.js"
+set EXIT_CODE=%ERRORLEVEL%
+
+if not "%EXIT_CODE%"=="0" (
+    echo.
+    echo ================================================================
+    echo  ERROR: database checkpoint failed with code %EXIT_CODE%
+    echo ================================================================
+    echo.
+    pause
+    exit /b %EXIT_CODE%
+)
+
+echo.
+echo [3/4] Preparing integrated build...
 node "%~dp0scripts\run-built-if-needed.js" --build-only
 set EXIT_CODE=%ERRORLEVEL%
 
@@ -38,7 +53,7 @@ if not "%EXIT_CODE%"=="0" (
 )
 
 echo.
-echo [3/3] Starting API and worker windows...
+echo [4/4] Starting API and worker windows...
 start "CoNAI API Runtime" /D "%~dp0" cmd /k node "%~dp0scripts\run-built-if-needed.js" --api --skip-build
 timeout /t 2 /nobreak > nul
 start "CoNAI Worker Runtime" /D "%~dp0" cmd /k node "%~dp0scripts\run-built-if-needed.js" --worker --skip-build

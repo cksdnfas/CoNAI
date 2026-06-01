@@ -5,6 +5,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
+const NORMALIZED_ROOT_DIR = normalizePathText(ROOT_DIR);
 const CURRENT_PID = process.pid;
 const isDryRun = process.argv.includes('--dry-run');
 
@@ -85,8 +86,14 @@ function getListeningPortOwners(port) {
 function isCoNaiRuntimeProcess(commandLine) {
   const command = normalizePathText(commandLine);
   const hasRunner = command.includes('scripts/run-built-if-needed.js');
+  const isFromCurrentRoot = command.includes(NORMALIZED_ROOT_DIR);
+  const hasRoleArg = command.includes('--api')
+    || command.includes('--worker')
+    || command.includes('--all')
+    || command.includes('--runtime-role=');
+  const isLegacyAllRunner = hasRunner && !hasRoleArg;
 
-  return hasRunner && (command.includes('--api') || command.includes('--worker'));
+  return hasRunner && isFromCurrentRoot && (hasRoleArg || isLegacyAllRunner);
 }
 
 function collectRuntimePids() {
