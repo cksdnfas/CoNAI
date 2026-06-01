@@ -13,6 +13,7 @@ const cliArgs = process.argv.slice(2);
 const args = new Set(cliArgs);
 const isCheckOnly = args.has('--check');
 const isBuildOnly = args.has('--build-only');
+const isSkipBuild = args.has('--skip-build');
 
 function parseRuntimeRole() {
   if (args.has('--api')) {
@@ -175,10 +176,17 @@ function main() {
   console.log(`Latest source: ${formatLocalTime(status.latestSourceMs)}`);
   console.log(`Build output : ${formatLocalTime(status.oldestOutputMs)}`);
   console.log(`Runtime role : ${runtimeRole ?? process.env.CONAI_RUNTIME_ROLE ?? process.env.CONAI_SIDE_EFFECT_ROLE ?? 'all'}`);
+  console.log(`Build mode   : ${isSkipBuild ? 'skip requested' : 'auto'}`);
   console.log('');
 
   if (isCheckOnly) {
     process.exit(0);
+  }
+
+  if (status.stale && isSkipBuild) {
+    console.error('Build output is stale, but --skip-build was used.');
+    console.error('Run without --skip-build or use RUN_CoNAI.bat to prepare the build once.');
+    process.exit(1);
   }
 
   if (status.stale) {

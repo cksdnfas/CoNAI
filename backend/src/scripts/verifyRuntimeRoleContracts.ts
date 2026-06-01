@@ -29,16 +29,23 @@ assert.equal(shouldServeHttpForRuntimeRole('worker', { CONAI_WORKER_HTTP: 'yes' 
 const projectRoot = path.resolve(__dirname, '..', '..', '..');
 const runnerSource = fs.readFileSync(path.join(projectRoot, 'scripts', 'run-built-if-needed.js'), 'utf8');
 const indexSource = fs.readFileSync(path.join(projectRoot, 'backend', 'src', 'index.ts'), 'utf8');
+const splitLauncherSource = fs.readFileSync(path.join(projectRoot, 'RUN_CoNAI.bat'), 'utf8');
+const buildAndRunLauncherSource = fs.readFileSync(path.join(projectRoot, 'RUN_CoNAI_BUILD_AND_RUN.bat'), 'utf8');
 
 assert.match(runnerSource, /--api/);
 assert.match(runnerSource, /--worker/);
+assert.match(runnerSource, /--skip-build/);
 assert.match(runnerSource, /CONAI_RUNTIME_ROLE/);
 assert.match(runnerSource, /CONAI_WORKER_HTTP/);
 assert.match(indexSource, /shouldSkipHttpServerForRuntimeRole/);
 assert.match(indexSource, /HTTP server disabled/);
 
+assert.equal(fs.existsSync(path.join(projectRoot, 'RUN_CoNAI.bat')), true);
 assert.equal(fs.existsSync(path.join(projectRoot, 'RUN_CoNAI_API.bat')), true);
 assert.equal(fs.existsSync(path.join(projectRoot, 'RUN_CoNAI_WORKER.bat')), true);
+assert.match(splitLauncherSource, /--build-only/);
+assert.match(splitLauncherSource, /--api --skip-build/);
+assert.match(splitLauncherSource, /--worker --skip-build/);
+assert.match(buildAndRunLauncherSource, /RUN_CoNAI\.bat/);
 
 console.log('✅ Runtime role contracts verified');
-
