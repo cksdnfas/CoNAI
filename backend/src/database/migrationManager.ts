@@ -32,6 +32,15 @@ export class MigrationManager {
     `);
   }
 
+  private hasMigrationsTable(): boolean {
+    return !!this.db.prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name = 'migrations'
+    `).get();
+  }
+
   // 적용된 마이그레이션 목록 조회
   private getAppliedMigrations(): string[] {
     const rows = this.db.prepare('SELECT version FROM migrations ORDER BY version').all() as any[];
@@ -105,14 +114,30 @@ export class MigrationManager {
   async migrate(): Promise<void> {
     let transactionStarted = false;
     try {
-      this.createMigrationsTable();
-      this.db.exec('BEGIN IMMEDIATE');
-      transactionStarted = true;
-
-      const appliedMigrations = this.getAppliedMigrations();
       const availableMigrations = await this.getAvailableMigrations();
 
-      const pendingMigrations = availableMigrations.filter(
+      if (!this.hasMigrationsTable()) {
+        this.createMigrationsTable();
+      }
+
+      let appliedMigrations = this.getAppliedMigrations();
+      let pendingMigrations = availableMigrations.filter(
+        migration => !appliedMigrations.includes(migration.version)
+      );
+
+      if (pendingMigrations.length === 0) {
+        console.log('✅ 모든 마이그레이션이 이미 적용되었습니다.');
+        return;
+      }
+
+      this.db.exec('BEGIN IMMEDIATE');
+      transactionStarted = true;
+      this.createMigrationsTable();
+
+      // Another split runtime process may have applied the same migrations while
+      // this process waited for the startup write lock.
+      appliedMigrations = this.getAppliedMigrations();
+      pendingMigrations = availableMigrations.filter(
         migration => !appliedMigrations.includes(migration.version)
       );
 
