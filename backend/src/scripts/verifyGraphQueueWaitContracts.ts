@@ -98,6 +98,7 @@ function assertTerminalOutcomeContract() {
 
 function assertGraphExecutionQueueColdBacklogContract() {
   const queueSource = readFileSync(resolve(process.cwd(), 'src/services/graphWorkflowExecutionQueue.ts'), 'utf8')
+  const metadataSource = readFileSync(resolve(process.cwd(), 'src/services/graphWorkflowExecutionQueueMetadata.ts'), 'utf8')
   assertTerminalStatusContract()
   if (!/claimNextQueued\('manual'\)/.test(queueSource) || !/claimNextQueued\('schedule'\)/.test(queueSource)) {
     throw new Error('graph workflow execution queue should claim bounded queued rows from DB by trigger type')
@@ -107,6 +108,12 @@ function assertGraphExecutionQueueColdBacklogContract() {
   }
   if (!/findQueuedPositions\(Array\.from\(targetIds\)\)/.test(queueSource)) {
     throw new Error('graph workflow queue positions should be resolved from DB for the visible execution set')
+  }
+  if (!/encodeQueuedExecutionMetadata/.test(metadataSource) || !/parseQueuedExecutionMetadata/.test(metadataSource)) {
+    throw new Error('graph workflow queue metadata codec should stay isolated from queue orchestration')
+  }
+  if (/const QUEUED_EXECUTION_METADATA_KIND/.test(queueSource)) {
+    throw new Error('graph workflow execution queue should not own the persisted metadata codec')
   }
 }
 

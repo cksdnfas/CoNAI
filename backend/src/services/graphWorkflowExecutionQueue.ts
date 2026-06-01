@@ -5,6 +5,7 @@ import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import { GraphWorkflowExecutor } from './graphWorkflowExecutor'
 import { settingsService } from './settingsService'
 import { writeExecutionLog } from './graph-workflow-executor/shared'
+import { encodeQueuedExecutionMetadata, parseQueuedExecutionMetadata } from './graphWorkflowExecutionQueueMetadata'
 
 type QueuedExecutionJob = {
   executionId: number
@@ -35,39 +36,9 @@ type InterruptedExecutionRecoverySummary = {
 const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
 const STRANDED_RUNNING_EXECUTION_MESSAGE = 'Execution process is no longer active. Re-run is required.'
 const QUEUE_RECHECK_INTERVAL_MS = 5000
-const QUEUED_EXECUTION_METADATA_KIND = 'graph_execution_queue_job'
-
-type PersistedQueuedExecutionMetadata = {
-  kind: typeof QUEUED_EXECUTION_METADATA_KIND
-  inputValues?: Record<string, unknown>
-  targetNodeId?: string
-  forceRerun?: boolean
-}
 
 function formatExecutionError(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown execution error'
-}
-
-function encodeQueuedExecutionMetadata(job: Pick<QueuedExecutionJob, 'inputValues' | 'targetNodeId' | 'forceRerun'>) {
-  return JSON.stringify({
-    kind: QUEUED_EXECUTION_METADATA_KIND,
-    inputValues: job.inputValues,
-    targetNodeId: job.targetNodeId,
-    forceRerun: job.forceRerun,
-  } satisfies PersistedQueuedExecutionMetadata)
-}
-
-function parseQueuedExecutionMetadata(value?: string | null): Partial<PersistedQueuedExecutionMetadata> {
-  if (!value) {
-    return {}
-  }
-
-  try {
-    const parsed = JSON.parse(value) as Partial<PersistedQueuedExecutionMetadata>
-    return parsed.kind === QUEUED_EXECUTION_METADATA_KIND ? parsed : {}
-  } catch {
-    return {}
-  }
 }
 
 function buildQueuedJobFromExecution(execution: NonNullable<ReturnType<typeof GraphExecutionModel.findById>>): QueuedExecutionJob {

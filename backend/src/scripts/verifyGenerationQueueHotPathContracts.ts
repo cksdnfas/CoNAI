@@ -42,6 +42,7 @@ async function main() {
     const queueServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationQueueService.ts'), 'utf8')
     const generationQueueModelSource = fs.readFileSync(path.resolve(process.cwd(), 'src/models/GenerationQueue.ts'), 'utf8')
     const queueReadRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/generation-queue/queue-read-routes.ts'), 'utf8')
+    const queueListServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/generation-queue/queue-list-service.ts'), 'utf8')
     const publicWorkflowRoutesSource = fs.readFileSync(path.resolve(process.cwd(), 'src/routes/public-workflows.routes.ts'), 'utf8')
     const generationHistoryServiceSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/generationHistoryService.ts'), 'utf8')
     const apiImageProcessorSource = fs.readFileSync(path.resolve(process.cwd(), 'src/services/APIImageProcessor.ts'), 'utf8')
@@ -114,18 +115,23 @@ async function main() {
     )
     assert.match(
       queueReadRoutesSource,
+      /buildGenerationQueueListResponse\(req\)/,
+      'queue list route should delegate list composition instead of owning queue query/enrichment flow',
+    )
+    assert.match(
+      queueListServiceSource,
       /GenerationQueueModel\.findAllListRecords\(/,
-      'queue list route should use lean list records without request_payload',
+      'queue list service should use lean list records without request_payload',
     )
     assert.match(
-      queueReadRoutesSource,
+      queueListServiceSource,
       /DEFAULT_QUEUE_LIST_LIMIT/,
-      'queue list route should default to a bounded page instead of returning the whole active backlog',
+      'queue list service should default to a bounded page instead of returning the whole active backlog',
     )
     assert.match(
-      queueReadRoutesSource,
+      queueListServiceSource,
       /QUEUE_ETA_WINDOW_LIMIT/,
-      'queue list route should compute ETA over a bounded active window instead of the entire waiting backlog',
+      'queue list service should compute ETA over a bounded active window instead of the entire waiting backlog',
     )
     assert.doesNotMatch(
       publicWorkflowRoutesSource,
