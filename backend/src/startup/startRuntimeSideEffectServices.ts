@@ -5,29 +5,30 @@ import { autoTagScheduler } from '../services/autoTagScheduler'
 import { GraphWorkflowScheduleService } from '../services/graphWorkflowScheduleService'
 import { GraphWorkflowExecutionQueue } from '../services/graphWorkflowExecutionQueue'
 import { GenerationQueueService } from '../services/generationQueueService'
+import {
+  normalizeRuntimeSideEffectRole,
+  resolveRuntimeSideEffectRole,
+  type RuntimeSideEffectRole,
+} from './runtimeRole'
 
-type RuntimeSideEffectRole = 'all' | 'api' | 'worker'
-
-function resolveRuntimeSideEffectRole(): RuntimeSideEffectRole {
-  const rawRole = (process.env.CONAI_RUNTIME_ROLE || process.env.CONAI_SIDE_EFFECT_ROLE || 'all').trim().toLowerCase()
-  if (rawRole === 'api' || rawRole === 'worker' || rawRole === 'all') {
-    return rawRole
+function warnUnknownRuntimeSideEffectRole() {
+  const rawRole = process.env.CONAI_RUNTIME_ROLE || process.env.CONAI_SIDE_EFFECT_ROLE
+  if (rawRole && !normalizeRuntimeSideEffectRole(rawRole)) {
+    console.warn(`⚠️  Unknown CONAI_RUNTIME_ROLE=${rawRole}; falling back to all`)
   }
-
-  console.warn(`⚠️  Unknown CONAI_RUNTIME_ROLE=${rawRole}; falling back to all`)
-  return 'all'
 }
 
 /** Start runtime daemons, watchers, and schedulers after core startup succeeds. */
-export async function startRuntimeSideEffectServices(isSafeSmokeMode: boolean) {
-  const settings = settingsService.loadSettings()
-
+export async function startRuntimeSideEffectServices(
+  isSafeSmokeMode: boolean,
+  runtimeRole: RuntimeSideEffectRole = resolveRuntimeSideEffectRole(),
+) {
   if (isSafeSmokeMode) {
     console.log('🧪 SAFE_SMOKE_MODE enabled, skipping daemon, watcher, and scheduler startup')
     return
   }
 
-  const runtimeRole = resolveRuntimeSideEffectRole()
+  warnUnknownRuntimeSideEffectRole()
   if (runtimeRole === 'api') {
     console.log('🧩 CONAI_RUNTIME_ROLE=api, skipping worker daemons, watchers, queues, and schedulers')
     return
@@ -36,6 +37,8 @@ export async function startRuntimeSideEffectServices(isSafeSmokeMode: boolean) {
   if (runtimeRole === 'worker') {
     console.log('🧩 CONAI_RUNTIME_ROLE=worker, starting runtime side-effect services')
   }
+
+  const settings = settingsService.loadSettings()
 
   if (settings.tagger.enabled) {
     try {

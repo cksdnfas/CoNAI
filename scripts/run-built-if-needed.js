@@ -9,9 +9,40 @@ const BACKEND_DIR = path.join(ROOT_DIR, 'backend');
 const BACKEND_ENTRY = path.join(BACKEND_DIR, 'dist', 'backend', 'src', 'index.js');
 const FRONTEND_INDEX = path.join(BACKEND_DIR, 'dist', 'frontend', 'index.html');
 
-const args = new Set(process.argv.slice(2));
+const cliArgs = process.argv.slice(2);
+const args = new Set(cliArgs);
 const isCheckOnly = args.has('--check');
 const isBuildOnly = args.has('--build-only');
+
+function parseRuntimeRole() {
+  if (args.has('--api')) {
+    return 'api';
+  }
+
+  if (args.has('--worker')) {
+    return 'worker';
+  }
+
+  if (args.has('--all')) {
+    return 'all';
+  }
+
+  const roleArg = cliArgs.find((arg) => arg.startsWith('--runtime-role='));
+  if (!roleArg) {
+    return null;
+  }
+
+  const role = roleArg.slice('--runtime-role='.length).trim().toLowerCase();
+  if (role === 'api' || role === 'worker' || role === 'all') {
+    return role;
+  }
+
+  console.error(`Invalid runtime role: ${role || '(empty)'}`);
+  console.error('Use --api, --worker, --all, or --runtime-role=api|worker|all.');
+  process.exit(1);
+}
+
+const runtimeRole = parseRuntimeRole();
 
 const SOURCE_TARGETS = [
   path.join(ROOT_DIR, 'package.json'),
@@ -143,6 +174,7 @@ function main() {
   console.log(`Reason       : ${status.reason}`);
   console.log(`Latest source: ${formatLocalTime(status.latestSourceMs)}`);
   console.log(`Build output : ${formatLocalTime(status.oldestOutputMs)}`);
+  console.log(`Runtime role : ${runtimeRole ?? process.env.CONAI_RUNTIME_ROLE ?? process.env.CONAI_SIDE_EFFECT_ROLE ?? 'all'}`);
   console.log('');
 
   if (isCheckOnly) {
@@ -167,13 +199,27 @@ function main() {
   }
 
   console.log('Starting built backend with bundled frontend...');
-  console.log('Open: http://localhost:1666');
+  if (runtimeRole === 'worker') {
+    console.log('Mode: worker-only runtime, HTTP disabled by default');
+  } else {
+    console.log('Open: configured PORT from .env (default http://localhost:1666)');
+  }
   console.log('');
+
+  const runtimeEnv = {};
+  if (runtimeRole) {
+    runtimeEnv.CONAI_RUNTIME_ROLE = runtimeRole;
+  }
+
+  if (runtimeRole === 'worker' && process.env.CONAI_WORKER_HTTP === undefined) {
+    runtimeEnv.CONAI_WORKER_HTTP = 'false';
+  }
 
   const startExitCode = runCommand('npm', ['run', 'start'], {
     cwd: BACKEND_DIR,
     env: {
       NODE_ENV: 'production',
+      ...runtimeEnv,
     },
   });
 

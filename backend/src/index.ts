@@ -61,11 +61,17 @@ import { QueryCacheService } from './services/QueryCacheService';
 import { WatchedFolderService } from './services/watchedFolderService';
 import { registerAppRoutes } from './startup/registerAppRoutes';
 import { startRuntimeSideEffectServices } from './startup/startRuntimeSideEffectServices';
+import {
+  resolveRuntimeSideEffectRole,
+  shouldSkipHttpServerForRuntimeRole,
+} from './startup/runtimeRole';
 
 const app = express();
 const PORT = process.env.PORT || PORTS.BACKEND_DEFAULT;
 const isDevelopment = isDevelopmentEnvironment;
 const isSafeSmokeMode = process.env.SAFE_SMOKE_MODE === 'true';
+const runtimeRole = resolveRuntimeSideEffectRole();
+const shouldStartHttpServer = !shouldSkipHttpServerForRuntimeRole(runtimeRole);
 
 /** Resolve the Express trust-proxy setting for direct and proxied deployments. */
 function resolveTrustProxySetting() {
@@ -235,6 +241,8 @@ async function initializeSessionMiddleware() {
 async function startServer() {
   try {
     console.log('🚀 CoNAI starting...\n');
+    console.log(`🧩 Runtime role: ${runtimeRole}${shouldStartHttpServer ? '' : ' (HTTP disabled)'}`);
+    const shouldRunWorkerStartupTasks = !isSafeSmokeMode && runtimeRole !== 'api';
 
     // 0. Initialize i18n (language settings)
     const { initI18n } = await import('./i18n');
@@ -250,10 +258,10 @@ async function startServer() {
     const isNewDatabase = !fs.existsSync(runtimePaths.databaseFile);
     await initializeDatabase();
 
-    if (!isSafeSmokeMode) {
+    if (shouldRunWorkerStartupTasks) {
       await WatchedFolderService.reconcileDefaultUploadFolder();
     } else {
-      console.log('🧪 SAFE_SMOKE_MODE enabled, runtime watchers and jobs stay disabled');
+      console.log(`${isSafeSmokeMode ? '🧪 SAFE_SMOKE_MODE' : '🧩 CONAI_RUNTIME_ROLE=api'} enabled, runtime watchers and jobs stay disabled`);
     }
 
     // 3-1. 첫 실행 안내
@@ -285,11 +293,15 @@ async function startServer() {
     initializeApiGenerationDb(); // Synchronous call (better-sqlite3)
 
     // 5-1. Generation History Cleanup (startup)
-    try {
-      const { CleanupService } = await import('./services/cleanupService');
-      await CleanupService.runStartupCleanup();
-    } catch (error) {
-      console.warn('⚠️  Failed to run startup cleanup:', error instanceof Error ? error.message : error);
+    if (shouldRunWorkerStartupTasks) {
+      try {
+        const { CleanupService } = await import('./services/cleanupService');
+        await CleanupService.runStartupCleanup();
+      } catch (error) {
+        console.warn('⚠️  Failed to run startup cleanup:', error instanceof Error ? error.message : error);
+      }
+    } else {
+      console.log('🧩 Worker startup cleanup skipped in API/smoke runtime');
     }
 
     // 5-2. Job Tracker 초기화 (generation progress tracking)
@@ -304,23 +316,27 @@ async function startServer() {
     await TempImageService.initialize();
 
     // 6-2. ComfyUI model preview negative cache cleanup
-    try {
-      const { cleanupComfyModelThumbnailStartupCache } = await import('./services/comfyModelThumbnailService');
-      const thumbnailCleanupReport = await cleanupComfyModelThumbnailStartupCache();
-      if (thumbnailCleanupReport.missingDeleted > 0 || thumbnailCleanupReport.sourceDeleted > 0 || thumbnailCleanupReport.errors > 0) {
-        console.log(
-          `🧹 ComfyUI model preview startup cleanup: ${thumbnailCleanupReport.missingDeleted} missing markers, ${thumbnailCleanupReport.sourceDeleted} source files, ${thumbnailCleanupReport.errors} errors`,
-        );
+    if (shouldRunWorkerStartupTasks) {
+      try {
+        const { cleanupComfyModelThumbnailStartupCache } = await import('./services/comfyModelThumbnailService');
+        const thumbnailCleanupReport = await cleanupComfyModelThumbnailStartupCache();
+        if (thumbnailCleanupReport.missingDeleted > 0 || thumbnailCleanupReport.sourceDeleted > 0 || thumbnailCleanupReport.errors > 0) {
+          console.log(
+            `🧹 ComfyUI model preview startup cleanup: ${thumbnailCleanupReport.missingDeleted} missing markers, ${thumbnailCleanupReport.sourceDeleted} source files, ${thumbnailCleanupReport.errors} errors`,
+          );
+        }
+      } catch (error) {
+        console.warn('⚠️  Failed to cleanup ComfyUI model preview cache:', error instanceof Error ? error.message : error);
       }
-    } catch (error) {
-      console.warn('⚠️  Failed to cleanup ComfyUI model preview cache:', error instanceof Error ? error.message : error);
+    } else {
+      console.log('🧩 ComfyUI model preview startup cleanup skipped in API/smoke runtime');
     }
 
     // 7. API 이미지 저장 디렉토리 생성
     await APIImageProcessor.ensureDirectories();
 
     // 7-11. Runtime side-effect services
-    await startRuntimeSideEffectServices(isSafeSmokeMode);
+    await startRuntimeSideEffectServices(isSafeSmokeMode, runtimeRole);
 
     const extractHost = (value?: string | null): string | undefined => {
       if (!value || value.trim().length === 0) {
@@ -416,9 +432,27 @@ ${tips.join('\n')}
 `);
     };
 
-    const startHttpServer = (): import('http').Server => {
+    const runtimeBannerLines = [`🧩 Runtime role: ${runtimeRole}`];
+
+    const printWorkerRuntimeBanner = () => {
+      console.log(`
+╔════════════════════════════════════════════════════════════════════════╗
+║  🧩 CoNAI worker runtime active                                      ║
+╠────────────────────────────────────────────────────────────────────────╣
+║  HTTP server disabled. Queue, schedule, watcher, and cleanup jobs run. ║
+║  Data Root: ${runtimePaths.basePath.padEnd(57).slice(0, 57)}║
+╚════════════════════════════════════════════════════════════════════════╝
+
+💡 Tips:
+   - Run an API process separately with CONAI_RUNTIME_ROLE=api
+   - Set CONAI_WORKER_HTTP=true only for debugging a worker HTTP endpoint
+   - Press Ctrl+C to stop the worker
+`);
+    };
+
+    const startHttpServer = (extraLines: string[] = runtimeBannerLines): import('http').Server => {
       const httpServer = app.listen(Number(PORT), bindHost, async () => {
-        await printBanner('http');
+        await printBanner('http', extraLines);
       });
 
       httpServer.on('error', (error: NodeJS.ErrnoException) => {
@@ -437,13 +471,15 @@ ${tips.join('\n')}
       return httpServer;
     };
 
-    let server: import('http').Server | import('https').Server;
+    let server: import('http').Server | import('https').Server | null = null;
 
-    if (isSecureContext) {
+    if (!shouldStartHttpServer) {
+      printWorkerRuntimeBanner();
+    } else if (isSecureContext) {
       const httpsOptions = await prepareHttpsOptions();
 
       if (httpsOptions) {
-        const extraLines: string[] = [];
+        const extraLines: string[] = [...runtimeBannerLines];
         if (httpsOptions.generatedCertPath) {
           extraLines.push(`🔐 Cert: ${httpsOptions.generatedCertPath}`);
         }
@@ -477,9 +513,11 @@ ${tips.join('\n')}
       server = startHttpServer();
     }
 
-    server.setTimeout?.(60000);
-    (server as any).keepAliveTimeout = 65000;
-    (server as any).headersTimeout = 66000;
+    if (server) {
+      server.setTimeout?.(60000);
+      (server as any).keepAliveTimeout = 65000;
+      (server as any).headersTimeout = 66000;
+    }
 
     // Graceful shutdown
     let isShuttingDown = false;

@@ -18,6 +18,7 @@
     "verify:graph-comfy-artifacts": "tsx src/scripts/verifyGraphComfyArtifactDescriptors.ts",
     "verify:graph-artifact-runtime": "tsx src/scripts/verifyGraphArtifactRuntime.ts",
     "verify:graph-final-result-promotion-contracts": "tsx src/scripts/verifyGraphFinalResultPromotionContracts.ts",
+    "verify:runtime-role-contracts": "tsx src/scripts/verifyRuntimeRoleContracts.ts",
     "verify:result-retention-contracts": "tsx src/scripts/verifyResultRetentionContracts.ts",
     "verify:video-optimization": "tsx src/scripts/verifyVideoOptimizationContracts.ts",
     "verify:builtin-system-modules": "tsx src/scripts/verifyBuiltinSystemModuleDefinitions.ts",
