@@ -245,7 +245,7 @@ export function WorkflowFinalResultsSection({
             <ImageList
               items={visualEntries.map((item) => item.image)}
               layout="grid"
-              activationMode="none"
+              activationMode="modal"
               getItemId={(image) => String(image.id)}
               minColumnWidth={160}
               gridItemHeight={240}
@@ -253,6 +253,10 @@ export function WorkflowFinalResultsSection({
               rowGap={12}
               className="workflow-final-results-list"
               showDefaultQuickActions={false}
+              modalAccessOptions={{
+                allowEditAction: false,
+                allowGroupAssignAction: false,
+              }}
               renderItemPersistentOverlay={(image) => {
                 const entry = visualEntryByImageId.get(String(image.id))
                 if (!entry?.overlayLabel && !entry?.sourceNodeLabel && !entry?.sourcePortLabel && !entry?.artifact.artifact_type) {

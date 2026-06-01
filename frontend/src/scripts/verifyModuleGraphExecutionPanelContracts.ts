@@ -333,6 +333,12 @@ function assertExecutionPanelLookupPolicy() {
     'final result image list should avoid oversized crop-prone preview frames',
   )
   assert(
+    finalResultsSource.includes('activationMode="modal"')
+      && finalResultsSource.includes('allowEditAction: false')
+      && finalResultsSource.includes('allowGroupAssignAction: false'),
+    'final result image list should open visual results in the existing image modal without edit/group quick actions',
+  )
+  assert(
     finalResultsSource.includes("t({ ko: '미디어 {count}', en: 'Media {count}' }, { count: visualEntries.length })")
       && finalResultsSource.includes("t({ ko: '파일 {count}', en: 'Files {count}' }, { count: nonVisualEntries.length })"),
     'final result header should summarize media and non-visual result counts',
