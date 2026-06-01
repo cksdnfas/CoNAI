@@ -497,6 +497,7 @@ export class MediaMetadataModel {
     sortOrder?: 'ASC' | 'DESC';
     cursorDate?: string;
     cursorHash?: string;
+    includeTotal?: boolean;
   }): { items: any[], total: number, hasMore: boolean } {
     return MediaMetadataFileQueries.findAllWithFilesCursor(options);
   }

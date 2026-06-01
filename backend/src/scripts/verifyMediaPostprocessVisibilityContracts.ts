@@ -133,6 +133,11 @@ async function main() {
         id INTEGER PRIMARY KEY,
         folder_name TEXT
       );
+
+      CREATE INDEX idx_metadata_first_seen_hash_desc
+        ON media_metadata(first_seen_date DESC, composite_hash DESC);
+      CREATE INDEX idx_image_files_hash_status_verified
+        ON image_files(composite_hash, file_status, last_verified_date DESC, id DESC);
     `);
     initializeUserSettingsDb();
     initializeApiGenerationDb();
@@ -238,7 +243,7 @@ async function main() {
     );
     assert.equal(list.total, 1);
 
-    const cursorList = MediaMetadataModel.findAllWithFilesCursor({ limit: 10, sortOrder: 'ASC' });
+    const cursorList = MediaMetadataModel.findAllWithFilesCursor({ limit: 10, sortOrder: 'ASC', includeTotal: true });
     assert.deepEqual(
       cursorList.items.map((image) => image.composite_hash),
       ['ready-hash'],

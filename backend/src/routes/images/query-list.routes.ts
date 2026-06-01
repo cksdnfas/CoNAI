@@ -25,10 +25,12 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const sortOrder = (req.query.sortOrder as 'ASC' | 'DESC') || 'DESC';
   const cursorDate = req.query.cursor_date as string | undefined;
   const cursorHash = req.query.cursor_hash as string | undefined;
+  const wantsCursorPagination = req.query.pagination === 'cursor' || req.query.cursor === 'true' || req.query.cursor === '1';
+  const includeCursorTotal = req.query.include_total === 'true' || req.query.include_total === '1';
 
-  const isCursorRequest = cursorDate !== undefined || cursorHash !== undefined;
+  const isCursorRequest = wantsCursorPagination || cursorDate !== undefined || cursorHash !== undefined;
   if (isCursorRequest) {
-    logger.debug(`🔍 [QueryRoutes] Cursor request: cursorDate=${cursorDate}, cursorHash=${cursorHash?.substring(0, 8)}, limit=${limit}`);
+    logger.debug(`🔍 [QueryRoutes] Cursor request: cursorDate=${cursorDate}, cursorHash=${cursorHash?.substring(0, 8)}, limit=${limit}, includeTotal=${includeCursorTotal}`);
   }
 
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -43,12 +45,17 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
         sortOrder,
         cursorDate: cursorDate || undefined,
         cursorHash: cursorHash || undefined,
+        includeTotal: includeCursorTotal,
       });
+      const lastItem = result.items.at(-1);
 
       return res.status(200).json(
         buildEnrichedImageListResponse(result.items, result.total, 0, limit, {
           hasMore: result.hasMore,
           totalPages: 0,
+          totalKnown: includeCursorTotal,
+          nextCursorDate: lastItem?.first_seen_date ?? null,
+          nextCursorHash: lastItem?.composite_hash ?? null,
         })
       );
     }

@@ -242,6 +242,9 @@ export interface ImageListResponse {
     limit: number;
     totalPages: number;
     hasMore?: boolean;
+    totalKnown?: boolean;
+    nextCursorDate?: string | null;
+    nextCursorHash?: string | null;
   };
   error?: string;
 }

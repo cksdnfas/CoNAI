@@ -18,6 +18,11 @@ interface UseHomePageDataOptions {
   notifyError: (message: string) => void
 }
 
+type HomeImagesPageParam = number | {
+  cursorDate?: string | null
+  cursorHash?: string | null
+}
+
 /** Collect Home page auth state, image feed data, selection, and group actions. */
 export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOptions) {
   const queryClient = useQueryClient()
@@ -51,18 +56,46 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
 
   const imagesQuery = useInfiniteQuery({
     queryKey: ['home-images', appliedChips],
-    initialPageParam: 1,
-    queryFn: ({ pageParam }) =>
-      isSearchMode
-        ? searchImagesComplex({
-            complex_filter: buildComplexFilterPayload(appliedChips),
-            page: pageParam,
-            limit: 40,
-            sortBy: 'upload_date',
-            sortOrder: 'DESC',
-          })
-        : getImages({ page: pageParam, limit: 40 }),
-    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
+    initialPageParam: (isSearchMode ? 1 : {}) as HomeImagesPageParam,
+    queryFn: ({ pageParam }) => {
+      const typedPageParam = pageParam as HomeImagesPageParam
+
+      if (isSearchMode) {
+        return searchImagesComplex({
+          complex_filter: buildComplexFilterPayload(appliedChips),
+          page: typeof typedPageParam === 'number' ? typedPageParam : 1,
+          limit: 40,
+          sortBy: 'upload_date',
+          sortOrder: 'DESC',
+        })
+      }
+
+      const cursor = typeof typedPageParam === 'number' ? {} : typedPageParam
+      return getImages({
+        pagination: 'cursor',
+        limit: 40,
+        cursorDate: cursor.cursorDate,
+        cursorHash: cursor.cursorHash,
+      })
+    },
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.hasMore) {
+        return undefined
+      }
+
+      if (isSearchMode) {
+        return lastPage.page + 1
+      }
+
+      if (!lastPage.nextCursorDate || !lastPage.nextCursorHash) {
+        return undefined
+      }
+
+      return {
+        cursorDate: lastPage.nextCursorDate,
+        cursorHash: lastPage.nextCursorHash,
+      }
+    },
     enabled: canViewHome,
   })
 

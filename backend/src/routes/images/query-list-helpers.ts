@@ -76,6 +76,9 @@ export function buildImageListResponse(
   options?: {
     hasMore?: boolean;
     totalPages?: number;
+    totalKnown?: boolean;
+    nextCursorDate?: string | null;
+    nextCursorHash?: string | null;
   }
 ): ImageListResponse {
   const data: ImageListData = {
@@ -88,6 +91,15 @@ export function buildImageListResponse(
 
   if (options?.hasMore !== undefined) {
     data.hasMore = options.hasMore;
+  }
+  if (options?.totalKnown !== undefined) {
+    data.totalKnown = options.totalKnown;
+  }
+  if (options?.nextCursorDate !== undefined) {
+    data.nextCursorDate = options.nextCursorDate;
+  }
+  if (options?.nextCursorHash !== undefined) {
+    data.nextCursorHash = options.nextCursorHash;
   }
 
   return {
@@ -105,6 +117,9 @@ export function buildEnrichedImageListResponse(
   options?: {
     hasMore?: boolean;
     totalPages?: number;
+    totalKnown?: boolean;
+    nextCursorDate?: string | null;
+    nextCursorHash?: string | null;
   }
 ): ImageListResponse {
   return buildImageListResponse(
