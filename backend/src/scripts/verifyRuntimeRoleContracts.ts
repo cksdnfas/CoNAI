@@ -53,6 +53,10 @@ assert.match(splitLauncherSource, /"%~dp0scripts\\run-built-if-needed\.js"/);
 assert.match(stopExistingRuntimeSource, /Get-NetTCPConnection/);
 assert.match(stopExistingRuntimeSource, /taskkill\.exe/);
 assert.match(stopExistingRuntimeSource, /scripts\/run-built-if-needed\.js/);
+assert.match(stopExistingRuntimeSource, /--api/);
+assert.match(stopExistingRuntimeSource, /--worker/);
+assert.doesNotMatch(stopExistingRuntimeSource, /isLegacyAllRunner/);
+assert.doesNotMatch(stopExistingRuntimeSource, /hasBackendEntry/);
 assert.match(buildAndRunLauncherSource, /RUN_CoNAI\.bat/);
 
 console.log('✅ Runtime role contracts verified');

@@ -84,14 +84,9 @@ function getListeningPortOwners(port) {
 
 function isCoNaiRuntimeProcess(commandLine) {
   const command = normalizePathText(commandLine);
-  const root = normalizePathText(ROOT_DIR);
   const hasRunner = command.includes('scripts/run-built-if-needed.js');
-  const hasBackendEntry = command.includes('dist/backend/src/index.js');
-  const isFutureRootScoped = command.includes(root) && (hasRunner || hasBackendEntry);
-  const isLegacySplitRunner = hasRunner && (command.includes('--api') || command.includes('--worker'));
-  const isLegacyAllRunner = hasRunner && !command.includes('stop-existing-runtime.js');
 
-  return isFutureRootScoped || isLegacySplitRunner || isLegacyAllRunner;
+  return hasRunner && (command.includes('--api') || command.includes('--worker'));
 }
 
 function collectRuntimePids() {
