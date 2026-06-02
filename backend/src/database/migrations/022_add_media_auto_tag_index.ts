@@ -38,27 +38,13 @@ function normalizeKey(value: string): string {
 }
 
 function normalizeAutoTagSearchTerm(term: string): string[] {
-  const variants: Set<string> = new Set();
   const normalized = term.trim().toLowerCase();
-
   if (!normalized) return [];
 
-  variants.add(normalized);
-
-  if (normalized.includes('_')) {
-    variants.add(normalized.replace(/_/g, ' '));
-    variants.add(normalized.replace(/_/g, ''));
-  }
-
-  if (normalized.includes(' ')) {
-    variants.add(normalized.replace(/ /g, '_'));
-    variants.add(normalized.replace(/ /g, ''));
-  }
-
-  if (normalized.includes('-')) {
-    variants.add(normalized.replace(/-/g, '_'));
-    variants.add(normalized.replace(/-/g, ' '));
-    variants.add(normalized.replace(/-/g, ''));
+  const variants: Set<string> = new Set([normalized]);
+  const compact = normalized.replace(/[_\s-]+/g, '');
+  if (compact) {
+    variants.add(compact);
   }
 
   return Array.from(variants);

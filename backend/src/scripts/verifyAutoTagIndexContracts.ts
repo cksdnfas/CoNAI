@@ -10,6 +10,8 @@ function readSource(relativePath: string): string {
 
 const initialMigration = readSource('backend/src/database/migrations/000_create_all_tables.ts');
 const autoTagIndexMigration = readSource('backend/src/database/migrations/022_add_media_auto_tag_index.ts');
+const autoTagIndexPruneMigration = readSource('backend/src/database/migrations/023_prune_media_auto_tag_index_variants.ts');
+const autoTagSearchTerms = readSource('backend/src/services/autoTagSearch/autoTagSearchTerms.ts');
 const autoTagIndexService = readSource('backend/src/services/autoTagIndexService.ts');
 const autoTagSql = readSource('backend/src/services/complexFilter/complexFilterAutoTagSql.ts');
 const mediaMetadataModel = readSource('backend/src/models/Image/MediaMetadataModel.ts');
@@ -63,8 +65,18 @@ assert.match(
 );
 assert.match(
   autoTagIndexService,
-  /normalizeAutoTagSearchTerm\(tagKey,\s*true\)/,
-  'auto-tag index sync must store the same normalized variants used by search',
+  /normalizeAutoTagIndexSearchKeys\(tagKey\)/,
+  'auto-tag index sync must store compact indexed search keys',
+);
+assert.match(
+  autoTagSearchTerms,
+  /compactAutoTagSearchKey/,
+  'auto-tag search terms must expose compact separator-free index keys',
+);
+assert.match(
+  autoTagSearchTerms,
+  /normalizeAutoTagIndexSearchKeys/,
+  'auto-tag search terms must expose the compact key set used by the index',
 );
 assert.match(
   autoTagIndexService,
@@ -89,8 +101,28 @@ assert.match(
 );
 assert.match(
   autoTagSql,
+  /normalizeAutoTagIndexSearchKeys/,
+  'complex auto-tag index filters must query the same compact key set stored by sync',
+);
+assert.match(
+  autoTagSql,
   /buildComplexFilterTagExistsCondition/,
   'complex auto-tag filters must keep the JSON fallback for unmigrated test DBs',
+);
+assert.match(
+  autoTagIndexPruneMigration,
+  /DELETE FROM media_auto_tag_index/,
+  'auto-tag prune migration must remove old expanded variant rows',
+);
+assert.match(
+  autoTagIndexPruneMigration,
+  /search_key != normalized_tag_key/,
+  'auto-tag prune migration must retain exact keys',
+);
+assert.match(
+  autoTagIndexPruneMigration,
+  /replace\(replace\(replace\(normalized_tag_key/,
+  'auto-tag prune migration must retain compact separator-free keys',
 );
 
 assert.match(

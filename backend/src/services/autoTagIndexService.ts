@@ -4,7 +4,7 @@ import {
   AUTO_TAG_GENERAL_JSON_PATHS,
   AUTO_TAG_MODEL_JSON_PATHS,
 } from './autoTagSqlShared';
-import { normalizeAutoTagSearchTerm } from './autoTagSearch/autoTagSearchTerms';
+import { normalizeAutoTagIndexSearchKeys } from './autoTagSearch/autoTagSearchTerms';
 
 type AutoTagIndexType = 'general' | 'character' | 'model';
 
@@ -123,7 +123,7 @@ function extractEntries(compositeHash: string, autoTagsJson: string | null | und
 }
 
 function buildSearchKeys(tagKey: string): string[] {
-  return normalizeAutoTagSearchTerm(tagKey, true);
+  return normalizeAutoTagIndexSearchKeys(tagKey);
 }
 
 export class AutoTagIndexService {

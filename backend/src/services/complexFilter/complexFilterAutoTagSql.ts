@@ -8,7 +8,10 @@ import {
   buildAutoTagRatingExpr,
   pushAutoTagPathMatchParams,
 } from '../autoTagSqlShared';
-import { normalizeAutoTagSearchTerm } from '../autoTagSearch/autoTagSearchTerms';
+import {
+  normalizeAutoTagIndexSearchKeys,
+  normalizeAutoTagSearchTerm,
+} from '../autoTagSearch/autoTagSearchTerms';
 import { AutoTagIndexService } from '../autoTagIndexService';
 
 /** Build the complex-filter SQL fragment for one auto-tag condition. */
@@ -186,7 +189,7 @@ function buildIndexedHasTypeCondition(params: any[], tagTypes: readonly string[]
 }
 
 function buildIndexedModelCondition(condition: FilterCondition, params: any[]): string | null {
-  const variants = normalizeAutoTagSearchTerm(String(condition.value).toLowerCase(), true);
+  const variants = normalizeAutoTagIndexSearchKeys(String(condition.value));
   if (variants.length === 0) {
     return null;
   }
@@ -205,7 +208,7 @@ function buildIndexedTagMatchCondition(
   params: any[],
   tagTypes: readonly string[],
 ): string | null {
-  const variants = normalizeAutoTagSearchTerm(String(condition.value).toLowerCase(), true);
+  const variants = normalizeAutoTagIndexSearchKeys(String(condition.value));
   if (variants.length === 0) {
     return null;
   }

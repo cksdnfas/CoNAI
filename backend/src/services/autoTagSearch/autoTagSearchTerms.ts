@@ -37,6 +37,27 @@ export function normalizeAutoTagSearchTerm(term: string, exactMatch = false): st
   return Array.from(variants);
 }
 
+/** Collapse separator variants into one key for compact indexed equality lookups. */
+export function compactAutoTagSearchKey(term: string): string {
+  return term.trim().toLowerCase().replace(/[_\s-]+/g, '');
+}
+
+/** Build the small key set stored in media_auto_tag_index. */
+export function normalizeAutoTagIndexSearchKeys(term: string): string[] {
+  const normalized = term.trim().toLowerCase();
+  if (!normalized) {
+    return [];
+  }
+
+  const keys = new Set<string>([normalized]);
+  const compactKey = compactAutoTagSearchKey(normalized);
+  if (compactKey) {
+    keys.add(compactKey);
+  }
+
+  return Array.from(keys);
+}
+
 /** Find JSON keys that match any normalized search variant. */
 export function findAutoTagMatchingKeys(jsonObject: any, searchTerm: string): string[] {
   if (!jsonObject || typeof jsonObject !== 'object') {
