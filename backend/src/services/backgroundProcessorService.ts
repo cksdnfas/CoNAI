@@ -20,6 +20,7 @@ import { QueryCacheService } from './QueryCacheService';
 import { MetadataExtractionError } from '../types/errors';
 import type { FileType } from '../types/image';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
+import { maybeTruncateImagesWal } from '../database/walMaintenance';
 
 interface UnhashedFile {
   id: number;
@@ -619,6 +620,7 @@ export class BackgroundProcessorService {
     );
 
     console.log(`  ✨ Processed image: ${fileName}`);
+    maybeTruncateImagesWal('background-image-processed');
   }
 
   /**
@@ -715,6 +717,7 @@ export class BackgroundProcessorService {
     }
 
     console.log(`  ✨ Processed video/animated: ${fileName} (${width}x${height})`);
+    maybeTruncateImagesWal('background-video-processed');
   }
 
   /**

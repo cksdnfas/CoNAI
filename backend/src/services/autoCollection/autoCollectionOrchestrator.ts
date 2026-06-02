@@ -16,6 +16,7 @@ import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ComplexFilterService } from '../complexFilterService';
 import { checkImageMatchesConditions } from './conditionEvaluator';
 import { EvaluableImage } from './types';
+import { maybeTruncateImagesWal } from '../../database/walMaintenance';
 
 /**
  * Auto Collection Orchestrator Class
@@ -115,6 +116,7 @@ export class AutoCollectionOrchestrator {
     }
 
     const { removedCount, addedCount } = ImageGroupModel.replaceAutoCollectedImages(groupId, matchingHashes);
+    maybeTruncateImagesWal('auto-collection-group-legacy');
 
     // Update last run time
     await GroupModel.updateAutoCollectLastRun(groupId);
@@ -152,6 +154,7 @@ export class AutoCollectionOrchestrator {
         groupId,
         matchingImages.map((image) => image.composite_hash)
       );
+      maybeTruncateImagesWal('auto-collection-group-complex');
 
       // Update last run time
       await GroupModel.updateAutoCollectLastRun(groupId);

@@ -8,7 +8,7 @@ import { configureAttachedSqliteDatabase, configureSqliteConnection } from '../d
 function assertConnectionPragmas(db: Database.Database, label: string) {
   assert.equal(String(db.pragma('journal_mode', { simple: true })).toLowerCase(), 'wal', `${label} must use WAL journal mode`)
   assert.equal(Number(db.pragma('synchronous', { simple: true })), 1, `${label} must use synchronous=NORMAL`)
-  assert.equal(Number(db.pragma('busy_timeout', { simple: true })), 5000, `${label} must keep a 5000ms busy timeout`)
+  assert.equal(Number(db.pragma('busy_timeout', { simple: true })), 60000, `${label} must keep a 60000ms busy timeout`)
 }
 
 function main() {

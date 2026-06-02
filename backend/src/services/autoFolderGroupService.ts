@@ -4,6 +4,7 @@ import { AutoFolderGroupRebuildResult } from '@conai/shared';
 import path from 'path';
 import fs from 'fs';
 import { normalizePath } from '../utils/pathResolver';
+import { maybeTruncateImagesWal } from '../database/walMaintenance';
 
 type WatchedFolderRow = {
   id: number;
@@ -271,6 +272,7 @@ export class AutoFolderGroupService {
       });
 
       persistRebuild();
+      maybeTruncateImagesWal('auto-folder-group-rebuild');
       console.log('  ✅ 기존 그룹 삭제 및 재구축 반영 완료');
 
       const durationMs = Date.now() - startTime;
