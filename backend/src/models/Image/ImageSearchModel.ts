@@ -30,6 +30,48 @@ function getReadyImageCondition() {
   return MediaPostprocessVisibilityService.buildReadyCondition('im');
 }
 
+const AUTO_TAG_SEARCH_TOTAL_CACHE_TTL_MS = 30_000;
+const AUTO_TAG_SEARCH_TOTAL_CACHE_MAX_ENTRIES = 250;
+
+type AutoTagSearchTotalCacheEntry = {
+  total: number;
+  expiresAt: number;
+};
+
+const autoTagSearchTotalCache = new Map<string, AutoTagSearchTotalCacheEntry>();
+
+function getAutoTagSearchTotalCacheKey(conditions: string[], params: unknown[]): string {
+  return JSON.stringify({ conditions, params });
+}
+
+function getCachedAutoTagSearchTotal(cacheKey: string, now = Date.now()): number | null {
+  const cached = autoTagSearchTotalCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= now) {
+    autoTagSearchTotalCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.total;
+}
+
+function setCachedAutoTagSearchTotal(cacheKey: string, total: number, now = Date.now()): void {
+  if (autoTagSearchTotalCache.size >= AUTO_TAG_SEARCH_TOTAL_CACHE_MAX_ENTRIES) {
+    const oldestKey = autoTagSearchTotalCache.keys().next().value;
+    if (oldestKey) {
+      autoTagSearchTotalCache.delete(oldestKey);
+    }
+  }
+
+  autoTagSearchTotalCache.set(cacheKey, {
+    total,
+    expiresAt: now + AUTO_TAG_SEARCH_TOTAL_CACHE_TTL_MS,
+  });
+}
+
 export class ImageSearchModel {
 
   /**
@@ -219,8 +261,16 @@ export class ImageSearchModel {
       ${whereClause}
     `;
 
-    const countRow = db.prepare(countQuery).get(...queryBuilder.params) as any;
-    const total = countRow.total;
+    const countCacheKey = getAutoTagSearchTotalCacheKey(safeConditions, queryBuilder.params);
+    const cachedTotal = getCachedAutoTagSearchTotal(countCacheKey);
+    let total: number;
+    if (cachedTotal !== null) {
+      total = cachedTotal;
+    } else {
+      const countRow = db.prepare(countQuery).get(...queryBuilder.params) as any;
+      total = countRow.total;
+      setCachedAutoTagSearchTotal(countCacheKey, total);
+    }
 
     // 정렬 컬럼 매핑
     let sortColumn = 'im.first_seen_date';

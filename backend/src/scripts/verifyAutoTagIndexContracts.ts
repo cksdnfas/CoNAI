@@ -15,6 +15,7 @@ const autoTagSearchTerms = readSource('backend/src/services/autoTagSearch/autoTa
 const autoTagIndexService = readSource('backend/src/services/autoTagIndexService.ts');
 const autoTagSql = readSource('backend/src/services/complexFilter/complexFilterAutoTagSql.ts');
 const autoTagSearchService = readSource('backend/src/services/autoTagSearchService.ts');
+const imageSearchModel = readSource('backend/src/models/Image/ImageSearchModel.ts');
 const mediaMetadataModel = readSource('backend/src/models/Image/MediaMetadataModel.ts');
 const autoTagScheduler = readSource('backend/src/services/autoTagScheduler.ts');
 const taggingRoutes = readSource('backend/src/routes/images/tagging.mutation.routes.ts');
@@ -144,6 +145,26 @@ assert.match(
   autoTagSearchService,
   /buildGeneralTagConditions/,
   'simple auto-tag search must keep the JSON fallback for unmigrated test DBs',
+);
+assert.match(
+  imageSearchModel,
+  /AUTO_TAG_SEARCH_TOTAL_CACHE_TTL_MS\s*=\s*30_000/,
+  'simple auto-tag search total count cache must use a short TTL',
+);
+assert.match(
+  imageSearchModel,
+  /getAutoTagSearchTotalCacheKey\(safeConditions,\s*queryBuilder\.params\)/,
+  'simple auto-tag search total cache must key by count conditions and parameters',
+);
+assert.match(
+  imageSearchModel,
+  /getCachedAutoTagSearchTotal\(countCacheKey\)/,
+  'simple auto-tag search must read cached totals before running the count query',
+);
+assert.match(
+  imageSearchModel,
+  /setCachedAutoTagSearchTotal\(countCacheKey,\s*total\)/,
+  'simple auto-tag search must cache exact totals after count misses',
 );
 assert.match(
   autoTagIndexPruneMigration,
