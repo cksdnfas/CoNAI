@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, ShieldCheck, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -19,10 +19,10 @@ const GenerationQueueHeaderWidgetLazy = lazy(async () => {
   return { default: module.GenerationQueueHeaderWidget }
 })
 
-const PRIMARY_NAV_ORDER = ['/groups', '/prompts', '/generation', '/upload', '/wallpaper', '/settings'] as const
+const PRIMARY_NAV_ORDER = ['/', '/groups', '/prompts', '/generation', '/upload', '/wallpaper', '/settings'] as const
 
 const navItems: Array<{ to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }> = [
-  { to: '/access', labelKey: 'appShell.availablePages', icon: ShieldCheck, permissionKey: null },
+  { to: '/access', labelKey: 'appShell.availablePages', icon: MapIcon, permissionKey: null },
   ...PRIMARY_NAV_ORDER.flatMap((path) => {
     const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
     return item ? [{ to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
@@ -65,10 +65,7 @@ function AppShellLayout() {
   const authStatusQuery = useAuthStatusQuery()
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
-  const shouldShowAccessOverviewNav = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated === true
-  const visibleNavItems = navItems.filter((item) => item.permissionKey === null
-    ? shouldShowAccessOverviewNav
-    : hasAuthPermission(permissionKeys, item.permissionKey))
+  const visibleNavItems = navItems.filter((item) => item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey))
   const isWallpaperRuntime = location.pathname === '/wallpaper/runtime'
   const shouldShowGenerationQueueWidget = authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true
   const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')
@@ -100,13 +97,12 @@ function AppShellLayout() {
         <div className="theme-shell-inner mx-auto flex w-full max-w-[1680px] items-center gap-3 sm:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-6">
             <NavLink
-              to="/"
-              end
+              to="/access"
               className="flex shrink-0 items-center gap-3 rounded-sm transition-opacity hover:opacity-90"
-              aria-label={t({ ko: '홈으로 이동', en: 'Go to Home' })}
+              aria-label={t('appShell.availablePages')}
               title={APP_BRAND_TOOLTIP}
-              onMouseEnter={() => prefetchAppRoute('/')}
-              onFocus={() => prefetchAppRoute('/')}
+              onMouseEnter={() => prefetchAppRoute('/access')}
+              onFocus={() => prefetchAppRoute('/access')}
             >
               <img src={APP_ICON_SRC} alt="" className="size-8 shrink-0 rounded-sm object-cover" draggable={false} />
               <span className="hidden text-lg font-bold tracking-[-0.04em] text-foreground sm:inline">{APP_NAME}</span>
