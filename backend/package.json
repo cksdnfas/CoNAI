@@ -18,6 +18,7 @@
     "verify:queue-routing-smoke": "tsx src/scripts/verifyGenerationQueueRouting.ts",
     "verify:graph-comfy-artifacts": "tsx src/scripts/verifyGraphComfyArtifactDescriptors.ts",
     "verify:graph-artifact-runtime": "tsx src/scripts/verifyGraphArtifactRuntime.ts",
+    "verify:graph-canonical-media-contracts": "tsx src/scripts/verifyGraphCanonicalMediaContracts.ts",
     "verify:graph-final-result-promotion-contracts": "tsx src/scripts/verifyGraphFinalResultPromotionContracts.ts",
     "verify:runtime-role-contracts": "tsx src/scripts/verifyRuntimeRoleContracts.ts",
     "verify:result-retention-contracts": "tsx src/scripts/verifyResultRetentionContracts.ts",

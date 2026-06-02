@@ -14,7 +14,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../generationQueueRouting'
 import { GenerationQueueService } from '../generationQueueService'
 import { ImageUploadService } from '../imageUploadService'
-import { saveArtifactBuffer, saveArtifactFileReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
+import { saveArtifactBuffer, saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
 import { resolveComfyGraphOutputDescriptor, resolveComfyOutputMimeType } from './comfyArtifactOutput'
 import {
   bufferToDataUrl,
@@ -237,47 +237,28 @@ async function resolveQueueBackedOutput(params: {
     fileName: originalFileName,
     compositeHash,
   }
-  let storagePath: string
-  let artifactRecordId: number
+  const referencedArtifact = await saveCanonicalMediaArtifactReference(
+    params.context.executionId,
+    params.node.id,
+    params.outputPortKey,
+    artifactType,
+    absoluteOriginalPath,
+    {
+      mimeType: resolvedMimeType,
+      originalFileName,
+      queueJobId: completedJob.id,
+      historyId,
+      compositeHash,
+      metadata: {
+        module: params.moduleDefinition.name,
+        outputKind: outputDescriptor.outputKind,
+      },
+    },
+  )
 
   if (shouldMaterializeValue) {
     const outputBuffer = await fs.promises.readFile(absoluteOriginalPath)
     outputValue = bufferToDataUrl(outputBuffer, resolvedMimeType)
-    const savedArtifact = await saveArtifactBuffer(
-      params.context.executionId,
-      params.node.id,
-      params.outputPortKey,
-      artifactType,
-      outputBuffer,
-      {
-        mimeType: resolvedMimeType,
-        sourcePathForMetadata: absoluteOriginalPath,
-        originalFileName,
-      },
-    )
-    storagePath = savedArtifact.storagePath
-    artifactRecordId = savedArtifact.artifactRecordId
-  } else {
-    const referencedArtifact = await saveArtifactFileReference(
-      params.context.executionId,
-      params.node.id,
-      params.outputPortKey,
-      artifactType,
-      absoluteOriginalPath,
-      {
-        mimeType: resolvedMimeType,
-        metadata: {
-          module: params.moduleDefinition.name,
-          outputKind: outputDescriptor.outputKind,
-          originalFileName,
-          queueJobId: completedJob.id,
-          historyId,
-          compositeHash,
-        },
-      },
-    )
-    storagePath = referencedArtifact.storagePath
-    artifactRecordId = referencedArtifact.artifactRecordId
   }
 
   const metadataValue = {
@@ -300,16 +281,11 @@ async function resolveQueueBackedOutput(params: {
     [params.outputPortKey]: {
       type: artifactType,
       value: outputValue,
-      storagePath,
-      artifactRecordId,
+      storagePath: referencedArtifact.storagePath,
+      artifactRecordId: referencedArtifact.artifactRecordId,
       metadata: {
-        module: params.moduleDefinition.name,
         mimeType: outputDescriptor.mimeType,
-        outputKind: outputDescriptor.outputKind,
-        originalFileName,
-        queueJobId: completedJob.id,
-        historyId,
-        compositeHash,
+        ...referencedArtifact.metadata,
       },
     },
     metadata: {
@@ -337,7 +313,8 @@ async function resolveQueueBackedOutput(params: {
       requestedServerId: completedJob.requested_server_id ?? null,
       requestedServerTag: completedJob.requested_server_tag ?? null,
       compositeHash,
-      storagePath,
+      storagePath: referencedArtifact.storagePath,
+      referenceKind: 'canonical-generated-media',
     },
   })
 }

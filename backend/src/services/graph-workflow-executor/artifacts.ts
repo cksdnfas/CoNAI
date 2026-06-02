@@ -155,6 +155,52 @@ export async function saveArtifactFileReference(
   }
 }
 
+type SaveCanonicalMediaArtifactReferenceOptions = {
+  mimeType?: string
+  originalFileName?: string
+  queueJobId?: number | null
+  historyId?: number | null
+  compositeHash?: string | null
+  metadata?: Record<string, unknown>
+}
+
+/** Persist a graph artifact descriptor for canonical generated media without copying the file. */
+export async function saveCanonicalMediaArtifactReference(
+  executionId: number,
+  nodeId: string,
+  portKey: string,
+  artifactType: ModulePortDataType | 'file',
+  storagePath: string,
+  options?: SaveCanonicalMediaArtifactReferenceOptions,
+) {
+  const metadata = {
+    kind: 'canonical-generated-media',
+    originalFileName: options?.originalFileName ?? path.basename(storagePath),
+    queueJobId: options?.queueJobId ?? null,
+    historyId: options?.historyId ?? null,
+    compositeHash: options?.compositeHash ?? null,
+    actualCompositeHash: options?.compositeHash ?? null,
+    canonicalPath: storagePath,
+    ...(options?.metadata ?? {}),
+  }
+  const savedArtifact = await saveArtifactFileReference(
+    executionId,
+    nodeId,
+    portKey,
+    artifactType,
+    storagePath,
+    {
+      mimeType: options?.mimeType,
+      metadata,
+    },
+  )
+
+  return {
+    ...savedArtifact,
+    metadata,
+  }
+}
+
 /** Look up the source artifact feeding a graph edge. */
 export function getSourceArtifact(context: ExecutionContext, edge: GraphWorkflowEdge) {
   const nodeArtifacts = context.artifactsByNode.get(edge.source_node_id)
