@@ -1,8 +1,11 @@
 import fs from 'fs'
 import path from 'path'
+import { resolveUploadsPath, runtimePaths } from '../../config/runtimePaths'
+import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
 import { GenerationHistoryModel, type ServiceType } from '../../models/GenerationHistory'
 import { GenerationHistoryService } from '../generationHistoryService'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
+import { ImageUploadService } from '../imageUploadService'
 import type { RuntimeArtifact } from './shared'
 
 type ArtifactMetadata = Record<string, unknown>
@@ -34,12 +37,23 @@ type FinalResultPromotionParams = {
   sourceArtifact: RuntimeArtifact
 }
 
+type PromotedFinalResult = FinalResultPromotionCandidate & {
+  reason: string | null
+  historyId?: number
+  errorMessage?: string
+}
+
 function parseMetadata(value: unknown): ArtifactMetadata {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {}
   }
 
   return value as ArtifactMetadata
+}
+
+function isPathInsideRoot(rootPath: string, candidatePath: string) {
+  const relative = path.relative(rootPath, candidatePath)
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
 function optionalString(value: unknown) {
@@ -433,4 +447,65 @@ export async function tryPromoteFinalResultArtifactToGenerationHistory(params: F
       errorMessage: error instanceof Error ? error.message : String(error),
     }
   }
+}
+
+/** Replace a promoted temp final artifact row with the canonical generated media reference. */
+export async function replacePromotedFinalResultSourceWithCanonicalMedia(
+  sourceArtifact: RuntimeArtifact,
+  promotionResult: PromotedFinalResult,
+) {
+  if (promotionResult.reason !== 'promoted' || !promotionResult.compositeHash || !sourceArtifact.artifactRecordId) {
+    return { replaced: false, reason: 'not_promoted' as const }
+  }
+
+  const activePath = ImageUploadService.getActiveFilePath(promotionResult.compositeHash)
+  if (!activePath) {
+    return { replaced: false, reason: 'canonical_path_missing' as const }
+  }
+
+  const canonicalPath = path.isAbsolute(activePath) ? activePath : resolveUploadsPath(activePath)
+  const previousStoragePath = sourceArtifact.storagePath ?? null
+  const metadata = {
+    ...(sourceArtifact.metadata ?? {}),
+    kind: 'canonical-generated-media',
+    historyId: promotionResult.historyId ?? null,
+    compositeHash: promotionResult.compositeHash,
+    actualCompositeHash: promotionResult.compositeHash,
+    canonicalPath,
+    originalFileName: promotionResult.originalFileName ?? path.basename(canonicalPath),
+    promotedFromGraphArtifact: true,
+  }
+
+  GraphExecutionArtifactModel.updateStorageAndMetadata(sourceArtifact.artifactRecordId, {
+    storage_path: canonicalPath,
+    metadata: JSON.stringify(metadata),
+  })
+
+  sourceArtifact.storagePath = canonicalPath
+  sourceArtifact.metadata = metadata
+  if (sourceArtifact.value && typeof sourceArtifact.value === 'object' && !Array.isArray(sourceArtifact.value) && !Buffer.isBuffer(sourceArtifact.value)) {
+    sourceArtifact.value = {
+      ...(sourceArtifact.value as Record<string, unknown>),
+      storagePath: canonicalPath,
+      fileName: path.basename(canonicalPath),
+      mimeType: promotionResult.mimeType ?? FileDiscoveryService.getMimeType(canonicalPath),
+      compositeHash: promotionResult.compositeHash,
+    }
+  }
+
+  if (previousStoragePath) {
+    const graphExecutionTempRoot = path.resolve(runtimePaths.tempDir, 'graph-executions')
+    const resolvedPreviousPath = path.resolve(previousStoragePath)
+    if (resolvedPreviousPath !== path.resolve(canonicalPath) && isPathInsideRoot(graphExecutionTempRoot, resolvedPreviousPath)) {
+      try {
+        await fs.promises.unlink(resolvedPreviousPath)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') {
+          console.warn('[GraphFinalResultPromotion] Failed to delete promoted temp artifact:', previousStoragePath)
+        }
+      }
+    }
+  }
+
+  return { replaced: true as const, canonicalPath }
 }

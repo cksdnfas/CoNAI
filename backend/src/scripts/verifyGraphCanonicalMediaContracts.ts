@@ -94,6 +94,42 @@ function assertCanonicalMediaHelperCarriesHashMetadata() {
   )
 }
 
+function assertPromotedFinalResultsUseCanonicalMediaReference() {
+  const promotionSource = readSource('backend/src/services/graph-workflow-executor/final-result-promotion.ts')
+  const resultOperationSource = readSource('backend/src/services/graph-workflow-executor/system-result-operations.ts')
+
+  assert.match(
+    promotionSource,
+    /replacePromotedFinalResultSourceWithCanonicalMedia/,
+    'final-result promotion should expose canonical replacement for promoted temp artifacts',
+  )
+  assert.match(
+    promotionSource,
+    /GraphExecutionArtifactModel\.updateStorageAndMetadata/,
+    'promoted final-result source artifacts should be updated to canonical media references',
+  )
+  assert.match(
+    promotionSource,
+    /ImageUploadService\.getActiveFilePath\(promotionResult\.compositeHash\)/,
+    'promoted final-result source replacement should resolve the canonical path from the media hash',
+  )
+  assert.match(
+    promotionSource,
+    /kind:\s*'canonical-generated-media'/,
+    'promoted final-result source replacement should label canonical media references explicitly',
+  )
+  assert.match(
+    promotionSource,
+    /runtimePaths\.tempDir, 'graph-executions'/,
+    'promoted final-result source replacement should only delete old graph temp files',
+  )
+  assert.match(
+    resultOperationSource,
+    /replacePromotedFinalResultSourceWithCanonicalMedia\(sourceArtifact, promotionResult\)/,
+    'final-result node should canonicalize promoted source artifact rows after history promotion',
+  )
+}
+
 assertQueueBackedResolverUsesCanonicalReference(
   'backend/src/services/graph-workflow-executor/execute-comfy.ts',
   'resolveQueueBackedOutput',
@@ -103,5 +139,6 @@ assertQueueBackedResolverUsesCanonicalReference(
   'resolveQueueBackedCodexOutput',
 )
 assertCanonicalMediaHelperCarriesHashMetadata()
+assertPromotedFinalResultsUseCanonicalMediaReference()
 
 console.log('Graph canonical media contract verification passed')

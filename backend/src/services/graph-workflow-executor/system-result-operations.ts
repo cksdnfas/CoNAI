@@ -1,6 +1,6 @@
 import { GraphExecutionFinalResultModel } from '../../models/GraphExecutionFinalResult'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
-import { tryPromoteFinalResultArtifactToGenerationHistory } from './final-result-promotion'
+import { replacePromotedFinalResultSourceWithCanonicalMedia, tryPromoteFinalResultArtifactToGenerationHistory } from './final-result-promotion'
 import {
   writeExecutionLog,
   type ExecutionContext,
@@ -73,6 +73,7 @@ export async function executeFinalResultNode(
     sourcePortKey: sourceEdge.source_port_key,
     sourceArtifact,
   })
+  const canonicalReplacementResult = await replacePromotedFinalResultSourceWithCanonicalMedia(sourceArtifact, promotionResult)
 
   context.artifactsByNode.set(node.id, {})
 
@@ -109,6 +110,7 @@ export async function executeFinalResultNode(
       finalResultId,
       artifactType: sourceArtifact.type,
       promotion: promotionResult,
+      canonicalReplacement: canonicalReplacementResult,
     },
   })
 }

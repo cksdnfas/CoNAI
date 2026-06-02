@@ -128,6 +128,22 @@ export class GraphExecutionArtifactModel {
     return info.lastInsertRowid as number
   }
 
+  static updateStorageAndMetadata(artifactId: number, data: {
+    storage_path?: string | null
+    metadata?: string | null
+  }) {
+    const db = getUserSettingsDb()
+    return db.prepare(`
+      UPDATE graph_execution_artifacts
+      SET storage_path = ?, metadata = ?
+      WHERE id = ?
+    `).run(
+      data.storage_path ?? null,
+      data.metadata ?? null,
+      artifactId,
+    ).changes
+  }
+
   static findByExecution(executionId: number): GraphExecutionArtifactRecord[] {
     const db = getUserSettingsDb()
     return db.prepare(`
