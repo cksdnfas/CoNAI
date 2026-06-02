@@ -40,7 +40,7 @@ API 요청과 오래 걸리는 백그라운드 작업이 서로 막지 않도록
 - rematch SQL staging transaction lock 보강
 - `media_auto_tag_index` 역색인 추가로 JSON full-scan 기반 `auto_tags` 검색 제거
 - `auto_tags` 저장 직후 `runAutoCollectionForNewImage(compositeHash)` 실행
-- 2999 검증 기준 5개 auto group rematch가 약 64초 수준에서 약 1.55초 수준으로 감소
+- 테스트 환경 검증 기준 5개 auto group rematch가 약 64초 수준에서 약 1.55초 수준으로 감소
 
 ---
 
