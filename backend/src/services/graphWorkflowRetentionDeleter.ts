@@ -4,6 +4,7 @@ import { GraphExecutionArtifactModel } from '../models/GraphExecutionArtifact'
 import { GraphExecutionFinalResultModel } from '../models/GraphExecutionFinalResult'
 import { GraphExecutionLogModel } from '../models/GraphExecutionLog'
 import { GraphExecutionModel } from '../models/GraphExecution'
+import { GraphExecutionNodeIoModel } from '../models/GraphExecutionNodeIo'
 import { deleteFile as recycleBinDeleteFile } from '../utils/recycleBin'
 import { settingsService } from './settingsService'
 
@@ -33,6 +34,7 @@ function cleanupEmptyRetiredExecutions(executionIds: number[]) {
     .map((execution) => execution.id)
 
   GraphExecutionLogModel.deleteByExecutionIds(deletableExecutionIds)
+  GraphExecutionNodeIoModel.deleteByExecutionIds(deletableExecutionIds)
   return GraphExecutionModel.deleteByIds(deletableExecutionIds)
 }
 

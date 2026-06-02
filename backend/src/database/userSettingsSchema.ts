@@ -320,6 +320,26 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // 17-1. Graph execution compact node IO table (ComfyUI-style wiring/ref ledger)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS graph_execution_node_io (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      execution_id INTEGER NOT NULL,
+      node_id TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK(direction IN ('input', 'output')),
+      port_key TEXT NOT NULL,
+      source_node_id TEXT,
+      source_port_key TEXT,
+      output_index INTEGER NOT NULL DEFAULT 1,
+      artifact_type TEXT,
+      ref_kind TEXT,
+      ref_value TEXT,
+      summary TEXT,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (execution_id) REFERENCES graph_executions(id) ON DELETE CASCADE
+    )
+  `);
+
   // 18. Image generation queue jobs table (durable queue source of truth)
   db.exec(`
     CREATE TABLE IF NOT EXISTS generation_queue_jobs (
@@ -776,7 +796,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_execution_id ON graph_execution_final_results(execution_id)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_execution_created ON graph_execution_final_results(execution_id, created_date DESC, id DESC)',
     'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_created_id ON graph_execution_final_results(created_date DESC, id DESC)',
-    'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_source_artifact_id ON graph_execution_final_results(source_artifact_id)'
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_final_results_source_artifact_id ON graph_execution_final_results(source_artifact_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_node_io_execution_node ON graph_execution_node_io(execution_id, node_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_node_io_execution_direction ON graph_execution_node_io(execution_id, direction)'
   ];
 
   indexes.forEach(sql => db.exec(sql));

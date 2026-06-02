@@ -60,6 +60,7 @@
     "verify:graph-comfy-artifacts": "cd backend && npm run verify:graph-comfy-artifacts",
     "verify:graph-artifact-runtime": "cd backend && npm run verify:graph-artifact-runtime",
     "verify:graph-canonical-media-contracts": "cd backend && npm run verify:graph-canonical-media-contracts",
+    "verify:graph-execution-compact-io-contracts": "cd backend && npm run verify:graph-execution-compact-io-contracts",
     "verify:result-retention-contracts": "cd backend && npm run verify:result-retention-contracts",
     "verify:video-optimization": "cd backend && npm run verify:video-optimization",
     "verify:media-postprocess-visibility": "cd backend && npm run verify:media-postprocess-visibility",

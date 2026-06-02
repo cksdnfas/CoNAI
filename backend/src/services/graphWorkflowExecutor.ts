@@ -2,6 +2,7 @@ import { GraphExecutionArtifactModel } from '../models/GraphExecutionArtifact'
 import { GraphExecutionFinalResultModel } from '../models/GraphExecutionFinalResult'
 import { GraphExecutionLogModel } from '../models/GraphExecutionLog'
 import { GraphExecutionModel } from '../models/GraphExecution'
+import { GraphExecutionNodeIoModel } from '../models/GraphExecutionNodeIo'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import { ModuleDefinitionModel } from '../models/ModuleDefinition'
 import { getIncomingArtifacts, loadRuntimeArtifactsByNode, resolveNodeInputs } from './graph-workflow-executor/artifacts'
@@ -10,6 +11,7 @@ import { executeCustomJsModule } from './graph-workflow-executor/execute-custom-
 import { executeNaiModule } from './graph-workflow-executor/execute-nai'
 import { executeCodexImageGenerationNode } from './graph-workflow-executor/system-codex-operations'
 import { executeSystemModule } from './graph-workflow-executor/execute-system'
+import { compactCompletedGraphExecutionArtifacts, persistCompactGraphExecutionNodeIo } from './graphWorkflowExecutionCompactor'
 import { requestGraphWorkflowOutputRetentionPrune } from './graphWorkflowOutputRetentionService'
 import {
   applyWorkflowRuntimeInputs,
@@ -639,6 +641,8 @@ export class GraphWorkflowExecutor {
         },
       })
 
+      persistCompactGraphExecutionNodeIo(context)
+      const compactionResult = await compactCompletedGraphExecutionArtifacts(context)
       GraphExecutionModel.updateStatus(executionId, 'completed')
       writeExecutionLog({
         executionId,
@@ -649,6 +653,7 @@ export class GraphWorkflowExecutor {
           targetNodeId: targetNodeId ?? null,
           reusedFromExecutionId: reusedArtifacts.reusedFromExecutionId,
           reusedNodeIds: reusedArtifacts.reusedNodeIds,
+          compaction: compactionResult,
         },
       })
       requestGraphWorkflowOutputRetentionPrune(workflow.id)
@@ -660,6 +665,7 @@ export class GraphWorkflowExecutor {
         targetNodeId: targetNodeId ?? null,
         artifacts: GraphExecutionArtifactModel.findByExecution(executionId),
         final_results: GraphExecutionFinalResultModel.findByExecution(executionId),
+        node_io: GraphExecutionNodeIoModel.findByExecution(executionId),
         logs: GraphExecutionLogModel.findByExecution(executionId),
       }
     } catch (error) {
