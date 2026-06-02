@@ -49,12 +49,16 @@ assert.ok(
   'custom-group auto collection rematch must delete only stale auto memberships',
 );
 assert.ok(
-  autoCollection.includes('ComplexFilterService.executeComplexSearchIds'),
-  'complex-filter auto collection must fetch only composite hashes, not page-search image records',
+  autoCollection.includes('ComplexFilterService.buildComplexSearchHashesQuery'),
+  'complex-filter auto collection must build a hash-only SQL query, not page-search image records',
 );
 assert.ok(
-  autoCollection.includes('ImageGroupModel.replaceAutoCollectedImages'),
-  'auto-collection orchestrator must route rebuild writes through the transaction helper',
+  autoCollection.includes('ImageGroupModel.replaceAutoCollectedImagesFromQuery'),
+  'complex-filter auto collection must feed hash SQL directly into set-based diff writes',
+);
+assert.ok(
+  groupModel.includes('FROM (${desiredHashesQuery}) AS desired_hashes'),
+  'custom-group auto collection rematch must stage SQL hash results without JS materialization',
 );
 
 console.log('✅ Group WAL hot-path contracts verified');

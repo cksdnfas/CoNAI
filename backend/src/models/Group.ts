@@ -286,13 +286,48 @@ export class ImageGroupModel {
    */
   static replaceAutoCollectedImages(groupId: number, compositeHashes: string[]): { removedCount: number; addedCount: number } {
     const uniqueHashes = Array.from(new Set(compositeHashes.filter(Boolean)));
-    db.exec(`
-      CREATE TEMP TABLE IF NOT EXISTS temp_auto_collect_hashes (
-        composite_hash TEXT PRIMARY KEY
-      ) WITHOUT ROWID
-    `);
-    const clearDesiredHashes = db.prepare('DELETE FROM temp_auto_collect_hashes');
+    this.ensureAutoCollectTempTable();
     const stageDesiredHash = db.prepare('INSERT OR IGNORE INTO temp_auto_collect_hashes (composite_hash) VALUES (?)');
+    return this.replaceAutoCollectedImagesFromStagedQuery(
+      groupId,
+      () => uniqueHashes.forEach((compositeHash) => {
+        stageDesiredHash.run(compositeHash);
+      }),
+      uniqueHashes.length > 0
+    );
+  }
+
+  /**
+   * Diff one group's auto-collected memberships from a SQL hash result.
+   */
+  static replaceAutoCollectedImagesFromQuery(
+    groupId: number,
+    desiredHashesQuery: string,
+    desiredHashesParams: unknown[] = []
+  ): { removedCount: number; addedCount: number } {
+    this.ensureAutoCollectTempTable();
+    const stageFromQuery = db.prepare(`
+      INSERT OR IGNORE INTO temp_auto_collect_hashes (composite_hash)
+      SELECT composite_hash
+      FROM (${desiredHashesQuery}) AS desired_hashes
+      WHERE composite_hash IS NOT NULL
+    `);
+    return this.replaceAutoCollectedImagesFromStagedQuery(
+      groupId,
+      () => {
+        stageFromQuery.run(...desiredHashesParams);
+      },
+      true
+    );
+  }
+
+  private static replaceAutoCollectedImagesFromStagedQuery(
+    groupId: number,
+    stageDesiredHashes: () => void,
+    hasDesiredHashes: boolean
+  ): { removedCount: number; addedCount: number } {
+    this.ensureAutoCollectTempTable();
+    const clearDesiredHashes = db.prepare('DELETE FROM temp_auto_collect_hashes');
     const deleteStaleAuto = db.prepare(`
       DELETE FROM image_groups
       WHERE group_id = ?
@@ -314,15 +349,12 @@ export class ImageGroupModel {
 
     const replace = db.transaction(() => {
       clearDesiredHashes.run();
+      stageDesiredHashes();
 
-      for (const compositeHash of uniqueHashes) {
-        stageDesiredHash.run(compositeHash);
-      }
-
-      const removedCount = uniqueHashes.length > 0
+      const removedCount = hasDesiredHashes
         ? deleteStaleAuto.run(groupId).changes
         : deleteAllAuto.run(groupId).changes;
-      const addedCount = uniqueHashes.length > 0
+      const addedCount = hasDesiredHashes
         ? insertMissingAuto.run(groupId).changes
         : 0;
 
@@ -331,6 +363,14 @@ export class ImageGroupModel {
     });
 
     return replace();
+  }
+
+  private static ensureAutoCollectTempTable(): void {
+    db.exec(`
+      CREATE TEMP TABLE IF NOT EXISTS temp_auto_collect_hashes (
+        composite_hash TEXT PRIMARY KEY
+      ) WITHOUT ROWID
+    `);
   }
 
   /**

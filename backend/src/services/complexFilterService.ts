@@ -950,21 +950,30 @@ export class ComplexFilterService {
     filter: ComplexFilter,
     basicParams?: ComplexSearchScope
   ): Promise<string[]> {
-    // Fetch rating weights
-    const weights = await RatingScoreService.getWeights();
-
-    // Build query
-    const { query: baseQuery, params } = this.buildComplexQuery(filter, weights, basicParams);
-
-    // Modify query to select only composite_hash
-    const hashesQuery = baseQuery.replace(
-      /SELECT\s+im\.\*,[\s\S]+?FROM/i,
-      'SELECT DISTINCT im.composite_hash FROM'
-    );
+    const { query: hashesQuery, params } = await this.buildComplexSearchHashesQuery(filter, basicParams);
 
     // Execute query
     const rows = db.prepare(hashesQuery).all(...params) as { composite_hash: string }[];
     return rows.map(row => row.composite_hash);
+  }
+
+  /**
+   * Build complex search SQL that returns only matching composite hashes.
+   * Auto-collection can feed this directly into INSERT ... SELECT, avoiding
+   * a JS array of every matched image.
+   */
+  static async buildComplexSearchHashesQuery(
+    filter: ComplexFilter,
+    basicParams?: ComplexSearchScope
+  ): Promise<{ query: string; params: any[] }> {
+    const weights = await RatingScoreService.getWeights();
+    const { query: baseQuery, params } = this.buildComplexQuery(filter, weights, basicParams);
+    const query = baseQuery.replace(
+      /SELECT\s+im\.\*,[\s\S]+?FROM/i,
+      'SELECT DISTINCT im.composite_hash FROM'
+    );
+
+    return { query, params };
   }
 
 }
