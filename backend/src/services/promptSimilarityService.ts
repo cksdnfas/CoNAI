@@ -205,22 +205,23 @@ export class PromptSimilarityService {
         im.composite_hash,
         im.prompt_similarity_algorithm,
         im.prompt_similarity_version,
-        im.pos_prompt_normalized,
-        im.neg_prompt_normalized,
-        im.auto_prompt_normalized,
         im.pos_prompt_fingerprint,
         im.neg_prompt_fingerprint,
         im.auto_prompt_fingerprint,
         im.prompt_similarity_updated_date
       FROM media_metadata im
-      INNER JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       WHERE im.composite_hash != ?
         AND im.prompt_similarity_algorithm = ?
         AND im.prompt_similarity_version = ?
         AND (${candidateFingerprintCondition})
         AND ${visibleCondition}
         AND ${readyCondition}
-      GROUP BY im.composite_hash
+        AND EXISTS (
+          SELECT 1
+          FROM image_files if
+          WHERE if.composite_hash = im.composite_hash
+            AND if.file_status = 'active'
+        )
     `).all(compositeHash, settings.algorithm, PROMPT_SIMILARITY_VERSION) as PromptSimilarityCandidateRow[];
 
     const matches: PromptSimilarityMatch[] = [];
@@ -417,8 +418,8 @@ export class PromptSimilarityService {
     algorithm: PromptSimilarityAlgorithm,
     threshold: number,
   ): PromptSimilarityFieldScore {
-    const hasSource = Boolean(sourceNormalized);
-    const hasTarget = Boolean(targetNormalized);
+    const hasSource = Boolean(sourceNormalized || sourceFingerprint);
+    const hasTarget = Boolean(targetNormalized || targetFingerprint);
     const exact = Boolean(sourceNormalized && targetNormalized && sourceNormalized === targetNormalized);
 
     if (!hasSource) {
@@ -649,16 +650,12 @@ export class PromptSimilarityService {
     targetFingerprint: string | null,
     algorithm: PromptSimilarityAlgorithm,
   ): number {
-    if (!sourceNormalized || !targetNormalized) {
-      return 0;
-    }
-
-    if (sourceNormalized === targetNormalized) {
-      return 100;
-    }
-
     if (!sourceFingerprint || !targetFingerprint) {
       return 0;
+    }
+
+    if (sourceNormalized && targetNormalized && sourceNormalized === targetNormalized) {
+      return 100;
     }
 
     if (algorithm === 'minhash') {

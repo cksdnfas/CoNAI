@@ -7,6 +7,7 @@ function readSource(relativePath: string): string {
 }
 
 const serviceSource = readSource('src/services/promptSimilarityService.ts');
+const migrationSource = readSource('src/database/migrations/024_add_prompt_similarity_candidate_indexes.ts');
 
 const findStart = serviceSource.indexOf('static findSimilarByCompositeHash');
 assert.notEqual(findStart, -1, 'findSimilarByCompositeHash should exist');
@@ -22,18 +23,23 @@ const candidateQuerySource = findSource.slice(rowsStart, rowsEnd);
 
 assert.doesNotMatch(
   candidateQuerySource,
-  /\bim\.prompt\b|\bim\.negative_prompt\b|\bim\.auto_tags\b/,
-  'prompt similarity candidates must not load large prompt text blobs',
+  /\bim\.prompt\b|\bim\.negative_prompt\b|\bim\.auto_tags\b|pos_prompt_normalized|neg_prompt_normalized|auto_prompt_normalized/,
+  'prompt similarity candidates must not load large prompt or normalized text blobs',
 );
 assert.doesNotMatch(
   candidateQuerySource,
   /watched_folders|wf\.folder_name|original_file_path|thumbnail_path|file_size/i,
   'prompt similarity candidates should defer full metadata/file hydration until final matches',
 );
+assert.doesNotMatch(
+  candidateQuerySource,
+  /GROUP BY im\.composite_hash/,
+  'prompt similarity candidates should avoid temp group-by trees on the hot path',
+);
 assert.match(
   candidateQuerySource,
-  /INNER JOIN image_files if ON im\.composite_hash = if\.composite_hash AND if\.file_status = 'active'/,
-  'prompt similarity candidates should require active files',
+  /EXISTS \([\s\S]*FROM image_files if[\s\S]*if\.composite_hash = im\.composite_hash[\s\S]*if\.file_status = 'active'/,
+  'prompt similarity candidates should require active files without duplicate-producing joins',
 );
 assert.match(
   candidateQuerySource,
@@ -81,6 +87,21 @@ assert.match(
   hydrateSource,
   /LEFT JOIN watched_folders wf/,
   'prompt similarity final hydration should preserve folder metadata',
+);
+assert.match(
+  migrationSource,
+  /idx_prompt_similarity_pos_candidates/,
+  'prompt similarity positive candidates should have a covering candidate index',
+);
+assert.match(
+  migrationSource,
+  /idx_prompt_similarity_neg_candidates/,
+  'prompt similarity negative candidates should have a covering candidate index',
+);
+assert.match(
+  migrationSource,
+  /idx_prompt_similarity_auto_candidates/,
+  'prompt similarity auto candidates should have a covering candidate index',
 );
 
 console.log('✅ Prompt similarity hot-path contracts verified');
