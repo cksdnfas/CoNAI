@@ -6,6 +6,7 @@ import { MediaPostprocessVisibilityService } from '../../services/mediaPostproce
 import { ImageMetadataRecord } from '../../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../../utils/dynamicUpdate';
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
+import { ImageStatsModel } from './ImageStatsModel';
 import { MediaMetadataFileQueries } from './MediaMetadataFileQueries';
 
 function normalizeSuggestionLimit(limit: number, fallback = 16, max = 50): number {
@@ -145,6 +146,7 @@ export class MediaMetadataModel {
     );
 
     AutoTagIndexService.syncForHash(data.composite_hash, data.auto_tags);
+    ImageStatsModel.invalidateAutoTagStatsCache();
 
     return data.composite_hash;
   }
@@ -213,6 +215,7 @@ export class MediaMetadataModel {
 
     if (info.changes > 0 && 'auto_tags' in filteredUpdates) {
       AutoTagIndexService.syncForHash(compositeHash, filteredUpdates.auto_tags as string | null | undefined);
+      ImageStatsModel.invalidateAutoTagStatsCache();
     }
 
     return info.changes > 0;
@@ -223,6 +226,9 @@ export class MediaMetadataModel {
    */
   static delete(compositeHash: string): boolean {
     const info = db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(compositeHash);
+    if (info.changes > 0) {
+      ImageStatsModel.invalidateAutoTagStatsCache();
+    }
     return info.changes > 0;
   }
 
@@ -236,6 +242,10 @@ export class MediaMetadataModel {
     const info = db.prepare(
       `DELETE FROM media_metadata WHERE composite_hash IN (${placeholders})`
     ).run(...compositeHashes);
+
+    if (info.changes > 0) {
+      ImageStatsModel.invalidateAutoTagStatsCache();
+    }
 
     return info.changes;
   }

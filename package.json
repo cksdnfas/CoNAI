@@ -129,6 +129,7 @@
     "verify:prompt-similarity-hot-path-contracts": "cd backend && npm run verify:prompt-similarity-hot-path-contracts",
     "verify:search-option-suggestion-contracts": "cd backend && npm run verify:search-option-suggestion-contracts",
     "verify:danbooru-browser-locale-contracts": "cd backend && npm run verify:danbooru-browser-locale-contracts",
+    "verify:auto-tag-stats-cache-contracts": "cd backend && npm run verify:auto-tag-stats-cache-contracts",
     "verify:auto-tag-index-contracts": "cd backend && npm run verify:auto-tag-index-contracts",
     "verify:single-image-auto-collect-contracts": "cd backend && npm run verify:single-image-auto-collect-contracts",
     "verify:danbooru-prompt-group-contracts": "cd backend && npm run verify:danbooru-prompt-group-contracts",

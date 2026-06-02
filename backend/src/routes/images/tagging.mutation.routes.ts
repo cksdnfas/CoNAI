@@ -3,6 +3,7 @@ import { routeParam } from '../routeParam';
 import fs from 'fs';
 import { asyncHandler } from '../../middleware/errorHandler';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
+import { ImageStatsModel } from '../../models/Image/ImageStatsModel';
 import { ImageTaggingModel } from '../../models/Image/ImageTaggingModel';
 import { db } from '../../database/init';
 import { imageTaggerService, ImageTaggerService } from '../../services/imageTaggerService';
@@ -543,6 +544,7 @@ router.post('/reset-auto-tags', asyncHandler(async (req: Request, res: Response)
       SET auto_tags = NULL
     `).run();
     AutoTagIndexService.clearAll();
+    ImageStatsModel.invalidateAutoTagStatsCache();
 
     logger.info(`[ResetAutoTags] Reset complete. Changes: ${result.changes}`);
     QueryCacheService.invalidateImageCache(undefined, true);

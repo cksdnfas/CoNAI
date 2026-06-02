@@ -11,10 +11,31 @@ import { AutoTagStats } from '../../types/autoTag';
  * - 모든 기존 통계 기능 유지
  */
 export class ImageStatsModel {
+  private static readonly AUTO_TAG_STATS_CACHE_TTL_MS = 30_000;
+  private static autoTagStatsCache: { value: AutoTagStats; expiresAt: number } | null = null;
+
+  private static cloneAutoTagStats(stats: AutoTagStats): AutoTagStats {
+    return {
+      ...stats,
+      rating_distribution: { ...stats.rating_distribution },
+      top_general_tags: stats.top_general_tags.map((tag) => ({ ...tag })),
+      model_distribution: { ...stats.model_distribution },
+    };
+  }
+
+  static invalidateAutoTagStatsCache(): void {
+    this.autoTagStatsCache = null;
+  }
+
   /**
    * 자동태그 통계 정보 조회
    */
   static async getAutoTagStats(): Promise<AutoTagStats> {
+    const now = Date.now();
+    if (this.autoTagStatsCache && this.autoTagStatsCache.expiresAt > now) {
+      return this.cloneAutoTagStats(this.autoTagStatsCache.value);
+    }
+
     // 1. 기본 통계
     const statsQuery = `
       SELECT
@@ -98,6 +119,11 @@ export class ImageStatsModel {
       top_general_tags: [],
       character_count: characterRow?.character_count || 0,
       model_distribution: modelDistribution
+    };
+
+    this.autoTagStatsCache = {
+      value: this.cloneAutoTagStats(stats),
+      expiresAt: now + this.AUTO_TAG_STATS_CACHE_TTL_MS,
     };
 
     return stats;

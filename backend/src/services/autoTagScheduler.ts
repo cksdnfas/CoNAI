@@ -13,6 +13,7 @@ import { kaloscopeTaggerService } from './kaloscopeTaggerService';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { QueryCacheService } from './QueryCacheService';
+import { ImageStatsModel } from '../models/Image/ImageStatsModel';
 import { RatingData } from '../types/autoTag';
 
 interface PendingAutoTagMedia {
@@ -311,6 +312,7 @@ class AutoTagScheduler {
       WHERE composite_hash = ?
     `).run(autoTags, ratingScore, compositeHash);
     AutoTagIndexService.syncForHash(compositeHash, autoTags);
+    ImageStatsModel.invalidateAutoTagStatsCache();
 
     try {
       const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(compositeHash);

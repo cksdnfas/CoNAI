@@ -57,6 +57,7 @@
     "verify:invalid-media-processing-contracts": "tsx src/scripts/verifyInvalidMediaProcessingContracts.ts",
     "verify:search-option-suggestion-contracts": "tsx src/scripts/verifySearchOptionSuggestionContracts.ts",
     "verify:danbooru-browser-locale-contracts": "tsx src/scripts/verifyDanbooruBrowserLocaleContracts.ts",
+    "verify:auto-tag-stats-cache-contracts": "tsx src/scripts/verifyAutoTagStatsCacheContracts.ts",
     "verify:auto-tag-index-contracts": "tsx src/scripts/verifyAutoTagIndexContracts.ts",
     "verify:single-image-auto-collect-contracts": "tsx src/scripts/verifySingleImageAutoCollectContracts.ts",
     "verify:group-image-route-contracts": "tsx src/scripts/verifyGroupImageRouteContracts.ts",
