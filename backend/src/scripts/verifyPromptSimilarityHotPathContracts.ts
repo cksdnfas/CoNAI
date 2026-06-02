@@ -60,6 +60,16 @@ assert.match(
   /buildPromptCandidateFingerprintCondition\(activeFields\)/,
   'prompt similarity candidates should require usable prepared fingerprints',
 );
+assert.match(
+  findSource,
+  /for \(const fieldName of activeFields\)/,
+  'prompt similarity scoring should only calculate fields active on the source image',
+);
+assert.match(
+  findSource,
+  /buildInactiveFieldScores\(settings\)/,
+  'prompt similarity should preserve inactive field score shape without calculating every field',
+);
 
 const hydrateSource = serviceSource.slice(hydrateStart);
 assert.match(

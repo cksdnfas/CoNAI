@@ -226,11 +226,16 @@ export class PromptSimilarityService {
     const matches: PromptSimilarityMatch[] = [];
     for (const row of rows) {
       const targetPrepared = this.getPreparedTexts(row, settings.algorithm);
-      const positive = this.calculateFieldScore(sourcePrepared.positiveNormalized, targetPrepared.positiveNormalized, sourcePrepared.positiveFingerprint, targetPrepared.positiveFingerprint, settings.algorithm, settings.fieldThresholds.positive);
-      const negative = this.calculateFieldScore(sourcePrepared.negativeNormalized, targetPrepared.negativeNormalized, sourcePrepared.negativeFingerprint, targetPrepared.negativeFingerprint, settings.algorithm, settings.fieldThresholds.negative);
-      const auto = this.calculateFieldScore(sourcePrepared.autoNormalized, targetPrepared.autoNormalized, sourcePrepared.autoFingerprint, targetPrepared.autoFingerprint, settings.algorithm, settings.fieldThresholds.auto);
+      const fieldScores = this.buildInactiveFieldScores(settings);
+      for (const fieldName of activeFields) {
+        fieldScores[fieldName] = this.calculateActiveFieldScore(
+          fieldName,
+          sourcePrepared,
+          targetPrepared,
+          settings,
+        );
+      }
 
-      const fieldScores = { positive, negative, auto };
       if (!activeFields.every((fieldName) => fieldScores[fieldName].passed)) {
         continue;
       }
@@ -243,9 +248,9 @@ export class PromptSimilarityService {
       matches.push({
         image: row as unknown as ImageWithFileView,
         combinedSimilarity,
-        positive,
-        negative,
-        auto,
+        positive: fieldScores.positive,
+        negative: fieldScores.negative,
+        auto: fieldScores.auto,
       });
     }
 
@@ -436,6 +441,64 @@ export class PromptSimilarityService {
       hasSource,
       hasTarget,
     };
+  }
+
+  /** Build placeholder scores for inactive fields so the hot path only scores source-active fields. */
+  private static buildInactiveFieldScores(settings: PromptSimilaritySettings): Record<PromptSimilarityFieldName, PromptSimilarityFieldScore> {
+    return {
+      positive: this.buildInactiveFieldScore(settings.fieldThresholds.positive),
+      negative: this.buildInactiveFieldScore(settings.fieldThresholds.negative),
+      auto: this.buildInactiveFieldScore(settings.fieldThresholds.auto),
+    };
+  }
+
+  private static buildInactiveFieldScore(threshold: number): PromptSimilarityFieldScore {
+    return {
+      similarity: 0,
+      threshold,
+      passed: true,
+      exact: false,
+      hasSource: false,
+      hasTarget: false,
+    };
+  }
+
+  private static calculateActiveFieldScore(
+    fieldName: PromptSimilarityFieldName,
+    sourcePrepared: PromptSimilarityPreparedTexts,
+    targetPrepared: PromptSimilarityPreparedTexts,
+    settings: PromptSimilaritySettings,
+  ): PromptSimilarityFieldScore {
+    if (fieldName === 'positive') {
+      return this.calculateFieldScore(
+        sourcePrepared.positiveNormalized,
+        targetPrepared.positiveNormalized,
+        sourcePrepared.positiveFingerprint,
+        targetPrepared.positiveFingerprint,
+        settings.algorithm,
+        settings.fieldThresholds.positive,
+      );
+    }
+
+    if (fieldName === 'negative') {
+      return this.calculateFieldScore(
+        sourcePrepared.negativeNormalized,
+        targetPrepared.negativeNormalized,
+        sourcePrepared.negativeFingerprint,
+        targetPrepared.negativeFingerprint,
+        settings.algorithm,
+        settings.fieldThresholds.negative,
+      );
+    }
+
+    return this.calculateFieldScore(
+      sourcePrepared.autoNormalized,
+      targetPrepared.autoNormalized,
+      sourcePrepared.autoFingerprint,
+      targetPrepared.autoFingerprint,
+      settings.algorithm,
+      settings.fieldThresholds.auto,
+    );
   }
 
   /** Calculate the weighted combined similarity score. */
