@@ -362,7 +362,7 @@ export class ImageGroupModel {
       return { removedCount, addedCount };
     });
 
-    return replace();
+    return replace.immediate();
   }
 
   private static ensureAutoCollectTempTable(): void {

@@ -60,5 +60,9 @@ assert.ok(
   groupModel.includes('FROM (${desiredHashesQuery}) AS desired_hashes'),
   'custom-group auto collection rematch must stage SQL hash results without JS materialization',
 );
+assert.ok(
+  groupModel.includes('replace.immediate()'),
+  'custom-group auto collection rematch must acquire the write transaction before reading desired hashes',
+);
 
 console.log('✅ Group WAL hot-path contracts verified');
