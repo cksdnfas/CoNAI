@@ -152,7 +152,7 @@ function runCommand(command, commandArgs, options = {}) {
   const result = spawnSync(command, commandArgs, {
     cwd: options.cwd ?? ROOT_DIR,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    shell: options.shell ?? (process.platform === 'win32'),
     env: {
       ...process.env,
       ...(options.env ?? {}),
@@ -223,8 +223,9 @@ function main() {
     runtimeEnv.CONAI_WORKER_HTTP = 'false';
   }
 
-  const startExitCode = runCommand('npm', ['run', 'start'], {
+  const startExitCode = runCommand(process.execPath, [BACKEND_ENTRY], {
     cwd: BACKEND_DIR,
+    shell: false,
     env: {
       NODE_ENV: 'production',
       ...runtimeEnv,

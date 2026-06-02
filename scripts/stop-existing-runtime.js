@@ -6,6 +6,8 @@ const { execFileSync, spawnSync } = require('child_process');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const NORMALIZED_ROOT_DIR = normalizePathText(ROOT_DIR);
+const BACKEND_ENTRY = path.join(ROOT_DIR, 'backend', 'dist', 'backend', 'src', 'index.js');
+const NORMALIZED_BACKEND_ENTRY = normalizePathText(BACKEND_ENTRY);
 const CURRENT_PID = process.pid;
 const isDryRun = process.argv.includes('--dry-run');
 
@@ -96,6 +98,10 @@ function isCoNaiRuntimeProcess(commandLine) {
   return hasRunner && isFromCurrentRoot && (hasRoleArg || isLegacyAllRunner);
 }
 
+function isCoNaiBackendEntryProcess(commandLine) {
+  return normalizePathText(commandLine).includes(NORMALIZED_BACKEND_ENTRY);
+}
+
 function collectRuntimePids() {
   const pids = new Set();
 
@@ -105,7 +111,7 @@ function collectRuntimePids() {
       continue;
     }
 
-    if (isCoNaiRuntimeProcess(processInfo.CommandLine)) {
+    if (isCoNaiRuntimeProcess(processInfo.CommandLine) || isCoNaiBackendEntryProcess(processInfo.CommandLine)) {
       pids.add(pid);
     }
   }

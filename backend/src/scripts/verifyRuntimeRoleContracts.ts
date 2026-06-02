@@ -39,6 +39,8 @@ assert.match(runnerSource, /--worker/);
 assert.match(runnerSource, /--skip-build/);
 assert.match(runnerSource, /CONAI_RUNTIME_ROLE/);
 assert.match(runnerSource, /CONAI_WORKER_HTTP/);
+assert.match(runnerSource, /process\.execPath/);
+assert.match(runnerSource, /\[BACKEND_ENTRY\]/);
 assert.match(indexSource, /shouldSkipHttpServerForRuntimeRole/);
 assert.match(indexSource, /HTTP server disabled/);
 
@@ -60,6 +62,8 @@ assert.match(stopExistingRuntimeSource, /--api/);
 assert.match(stopExistingRuntimeSource, /--worker/);
 assert.match(stopExistingRuntimeSource, /isLegacyAllRunner/);
 assert.match(stopExistingRuntimeSource, /NORMALIZED_ROOT_DIR/);
+assert.match(stopExistingRuntimeSource, /NORMALIZED_BACKEND_ENTRY/);
+assert.match(stopExistingRuntimeSource, /isCoNaiBackendEntryProcess/);
 assert.doesNotMatch(stopExistingRuntimeSource, /hasBackendEntry/);
 assert.match(checkpointRuntimeDatabasesSource, /wal_checkpoint\(TRUNCATE\)/);
 assert.match(checkpointRuntimeDatabasesSource, /RUNTIME_DATABASE_DIR/);
