@@ -8,6 +8,7 @@ import { RatingScoreService } from './ratingScoreService';
 import { PromptCollectionService } from './promptCollectionService';
 import { AutoTagsComposeService } from './autoTagsComposeService';
 import { AutoTagIndexService } from './autoTagIndexService';
+import { AutoCollectionService } from './autoCollectionService';
 import { kaloscopeTaggerService } from './kaloscopeTaggerService';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
@@ -285,7 +286,7 @@ class AutoTagScheduler {
     }
 
     const ratingScore = await this.calculateRatingScore(ratingData);
-    this.persistAutoTags(compositeHash, autoTags, ratingScore);
+    await this.persistAutoTags(compositeHash, autoTags, ratingScore);
     await this.collectAutoPrompts(taggerTaglist);
   }
 
@@ -303,13 +304,26 @@ class AutoTagScheduler {
     }
   }
 
-  private persistAutoTags(compositeHash: string, autoTags: string, ratingScore: number | null): void {
+  private async persistAutoTags(compositeHash: string, autoTags: string, ratingScore: number | null): Promise<void> {
     db.prepare(`
       UPDATE media_metadata
       SET auto_tags = ?, rating_score = ?, metadata_updated_date = CURRENT_TIMESTAMP
       WHERE composite_hash = ?
     `).run(autoTags, ratingScore, compositeHash);
     AutoTagIndexService.syncForHash(compositeHash, autoTags);
+
+    try {
+      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(compositeHash);
+      if (autoCollectResults.length > 0) {
+        QueryCacheService.scheduleGalleryCacheInvalidation();
+        console.log(`[AutoTagScheduler] Auto-assigned ${compositeHash.substring(0, 12)} to ${autoCollectResults.length} group(s) after auto-tag extraction`);
+      }
+    } catch (error) {
+      console.warn(
+        `[AutoTagScheduler] Auto-collection failed after auto-tag extraction for ${compositeHash.substring(0, 12)}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
 
     const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
     if (releasedForVisibility) {
