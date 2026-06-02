@@ -245,24 +245,21 @@ export class MediaMetadataFileQueries {
     return db.prepare(query).all(...compositeHashes);
   }
 
-  /** Pick one random active media row for a specific file type without ORDER BY RANDOM(). */
+  /** Pick one random active media row for a specific file type without COUNT/OFFSET scans. */
   static getRandomByFileType(fileType: Extract<FileType, 'image' | 'video'>): any | null {
     const visibleCondition = getVisibleMediaMetadataCondition();
     const readyCondition = getReadyMediaMetadataCondition();
-    const countStmt = db.prepare(`
-      SELECT COUNT(*) as total
-      FROM image_files if
-      LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
-      WHERE if.file_status = 'active' AND if.file_type = ? AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}
-    `);
-    const countRow = countStmt.get(fileType) as { total: number };
+    const maxFileIdRow = db.prepare(`
+      SELECT MAX(id) as maxFileId
+      FROM image_files
+      WHERE file_status = 'active'
+        AND file_type = ?
+        AND composite_hash IS NOT NULL
+    `).get(fileType) as { maxFileId: number | null };
 
-    if (!countRow || countRow.total === 0) {
+    if (!maxFileIdRow?.maxFileId) {
       return null;
     }
-
-    const randomOffset = Math.floor(Math.random() * countRow.total);
-    console.log('[MediaMetadataModel] Random offset:', randomOffset, 'out of', countRow.total);
 
     const stmt = db.prepare(`
       SELECT
@@ -307,11 +304,20 @@ export class MediaMetadataFileQueries {
         if.file_type
       FROM image_files if
       LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
-      WHERE if.file_status = 'active' AND if.file_type = ? AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}
-      LIMIT 1 OFFSET ?
+      WHERE if.file_status = 'active'
+        AND if.file_type = ?
+        AND if.composite_hash IS NOT NULL
+        AND ${visibleCondition}
+        AND ${readyCondition}
+        AND if.id >= ?
+      ORDER BY if.id ASC
+      LIMIT 1
     `);
 
-    const row = stmt.get(fileType, randomOffset);
+    const randomStartId = Math.floor(Math.random() * maxFileIdRow.maxFileId) + 1;
+    console.log('[MediaMetadataModel] Random start id:', randomStartId, 'max', maxFileIdRow.maxFileId);
+
+    const row = stmt.get(fileType, randomStartId) ?? stmt.get(fileType, 0);
     console.log(`[MediaMetadataModel] Random ${fileType} selected:`, (row as any)?.composite_hash?.substring(0, 8));
 
     return row || null;

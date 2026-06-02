@@ -321,36 +321,30 @@ export class ImageSearchModel {
 
   /**
    * 검색 조건에 맞는 랜덤 이미지 조회
-   * Using OFFSET with random index for true randomness
+   * Uses an indexed file-id start point instead of count + deep OFFSET scans.
    */
   static async getRandomFromSearch(
     searchParams: ImageSearchParamsInput
   ): Promise<any | null> {
-    const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams);
+    const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams, {
+      requireCompositeHash: true,
+      requireActiveFile: true,
+    });
 
     const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
-    // First get the count
-    const countQuery = `
-      SELECT COUNT(*) as total
-      FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      ${groupJoinClause}
-      ${whereClause}
-    `;
+    const maxFileIdRow = db.prepare(`
+      SELECT MAX(id) as maxFileId
+      FROM image_files
+      WHERE file_status = 'active'
+        AND composite_hash IS NOT NULL
+    `).get() as { maxFileId: number | null };
 
-    const countRow = db.prepare(countQuery).get(...params) as { total: number };
-
-    if (!countRow || countRow.total === 0) {
+    if (!maxFileIdRow?.maxFileId) {
       return null;
     }
 
-    // Generate random offset
-    const randomOffset = Math.floor(Math.random() * countRow.total);
-    console.log('[ImageSearchModel] Random offset:', randomOffset, 'out of', countRow.total);
-
-    // Get the image at that offset
     const query = `
       SELECT
         im.*,
@@ -361,14 +355,20 @@ export class ImageSearchModel {
         if.mime_type,
         if.folder_id,
         if.file_type
-      FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+      FROM image_files if
+      INNER JOIN media_metadata im ON if.composite_hash = im.composite_hash
       ${groupJoinClause}
       ${whereClause}
-      LIMIT 1 OFFSET ?
+        AND if.id >= ?
+      ORDER BY if.id ASC
+      LIMIT 1
     `;
 
-    const row = db.prepare(query).get(...params, randomOffset);
+    const randomStartId = Math.floor(Math.random() * maxFileIdRow.maxFileId) + 1;
+    console.log('[ImageSearchModel] Random start id:', randomStartId, 'max', maxFileIdRow.maxFileId);
+
+    const stmt = db.prepare(query);
+    const row = stmt.get(...params, randomStartId) ?? stmt.get(...params, 0);
     console.log('[ImageSearchModel] Random image selected:', (row as any)?.composite_hash?.substring(0, 8));
 
     return row || null;
