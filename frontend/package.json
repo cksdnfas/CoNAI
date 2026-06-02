@@ -21,6 +21,7 @@
     "verify:home-feed-progress-ui-contracts": "tsx src/scripts/verifyHomeFeedProgressUiContracts.ts",
     "verify:group-image-feed-progress-ui-contracts": "tsx src/scripts/verifyGroupImageFeedProgressUiContracts.ts",
     "verify:group-explorer-count-map-contracts": "tsx src/scripts/verifyGroupExplorerCountMapContracts.ts",
+    "verify:group-rematch-polling-contracts": "tsx src/scripts/verifyGroupRematchPollingContracts.ts",
     "verify:prompt-list-progress-contracts": "tsx src/scripts/verifyPromptListProgressContracts.ts",
     "verify:danbooru-browser-progress-contracts": "tsx src/scripts/verifyDanbooruBrowserProgressContracts.ts",
     "verify:module-workflow-output-progress-contracts": "tsx src/scripts/verifyModuleWorkflowOutputProgressContracts.ts",

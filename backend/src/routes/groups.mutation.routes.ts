@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { AutoCollectionService } from '../services/autoCollectionService';
+import { GroupRematchJobService } from '../services/groupRematchJobService';
 import { ComplexFilterService } from '../services/complexFilterService';
 import { GroupCreateData, GroupUpdateData, ComplexFilter, AutoCollectCondition, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -100,9 +101,9 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
     if (auto_collect_enabled && auto_collect_conditions) {
       try {
-        await AutoCollectionService.runAutoCollectionForGroup(groupId);
+        GroupRematchJobService.startJobProcess('group-auto-collect', { groupId });
       } catch (autoCollectError) {
-        console.warn('Auto collection failed for new group:', autoCollectError);
+        console.warn('Auto collection job failed to start for new group:', autoCollectError);
       }
     }
 
@@ -156,9 +157,9 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 
     if (auto_collect_enabled && auto_collect_conditions) {
       try {
-        await AutoCollectionService.runAutoCollectionForGroup(id);
+        GroupRematchJobService.startJobProcess('group-auto-collect', { groupId: id });
       } catch (autoCollectError) {
-        console.warn('Auto collection failed after group update:', autoCollectError);
+        console.warn('Auto collection job failed to start after group update:', autoCollectError);
       }
     }
 
@@ -350,11 +351,28 @@ router.delete('/:id/images/:imageId', asyncHandler(async (req: Request, res: Res
   }
 }));
 
+router.get('/auto-collect-jobs/:jobId', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const jobId = parseRequiredRouteParam(req.params.jobId);
+    const job = GroupRematchJobService.readJob(jobId);
+    if (!job) {
+      return res.status(404).json(errorResponse('Auto-collect job not found'));
+    }
+
+    return res.json(successResponse(job));
+  } catch (error) {
+    console.error('Error loading auto collection job:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to load auto collection job';
+    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
 router.post('/:id/auto-collect', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = parseRouteId(req.params.id);
-    const result = await AutoCollectionService.runAutoCollectionForGroup(id);
-    return res.json(successResponse(result));
+    const job = GroupRematchJobService.startJobProcess('group-auto-collect', { groupId: id });
+    return res.status(202).json(successResponse(job));
   } catch (error) {
     console.error('Error running auto collection:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to run auto collection';
@@ -365,16 +383,8 @@ router.post('/:id/auto-collect', asyncHandler(async (req: Request, res: Response
 
 router.post('/auto-collect-all', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const results = await AutoCollectionService.runAutoCollectionForAllGroups();
-
-    return res.json(
-      successResponse({
-        results,
-        total_groups: results.length,
-        total_images_added: results.reduce((sum, r) => sum + r.images_added, 0),
-        total_images_removed: results.reduce((sum, r) => sum + r.images_removed, 0)
-      })
-    );
+    const job = GroupRematchJobService.startJobProcess('all-auto-collect');
+    return res.status(202).json(successResponse(job));
   } catch (error) {
     console.error('Error running auto collection for all groups:', error);
     return res.status(500).json(errorResponse('Failed to run auto collection for all groups'));

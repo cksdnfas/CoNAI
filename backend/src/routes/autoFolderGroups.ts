@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { AutoFolderGroupService } from '../services/autoFolderGroupService';
+import { GroupRematchJobService } from '../services/groupRematchJobService';
 import { GroupDownloadService, DownloadType, CaptionMode } from '../services/groupDownloadService';
 import { AutoFolderGroupImageModel } from '../models/AutoFolderGroup';
 import { validateId,
@@ -185,13 +186,8 @@ router.get('/:id/breadcrumb', asyncHandler(async (req: Request, res: Response) =
  */
 router.post('/rebuild', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const result = await AutoFolderGroupService.rebuildAllFolderGroups();
-
-    if (!result.success) {
-      return res.status(500).json(errorResponse(result.error || 'Failed to rebuild groups'));
-    }
-
-    return res.json(successResponse(result));
+    const job = GroupRematchJobService.startJobProcess('auto-folder-rebuild');
+    return res.status(202).json(successResponse(job));
   } catch (error) {
     console.error('Error rebuilding groups:', error);
     return res.status(500).json(errorResponse('Failed to rebuild groups'));

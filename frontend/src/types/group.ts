@@ -86,6 +86,32 @@ export interface GroupAutoCollectAllResult {
   total_images_removed: number
 }
 
+export type GroupRematchJobKind = 'group-auto-collect' | 'all-auto-collect' | 'auto-folder-rebuild'
+
+export type GroupRematchJobStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+export interface GroupRematchJobProgress {
+  total: number
+  completed: number
+  failed: number
+  percentage: number
+  current_label?: string | null
+}
+
+export interface GroupRematchJobRecord<T = unknown> {
+  job_id: string
+  kind: GroupRematchJobKind
+  status: GroupRematchJobStatus
+  progress: GroupRematchJobProgress
+  group_id?: number | null
+  result?: T
+  error?: string | null
+  created_at: string
+  updated_at: string
+  started_at?: string | null
+  completed_at?: string | null
+}
+
 export interface GroupFileCounts {
   thumbnail: number
   original: number
