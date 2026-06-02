@@ -40,6 +40,7 @@
     "verify:graph-workflow-route-contracts": "tsx src/scripts/verifyGraphWorkflowRouteContracts.ts",
     "verify:queue-eta-contracts": "tsx src/scripts/verifyGenerationQueueEtaContracts.ts",
     "verify:queue-hot-path-contracts": "tsx src/scripts/verifyGenerationQueueHotPathContracts.ts",
+    "verify:queue-payload-pruning-contracts": "tsx src/scripts/verifyGenerationQueuePayloadPruningContracts.ts",
     "verify:query-cache-debounce-contracts": "tsx src/scripts/verifyQueryCacheDebounceContracts.ts",
     "verify:graph-queue-wait-contracts": "tsx src/scripts/verifyGraphQueueWaitContracts.ts",
     "verify:image-similarity-contracts": "tsx src/scripts/verifyImageSimilarityContracts.ts",

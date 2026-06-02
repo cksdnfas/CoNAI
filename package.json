@@ -56,6 +56,7 @@
     "verify:queue-routing-smoke": "cd backend && npm run verify:queue-routing-smoke",
     "verify:queue-wakeup-smoke": "cd backend && npm run verify:queue-wakeup-smoke",
     "verify:queue-hot-path-contracts": "cd backend && npm run verify:queue-hot-path-contracts",
+    "verify:queue-payload-pruning-contracts": "cd backend && npm run verify:queue-payload-pruning-contracts",
     "verify:query-cache-debounce-contracts": "cd backend && npm run verify:query-cache-debounce-contracts",
     "verify:graph-comfy-artifacts": "cd backend && npm run verify:graph-comfy-artifacts",
     "verify:graph-artifact-runtime": "cd backend && npm run verify:graph-artifact-runtime",
