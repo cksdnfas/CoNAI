@@ -14,6 +14,7 @@ const autoTagIndexPruneMigration = readSource('backend/src/database/migrations/0
 const autoTagSearchTerms = readSource('backend/src/services/autoTagSearch/autoTagSearchTerms.ts');
 const autoTagIndexService = readSource('backend/src/services/autoTagIndexService.ts');
 const autoTagSql = readSource('backend/src/services/complexFilter/complexFilterAutoTagSql.ts');
+const autoTagSearchService = readSource('backend/src/services/autoTagSearchService.ts');
 const mediaMetadataModel = readSource('backend/src/models/Image/MediaMetadataModel.ts');
 const autoTagScheduler = readSource('backend/src/services/autoTagScheduler.ts');
 const taggingRoutes = readSource('backend/src/routes/images/tagging.mutation.routes.ts');
@@ -108,6 +109,41 @@ assert.match(
   autoTagSql,
   /buildComplexFilterTagExistsCondition/,
   'complex auto-tag filters must keep the JSON fallback for unmigrated test DBs',
+);
+assert.match(
+  autoTagSearchService,
+  /AutoTagIndexService\.hasIndexTable\(\)/,
+  'simple auto-tag search must detect the indexed table',
+);
+assert.match(
+  autoTagSearchService,
+  /FROM media_auto_tag_index/,
+  'simple auto-tag search must query the normalized index table',
+);
+assert.match(
+  autoTagSearchService,
+  /search_key IN/,
+  'simple auto-tag search must use equality lookup on normalized search keys',
+);
+assert.match(
+  autoTagSearchService,
+  /rewriteIndexedConditionForOrderedScan/,
+  'simple auto-tag search must expose ordered-scan conditions for paged lookups',
+);
+assert.match(
+  autoTagSearchService,
+  /WHERE ati\.composite_hash = i\.composite_hash/,
+  'simple auto-tag ordered scans must probe the index by the ordered media row hash',
+);
+assert.match(
+  autoTagSearchService,
+  /normalizeAutoTagIndexSearchKeys/,
+  'simple auto-tag search must query the same compact key set stored by sync',
+);
+assert.match(
+  autoTagSearchService,
+  /buildGeneralTagConditions/,
+  'simple auto-tag search must keep the JSON fallback for unmigrated test DBs',
 );
 assert.match(
   autoTagIndexPruneMigration,

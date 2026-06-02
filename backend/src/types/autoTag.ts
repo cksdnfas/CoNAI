@@ -112,4 +112,5 @@ export interface AutoTagStats {
 export interface QueryBuilderResult {
   conditions: string[];
   params: any[];
+  orderedConditions?: string[];
 }

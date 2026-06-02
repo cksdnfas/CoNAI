@@ -194,16 +194,20 @@ export class ImageSearchModel {
     // AutoTagSearchService가 쿼리 조건을 생성 (media_metadata 기반으로 수정 필요)
     const queryBuilder = await AutoTagSearchService.buildAutoTagSearchQuery(searchParams, basicSearchParams);
 
-    // 조건을 media_metadata 테이블 기준으로 변경
-    const conditions = queryBuilder.conditions.map((cond: string) => {
-      return cond
+    const mapAutoTagConditionAliases = (cond: string) => cond
         .replace(/\bi\.upload_date\b/g, 'im.first_seen_date')
         .replace(/\bi\.prompt\b/g, 'im.prompt')
         .replace(/\bi\.negative_prompt\b/g, 'im.negative_prompt')
         .replace(/\bi\.ai_tool\b/g, 'im.ai_tool')
         .replace(/\bi\.model_name\b/g, 'im.model_name')
-        .replace(/\bi\.auto_tags\b/g, 'im.auto_tags');
-    });
+        .replace(/\bi\.auto_tags\b/g, 'im.auto_tags')
+        .replace(/\bi\.rating_score\b/g, 'im.rating_score')
+        .replace(/\bi\.composite_hash\b/g, 'im.composite_hash');
+
+    // 조건을 media_metadata 테이블 기준으로 변경
+    const conditions = queryBuilder.conditions.map(mapAutoTagConditionAliases);
+    const orderedConditions = (queryBuilder.orderedConditions ?? queryBuilder.conditions)
+      .map(mapAutoTagConditionAliases);
 
     const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
@@ -226,6 +230,34 @@ export class ImageSearchModel {
       sortColumn = 'if.file_size';
     }
 
+    const pageJoinClause = sortBy === 'file_size'
+      ? "LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'"
+      : '';
+    const pageGroupClause = sortBy === 'file_size' ? 'GROUP BY im.composite_hash' : '';
+
+    const pageSafeConditions = [...orderedConditions, getVisibleImageCondition(), getReadyImageCondition()];
+    const pageWhereClause = pageSafeConditions.length > 0 ? `WHERE ${pageSafeConditions.join(' AND ')}` : '';
+
+    const pageHashQuery = `
+      SELECT im.composite_hash
+      FROM media_metadata im
+      ${pageJoinClause}
+      ${pageWhereClause}
+      ${pageGroupClause}
+      ORDER BY ${sortColumn} ${sortOrder}, im.composite_hash ASC
+      LIMIT ? OFFSET ?
+    `;
+
+    const pageHashRows = db.prepare(pageHashQuery).all(...queryBuilder.params, limit, offset) as Array<{ composite_hash: string }>;
+    const pageHashes = pageHashRows.map((row) => row.composite_hash);
+
+    if (pageHashes.length === 0) {
+      return { images: [], total };
+    }
+
+    const pageHashPlaceholders = pageHashes.map(() => '?').join(', ');
+    const pageOrderCase = pageHashes.map((_, index) => `WHEN ? THEN ${index}`).join(' ');
+
     // 데이터 조회
     const dataQuery = `
       SELECT
@@ -244,13 +276,12 @@ export class ImageSearchModel {
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
       LEFT JOIN groups g ON ig.group_id = g.id
-      ${whereClause}
+      WHERE im.composite_hash IN (${pageHashPlaceholders})
       GROUP BY im.composite_hash
-      ORDER BY ${sortColumn} ${sortOrder}
-      LIMIT ? OFFSET ?
+      ORDER BY CASE im.composite_hash ${pageOrderCase} ELSE ${pageHashes.length} END
     `;
 
-    const rows = db.prepare(dataQuery).all(...queryBuilder.params, limit, offset) as any[];
+    const rows = db.prepare(dataQuery).all(...pageHashes, ...pageHashes) as any[];
 
     return { images: mapGroupedImageRows(rows), total };
   }
