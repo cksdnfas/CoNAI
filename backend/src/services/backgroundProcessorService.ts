@@ -140,6 +140,26 @@ function linkImageFileToHash(fileId: number, compositeHash: string): void {
   );
 }
 
+function markFileAsProcessingFailed(fileId: number, filePath: string, reason: string): void {
+  db.prepare(
+    `
+      UPDATE image_files
+      SET file_status = 'failed',
+          last_verified_date = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `
+  ).run(fileId);
+
+  console.warn(
+    `  ⚠️  Media file skipped and marked failed: ${path.basename(filePath)} (${reason})`
+  );
+}
+
+function isUnsupportedImageFormatError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /unsupported image format|input file is missing|empty input file/i.test(message);
+}
+
 function determineFileType(mimeType: string, filePath: string): FileType {
   if (mimeType.startsWith('video/')) {
     return 'video';
@@ -504,6 +524,12 @@ export class BackgroundProcessorService {
       );
     }
 
+    const stats = await fs.promises.stat(file.original_file_path);
+    if (stats.size <= 0) {
+      markFileAsProcessingFailed(file.id, file.original_file_path, 'empty file');
+      return;
+    }
+
     // 파일 타입에 따라 처리
     if (file.file_type === 'video' || file.file_type === 'animated') {
       // 동영상 및 애니메이션 이미지: file_hash 생성 후 composite_hash에 저장
@@ -522,10 +548,23 @@ export class BackgroundProcessorService {
     const fileName = path.basename(file.original_file_path);
 
     // Generate hashes and color histogram
-    const { hashes, colorHistogram } =
-      await ImageSimilarityService.generateHashAndHistogram(
+    let hashes: Awaited<ReturnType<typeof ImageSimilarityService.generateHashAndHistogram>>['hashes'];
+    let colorHistogram: Awaited<ReturnType<typeof ImageSimilarityService.generateHashAndHistogram>>['colorHistogram'];
+
+    try {
+      const result = await ImageSimilarityService.generateHashAndHistogram(
         file.original_file_path
       );
+      hashes = result.hashes;
+      colorHistogram = result.colorHistogram;
+    } catch (error) {
+      if (isUnsupportedImageFormatError(error)) {
+        markFileAsProcessingFailed(file.id, file.original_file_path, 'unsupported image format');
+        return;
+      }
+
+      throw error;
+    }
 
     // Check if this hash already exists (duplicate detection)
     const existing = findExistingMediaMetadataSummary(hashes.compositeHash);
