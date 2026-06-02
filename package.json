@@ -36,7 +36,7 @@
     "deploy:docker:stop": "cd build-output/docker && docker-compose down",
     "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
-    "start:built": "node scripts/run-built-if-needed.js",
+    "start:built": "node scripts/run-built-if-needed.js --split",
     "start:built:api": "node scripts/run-built-if-needed.js --api",
     "start:built:worker": "node scripts/run-built-if-needed.js --worker",
     "start:frontend": "cd frontend && npm run preview",

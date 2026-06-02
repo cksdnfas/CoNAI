@@ -91,6 +91,7 @@ function isCoNaiRuntimeProcess(commandLine) {
   const isFromCurrentRoot = command.includes(NORMALIZED_ROOT_DIR);
   const hasRoleArg = command.includes('--api')
     || command.includes('--worker')
+    || command.includes('--split')
     || command.includes('--all')
     || command.includes('--runtime-role=');
   const isLegacyAllRunner = hasRunner && !hasRoleArg;

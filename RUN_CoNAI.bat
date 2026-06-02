@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 > nul
 setlocal
-title CoNAI Split Runtime Launcher
+title CoNAI Runtime Supervisor
 cd /d "%~dp0"
 
 echo ========================================
-echo CoNAI Split Runtime Launcher
+echo CoNAI Runtime Supervisor
 echo ========================================
 echo.
 echo [1/3] Stopping existing runtime processes...
@@ -23,7 +23,7 @@ if not "%EXIT_CODE%"=="0" (
 )
 
 echo.
-echo [2/4] Truncating SQLite WAL files...
+echo [2/3] Truncating SQLite WAL files...
 node "%~dp0scripts\checkpoint-runtime-databases.js"
 set EXIT_CODE=%ERRORLEVEL%
 
@@ -38,29 +38,18 @@ if not "%EXIT_CODE%"=="0" (
 )
 
 echo.
-echo [3/4] Preparing integrated build...
-node "%~dp0scripts\run-built-if-needed.js" --build-only
+echo [3/3] Starting API + worker under one supervisor...
+node "%~dp0scripts\run-built-if-needed.js" --split
 set EXIT_CODE=%ERRORLEVEL%
 
 if not "%EXIT_CODE%"=="0" (
     echo.
     echo ================================================================
-    echo  ERROR: build failed with code %EXIT_CODE%
+    echo  ERROR: runtime supervisor failed with code %EXIT_CODE%
     echo ================================================================
     echo.
     pause
     exit /b %EXIT_CODE%
 )
 
-echo.
-echo [4/4] Starting API and worker windows...
-start "CoNAI API Runtime" /D "%~dp0" cmd /k node "%~dp0scripts\run-built-if-needed.js" --api --skip-build
-timeout /t 2 /nobreak > nul
-start "CoNAI Worker Runtime" /D "%~dp0" cmd /k node "%~dp0scripts\run-built-if-needed.js" --worker --skip-build
-
-echo.
-echo API and worker started in separate windows.
-echo API/UI uses the configured PORT from .env.
-echo Worker runs queue, scheduler, cleanup, and no HTTP by default.
-echo.
-exit /b 0
+exit /b %EXIT_CODE%
