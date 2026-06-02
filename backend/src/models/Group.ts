@@ -286,7 +286,7 @@ export class ImageGroupModel {
    */
   static replaceAutoCollectedImages(groupId: number, compositeHashes: string[]): { removedCount: number; addedCount: number } {
     const uniqueHashes = Array.from(new Set(compositeHashes.filter(Boolean)));
-    const ensureDesiredHashes = db.prepare(`
+    db.exec(`
       CREATE TEMP TABLE IF NOT EXISTS temp_auto_collect_hashes (
         composite_hash TEXT PRIMARY KEY
       ) WITHOUT ROWID
@@ -313,7 +313,6 @@ export class ImageGroupModel {
     `);
 
     const replace = db.transaction(() => {
-      ensureDesiredHashes.run();
       clearDesiredHashes.run();
 
       for (const compositeHash of uniqueHashes) {
