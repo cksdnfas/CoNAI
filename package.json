@@ -126,6 +126,7 @@
     "verify:backup-source-contracts": "cd backend && npm run verify:backup-source-contracts",
     "verify:like-search-literal-contracts": "cd backend && npm run verify:like-search-literal-contracts",
     "verify:random-media-selection-contracts": "cd backend && npm run verify:random-media-selection-contracts",
+    "verify:prompt-similarity-hot-path-contracts": "cd backend && npm run verify:prompt-similarity-hot-path-contracts",
     "verify:search-option-suggestion-contracts": "cd backend && npm run verify:search-option-suggestion-contracts",
     "verify:danbooru-browser-locale-contracts": "cd backend && npm run verify:danbooru-browser-locale-contracts",
     "verify:auto-tag-index-contracts": "cd backend && npm run verify:auto-tag-index-contracts",

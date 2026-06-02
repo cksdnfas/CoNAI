@@ -52,6 +52,7 @@
     "verify:backup-source-contracts": "tsx src/scripts/verifyBackupSourceContracts.ts",
     "verify:like-search-literal-contracts": "tsx src/scripts/verifyLikeSearchLiteralContracts.ts",
     "verify:random-media-selection-contracts": "tsx src/scripts/verifyRandomMediaSelectionContracts.ts",
+    "verify:prompt-similarity-hot-path-contracts": "tsx src/scripts/verifyPromptSimilarityHotPathContracts.ts",
     "verify:media-postprocess-visibility": "tsx src/scripts/verifyMediaPostprocessVisibilityContracts.ts",
     "verify:invalid-media-processing-contracts": "tsx src/scripts/verifyInvalidMediaProcessingContracts.ts",
     "verify:search-option-suggestion-contracts": "tsx src/scripts/verifySearchOptionSuggestionContracts.ts",

@@ -8,6 +8,8 @@ import {
   PromptSimilarityRebuildResult,
   PromptSimilaritySettings,
 } from '../types/promptSimilarity';
+import { ImageSafetyService } from './imageSafetyService';
+import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { settingsService } from './settingsService';
 
 const PROMPT_SIMILARITY_VERSION = 1;
@@ -46,7 +48,7 @@ interface PromptSimilarityPreparedTexts {
   autoFingerprint: string | null;
 }
 
-type PromptSimilarityCandidateRow = ImageWithFileView & PromptSimilarityStoredFields;
+type PromptSimilarityCandidateRow = Pick<ImageMetadataRecord, 'composite_hash'> & PromptSimilarityStoredFields;
 
 function hashToHex(input: string, length: number): string {
   return crypto.createHash('sha256').update(input).digest('hex').slice(0, length);
@@ -82,7 +84,7 @@ function normalizeWeight(value: number | undefined, fallback: number): number {
 
 export class PromptSimilarityService {
   /** Build normalized prompt texts from metadata fields. */
-  static buildSourceTexts(data: Pick<ImageMetadataRecord, 'prompt' | 'negative_prompt' | 'auto_tags'>): PromptSimilaritySourceTexts {
+  static buildSourceTexts(data: Partial<Pick<ImageMetadataRecord, 'prompt' | 'negative_prompt' | 'auto_tags'>>): PromptSimilaritySourceTexts {
     return {
       positive: this.normalizePromptText(data.prompt),
       negative: this.normalizePromptText(data.negative_prompt),
@@ -195,18 +197,12 @@ export class PromptSimilarityService {
       return [];
     }
 
+    const visibleCondition = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+    const readyCondition = MediaPostprocessVisibilityService.buildReadyCondition('im');
+    const candidateFingerprintCondition = this.buildPromptCandidateFingerprintCondition(activeFields);
     const rows = db.prepare(`
       SELECT
         im.composite_hash,
-        im.prompt,
-        im.negative_prompt,
-        im.auto_tags,
-        im.width,
-        im.height,
-        im.thumbnail_path,
-        im.rating_score,
-        im.first_seen_date,
-        im.metadata_updated_date,
         im.prompt_similarity_algorithm,
         im.prompt_similarity_version,
         im.pos_prompt_normalized,
@@ -215,21 +211,17 @@ export class PromptSimilarityService {
         im.pos_prompt_fingerprint,
         im.neg_prompt_fingerprint,
         im.auto_prompt_fingerprint,
-        im.prompt_similarity_updated_date,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_status,
-        if.file_type,
-        if.mime_type,
-        if.file_size,
-        if.folder_id,
-        wf.folder_name
+        im.prompt_similarity_updated_date
       FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      LEFT JOIN watched_folders wf ON if.folder_id = wf.id
+      INNER JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       WHERE im.composite_hash != ?
+        AND im.prompt_similarity_algorithm = ?
+        AND im.prompt_similarity_version = ?
+        AND (${candidateFingerprintCondition})
+        AND ${visibleCondition}
+        AND ${readyCondition}
       GROUP BY im.composite_hash
-    `).all(compositeHash) as PromptSimilarityCandidateRow[];
+    `).all(compositeHash, settings.algorithm, PROMPT_SIMILARITY_VERSION) as PromptSimilarityCandidateRow[];
 
     const matches: PromptSimilarityMatch[] = [];
     for (const row of rows) {
@@ -249,7 +241,7 @@ export class PromptSimilarityService {
       }
 
       matches.push({
-        image: row,
+        image: row as unknown as ImageWithFileView,
         combinedSimilarity,
         positive,
         negative,
@@ -482,9 +474,20 @@ export class PromptSimilarityService {
     return fields.filter((field) => field.hasSource && field.weight > 0).map((field) => field.name);
   }
 
+  /** Restrict prompt similarity candidates to rows with usable prepared fingerprints. */
+  private static buildPromptCandidateFingerprintCondition(activeFields: PromptSimilarityFieldName[]): string {
+    const fingerprintColumns: Record<PromptSimilarityFieldName, string> = {
+      positive: 'im.pos_prompt_fingerprint',
+      negative: 'im.neg_prompt_fingerprint',
+      auto: 'im.auto_prompt_fingerprint',
+    };
+
+    return activeFields.map((field) => `${fingerprintColumns[field]} IS NOT NULL`).join(' OR ') || '1 = 0';
+  }
+
   /** Build normalized text and fingerprint pairs for one row. */
   private static getPreparedTexts(
-    record: Pick<ImageMetadataRecord, 'prompt' | 'negative_prompt' | 'auto_tags'> & Partial<PromptSimilarityStoredFields>,
+    record: Partial<Pick<ImageMetadataRecord, 'prompt' | 'negative_prompt' | 'auto_tags'>> & Partial<PromptSimilarityStoredFields>,
     algorithm: PromptSimilarityAlgorithm,
   ): PromptSimilarityPreparedTexts {
     const canReuseStoredFields = record.prompt_similarity_algorithm === algorithm && record.prompt_similarity_version === PROMPT_SIMILARITY_VERSION;
