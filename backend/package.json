@@ -53,6 +53,7 @@
     "verify:media-postprocess-visibility": "tsx src/scripts/verifyMediaPostprocessVisibilityContracts.ts",
     "verify:search-option-suggestion-contracts": "tsx src/scripts/verifySearchOptionSuggestionContracts.ts",
     "verify:danbooru-browser-locale-contracts": "tsx src/scripts/verifyDanbooruBrowserLocaleContracts.ts",
+    "verify:auto-tag-index-contracts": "tsx src/scripts/verifyAutoTagIndexContracts.ts",
     "verify:group-image-route-contracts": "tsx src/scripts/verifyGroupImageRouteContracts.ts",
     "verify:group-wal-hot-path-contracts": "tsx src/scripts/verifyGroupWalHotPathContracts.ts",
     "verify:group-rematch-job-contracts": "tsx src/scripts/verifyGroupRematchJobContracts.ts",

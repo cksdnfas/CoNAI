@@ -98,6 +98,7 @@ export const DATA_REMATCH_EXCLUDED_FILE_TYPES = ['video'] as const;
 export const HASH_REGENERATION_BLOCKED_PIPELINES = ['auto-tag-extraction', 'artist-extraction'] as const;
 export const DATA_REMATCH_HASH_REFERENCE_TABLES = [
   'media_metadata',
+  'media_auto_tag_index',
   'image_files',
   'image_groups',
   'auto_folder_group_images',
@@ -698,6 +699,7 @@ export class DataRematchService {
     if (oldHash === newHash) return;
 
     this.remapHashRefTableRows('image_groups', oldHash, newHash);
+    this.remapHashRefTableRows('media_auto_tag_index', oldHash, newHash);
     this.remapHashRefTableRows('auto_folder_group_images', oldHash, newHash);
     this.remapHashRefTableRows('image_models', oldHash, newHash);
     this.remapHashRefTableRows('civitai_temp_urls', oldHash, newHash);

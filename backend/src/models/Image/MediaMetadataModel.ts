@@ -1,5 +1,6 @@
 import { db } from '../../database/init';
 import { settingsService } from '../../services/settingsService';
+import { AutoTagIndexService } from '../../services/autoTagIndexService';
 import { PromptSimilarityService } from '../../services/promptSimilarityService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { ImageMetadataRecord } from '../../types/image';
@@ -143,6 +144,8 @@ export class MediaMetadataModel {
       promptSimilarityFields.prompt_similarity_updated_date
     );
 
+    AutoTagIndexService.syncForHash(data.composite_hash, data.auto_tags);
+
     return data.composite_hash;
   }
 
@@ -207,6 +210,10 @@ export class MediaMetadataModel {
 
     const { sql, values } = buildUpdateQuery('media_metadata', finalUpdates, { composite_hash: compositeHash });
     const info = db.prepare(sql).run(...values);
+
+    if (info.changes > 0 && 'auto_tags' in filteredUpdates) {
+      AutoTagIndexService.syncForHash(compositeHash, filteredUpdates.auto_tags as string | null | undefined);
+    }
 
     return info.changes > 0;
   }

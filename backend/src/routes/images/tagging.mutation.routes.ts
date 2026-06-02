@@ -9,6 +9,7 @@ import { imageTaggerService, ImageTaggerService } from '../../services/imageTagg
 import { TaggerResult } from '../../services/taggerDaemon';
 import { resolveUploadsPath } from '../../config/runtimePaths';
 import { RatingScoreService } from '../../services/ratingScoreService';
+import { AutoTagIndexService } from '../../services/autoTagIndexService';
 import { logger } from '../../utils/logger';
 import { QueryCacheService } from '../../services/QueryCacheService';
 import { buildMergedAutoTags, extractRatingData } from './tagging.shared';
@@ -541,6 +542,7 @@ router.post('/reset-auto-tags', asyncHandler(async (req: Request, res: Response)
       UPDATE media_metadata
       SET auto_tags = NULL
     `).run();
+    AutoTagIndexService.clearAll();
 
     logger.info(`[ResetAutoTags] Reset complete. Changes: ${result.changes}`);
     QueryCacheService.invalidateImageCache(undefined, true);

@@ -7,6 +7,7 @@ import { SystemSettingsService } from './systemSettingsService';
 import { RatingScoreService } from './ratingScoreService';
 import { PromptCollectionService } from './promptCollectionService';
 import { AutoTagsComposeService } from './autoTagsComposeService';
+import { AutoTagIndexService } from './autoTagIndexService';
 import { kaloscopeTaggerService } from './kaloscopeTaggerService';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
@@ -308,6 +309,7 @@ class AutoTagScheduler {
       SET auto_tags = ?, rating_score = ?, metadata_updated_date = CURRENT_TIMESTAMP
       WHERE composite_hash = ?
     `).run(autoTags, ratingScore, compositeHash);
+    AutoTagIndexService.syncForHash(compositeHash, autoTags);
 
     const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
     if (releasedForVisibility) {
