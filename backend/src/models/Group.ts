@@ -282,27 +282,52 @@ export class ImageGroupModel {
   }
 
   /**
-   * Replace one group's auto-collected memberships in a single transaction.
+   * Diff one group's auto-collected memberships in a single transaction.
    */
   static replaceAutoCollectedImages(groupId: number, compositeHashes: string[]): { removedCount: number; addedCount: number } {
     const uniqueHashes = Array.from(new Set(compositeHashes.filter(Boolean)));
-    const deleteAuto = db.prepare(
-      'DELETE FROM image_groups WHERE group_id = ? AND collection_type = ?'
-    );
-    const insertAuto = db.prepare(`
+    const ensureDesiredHashes = db.prepare(`
+      CREATE TEMP TABLE IF NOT EXISTS temp_auto_collect_hashes (
+        composite_hash TEXT PRIMARY KEY
+      ) WITHOUT ROWID
+    `);
+    const clearDesiredHashes = db.prepare('DELETE FROM temp_auto_collect_hashes');
+    const stageDesiredHash = db.prepare('INSERT OR IGNORE INTO temp_auto_collect_hashes (composite_hash) VALUES (?)');
+    const deleteStaleAuto = db.prepare(`
+      DELETE FROM image_groups
+      WHERE group_id = ?
+        AND collection_type = 'auto'
+        AND composite_hash NOT IN (SELECT composite_hash FROM temp_auto_collect_hashes)
+    `);
+    const deleteAllAuto = db.prepare(`
+      DELETE FROM image_groups
+      WHERE group_id = ?
+        AND collection_type = 'auto'
+    `);
+    const insertMissingAuto = db.prepare(`
       INSERT OR IGNORE INTO image_groups (
         group_id, composite_hash, order_index, collection_type
-      ) VALUES (?, ?, 0, 'auto')
+      )
+      SELECT ?, composite_hash, 0, 'auto'
+      FROM temp_auto_collect_hashes
     `);
 
     const replace = db.transaction(() => {
-      const removedCount = deleteAuto.run(groupId, 'auto').changes;
-      let addedCount = 0;
+      ensureDesiredHashes.run();
+      clearDesiredHashes.run();
 
       for (const compositeHash of uniqueHashes) {
-        addedCount += insertAuto.run(groupId, compositeHash).changes;
+        stageDesiredHash.run(compositeHash);
       }
 
+      const removedCount = uniqueHashes.length > 0
+        ? deleteStaleAuto.run(groupId).changes
+        : deleteAllAuto.run(groupId).changes;
+      const addedCount = uniqueHashes.length > 0
+        ? insertMissingAuto.run(groupId).changes
+        : 0;
+
+      clearDesiredHashes.run();
       return { removedCount, addedCount };
     });
 

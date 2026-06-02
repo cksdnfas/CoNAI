@@ -34,11 +34,23 @@ assert.ok(
 );
 assert.ok(
   groupModel.includes('const replace = db.transaction'),
-  'custom-group auto collection replacement must run in one transaction',
+  'custom-group auto collection diff replacement must run in one transaction',
 );
 assert.ok(
   groupModel.includes('INSERT OR IGNORE INTO image_groups'),
   'custom-group auto collection must avoid per-row duplicate checks',
+);
+assert.ok(
+  groupModel.includes('temp_auto_collect_hashes'),
+  'custom-group auto collection rematch must stage desired hashes for set-based diff writes',
+);
+assert.ok(
+  groupModel.includes('composite_hash NOT IN (SELECT composite_hash FROM temp_auto_collect_hashes)'),
+  'custom-group auto collection rematch must delete only stale auto memberships',
+);
+assert.ok(
+  autoCollection.includes('ComplexFilterService.executeComplexSearchIds'),
+  'complex-filter auto collection must fetch only composite hashes, not page-search image records',
 );
 assert.ok(
   autoCollection.includes('ImageGroupModel.replaceAutoCollectedImages'),

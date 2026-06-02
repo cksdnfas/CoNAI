@@ -142,17 +142,14 @@ export class AutoCollectionOrchestrator {
     startTime: number
   ): Promise<AutoCollectResult> {
     try {
-      // Use ComplexFilterService for efficient querying
-      const searchResult = await ComplexFilterService.executeComplexSearch(
+      // Rematch only needs identity. Avoid page-search COUNT/ORDER/JOIN work.
+      const matchingHashes = await ComplexFilterService.executeComplexSearchIds(
         complexFilter,
-        undefined,
-        { page: 1, limit: 10000, includeStats: false } // Get all matching images without stats-side CTE recounts
+        undefined
       );
-
-      const matchingImages = searchResult.images;
       const { removedCount, addedCount } = ImageGroupModel.replaceAutoCollectedImages(
         groupId,
-        matchingImages.map((image) => image.composite_hash)
+        matchingHashes
       );
       maybeTruncateImagesWal('auto-collection-group-complex');
 
