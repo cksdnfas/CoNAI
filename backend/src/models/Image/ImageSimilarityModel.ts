@@ -13,6 +13,7 @@ import { ImageSafetyService } from '../../services/imageSafetyService';
 import {
   buildColorCandidateQuery,
   buildDuplicateCandidateQuery,
+  buildDuplicateGroupMetadataCountQuery,
   buildDuplicateGroupFilesQuery,
   buildDuplicateGroupMetadataQuery,
   buildSimilarCandidateQuery,
@@ -29,6 +30,27 @@ import {
   sortDuplicateResults,
   sortSimilarResults,
 } from './ImageSimilarityMatchBuilder';
+
+export const DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT = 5000;
+
+type DuplicateGroupScanOptions = DuplicateSearchOptions & {
+  candidateLimit?: number;
+  allowLargeSyncScan?: boolean;
+};
+
+export class DuplicateGroupScanTooLargeError extends Error {
+  readonly candidateCount: number;
+  readonly candidateLimit: number;
+
+  constructor(candidateCount: number, candidateLimit: number) {
+    super(
+      `Duplicate group scan has ${candidateCount} candidates, above the synchronous limit of ${candidateLimit}.`
+    );
+    this.name = 'DuplicateGroupScanTooLargeError';
+    this.candidateCount = candidateCount;
+    this.candidateLimit = candidateLimit;
+  }
+}
 
 /**
  * 이미지 유사도 검색 모델
@@ -53,6 +75,11 @@ export class ImageSimilarityModel {
     return db.prepare(
       'SELECT * FROM media_metadata WHERE composite_hash = ?'
     ).get(compositeHash) as ImageMetadataRecord | undefined;
+  }
+
+  static countDuplicateGroupCandidates(): number {
+    const result = db.prepare(buildDuplicateGroupMetadataCountQuery()).get() as { count: number } | undefined;
+    return result?.count ?? 0;
   }
 
   private static buildHydrationKey(image: Partial<SimilarityCandidateRecord>): string | null {
@@ -363,12 +390,20 @@ export class ImageSimilarityModel {
    * 4. 각 그룹의 composite_hash로 image_files에서 실제 중복 파일 조회
    */
   static async findAllDuplicateGroups(
-    options: DuplicateSearchOptions = {}
+    options: DuplicateGroupScanOptions = {}
   ): Promise<DuplicateGroup[]> {
     const {
       threshold = SIMILARITY_THRESHOLDS.NEAR_DUPLICATE,
-      minGroupSize = 2
+      minGroupSize = 2,
+      candidateLimit = DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT,
+      allowLargeSyncScan = false
     } = options;
+
+    const boundedCandidateLimit = Math.max(1, Math.floor(candidateLimit));
+    const candidateCount = this.countDuplicateGroupCandidates();
+    if (!allowLargeSyncScan && candidateCount > boundedCandidateLimit) {
+      throw new DuplicateGroupScanTooLargeError(candidateCount, boundedCandidateLimit);
+    }
 
     // STEP 1: image_files에 실제 존재하는 파일의 메타데이터만 조회 (고아 데이터 제외)
     const allMetadata = db.prepare(buildDuplicateGroupMetadataQuery()).all() as ImageMetadataRecord[];

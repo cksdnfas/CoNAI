@@ -144,6 +144,19 @@ export function buildDuplicateGroupMetadataQuery() {
   `
 }
 
+/** Count visible metadata rows before duplicate-group clustering. */
+export function buildDuplicateGroupMetadataCountQuery() {
+  return `
+    SELECT COUNT(DISTINCT m.composite_hash) as count
+    FROM media_metadata m
+    INNER JOIN image_files f ON m.composite_hash = f.composite_hash
+    WHERE f.file_status = 'active'
+      AND m.perceptual_hash IS NOT NULL
+      AND ${ImageSafetyService.buildVisibleScoreCondition('m.rating_score')}
+      AND ${getReadySimilarityCondition('m')}
+  `
+}
+
 /** Build the active-file lookup query for one duplicate metadata group. */
 export function buildDuplicateGroupFilesQuery(compositeHashes: string[]) {
   const placeholders = compositeHashes.map(() => '?').join(',')
