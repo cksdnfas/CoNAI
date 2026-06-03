@@ -1,8 +1,8 @@
 # Release Notes
 
-## Version 26.6.3 (2026-06-02 준비)
+## Version 26.6.3 (2026-06-03 준비)
 
-v26.6.3은 `26.5.23` 이후 누적된 130개 커밋을 정리한 알파 릴리즈 준비 문서입니다. 핵심은 API/worker 런타임 분리, SQLite WAL과 startup migration 안정화, 자동 그룹 재매칭 비용 절감, auto tag 역색인 기반 검색, 단건 자동 그룹 할당 복구, 모듈 그래프 final result 보존, 그리고 프롬프트/워크플로우 편의 기능 확장입니다.
+v26.6.3은 `26.5.23` 이후 누적된 147개 커밋을 정리한 알파 릴리즈 준비 문서입니다. 핵심은 API/worker 런타임 분리, SQLite WAL과 startup migration 안정화, 자동 그룹 재매칭 비용 절감, auto tag 역색인 기반 검색과 통계 캐싱, 단건 자동 그룹 할당 복구, 모듈 그래프 final result 보존, 프롬프트/워크플로우 편의 기능 확장, 그리고 런타임/UI hot path 정리입니다.
 
 ---
 
@@ -15,6 +15,9 @@ API 요청과 오래 걸리는 백그라운드 작업이 서로 막지 않도록
 - queue/retention hot path 상한 설정과 home image feed 응답 속도 개선
 - startup migration 직렬화, 최신 DB의 migration lock skip, stale runtime 정리 경로 보강
 - backend stop 명령을 프로젝트 root scope로 제한해 외부 프로세스 오작동 방지
+- split runtime supervisor 보강으로 API/worker 재시작과 중복 런타임 정리 경로 안정화
+- API/smoke runtime에서는 custom node filesystem sync를 건너뛰고 worker/manual 경로로 넘겨 startup I/O 감소
+- 오래된 queue payload와 invalid media hash retry 경로 정리
 
 ---
 
@@ -39,6 +42,9 @@ API 요청과 오래 걸리는 백그라운드 작업이 서로 막지 않도록
 - rematch hash staging을 SQL 내부 temp table로 stream 처리
 - rematch SQL staging transaction lock 보강
 - `media_auto_tag_index` 역색인 추가로 JSON full-scan 기반 `auto_tags` 검색 제거
+- auto-tag stats 30초 캐시와 stats용 부분 인덱스로 cold/warm 통계 조회 비용 감소
+- 단순 auto-tag search가 역색인을 먼저 사용하고, 동일 조건 total count를 짧게 캐싱
+- auto-tag index key 압축, duplicate group scan guard, random media offset scan 회피
 - `auto_tags` 저장 직후 `runAutoCollectionForNewImage(compositeHash)` 실행
 - 테스트 환경 검증 기준 5개 auto group rematch가 약 64초 수준에서 약 1.55초 수준으로 감소
 
@@ -78,6 +84,8 @@ API 요청과 오래 걸리는 백그라운드 작업이 서로 막지 않도록
 - literal tag parentheses 보존
 - prompt inline syntax settings, token scanner, autocomplete, wildcard inline picker 확장
 - prompt preset inline picker와 editable group snapshot cache 정리
+- prompt similarity candidate 범위를 줄이고 inactive field를 건너뛰어 후보 계산 비용 감소
+- wildcard inline picker를 data hook, suggestion hook, popup content로 분리하고 focus/open 시점 lazy load 유지
 
 ---
 
@@ -91,17 +99,39 @@ API 요청과 오래 걸리는 백그라운드 작업이 서로 막지 않도록
 - generation history statistics, workflow history stats, artifact history totals 정렬
 - history failed cleanup gate, stale fast polling 중단, pending media preview gate 보강
 - upload result link와 selected file size total 재사용
+- image detail media control UI를 별도 컴포넌트로 분리하고 pan-drag 상태 갱신을 animation frame으로 묶음
+- generation queue header polling은 hidden tab에서 중단하고 idle 상태에서는 더 느리게 polling
+
+---
+
+### UI / 유지보수 hot path 정리
+
+큰 단일 파일과 반복 polling/lookup을 줄여 릴리즈 이후 변경 비용과 화면 runtime waste를 낮췄습니다.
+
+- wallpaper motion widget의 per-widget 90ms interval을 공유 active-widget ticker로 통합
+- module graph editor interaction에서 반복 `nodes.find(...)` 대신 memoized `nodeById` 조회 사용
+- MCP generation tool 등록부를 NovelAI flow와 Comfy output save/postprocess service로 분리
+- built-in system module seed 정의를 데이터 테이블과 단일 upsert loop로 분리
+- 각 분리 지점에 contract 검증을 추가해 파일이 다시 비대해지는 회귀를 차단
 
 ---
 
 ### 포함된 주요 커밋 범위
 
-이 문서는 Git 태그 `26.5.23` 이후 `9a1c4166`까지의 변경을 바탕으로 정리했습니다.
+이 문서는 Git 태그 `26.5.23` 이후 `ad6431a9`까지의 변경을 바탕으로 정리했습니다.
 
-- 커밋 범위: `26.5.23..9a1c4166`
-- 커밋 수: **130**
-- 변경 규모: **222 files changed, 13,377 insertions(+), 1,493 deletions(-)**
+- 커밋 범위: `26.5.23..ad6431a9`
+- 커밋 수: **147**
+- 변경 규모: **267 files changed, 18,353 insertions(+), 4,353 deletions(-)**
 - 대표 커밋:
+  - `ad6431a9` refactor: reduce runtime and UI hot paths
+  - `0d2ca16a` perf: cache auto-tag search totals
+  - `f3d84834` perf: use auto-tag index for tag search
+  - `3731b6a6` perf: index auto-tag stats queries
+  - `6b5aa6de` perf: cache auto-tag stats
+  - `ee5ab1cc` perf: index prompt similarity candidates
+  - `c89b4e02` perf: avoid random media offset scans
+  - `c27fef8e` fix(runtime): supervise split runtime
   - `ee0c6cb6` feat: split api and worker runtime roles
   - `8913087f` perf: bound queue and retention hot paths
   - `be742ef3` fix: serialize startup migrations
@@ -132,6 +162,15 @@ API 요청과 오래 걸리는 백그라운드 작업이 서로 막지 않도록
 - `npm run verify:auto-tag-index-contracts`
 - `npm run verify:group-rematch-job-contracts`
 - `npm run verify:sqlite-wal-maintenance-contracts`
+- `npm run verify:auto-tag-stats-cache-contracts`
+- `npm run verify:search-option-suggestion-contracts`
+- `npm run verify:prompt-inline-syntax-contracts`
+- `npm run verify:image-detail-filter-preview-contracts`
+- `npm run verify:generation-queue-ui-contracts`
+- `npm run verify:wallpaper-layout-contracts`
+- `npm run verify:module-graph-bypass-contracts`
+- `npm run verify:mcp-generation-tools-contracts`
+- `npm run verify:builtin-system-modules`
 - `python -m graphify update .`
 - `package.json`, `frontend/package.json`, `backend/package.json`, `shared/package.json` 버전 **26.6.3** 정렬
 - root/frontend/backend `package-lock.json`의 workspace/package 버전 정렬
