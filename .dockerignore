@@ -1,0 +1,17 @@
+.git
+.github
+.vscode
+.tmp
+_shots
+build-output
+graphify-out
+node_modules
+**/node_modules
+**/dist
+temp
+tmp
+user
+.env
+.env.*
+!.env.example
+*.log
