@@ -9,6 +9,8 @@ function readSource(relativePath: string): string {
 const authMiddlewareSource = readSource('src/middleware/authMiddleware.ts');
 const routeRegistrationSource = readSource('src/startup/registerAppRoutes.ts');
 const permissionGroupSource = readSource('src/models/AuthPermissionGroup.ts');
+const securityTabDataSource = readSource('../frontend/src/features/settings/components/security-tab-data.ts');
+const dockerfileSource = readSource('../Dockerfile');
 
 assert.ok(
   authMiddlewareSource.includes('export const allowAnonymousAnyPermission'),
@@ -19,6 +21,10 @@ for (const permissionKey of ['page.home.view', 'page.image-detail.view', 'page.w
   assert.ok(
     permissionGroupSource.includes(`'${permissionKey}'`),
     `anonymous built-in access must allow configuring ${permissionKey}`,
+  );
+  assert.ok(
+    securityTabDataSource.includes(`'${permissionKey}'`),
+    `anonymous permission group modal must expose ${permissionKey}`,
   );
 }
 
@@ -73,6 +79,21 @@ assert.match(
   routeRegistrationSource,
   /app\.use\('\/api\/nai'[\s\S]*?optionalAuth[\s\S]*?requirePermission\('page\.generation\.view'\)/,
   'generation actions must remain authenticated and permission-gated',
+);
+
+assert.ok(
+  dockerfileSource.includes('python3-pip'),
+  'Coolify Docker runtime must include pip so WD Tagger and Kaloscope dependencies can be installed',
+);
+
+assert.ok(
+  dockerfileSource.includes('-r /app/backend/python/requirements.txt'),
+  'Coolify Docker runtime must install the bundled Python tagger requirements',
+);
+
+assert.ok(
+  dockerfileSource.includes('https://download.pytorch.org/whl/cpu'),
+  'Coolify Docker runtime should prefer CPU PyTorch wheels for the public demo host',
 );
 
 console.log('✅ Anonymous image demo access contracts verified');

@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     ffmpeg \
+    python3-pip \
     python3 \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p \
@@ -47,6 +48,11 @@ COPY --from=build /app/package*.json /app/
 COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/shared /app/shared
 COPY --from=build /app/backend /app/backend
+
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    --extra-index-url https://pypi.org/simple \
+    -r /app/backend/python/requirements.txt
 
 ENV NODE_ENV=production \
     PORT=1666 \
