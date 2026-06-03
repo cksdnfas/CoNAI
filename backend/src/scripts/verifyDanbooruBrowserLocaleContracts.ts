@@ -9,6 +9,12 @@ const runtimeBase = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-danbooru-locale
 const dbPath = path.join(runtimeBase, 'danbooru.sqlite');
 process.env.DANBOORU_SQLITE_PATH = dbPath;
 
+const danbooruBrowserServiceSource = fs.readFileSync(path.resolve(__dirname, '..', 'services', 'danbooruBrowserService.ts'), 'utf8');
+assert.match(danbooruBrowserServiceSource, /CHARACTER_IMAGE_CACHE_TTL_MS = 60_000/);
+assert.match(danbooruBrowserServiceSource, /characterImageDirectoryByTagId = new Map/);
+assert.match(danbooruBrowserServiceSource, /characterImageRecordsByTagId = new Map/);
+assert.match(danbooruBrowserServiceSource, /resolveCharacterImageDirectory/);
+
 function createFixtureDb() {
   const db = new Database(dbPath);
   db.exec(`

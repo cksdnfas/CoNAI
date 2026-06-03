@@ -40,7 +40,7 @@ import {
 
 const ACTIVE_QUEUE_STATUSES: Array<GenerationQueueJobRecord['status']> = ['queued', 'dispatching', 'running']
 const ACTIVE_QUEUE_REFETCH_INTERVAL_MS = 3_000
-const IDLE_QUEUE_REFETCH_INTERVAL_MS = 8_000
+const IDLE_QUEUE_REFETCH_INTERVAL_MS = 30_000
 const LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY = 'conai:image-generation-queue:last-seen-job-id'
 
 type QueueFilterValue = 'all' | 'novelai' | 'codex' | 'comfyui' | `workflow:${number}`
@@ -76,6 +76,14 @@ function persistLastSeenQueueJobId(value: number) {
   } catch {
     // Session storage can be unavailable in hardened browser contexts.
   }
+}
+
+function getGenerationQueueHeaderRefetchInterval(activeCount: number, isOpen: boolean) {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    return false
+  }
+
+  return activeCount > 0 || isOpen ? ACTIVE_QUEUE_REFETCH_INTERVAL_MS : IDLE_QUEUE_REFETCH_INTERVAL_MS
 }
 
 function parseQueueFilter(value: QueueFilterValue) {
@@ -171,7 +179,7 @@ export function GenerationQueueHeaderWidget() {
     enabled: hasGenerationPermission,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
-      return activeCount > 0 || isOpen ? ACTIVE_QUEUE_REFETCH_INTERVAL_MS : IDLE_QUEUE_REFETCH_INTERVAL_MS
+      return getGenerationQueueHeaderRefetchInterval(activeCount, isOpen)
     },
   })
 
@@ -185,7 +193,7 @@ export function GenerationQueueHeaderWidget() {
     enabled: isFilteredQueueQueryEnabled,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.records.length ?? 0
-      return activeCount > 0 || isOpen ? ACTIVE_QUEUE_REFETCH_INTERVAL_MS : IDLE_QUEUE_REFETCH_INTERVAL_MS
+      return getGenerationQueueHeaderRefetchInterval(activeCount, isOpen)
     },
   })
 

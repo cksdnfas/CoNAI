@@ -48,6 +48,9 @@ assert.match(runnerSource, /process\.execPath/);
 assert.match(runnerSource, /\[BACKEND_ENTRY\]/);
 assert.match(indexSource, /shouldSkipHttpServerForRuntimeRole/);
 assert.match(indexSource, /HTTP server disabled/);
+assert.match(indexSource, /const customNodeSyncSkipped = !shouldRunWorkerStartupTasks/);
+assert.match(indexSource, /Custom node filesystem sync skipped in API\/smoke runtime/);
+assert.match(indexSource, /Custom node sync: skipped in API\/smoke runtime/);
 assert.match(rootPackageJson.scripts['start:built'], /--split/);
 
 assert.equal(fs.existsSync(path.join(projectRoot, 'RUN_CoNAI.bat')), true);

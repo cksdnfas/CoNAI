@@ -1,11 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type SyntheticEvent, type UIEvent } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQueries } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { inputVariants } from '@/components/ui/input'
 import { textareaVariants } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import { getDanbooruBrowserCharacters, getDanbooruBrowserSummary } from '@/lib/api-danbooru-browser'
-import { getWildcards } from '@/lib/api-wildcards'
+import { getDanbooruBrowserCharacters } from '@/lib/api-danbooru-browser'
 import { cn } from '@/lib/utils'
 import type { PromptTypeFilter } from '@/types/prompt'
 import {
@@ -14,18 +13,10 @@ import {
 } from './wildcard-generation-panel-helpers'
 import {
   buildWildcardInsertion,
-  countStoredWildcardItemsForTool,
-  countWildcardItemsForTool,
-  flattenWildcardRecords,
   MAX_RECENT_WILDCARDS,
   readStoredRecentWildcards,
   readStoredWildcardFilterMode,
-  resolveActiveWildcardQuery,
-  scoreWildcardMatch,
   writeStoredRecentWildcards,
-  writeStoredWildcardFilterMode,
-  resolvePreferredWildcardItemTool,
-  type FlattenedWildcardRecord,
   type PromptWildcardTool,
   type WildcardFilterMode,
   type WildcardInsertionRange,
@@ -35,8 +26,7 @@ import {
   getPromptSyntaxKindLabel,
   summarizePromptSyntaxTokens,
 } from './prompt-syntax-highlight-helpers'
-import { useWildcardWorkspaceBrowser } from './use-wildcard-workspace-browser'
-import { WildcardInlinePickerExplorer } from './wildcard-inline-picker-explorer'
+import { useWildcardInlinePickerData } from './use-wildcard-inline-picker-data'
 import { resolveFloatingDropdownRectFromRect } from './floating-dropdown-utils'
 import {
   buildPromptAutocompleteInsertion,
@@ -45,14 +35,14 @@ import {
   usePromptInlineAutocomplete,
   type PromptAutocompleteSuggestion,
 } from './use-prompt-inline-autocomplete'
-import { usePromptInlineSyntaxSettings, type PromptInlineSyntaxSource } from './prompt-inline-syntax-settings'
-import { resolveActiveDanbooruGroupQuery, resolveActivePromptTextQuery, type ActivePromptTokenQuery } from './prompt-inline-token-scanner'
+import { usePromptInlineSyntaxSettings } from './prompt-inline-syntax-settings'
+import { useWildcardInlinePickerSuggestions } from './use-wildcard-inline-picker-suggestions'
+import { WildcardInlinePickerPopupContent } from './wildcard-inline-picker-popup-content'
 import {
   getPromptSyntaxChipClass,
   getTextFieldCaretClientRect,
   PromptAutocompletePopup,
   PromptSyntaxTokenPopup,
-  renderHighlightedText,
   renderPromptSyntaxOverlay,
   WildcardInlinePickerPopup,
   type InlinePickerPopupPosition,
@@ -110,49 +100,45 @@ export function WildcardInlinePickerField({
   const [inlinePopupPosition, setInlinePopupPosition] = useState<InlinePickerPopupPosition | null>(null)
   const [promptAutocompletePopupPosition, setPromptAutocompletePopupPosition] = useState<InlinePickerPopupPosition | null>(null)
   const { settings: syntaxSettings } = usePromptInlineSyntaxSettings()
+  const shouldLoadWildcardData = !disabled && isFocused
 
-  const wildcardsQuery = useQuery({
-    queryKey: ['wildcards', 'inline-picker'],
-    queryFn: () => getWildcards({ hierarchical: true, withItems: true }),
-    staleTime: 60_000,
-  })
-
-  const wildcards = useMemo(() => wildcardsQuery.data ?? [], [wildcardsQuery.data])
-  const flattenedWildcards = useMemo(() => flattenWildcardRecords(wildcards), [wildcards])
-  const activeGroupQuery = useMemo(
-    () => (syntaxSettings.triggers['danbooru-group'] ? resolveActiveDanbooruGroupQuery(value, caretPosition) : null),
-    [caretPosition, syntaxSettings.triggers, value],
-  )
-  const activeWildcardQuery = useMemo(
-    () => (syntaxSettings.triggers.wildcard ? resolveActiveWildcardQuery(value, caretPosition) : null),
-    [caretPosition, syntaxSettings.triggers.wildcard, value],
-  )
-  const activeTextQuery = useMemo(
-    () => ((syntaxSettings.triggers.preprocess || syntaxSettings.triggers.tag) ? resolveActivePromptTextQuery(value, caretPosition) : null),
-    [caretPosition, syntaxSettings.triggers.preprocess, syntaxSettings.triggers.tag, value],
-  )
-
-  const danbooruSummaryQuery = useQuery({
-    queryKey: ['danbooru-browser-summary', 'inline-group-picker'],
-    queryFn: getDanbooruBrowserSummary,
-    enabled: activeGroupQuery !== null,
-    staleTime: 60_000,
-    retry: false,
+  const {
+    wildcardsQuery,
+    flattenedWildcards,
+    explorerTreeNodes,
+    explorerEntries,
+    selectedExplorerId,
+    setSelectedExplorerId,
+    explorerEntryIdSet,
+    rootExplorerEntryIds,
+  } = useWildcardInlinePickerData({
+    activeTab: activeExplorerTab,
+    enabled: shouldLoadWildcardData,
   })
   const {
-    treeNodes: explorerTreeNodes,
-    entries: explorerEntries,
-    selectedWildcardId: selectedExplorerId,
-    setSelectedWildcardId: setSelectedExplorerId,
-  } = useWildcardWorkspaceBrowser({
-    records: wildcards,
-    activeTab: activeExplorerTab,
+    activeGroupQuery,
+    activeWildcardQuery,
+    activeSource,
+    activeQuery,
+    activePreprocessQuery,
+    activeDanbooruGroupQuery,
+    danbooruSummaryQuery,
+    preprocessSuggestions,
+    groupSuggestions,
+    suggestions,
+    normalizedActiveQuery,
+    indexedSuggestions,
+    recentSuggestions,
+    remainingSuggestions,
+  } = useWildcardInlinePickerSuggestions({
+    value,
+    caretPosition,
+    syntaxSettings,
+    flattenedWildcards,
+    filterMode,
+    recentWildcardNames,
+    tool,
   })
-  const explorerEntryIdSet = useMemo(() => new Set(explorerEntries.map((entry) => entry.wildcard.id)), [explorerEntries])
-  const rootExplorerEntryIds = useMemo(
-    () => explorerEntries.filter((entry) => entry.depth === 0).map((entry) => entry.wildcard.id),
-    [explorerEntries],
-  )
   const detectedTokens = useMemo(
     () => detectPromptSyntaxTokens(value, flattenedWildcards, tool),
     [flattenedWildcards, tool, value],
@@ -215,143 +201,6 @@ export function WildcardInlinePickerField({
     [activeDetectedCharacterKey, detectedCharacters],
   )
 
-  const preprocessSuggestions = useMemo(() => {
-    if (!activeTextQuery) {
-      return []
-    }
-
-    const normalizedQuery = activeTextQuery.query.trim().toLowerCase()
-    if (!normalizedQuery) {
-      return []
-    }
-
-    return flattenedWildcards
-      .filter((record) => record.type === 'chain' && !record.isAutoCollected)
-      .map((record) => ({
-        record,
-        score: scoreWildcardMatch(record, normalizedQuery),
-        toolItemCount: countWildcardItemsForTool(record.items, tool),
-        generalItemCount: countStoredWildcardItemsForTool(record.items, 'general'),
-        naiItemCount: countStoredWildcardItemsForTool(record.items, 'nai'),
-        comfyuiItemCount: countStoredWildcardItemsForTool(record.items, 'comfyui'),
-        recentIndex: Number.POSITIVE_INFINITY,
-      }))
-      .filter(({ score }) => score >= 0)
-      .sort((left, right) => right.score - left.score || left.record.path.join('/').localeCompare(right.record.path.join('/')))
-      .slice(0, 8)
-  }, [activeTextQuery, flattenedWildcards, tool])
-
-  const groupSuggestions = useMemo(() => {
-    if (!activeGroupQuery) {
-      return []
-    }
-
-    const normalizedQuery = activeGroupQuery.query.trim().toLowerCase().replace(/\s+/g, '_')
-    return (danbooruSummaryQuery.data?.tree ?? [])
-      .filter((node) => node.section === 'tags' && node.filter?.taxonomyNodeId !== undefined)
-      .map((node) => {
-        const label = node.label
-        const translatedLabel = node.translatedLabel ?? null
-        const searchable = `${label} ${translatedLabel ?? ''}`.toLowerCase().replace(/\s+/g, '_')
-        const score = !normalizedQuery
-          ? node.count
-          : searchable.startsWith(normalizedQuery)
-            ? 1_000_000 + node.count
-            : searchable.includes(normalizedQuery)
-              ? 500_000 + node.count
-              : -1
-
-        return {
-          id: node.id,
-          label,
-          translatedLabel,
-          count: node.count,
-          taxonomyNodeId: node.filter?.taxonomyNodeId ?? 0,
-          score,
-        }
-      })
-      .filter((suggestion) => suggestion.score >= 0)
-      .sort((left, right) => right.score - left.score || left.label.localeCompare(right.label))
-      .slice(0, 10)
-  }, [activeGroupQuery, danbooruSummaryQuery.data?.tree])
-
-  const activeSource = useMemo<PromptInlineSyntaxSource | null>(() => {
-    for (const source of syntaxSettings.priority) {
-      if (!syntaxSettings.triggers[source]) {
-        continue
-      }
-      if (source === 'danbooru-group' && activeGroupQuery) {
-        return source
-      }
-      if (source === 'preprocess' && activeTextQuery && preprocessSuggestions.length > 0) {
-        return source
-      }
-      if (source === 'wildcard' && activeWildcardQuery) {
-        return source
-      }
-      if (source === 'tag' && activeTextQuery) {
-        return source
-      }
-    }
-    return null
-  }, [activeGroupQuery, activeTextQuery, activeWildcardQuery, preprocessSuggestions.length, syntaxSettings.priority, syntaxSettings.triggers])
-
-  const activeQuery = activeSource === 'wildcard' ? activeWildcardQuery : null
-  const activePreprocessQuery: ActivePromptTokenQuery | null = activeSource === 'preprocess' ? activeTextQuery : null
-  const activeDanbooruGroupQuery: ActivePromptTokenQuery | null = activeSource === 'danbooru-group' ? activeGroupQuery : null
-
-  const suggestions = useMemo(() => {
-    if (!activeQuery) {
-      return []
-    }
-
-    const normalizedQuery = activeQuery.query.trim().toLowerCase()
-    const recentIndexMap = new Map(recentWildcardNames.map((name, index) => [name, index]))
-    const records = flattenedWildcards
-      .map((record) => ({
-        record,
-        score: scoreWildcardMatch(record, normalizedQuery),
-        toolItemCount: countWildcardItemsForTool(record.items, tool),
-        generalItemCount: countStoredWildcardItemsForTool(record.items, 'general'),
-        naiItemCount: countStoredWildcardItemsForTool(record.items, 'nai'),
-        comfyuiItemCount: countStoredWildcardItemsForTool(record.items, 'comfyui'),
-        recentIndex: recentIndexMap.get(record.name) ?? Number.POSITIVE_INFINITY,
-      }))
-      .filter(({ score, toolItemCount }) => {
-        if (normalizedQuery.length > 0 && score < 0) {
-          return false
-        }
-
-        if (filterMode === 'available-only' && toolItemCount === 0) {
-          return false
-        }
-
-        return true
-      })
-      .sort((left, right) => {
-        if (normalizedQuery.length === 0 && left.recentIndex !== right.recentIndex) {
-          return left.recentIndex - right.recentIndex
-        }
-
-        if (right.score !== left.score) {
-          return right.score - left.score
-        }
-
-        if (left.recentIndex !== right.recentIndex) {
-          return left.recentIndex - right.recentIndex
-        }
-
-        if (right.toolItemCount !== left.toolItemCount) {
-          return right.toolItemCount - left.toolItemCount
-        }
-
-        return left.record.path.join('/').localeCompare(right.record.path.join('/'))
-      })
-      .slice(0, 8)
-
-    return records
-  }, [activeQuery, filterMode, flattenedWildcards, recentWildcardNames, tool])
-
   const isTreeExplorerMode = activeSource === 'wildcard' && filterMode === 'all' && (activeQuery === null || (activeQuery?.query.trim().length ?? 0) === 0)
   const isPopupOpen = isFocused && !disabled && (activeSource === 'danbooru-group' || activeSource === 'preprocess' || activeSource === 'wildcard' || isExplorerPinned)
   const {
@@ -371,16 +220,6 @@ export function WildcardInlinePickerField({
     isWildcardPopupOpen: isPopupOpen,
     autocompletePromptType,
   })
-  const normalizedActiveQuery = activePreprocessQuery?.query.trim() ?? activeDanbooruGroupQuery?.query.trim() ?? activeQuery?.query.trim() ?? ''
-  const activeListSuggestions = activeSource === 'preprocess' ? preprocessSuggestions : suggestions
-  const indexedSuggestions = activeListSuggestions.map((suggestion, index) => ({ ...suggestion, index }))
-  const recentSuggestions = activeSource === 'wildcard' && normalizedActiveQuery.length === 0
-    ? indexedSuggestions.filter((suggestion) => Number.isFinite(suggestion.recentIndex))
-    : []
-  const remainingSuggestions = activeSource === 'wildcard' && normalizedActiveQuery.length === 0
-    ? indexedSuggestions.filter((suggestion) => !Number.isFinite(suggestion.recentIndex))
-    : indexedSuggestions
-
   useLayoutEffect(() => {
     if (!multiline || !(fieldRef.current instanceof HTMLTextAreaElement)) {
       return
@@ -875,63 +714,6 @@ export function WildcardInlinePickerField({
     }, 120)
   }
 
-  const renderSuggestionButton = ({
-    record,
-    toolItemCount,
-    generalItemCount,
-    naiItemCount,
-    comfyuiItemCount,
-    recentIndex,
-    index,
-  }: {
-    record: FlattenedWildcardRecord
-    toolItemCount: number
-    generalItemCount: number
-    naiItemCount: number
-    comfyuiItemCount: number
-    recentIndex: number
-    index: number
-  }) => {
-    const isActive = index === activeIndex
-    const preferredBadgeTool = resolvePreferredWildcardItemTool(record.items, tool)
-
-    return (
-      <button
-        key={record.id}
-        type="button"
-        onMouseDown={(event) => {
-          event.preventDefault()
-          if (activeSource === 'preprocess') {
-            handleInsertPreprocess(record.name)
-          } else {
-            handleInsertWildcard(record.name)
-          }
-        }}
-        className={cn(
-          'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left transition-colors',
-          isActive ? 'bg-surface-high' : 'hover:bg-surface-lowest',
-        )}
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-medium text-foreground">{renderHighlightedText(record.name, normalizedActiveQuery)}</span>
-            <Badge variant={record.type === 'chain' ? 'secondary' : 'outline'}>{record.type === 'chain' ? 'Chain' : 'Wildcard'}</Badge>
-            {record.isAutoCollected ? <Badge variant="outline">Auto LoRA</Badge> : null}
-            {Number.isFinite(recentIndex) ? <Badge variant="secondary">{t('image-generation.components.wildcard.inline.picker.field.recent')}</Badge> : null}
-            {toolItemCount === 0 ? <Badge variant="outline">{t('image-generation.components.wildcard.inline.picker.field.current.tool.is.empty')}</Badge> : null}
-          </div>
-          <div className="mt-1 truncate text-xs text-muted-foreground">{renderHighlightedText(record.path.join(' / '), normalizedActiveQuery)}</div>
-        </div>
-
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          <Badge variant={preferredBadgeTool === 'general' ? 'secondary' : 'outline'}>General {generalItemCount}</Badge>
-          <Badge variant={preferredBadgeTool === 'nai' ? 'secondary' : 'outline'}>NAI {naiItemCount}</Badge>
-          <Badge variant={preferredBadgeTool === 'comfyui' ? 'secondary' : 'outline'}>Comfy {comfyuiItemCount}</Badge>
-        </div>
-      </button>
-    )
-  }
-
   return (
     <div ref={rootRef} className="relative space-y-2">
       <div className={cn('relative rounded-sm', showDetectedSyntax && detectedTokens.length > 0 ? 'bg-surface-container' : undefined)}>
@@ -1086,126 +868,34 @@ export function WildcardInlinePickerField({
 
       {isPopupOpen && inlinePopupPosition ? (
         <WildcardInlinePickerPopup position={inlinePopupPosition}>
-          <div className="space-y-2 border-b border-border/70 px-3 py-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              {activeSource === 'wildcard' ? (
-                <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                    setFilterMode('available-only')
-                    setIsExplorerPinned(false)
-                    writeStoredWildcardFilterMode(tool, 'available-only')
-                  }}
-                  className={cn(
-                    'rounded-sm border px-2 py-1 text-xs transition-colors',
-                    filterMode === 'available-only' ? 'border-primary bg-surface-high text-foreground' : 'border-border bg-surface-lowest hover:bg-surface-high',
-                  )}
-                >
-                  {t('image-generation.components.wildcard.inline.picker.field.search')}
-                </button>
-                <button
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                    setFilterMode('all')
-                    setIsExplorerPinned(true)
-                    writeStoredWildcardFilterMode(tool, 'all')
-                  }}
-                  className={cn(
-                    'rounded-sm border px-2 py-1 text-xs transition-colors',
-                    filterMode === 'all' ? 'border-primary bg-surface-high text-foreground' : 'border-border bg-surface-lowest hover:bg-surface-high',
-                  )}
-                >
-                  {t('image-generation.components.wildcard.inline.picker.field.browse.all')}
-                </button>
-              </div>
-              ) : (
-                <div className="text-xs font-medium text-muted-foreground">
-                  {activeSource === 'danbooru-group' ? t({ ko: '태그 그룹', en: 'Tag Groups' }) : t({ ko: '전처리', en: 'Preprocess' })}
-                </div>
-              )}
-              <Badge variant="outline">{activeSource === 'danbooru-group' ? groupSuggestions.length : isTreeExplorerMode ? explorerEntries.length : activeListSuggestions.length}</Badge>
-            </div>
-          </div>
-
-          {activeSource === 'danbooru-group' ? (
-            danbooruSummaryQuery.isLoading ? (
-              <div className="px-3 py-3 text-sm text-muted-foreground">{t({ ko: '태그 그룹을 불러오는 중', en: 'Loading tag groups' })}</div>
-            ) : groupSuggestions.length > 0 ? (
-              <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
-                {groupSuggestions.map((group, index) => {
-                  const isActive = index === activeIndex
-                  return (
-                    <button
-                      key={group.id}
-                      type="button"
-                      onMouseDown={(event) => {
-                        event.preventDefault()
-                        handleInsertDanbooruGroup(group.label)
-                      }}
-                      className={cn(
-                        'flex w-full items-start justify-between gap-3 rounded-sm px-3 py-2 text-left transition-colors',
-                        isActive ? 'bg-surface-high' : 'hover:bg-surface-lowest',
-                      )}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-foreground">{renderHighlightedText(group.label, normalizedActiveQuery)}</span>
-                        {group.translatedLabel ? <span className="block truncate text-xs text-muted-foreground">{group.translatedLabel}</span> : null}
-                      </span>
-                      <Badge variant="outline">{group.count}</Badge>
-                    </button>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="px-3 py-3 text-sm text-muted-foreground">
-                {danbooruSummaryQuery.data?.database.available === false
-                  ? t({ ko: 'Danbooru DB가 없어서 태그 그룹을 사용할 수 없어.', en: 'Danbooru DB is missing, so tag groups are unavailable.' })
-                  : t({ ko: '일치하는 태그 그룹 없음', en: 'No matching tag groups' })}
-              </div>
-            )
-          ) : wildcardsQuery.isLoading ? (
-            <div className="px-3 py-3 text-sm text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.loading.wildcards')}</div>
-          ) : isTreeExplorerMode ? (
-            <WildcardInlinePickerExplorer
-              activeTab={activeExplorerTab}
-              expandedWildcardIds={expandedExplorerIds}
-              selectedWildcardId={selectedExplorerId}
-              tool={tool}
-              treeNodes={explorerTreeNodes}
-              onChangeActiveTab={setActiveExplorerTab}
-              onInsertWildcard={handleInsertWildcard}
-              onSelectWildcard={setSelectedExplorerId}
-              onToggleExpanded={toggleExplorerExpanded}
-            />
-          ) : activeListSuggestions.length > 0 ? (
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">
-              {recentSuggestions.length > 0 ? (
-                <div className="space-y-1">
-                  <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.recent')}</div>
-                  <div className="space-y-1">
-                    {recentSuggestions.map(renderSuggestionButton)}
-                  </div>
-                </div>
-              ) : null}
-
-              {remainingSuggestions.length > 0 ? (
-                <div className="space-y-1">
-                  {recentSuggestions.length > 0 ? <div className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.all.results')}</div> : null}
-                  <div className="space-y-1">
-                    {remainingSuggestions.map(renderSuggestionButton)}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="space-y-2 px-3 py-3 text-sm text-muted-foreground">
-              <div>{activeSource === 'preprocess' ? t({ ko: '일치하는 전처리 없음', en: 'No matching preprocess entries' }) : t('image-generation.components.wildcard.inline.picker.field.no.matching.wildcards')}</div>
-              {activeSource === 'wildcard' && filterMode === 'available-only' ? <div className="text-xs">{t('image-generation.components.wildcard.inline.picker.field.search.mode.may.hide.wildcards.dedicated.to')}</div> : null}
-            </div>
-          )}
+          <WildcardInlinePickerPopupContent
+            activeSource={activeSource}
+            activeIndex={activeIndex}
+            activeListSuggestions={indexedSuggestions}
+            activeExplorerTab={activeExplorerTab}
+            expandedExplorerIds={expandedExplorerIds}
+            explorerEntriesCount={explorerEntries.length}
+            explorerTreeNodes={explorerTreeNodes}
+            filterMode={filterMode}
+            groupSuggestions={groupSuggestions}
+            isDanbooruDatabaseAvailable={danbooruSummaryQuery.data?.database.available !== false}
+            isDanbooruSummaryLoading={danbooruSummaryQuery.isLoading}
+            isTreeExplorerMode={isTreeExplorerMode}
+            isWildcardsLoading={wildcardsQuery.isLoading}
+            normalizedActiveQuery={normalizedActiveQuery}
+            recentSuggestions={recentSuggestions}
+            remainingSuggestions={remainingSuggestions}
+            selectedExplorerId={selectedExplorerId}
+            tool={tool}
+            onChangeActiveExplorerTab={setActiveExplorerTab}
+            onChangeFilterMode={setFilterMode}
+            onInsertDanbooruGroup={handleInsertDanbooruGroup}
+            onInsertPreprocess={handleInsertPreprocess}
+            onInsertWildcard={handleInsertWildcard}
+            onSelectExplorerId={setSelectedExplorerId}
+            onSetExplorerPinned={setIsExplorerPinned}
+            onToggleExplorerExpanded={toggleExplorerExpanded}
+          />
         </WildcardInlinePickerPopup>
       ) : null}
     </div>

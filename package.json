@@ -163,6 +163,7 @@
     "verify:module-graph-bypass-contracts": "cd frontend && npm run verify:module-graph-bypass-contracts",
     "verify:graph-workflow-bypass-contracts": "cd backend && npm run verify:graph-workflow-bypass-contracts",
     "verify:graph-final-result-promotion-contracts": "cd backend && npm run verify:graph-final-result-promotion-contracts",
+    "verify:mcp-generation-tools-contracts": "cd backend && npm run verify:mcp-generation-tools-contracts",
     "verify:runtime-role-contracts": "cd backend && npm run verify:runtime-role-contracts"
   },
   "devDependencies": {

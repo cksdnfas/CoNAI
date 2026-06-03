@@ -21,6 +21,7 @@
     "verify:graph-canonical-media-contracts": "tsx src/scripts/verifyGraphCanonicalMediaContracts.ts",
     "verify:graph-execution-compact-io-contracts": "tsx src/scripts/verifyGraphExecutionCompactIoContracts.ts",
     "verify:graph-final-result-promotion-contracts": "tsx src/scripts/verifyGraphFinalResultPromotionContracts.ts",
+    "verify:mcp-generation-tools-contracts": "tsx src/scripts/verifyMcpGenerationToolsContracts.ts",
     "verify:runtime-role-contracts": "tsx src/scripts/verifyRuntimeRoleContracts.ts",
     "verify:result-retention-contracts": "tsx src/scripts/verifyResultRetentionContracts.ts",
     "verify:video-optimization": "tsx src/scripts/verifyVideoOptimizationContracts.ts",

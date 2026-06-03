@@ -277,8 +277,16 @@ async function startServer() {
     app.use(apiLimiter);
 
     // 4-1. Sync file-based custom nodes into the module registry.
-    const { CustomNodeRegistryService } = await import('./services/customNodeRegistryService');
-    const customNodeSyncResult = await CustomNodeRegistryService.syncCustomNodesFromFileSystem();
+    const customNodeSyncSkipped = !shouldRunWorkerStartupTasks;
+    const customNodeSyncResult = customNodeSyncSkipped
+      ? { nodes: [], errors: [] }
+      : await (async () => {
+          const { CustomNodeRegistryService } = await import('./services/customNodeRegistryService');
+          return CustomNodeRegistryService.syncCustomNodesFromFileSystem();
+        })();
+    if (customNodeSyncSkipped) {
+      console.log('🧩 Custom node filesystem sync skipped in API/smoke runtime');
+    }
 
     // 4-2. Register all routes (after session middleware is configured)
     const routeRegistration = registerAppRoutes(app, {
@@ -383,7 +391,9 @@ async function startServer() {
             '🧪 Before build: UI http://localhost:1677',
             `🧭 After build: app ${networkInfo.localUrl}`,
           ];
-      const customNodeSummary = `🧩 Custom nodes: ${customNodeSyncResult.nodes.length} loaded, ${customNodeSyncResult.errors.length} errors`;
+      const customNodeSummary = customNodeSyncSkipped
+        ? '🧩 Custom node sync: skipped in API/smoke runtime'
+        : `🧩 Custom nodes: ${customNodeSyncResult.nodes.length} loaded, ${customNodeSyncResult.errors.length} errors`;
 
       console.log(`
 ${divider}`);

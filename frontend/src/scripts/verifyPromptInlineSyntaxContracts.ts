@@ -44,6 +44,9 @@ for (const syntax of ['__Group__', '__Group[3]__', '__Group[0~3]__', '__Group<1k
 }
 
 const inlineFieldSource = source('features/image-generation/components/wildcard-inline-picker-field.tsx')
+const inlineDataSource = source('features/image-generation/components/use-wildcard-inline-picker-data.ts')
+const inlineSuggestionsSource = source('features/image-generation/components/use-wildcard-inline-picker-suggestions.ts')
+const inlinePopupSource = source('features/image-generation/components/wildcard-inline-picker-popup-content.tsx')
 equal(
   inlineFieldSource.includes("activeSource === 'danbooru-group'"),
   true,
@@ -58,6 +61,46 @@ equal(
   inlineFieldSource.includes('activeDetectedCharacter'),
   true,
   'inline picker must expose detected character chips with a related-tag popup',
+)
+equal(
+  inlineFieldSource.includes('const shouldLoadWildcardData = !disabled && isFocused'),
+  true,
+  'inline picker should defer loading the full wildcard tree until the field is focused',
+)
+equal(
+  inlineFieldSource.includes('enabled: shouldLoadWildcardData'),
+  true,
+  'inline picker wildcard query should use the deferred loading guard',
+)
+equal(
+  inlineDataSource.includes("queryKey: ['wildcards', 'inline-picker']") && inlineDataSource.includes('getWildcards({ hierarchical: true, withItems: true })'),
+  true,
+  'inline picker wildcard data loading should live in the dedicated data hook',
+)
+equal(
+  inlineDataSource.includes('flattenWildcardRecords') && inlineDataSource.includes('useWildcardWorkspaceBrowser'),
+  true,
+  'inline picker data hook should own wildcard flattening and explorer browser state',
+)
+equal(
+  inlineSuggestionsSource.includes('export function useWildcardInlinePickerSuggestions') && inlineSuggestionsSource.includes('const activeSource = useMemo'),
+  true,
+  'inline picker suggestion/source routing should live in the dedicated suggestions hook',
+)
+equal(
+  inlineSuggestionsSource.includes("queryKey: ['danbooru-browser-summary', 'inline-group-picker']") && inlineSuggestionsSource.includes('createWildcardSuggestion'),
+  true,
+  'inline picker suggestions hook should own group summary loading and wildcard suggestion scoring',
+)
+equal(
+  inlineFieldSource.includes('WildcardInlinePickerPopupContent') && inlinePopupSource.includes('export function WildcardInlinePickerPopupContent'),
+  true,
+  'inline picker popup rendering should stay in a dedicated popup content component',
+)
+equal(
+  inlinePopupSource.includes('WildcardInlinePickerExplorer') && inlinePopupSource.includes('renderSuggestionButton'),
+  true,
+  'inline picker popup content should own explorer/list suggestion rendering',
 )
 
 console.log('Prompt inline syntax contracts verified')

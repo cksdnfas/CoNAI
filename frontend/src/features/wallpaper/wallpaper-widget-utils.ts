@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { ImageRecord } from '@/types/image'
 import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord } from '@/lib/api-module-graph'
 import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset, WallpaperImageHoverMotion, WallpaperImageTransitionSpeed } from './wallpaper-types'
@@ -44,25 +44,58 @@ export function useWallpaperRotatingIndex(length: number, intervalMs: number, en
   return tick % length
 }
 
-/** Drive subtle ambient motion without a full animation system. */
+const WALLPAPER_MOTION_TICK_INTERVAL_MS = 90
+const wallpaperMotionListeners = new Set<() => void>()
+let wallpaperMotionTick = 0
+let wallpaperMotionTimer: number | null = null
+
+function startWallpaperMotionTicker() {
+  if (wallpaperMotionTimer !== null) {
+    return
+  }
+
+  wallpaperMotionTimer = window.setInterval(() => {
+    wallpaperMotionTick += 1
+    for (const listener of wallpaperMotionListeners) {
+      listener()
+    }
+  }, WALLPAPER_MOTION_TICK_INTERVAL_MS)
+}
+
+function stopWallpaperMotionTicker() {
+  if (wallpaperMotionTimer === null) {
+    return
+  }
+
+  window.clearInterval(wallpaperMotionTimer)
+  wallpaperMotionTimer = null
+}
+
+function subscribeWallpaperMotionTick(listener: () => void) {
+  wallpaperMotionListeners.add(listener)
+  if (wallpaperMotionListeners.size === 1) {
+    startWallpaperMotionTicker()
+  }
+
+  return () => {
+    wallpaperMotionListeners.delete(listener)
+    if (wallpaperMotionListeners.size === 0) {
+      stopWallpaperMotionTicker()
+    }
+  }
+}
+
+const subscribeDisabledWallpaperMotionTick = () => () => {}
+const getWallpaperMotionTickSnapshot = () => wallpaperMotionTick
+const getDisabledWallpaperMotionTickSnapshot = () => 0
+
+/** Drive subtle ambient motion with one shared ticker for all active widgets. */
 export function useWallpaperMotionTick(enabled: boolean) {
-  const [tick, setTick] = useState(0)
-
-  useEffect(() => {
-    if (!enabled) {
-      return
-    }
-
-    const timer = window.setInterval(() => {
-      setTick((current) => current + 1)
-    }, 90)
-
-    return () => {
-      window.clearInterval(timer)
-    }
-  }, [enabled])
-
-  return tick
+  return useSyncExternalStore(
+    enabled ? subscribeWallpaperMotionTick : subscribeDisabledWallpaperMotionTick,
+    enabled ? getWallpaperMotionTickSnapshot : getDisabledWallpaperMotionTickSnapshot,
+    getDisabledWallpaperMotionTickSnapshot,
+  )
 }
 
 export interface WallpaperBezierControlPoints {

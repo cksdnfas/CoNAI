@@ -296,6 +296,7 @@ function assertHeaderRefreshTargets() {
 
 function assertHeaderWidgetStorageGuards() {
   const headerWidgetSource = readFileSync(join(process.cwd(), 'src', 'features', 'image-generation', 'components', 'generation-queue-header-widget.tsx'), 'utf8')
+    .replace(/\r\n/g, '\n')
 
   assertEqual(
     headerWidgetSource.includes('try {\n    rawValue = window.sessionStorage.getItem(LAST_SEEN_QUEUE_JOB_ID_STORAGE_KEY)\n  } catch {\n    return null\n  }'),
@@ -311,6 +312,21 @@ function assertHeaderWidgetStorageGuards() {
     headerWidgetSource.includes('const initialLastSeenQueueJobId = useMemo(() => readLastSeenQueueJobId(), [])'),
     true,
     'queue header should read the notification baseline once per mount',
+  )
+  assertEqual(
+    headerWidgetSource.includes('const IDLE_QUEUE_REFETCH_INTERVAL_MS = 30_000'),
+    true,
+    'queue header should use a slow idle poll when no active job is visible',
+  )
+  assertEqual(
+    headerWidgetSource.includes("document.visibilityState === 'hidden'"),
+    true,
+    'queue header should pause interval polling while the browser tab is hidden',
+  )
+  assertEqual(
+    headerWidgetSource.includes('getGenerationQueueHeaderRefetchInterval(activeCount, isOpen)'),
+    true,
+    'queue header refetch intervals should share one visibility-aware policy',
   )
 }
 

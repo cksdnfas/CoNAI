@@ -15,6 +15,7 @@ const DANBOORU_DB_FILE_PATTERNS = ['danbooru.sqlite', '*danbooru*.sqlite', '*dan
 const DANBOORU_DB_EXTENSIONS = new Set(['.sqlite', '.sqlite3', '.db']);
 const CHARACTER_IMAGE_DIRECTORY_NAME = 'character-images';
 const CHARACTER_IMAGE_EXTENSIONS = new Set(['.webp', '.png', '.jpg', '.jpeg', '.gif']);
+const CHARACTER_IMAGE_CACHE_TTL_MS = 60_000;
 
 type RelatedTagCategoryName = typeof RELATED_TAG_CATEGORY_NAMES[number];
 
@@ -89,6 +90,16 @@ export interface DanbooruBrowserCopyrightRecord {
 export interface DanbooruBrowserCharacterImageRecord {
   fileName: string;
   url: string;
+}
+
+interface CharacterImageDirectoryCacheEntry {
+  expiresAt: number;
+  directory: string | null;
+}
+
+interface CharacterImageRecordsCacheEntry {
+  expiresAt: number;
+  records: DanbooruBrowserCharacterImageRecord[];
 }
 
 export interface DanbooruBrowserCharacterRecord {
@@ -553,11 +564,15 @@ function buildTaxonomyParentKeyByKey(rows: TaxonomyNodeRow[]): Map<string, strin
 class DanbooruBrowserService {
   private db: Database.Database | null = null;
   private taxonomyDescendantIdsById: Map<number, number[]> | null = null;
+  private characterImageDirectoryByTagId = new Map<number, CharacterImageDirectoryCacheEntry>();
+  private characterImageRecordsByTagId = new Map<number, CharacterImageRecordsCacheEntry>();
 
   close(): void {
     this.db?.close();
     this.db = null;
     this.taxonomyDescendantIdsById = null;
+    this.characterImageDirectoryByTagId.clear();
+    this.characterImageRecordsByTagId.clear();
   }
 
   private hasAvailableDb(): boolean {
@@ -584,7 +599,7 @@ class DanbooruBrowserService {
     return path.join(runtimePaths.databaseDir, CHARACTER_IMAGE_DIRECTORY_NAME);
   }
 
-  private getCharacterImageDirectory(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): string | null {
+  private resolveCharacterImageDirectory(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): string | null {
     const rootDirectory = this.getCharacterImageRootDirectory();
     if (!fs.existsSync(rootDirectory)) {
       return null;
@@ -609,13 +624,38 @@ class DanbooruBrowserService {
     return null;
   }
 
+  private getCharacterImageDirectory(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): string | null {
+    const now = Date.now();
+    const cached = this.characterImageDirectoryByTagId.get(row.tag_id);
+    if (cached && cached.expiresAt > now) {
+      return cached.directory;
+    }
+
+    const directory = this.resolveCharacterImageDirectory(row);
+    this.characterImageDirectoryByTagId.set(row.tag_id, {
+      directory,
+      expiresAt: now + CHARACTER_IMAGE_CACHE_TTL_MS,
+    });
+    return directory;
+  }
+
   private getCharacterImageRecords(row: Pick<CharacterRow, 'tag_id' | 'name' | 'normalized_name'>): DanbooruBrowserCharacterImageRecord[] {
+    const now = Date.now();
+    const cached = this.characterImageRecordsByTagId.get(row.tag_id);
+    if (cached && cached.expiresAt > now) {
+      return cached.records;
+    }
+
     const directory = this.getCharacterImageDirectory(row);
     if (!directory) {
+      this.characterImageRecordsByTagId.set(row.tag_id, {
+        records: [],
+        expiresAt: now + CHARACTER_IMAGE_CACHE_TTL_MS,
+      });
       return [];
     }
 
-    return fs.readdirSync(directory, { withFileTypes: true })
+    const records = fs.readdirSync(directory, { withFileTypes: true })
       .filter((entry) => entry.isFile() && isCharacterImageFile(entry.name))
       .map((entry) => entry.name)
       .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }))
@@ -623,6 +663,11 @@ class DanbooruBrowserService {
         fileName,
         url: buildCharacterImageUrl(row.tag_id, fileName),
       }));
+    this.characterImageRecordsByTagId.set(row.tag_id, {
+      records,
+      expiresAt: now + CHARACTER_IMAGE_CACHE_TTL_MS,
+    });
+    return records;
   }
 
   getCharacterImageFilePath(tagId: unknown, fileName: string): string | null {

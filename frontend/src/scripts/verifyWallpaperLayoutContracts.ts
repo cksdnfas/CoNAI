@@ -45,6 +45,24 @@ function assertUnique(values: string[], label: string) {
 
 const wallpaperEditorPageSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-editor-page.tsx'), 'utf8')
 const wallpaperCanvasViewSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-canvas-view.tsx'), 'utf8')
+const wallpaperWidgetUtilsSource = readFileSync(resolve(process.cwd(), 'src/features/wallpaper/wallpaper-widget-utils.ts'), 'utf8')
+assert(
+  wallpaperWidgetUtilsSource.includes('useSyncExternalStore'),
+  'wallpaper motion widgets should subscribe to a shared ticker instead of owning one interval per widget',
+)
+assert(
+  wallpaperWidgetUtilsSource.includes('const wallpaperMotionListeners = new Set<() => void>()'),
+  'wallpaper motion ticker should fan out through one listener set',
+)
+assert(
+  wallpaperWidgetUtilsSource.includes('wallpaperMotionListeners.size === 1')
+    && wallpaperWidgetUtilsSource.includes('wallpaperMotionListeners.size === 0'),
+  'wallpaper motion ticker should start on the first subscriber and stop after the last subscriber',
+)
+assert(
+  !wallpaperWidgetUtilsSource.includes('setTick((current) => current + 1)\n    }, 90'),
+  'wallpaper motion tick should not allocate a 90ms interval per widget instance',
+)
 assert(
   wallpaperEditorPageSource.includes('const savedPresetById = useMemo(() => new Map(savedPresets.map((preset) => [preset.id, preset])), [savedPresets])'),
   'wallpaper editor should build one saved-preset id index per preset change',
