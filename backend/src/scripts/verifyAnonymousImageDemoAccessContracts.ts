@@ -20,21 +20,26 @@ assert.ok(
 for (const permissionKey of ['page.home.view', 'page.image-detail.view', 'page.wallpaper.runtime.view']) {
   assert.ok(
     permissionGroupSource.includes(`'${permissionKey}'`),
-    `anonymous built-in access must allow configuring ${permissionKey}`,
-  );
-  assert.ok(
-    securityTabDataSource.includes(`'${permissionKey}'`),
-    `anonymous permission group modal must expose ${permissionKey}`,
+    `built-in access must allow configuring ${permissionKey}`,
   );
 }
 
-for (const blockedPermissionKey of ['page.upload.view', 'page.settings.view', 'wildcards.edit', 'wildcards.delete']) {
-  assert.doesNotMatch(
-    permissionGroupSource,
-    new RegExp(`ANONYMOUS_EDITABLE_PERMISSION_KEYS[\\s\\S]*?'${blockedPermissionKey}'`),
-    `anonymous built-in access must not expose ${blockedPermissionKey} through the demo read-only scope`,
-  );
-}
+assert.doesNotMatch(
+  permissionGroupSource,
+  /ANONYMOUS_EDITABLE_PERMISSION_KEYS/,
+  'anonymous access must not use a separate backend editable permission allow-list',
+);
+
+assert.doesNotMatch(
+  securityTabDataSource,
+  /ANONYMOUS_EDITABLE_PERMISSION_KEYS/,
+  'anonymous access must not use a separate frontend editable permission filter',
+);
+
+assert.ok(
+  securityTabDataSource.includes("permission.permissionKey.startsWith('page.')"),
+  'custom permission groups should stay page-only while built-in groups use the full editable catalog',
+);
 
 assert.match(
   routeRegistrationSource,

@@ -31,11 +31,6 @@ import { useI18n } from '@/i18n'
 const AUTH_ACCOUNTS_QUERY_KEY = ['auth-accounts'] as const
 const AUTH_PERMISSION_GROUPS_QUERY_KEY = ['auth-permission-groups', 'all'] as const
 const AUTH_PAGE_ACCESS_QUERY_KEY = ['auth-page-access'] as const
-const ANONYMOUS_EDITABLE_PERMISSION_KEYS = new Set([
-  'page.home.view',
-  'page.image-detail.view',
-  'page.wallpaper.runtime.view',
-])
 
 type SetupDraft = {
   username: string
@@ -346,11 +341,13 @@ export function useSecurityTabData() {
 
   const editablePermissionCatalog = useMemo(() => {
     const catalog = pageAccessQuery.data?.permissions ?? []
-    if (activePermissionGroup?.groupKey === 'anonymous') {
-      return catalog.filter((permission) => ANONYMOUS_EDITABLE_PERMISSION_KEYS.has(permission.permissionKey))
+    const editingCustomGroup = permissionGroupEditorMode === 'create'
+      || (activePermissionGroup !== null && !activePermissionGroup.systemGroup)
+    if (editingCustomGroup) {
+      return catalog.filter((permission) => permission.permissionKey.startsWith('page.'))
     }
     return catalog
-  }, [activePermissionGroup?.groupKey, pageAccessQuery.data?.permissions])
+  }, [activePermissionGroup, pageAccessQuery.data?.permissions, permissionGroupEditorMode])
 
   const addableAccounts = useMemo(() => {
     const memberIds = new Set(activePermissionGroupMembers.map((member) => member.id))

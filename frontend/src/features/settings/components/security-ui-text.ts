@@ -26,6 +26,7 @@ const PAGE_PERMISSION_LABELS: LocalizedMap = {
   'page.groups.view': { ko: '그룹', en: 'Groups' },
   'page.prompts.view': { ko: '프롬프트', en: 'Prompts' },
   'page.generation.view': { ko: '생성', en: 'Generation' },
+  'page.wildcards.view': { ko: '와일드카드', en: 'Wildcards' },
   'page.image-detail.view': { ko: '이미지 상세', en: 'Image detail' },
   'page.metadata-editor.view': { ko: '메타데이터 편집', en: 'Metadata editor' },
   'page.upload.view': { ko: '업로드', en: 'Upload' },
