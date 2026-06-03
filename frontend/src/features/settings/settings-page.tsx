@@ -118,6 +118,7 @@ export function SettingsPage() {
     queryClient.setQueryData(['app-settings'], nextSettings)
     queryClient.setQueryData(['runtime-appearance-settings'], nextSettings.appearance)
     queryClient.setQueryData(['runtime-appearance'], nextSettings.appearance)
+    queryClient.setQueryData(['public-header-navigation-settings'], nextSettings.general.headerNavigation)
   }
 
   const refreshAutoQueries = async () => {

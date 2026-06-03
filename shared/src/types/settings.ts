@@ -41,8 +41,26 @@ export interface MetadataExtractionSettings {
 /**
  * General application settings
  */
+export const HEADER_NAVIGATION_ITEM_KEYS = [
+  'access',
+  'home',
+  'groups',
+  'prompts',
+  'generation',
+  'upload',
+  'wallpaper',
+  'settings',
+  'search',
+  'queue',
+  'account',
+] as const;
+
+export type HeaderNavigationItemKey = typeof HEADER_NAVIGATION_ITEM_KEYS[number];
+export type HeaderNavigationSettings = Record<HeaderNavigationItemKey, boolean>;
+
 export interface GeneralSettings {
   language: SupportedLanguage;
+  headerNavigation?: HeaderNavigationSettings;
 }
 
 /**

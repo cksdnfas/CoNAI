@@ -15,6 +15,7 @@ import { kaloscopeTaggerService } from '../services/kaloscopeTaggerService';
 import {
   DEFAULT_ARTIST_LINK_URL_TEMPLATE,
   GeneralSettings,
+  HEADER_NAVIGATION_ITEM_KEYS,
   ImageSimilarityCheckMode,
   KaloscopeSettings,
   LlmPresetRecord,
@@ -41,6 +42,7 @@ const validImageSimilarityCheckModes: ImageSimilarityCheckMode[] = ['manual', 'a
 const validKaloscopeDevices = ['auto', 'cpu', 'cuda'] as const;
 const validTaggerModels = ['vit', 'swinv2', 'convnext'] as const;
 const validTaggerDevices = ['auto', 'cpu', 'cuda'] as const;
+const validHeaderNavigationItemKeys = new Set<string>(HEADER_NAVIGATION_ITEM_KEYS);
 
 function normalizeOptionalText(value: unknown) {
   return typeof value === 'string' ? value : '';
@@ -247,6 +249,25 @@ router.put(
       ) {
         sendRouteBadRequest(res, 'deleteProtection.recycleBinPath must be a non-empty string');
         return;
+      }
+    }
+
+    if (generalSettings.headerNavigation !== undefined) {
+      if (!generalSettings.headerNavigation || typeof generalSettings.headerNavigation !== 'object') {
+        sendRouteBadRequest(res, 'headerNavigation must be an object');
+        return;
+      }
+
+      for (const [key, value] of Object.entries(generalSettings.headerNavigation)) {
+        if (!validHeaderNavigationItemKeys.has(key)) {
+          sendRouteBadRequest(res, `Invalid headerNavigation key: ${key}`);
+          return;
+        }
+
+        if (typeof value !== 'boolean') {
+          sendRouteBadRequest(res, `headerNavigation.${key} must be a boolean`);
+          return;
+        }
       }
     }
 

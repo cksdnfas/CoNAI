@@ -162,6 +162,31 @@ export const allowAnonymousPermission = (permissionKey: string) => (req: Request
 };
 
 /**
+ * Allow anonymous or bootstrap access when any resolved permission is present.
+ * Returns 401 for unauthenticated requests without one of the permissions.
+ */
+export const allowAnonymousAnyPermission = (requiredPermissionKeys: readonly string[]) => (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
+  const permissionKeySet = new Set(requiredPermissionKeys);
+  const { permissionKeys, authenticated } = resolveRequestPermissionKeys(req);
+
+  if (permissionKeys.some((permissionKey) => permissionKeySet.has(permissionKey))) {
+    next();
+    return;
+  }
+
+  if (authenticated) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+
+  res.status(401).json({ error: 'Unauthorized' });
+};
+
+/**
  * Optional authentication middleware.
  * - If auth credentials are NOT configured: allow access freely.
  * - If auth credentials ARE configured: require authentication.

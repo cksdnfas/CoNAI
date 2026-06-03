@@ -86,6 +86,8 @@
     "verify:saved-graph-list-contracts": "cd frontend && npm run verify:saved-graph-list-contracts",
     "verify:wallpaper-widget-library-search-contracts": "cd frontend && npm run verify:wallpaper-widget-library-search-contracts",
     "verify:auth-db-bootstrap": "cd backend && npm run verify:auth-db-bootstrap",
+    "verify:anonymous-image-demo-access-contracts": "cd backend && npm run verify:anonymous-image-demo-access-contracts",
+    "verify:header-navigation-settings-contracts": "cd backend && npm run verify:header-navigation-settings-contracts",
     "verify:nai-user-data-contracts": "cd backend && npm run verify:nai-user-data-contracts",
     "verify:codex-generation-contracts": "cd backend && npm run verify:codex-generation-contracts",
     "verify:module-library-grouping": "cd frontend && npm run verify:module-library-grouping",

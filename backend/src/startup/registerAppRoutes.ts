@@ -40,7 +40,13 @@ import { runtimeMediaSettingsRoutes } from '../routes/runtime-media-settings.rou
 import publicWorkflowRoutes from '../routes/public-workflows.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
-import { allowAnonymousPermission, optionalAuth, requireAuth, requirePermission } from '../middleware/authMiddleware';
+import {
+  allowAnonymousAnyPermission,
+  allowAnonymousPermission,
+  optionalAuth,
+  requireAuth,
+  requirePermission,
+} from '../middleware/authMiddleware';
 import { buildAuthStatusPayload } from '../routes/auth-route-helpers';
 import { settingsService } from '../services/settingsService';
 
@@ -97,6 +103,51 @@ function renderIntegratedFrontendIndex(req: Request, res: Response, htmlTemplate
     : `${bootstrapScript}${htmlTemplate}`;
 }
 
+const IMAGE_READ_PERMISSION_KEYS = ['page.home.view', 'page.image-detail.view'] as const;
+const HOME_IMAGE_READ_PERMISSION_KEYS = ['page.home.view', 'page.image-detail.view'] as const;
+const WALLPAPER_IMAGE_READ_PERMISSION_KEYS = [
+  'page.home.view',
+  'page.image-detail.view',
+  'page.wallpaper.runtime.view',
+] as const;
+
+function isReadMethod(req: Request): boolean {
+  return req.method === 'GET' || req.method === 'HEAD';
+}
+
+function isImageReadRequest(req: Request): boolean {
+  if (isReadMethod(req)) {
+    return true;
+  }
+
+  if (req.method !== 'POST') {
+    return false;
+  }
+
+  return [
+    '/batch',
+    '/download/batch',
+    '/random-from-search',
+    '/search',
+    '/search/ids',
+    '/search-by-autotags',
+    '/search/complex',
+    '/search/complex/ids',
+    '/search/complex/validate',
+  ].includes(req.path);
+}
+
+function allowReadAccess(permissionKeys: readonly string[]): RequestHandler {
+  return (req, res, next) => {
+    if (isReadMethod(req)) {
+      allowAnonymousAnyPermission(permissionKeys)(req, res, next);
+      return;
+    }
+
+    optionalAuth(req, res, next);
+  };
+}
+
 /** Register API routes, runtime static directories, frontend assets, and terminal handlers. */
 export function registerAppRoutes(app: Express, options: RegisterAppRoutesOptions): RegisterAppRoutesResult {
   registerRuntimeStaticDirectory(app, '/uploads', options.uploadsDir);
@@ -132,7 +183,12 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
         return;
       }
 
-      allowAnonymousPermission('page.wallpaper.runtime.view')(req, res, next);
+      allowAnonymousAnyPermission(WALLPAPER_IMAGE_READ_PERMISSION_KEYS)(req, res, next);
+      return;
+    }
+
+    if (isImageReadRequest(req)) {
+      allowAnonymousAnyPermission(IMAGE_READ_PERMISSION_KEYS)(req, res, next);
       return;
     }
 
@@ -151,8 +207,14 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
       data: settingsService.loadSettings().appearance,
     });
   });
+  app.get('/api/settings/header-navigation-public', options.readOnlyLimiter, (_req, res) => {
+    res.json({
+      success: true,
+      data: settingsService.loadSettings().general.headerNavigation,
+    });
+  });
   app.use('/api/runtime-appearance', optionalAuth, runtimeAppearanceRoutes);
-  app.use('/api/runtime-media-settings', options.readOnlyLimiter, optionalAuth, runtimeMediaSettingsRoutes);
+  app.use('/api/runtime-media-settings', options.readOnlyLimiter, allowReadAccess(HOME_IMAGE_READ_PERMISSION_KEYS), runtimeMediaSettingsRoutes);
   app.use('/api/settings', optionalAuth, requirePermission('page.settings.view'), settingsRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);
@@ -170,7 +232,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/folders', optionalAuth, watchedFoldersRoutes);
   app.use('/api/backup-sources', optionalAuth, backupSourcesRoutes);
   app.use('/api/search-history', optionalAuth, searchHistoryRoutes);
-  app.use('/api/search-options', options.readOnlyLimiter, optionalAuth, searchOptionsRoutes);
+  app.use('/api/search-options', options.readOnlyLimiter, allowReadAccess(HOME_IMAGE_READ_PERMISSION_KEYS), searchOptionsRoutes);
   app.use('/api/background-queue', optionalAuth, requirePermission('page.generation.view'), backgroundQueueRoutes);
   app.use('/api/system', optionalAuth, systemRoutes);
   app.use('/api/image-editor', options.uploadLimiter, optionalAuth, imageEditorRoutes);

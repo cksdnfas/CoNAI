@@ -95,6 +95,10 @@ export const API_ERROR_FALLBACKS = {
     ko: '공용 화면 설정을 불러오지 못했어.',
     en: 'Failed to load public appearance settings.',
   },
+  'settings.headerNavigationPublic.load': {
+    ko: '상단 네비 설정을 불러오지 못했어.',
+    en: 'Failed to load header navigation settings.',
+  },
   'settings.runtimeSimilarity.load': {
     ko: '런타임 유사도 설정을 불러오지 못했어.',
     en: 'Failed to load runtime similarity settings.',

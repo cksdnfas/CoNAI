@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
@@ -10,8 +11,10 @@ import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import { useI18n } from '@/i18n'
+import { getPublicHeaderNavigationSettings } from '@/lib/api-settings'
 import { APP_BRAND_TOOLTIP, APP_ICON_SRC, APP_NAME } from '@/lib/app-metadata'
 import { cn } from '@/lib/utils'
+import { DEFAULT_HEADER_NAVIGATION_SETTINGS, type HeaderNavigationItemKey } from '@/types/settings'
 import { useAppShellNavScroll } from './use-app-shell-nav-scroll'
 
 const GenerationQueueHeaderWidgetLazy = lazy(async () => {
@@ -20,12 +23,21 @@ const GenerationQueueHeaderWidgetLazy = lazy(async () => {
 })
 
 const PRIMARY_NAV_ORDER = ['/', '/groups', '/prompts', '/generation', '/upload', '/wallpaper', '/settings'] as const
+const PRIMARY_NAV_ITEM_IDS: Record<typeof PRIMARY_NAV_ORDER[number], HeaderNavigationItemKey> = {
+  '/': 'home',
+  '/groups': 'groups',
+  '/prompts': 'prompts',
+  '/generation': 'generation',
+  '/upload': 'upload',
+  '/wallpaper': 'wallpaper',
+  '/settings': 'settings',
+}
 
-const navItems: Array<{ to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }> = [
-  { to: '/access', labelKey: 'appShell.availablePages', icon: MapIcon, permissionKey: null },
+const navItems: Array<{ id: HeaderNavigationItemKey; to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }> = [
+  { id: 'access', to: '/access', labelKey: 'appShell.availablePages', icon: MapIcon, permissionKey: null },
   ...PRIMARY_NAV_ORDER.flatMap((path) => {
     const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
-    return item ? [{ to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
+    return item ? [{ id: PRIMARY_NAV_ITEM_IDS[path], to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
   }),
 ]
 
@@ -63,11 +75,19 @@ function AppShellLayout() {
   const location = useLocation()
   const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
+  const headerNavigationQuery = useQuery({
+    queryKey: ['public-header-navigation-settings'],
+    queryFn: getPublicHeaderNavigationSettings,
+    staleTime: 60_000,
+  })
+  const headerNavigation = headerNavigationQuery.data ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
-  const visibleNavItems = navItems.filter((item) => item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey))
+  const visibleNavItems = navItems.filter((item) => headerNavigation[item.id] !== false && (item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey)))
   const isWallpaperRuntime = location.pathname === '/wallpaper/runtime'
-  const shouldShowGenerationQueueWidget = authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true
+  const shouldShowGenerationQueueWidget = headerNavigation.queue !== false && (authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true)
+  const shouldShowHeaderSearch = headerNavigation.search !== false && !isAnonymousSession
+  const shouldShowAccountMenu = headerNavigation.account !== false
   const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')
   const {
     navScrollRef,
@@ -167,8 +187,8 @@ function AppShellLayout() {
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-4">
             {shouldShowGenerationQueueWidget ? <DeferredGenerationQueueHeaderWidget /> : null}
-            <HomeSearchHeaderBox active={!isAnonymousSession} />
-            <HeaderAccountMenu />
+            <HomeSearchHeaderBox active={shouldShowHeaderSearch} />
+            {shouldShowAccountMenu ? <HeaderAccountMenu /> : null}
           </div>
         </div>
       </header>
@@ -177,7 +197,7 @@ function AppShellLayout() {
         <Outlet />
       </main>
 
-      <HomeSearchDrawer active={!isAnonymousSession} />
+      <HomeSearchDrawer active={shouldShowHeaderSearch} />
       {shouldUseGlobalScrollRestoration ? <ScrollRestoration getKey={(location) => `${location.pathname}${location.search}`} /> : null}
     </div>
   )

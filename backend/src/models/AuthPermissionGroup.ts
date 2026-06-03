@@ -26,7 +26,11 @@ const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
   'wildcards.delete',
 ] as const;
 
-const ANONYMOUS_EDITABLE_PERMISSION_KEYS = ['page.wallpaper.runtime.view'] as const;
+const ANONYMOUS_EDITABLE_PERMISSION_KEYS = [
+  'page.home.view',
+  'page.image-detail.view',
+  'page.wallpaper.runtime.view',
+] as const;
 
 export interface PermissionGroupPageAccessRecord {
   group_key: BuiltInPermissionGroupKey;
@@ -319,7 +323,7 @@ export class AuthPermissionGroup {
       permissionKeys,
       this.getBuiltInEditablePermissionKeys(groupKey),
       groupKey === 'anonymous'
-        ? 'Anonymous access can only include the wallpaper runtime page'
+        ? 'Anonymous access can only include demo read-only pages'
         : 'One or more permission keys are invalid',
     );
   }

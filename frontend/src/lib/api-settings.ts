@@ -6,6 +6,7 @@ import type {
   AppSettings,
   GenerationThrottleSettings,
   GeneralSettings,
+  HeaderNavigationSettings,
   ImageSaveSettings,
   KaloscopeServerStatus,
   KaloscopeSettings,
@@ -182,6 +183,14 @@ export async function getPublicAppearanceSettings() {
   const response = await fetchJson<ApiResponse<AppearanceSettings>>('/api/settings/appearance-public')
   if (!response.success) {
     throw createApiFallbackError(response.error, 'settings.appearancePublic.load')
+  }
+  return response.data
+}
+
+export async function getPublicHeaderNavigationSettings() {
+  const response = await fetchJson<ApiResponse<HeaderNavigationSettings>>('/api/settings/header-navigation-public')
+  if (!response.success) {
+    throw createApiFallbackError(response.error, 'settings.headerNavigationPublic.load')
   }
   return response.data
 }
