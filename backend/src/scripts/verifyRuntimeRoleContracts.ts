@@ -31,6 +31,7 @@ const runnerSource = fs.readFileSync(path.join(projectRoot, 'scripts', 'run-buil
 const stopExistingRuntimeSource = fs.readFileSync(path.join(projectRoot, 'scripts', 'stop-existing-runtime.js'), 'utf8');
 const checkpointRuntimeDatabasesSource = fs.readFileSync(path.join(projectRoot, 'scripts', 'checkpoint-runtime-databases.js'), 'utf8');
 const indexSource = fs.readFileSync(path.join(projectRoot, 'backend', 'src', 'index.ts'), 'utf8');
+const dockerfileSource = fs.readFileSync(path.join(projectRoot, 'Dockerfile'), 'utf8');
 const rootPackageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
 const splitLauncherSource = fs.readFileSync(path.join(projectRoot, 'RUN_CoNAI.bat'), 'utf8');
 const buildAndRunLauncherSource = fs.readFileSync(path.join(projectRoot, 'RUN_CoNAI_BUILD_AND_RUN.bat'), 'utf8');
@@ -51,6 +52,8 @@ assert.match(indexSource, /HTTP server disabled/);
 assert.match(indexSource, /const customNodeSyncSkipped = !shouldRunWorkerStartupTasks/);
 assert.match(indexSource, /Custom node filesystem sync skipped in API\/smoke runtime/);
 assert.match(indexSource, /Custom node sync: skipped in API\/smoke runtime/);
+assert.match(dockerfileSource, /CONAI_RUNTIME_ROLE=all/);
+assert.doesNotMatch(dockerfileSource, /CONAI_RUNTIME_ROLE=api/);
 assert.match(rootPackageJson.scripts['start:built'], /--split/);
 
 assert.equal(fs.existsSync(path.join(projectRoot, 'RUN_CoNAI.bat')), true);

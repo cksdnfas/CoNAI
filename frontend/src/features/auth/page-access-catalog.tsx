@@ -1,4 +1,4 @@
-import { FolderTree, House, Image as ImageIcon, LayoutGrid, MessageSquareText, Settings2, Sparkles, Upload, WandSparkles, type LucideIcon } from 'lucide-react'
+import { FolderTree, Image as ImageIcon, Images, LayoutGrid, MessageSquareText, Settings2, Sparkles, Upload, WandSparkles, type LucideIcon } from 'lucide-react'
 import { hasAuthPermission } from './auth-permissions'
 
 export interface PageAccessCatalogItem {
@@ -16,7 +16,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     labelKey: 'pageAccessCatalog.home',
     descriptionKey: 'pageAccessCatalog.imageBrowsing',
     permissionKey: 'page.home.view',
-    icon: House,
+    icon: Images,
     category: 'primary',
   },
   {
