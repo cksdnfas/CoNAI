@@ -1,11 +1,21 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { isHttpMcpEnabled } from '../mcp';
 
+const mcpHttpRouteSource = readFileSync(resolve(process.cwd(), 'src/mcp/index.ts'), 'utf8');
 const generationToolsSource = readFileSync(resolve(process.cwd(), 'src/mcp/tools/generationTools.ts'), 'utf8');
 const novelAiToolsSource = readFileSync(resolve(process.cwd(), 'src/mcp/tools/generationNovelAiTools.ts'), 'utf8');
 const comfyOutputServiceSource = readFileSync(resolve(process.cwd(), 'src/mcp/tools/mcpComfyOutputService.ts'), 'utf8');
 const combinedSource = `${generationToolsSource}\n${novelAiToolsSource}\n${comfyOutputServiceSource}`;
+
+assert.equal(isHttpMcpEnabled({}), false, 'HTTP MCP endpoint should be disabled by default');
+assert.equal(isHttpMcpEnabled({ CONAI_MCP_HTTP_ENABLED: 'true' }), true, 'HTTP MCP endpoint should support explicit true opt-in');
+assert.equal(isHttpMcpEnabled({ CONAI_MCP_HTTP_ENABLED: '1' }), true, 'HTTP MCP endpoint should support numeric opt-in');
+assert.equal(isHttpMcpEnabled({ CONAI_MCP_HTTP_ENABLED: 'yes' }), true, 'HTTP MCP endpoint should support yes opt-in');
+assert.equal(isHttpMcpEnabled({ CONAI_MCP_HTTP_ENABLED: 'false' }), false, 'HTTP MCP endpoint should reject false');
+assert.match(mcpHttpRouteSource, /router\.use\('\/mcp'[\s\S]*?isHttpMcpEnabled\(\)/, 'HTTP MCP route should be guarded before method handlers');
+assert.match(mcpHttpRouteSource, /CONAI_MCP_HTTP_ENABLED=true/, 'disabled HTTP MCP message should name the explicit opt-in variable');
 
 const registerMatch = /export function registerGenerationTools\(server: McpServer\): void \{([\s\S]*?)\n\}/.exec(generationToolsSource);
 assert.ok(registerMatch, 'generation tools should expose a public registration entrypoint');

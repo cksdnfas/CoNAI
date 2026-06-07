@@ -4,6 +4,31 @@ import { createMcpServer } from './server';
 
 const router = Router();
 
+function parseEnabledFlag(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+}
+
+export function isHttpMcpEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return parseEnabledFlag(env.CONAI_MCP_HTTP_ENABLED);
+}
+
+router.use('/mcp', (_req: Request, res: Response, next) => {
+  if (isHttpMcpEnabled()) {
+    next();
+    return;
+  }
+
+  res.status(404).json({
+    jsonrpc: '2.0',
+    error: {
+      code: -32000,
+      message: 'MCP HTTP endpoint is disabled. Set CONAI_MCP_HTTP_ENABLED=true only for trusted clients.',
+    },
+    id: null,
+  });
+});
+
 /**
  * POST /mcp
  * MCP Streamable HTTP 엔드포인트 (Stateless)
