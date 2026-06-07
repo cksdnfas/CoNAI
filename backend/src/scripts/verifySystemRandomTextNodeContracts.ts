@@ -88,6 +88,33 @@ function verifyRandomTextChoiceExecution() {
       'highest random value should select the last connected dynamic candidate',
     )
 
+    Math.random = () => 0
+    assert.equal(
+      executeRandomText({
+        options: [
+          { key: 'text_1', value: 'fallback-a' },
+          { key: 'text_2', value: 'fallback-b' },
+        ],
+        'options.text_2': 'connected-b',
+      }),
+      'fallback-a',
+      'partially connected random text choices should preserve configured row order',
+    )
+
+    Math.random = () => 0.999
+    assert.equal(
+      executeRandomText({
+        options: [
+          { key: 'text_1', value: 'fallback-a' },
+          { key: 'text_2', value: 'fallback-b' },
+        ],
+        'options.text_2': 'connected-b',
+        'options.text_3': 'connected-c',
+      }),
+      'connected-c',
+      'unlisted connected random text choices should append after configured rows',
+    )
+
     assert.equal(executeRandomText({ options: [] }), '', 'empty candidate list should emit an empty text artifact')
   } finally {
     Math.random = originalRandom

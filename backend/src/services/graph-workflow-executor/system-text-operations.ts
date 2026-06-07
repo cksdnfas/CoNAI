@@ -167,7 +167,7 @@ function normalizeRandomTextChoiceEntries(value: unknown) {
 /** Collect explicit rows plus dynamic upstream inputs such as `options.text_1`. */
 function collectRandomTextChoiceCandidates(resolvedInputs: Record<string, any>) {
   const candidates: string[] = []
-  const connectedKeys = new Set<string>()
+  const connectedTextByKey = new Map<string, string>()
 
   for (const [inputKey, inputValue] of Object.entries(resolvedInputs)) {
     if (!inputKey.startsWith(RANDOM_TEXT_CHOICE_FIELD_PREFIX)) {
@@ -177,19 +177,27 @@ function collectRandomTextChoiceCandidates(resolvedInputs: Record<string, any>) 
     const entryKey = inputKey.slice(RANDOM_TEXT_CHOICE_FIELD_PREFIX.length).trim()
     const textValue = normalizeTextValue(inputValue)
     if (entryKey && textValue.length > 0) {
-      connectedKeys.add(entryKey)
+      connectedTextByKey.set(entryKey, textValue)
+    }
+  }
+
+  const configuredKeys = new Set<string>()
+  for (const entry of normalizeRandomTextChoiceEntries(resolvedInputs.options)) {
+    const key = typeof entry.key === 'string' ? entry.key.trim() : ''
+    if (key) {
+      configuredKeys.add(key)
+    }
+
+    const textValue = key && connectedTextByKey.has(key)
+      ? connectedTextByKey.get(key) ?? ''
+      : normalizeTextValue(entry.value)
+    if (textValue.length > 0) {
       candidates.push(textValue)
     }
   }
 
-  for (const entry of normalizeRandomTextChoiceEntries(resolvedInputs.options)) {
-    const key = typeof entry.key === 'string' ? entry.key.trim() : ''
-    if (key && connectedKeys.has(key)) {
-      continue
-    }
-
-    const textValue = normalizeTextValue(entry.value)
-    if (textValue.length > 0) {
+  for (const [key, textValue] of connectedTextByKey) {
+    if (!configuredKeys.has(key)) {
       candidates.push(textValue)
     }
   }
