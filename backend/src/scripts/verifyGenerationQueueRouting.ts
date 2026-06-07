@@ -92,11 +92,22 @@ function main() {
     'tag routing should allow a Modal backend when its tag was requested explicitly',
   )
 
+  assert.deepEqual(
+    getGenerationQueueEligibleServerIds(job({ id: 15, service_type: 'comfyui', requested_server_id: 999 }), activeServers),
+    [],
+    'explicit server routing should not synthesize eligibility for inactive servers',
+  )
+
   const tagLane = resolveGenerationQueueLaneMeta(job({ id: 14, service_type: 'comfyui', requested_server_tag: ' FAST.LANE ' }), activeServers)
   assert.equal(tagLane.scope, 'tag')
   assert.equal(tagLane.serverTag, 'fast.lane')
   assert.equal(tagLane.laneKey, 'comfyui:tag:fast.lane:1')
   assert.deepEqual(tagLane.eligibleServerIds, [1])
+
+  const inactiveServerLane = resolveGenerationQueueLaneMeta(job({ id: 15, service_type: 'comfyui', requested_server_id: 999 }), activeServers)
+  assert.equal(inactiveServerLane.scope, 'server')
+  assert.equal(inactiveServerLane.serverId, 999)
+  assert.deepEqual(inactiveServerLane.eligibleServerIds, [])
 
   const positions = computeQueuePositions([
     job({ id: 20, service_type: 'comfyui', requested_server_tag: 'fast.lane', priority: 1 }),

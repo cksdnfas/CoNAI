@@ -298,8 +298,12 @@ function getLaneCapacity(record: GenerationQueueJobListRecord, queuePosition: Qu
     return capacityContext.totalComfyCapacity
   }
 
+  if (queuePosition.eligibleServerIds.length === 0) {
+    return 0
+  }
+
   if (queuePosition.scope === 'server' && queuePosition.serverId !== null) {
-    return Math.max(capacityContext.comfyCapacityByServerId.get(queuePosition.serverId) ?? 0, 1)
+    return capacityContext.comfyCapacityByServerId.get(queuePosition.serverId) ?? 0
   }
 
   if (queuePosition.eligibleServerIds.length > 0) {
@@ -392,6 +396,10 @@ function estimateQueueEta(
   }
 
   const capacity = getLaneCapacity(record, queuePosition, capacityContext)
+  if (capacity <= 0) {
+    return { waitSeconds: null, totalSeconds: null, durationSeconds }
+  }
+
   const slotAvailabilitySeconds = getRunningLaneRecords(record, queuePosition, runningIndex)
     .map((candidate) => {
       const candidateDurationSeconds = referenceDurationById.get(candidate.id) ?? durationSeconds

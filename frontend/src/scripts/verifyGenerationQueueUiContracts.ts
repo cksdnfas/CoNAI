@@ -6,10 +6,13 @@ import {
   getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
   getGenerationQueueHeaderRefreshTargets,
+  getGenerationQueueDurationLabel,
+  getGenerationQueueLaneLabel,
   getGenerationQueueProgressPercent,
   getGenerationQueueRemainingLabel,
   getGenerationQueueRequesterLabel,
   getGenerationQueueStatusLabel,
+  getGenerationQueueWaitLabel,
   getGenerationQueueWorkflowLabel,
   shouldEnableFilteredQueueHeaderQuery,
 } from '../features/image-generation/components/generation-queue-ui'
@@ -154,6 +157,29 @@ function assertRemainingLabels() {
   assertEqual(getGenerationQueueRemainingLabel(makeQueueRecord({ estimated_total_seconds: 120 }), translate, formatNumber), '2m', 'minute ETA should round to minutes')
   assertEqual(getGenerationQueueRemainingLabel(makeQueueRecord({ estimated_total_seconds: 3600 }), translate, formatNumber), '1h', 'whole-hour ETA should omit minutes')
   assertEqual(getGenerationQueueRemainingLabel(makeQueueRecord({ estimated_total_seconds: 3660 }), translate, formatNumber), '1h 1m', 'hour ETA should include remaining minutes when present')
+}
+
+function assertOperationalMetaLabels() {
+  assertEqual(
+    getGenerationQueueLaneLabel(makeQueueRecord({ queue_position: 2, queue_position_scope: 'auto' }), translate, formatNumber),
+    '자동 · 큐 2',
+    'auto-routed jobs should expose queue position and lane scope',
+  )
+  assertEqual(
+    getGenerationQueueLaneLabel(makeQueueRecord({ queue_position: 3, queue_position_scope: 'server', queue_position_server_id: 7 }), translate, formatNumber),
+    '서버 7 · 큐 3',
+    'server-routed jobs should expose server id and queue position',
+  )
+  assertEqual(
+    getGenerationQueueLaneLabel(makeQueueRecord({ queue_position: 4, queue_position_scope: 'tag', queue_position_server_tag: 'fast' }), translate, formatNumber),
+    '#fast · 큐 4',
+    'tag-routed jobs should expose the normalized tag and queue position',
+  )
+  assertEqual(getGenerationQueueLaneLabel(makeQueueRecord({ queue_position: null }), translate, formatNumber), null, 'missing queue position should stay hidden')
+  assertEqual(getGenerationQueueWaitLabel(makeQueueRecord({ estimated_wait_seconds: 0 }), translate, formatNumber), '곧 시작', 'zero wait should be shown as starts-soon')
+  assertEqual(getGenerationQueueWaitLabel(makeQueueRecord({ estimated_wait_seconds: 90 }), translate, formatNumber), '대기 2m', 'queued wait should be separate from total remaining time')
+  assertEqual(getGenerationQueueWaitLabel(makeQueueRecord({ status: 'running', estimated_wait_seconds: 90 }), translate, formatNumber), null, 'running jobs should not show queued wait')
+  assertEqual(getGenerationQueueDurationLabel(makeQueueRecord({ estimated_duration_seconds: 75 }), translate, formatNumber), '예상 1m', 'median duration should be available as operational metadata')
 }
 
 function assertElapsedLabels() {
@@ -334,6 +360,7 @@ assertStatusLabels()
 assertWorkflowLabels()
 assertRequesterLabels()
 assertRemainingLabels()
+assertOperationalMetaLabels()
 assertElapsedLabels()
 assertProgressPercent()
 assertHeaderQuerySnapshotSelection()

@@ -153,7 +153,7 @@ export function resolveGenerationQueueLaneMeta(record: GenerationQueueJobListRec
       scope: 'server',
       serverId: assignedOrRequestedServerId,
       serverTag: null,
-      eligibleServerIds: eligibleServerIds.length > 0 ? eligibleServerIds : [assignedOrRequestedServerId],
+      eligibleServerIds,
     }
   }
 

@@ -176,6 +176,62 @@ export function getGenerationQueueRemainingLabel(record: GenerationQueueJobRecor
   return formatGenerationQueueEtaSeconds(record.estimated_total_seconds, t, formatNumber)
 }
 
+/** Render the queue lane and position so operators can see where a job is waiting. */
+export function getGenerationQueueLaneLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber) {
+  const position = record.queue_position
+  if (position === undefined || position === null || position <= 0) {
+    return null
+  }
+
+  const positionLabel = t({ ko: '큐 {position}', en: 'Queue {position}' }, { position: formatNumber(position) })
+
+  if (record.queue_position_scope === 'server' && record.queue_position_server_id != null) {
+    return t({ ko: '서버 {serverId} · {positionLabel}', en: 'Server {serverId} · {positionLabel}' }, {
+      serverId: formatNumber(record.queue_position_server_id),
+      positionLabel,
+    })
+  }
+
+  if (record.queue_position_scope === 'tag' && record.queue_position_server_tag) {
+    return t({ ko: '#{serverTag} · {positionLabel}', en: '#{serverTag} · {positionLabel}' }, {
+      serverTag: record.queue_position_server_tag,
+      positionLabel,
+    })
+  }
+
+  if (record.queue_position_scope === 'auto') {
+    return t({ ko: '자동 · {positionLabel}', en: 'Auto · {positionLabel}' }, { positionLabel })
+  }
+
+  return positionLabel
+}
+
+/** Render queued wait time separately from total remaining time. */
+export function getGenerationQueueWaitLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber) {
+  if (record.status === 'running') {
+    return null
+  }
+
+  const waitLabel = formatGenerationQueueEtaSeconds(record.estimated_wait_seconds, t, formatNumber)
+  if (!waitLabel) {
+    return null
+  }
+
+  return record.estimated_wait_seconds === 0
+    ? t({ ko: '곧 시작', en: 'Starts soon' })
+    : t({ ko: '대기 {waitLabel}', en: 'Wait {waitLabel}' }, { waitLabel })
+}
+
+/** Render the median duration estimate that backs queue wait/remaining labels. */
+export function getGenerationQueueDurationLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber) {
+  const durationLabel = formatGenerationQueueEtaSeconds(record.estimated_duration_seconds, t, formatNumber)
+  if (!durationLabel) {
+    return null
+  }
+
+  return t({ ko: '예상 {durationLabel}', en: 'Estimate {durationLabel}' }, { durationLabel })
+}
+
 /** Render active job age beside the compact queue timestamp. */
 export function getGenerationQueueElapsedLabel(record: GenerationQueueJobRecord, t: Translate, formatNumber: FormatNumber, nowMs = Date.now()) {
   const anchorValue = record.status === 'running' ? record.started_at : record.queued_at

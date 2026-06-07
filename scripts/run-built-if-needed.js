@@ -289,7 +289,12 @@ function runSplitRuntimeSupervisor() {
 }
 
 function main() {
-  if (isSplitRuntime && (args.has('--api') || args.has('--worker') || args.has('--all'))) {
+  const hasExplicitSingleRoleArg = args.has('--api')
+    || args.has('--worker')
+    || args.has('--all')
+    || cliArgs.some((arg) => arg.startsWith('--runtime-role='));
+
+  if (isSplitRuntime && hasExplicitSingleRoleArg) {
     console.error('Use either --split or a single runtime role, not both.');
     process.exit(1);
   }

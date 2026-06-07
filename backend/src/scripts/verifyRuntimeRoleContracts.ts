@@ -45,6 +45,8 @@ assert.match(runnerSource, /spawn\(process\.execPath, \[BACKEND_ENTRY\]/);
 assert.match(runnerSource, /--skip-build/);
 assert.match(runnerSource, /CONAI_RUNTIME_ROLE/);
 assert.match(runnerSource, /CONAI_WORKER_HTTP/);
+assert.match(runnerSource, /hasExplicitSingleRoleArg/);
+assert.match(runnerSource, /startsWith\('--runtime-role='/);
 assert.match(runnerSource, /process\.execPath/);
 assert.match(runnerSource, /\[BACKEND_ENTRY\]/);
 assert.match(indexSource, /shouldSkipHttpServerForRuntimeRole/);

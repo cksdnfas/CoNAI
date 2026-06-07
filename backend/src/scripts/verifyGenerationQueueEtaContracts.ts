@@ -142,6 +142,18 @@ function main() {
   const noSampleEtas = computeQueueEtas(noSampleQueue, noSamplePositions, [], activeServers)
   assertEta(noSampleEtas, 40, { waitSeconds: null, totalSeconds: null, durationSeconds: null })
 
+  const unavailableServerQueue = [job({ id: 50, service_type: 'comfyui', requested_server_id: 999 })]
+  const unavailableServerPositions = computeQueuePositions(unavailableServerQueue, activeServers)
+  assert.deepEqual(unavailableServerPositions.get(50)?.eligibleServerIds, [], 'inactive explicit server lanes should stay visibly unrunnable')
+  const unavailableServerEtas = computeQueueEtas(unavailableServerQueue, unavailableServerPositions, durationSamples, activeServers)
+  assertEta(unavailableServerEtas, 50, { waitSeconds: null, totalSeconds: null, durationSeconds: 40 })
+
+  const unavailableTagQueue = [job({ id: 51, service_type: 'comfyui', requested_server_tag: 'missing-tag' })]
+  const unavailableTagPositions = computeQueuePositions(unavailableTagQueue, activeServers)
+  assert.deepEqual(unavailableTagPositions.get(51)?.eligibleServerIds, [], 'tag lanes without active servers should stay visibly unrunnable')
+  const unavailableTagEtas = computeQueueEtas(unavailableTagQueue, unavailableTagPositions, durationSamples, activeServers)
+  assertEta(unavailableTagEtas, 51, { waitSeconds: null, totalSeconds: null, durationSeconds: 40 })
+
   console.log('✅ Generation queue ETA contracts passed (capacity-aware ComfyUI lanes, queued-ahead distribution, missing samples)')
 }
 
