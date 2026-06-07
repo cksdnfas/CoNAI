@@ -26,5 +26,14 @@ function verifyImageDetailFilterPreviewStability() {
   match(mediaSource, /className=\{cn\('absolute inset-0 h-full w-full pointer-events-none select-none object-contain transition-opacity duration-150'/, 'filter canvas should cover the same fitted frame as the primary image')
 }
 
+function verifyImageDetailModelSearchBridge() {
+  const metaCardSource = source('src/features/images/components/detail/image-detail-meta-card.tsx')
+
+  match(metaCardSource, /function getImageModelSearchValue\(image: ImageRecord\)[\s\S]*?return typeof modelName === 'string' \? modelName\.trim\(\) : ''/, 'detail metadata should normalize model names before creating search chips')
+  match(metaCardSource, /const handleAddModelSearchFilter = \(modelName: string\) => \{[\s\S]*?imageViewModal\?\.closeImageView\(\)[\s\S]*?addScopedTextChip\('model', modelName, \{ apply: true \}\)/, 'detail metadata model action should close modal review and immediately apply a model search filter')
+  match(metaCardSource, /aria-label=\{t\(\{ ko: '이 모델로 검색', en: 'Search this model' \}\)\}[\s\S]*?<Search className="h-4 w-4" \/>/, 'detail metadata model search should remain an icon action with accessible label')
+}
+
 verifyImageDetailFilterPreviewStability()
+verifyImageDetailModelSearchBridge()
 console.log('Image detail filter preview contracts verified.')

@@ -10,6 +10,22 @@ const imageViewModalProviderSource = readFileSync(
   resolve(process.cwd(), 'src/features/images/components/detail/image-view-modal-provider.tsx'),
   'utf8',
 )
+const imageListGridSource = readFileSync(
+  resolve(process.cwd(), 'src/features/images/components/image-list/image-list-grid.tsx'),
+  'utf8',
+)
+const imageListMasonrySource = readFileSync(
+  resolve(process.cwd(), 'src/features/images/components/image-list/image-list-masonry.tsx'),
+  'utf8',
+)
+const imageListItemSource = readFileSync(
+  resolve(process.cwd(), 'src/features/images/components/image-list/image-list-item.tsx'),
+  'utf8',
+)
+const imageDetailViewSource = readFileSync(
+  resolve(process.cwd(), 'src/features/images/image-detail-view.tsx'),
+  'utf8',
+)
 
 assert.match(
   imageListSource,
@@ -69,6 +85,54 @@ assert.doesNotMatch(
   imageViewModalProviderSource,
   /compositeHashes\.indexOf\(/,
   'modal previous/next navigation must not scan the composite-hash sequence for every arrow-key step',
+)
+
+assert.match(
+  imageListSource,
+  /const queryClient = useQueryClient\(\)/,
+  'ImageList should own a query client for pre-opening detail warmup',
+)
+
+assert.match(
+  imageListSource,
+  /const handlePreviewIntent = useCallback\(\(image: ImageRecord\) => \{[\s\S]*?if \(activationMode === 'none' \|\| selectionMode \|\| isDraggingSelection\) \{[\s\S]*?queryClient\.prefetchQuery\(\{[\s\S]*?queryKey: \['image-detail', compositeHash\][\s\S]*?queryFn: \(\{ signal \}\) => getImage\(compositeHash, \{ signal \}\)[\s\S]*?staleTime: 30_000/,
+  'ImageList should prefetch image detail on hover/focus while avoiding selection-drag paths',
+)
+
+assert.match(
+  imageListSource,
+  /<ImageListGridLazy[\s\S]*?onPreviewIntent=\{handlePreviewIntent\}/,
+  'grid image lists should receive the shared preview-intent warmup callback',
+)
+
+assert.match(
+  imageListSource,
+  /<ImageListMasonryLazy[\s\S]*?onPreviewIntent=\{handlePreviewIntent\}/,
+  'masonry image lists should receive the shared preview-intent warmup callback',
+)
+
+assert.match(
+  imageListGridSource,
+  /onPreviewIntent\?: \(image: ImageRecord\) => void[\s\S]*?onPreviewIntent=\{context\.onPreviewIntent\}/,
+  'grid image-list items should forward preview intent from the virtualized context',
+)
+
+assert.match(
+  imageListMasonrySource,
+  /onPreviewIntent\?: \(image: ImageRecord\) => void[\s\S]*?onPreviewIntent=\{context\.onPreviewIntent\}/,
+  'masonry image-list items should forward preview intent from the virtualized context',
+)
+
+assert.match(
+  imageListItemSource,
+  /onPointerEnter=\{interactive \? \(\(\) => onPreviewIntent\?\.\(image\)\) : undefined\}[\s\S]*?onFocus=\{interactive \? \(\(\) => onPreviewIntent\?\.\(image\)\) : undefined\}/,
+  'image list cards should warm detail data from pointer and keyboard preview intent',
+)
+
+assert.match(
+  imageDetailViewSource,
+  /const prefetchedImage = queryClient\.getQueryData<ImageRecord>\(\['image-detail', compositeHash\]\)[\s\S]*?if \(prefetchedImage\?\.composite_hash === compositeHash\) \{[\s\S]*?return prefetchedImage/,
+  'image detail views should consume prefetched detail records before scanning broader feed caches',
 )
 
 console.log('Image list modal contracts verified.')

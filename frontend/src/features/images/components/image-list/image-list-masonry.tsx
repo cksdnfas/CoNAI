@@ -21,6 +21,7 @@ interface ImageListMasonryProps {
   showDefaultQuickActions?: boolean
   interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
+  onPreviewIntent?: (image: ImageRecord) => void
 }
 
 interface ImageListMasonryContext {
@@ -35,6 +36,7 @@ interface ImageListMasonryContext {
   showDefaultQuickActions?: boolean
   interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
+  onPreviewIntent?: (image: ImageRecord) => void
 }
 
 const MasonryItemContent: ItemContent<ImageRecord, ImageListMasonryContext> = ({ data: image, context }) => {
@@ -58,6 +60,7 @@ const MasonryItemContent: ItemContent<ImageRecord, ImageListMasonryContext> = ({
         showDefaultQuickActions={context.showDefaultQuickActions}
         interactive={context.interactive}
         blurPreview={context.shouldBlurItemPreview?.(image) ?? false}
+        onPreviewIntent={context.onPreviewIntent}
       />
     </div>
   )
@@ -81,6 +84,7 @@ export function ImageListMasonry({
   showDefaultQuickActions,
   interactive,
   shouldBlurItemPreview,
+  onPreviewIntent,
 }: ImageListMasonryProps) {
   const usesWindowScroll = scrollMode === 'window'
   const resolvedContainerHeight = usesWindowScroll
@@ -102,6 +106,7 @@ export function ImageListMasonry({
     showDefaultQuickActions,
     interactive,
     shouldBlurItemPreview,
+    onPreviewIntent,
   }), [
     rowGap,
     selectedIdSet,
@@ -114,6 +119,7 @@ export function ImageListMasonry({
     showDefaultQuickActions,
     interactive,
     shouldBlurItemPreview,
+    onPreviewIntent,
   ])
 
   return (

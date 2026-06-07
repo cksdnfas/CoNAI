@@ -159,6 +159,11 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       return initialImage
     }
 
+    const prefetchedImage = queryClient.getQueryData<ImageRecord>(['image-detail', compositeHash])
+    if (prefetchedImage?.composite_hash === compositeHash) {
+      return prefetchedImage
+    }
+
     if (presentation === 'modal') {
       return undefined
     }

@@ -1,8 +1,10 @@
 import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { markHomeScrollRestorePending } from '@/features/home/use-home-scroll-restoration'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
+import { getImage } from '@/lib/api-images'
 import type { ImageRecord } from '@/types/image'
 const ImageListGridLazy = lazy(async () => {
   const module = await import('./image-list-grid')
@@ -50,8 +52,10 @@ export function ImageList({
   renderItemPersistentOverlay,
   showDefaultQuickActions = true,
   shouldBlurItemPreview,
+  onPreviewIntent,
   modalAccessOptions,
 }: ImageListProps) {
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const location = useLocation()
   const imageViewModal = useImageViewModal()
@@ -153,6 +157,28 @@ export function ImageList({
     [activationMode, imageViewModal, itemCompositeHashes, items, location.pathname, modalAccessOptions, modalNavigationSourceId, navigate, onSelectedIdsChange, selectedIdSet, selectedIds, selectionMode, shouldSuppressClick],
   )
 
+  const handlePreviewIntent = useCallback((image: ImageRecord) => {
+    onPreviewIntent?.(image)
+
+    if (activationMode === 'none' || selectionMode || isDraggingSelection) {
+      return
+    }
+
+    const compositeHash = typeof image.composite_hash === 'string' && image.composite_hash.trim().length > 0
+      ? image.composite_hash
+      : null
+
+    if (!compositeHash) {
+      return
+    }
+
+    void queryClient.prefetchQuery({
+      queryKey: ['image-detail', compositeHash],
+      queryFn: ({ signal }) => getImage(compositeHash, { signal }),
+      staleTime: 30_000,
+    })
+  }, [activationMode, isDraggingSelection, onPreviewIntent, queryClient, selectionMode])
+
   const activeModalIndexInList = useMemo(() => {
     const activeCompositeHash = imageViewModal?.activeCompositeHash
     if (activationMode !== 'modal' || !activeCompositeHash) {
@@ -242,6 +268,7 @@ export function ImageList({
               showDefaultQuickActions={showDefaultQuickActions}
               interactive={activationMode !== 'none' || selectionMode}
               shouldBlurItemPreview={shouldBlurItemPreview}
+              onPreviewIntent={handlePreviewIntent}
             />
           ) : (
             <ImageListMasonryLazy
@@ -262,6 +289,7 @@ export function ImageList({
               showDefaultQuickActions={showDefaultQuickActions}
               interactive={activationMode !== 'none' || selectionMode}
               shouldBlurItemPreview={shouldBlurItemPreview}
+              onPreviewIntent={handlePreviewIntent}
             />
           )}
         </Suspense>
