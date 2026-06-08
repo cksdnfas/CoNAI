@@ -134,6 +134,7 @@ export function ModuleGraphWorkflowBrowseSidePanel({
       latestExecutionArtifacts={latestExecutionDetail?.artifacts}
       latestExecutionFinalResults={latestExecutionDetail?.final_results}
       latestExecutionLogs={latestExecutionDetail?.logs}
+      latestExecutionNodeIo={latestExecutionDetail?.node_io}
       latestExecutionDetailIsLoading={latestExecutionDetailIsLoading}
       latestExecutionDetailError={latestExecutionDetailError}
       onInputValueChange={onInputValueChange}

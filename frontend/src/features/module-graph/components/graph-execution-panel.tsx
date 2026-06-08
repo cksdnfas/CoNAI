@@ -12,6 +12,7 @@ import type {
   GraphExecutionArtifactRecord,
   GraphExecutionFinalResultRecord,
   GraphExecutionLogRecord,
+  GraphExecutionNodeIoRecord,
   GraphExecutionRecord,
   GraphWorkflowRecord,
 } from '@/lib/api-module-graph'
@@ -24,7 +25,11 @@ import {
 } from '../module-graph-shared'
 import {
   buildArtifactGroupModalText,
+  buildExecutionComparisonRows,
+  buildExecutionComparisonSummary,
   buildNodeDisplayLabelMap,
+  type ExecutionComparisonRow,
+  type ExecutionComparisonSummary,
   formatPrimitiveValue,
   getExecutionInputEntries,
   getExecutionModeLabel,
@@ -45,9 +50,10 @@ type GraphExecutionDetail = {
   artifacts: GraphExecutionArtifactRecord[]
   final_results: GraphExecutionFinalResultRecord[]
   logs: GraphExecutionLogRecord[]
+  node_io: GraphExecutionNodeIoRecord[]
 }
 
-type ExecutionDetailSectionKey = 'summary' | 'inputs' | 'artifacts' | 'logs'
+type ExecutionDetailSectionKey = 'summary' | 'inputs' | 'compare' | 'artifacts' | 'logs'
 
 function ExecutionOutputGroupCard({
   group,
@@ -137,6 +143,65 @@ function ExecutionOutputGroupCard({
   )
 }
 
+function ExecutionComparisonContextBlock({
+  summary,
+  rows,
+  compact = false,
+}: {
+  summary: ExecutionComparisonSummary
+  rows: ExecutionComparisonRow[]
+  compact?: boolean
+}) {
+  const { t, formatNumber } = useI18n()
+  const visibleRows = compact ? rows.slice(0, 5) : rows
+  const hiddenRowCount = Math.max(0, rows.length - visibleRows.length)
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        <span>{t({ ko: '비교 맥락', en: 'Compare context' })}</span>
+        <Badge variant="outline">{t({ ko: '입력 {count}', en: 'Inputs {count}' }, { count: formatNumber(summary.runtimeInputCount) })}</Badge>
+        <Badge variant="outline">{t({ ko: '원장 입력 {count}', en: 'Ledger inputs {count}' }, { count: formatNumber(summary.compactInputCount) })}</Badge>
+        <Badge variant="outline">{t({ ko: '원장 출력 {count}', en: 'Ledger outputs {count}' }, { count: formatNumber(summary.compactOutputCount) })}</Badge>
+        <Badge variant={summary.finalResultCount > 0 ? 'secondary' : 'outline'}>{t({ ko: '최종 {count}', en: 'Final {count}' }, { count: formatNumber(summary.finalResultCount) })}</Badge>
+        {summary.issueLogCount > 0 ? <Badge variant="outline">{t({ ko: '경고/오류 {count}', en: 'Warnings/errors {count}' }, { count: formatNumber(summary.issueLogCount) })}</Badge> : null}
+        {summary.finalResultWarningCount > 0 ? <Badge variant="outline">{t({ ko: '최종 경고 {count}', en: 'Final warnings {count}' }, { count: formatNumber(summary.finalResultWarningCount) })}</Badge> : null}
+      </div>
+
+      {visibleRows.length === 0 ? (
+        <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+          {t({ ko: '압축 입출력 원장 없음', en: 'No compact input/output ledger yet' })}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {visibleRows.map((row) => (
+            <div key={row.id} className="rounded-sm border border-border bg-background/45 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge variant={row.direction === 'output' ? 'secondary' : 'outline'}>{row.direction === 'output' ? t({ ko: '출력', en: 'Output' }) : t({ ko: '입력', en: 'Input' })}</Badge>
+                <span className="min-w-0 truncate text-sm font-medium text-foreground">{row.nodeLabel}</span>
+                <Badge variant="outline">{row.portKey}</Badge>
+                {row.artifactType ? <Badge variant="outline">{row.artifactType}</Badge> : null}
+              </div>
+              {row.sourceLabel || row.refLabel || row.summaryText ? (
+                <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
+                  {row.sourceLabel ? <div className="break-all">{t({ ko: '소스 {value}', en: 'Source {value}' }, { value: row.sourceLabel })}</div> : null}
+                  {row.refLabel ? <div className="break-all">{row.refLabel}</div> : null}
+                  {row.summaryText ? <div className="break-all">{row.summaryText}</div> : null}
+                </div>
+              ) : null}
+            </div>
+          ))}
+          {hiddenRowCount > 0 ? (
+            <div className="text-xs text-muted-foreground">
+              {t({ ko: '추가 원장 {count}개는 상세에서 확인 가능', en: '{count} more ledger rows available in details' }, { count: formatNumber(hiddenRowCount) })}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SelectedExecutionSummary({
   executionDetail,
   selectedGraph,
@@ -167,6 +232,18 @@ function SelectedExecutionSummary({
       getNodeDisplayLabelFromMap(nodeLabelMap, finalResultLifecycleWarning.sourceNodeId, nodeLabelOverrides),
     )
     : buildFinalResultLifecycleWarningSourceLabel(finalResultLifecycleWarning)
+  const executionComparisonSummary = useMemo(() => buildExecutionComparisonSummary({
+    inputEntries: executionInputEntries,
+    artifacts: executionDetail.artifacts,
+    finalResults,
+    logs: executionDetail.logs,
+    nodeIo: executionDetail.node_io ?? [],
+  }), [executionDetail.artifacts, executionDetail.logs, executionDetail.node_io, executionInputEntries, finalResults])
+  const executionComparisonRows = useMemo(() => buildExecutionComparisonRows(
+    executionDetail.node_io ?? [],
+    selectedGraph,
+    nodeLabelOverrides,
+  ), [executionDetail.node_io, nodeLabelOverrides, selectedGraph])
 
   return (
     <div className="space-y-4 rounded-sm border border-border bg-surface-low p-3">
@@ -216,6 +293,12 @@ function SelectedExecutionSummary({
           ) : null}
         </div>
       ) : null}
+
+      <ExecutionComparisonContextBlock
+        summary={executionComparisonSummary}
+        rows={executionComparisonRows}
+        compact
+      />
 
       {executionInputEntries.length > 0 ? (
         <div className="space-y-2.5">
@@ -315,6 +398,7 @@ export function GraphExecutionPanel({
   const detailSectionRefs = useRef<Record<ExecutionDetailSectionKey, HTMLDivElement | null>>({
     summary: null,
     inputs: null,
+    compare: null,
     artifacts: null,
     logs: null,
   })
@@ -402,6 +486,7 @@ export function GraphExecutionPanel({
     <div className="flex flex-wrap gap-2">
       <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('summary')}>{t({ ko: '요약', en: 'Summary' })}</Button>
       {executionInputEntries.length > 0 ? <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('inputs')}>{t({ ko: '입력', en: 'Inputs' })}</Button> : null}
+      <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('compare')}>{t({ ko: '비교', en: 'Compare' })}</Button>
       <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('artifacts')}>{t({ ko: '아티팩트', en: 'Artifacts' })}</Button>
       <Button type="button" size="sm" variant="outline" onClick={() => scrollToDetailSection('logs')}>{t({ ko: '로그', en: 'Logs' })}</Button>
     </div>
@@ -574,6 +659,23 @@ export function GraphExecutionPanel({
                 </div>
               </div>
             ) : null}
+
+            <div ref={(node) => { detailSectionRefs.current.compare = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
+              <ExecutionComparisonContextBlock
+                summary={buildExecutionComparisonSummary({
+                  inputEntries: executionInputEntries,
+                  artifacts: executionDetail.artifacts,
+                  finalResults,
+                  logs: executionDetail.logs,
+                  nodeIo: executionDetail.node_io ?? [],
+                })}
+                rows={buildExecutionComparisonRows(
+                  executionDetail.node_io ?? [],
+                  selectedGraph,
+                  nodeLabelOverrides,
+                )}
+              />
+            </div>
 
             <div ref={(node) => { detailSectionRefs.current.artifacts = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">

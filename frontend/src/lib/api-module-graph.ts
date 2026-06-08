@@ -228,6 +228,24 @@ export interface GraphExecutionFinalResultRecord {
   created_date: string
 }
 
+export type GraphExecutionNodeIoDirection = 'input' | 'output'
+
+export interface GraphExecutionNodeIoRecord {
+  id: number
+  execution_id: number
+  node_id: string
+  direction: GraphExecutionNodeIoDirection
+  port_key: string
+  source_node_id?: string | null
+  source_port_key?: string | null
+  output_index: number
+  artifact_type?: ModulePortDataType | 'file' | null
+  ref_kind?: string | null
+  ref_value?: string | null
+  summary?: string | null
+  created_date: string
+}
+
 export interface GraphWorkflowBrowseContentRecord {
   scope: {
     folder_id: number | null
@@ -763,6 +781,7 @@ export async function getGraphExecution(executionId: number) {
     artifacts: GraphExecutionArtifactRecord[]
     final_results: GraphExecutionFinalResultRecord[]
     logs: GraphExecutionLogRecord[]
+    node_io: GraphExecutionNodeIoRecord[]
   }>>(`/api/graph-workflows/executions/${executionId}`)
   return response.data
 }

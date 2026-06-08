@@ -1,5 +1,8 @@
 import type {
   GraphExecutionArtifactRecord,
+  GraphExecutionFinalResultRecord,
+  GraphExecutionLogRecord,
+  GraphExecutionNodeIoRecord,
   GraphWorkflowExposedInput,
   GraphWorkflowRecord,
 } from '@/lib/api-module-graph'
@@ -11,6 +14,7 @@ import {
   hasGraphArtifactVisualPreview,
   isEmptyLlmJsonArtifact,
 } from '../module-graph-shared'
+import { listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
 
 export type ParsedExecutionPlan = {
   orderedNodeIds?: string[]
@@ -32,6 +36,27 @@ export type ExecutionInputEntry = {
   key: string
   label: string
   value: unknown
+}
+
+export type ExecutionComparisonSummary = {
+  runtimeInputCount: number
+  compactInputCount: number
+  compactOutputCount: number
+  artifactCount: number
+  finalResultCount: number
+  issueLogCount: number
+  finalResultWarningCount: number
+}
+
+export type ExecutionComparisonRow = {
+  id: number
+  direction: GraphExecutionNodeIoRecord['direction']
+  nodeLabel: string
+  portKey: string
+  sourceLabel: string | null
+  artifactType: string | null
+  refLabel: string | null
+  summaryText: string | null
 }
 
 const COMPACT_HIDDEN_ARTIFACT_PORT_KEYS = new Set(['image_ref', 'metadata'])
@@ -95,6 +120,78 @@ export function formatPrimitiveValue(value: unknown) {
   }
 
   return JSON.stringify(value)
+}
+
+function compactComparisonText(value: string, maxLength = 72) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized
+}
+
+function parseNodeIoSummary(value?: string | null) {
+  if (!value) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function readSummaryString(summary: Record<string, unknown> | null, key: string) {
+  const value = summary?.[key]
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+}
+
+function readSummaryNumber(summary: Record<string, unknown> | null, key: string) {
+  const value = summary?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function summarizeNodeIoValue(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  const valueKind = typeof record.valueKind === 'string' ? record.valueKind : null
+  const size = typeof record.size === 'number' && Number.isFinite(record.size) ? record.size : null
+  const hash = typeof record.hash === 'string' && record.hash.trim() ? record.hash.trim().slice(0, 12) : null
+  return [valueKind, size !== null ? `${size}b` : null, hash ? `#${hash}` : null].filter(Boolean).join(' ') || null
+}
+
+function summarizeNodeIoSummary(value?: string | null) {
+  const summary = parseNodeIoSummary(value)
+  if (!summary) {
+    return null
+  }
+
+  const sourceArtifactId = readSummaryNumber(summary, 'sourceArtifactId')
+  const sourceRefKind = readSummaryString(summary, 'sourceRefKind')
+  const sourceRefValue = readSummaryString(summary, 'sourceRefValue')
+  const artifactRecordId = readSummaryNumber(summary, 'artifactRecordId')
+  const metadataKind = readSummaryString(summary, 'metadataKind')
+  const mimeType = readSummaryString(summary, 'mimeType')
+  const fileName = readSummaryString(summary, 'fileName')
+  const queueJobId = readSummaryNumber(summary, 'queueJobId')
+  const historyId = readSummaryNumber(summary, 'historyId')
+  const valueSummary = summarizeNodeIoValue(summary.value)
+
+  return [
+    sourceArtifactId !== null ? `source #${sourceArtifactId}` : null,
+    sourceRefKind && sourceRefValue ? `${sourceRefKind}: ${compactComparisonText(sourceRefValue, 48)}` : sourceRefKind,
+    artifactRecordId !== null ? `artifact #${artifactRecordId}` : null,
+    metadataKind,
+    mimeType,
+    fileName,
+    queueJobId !== null ? `queue #${queueJobId}` : null,
+    historyId !== null ? `history #${historyId}` : null,
+    valueSummary,
+  ].filter(Boolean).join(' · ') || null
 }
 
 /** Summarize one structured value into a small list of readable preview lines. */
@@ -197,6 +294,63 @@ export function getExecutionInputEntries(plan: ParsedExecutionPlan | null, input
     label: labelMap.get(key) ?? key,
     value,
   }))
+}
+
+export function buildExecutionComparisonSummary({
+  inputEntries,
+  artifacts,
+  finalResults,
+  logs,
+  nodeIo,
+}: {
+  inputEntries: ExecutionInputEntry[]
+  artifacts: GraphExecutionArtifactRecord[]
+  finalResults: GraphExecutionFinalResultRecord[]
+  logs: GraphExecutionLogRecord[]
+  nodeIo: GraphExecutionNodeIoRecord[]
+}): ExecutionComparisonSummary {
+  const finalResultWarningCount = listFinalResultLifecycleWarnings(logs).length
+  const issueLogCount = logs.filter((log) => log.level === 'warn' || log.level === 'error').length
+
+  return {
+    runtimeInputCount: inputEntries.length,
+    compactInputCount: nodeIo.filter((record) => record.direction === 'input').length,
+    compactOutputCount: nodeIo.filter((record) => record.direction === 'output').length,
+    artifactCount: artifacts.length,
+    finalResultCount: finalResults.length,
+    issueLogCount,
+    finalResultWarningCount,
+  }
+}
+
+export function buildExecutionComparisonRows(
+  nodeIo: GraphExecutionNodeIoRecord[],
+  selectedGraph?: GraphWorkflowRecord | null,
+  nodeLabelOverrides?: Record<string, string> | null,
+): ExecutionComparisonRow[] {
+  const nodeLabelMap = buildNodeDisplayLabelMap(selectedGraph)
+
+  return nodeIo.map((record) => {
+    const nodeLabel = getNodeDisplayLabelFromMap(nodeLabelMap, record.node_id, nodeLabelOverrides)
+    const sourceNodeLabel = record.source_node_id
+      ? getNodeDisplayLabelFromMap(nodeLabelMap, record.source_node_id, nodeLabelOverrides)
+      : null
+    const sourceLabel = sourceNodeLabel
+      ? [sourceNodeLabel, record.source_port_key].filter(Boolean).join(' · ')
+      : null
+    const refLabel = [record.ref_kind, record.ref_value ? compactComparisonText(record.ref_value, 64) : null].filter(Boolean).join(': ') || null
+
+    return {
+      id: record.id,
+      direction: record.direction,
+      nodeLabel,
+      portKey: record.port_key,
+      sourceLabel,
+      artifactType: record.artifact_type ?? null,
+      refLabel,
+      summaryText: summarizeNodeIoSummary(record.summary),
+    }
+  })
 }
 
 /** Build a reusable node-label lookup map for execution summary surfaces. */

@@ -8,11 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
-import { getGraphWorkflowSchedules, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord } from '@/lib/api-module-graph'
+import { getGraphWorkflowSchedules, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
-import { buildNodeDisplayLabelMap, getNodeDisplayLabelFromMap } from './graph-execution-panel-helpers'
+import { buildExecutionComparisonSummary, buildNodeDisplayLabelMap, getExecutionInputEntries, getNodeDisplayLabelFromMap, parseExecutionPlan } from './graph-execution-panel-helpers'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 import { buildFinalResultLifecycleWarningSourceLabel, listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
@@ -27,6 +27,7 @@ type WorkflowRunnerPanelProps = {
   latestExecutionArtifacts?: GraphExecutionArtifactRecord[] | null
   latestExecutionFinalResults?: GraphExecutionFinalResultRecord[] | null
   latestExecutionLogs?: GraphExecutionLogRecord[] | null
+  latestExecutionNodeIo?: GraphExecutionNodeIoRecord[] | null
   latestExecutionDetailIsLoading?: boolean
   latestExecutionDetailError?: string | null
   graphSummary?: SavedGraphWorkflowSummary | null
@@ -53,6 +54,7 @@ export function WorkflowRunnerPanel({
   latestExecutionArtifacts,
   latestExecutionFinalResults,
   latestExecutionLogs,
+  latestExecutionNodeIo,
   latestExecutionDetailIsLoading = false,
   latestExecutionDetailError = null,
   graphSummary,
@@ -100,6 +102,17 @@ export function WorkflowRunnerPanel({
       getNodeDisplayLabelFromMap(nodeLabelMap, latestExecutionFinalResultWarning.sourceNodeId),
     )
     : buildFinalResultLifecycleWarningSourceLabel(latestExecutionFinalResultWarning)
+  const latestExecutionInputEntries = useMemo(
+    () => getExecutionInputEntries(parseExecutionPlan(latestExecution?.execution_plan), inputDefinitions),
+    [inputDefinitions, latestExecution?.execution_plan],
+  )
+  const latestExecutionComparisonSummary = useMemo(() => buildExecutionComparisonSummary({
+    inputEntries: latestExecutionInputEntries,
+    artifacts: latestExecutionArtifacts ?? [],
+    finalResults: latestExecutionFinalResults ?? [],
+    logs: latestExecutionLogs ?? [],
+    nodeIo: latestExecutionNodeIo ?? [],
+  }), [latestExecutionArtifacts, latestExecutionFinalResults, latestExecutionInputEntries, latestExecutionLogs, latestExecutionNodeIo])
   const latestExecutionArtifactCount = shouldShowLatestExecutionResults && latestExecutionArtifacts ? latestExecutionArtifacts.length : null
   const latestExecutionEmptyResultLabel = graphSummary && graphSummary.finalResultNodeCount > 0
     ? latestExecutionArtifactCount && latestExecutionArtifactCount > 0
@@ -234,6 +247,10 @@ export function WorkflowRunnerPanel({
                   ) : null}
                   {latestExecutionResultCountLabel ? (
                     <Badge variant={latestExecutionFinalResults && latestExecutionFinalResults.length > 0 ? 'secondary' : 'outline'}>{latestExecutionResultCountLabel}</Badge>
+                  ) : null}
+                  <Badge variant="outline">{t({ ko: '입출력 {count}', en: 'I/O {count}' }, { count: formatNumber(latestExecutionComparisonSummary.compactInputCount + latestExecutionComparisonSummary.compactOutputCount) })}</Badge>
+                  {latestExecutionComparisonSummary.issueLogCount > 0 ? (
+                    <Badge variant="outline">{t({ ko: '경고/오류 {count}', en: 'Warnings/errors {count}' }, { count: formatNumber(latestExecutionComparisonSummary.issueLogCount) })}</Badge>
                   ) : null}
                 </AlertTitle>
                 <AlertDescription className="pt-3">
