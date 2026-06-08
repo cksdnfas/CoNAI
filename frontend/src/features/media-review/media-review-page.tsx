@@ -45,6 +45,7 @@ const REVIEW_QUEUE_OPTIONS: Array<{ value: MediaReviewQueueKey; icon: typeof Fil
   { value: 'sparse-tags', icon: Sigma, label: { ko: '태그 부족', en: 'Sparse tags' } },
   { value: 'unrated', icon: Star, label: { ko: '평가 없음', en: 'Unrated' } },
   { value: 'similar', icon: CircleDot, label: { ko: '유사', en: 'Similar' } },
+  { value: 'recoverable', icon: Undo2, label: { ko: '복구 점검', en: 'Recover' } },
 ]
 
 function getImageListId(image: ImageRecord) {
@@ -71,10 +72,12 @@ function BatchReviewPreview({
   selectedCount,
   selectedCompositeCount,
   reviewedCount,
+  recoverableCount,
 }: {
   selectedCount: number
   selectedCompositeCount: number
   reviewedCount: number
+  recoverableCount: number
 }) {
   const { t, formatNumber } = useI18n()
 
@@ -82,13 +85,14 @@ function BatchReviewPreview({
     <PageInset className="space-y-2 text-xs text-muted-foreground" data-media-review-batch-preview="true">
       <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
         <Badge>{t({ ko: '{count}개 선택', en: '{count} selected' }, { count: formatNumber(selectedCount) })}</Badge>
-        <Badge variant="outline">{t({ ko: '적용 가능 {count}', en: '{count} actionable' }, { count: formatNumber(selectedCompositeCount) })}</Badge>
+        <Badge variant="outline">{t({ ko: '활성 적용 가능 {count}', en: '{count} active actionable' }, { count: formatNumber(selectedCompositeCount) })}</Badge>
         {reviewedCount > 0 ? <Badge variant="outline">{t({ ko: '검토 완료 {count}', en: '{count} reviewed' }, { count: formatNumber(reviewedCount) })}</Badge> : null}
+        {recoverableCount > 0 ? <Badge variant="outline">{t({ ko: '복구 점검 {count}', en: '{count} recovery checks' }, { count: formatNumber(recoverableCount) })}</Badge> : null}
       </div>
       <div className="grid gap-2 md:grid-cols-3">
         <div>{t({ ko: '그룹: 선택 항목을 기존 사용자 그룹에 추가해. 삭제나 이동은 하지 않아.', en: 'Group: add selected items to an existing custom group without deleting or moving files.' })}</div>
         <div>{t({ ko: '태그/등급: 기존 태거 경로로 auto_tags와 rating_score를 다시 계산해.', en: 'Tags/rating: rerun the existing tagger path to refresh auto_tags and rating_score.' })}</div>
-        <div>{t({ ko: '상태: 현재 화면 세션에서만 검토 완료/대기 큐를 바꿔.', en: 'Status: update the reviewed/needs-review queues for this page session only.' })}</div>
+        <div>{t({ ko: '복구: 누락/삭제 상태는 정리하지 않고 검토 신호로만 남겨.', en: 'Recovery: missing/deleted states stay as review signals; this does not clean them up.' })}</div>
       </div>
     </PageInset>
   )
@@ -104,6 +108,11 @@ function ReviewSignalOverlay({ image, similarHashSet, reviewedIdSet }: { image: 
       ? t({ ko: '태그 {count}', en: '{count} tags' }, { count: formatNumber(signals.tagCount) })
       : t({ ko: '태그 {count}', en: '{count} tags' }, { count: formatNumber(signals.tagCount) })
   const ratingLabel = signals.ratingLabel ?? (signals.ratingScore === null ? t({ ko: '평가 없음', en: 'unrated' }) : formatNumber(signals.ratingScore))
+  const recoveryLabel = signals.recoverabilityState === 'deleted'
+    ? t({ ko: '휴지통 기록', en: 'recycled' })
+    : signals.recoverabilityState === 'missing'
+      ? t({ ko: '파일 누락', en: 'missing file' })
+      : null
 
   return (
     <div className="pointer-events-none absolute inset-x-2 bottom-2 flex flex-wrap gap-1">
@@ -111,6 +120,7 @@ function ReviewSignalOverlay({ image, similarHashSet, reviewedIdSet }: { image: 
       <Badge variant={signals.tagQuality === 'ready' ? 'secondary' : 'outline'}>{tagLabel}</Badge>
       <Badge variant={signals.ratingScore === null && signals.ratingLabel === null ? 'outline' : 'secondary'}>{ratingLabel}</Badge>
       {signals.isSimilarMatch ? <Badge>{t({ ko: '유사', en: 'similar' })}</Badge> : null}
+      {recoveryLabel ? <Badge variant="outline">{recoveryLabel}</Badge> : null}
       {reviewedIdSet.has(imageId) ? <Badge>{t({ ko: '검토 완료', en: 'reviewed' })}</Badge> : null}
     </div>
   )
@@ -234,16 +244,21 @@ export function MediaReviewPage() {
     () => visibleItems.filter((image) => selectedIdSet.has(getImageListId(image))),
     [selectedIdSet, visibleItems],
   )
+  const selectedActionableImages = useMemo(
+    () => selectedImages.filter((image) => image.file_status !== 'missing' && image.file_status !== 'deleted'),
+    [selectedImages],
+  )
   const selectedCompositeHashes = useMemo(
-    () => selectedImages
+    () => selectedActionableImages
       .map((image) => image.composite_hash)
       .filter((value): value is string => typeof value === 'string' && value.length > 0),
-    [selectedImages],
+    [selectedActionableImages],
   )
   const selectedReviewedCount = useMemo(
     () => selectedImages.filter((image) => reviewedIdSet.has(getImageListId(image))).length,
     [reviewedIdSet, selectedImages],
   )
+  const selectedRecoverableCount = selectedImages.length - selectedActionableImages.length
 
   const assignToGroupMutation = useMutation({
     mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
@@ -439,11 +454,12 @@ export function MediaReviewPage() {
           fullWidth
         />
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <SignalTile label={t({ ko: '표시', en: 'Showing' })} value={`${formatNumber(visibleItems.length)} / ${formatNumber(filteredImages.length)}`} icon={Filter} />
           <SignalTile label={t({ ko: '그룹 없음', en: 'Ungrouped' })} value={formatNumber(visibleSummary.ungroupedCount)} icon={FolderTree} />
           <SignalTile label={t({ ko: '태그 점검', en: 'Tag review' })} value={formatNumber(visibleSummary.missingTagCount + visibleSummary.sparseTagCount)} icon={Tags} />
           <SignalTile label={t({ ko: '유사 매칭', en: 'Similar matches' })} value={formatNumber(visibleSummary.similarCount)} icon={CircleDot} />
+          <SignalTile label={t({ ko: '복구 점검', en: 'Recovery checks' })} value={formatNumber(visibleSummary.recoverableCount)} icon={Undo2} />
         </div>
 
         <PageInset className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -461,6 +477,13 @@ export function MediaReviewPage() {
             )}
             {similarImagesQuery.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
           </div>
+        </PageInset>
+
+        <PageInset className="text-xs text-muted-foreground" data-media-review-cleanup-guardrail="true">
+          {t({
+            ko: '이 화면의 일괄 작업은 그룹 추가, 태그/등급 재점검, 검토 상태 표시까지만 수행해. 파일 삭제, 휴지통 비우기, 영구 정리는 여기서 실행하지 않아.',
+            en: 'Batch actions here only add groups, recheck tags/ratings, or mark review state. File deletion, recycle-bin emptying, and permanent cleanup do not run from this workspace.',
+          })}
         </PageInset>
       </PageSection>
 
@@ -501,6 +524,7 @@ export function MediaReviewPage() {
               selectedCount={selectedIds.length}
               selectedCompositeCount={selectedCompositeHashes.length}
               reviewedCount={selectedReviewedCount}
+              recoverableCount={selectedRecoverableCount}
             />
           ) : null}
 
@@ -547,7 +571,7 @@ export function MediaReviewPage() {
         selectedCount={selectedIds.length}
         downloadableCount={selectedCompositeHashes.length}
         showDownloadAction={false}
-        statusText={t({ ko: '그룹, 태그/등급, 검토 상태를 선택 항목에 일괄 적용', en: 'Batch group, tag/rating, and review-state actions for the selection' })}
+        statusText={t({ ko: '활성 항목에만 그룹, 태그/등급, 검토 상태 적용. 삭제/정리 없음', en: 'Apply group, tag/rating, and review state to active items only. No deletion or cleanup.' })}
         extraActions={
           <>
             <Button

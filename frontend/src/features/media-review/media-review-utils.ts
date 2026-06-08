@@ -2,8 +2,9 @@ import { createTextSearchChip } from '@/features/search/search-utils'
 import type { SearchChip } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 
-export type MediaReviewQueueKey = 'all' | 'needs-review' | 'reviewed' | 'ungrouped' | 'missing-tags' | 'sparse-tags' | 'unrated' | 'similar'
+export type MediaReviewQueueKey = 'all' | 'needs-review' | 'reviewed' | 'ungrouped' | 'missing-tags' | 'sparse-tags' | 'unrated' | 'similar' | 'recoverable'
 export type MediaReviewTagQuality = 'missing' | 'sparse' | 'ready'
+export type MediaReviewRecoverabilityState = 'active' | 'missing' | 'deleted'
 
 export interface MediaReviewSignals {
   compositeHash: string | null
@@ -13,6 +14,7 @@ export interface MediaReviewSignals {
   tagCount: number
   tagQuality: MediaReviewTagQuality
   isSimilarMatch: boolean
+  recoverabilityState: MediaReviewRecoverabilityState
 }
 
 export interface MediaReviewSignalSummary {
@@ -24,6 +26,7 @@ export interface MediaReviewSignalSummary {
   missingTagCount: number
   sparseTagCount: number
   similarCount: number
+  recoverableCount: number
 }
 
 function getRecordCount(record: Record<string, unknown> | null | undefined) {
@@ -68,6 +71,11 @@ export function getMediaReviewSignals(image: ImageRecord, similarHashSet?: Reado
   const tagCount = generalTagCount + characterTagCount
   const compositeHash = typeof image.composite_hash === 'string' && image.composite_hash.length > 0 ? image.composite_hash : null
   const tagQuality: MediaReviewTagQuality = tagCount === 0 ? 'missing' : tagCount < 6 ? 'sparse' : 'ready'
+  const recoverabilityState: MediaReviewRecoverabilityState = image.file_status === 'deleted'
+    ? 'deleted'
+    : image.file_status === 'missing'
+      ? 'missing'
+      : 'active'
 
   return {
     compositeHash,
@@ -77,6 +85,7 @@ export function getMediaReviewSignals(image: ImageRecord, similarHashSet?: Reado
     tagCount,
     tagQuality,
     isSimilarMatch: compositeHash ? similarHashSet?.has(compositeHash) === true : false,
+    recoverabilityState,
   }
 }
 
@@ -109,6 +118,10 @@ export function getMediaReviewSignalSummary(images: ImageRecord[], similarHashSe
       summary.similarCount += 1
     }
 
+    if (signals.recoverabilityState !== 'active') {
+      summary.recoverableCount += 1
+    }
+
     return summary
   }, {
     totalCount: 0,
@@ -119,6 +132,7 @@ export function getMediaReviewSignalSummary(images: ImageRecord[], similarHashSe
     missingTagCount: 0,
     sparseTagCount: 0,
     similarCount: 0,
+    recoverableCount: 0,
   })
 }
 
@@ -153,6 +167,10 @@ export function filterMediaReviewImages(images: ImageRecord[], queue: MediaRevie
 
     if (queue === 'unrated') {
       return signals.ratingScore === null && signals.ratingLabel === null
+    }
+
+    if (queue === 'recoverable') {
+      return signals.recoverabilityState !== 'active'
     }
 
     return signals.isSimilarMatch

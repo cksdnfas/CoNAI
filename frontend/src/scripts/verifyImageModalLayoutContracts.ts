@@ -454,7 +454,7 @@ function verifyImageModalMediaStartsFromContainedCenter() {
   )
   match(
     mediaSource,
-    /useEffect\(\(\) => \{[\s\S]*?setNaturalMediaSize\(null\)[\s\S]*?scaleRef\.current = DEFAULT_SCALE[\s\S]*?setScale\(DEFAULT_SCALE\)[\s\S]*?\}, \[renderUrl\]\)/,
+    /useEffect\(\(\) => \{[\s\S]*?setNaturalMediaSize\(null\)[\s\S]*?scaleRef\.current = DEFAULT_SCALE[\s\S]*?setScale\(DEFAULT_SCALE\)[\s\S]*?\}, \[[^\]]*renderUrl[^\]]*\]\)/,
     'changing modal images should not inherit a stale zoom level from a previous image',
   )
   doesNotMatch(
