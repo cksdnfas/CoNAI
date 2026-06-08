@@ -10,6 +10,8 @@ export type MediaReviewRecoverabilityState = 'active' | 'missing' | 'deleted'
 export type MediaReviewRecommendationPriority = 'high' | 'medium' | 'low'
 export type MediaReviewTagQualitySuggestionKey = 'retag-missing' | 'retag-sparse' | 'review-unrated' | 'tag-quality-ready'
 export type MediaReviewGroupQualityCheckKey = 'ungrouped-loaded' | 'empty-groups' | 'auto-collect-not-run' | 'large-root-groups' | 'group-coverage-ready'
+export type MediaReviewSimilarityDecisionKind = 'duplicate-candidate' | 'keep-separate' | 'needs-human-review'
+export type MediaReviewCleanupStageAction = 'review-missing-file' | 'review-recycled-record' | 'hold-active-similar' | 'hold-active-selected'
 
 export interface MediaReviewSignals {
   compositeHash: string | null
@@ -55,6 +57,40 @@ export interface MediaReviewGroupQualityCheck {
   groupIds: number[]
 }
 
+export interface MediaReviewSimilarityDecisionHistoryItem {
+  id: string
+  anchorHash: string
+  targetHash: string
+  decision: MediaReviewSimilarityDecisionKind
+  decidedAt: string
+  matchState: 'similar-match' | 'manual-selection'
+  reversible: true
+}
+
+export interface MediaReviewSimilarityDecisionSummary {
+  totalCount: number
+  duplicateCandidateCount: number
+  keepSeparateCount: number
+  needsHumanReviewCount: number
+}
+
+export interface MediaReviewCleanupStageItem {
+  id: string
+  compositeHash: string | null
+  action: MediaReviewCleanupStageAction
+  recoverabilityState: MediaReviewRecoverabilityState
+  reason: 'missing-file' | 'recycled-record' | 'similar-active' | 'selected-active'
+  destructiveAction: false
+}
+
+export interface MediaReviewCleanupStagingPlan {
+  items: MediaReviewCleanupStageItem[]
+  activeCount: number
+  recoverableCount: number
+  similarCount: number
+  destructiveCount: 0
+}
+
 function getRecordCount(record: Record<string, unknown> | null | undefined) {
   return record ? Object.keys(record).length : 0
 }
@@ -69,6 +105,19 @@ function getTopRatingLabel(record: Record<string, number> | null | undefined) {
     .sort((a, b) => b[1] - a[1])
 
   return topRating?.[0] ?? null
+}
+
+function getMediaReviewItemId(image: ImageRecord, fallbackIndex = 0) {
+  const compositeHash = typeof image.composite_hash === 'string' && image.composite_hash.length > 0 ? image.composite_hash : null
+  if (compositeHash) {
+    return compositeHash
+  }
+
+  if (typeof image.id === 'number' || typeof image.id === 'string') {
+    return String(image.id)
+  }
+
+  return `review-item-${fallbackIndex}`
 }
 
 export function buildMediaReviewSearchChips(searchText: string): SearchChip[] {
@@ -87,6 +136,118 @@ export function buildMediaReviewSearchChips(searchText: string): SearchChip[] {
   if (modelChip) chips.push(modelChip)
 
   return chips
+}
+
+export function buildMediaReviewSimilarityDecisionHistory(
+  images: ImageRecord[],
+  anchorHash: string | null | undefined,
+  decision: MediaReviewSimilarityDecisionKind,
+  decidedAt: string,
+  similarHashSet?: ReadonlySet<string>,
+): MediaReviewSimilarityDecisionHistoryItem[] {
+  const normalizedAnchorHash = typeof anchorHash === 'string' && anchorHash.length > 0 ? anchorHash : null
+  if (!normalizedAnchorHash) {
+    return []
+  }
+
+  return images.flatMap((image) => {
+    const targetHash = typeof image.composite_hash === 'string' && image.composite_hash.length > 0 ? image.composite_hash : null
+    if (!targetHash || targetHash === normalizedAnchorHash) {
+      return []
+    }
+
+    const matchState = similarHashSet?.has(targetHash) ? 'similar-match' : 'manual-selection'
+
+    return [{
+      id: `${normalizedAnchorHash}:${targetHash}:${decision}:${decidedAt}`,
+      anchorHash: normalizedAnchorHash,
+      targetHash,
+      decision,
+      decidedAt,
+      matchState,
+      reversible: true as const,
+    }]
+  })
+}
+
+export function getMediaReviewSimilarityDecisionSummary(history: MediaReviewSimilarityDecisionHistoryItem[]): MediaReviewSimilarityDecisionSummary {
+  return history.reduce<MediaReviewSimilarityDecisionSummary>((summary, item) => {
+    summary.totalCount += 1
+    if (item.decision === 'duplicate-candidate') {
+      summary.duplicateCandidateCount += 1
+    } else if (item.decision === 'keep-separate') {
+      summary.keepSeparateCount += 1
+    } else {
+      summary.needsHumanReviewCount += 1
+    }
+
+    return summary
+  }, {
+    totalCount: 0,
+    duplicateCandidateCount: 0,
+    keepSeparateCount: 0,
+    needsHumanReviewCount: 0,
+  })
+}
+
+export function buildMediaReviewCleanupStagingPlan(
+  images: ImageRecord[],
+  similarHashSet?: ReadonlySet<string>,
+): MediaReviewCleanupStagingPlan {
+  const items = images.map<MediaReviewCleanupStageItem>((image, index) => {
+    const signals = getMediaReviewSignals(image, similarHashSet)
+    const fallbackId = getMediaReviewItemId(image, index)
+
+    if (signals.recoverabilityState === 'missing') {
+      return {
+        id: `${fallbackId}:review-missing-file`,
+        compositeHash: signals.compositeHash,
+        action: 'review-missing-file',
+        recoverabilityState: signals.recoverabilityState,
+        reason: 'missing-file',
+        destructiveAction: false,
+      }
+    }
+
+    if (signals.recoverabilityState === 'deleted') {
+      return {
+        id: `${fallbackId}:review-recycled-record`,
+        compositeHash: signals.compositeHash,
+        action: 'review-recycled-record',
+        recoverabilityState: signals.recoverabilityState,
+        reason: 'recycled-record',
+        destructiveAction: false,
+      }
+    }
+
+    if (signals.isSimilarMatch) {
+      return {
+        id: `${fallbackId}:hold-active-similar`,
+        compositeHash: signals.compositeHash,
+        action: 'hold-active-similar',
+        recoverabilityState: signals.recoverabilityState,
+        reason: 'similar-active',
+        destructiveAction: false,
+      }
+    }
+
+    return {
+      id: `${fallbackId}:hold-active-selected`,
+      compositeHash: signals.compositeHash,
+      action: 'hold-active-selected',
+      recoverabilityState: signals.recoverabilityState,
+      reason: 'selected-active',
+      destructiveAction: false,
+    }
+  })
+
+  return {
+    items,
+    activeCount: items.filter((item) => item.recoverabilityState === 'active').length,
+    recoverableCount: items.filter((item) => item.recoverabilityState !== 'active').length,
+    similarCount: items.filter((item) => item.action === 'hold-active-similar').length,
+    destructiveCount: 0,
+  }
 }
 
 export function getMediaReviewSignals(image: ImageRecord, similarHashSet?: ReadonlySet<string>): MediaReviewSignals {

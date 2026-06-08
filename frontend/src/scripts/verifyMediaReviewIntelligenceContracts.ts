@@ -2,9 +2,12 @@ import { equal, ok } from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  buildMediaReviewCleanupStagingPlan,
   getMediaReviewGroupQualityChecks,
   getMediaReviewRecommendedQueues,
   getMediaReviewSignalSummary,
+  buildMediaReviewSimilarityDecisionHistory,
+  getMediaReviewSimilarityDecisionSummary,
   getMediaReviewTagQualitySuggestions,
 } from '../features/media-review/media-review-utils'
 import type { GroupWithHierarchy } from '../types/group'
@@ -76,6 +79,15 @@ const summary = getMediaReviewSignalSummary(reviewImages, similarHashSet)
 const recommendations = getMediaReviewRecommendedQueues(summary, { reviewedCount: 1 })
 const tagSuggestions = getMediaReviewTagQualitySuggestions(summary)
 const groupChecks = getMediaReviewGroupQualityChecks(reviewImages, groups)
+const decisionHistory = buildMediaReviewSimilarityDecisionHistory(
+  reviewImages,
+  'ready-grouped',
+  'duplicate-candidate',
+  '2026-06-08T16:00:00.000Z',
+  similarHashSet,
+)
+const decisionSummary = getMediaReviewSimilarityDecisionSummary(decisionHistory)
+const cleanupStagingPlan = buildMediaReviewCleanupStagingPlan(reviewImages, similarHashSet)
 
 equal(recommendations[0].queue, 'recoverable', 'recoverable queue should be recommended before normal quality queues')
 ok(recommendations.some((recommendation) => recommendation.queue === 'missing-tags'), 'recommended queues should include missing tag work')
@@ -86,6 +98,13 @@ ok(tagSuggestions.some((suggestion) => suggestion.key === 'review-unrated' && su
 ok(groupChecks.some((check) => check.key === 'ungrouped-loaded' && check.queue === 'ungrouped'), 'group checks should route loaded ungrouped media')
 ok(groupChecks.some((check) => check.key === 'empty-groups' && check.groupIds.includes(20)), 'group checks should surface empty groups')
 ok(groupChecks.some((check) => check.key === 'auto-collect-not-run' && check.groupIds.includes(10)), 'group checks should surface enabled auto-collect groups without a run record')
+equal(decisionHistory.length, 3, 'similarity decision history should record target decisions while excluding the anchor')
+equal(decisionSummary.duplicateCandidateCount, 3, 'decision summary should count duplicate-candidate decisions')
+ok(decisionHistory.some((item) => item.targetHash === 'sparse-tags' && item.matchState === 'similar-match'), 'decision history should preserve whether a target came from similarity results')
+equal(cleanupStagingPlan.items.length, reviewImages.length, 'cleanup staging should stage selected items as review records')
+equal(cleanupStagingPlan.recoverableCount, 1, 'cleanup staging should count missing/deleted records as recoverable review')
+equal(cleanupStagingPlan.destructiveCount, 0, 'cleanup staging should never plan destructive cleanup')
+ok(cleanupStagingPlan.items.every((item) => item.destructiveAction === false), 'cleanup staging items should be explicitly non-destructive')
 
 const root = process.cwd()
 const reviewPage = readFileSync(join(root, 'src/features/media-review/media-review-page.tsx'), 'utf8')
@@ -94,6 +113,9 @@ ok(reviewPage.includes('data-media-review-intelligence-panel="true"'), 'media re
 ok(reviewPage.includes('data-media-review-recommended-queues="true"'), 'media review page should render recommended queues')
 ok(reviewPage.includes('data-media-review-tag-quality-suggestions="true"'), 'media review page should render tag quality suggestions')
 ok(reviewPage.includes('data-media-review-group-quality-checks="true"'), 'media review page should render group quality checks')
+ok(reviewPage.includes('data-media-review-similarity-history="true"'), 'media review page should render similarity decision history')
+ok(reviewPage.includes('data-media-review-cleanup-staging="true"'), 'media review page should render reversible cleanup staging')
+ok(reviewPage.includes('handleStageCleanupSelected'), 'media review cleanup staging should be a local staging action')
 ok(!reviewPage.includes('deleteImages('), 'media review intelligence should not add destructive deletion actions')
 ok(!reviewPage.includes('triggerBlobDownload'), 'media review intelligence should not turn quality checks into downloads')
 

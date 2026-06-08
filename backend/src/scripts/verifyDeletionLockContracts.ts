@@ -83,6 +83,18 @@ function verifyMediaReviewDoesNotExposeDestructiveCleanup() {
 
   assert.match(
     mediaReviewSource,
+    /data-media-review-cleanup-staging="true"/,
+    'media review should stage cleanup review separately from deletion actions',
+  )
+
+  assert.match(
+    mediaReviewSource,
+    /handleStageCleanupSelected[\s\S]*setCleanupStageItems/,
+    'media review cleanup staging should stay as local review state',
+  )
+
+  assert.match(
+    mediaReviewSource,
     /const selectedActionableImages = useMemo\([\s\S]*?file_status !== 'missing'[\s\S]*?file_status !== 'deleted'/,
     'media review batch mutations should exclude missing/deleted records from active write actions',
   )
@@ -97,6 +109,12 @@ function verifyMediaReviewDoesNotExposeDestructiveCleanup() {
     mediaReviewUtilsSource,
     /if \(queue === 'recoverable'\) \{[\s\S]*?signals\.recoverabilityState !== 'active'/,
     'media review should expose a recoverable queue without adding cleanup mutation routes',
+  )
+
+  assert.match(
+    mediaReviewUtilsSource,
+    /destructiveAction: false/,
+    'media review cleanup staging must explicitly separate review staging from destructive cleanup',
   )
 
   assert.doesNotMatch(

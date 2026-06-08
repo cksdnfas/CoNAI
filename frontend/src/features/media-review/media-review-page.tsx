@@ -24,16 +24,24 @@ import { batchTagImages, getImages, getSimilarImages, searchImagesComplex } from
 import { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import {
+  buildMediaReviewCleanupStagingPlan,
   buildMediaReviewSearchChips,
+  buildMediaReviewSimilarityDecisionHistory,
   filterMediaReviewImages,
   getMediaReviewGroupQualityChecks,
   getMediaReviewRecommendedQueues,
   getMediaReviewSignals,
   getMediaReviewSignalSummary,
+  getMediaReviewSimilarityDecisionSummary,
   getMediaReviewTagQualitySuggestions,
   type MediaReviewQueueKey,
+  type MediaReviewCleanupStageAction,
+  type MediaReviewCleanupStageItem,
+  type MediaReviewCleanupStagingPlan,
   type MediaReviewGroupQualityCheck,
   type MediaReviewRecommendedQueue,
+  type MediaReviewSimilarityDecisionHistoryItem,
+  type MediaReviewSimilarityDecisionKind,
   type MediaReviewTagQualitySuggestion,
 } from './media-review-utils'
 
@@ -181,6 +189,34 @@ function getGroupCheckCopy(check: MediaReviewGroupQualityCheck) {
   }
 }
 
+function getSimilarityDecisionCopy(decision: MediaReviewSimilarityDecisionKind) {
+  if (decision === 'duplicate-candidate') {
+    return { ko: '중복 후보', en: 'Duplicate candidate' }
+  }
+
+  if (decision === 'keep-separate') {
+    return { ko: '별도 보존', en: 'Keep separate' }
+  }
+
+  return { ko: '추가 확인', en: 'Needs review' }
+}
+
+function getCleanupStageActionCopy(action: MediaReviewCleanupStageAction) {
+  if (action === 'review-missing-file') {
+    return { ko: '누락 파일 확인', en: 'Check missing file' }
+  }
+
+  if (action === 'review-recycled-record') {
+    return { ko: '휴지통 기록 확인', en: 'Check recycled record' }
+  }
+
+  if (action === 'hold-active-similar') {
+    return { ko: '활성 유사 항목 보류', en: 'Hold active similar item' }
+  }
+
+  return { ko: '활성 선택 항목 보류', en: 'Hold selected active item' }
+}
+
 function MediaReviewIntelligencePanel({
   recommendedQueues,
   tagSuggestions,
@@ -290,6 +326,122 @@ function MediaReviewIntelligencePanel({
   )
 }
 
+function SimilarityHistoryAndCleanupStagingPanel({
+  decisionHistory,
+  cleanupStageItems,
+  selectedSimilarityTargetCount,
+  selectedCleanupStagePlan,
+  canRecordSimilarityDecision,
+  onRecordSimilarityDecision,
+  onStageCleanup,
+  onClearDecisionHistory,
+  onClearCleanupStage,
+}: {
+  decisionHistory: MediaReviewSimilarityDecisionHistoryItem[]
+  cleanupStageItems: MediaReviewCleanupStageItem[]
+  selectedSimilarityTargetCount: number
+  selectedCleanupStagePlan: MediaReviewCleanupStagingPlan
+  canRecordSimilarityDecision: boolean
+  onRecordSimilarityDecision: (decision: MediaReviewSimilarityDecisionKind) => void
+  onStageCleanup: () => void
+  onClearDecisionHistory: () => void
+  onClearCleanupStage: () => void
+}) {
+  const { t, formatNumber } = useI18n()
+  const decisionSummary = getMediaReviewSimilarityDecisionSummary(decisionHistory)
+  const stagedActiveCount = cleanupStageItems.filter((item) => item.recoverabilityState === 'active').length
+  const stagedRecoverableCount = cleanupStageItems.filter((item) => item.recoverabilityState !== 'active').length
+  const stagedDestructiveCount = cleanupStageItems.filter((item) => item.destructiveAction).length
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <PageInset className="space-y-3" data-media-review-similarity-history="true">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <CircleDot className="h-4 w-4 text-primary" />
+            <span>{t({ ko: '유사도 결정 기록', en: 'Similarity decision history' })}</span>
+          </div>
+          <Badge variant="outline">{formatNumber(decisionSummary.totalCount)}</Badge>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Badge variant="secondary">{t({ ko: '중복 {count}', en: '{count} duplicate' }, { count: formatNumber(decisionSummary.duplicateCandidateCount) })}</Badge>
+          <Badge variant="secondary">{t({ ko: '별도 {count}', en: '{count} separate' }, { count: formatNumber(decisionSummary.keepSeparateCount) })}</Badge>
+          <Badge variant="outline">{t({ ko: '확인 {count}', en: '{count} review' }, { count: formatNumber(decisionSummary.needsHumanReviewCount) })}</Badge>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => onRecordSimilarityDecision('duplicate-candidate')} disabled={!canRecordSimilarityDecision}>
+            <CircleDot className="h-4 w-4" />
+            {t({ ko: '중복 후보 기록', en: 'Record duplicate' })}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => onRecordSimilarityDecision('keep-separate')} disabled={!canRecordSimilarityDecision}>
+            <ShieldCheck className="h-4 w-4" />
+            {t({ ko: '별도 보존 기록', en: 'Record separate' })}
+          </Button>
+          <Button size="icon-sm" variant="secondary" onClick={onClearDecisionHistory} disabled={decisionHistory.length === 0} aria-label={t({ ko: '유사도 결정 기록 지우기', en: 'Clear similarity decision history' })} title={t({ ko: '유사도 결정 기록 지우기', en: 'Clear similarity decision history' })}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {t({ ko: '선택 기준과 대상 {count}개', en: '{count} selected targets against the anchor' }, { count: formatNumber(selectedSimilarityTargetCount) })}
+        </div>
+        {decisionHistory.length > 0 ? (
+          <div className="space-y-2">
+            {decisionHistory.slice(0, 3).map((item) => (
+              <div key={item.id} className="rounded-sm border border-border bg-surface-lowest px-3 py-2 text-xs">
+                <div className="flex flex-wrap items-center gap-2 text-foreground">
+                  <Badge variant="outline">{t(getSimilarityDecisionCopy(item.decision))}</Badge>
+                  <span className="font-mono">{item.targetHash}</span>
+                </div>
+                <div className="mt-1 text-muted-foreground">{item.matchState === 'similar-match' ? t({ ko: '유사도 결과 기반', en: 'From similarity result' }) : t({ ko: '수동 선택 기반', en: 'From manual selection' })}</div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </PageInset>
+
+      <PageInset className="space-y-3" data-media-review-cleanup-staging="true">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Undo2 className="h-4 w-4 text-primary" />
+            <span>{t({ ko: '정리 스테이징', en: 'Cleanup staging' })}</span>
+          </div>
+          <Badge variant="outline">{formatNumber(cleanupStageItems.length)}</Badge>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Badge variant="secondary">{t({ ko: '활성 {count}', en: '{count} active' }, { count: formatNumber(stagedActiveCount) })}</Badge>
+          <Badge variant="secondary">{t({ ko: '복구 {count}', en: '{count} recoverable' }, { count: formatNumber(stagedRecoverableCount) })}</Badge>
+          <Badge variant="outline">{t({ ko: '삭제 {count}', en: '{count} destructive' }, { count: formatNumber(stagedDestructiveCount) })}</Badge>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={onStageCleanup} disabled={selectedCleanupStagePlan.items.length === 0}>
+            <ClipboardList className="h-4 w-4" />
+            {t({ ko: '선택 항목 스테이징', en: 'Stage selected' })}
+          </Button>
+          <Button size="icon-sm" variant="secondary" onClick={onClearCleanupStage} disabled={cleanupStageItems.length === 0} aria-label={t({ ko: '정리 스테이징 지우기', en: 'Clear cleanup staging' })} title={t({ ko: '정리 스테이징 지우기', en: 'Clear cleanup staging' })}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {t({ ko: '선택 후보 {count}개. 스테이징은 검토 목록만 만들고 파일 삭제, 휴지통 비우기, 영구 정리를 실행하지 않아.', en: '{count} selected candidates. Staging only builds a review list; it does not delete files, empty the recycle bin, or run permanent cleanup.' }, { count: formatNumber(selectedCleanupStagePlan.items.length) })}
+        </div>
+        {cleanupStageItems.length > 0 ? (
+          <div className="space-y-2">
+            {cleanupStageItems.slice(0, 3).map((item) => (
+              <div key={item.id} className="rounded-sm border border-border bg-surface-lowest px-3 py-2 text-xs">
+                <div className="flex flex-wrap items-center gap-2 text-foreground">
+                  <Badge variant="outline">{t(getCleanupStageActionCopy(item.action))}</Badge>
+                  <span className="font-mono">{item.compositeHash ?? item.id}</span>
+                </div>
+                <div className="mt-1 text-muted-foreground">{t({ ko: '파괴적 작업 없음', en: 'No destructive action' })}</div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </PageInset>
+    </div>
+  )
+}
+
 function BatchReviewPreview({
   selectedCount,
   selectedCompositeCount,
@@ -360,6 +512,8 @@ export function MediaReviewPage() {
   const [activeQueue, setActiveQueue] = useState<MediaReviewQueueKey>('all')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [reviewedIds, setReviewedIds] = useState<string[]>([])
+  const [similarityDecisionHistory, setSimilarityDecisionHistory] = useState<MediaReviewSimilarityDecisionHistoryItem[]>([])
+  const [cleanupStageItems, setCleanupStageItems] = useState<MediaReviewCleanupStageItem[]>([])
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
 
   useAuthPermissionRedirect({
@@ -493,6 +647,17 @@ export function MediaReviewPage() {
     [reviewedIdSet, selectedImages],
   )
   const selectedRecoverableCount = selectedImages.length - selectedActionableImages.length
+  const selectedSimilarityTargetCount = useMemo(
+    () => selectedImages.filter((image) => {
+      const compositeHash = getImageCompositeHash(image)
+      return compositeHash !== null && compositeHash !== selectedAnchorHash
+    }).length,
+    [selectedAnchorHash, selectedImages],
+  )
+  const selectedCleanupStagePlan = useMemo(
+    () => buildMediaReviewCleanupStagingPlan(selectedImages, similarHashSet),
+    [selectedImages, similarHashSet],
+  )
 
   const assignToGroupMutation = useMutation({
     mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
@@ -606,6 +771,45 @@ export function MediaReviewPage() {
     setReviewedIds((current) => current.filter((imageId) => !selectedIdSnapshot.has(imageId)))
     setSelectedIds([])
     showSnackbar({ message: t({ ko: '선택 항목을 검토 대기로 돌렸어.', en: 'Moved selected items back to needs review.' }), tone: 'info' })
+  }
+
+  const handleRecordSimilarityDecision = (decision: MediaReviewSimilarityDecisionKind) => {
+    const decisionItems = buildMediaReviewSimilarityDecisionHistory(
+      selectedImages,
+      selectedAnchorHash,
+      decision,
+      new Date().toISOString(),
+      similarHashSet,
+    )
+
+    if (decisionItems.length === 0) {
+      showSnackbar({ message: t({ ko: '유사도 기준과 대상 항목을 함께 선택해야 해.', en: 'Select a similarity anchor and target items together.' }), tone: 'error' })
+      return
+    }
+
+    setSimilarityDecisionHistory((current) => [...decisionItems, ...current].slice(0, 48))
+    setSelectedIds([])
+    showSnackbar({
+      message: t({ ko: '유사도 결정 {count}개를 기록했어.', en: 'Recorded {count} similarity decisions.' }, { count: formatNumber(decisionItems.length) }),
+      tone: 'info',
+    })
+  }
+
+  const handleStageCleanupSelected = () => {
+    if (selectedCleanupStagePlan.items.length === 0) {
+      return
+    }
+
+    const stagedIds = new Set(selectedCleanupStagePlan.items.map((item) => item.id))
+    setCleanupStageItems((current) => [
+      ...selectedCleanupStagePlan.items,
+      ...current.filter((item) => !stagedIds.has(item.id)),
+    ].slice(0, 48))
+    setSelectedIds([])
+    showSnackbar({
+      message: t({ ko: '정리 검토 항목 {count}개를 스테이징했어.', en: 'Staged {count} cleanup review items.' }, { count: formatNumber(selectedCleanupStagePlan.items.length) }),
+      tone: 'info',
+    })
   }
 
   const renderReviewOverlay = (image: ImageRecord): ReactNode => {
@@ -730,6 +934,18 @@ export function MediaReviewPage() {
             en: 'Batch actions here only add groups, recheck tags/ratings, or mark review state. File deletion, recycle-bin emptying, and permanent cleanup do not run from this workspace.',
           })}
         </PageInset>
+
+        <SimilarityHistoryAndCleanupStagingPanel
+          decisionHistory={similarityDecisionHistory}
+          cleanupStageItems={cleanupStageItems}
+          selectedSimilarityTargetCount={selectedSimilarityTargetCount}
+          selectedCleanupStagePlan={selectedCleanupStagePlan}
+          canRecordSimilarityDecision={Boolean(selectedAnchorHash) && selectedSimilarityTargetCount > 0}
+          onRecordSimilarityDecision={handleRecordSimilarityDecision}
+          onStageCleanup={handleStageCleanupSelected}
+          onClearDecisionHistory={() => setSimilarityDecisionHistory([])}
+          onClearCleanupStage={() => setCleanupStageItems([])}
+        />
       </PageSection>
 
       {imagesQuery.isError ? (
@@ -816,7 +1032,7 @@ export function MediaReviewPage() {
         selectedCount={selectedIds.length}
         downloadableCount={selectedCompositeHashes.length}
         showDownloadAction={false}
-        statusText={t({ ko: '활성 항목에만 그룹, 태그/등급, 검토 상태 적용. 삭제/정리 없음', en: 'Apply group, tag/rating, and review state to active items only. No deletion or cleanup.' })}
+        statusText={t({ ko: '활성 항목에만 그룹, 태그/등급, 검토 상태 적용. 정리는 스테이징만 가능', en: 'Apply group, tag/rating, and review state to active items only. Cleanup is staging only.' })}
         extraActions={
           <>
             <Button
