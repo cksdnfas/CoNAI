@@ -20,6 +20,21 @@ type EvidenceItem = {
   tone: 'ready' | 'attention' | 'blocked'
 }
 
+type HandoffEvidenceItem = {
+  id: string
+  title: TranslationDictionary
+  artifact: string
+  detail: TranslationDictionary
+}
+
+type RunbookGuardrail = {
+  id: string
+  phase: TranslationDictionary
+  title: TranslationDictionary
+  status: TranslationDictionary
+  description: TranslationDictionary
+}
+
 const REVIEW_ITEMS: ReadinessItem[] = [
   {
     id: 'completed-work',
@@ -109,6 +124,107 @@ const REVIEW_LANES: ReadinessItem[] = [
   },
 ]
 
+const HANDOFF_EVIDENCE_ITEMS: HandoffEvidenceItem[] = [
+  {
+    id: 'local-commit-snapshot',
+    title: { ko: '로컬 커밋 스냅샷', en: 'Local commit snapshot' },
+    artifact: 'git status --short --branch; git log --oneline origin/alphatest..HEAD',
+    detail: {
+      ko: '원격보다 앞선 로컬 커밋과 깨끗한 작업 트리를 push 판단 전에 캡처해.',
+      en: 'Capture local commits ahead of origin and clean worktree state before any push decision.',
+    },
+  },
+  {
+    id: 'alpha-push-plan',
+    title: { ko: 'alpha push 준비 메모', en: 'Alpha push preparation note' },
+    artifact: 'push approval note for alphatest',
+    detail: {
+      ko: 'push 명령은 실행하지 않고 대상 브랜치, 승인자, 예상 커밋 범위만 검토 대상으로 둬.',
+      en: 'Do not run push; keep target branch, approver, and expected commit range reviewable.',
+    },
+  },
+  {
+    id: 'demo-host-handoff',
+    title: { ko: 'demo host 핸드오프', en: 'Demo host handoff' },
+    artifact: 'live demo host pull/update command notes',
+    detail: {
+      ko: 'demo host pull/update는 push 승인 뒤 별도 단계로 남기고 필요한 명령과 대상만 기록해.',
+      en: 'Keep demo-host pull/update as a later approved step while recording commands and target host notes.',
+    },
+  },
+  {
+    id: 'smoke-evidence',
+    title: { ko: '스모크 근거 번들', en: 'Smoke evidence bundle' },
+    artifact: 'npm run verify:release-readiness + live target smoke notes',
+    detail: {
+      ko: '로컬 검증과 live target smoke 계획을 분리해, smoke 실행은 재시작 승인 뒤에만 진행해.',
+      en: 'Separate local verification from live-target smoke planning; smoke runs only after restart approval.',
+    },
+  },
+  {
+    id: 'rollback-plan',
+    title: { ko: '롤백 준비 기록', en: 'Rollback preparation record' },
+    artifact: 'rollback notes: previous commit, service target, protected port 3999',
+    detail: {
+      ko: '재시작 전에 이전 커밋, 대상 서비스, 보호 포트 3999 회피, 실패 시 중단 기준을 확인해.',
+      en: 'Confirm previous commit, service target, protected port 3999 avoidance, and stop criteria before restart.',
+    },
+  },
+]
+
+const RUNBOOK_GUARDRAILS: RunbookGuardrail[] = [
+  {
+    id: 'approval-before-push',
+    phase: { ko: 'alpha push', en: 'Alpha push' },
+    title: { ko: '승인 전 push 금지', en: 'No push before approval' },
+    status: { ko: '승인 필요', en: 'Approval required' },
+    description: {
+      ko: '작업자는 로컬 커밋까지만 만들고 원격 반영은 사용자 승인 뒤 별도 단계로 남겨.',
+      en: 'Workers stop at local commits; remote updates remain separate until the user approves them.',
+    },
+  },
+  {
+    id: 'demo-host-preflight',
+    phase: { ko: 'demo host', en: 'Demo host' },
+    title: { ko: 'pull/update는 준비 전용', en: 'Pull/update is preparation only' },
+    status: { ko: '준비 전용', en: 'Preparation only' },
+    description: {
+      ko: 'demo host 대상, 브랜치, 예상 명령은 기록하지만 pull, deploy, restart는 실행하지 않아.',
+      en: 'Record host, branch, and expected commands without running pull, deploy, or restart.',
+    },
+  },
+  {
+    id: 'protected-3999',
+    phase: { ko: 'restart/smoke', en: 'Restart/smoke' },
+    title: { ko: '보호 포트 3999 회피', en: 'Avoid protected port 3999' },
+    status: { ko: '차단', en: 'Blocked' },
+    description: {
+      ko: '로드맵이 명시하지 않는 한 서비스 3999 조작, 재시작, smoke 실행은 승인 대상이야.',
+      en: 'Touching service 3999, restarting, or running smoke needs approval unless a roadmap explicitly allows it.',
+    },
+  },
+  {
+    id: 'rollback-before-restart',
+    phase: { ko: 'rollback', en: 'Rollback' },
+    title: { ko: '재시작 전 롤백 기준', en: 'Rollback before restart' },
+    status: { ko: '필수 확인', en: 'Required check' },
+    description: {
+      ko: '재시작 승인 전 이전 커밋, 실패 기준, 복구 담당 범위가 핸드오프 메모에 있어야 해.',
+      en: 'Previous commit, failure threshold, and recovery owner notes must exist before restart approval.',
+    },
+  },
+  {
+    id: 'destructive-cleanup-boundary',
+    phase: { ko: 'data cleanup', en: 'Data cleanup' },
+    title: { ko: '파괴적 정리 분리', en: 'Separate destructive cleanup' },
+    status: { ko: '별도 승인', en: 'Separate approval' },
+    description: {
+      ko: '삭제, 보존 정책, 스키마 변경은 release handoff 근거가 아니라 별도 승인 작업으로 남겨.',
+      en: 'Deletion, retention policy, and schema changes stay outside release handoff evidence.',
+    },
+  },
+]
+
 const USER_DECISIONS: ReadinessItem[] = [
   {
     id: 'alpha-push',
@@ -148,14 +264,29 @@ function getEvidenceToneVariant(tone: EvidenceItem['tone']) {
 export function ReleaseReadinessTab() {
   const { t } = useI18n()
   const [reviewedItems, setReviewedItems] = useState<Set<string>>(() => new Set())
+  const [capturedHandoffItems, setCapturedHandoffItems] = useState<Set<string>>(() => new Set())
   const reviewedCount = reviewedItems.size
+  const capturedHandoffCount = capturedHandoffItems.size
   const allReviewed = reviewedCount === REVIEW_ITEMS.length
   const readinessState = allReviewed ? t({ ko: '검토 완료', en: 'Reviewed' }) : t({ ko: '{count}/{total} 확인', en: '{count}/{total} checked' }, { count: reviewedCount, total: REVIEW_ITEMS.length })
+  const handoffState = capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
 
   const readinessPercent = useMemo(() => Math.round((reviewedCount / REVIEW_ITEMS.length) * 100), [reviewedCount])
 
   const toggleReviewedItem = (id: string, checked: boolean) => {
     setReviewedItems((current) => {
+      const next = new Set(current)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const toggleCapturedHandoffItem = (id: string, checked: boolean) => {
+    setCapturedHandoffItems((current) => {
       const next = new Set(current)
       if (checked) {
         next.add(id)
@@ -244,6 +375,55 @@ export function ReleaseReadinessTab() {
             <SettingsInsetBlock key={t(item.label)} className="text-sm text-muted-foreground">
               <span className="font-semibold text-foreground">{t(item.label)}: </span>
               {t(item.detail)}
+            </SettingsInsetBlock>
+          ))}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        heading={t({ ko: '릴리즈 핸드오프 근거', en: 'Release handoff evidence' })}
+        actions={<Badge variant={capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length ? 'default' : 'secondary'}>{handoffState}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: '이 체크는 실행 기록이 아니라 release handoff에 필요한 근거가 준비됐는지 보는 로컬 검토 상태야. push, deploy, restart, smoke는 여기서 실행하지 않아.',
+            en: 'These checks are local review state for release handoff evidence, not execution records. Push, deploy, restart, and smoke do not run here.',
+          })}
+        </SettingsInsetBlock>
+
+        <div className="grid gap-3 min-[1000px]:grid-cols-2">
+          {HANDOFF_EVIDENCE_ITEMS.map((item) => {
+            const checked = capturedHandoffItems.has(item.id)
+
+            return (
+              <SettingsToggleRow key={item.id} className={cn('items-start', checked && 'border-primary/40 bg-primary/10')}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => toggleCapturedHandoffItem(item.id, event.target.checked)}
+                  aria-label={t(item.title)}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-foreground">{t(item.title)}</span>
+                  <span className="mt-1 block font-mono text-xs text-foreground/90">{item.artifact}</span>
+                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">{t(item.detail)}</span>
+                </span>
+              </SettingsToggleRow>
+            )
+          })}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection heading={t({ ko: '런북 가드레일', en: 'Runbook guardrails' })}>
+        <div className="grid gap-3 min-[1000px]:grid-cols-2">
+          {RUNBOOK_GUARDRAILS.map((item) => (
+            <SettingsInsetBlock key={item.id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{t(item.phase)}</Badge>
+                <Badge variant="outline">{t(item.status)}</Badge>
+              </div>
+              <div className="mt-3 text-sm font-semibold text-foreground">{t(item.title)}</div>
+              <div className="mt-1 text-sm leading-6 text-muted-foreground">{t(item.description)}</div>
             </SettingsInsetBlock>
           ))}
         </div>

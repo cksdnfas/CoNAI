@@ -54,6 +54,14 @@
 
 로컬 확인 절차와 승인 경계는 [`docs/systems/26.6.8-workflow-media-operations.md`](../systems/26.6.8-workflow-media-operations.md)에 따로 정리했습니다.
 
+릴리즈 준비 워크스페이스는 다음 핸드오프 근거를 로컬에서 캡처할 수 있게 정리합니다. 이 항목들은 검토 상태이며 push, deploy, restart, smoke를 실행하지 않습니다.
+
+- 로컬 커밋 스냅샷과 원격 대비 커밋 범위
+- alpha branch push 승인 메모
+- demo host pull/update 핸드오프 메모
+- 로컬 검증 결과와 live target smoke 계획 분리
+- restart 전에 확인할 롤백 기준과 protected port `3999` 회피 기준
+
 로컬 준비 확인 alias:
 
 ```bash
@@ -81,6 +89,8 @@ npm run verify:release-readiness
 - auth model redesign, security policy change, public API expansion
 - DB schema/data retention/destructive cleanup
 - package version bump, git tag, public release announcement
+
+Runbook guardrails는 이 승인 경계를 화면에서 다시 보여주며, demo host 작업은 preparation only, rollback 기준은 restart 전 필수 확인으로 남깁니다.
 
 ---
 
