@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, CircleDot, Filter, FolderPlus, FolderTree, Loader2, RotateCw, Search, Sigma, Star, Tags, Undo2, X } from 'lucide-react'
+import { CheckCircle2, CircleDot, ClipboardList, Filter, FolderPlus, FolderTree, Loader2, RotateCw, Search, ShieldCheck, Sigma, Star, Tags, Undo2, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -26,9 +26,15 @@ import type { ImageRecord } from '@/types/image'
 import {
   buildMediaReviewSearchChips,
   filterMediaReviewImages,
+  getMediaReviewGroupQualityChecks,
+  getMediaReviewRecommendedQueues,
   getMediaReviewSignals,
   getMediaReviewSignalSummary,
+  getMediaReviewTagQualitySuggestions,
   type MediaReviewQueueKey,
+  type MediaReviewGroupQualityCheck,
+  type MediaReviewRecommendedQueue,
+  type MediaReviewTagQualitySuggestion,
 } from './media-review-utils'
 
 type ReviewImagesPageParam = number | {
@@ -65,6 +71,222 @@ function SignalTile({ label, value, icon: Icon }: { label: string; value: string
         <div className="text-sm font-semibold text-foreground">{value}</div>
       </div>
     </PageInset>
+  )
+}
+
+function getReviewQueueOption(queue: MediaReviewQueueKey) {
+  return REVIEW_QUEUE_OPTIONS.find((option) => option.value === queue) ?? REVIEW_QUEUE_OPTIONS[0]
+}
+
+function getRecommendationToneClass(priority: 'high' | 'medium' | 'low') {
+  if (priority === 'high') {
+    return 'border-amber-400/50 bg-amber-500/10 text-amber-100'
+  }
+
+  if (priority === 'medium') {
+    return 'border-sky-400/40 bg-sky-500/10 text-sky-100'
+  }
+
+  return 'border-border bg-surface-lowest text-muted-foreground'
+}
+
+function getQueueRecommendationReason(queue: MediaReviewQueueKey) {
+  if (queue === 'recoverable') {
+    return { ko: '누락/휴지통 상태를 먼저 확인해.', en: 'Check missing or recycled records first.' }
+  }
+
+  if (queue === 'missing-tags') {
+    return { ko: '태그가 없는 항목은 검색성과 등급 판단이 약해.', en: 'Items without tags weaken search and rating decisions.' }
+  }
+
+  if (queue === 'sparse-tags') {
+    return { ko: '태그 수가 낮은 항목은 재점검 후보야.', en: 'Low tag coverage makes these good recheck candidates.' }
+  }
+
+  if (queue === 'ungrouped') {
+    return { ko: '그룹 없는 항목을 묶으면 라이브러리 탐색성이 올라가.', en: 'Grouping unassigned items improves library navigation.' }
+  }
+
+  if (queue === 'unrated') {
+    return { ko: '등급 신호가 없어 안전 표시 판단을 보강해야 해.', en: 'Missing rating signals need review for safety display.' }
+  }
+
+  if (queue === 'similar') {
+    return { ko: '선택 기준과 가까운 결과를 비교해 중복 후보를 판단해.', en: 'Compare items near the selected anchor for duplicate decisions.' }
+  }
+
+  return { ko: '아직 세션 검토 완료 표시가 없는 항목이야.', en: 'Items not yet marked reviewed in this session.' }
+}
+
+function getTagSuggestionCopy(suggestion: MediaReviewTagQualitySuggestion) {
+  if (suggestion.key === 'retag-missing') {
+    return {
+      title: { ko: '태그 없는 항목 재점검', en: 'Recheck untagged items' },
+      body: { ko: '선택 후 태그/등급 재점검으로 auto_tags와 rating_score를 채워.', en: 'Select and rerun tag/rating checks to fill auto_tags and rating_score.' },
+    }
+  }
+
+  if (suggestion.key === 'retag-sparse') {
+    return {
+      title: { ko: '태그 부족 항목 보강', en: 'Improve sparse tags' },
+      body: { ko: '태그 수가 적은 항목을 모아 품질을 다시 확인해.', en: 'Collect low-coverage items and review tag quality again.' },
+    }
+  }
+
+  if (suggestion.key === 'review-unrated') {
+    return {
+      title: { ko: '등급 없음 확인', en: 'Review unrated items' },
+      body: { ko: 'rating_score나 등급 라벨이 없는 항목은 안전 표시 기준을 다시 확인해.', en: 'Items without rating_score or labels need safety-display review.' },
+    }
+  }
+
+  return {
+    title: { ko: '태그 품질 준비됨', en: 'Tag quality ready' },
+    body: { ko: '로드된 항목에는 즉시 조치가 필요한 태그 품질 신호가 없어.', en: 'Loaded items have no immediate tag-quality action signal.' },
+  }
+}
+
+function getGroupCheckCopy(check: MediaReviewGroupQualityCheck) {
+  if (check.key === 'ungrouped-loaded') {
+    return {
+      title: { ko: '그룹 없는 로드 항목', en: 'Loaded ungrouped items' },
+      body: { ko: '현재 로드된 결과에서 사용자 그룹 후보를 먼저 묶어.', en: 'Group candidates from the currently loaded results first.' },
+    }
+  }
+
+  if (check.key === 'empty-groups') {
+    return {
+      title: { ko: '빈 그룹 점검', en: 'Empty group check' },
+      body: { ko: '이미지 수가 0인 그룹은 보존/정리 판단이 필요해.', en: 'Groups with zero images need keep-or-cleanup review.' },
+    }
+  }
+
+  if (check.key === 'auto-collect-not-run') {
+    return {
+      title: { ko: '자동 수집 미실행', en: 'Auto collect not run' },
+      body: { ko: '자동 수집이 켜졌지만 실행 기록이 없는 그룹을 확인해.', en: 'Review enabled auto-collect groups without a run record.' },
+    }
+  }
+
+  if (check.key === 'large-root-groups') {
+    return {
+      title: { ko: '큰 루트 그룹', en: 'Large root groups' },
+      body: { ko: '하위 분류나 품질 분리가 필요한 루트 그룹 후보야.', en: 'Root groups may need sub-classification or quality splits.' },
+    }
+  }
+
+  return {
+    title: { ko: '그룹 품질 준비됨', en: 'Group quality ready' },
+    body: { ko: '로드된 결과와 그룹 목록에서 즉시 조치할 품질 신호가 없어.', en: 'Loaded results and groups have no immediate quality action signal.' },
+  }
+}
+
+function MediaReviewIntelligencePanel({
+  recommendedQueues,
+  tagSuggestions,
+  groupChecks,
+  activeQueue,
+  onQueueChange,
+}: {
+  recommendedQueues: MediaReviewRecommendedQueue[]
+  tagSuggestions: MediaReviewTagQualitySuggestion[]
+  groupChecks: MediaReviewGroupQualityCheck[]
+  activeQueue: MediaReviewQueueKey
+  onQueueChange: (queue: MediaReviewQueueKey) => void
+}) {
+  const { t, formatNumber } = useI18n()
+
+  return (
+    <div className="grid gap-3 xl:grid-cols-3" data-media-review-intelligence-panel="true">
+      <PageInset className="space-y-3" data-media-review-recommended-queues="true">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <ClipboardList className="h-4 w-4 text-primary" />
+          <span>{t({ ko: '추천 리뷰 큐', en: 'Recommended queues' })}</span>
+        </div>
+        {recommendedQueues.length > 0 ? (
+          <div className="space-y-2">
+            {recommendedQueues.map((recommendation) => {
+              const option = getReviewQueueOption(recommendation.queue)
+              const Icon = option.icon
+              return (
+                <button
+                  key={recommendation.queue}
+                  type="button"
+                  className={`flex w-full items-start gap-2 rounded-sm border px-3 py-2 text-left transition hover:bg-surface-high ${getRecommendationToneClass(recommendation.priority)} ${activeQueue === recommendation.queue ? 'ring-1 ring-primary' : ''}`}
+                  onClick={() => onQueueChange(recommendation.queue)}
+                >
+                  <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+                      <span>{t(option.label)}</span>
+                      <Badge variant="outline">{formatNumber(recommendation.count)}</Badge>
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">{t(getQueueRecommendationReason(recommendation.queue))}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ShieldCheck className="h-4 w-4" />
+            <span>{t({ ko: '로드된 항목에는 우선 추천 큐가 없어.', en: 'No priority queue is recommended for loaded items.' })}</span>
+          </div>
+        )}
+      </PageInset>
+
+      <PageInset className="space-y-3" data-media-review-tag-quality-suggestions="true">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Tags className="h-4 w-4 text-primary" />
+          <span>{t({ ko: '태그 품질 제안', en: 'Tag quality suggestions' })}</span>
+        </div>
+        <div className="space-y-2">
+          {tagSuggestions.map((suggestion) => {
+            const copy = getTagSuggestionCopy(suggestion)
+            return (
+              <div key={suggestion.key} className={`rounded-sm border px-3 py-2 ${getRecommendationToneClass(suggestion.priority)}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-foreground">
+                  <span>{t(copy.title)}</span>
+                  <Badge variant="outline">{formatNumber(suggestion.count)}</Badge>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">{t(copy.body)}</div>
+                {suggestion.queue ? (
+                  <Button className="mt-2" size="sm" variant="outline" onClick={() => onQueueChange(suggestion.queue!)}>
+                    {t({ ko: '큐 열기', en: 'Open queue' })}
+                  </Button>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      </PageInset>
+
+      <PageInset className="space-y-3" data-media-review-group-quality-checks="true">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <FolderTree className="h-4 w-4 text-primary" />
+          <span>{t({ ko: '그룹 품질 체크', en: 'Group quality checks' })}</span>
+        </div>
+        <div className="space-y-2">
+          {groupChecks.map((check) => {
+            const copy = getGroupCheckCopy(check)
+            return (
+              <div key={check.key} className={`rounded-sm border px-3 py-2 ${getRecommendationToneClass(check.priority)}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-foreground">
+                  <span>{t(copy.title)}</span>
+                  <Badge variant="outline">{formatNumber(check.count)}</Badge>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">{t(copy.body)}</div>
+                {check.queue ? (
+                  <Button className="mt-2" size="sm" variant="outline" onClick={() => onQueueChange(check.queue!)}>
+                    {t({ ko: '큐 열기', en: 'Open queue' })}
+                  </Button>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      </PageInset>
+    </div>
   )
 }
 
@@ -221,6 +443,18 @@ export function MediaReviewPage() {
     [similarImagesQuery.data?.similar],
   )
   const sourceSummary = useMemo(() => getMediaReviewSignalSummary(loadedImages, similarHashSet), [loadedImages, similarHashSet])
+  const recommendedQueues = useMemo(
+    () => getMediaReviewRecommendedQueues(sourceSummary, { reviewedCount: reviewedIdSet.size }),
+    [reviewedIdSet.size, sourceSummary],
+  )
+  const tagQualitySuggestions = useMemo(
+    () => getMediaReviewTagQualitySuggestions(sourceSummary),
+    [sourceSummary],
+  )
+  const groupQualityChecks = useMemo(
+    () => getMediaReviewGroupQualityChecks(loadedImages, groupsQuery.data ?? []),
+    [groupsQuery.data, loadedImages],
+  )
   const filteredImages = useMemo(
     () => filterMediaReviewImages(loadedImages, activeQueue, similarHashSet, reviewedIdSet),
     [activeQueue, loadedImages, reviewedIdSet, similarHashSet],
@@ -461,6 +695,17 @@ export function MediaReviewPage() {
           <SignalTile label={t({ ko: '유사 매칭', en: 'Similar matches' })} value={formatNumber(visibleSummary.similarCount)} icon={CircleDot} />
           <SignalTile label={t({ ko: '복구 점검', en: 'Recovery checks' })} value={formatNumber(visibleSummary.recoverableCount)} icon={Undo2} />
         </div>
+
+        <MediaReviewIntelligencePanel
+          recommendedQueues={recommendedQueues}
+          tagSuggestions={tagQualitySuggestions}
+          groupChecks={groupQualityChecks}
+          activeQueue={activeQueue}
+          onQueueChange={(queue) => {
+            setActiveQueue(queue)
+            setSelectedIds([])
+          }}
+        />
 
         <PageInset className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
