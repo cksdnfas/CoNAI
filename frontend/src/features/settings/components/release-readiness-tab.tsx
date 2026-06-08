@@ -35,6 +35,22 @@ type RunbookGuardrail = {
   description: TranslationDictionary
 }
 
+type IntegratedOperationsLane = {
+  id: string
+  label: TranslationDictionary
+  status: TranslationDictionary
+  source: string
+  description: TranslationDictionary
+  checkpoints: TranslationDictionary[]
+  nextReview: TranslationDictionary
+}
+
+type IntegratedDecisionGate = {
+  id: string
+  title: TranslationDictionary
+  description: TranslationDictionary
+}
+
 const REVIEW_ITEMS: ReadinessItem[] = [
   {
     id: 'completed-work',
@@ -66,6 +82,84 @@ const REVIEW_ITEMS: ReadinessItem[] = [
     description: {
       ko: 'push, demo update, restart, destructive cleanup은 실행 버튼이 아니라 승인 항목으로 남음.',
       en: 'Push, demo update, restart, and destructive cleanup stay as approvals, not action buttons.',
+    },
+  },
+]
+
+const INTEGRATED_OPERATIONS_LANES: IntegratedOperationsLane[] = [
+  {
+    id: 'release-handoff',
+    label: { ko: '릴리즈 준비', en: 'Release readiness' },
+    status: { ko: '승인 분리', en: 'Approvals separated' },
+    source: 'Settings > Release readiness',
+    description: {
+      ko: '로컬 커밋, 검증 근거, 핸드오프 메모, 롤백 기준을 먼저 모으고 push/deploy/restart는 사용자 결정으로 남겨.',
+      en: 'Collect local commits, verification evidence, handoff notes, and rollback criteria while push/deploy/restart stay user decisions.',
+    },
+    checkpoints: [
+      { ko: '완료 작업과 caveat 검토', en: 'Completed work and caveat review' },
+      { ko: 'verify:release-readiness와 Graphify 근거', en: 'verify:release-readiness and Graphify evidence' },
+      { ko: 'alpha/demo/restart/cleanup 승인 분리', en: 'Separate alpha/demo/restart/cleanup approvals' },
+    ],
+    nextReview: { ko: '릴리즈 액션 전 최종 판단', en: 'Final judgment before release action' },
+  },
+  {
+    id: 'media-intelligence',
+    label: { ko: '미디어 품질', en: 'Media quality' },
+    status: { ko: '비파괴 검토', en: 'Non-destructive review' },
+    source: 'Media review',
+    description: {
+      ko: '추천 큐, 태그 품질, 그룹 검사, 유사도 결정 기록, 복구 가능한 정리 staging을 릴리즈 판단 근거에 연결해.',
+      en: 'Connect recommended queues, tag quality, group checks, similarity decision history, and recoverable cleanup staging to release judgment.',
+    },
+    checkpoints: [
+      { ko: 'recommended queues와 tag quality suggestions', en: 'Recommended queues and tag quality suggestions' },
+      { ko: 'group quality checks와 similarity decision history', en: 'Group quality checks and similarity decision history' },
+      { ko: 'reversible cleanup staging, destructive cleanup 제외', en: 'Reversible cleanup staging, destructive cleanup excluded' },
+    ],
+    nextReview: { ko: '미디어 cleanup이나 공개 전 품질 판단', en: 'Quality judgment before media cleanup or public review' },
+  },
+  {
+    id: 'workflow-runtime',
+    label: { ko: '워크플로우 런타임', en: 'Workflow runtime' },
+    status: { ko: '운영 상태', en: 'Runtime state' },
+    source: 'Module graph > Run panel',
+    description: {
+      ko: 'saved workflow version, preset diff, queue health, retry policy, artifact retention, recovery telemetry를 실행 반복 전 확인 대상으로 둬.',
+      en: 'Keep saved workflow versions, preset diffs, queue health, retry policy, artifact retention, and recovery telemetry reviewable before reruns.',
+    },
+    checkpoints: [
+      { ko: 'version summary와 preset diff visibility', en: 'Version summary and preset diff visibility' },
+      { ko: 'queue health, retry policy, retention hints', en: 'Queue health, retry policy, retention hints' },
+      { ko: 'startup recovery와 running-not-in-process telemetry', en: 'Startup recovery and running-not-in-process telemetry' },
+    ],
+    nextReview: { ko: 'rerun, recovery, smoke 계획 전 상태 확인', en: 'State check before rerun, recovery, or smoke planning' },
+  },
+]
+
+const INTEGRATED_DECISION_GATES: IntegratedDecisionGate[] = [
+  {
+    id: 'release-evidence-ready',
+    title: { ko: '릴리즈 근거가 먼저 준비됨', en: 'Release evidence comes first' },
+    description: {
+      ko: '로컬 검증과 handoff evidence가 없으면 push/demo/restart 판단으로 넘어가지 않아.',
+      en: 'Push/demo/restart judgment does not proceed without local checks and handoff evidence.',
+    },
+  },
+  {
+    id: 'media-quality-before-cleanup',
+    title: { ko: '미디어 품질 판단이 정리보다 앞섬', en: 'Media quality before cleanup' },
+    description: {
+      ko: '추천 큐와 품질 신호는 staging만 만들고 삭제나 보존 정책 변경은 별도 승인으로 남겨.',
+      en: 'Queues and quality signals create staging only; deletion and retention policy changes stay separately approved.',
+    },
+  },
+  {
+    id: 'runtime-health-before-rerun',
+    title: { ko: '런타임 상태가 재실행보다 앞섬', en: 'Runtime health before rerun' },
+    description: {
+      ko: 'queue, retry, retention, recovery 상태가 기록되지 않으면 rerun/smoke 근거가 불완전한 것으로 봐.',
+      en: 'Rerun/smoke evidence is incomplete until queue, retry, retention, and recovery state are recorded.',
     },
   },
 ]
@@ -351,6 +445,51 @@ export function ReleaseReadinessTab() {
               </SettingsToggleRow>
             )
           })}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        data-integrated-operations-surface="true"
+        heading={t({ ko: '통합 운영 표면', en: 'Integrated operations surface' })}
+        actions={<Badge variant="secondary">{t({ ko: '검토 허브', en: 'Review hub' })}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: '릴리즈 준비, 미디어 품질, 워크플로우 런타임 상태를 같은 판단 흐름에 묶어 외부 작업 전에 확인할 근거와 남은 사용자 결정을 분리해.',
+            en: 'Release readiness, media quality, and workflow runtime state are tied into one judgment flow so evidence and user decisions stay separated before external action.',
+          })}
+        </SettingsInsetBlock>
+
+        <div className="grid gap-3 min-[1100px]:grid-cols-3">
+          {INTEGRATED_OPERATIONS_LANES.map((lane) => (
+            <SettingsInsetBlock key={lane.id} data-integrated-operations-lane={lane.id} className="flex min-h-full flex-col">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{t(lane.label)}</Badge>
+                <Badge variant="outline">{t(lane.status)}</Badge>
+              </div>
+              <div className="mt-3 font-mono text-xs text-muted-foreground">{lane.source}</div>
+              <div className="mt-2 text-sm leading-6 text-muted-foreground">{t(lane.description)}</div>
+              <div className="mt-4 space-y-2">
+                {lane.checkpoints.map((checkpoint) => (
+                  <div key={t(checkpoint)} className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
+                    {t(checkpoint)}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-auto pt-4 text-xs font-medium text-muted-foreground">
+                {t(lane.nextReview)}
+              </div>
+            </SettingsInsetBlock>
+          ))}
+        </div>
+
+        <div data-integrated-operations-gates="true" className="grid gap-3 min-[1000px]:grid-cols-3">
+          {INTEGRATED_DECISION_GATES.map((gate) => (
+            <SettingsInsetBlock key={gate.id} data-integrated-operations-gate={gate.id}>
+              <div className="text-sm font-semibold text-foreground">{t(gate.title)}</div>
+              <div className="mt-1 text-sm leading-6 text-muted-foreground">{t(gate.description)}</div>
+            </SettingsInsetBlock>
+          ))}
         </div>
       </SettingsSection>
 
