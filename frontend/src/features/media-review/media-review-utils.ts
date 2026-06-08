@@ -2,7 +2,7 @@ import { createTextSearchChip } from '@/features/search/search-utils'
 import type { SearchChip } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 
-export type MediaReviewQueueKey = 'all' | 'ungrouped' | 'missing-tags' | 'sparse-tags' | 'unrated' | 'similar'
+export type MediaReviewQueueKey = 'all' | 'needs-review' | 'reviewed' | 'ungrouped' | 'missing-tags' | 'sparse-tags' | 'unrated' | 'similar'
 export type MediaReviewTagQuality = 'missing' | 'sparse' | 'ready'
 
 export interface MediaReviewSignals {
@@ -122,16 +122,25 @@ export function getMediaReviewSignalSummary(images: ImageRecord[], similarHashSe
   })
 }
 
-export function filterMediaReviewImages(images: ImageRecord[], queue: MediaReviewQueueKey, similarHashSet?: ReadonlySet<string>) {
+export function filterMediaReviewImages(images: ImageRecord[], queue: MediaReviewQueueKey, similarHashSet?: ReadonlySet<string>, reviewedIdSet?: ReadonlySet<string>) {
   if (queue === 'all') {
     return images
   }
 
   return images.filter((image) => {
     const signals = getMediaReviewSignals(image, similarHashSet)
+    const imageId = String(image.composite_hash ?? image.id)
 
     if (queue === 'ungrouped') {
       return signals.groupCount === 0
+    }
+
+    if (queue === 'needs-review') {
+      return reviewedIdSet?.has(imageId) !== true
+    }
+
+    if (queue === 'reviewed') {
+      return reviewedIdSet?.has(imageId) === true
     }
 
     if (queue === 'missing-tags') {

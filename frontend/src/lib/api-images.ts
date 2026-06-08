@@ -115,6 +115,37 @@ export async function deleteImagesBulk(compositeHashes: string[]) {
   return response.data
 }
 
+export interface BatchImageTagResultItem {
+  composite_hash: string
+  success: boolean
+  auto_tags?: unknown
+  error?: string
+  error_type?: string
+}
+
+export interface BatchImageTagResult {
+  total: number
+  success_count: number
+  fail_count: number
+  results: BatchImageTagResultItem[]
+}
+
+export async function batchTagImages(compositeHashes: string[]) {
+  const response = await fetchJson<ApiResponse<BatchImageTagResult>>('/api/images/batch-tag', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ image_ids: compositeHashes }),
+  })
+
+  if (!response.success) {
+    throw createApiFallbackError(response.error, 'images.batchTag')
+  }
+
+  return response.data
+}
+
 export async function getImageDuplicates(compositeHash: string, threshold = 5, init?: RequestInit) {
   const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/duplicates?threshold=${threshold}`, init)
   if (!response.success) {

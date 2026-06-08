@@ -16,6 +16,8 @@ const imageFeedSafetySource = source('features/images/components/image-list/use-
 const homePageDataSource = source('features/home/use-home-page-data.ts')
 const groupPageQueriesSource = source('features/groups/use-group-page-queries.ts')
 const imageAttachmentPickerSource = source('features/image-generation/components/image-attachment-picker.tsx')
+const mediaReviewPageSource = source('features/media-review/media-review-page.tsx')
+const apiImagesSource = source('lib/api-images.ts')
 
 assert.match(
   imageListSource,
@@ -198,6 +200,37 @@ assert.doesNotMatch(
   imageAttachmentPickerSource,
   /getImageListDisplayName\(image\)\.toLowerCase\(\)\.includes\(search\)/,
   'Image attachment picker search must not rebuild display names while filtering each keystroke',
+)
+
+assert.match(
+  mediaReviewPageSource,
+  /const selectedIdSet = useMemo\(\(\) => new Set\(selectedIds\), \[selectedIds\]\)/,
+  'Media review should memoize selected ids before deriving batch actions',
+)
+assert.match(
+  mediaReviewPageSource,
+  /const reviewedIdSet = useMemo\(\(\) => new Set\(reviewedIds\), \[reviewedIds\]\)/,
+  'Media review should memoize reviewed ids before filtering review queues',
+)
+assert.match(
+  mediaReviewPageSource,
+  /filterMediaReviewImages\(loadedImages, activeQueue, similarHashSet, reviewedIdSet\)/,
+  'Media review queues should include session review state without schema changes',
+)
+assert.match(
+  mediaReviewPageSource,
+  /<BatchReviewPreview[\s\S]*selectedCompositeCount=\{selectedCompositeHashes\.length\}/,
+  'Media review batch actions should render a selection preview before mutation actions',
+)
+assert.match(
+  mediaReviewPageSource,
+  /<ImageSelectionBar[\s\S]*showDownloadAction=\{false\}[\s\S]*handleOpenAssignModal[\s\S]*handleBatchTagSelected[\s\S]*handleMarkReviewed/,
+  'Media review selection bar should expose group, tag/rating, and reviewed-state batch actions',
+)
+assert.match(
+  apiImagesSource,
+  /export async function batchTagImages\(compositeHashes: string\[\]\)[\s\S]*\/api\/images\/batch-tag[\s\S]*image_ids: compositeHashes/,
+  'Media review tag/rating batch action should reuse the existing batch-tag API',
 )
 
 console.log('Image list selection contracts verified.')

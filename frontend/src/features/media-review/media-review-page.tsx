@@ -1,5 +1,5 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { CircleDot, Filter, FolderTree, Loader2, Search, Sigma, Star, Tags, X } from 'lucide-react'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CheckCircle2, CircleDot, Filter, FolderPlus, FolderTree, Loader2, RotateCw, Search, Sigma, Star, Tags, Undo2, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { PageHeader } from '@/components/common/page-header'
 import { PageInset, PageSection } from '@/components/common/page-surface'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
@@ -16,8 +17,10 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { buildComplexFilterPayload } from '@/features/search/search-utils'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { ImageList } from '@/features/images/components/image-list/image-list'
-import { getGroupsHierarchyAll } from '@/lib/api-groups'
-import { getImages, getSimilarImages, searchImagesComplex } from '@/lib/api-images'
+import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
+import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
+import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
+import { batchTagImages, getImages, getSimilarImages, searchImagesComplex } from '@/lib/api-images'
 import { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import {
@@ -35,6 +38,8 @@ type ReviewImagesPageParam = number | {
 
 const REVIEW_QUEUE_OPTIONS: Array<{ value: MediaReviewQueueKey; icon: typeof Filter; label: { ko: string; en: string } }> = [
   { value: 'all', icon: Filter, label: { ko: '전체', en: 'All' } },
+  { value: 'needs-review', icon: CheckCircle2, label: { ko: '검토 대기', en: 'Needs review' } },
+  { value: 'reviewed', icon: CheckCircle2, label: { ko: '검토 완료', en: 'Reviewed' } },
   { value: 'ungrouped', icon: FolderTree, label: { ko: '그룹 없음', en: 'Ungrouped' } },
   { value: 'missing-tags', icon: Tags, label: { ko: '태그 없음', en: 'No tags' } },
   { value: 'sparse-tags', icon: Sigma, label: { ko: '태그 부족', en: 'Sparse tags' } },
@@ -62,9 +67,37 @@ function SignalTile({ label, value, icon: Icon }: { label: string; value: string
   )
 }
 
-function ReviewSignalOverlay({ image, similarHashSet }: { image: ImageRecord; similarHashSet: ReadonlySet<string> }) {
+function BatchReviewPreview({
+  selectedCount,
+  selectedCompositeCount,
+  reviewedCount,
+}: {
+  selectedCount: number
+  selectedCompositeCount: number
+  reviewedCount: number
+}) {
+  const { t, formatNumber } = useI18n()
+
+  return (
+    <PageInset className="space-y-2 text-xs text-muted-foreground" data-media-review-batch-preview="true">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+        <Badge>{t({ ko: '{count}개 선택', en: '{count} selected' }, { count: formatNumber(selectedCount) })}</Badge>
+        <Badge variant="outline">{t({ ko: '적용 가능 {count}', en: '{count} actionable' }, { count: formatNumber(selectedCompositeCount) })}</Badge>
+        {reviewedCount > 0 ? <Badge variant="outline">{t({ ko: '검토 완료 {count}', en: '{count} reviewed' }, { count: formatNumber(reviewedCount) })}</Badge> : null}
+      </div>
+      <div className="grid gap-2 md:grid-cols-3">
+        <div>{t({ ko: '그룹: 선택 항목을 기존 사용자 그룹에 추가해. 삭제나 이동은 하지 않아.', en: 'Group: add selected items to an existing custom group without deleting or moving files.' })}</div>
+        <div>{t({ ko: '태그/등급: 기존 태거 경로로 auto_tags와 rating_score를 다시 계산해.', en: 'Tags/rating: rerun the existing tagger path to refresh auto_tags and rating_score.' })}</div>
+        <div>{t({ ko: '상태: 현재 화면 세션에서만 검토 완료/대기 큐를 바꿔.', en: 'Status: update the reviewed/needs-review queues for this page session only.' })}</div>
+      </div>
+    </PageInset>
+  )
+}
+
+function ReviewSignalOverlay({ image, similarHashSet, reviewedIdSet }: { image: ImageRecord; similarHashSet: ReadonlySet<string>; reviewedIdSet: ReadonlySet<string> }) {
   const { t, formatNumber } = useI18n()
   const signals = getMediaReviewSignals(image, similarHashSet)
+  const imageId = getImageListId(image)
   const tagLabel = signals.tagQuality === 'missing'
     ? t({ ko: '태그 없음', en: 'no tags' })
     : signals.tagQuality === 'sparse'
@@ -78,12 +111,15 @@ function ReviewSignalOverlay({ image, similarHashSet }: { image: ImageRecord; si
       <Badge variant={signals.tagQuality === 'ready' ? 'secondary' : 'outline'}>{tagLabel}</Badge>
       <Badge variant={signals.ratingScore === null && signals.ratingLabel === null ? 'outline' : 'secondary'}>{ratingLabel}</Badge>
       {signals.isSimilarMatch ? <Badge>{t({ ko: '유사', en: 'similar' })}</Badge> : null}
+      {reviewedIdSet.has(imageId) ? <Badge>{t({ ko: '검토 완료', en: 'reviewed' })}</Badge> : null}
     </div>
   )
 }
 
 /** Render a non-destructive media review workspace that combines existing search, group, tag, rating, and similarity signals. */
 export function MediaReviewPage() {
+  const queryClient = useQueryClient()
+  const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const canViewReview = hasAuthPermission(authStatusQuery.data?.permissionKeys, 'page.home.view')
@@ -91,6 +127,8 @@ export function MediaReviewPage() {
   const [appliedSearchText, setAppliedSearchText] = useState('')
   const [activeQueue, setActiveQueue] = useState<MediaReviewQueueKey>('all')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [reviewedIds, setReviewedIds] = useState<string[]>([])
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
 
   useAuthPermissionRedirect({
     enabled: !authStatusQuery.isLoading && !canViewReview,
@@ -156,6 +194,7 @@ export function MediaReviewPage() {
     [imagesQuery.data?.pages],
   )
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const reviewedIdSet = useMemo(() => new Set(reviewedIds), [reviewedIds])
   const selectedAnchorImage = useMemo(
     () => loadedImages.find((image) => selectedIdSet.has(getImageListId(image))) ?? null,
     [loadedImages, selectedIdSet],
@@ -173,8 +212,8 @@ export function MediaReviewPage() {
   )
   const sourceSummary = useMemo(() => getMediaReviewSignalSummary(loadedImages, similarHashSet), [loadedImages, similarHashSet])
   const filteredImages = useMemo(
-    () => filterMediaReviewImages(loadedImages, activeQueue, similarHashSet),
-    [activeQueue, loadedImages, similarHashSet],
+    () => filterMediaReviewImages(loadedImages, activeQueue, similarHashSet, reviewedIdSet),
+    [activeQueue, loadedImages, reviewedIdSet, similarHashSet],
   )
   const {
     visibleItems,
@@ -191,6 +230,59 @@ export function MediaReviewPage() {
     onLoadMore: imagesQuery.fetchNextPage,
   })
   const visibleSummary = useMemo(() => getMediaReviewSignalSummary(visibleItems, similarHashSet), [similarHashSet, visibleItems])
+  const selectedImages = useMemo(
+    () => visibleItems.filter((image) => selectedIdSet.has(getImageListId(image))),
+    [selectedIdSet, visibleItems],
+  )
+  const selectedCompositeHashes = useMemo(
+    () => selectedImages
+      .map((image) => image.composite_hash)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0),
+    [selectedImages],
+  )
+  const selectedReviewedCount = useMemo(
+    () => selectedImages.filter((image) => reviewedIdSet.has(getImageListId(image))).length,
+    [reviewedIdSet, selectedImages],
+  )
+
+  const assignToGroupMutation = useMutation({
+    mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
+    onSuccess: async (result) => {
+      setIsAssignModalOpen(false)
+      setSelectedIds([])
+      showSnackbar({ message: result.message, tone: 'info' })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
+        queryClient.invalidateQueries({ queryKey: ['media-review-images'] }),
+      ])
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '선택 항목을 그룹에 추가하지 못했어.', en: 'Failed to add selected items to the group.' }), tone: 'error' })
+    },
+  })
+
+  const batchTagMutation = useMutation({
+    mutationFn: (compositeHashes: string[]) => batchTagImages(compositeHashes),
+    onSuccess: async (result) => {
+      setSelectedIds([])
+      showSnackbar({
+        message: result.fail_count > 0
+          ? t({ ko: '태그/등급 재점검: 성공 {success}개, 실패 {failed}개', en: 'Tag/rating recheck: {success} succeeded, {failed} failed' }, { success: formatNumber(result.success_count), failed: formatNumber(result.fail_count) })
+          : t({ ko: '태그/등급 {count}개 재점검 완료', en: '{count} tag/rating checks completed' }, { count: formatNumber(result.success_count) }),
+        tone: result.fail_count > 0 ? 'error' : 'info',
+      })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['media-review-images'] }),
+        queryClient.invalidateQueries({ queryKey: ['home-images'] }),
+        queryClient.invalidateQueries({ queryKey: ['image-detail'] }),
+      ])
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '선택 항목 태그/등급 재점검에 실패했어.', en: 'Failed to recheck selected item tags and ratings.' }), tone: 'error' })
+    },
+  })
 
   const handleSubmitSearch = () => {
     setSelectedIds([])
@@ -203,13 +295,77 @@ export function MediaReviewPage() {
     setSelectedIds([])
   }
 
+  const handleOpenAssignModal = () => {
+    if (selectedCompositeHashes.length === 0) {
+      return
+    }
+
+    if (groupsQuery.isPending) {
+      showSnackbar({ message: t({ ko: '사용자 그룹을 불러오는 중이야.', en: 'Loading custom groups.' }), tone: 'info' })
+      return
+    }
+
+    if (groupsQuery.isError) {
+      showSnackbar({ message: groupsQuery.error instanceof Error ? groupsQuery.error.message : t({ ko: '그룹 목록을 불러오지 못했어.', en: 'Failed to load groups.' }), tone: 'error' })
+      return
+    }
+
+    if ((groupsQuery.data?.length ?? 0) === 0) {
+      showSnackbar({ message: t({ ko: '먼저 사용자 그룹을 만들어야 해.', en: 'Create a custom group first.' }), tone: 'error' })
+      return
+    }
+
+    setIsAssignModalOpen(true)
+  }
+
+  const handleAssignToGroup = async (groupId: number) => {
+    await assignToGroupMutation.mutateAsync({
+      groupId,
+      compositeHashes: selectedCompositeHashes,
+    })
+  }
+
+  const handleBatchTagSelected = () => {
+    if (selectedCompositeHashes.length === 0 || batchTagMutation.isPending) {
+      return
+    }
+
+    const confirmed = window.confirm(t({ ko: '선택한 {count}개 항목의 태그와 등급을 다시 계산할까?', en: 'Recalculate tags and ratings for {count} selected items?' }, { count: formatNumber(selectedCompositeHashes.length) }))
+    if (!confirmed) {
+      return
+    }
+
+    batchTagMutation.mutate(selectedCompositeHashes)
+  }
+
+  const handleMarkReviewed = () => {
+    if (selectedIds.length === 0) {
+      return
+    }
+
+    setReviewedIds((current) => Array.from(new Set([...current, ...selectedIds])))
+    setSelectedIds([])
+    showSnackbar({ message: t({ ko: '선택 항목을 검토 완료로 표시했어.', en: 'Marked selected items as reviewed.' }), tone: 'info' })
+  }
+
+  const handleReopenReview = () => {
+    if (selectedIds.length === 0) {
+      return
+    }
+
+    const selectedIdSnapshot = new Set(selectedIds)
+    setReviewedIds((current) => current.filter((imageId) => !selectedIdSnapshot.has(imageId)))
+    setSelectedIds([])
+    showSnackbar({ message: t({ ko: '선택 항목을 검토 대기로 돌렸어.', en: 'Moved selected items back to needs review.' }), tone: 'info' })
+  }
+
   const renderReviewOverlay = (image: ImageRecord): ReactNode => {
     const safetyOverlay = renderSafetyOverlay(image)
 
     return (
       <>
         {safetyOverlay}
-        <ReviewSignalOverlay image={image} similarHashSet={similarHashSet} />
+        <ReviewSignalOverlay image={image} similarHashSet={similarHashSet} reviewedIdSet={reviewedIdSet} />
       </>
     )
   }
@@ -340,6 +496,14 @@ export function MediaReviewPage() {
 
       {!imagesQuery.isPending && !imagesQuery.isError && visibleItems.length > 0 ? (
         <>
+          {selectedIds.length > 0 ? (
+            <BatchReviewPreview
+              selectedCount={selectedIds.length}
+              selectedCompositeCount={selectedCompositeHashes.length}
+              reviewedCount={selectedReviewedCount}
+            />
+          ) : null}
+
           <ImageList
             items={visibleItems}
             resetKey={`media-review:${activeQueue}:${appliedSearchText}`}
@@ -378,6 +542,72 @@ export function MediaReviewPage() {
           </div>
         </>
       ) : null}
+
+      <ImageSelectionBar
+        selectedCount={selectedIds.length}
+        downloadableCount={selectedCompositeHashes.length}
+        showDownloadAction={false}
+        statusText={t({ ko: '그룹, 태그/등급, 검토 상태를 선택 항목에 일괄 적용', en: 'Batch group, tag/rating, and review-state actions for the selection' })}
+        extraActions={
+          <>
+            <Button
+              size="icon-sm"
+              variant="secondary"
+              onClick={handleOpenAssignModal}
+              disabled={assignToGroupMutation.isPending || groupsQuery.isPending || selectedCompositeHashes.length === 0}
+              title={assignToGroupMutation.isPending ? t({ ko: '그룹 추가 중', en: 'Adding to group' }) : t({ ko: '그룹에 추가', en: 'Add to group' })}
+              aria-label={assignToGroupMutation.isPending ? t({ ko: '그룹 추가 중', en: 'Adding to group' }) : t({ ko: '그룹에 추가', en: 'Add to group' })}
+              data-no-select-drag="true"
+            >
+              <FolderPlus className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="secondary"
+              onClick={handleBatchTagSelected}
+              disabled={batchTagMutation.isPending || selectedCompositeHashes.length === 0}
+              title={batchTagMutation.isPending ? t({ ko: '재점검 중', en: 'Rechecking' }) : t({ ko: '태그/등급 재점검', en: 'Recheck tags and ratings' })}
+              aria-label={batchTagMutation.isPending ? t({ ko: '재점검 중', en: 'Rechecking' }) : t({ ko: '태그/등급 재점검', en: 'Recheck tags and ratings' })}
+              data-no-select-drag="true"
+            >
+              {batchTagMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4" />}
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="secondary"
+              onClick={handleMarkReviewed}
+              disabled={selectedIds.length === 0}
+              title={t({ ko: '검토 완료 표시', en: 'Mark reviewed' })}
+              aria-label={t({ ko: '검토 완료 표시', en: 'Mark reviewed' })}
+              data-no-select-drag="true"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+            </Button>
+          </>
+        }
+        trailingActions={selectedReviewedCount > 0 ? (
+          <Button
+            size="icon-sm"
+            variant="outline"
+            onClick={handleReopenReview}
+            title={t({ ko: '검토 대기로 되돌리기', en: 'Move back to needs review' })}
+            aria-label={t({ ko: '검토 대기로 되돌리기', en: 'Move back to needs review' })}
+            data-no-select-drag="true"
+          >
+            <Undo2 className="h-4 w-4" />
+          </Button>
+        ) : undefined}
+        onClear={() => setSelectedIds([])}
+      />
+
+      <GroupAssignModal
+        open={isAssignModalOpen}
+        groups={groupsQuery.data ?? []}
+        selectedCount={selectedCompositeHashes.length}
+        isSubmitting={assignToGroupMutation.isPending}
+        onClose={() => setIsAssignModalOpen(false)}
+        onSubmit={handleAssignToGroup}
+      />
     </div>
   )
 }

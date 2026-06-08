@@ -71,6 +71,10 @@ export const API_ERROR_FALLBACKS = {
     ko: '이미지 삭제에 실패했어.',
     en: 'Failed to delete images.',
   },
+  'images.batchTag': {
+    ko: '선택 이미지 태그/등급 재점검에 실패했어.',
+    en: 'Failed to recheck tags and ratings for the selected images.',
+  },
   'images.duplicates.load': {
     ko: '중복 이미지를 불러오지 못했어.',
     en: 'Failed to load duplicate images.',

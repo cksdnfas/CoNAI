@@ -104,6 +104,8 @@ assertEqual(filterMediaReviewImages(mediaReviewImages, 'missing-tags').length, 1
 assertEqual(filterMediaReviewImages(mediaReviewImages, 'sparse-tags').length, 1, 'sparse-tags queue should isolate weak tag coverage')
 assertEqual(filterMediaReviewImages(mediaReviewImages, 'unrated').length, 1, 'unrated queue should isolate items with no rating signal')
 assertEqual(filterMediaReviewImages(mediaReviewImages, 'similar', similarHashSet).length, 1, 'similar queue should use the selected-anchor hash set')
+assertEqual(filterMediaReviewImages(mediaReviewImages, 'needs-review', similarHashSet, new Set(['hash-grouped-ready'])).length, 2, 'needs-review queue should hide session-reviewed items without moving media')
+assertEqual(filterMediaReviewImages(mediaReviewImages, 'reviewed', similarHashSet, new Set(['hash-grouped-ready'])).length, 1, 'reviewed queue should isolate session-reviewed items without schema changes')
 
 const reviewSearchChips = buildMediaReviewSearchChips('comfy forest')
 assertEqual(reviewSearchChips.length, 3, 'media review search should combine prompt, auto-tag, and model search chips')
