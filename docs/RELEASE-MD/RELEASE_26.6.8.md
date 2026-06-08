@@ -78,6 +78,12 @@ npm run verify:release-readiness
 
 - `python -m graphify update .`
 
+최종 준비 상태:
+
+- 문서 사이드바와 릴리즈 인덱스는 `26.6.8 workflow-media-operations` 작업 노트와 최신 안정 릴리즈 `26.6.3`을 분리해서 표시합니다.
+- `verify:release-readiness` alias는 docs build와 전체 build까지 포함하는 로컬 준비 확인으로 유지합니다.
+- push, deploy, live demo update, server restart, protected service `3999` 조작, package version bump, git tag는 실행하지 않습니다.
+
 ---
 
 ### 승인 경계

@@ -77,6 +77,7 @@
     "verify:prompt-inline-syntax-contracts": "cd frontend && npm run verify:prompt-inline-syntax-contracts",
     "verify:app-document-metadata-contracts": "cd frontend && npm run verify:app-document-metadata-contracts",
     "verify:release-readiness-workspace": "cd frontend && npm run verify:release-readiness-workspace",
+    "verify:integrated-operations-surface-contracts": "cd frontend && npm run verify:integrated-operations-surface-contracts",
     "verify:media-review-intelligence-contracts": "cd frontend && npm run verify:media-review-intelligence-contracts",
     "verify:prompt-list-progress-contracts": "cd frontend && npm run verify:prompt-list-progress-contracts",
     "verify:upload-result-links": "cd frontend && npm run verify:upload-result-links",
