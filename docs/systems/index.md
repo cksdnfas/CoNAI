@@ -12,7 +12,7 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 5. [모듈 그래프 노드 UX 개편안](/systems/module-graph-node-ux-redesign-plan)
 6. [LLM and Codex Graph Nodes Plan](/systems/llm-and-codex-graph-nodes-plan)
 7. [MCP와 자동화 인터페이스](/systems/mcp-and-automation)
-8. [26.7.0 release readiness](/systems/26.7.0-release-readiness)
+8. [26.6.8 workflow-media-operations](/systems/26.6.8-workflow-media-operations)
 
 ## 왜 이 순서인가
 
@@ -44,6 +44,6 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 - 화면 밖에서 CoNAI를 호출하는 자동화 진입점입니다.
 - AI 에이전트 연동과 외부 도구 호출의 연결부입니다.
 
-### 8) 26.7.0 release readiness
-- 워크플로우 운영 업그레이드를 알파 리뷰 전에 어떤 순서로 검증할지 정리합니다.
+### 8) 26.6.8 workflow-media-operations
+- 워크플로우·미디어 운영 업그레이드를 로컬 검토 전에 어떤 순서로 검증할지 정리합니다.
 - push, deploy, restart, protected service 조작 없이 확인 가능한 로컬 준비 경계입니다.

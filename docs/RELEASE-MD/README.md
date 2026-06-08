@@ -4,7 +4,7 @@
 
 ## 최신 릴리즈
 
-- [26.7.0 readiness](./RELEASE_26.7.0.md)
+- [26.6.8 workflow-media-operations](./RELEASE_26.6.8.md)
 - [26.6.3](./RELEASE_26.6.3.md)
 - [26.05.23](./RELEASE_26.05.23.md)
 - [26.5.17](./RELEASE_26.5.17.md)
