@@ -76,6 +76,7 @@
     "verify:prompt-weight-display-contracts": "cd frontend && npm run verify:prompt-weight-display-contracts",
     "verify:prompt-inline-syntax-contracts": "cd frontend && npm run verify:prompt-inline-syntax-contracts",
     "verify:app-document-metadata-contracts": "cd frontend && npm run verify:app-document-metadata-contracts",
+    "verify:release-readiness-workspace": "cd frontend && npm run verify:release-readiness-workspace",
     "verify:prompt-list-progress-contracts": "cd frontend && npm run verify:prompt-list-progress-contracts",
     "verify:upload-result-links": "cd frontend && npm run verify:upload-result-links",
     "verify:danbooru-browser-progress-contracts": "cd frontend && npm run verify:danbooru-browser-progress-contracts",

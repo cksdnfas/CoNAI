@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "verify:app-document-metadata-contracts": "tsx src/scripts/verifyAppDocumentMetadataContracts.ts",
+    "verify:release-readiness-workspace": "tsx src/scripts/verifyReleaseReadinessWorkspaceContracts.ts",
     "verify:module-library-grouping": "tsx src/scripts/verifyModuleLibraryGrouping.ts",
     "verify:module-graph-execution-status-contracts": "tsx src/scripts/verifyModuleGraphExecutionStatusContracts.ts",
     "verify:module-graph-execution-panel-contracts": "tsx src/scripts/verifyModuleGraphExecutionPanelContracts.ts",
