@@ -1,0 +1,229 @@
+import type { TranslationDictionary } from '@/i18n'
+
+export const RELEASE_READINESS_HISTORY_SCHEMA_VERSION = 1
+export const RELEASE_READINESS_HISTORY_STORAGE_KEY = 'conai.release-readiness.history.v1'
+export const MAX_RELEASE_READINESS_HISTORY_RECORDS = 12
+
+type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
+
+export type ReleaseReadinessEvidenceTone = 'ready' | 'attention' | 'blocked'
+
+export type ReleaseReadinessChecklistItemContract = {
+  id: string
+  title: TranslationDictionary
+  description: TranslationDictionary
+}
+
+export type ReleaseReadinessEvidenceItemContract = {
+  id: string
+  label: TranslationDictionary
+  value: string
+  detail: TranslationDictionary
+  tone: ReleaseReadinessEvidenceTone
+}
+
+export type ReleaseReadinessHandoffItemContract = {
+  id: string
+  title: TranslationDictionary
+  artifact: string
+  detail: TranslationDictionary
+}
+
+export type ReleaseReadinessRunbookGuardrailContract = {
+  id: string
+  phase: TranslationDictionary
+  title: TranslationDictionary
+  status: TranslationDictionary
+  description: TranslationDictionary
+}
+
+export type ReleaseReadinessUserDecisionContract = ReleaseReadinessChecklistItemContract
+
+export type ReleaseReadinessHistoryRecord = {
+  id: string
+  schemaVersion: typeof RELEASE_READINESS_HISTORY_SCHEMA_VERSION
+  source: 'settings.release-readiness'
+  storageSurface: 'local-browser'
+  savedAt: string
+  appVersionLabel: string
+  externalActionsExecuted: false
+  pushDeployRestartBoundary: 'approval-required'
+  reviewedItemIds: string[]
+  capturedHandoffItemIds: string[]
+  summary: {
+    reviewedCount: number
+    reviewItemCount: number
+    capturedHandoffCount: number
+    handoffItemCount: number
+    readyForExport: boolean
+  }
+  checklist: Array<ReleaseReadinessChecklistItemContract & { status: 'checked' | 'open' }>
+  evidence: ReleaseReadinessEvidenceItemContract[]
+  handoff: Array<ReleaseReadinessHandoffItemContract & { status: 'captured' | 'open' }>
+  runbookGuardrails: ReleaseReadinessRunbookGuardrailContract[]
+  userDecisions: Array<ReleaseReadinessUserDecisionContract & { status: 'approval-required' }>
+}
+
+export type ReleaseReadinessHistoryDocument = {
+  schemaVersion: typeof RELEASE_READINESS_HISTORY_SCHEMA_VERSION
+  records: ReleaseReadinessHistoryRecord[]
+  lastSavedAt: string | null
+}
+
+export type ReleaseReadinessHistorySnapshotInput = {
+  id?: string
+  savedAt?: string
+  appVersionLabel: string
+  reviewedItemIds: Iterable<string>
+  capturedHandoffItemIds: Iterable<string>
+  reviewItems: readonly ReleaseReadinessChecklistItemContract[]
+  evidenceItems: readonly ReleaseReadinessEvidenceItemContract[]
+  handoffItems: readonly ReleaseReadinessHandoffItemContract[]
+  runbookGuardrails: readonly ReleaseReadinessRunbookGuardrailContract[]
+  userDecisions: readonly ReleaseReadinessUserDecisionContract[]
+}
+
+export function createEmptyReleaseReadinessHistoryDocument(): ReleaseReadinessHistoryDocument {
+  return {
+    schemaVersion: RELEASE_READINESS_HISTORY_SCHEMA_VERSION,
+    records: [],
+    lastSavedAt: null,
+  }
+}
+
+function getBrowserStorage(): StorageLike | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
+function uniqueIds(ids: Iterable<string>) {
+  return Array.from(new Set(Array.from(ids).filter((id) => typeof id === 'string' && id.trim().length > 0)))
+}
+
+function buildRecordId(savedAt: string) {
+  const timestamp = savedAt.replace(/\D/g, '').slice(0, 14) || 'snapshot'
+  const suffix = Math.random().toString(36).slice(2, 8)
+  return `release-readiness-${timestamp}-${suffix}`
+}
+
+function isHistoryRecord(value: unknown): value is ReleaseReadinessHistoryRecord {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Partial<ReleaseReadinessHistoryRecord>
+  return (
+    record.schemaVersion === RELEASE_READINESS_HISTORY_SCHEMA_VERSION
+    && record.source === 'settings.release-readiness'
+    && record.storageSurface === 'local-browser'
+    && record.externalActionsExecuted === false
+    && record.pushDeployRestartBoundary === 'approval-required'
+    && typeof record.id === 'string'
+    && typeof record.savedAt === 'string'
+    && typeof record.appVersionLabel === 'string'
+    && Array.isArray(record.reviewedItemIds)
+    && Array.isArray(record.capturedHandoffItemIds)
+    && Array.isArray(record.checklist)
+    && Array.isArray(record.evidence)
+    && Array.isArray(record.handoff)
+    && Array.isArray(record.runbookGuardrails)
+    && Array.isArray(record.userDecisions)
+  )
+}
+
+export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistorySnapshotInput): ReleaseReadinessHistoryRecord {
+  const savedAt = input.savedAt ?? new Date().toISOString()
+  const reviewedItemIds = uniqueIds(input.reviewedItemIds)
+  const capturedHandoffItemIds = uniqueIds(input.capturedHandoffItemIds)
+  const reviewedSet = new Set(reviewedItemIds)
+  const capturedSet = new Set(capturedHandoffItemIds)
+  const reviewItemCount = input.reviewItems.length
+  const handoffItemCount = input.handoffItems.length
+
+  return {
+    id: input.id ?? buildRecordId(savedAt),
+    schemaVersion: RELEASE_READINESS_HISTORY_SCHEMA_VERSION,
+    source: 'settings.release-readiness',
+    storageSurface: 'local-browser',
+    savedAt,
+    appVersionLabel: input.appVersionLabel,
+    externalActionsExecuted: false,
+    pushDeployRestartBoundary: 'approval-required',
+    reviewedItemIds,
+    capturedHandoffItemIds,
+    summary: {
+      reviewedCount: reviewedItemIds.length,
+      reviewItemCount,
+      capturedHandoffCount: capturedHandoffItemIds.length,
+      handoffItemCount,
+      readyForExport: reviewItemCount > 0 && handoffItemCount > 0 && reviewedItemIds.length === reviewItemCount && capturedHandoffItemIds.length === handoffItemCount,
+    },
+    checklist: input.reviewItems.map((item) => ({
+      ...item,
+      status: reviewedSet.has(item.id) ? 'checked' : 'open',
+    })),
+    evidence: input.evidenceItems.map((item) => ({ ...item })),
+    handoff: input.handoffItems.map((item) => ({
+      ...item,
+      status: capturedSet.has(item.id) ? 'captured' : 'open',
+    })),
+    runbookGuardrails: input.runbookGuardrails.map((item) => ({ ...item })),
+    userDecisions: input.userDecisions.map((item) => ({
+      ...item,
+      status: 'approval-required',
+    })),
+  }
+}
+
+export function normalizeReleaseReadinessHistoryDocument(value: unknown): ReleaseReadinessHistoryDocument {
+  if (!value || typeof value !== 'object') return createEmptyReleaseReadinessHistoryDocument()
+  const document = value as Partial<ReleaseReadinessHistoryDocument>
+  if (document.schemaVersion !== RELEASE_READINESS_HISTORY_SCHEMA_VERSION || !Array.isArray(document.records)) {
+    return createEmptyReleaseReadinessHistoryDocument()
+  }
+
+  const records = document.records
+    .filter(isHistoryRecord)
+    .sort((left, right) => Date.parse(right.savedAt) - Date.parse(left.savedAt))
+    .slice(0, MAX_RELEASE_READINESS_HISTORY_RECORDS)
+
+  return {
+    schemaVersion: RELEASE_READINESS_HISTORY_SCHEMA_VERSION,
+    records,
+    lastSavedAt: records[0]?.savedAt ?? null,
+  }
+}
+
+export function readReleaseReadinessHistoryFromStorage(storage: StorageLike | null = getBrowserStorage()): ReleaseReadinessHistoryDocument {
+  if (!storage) return createEmptyReleaseReadinessHistoryDocument()
+
+  try {
+    const rawValue = storage.getItem(RELEASE_READINESS_HISTORY_STORAGE_KEY)
+    if (!rawValue) return createEmptyReleaseReadinessHistoryDocument()
+    return normalizeReleaseReadinessHistoryDocument(JSON.parse(rawValue))
+  } catch {
+    return createEmptyReleaseReadinessHistoryDocument()
+  }
+}
+
+export function saveReleaseReadinessHistoryRecord(
+  record: ReleaseReadinessHistoryRecord,
+  storage: StorageLike | null = getBrowserStorage(),
+): ReleaseReadinessHistoryDocument {
+  const current = readReleaseReadinessHistoryFromStorage(storage)
+  const document = normalizeReleaseReadinessHistoryDocument({
+    schemaVersion: RELEASE_READINESS_HISTORY_SCHEMA_VERSION,
+    records: [record, ...current.records.filter((historyRecord) => historyRecord.id !== record.id)],
+  })
+
+  if (storage) {
+    try {
+      storage.setItem(RELEASE_READINESS_HISTORY_STORAGE_KEY, JSON.stringify(document))
+    } catch {
+      // Storage can be blocked in private, embedded, or policy-restricted contexts.
+    }
+  }
+
+  return document
+}

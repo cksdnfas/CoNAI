@@ -1,39 +1,28 @@
 import { useMemo, useState } from 'react'
-import { CheckCircle2, RotateCcw } from 'lucide-react'
+import { CheckCircle2, RotateCcw, Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SettingsInsetBlock, SettingsSection, SettingsToggleRow, SettingsValueTile } from './settings-primitives'
 import { APP_VERSION_LABEL } from '@/lib/app-metadata'
 import { cn } from '@/lib/utils'
 import { useI18n, type TranslationDictionary } from '@/i18n'
+import {
+  buildReleaseReadinessHistoryRecord,
+  readReleaseReadinessHistoryFromStorage,
+  RELEASE_READINESS_HISTORY_SCHEMA_VERSION,
+  saveReleaseReadinessHistoryRecord,
+  type ReleaseReadinessChecklistItemContract,
+  type ReleaseReadinessEvidenceItemContract,
+  type ReleaseReadinessHandoffItemContract,
+  type ReleaseReadinessRunbookGuardrailContract,
+  type ReleaseReadinessUserDecisionContract,
+} from '../release-readiness-history'
 
-type ReadinessItem = {
-  id: string
-  title: TranslationDictionary
-  description: TranslationDictionary
-}
-
-type EvidenceItem = {
-  label: TranslationDictionary
-  value: string
-  detail: TranslationDictionary
-  tone: 'ready' | 'attention' | 'blocked'
-}
-
-type HandoffEvidenceItem = {
-  id: string
-  title: TranslationDictionary
-  artifact: string
-  detail: TranslationDictionary
-}
-
-type RunbookGuardrail = {
-  id: string
-  phase: TranslationDictionary
-  title: TranslationDictionary
-  status: TranslationDictionary
-  description: TranslationDictionary
-}
+type ReadinessItem = ReleaseReadinessChecklistItemContract
+type EvidenceItem = ReleaseReadinessEvidenceItemContract
+type HandoffEvidenceItem = ReleaseReadinessHandoffItemContract
+type RunbookGuardrail = ReleaseReadinessRunbookGuardrailContract
+type UserDecisionItem = ReleaseReadinessUserDecisionContract
 
 type IntegratedOperationsLane = {
   id: string
@@ -166,24 +155,28 @@ const INTEGRATED_DECISION_GATES: IntegratedDecisionGate[] = [
 
 const EVIDENCE_ITEMS: EvidenceItem[] = [
   {
+    id: 'current-version',
     label: { ko: '현재 버전', en: 'Current version' },
     value: APP_VERSION_LABEL,
     detail: { ko: '패키지 버전 라벨 기준', en: 'From the package version label' },
     tone: 'ready',
   },
   {
+    id: 'release-check',
     label: { ko: '릴리즈 점검', en: 'Release check' },
     value: 'npm run verify:release-readiness',
     detail: { ko: '스크립트 alias, docs build, 전체 build 포함', en: 'Includes script aliases, docs build, and full build' },
     tone: 'ready',
   },
   {
+    id: 'graphify-evidence',
     label: { ko: 'Graphify 근거', en: 'Graphify evidence' },
     value: 'python -m graphify update .',
     detail: { ko: '코드 변경 뒤 갱신 필요', en: 'Required after code changes' },
     tone: 'attention',
   },
   {
+    id: 'external-actions',
     label: { ko: '외부 작업', en: 'External actions' },
     value: 'approval-required',
     detail: { ko: 'push, deploy, restart는 별도 승인 필요', en: 'Push, deploy, and restart need separate approval' },
@@ -319,7 +312,7 @@ const RUNBOOK_GUARDRAILS: RunbookGuardrail[] = [
   },
 ]
 
-const USER_DECISIONS: ReadinessItem[] = [
+const USER_DECISIONS: UserDecisionItem[] = [
   {
     id: 'alpha-push',
     title: { ko: 'alpha branch push 승인', en: 'Approve alpha branch push' },
@@ -356,14 +349,21 @@ function getEvidenceToneVariant(tone: EvidenceItem['tone']) {
 
 /** Provide a release decision workspace that never performs external release actions itself. */
 export function ReleaseReadinessTab() {
-  const { t } = useI18n()
-  const [reviewedItems, setReviewedItems] = useState<Set<string>>(() => new Set())
-  const [capturedHandoffItems, setCapturedHandoffItems] = useState<Set<string>>(() => new Set())
+  const { t, formatDateTime } = useI18n()
+  const [readinessHistory, setReadinessHistory] = useState(() => readReleaseReadinessHistoryFromStorage().records)
+  const latestReadinessRecord = readinessHistory[0] ?? null
+  const [reviewedItems, setReviewedItems] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedItemIds ?? []))
+  const [capturedHandoffItems, setCapturedHandoffItems] = useState<Set<string>>(() => new Set(latestReadinessRecord?.capturedHandoffItemIds ?? []))
   const reviewedCount = reviewedItems.size
   const capturedHandoffCount = capturedHandoffItems.size
   const allReviewed = reviewedCount === REVIEW_ITEMS.length
+  const allHandoffCaptured = capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length
   const readinessState = allReviewed ? t({ ko: '검토 완료', en: 'Reviewed' }) : t({ ko: '{count}/{total} 확인', en: '{count}/{total} checked' }, { count: reviewedCount, total: REVIEW_ITEMS.length })
-  const handoffState = capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
+  const handoffState = allHandoffCaptured ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
+  const historyState = readinessHistory.length > 0 ? t({ ko: '{count}개 저장', en: '{count} saved' }, { count: readinessHistory.length }) : t({ ko: '기록 없음', en: 'No records' })
+  const latestHistoryLabel = latestReadinessRecord
+    ? formatDateTime(latestReadinessRecord.savedAt, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : t({ ko: '아직 없음', en: 'None yet' })
 
   const readinessPercent = useMemo(() => Math.round((reviewedCount / REVIEW_ITEMS.length) * 100), [reviewedCount])
 
@@ -391,12 +391,32 @@ export function ReleaseReadinessTab() {
     })
   }
 
+  const saveReadinessHistorySnapshot = () => {
+    const record = buildReleaseReadinessHistoryRecord({
+      appVersionLabel: APP_VERSION_LABEL,
+      reviewedItemIds: reviewedItems,
+      capturedHandoffItemIds: capturedHandoffItems,
+      reviewItems: REVIEW_ITEMS,
+      evidenceItems: EVIDENCE_ITEMS,
+      handoffItems: HANDOFF_EVIDENCE_ITEMS,
+      runbookGuardrails: RUNBOOK_GUARDRAILS,
+      userDecisions: USER_DECISIONS,
+    })
+    const document = saveReleaseReadinessHistoryRecord(record)
+    setReadinessHistory(document.records)
+  }
+
   return (
     <div className="space-y-6">
       <SettingsSection
+        data-release-readiness-history-contract="true"
         heading={t({ ko: '릴리즈 준비 워크스페이스', en: 'Release readiness workspace' })}
         actions={(
           <>
+            <Button type="button" size="sm" variant="secondary" onClick={saveReadinessHistorySnapshot}>
+              <Save className="h-4 w-4" />
+              {t({ ko: '스냅샷 저장', en: 'Save snapshot' })}
+            </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setReviewedItems(new Set(REVIEW_ITEMS.map((item) => item.id)))}>
               <CheckCircle2 className="h-4 w-4" />
               {t({ ko: '검토 표시', en: 'Mark reviewed' })}
@@ -407,10 +427,11 @@ export function ReleaseReadinessTab() {
           </>
         )}
       >
-        <div className="grid gap-3 min-[900px]:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="grid gap-3 min-[900px]:grid-cols-[minmax(0,1fr)_180px_180px]">
           <SettingsInsetBlock>
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant={allReviewed ? 'default' : 'secondary'}>{readinessState}</Badge>
+              <Badge variant={allHandoffCaptured ? 'default' : 'secondary'}>{handoffState}</Badge>
               <div className="min-w-0 text-sm text-muted-foreground">
                 {t({
                   ko: '완료 작업, 주의 사항, 검증 근거, 사용자 결정을 릴리즈 액션 전에 한곳에서 점검해.',
@@ -424,6 +445,18 @@ export function ReleaseReadinessTab() {
           </SettingsInsetBlock>
 
           <SettingsValueTile label={t({ ko: '진행률', en: 'Progress' })} value={`${readinessPercent}%`} />
+          <SettingsValueTile
+            data-release-readiness-history-summary="true"
+            label={t({ ko: '런북 이력', en: 'Runbook history' })}
+            value={(
+              <span className="flex min-w-0 flex-col gap-1">
+                <span>{historyState}</span>
+                <span className="truncate text-xs font-normal text-muted-foreground">
+                  {t({ ko: 'v{version} · {latest}', en: 'v{version} · {latest}' }, { version: RELEASE_READINESS_HISTORY_SCHEMA_VERSION, latest: latestHistoryLabel })}
+                </span>
+              </span>
+            )}
+          />
         </div>
 
         <div className="grid gap-3 min-[900px]:grid-cols-2">

@@ -1,0 +1,171 @@
+import { deepEqual, equal, ok } from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  buildReleaseReadinessHistoryRecord,
+  MAX_RELEASE_READINESS_HISTORY_RECORDS,
+  readReleaseReadinessHistoryFromStorage,
+  RELEASE_READINESS_HISTORY_SCHEMA_VERSION,
+  RELEASE_READINESS_HISTORY_STORAGE_KEY,
+  saveReleaseReadinessHistoryRecord,
+} from '../features/settings/release-readiness-history'
+
+const root = process.cwd()
+const releaseReadinessTab = readFileSync(join(root, 'src/features/settings/components/release-readiness-tab.tsx'), 'utf8')
+const historyContract = readFileSync(join(root, 'src/features/settings/release-readiness-history.ts'), 'utf8')
+
+class MemoryStorage {
+  private values = new Map<string, string>()
+
+  getItem(key: string) {
+    return this.values.get(key) ?? null
+  }
+
+  setItem(key: string, value: string) {
+    this.values.set(key, value)
+  }
+}
+
+const reviewItems = [
+  {
+    id: 'completed-work',
+    title: { ko: '완료 작업 검토', en: 'Completed work reviewed' },
+    description: { ko: '완료 작업 확인', en: 'Completed work check' },
+  },
+  {
+    id: 'evidence',
+    title: { ko: '검증 근거 확인', en: 'Evidence checked' },
+    description: { ko: '검증 근거 연결', en: 'Evidence is linked' },
+  },
+]
+
+const evidenceItems = [
+  {
+    id: 'release-check',
+    label: { ko: '릴리즈 점검', en: 'Release check' },
+    value: 'npm run verify:release-readiness',
+    detail: { ko: '로컬 검증', en: 'Local verification' },
+    tone: 'ready' as const,
+  },
+]
+
+const handoffItems = [
+  {
+    id: 'smoke-evidence',
+    title: { ko: '스모크 근거 번들', en: 'Smoke evidence bundle' },
+    artifact: 'npm run verify:release-readiness + live target smoke notes',
+    detail: { ko: '스모크 계획 분리', en: 'Smoke planning stays separate' },
+  },
+  {
+    id: 'rollback-plan',
+    title: { ko: '롤백 준비 기록', en: 'Rollback preparation record' },
+    artifact: 'rollback notes: previous commit, service target, protected port 3999',
+    detail: { ko: '재시작 전 확인', en: 'Check before restart' },
+  },
+]
+
+const runbookGuardrails = [
+  {
+    id: 'protected-3999',
+    phase: { ko: 'restart/smoke', en: 'Restart/smoke' },
+    title: { ko: '보호 포트 3999 회피', en: 'Avoid protected port 3999' },
+    status: { ko: '차단', en: 'Blocked' },
+    description: { ko: '별도 승인 필요', en: 'Separate approval required' },
+  },
+]
+
+const userDecisions = [
+  {
+    id: 'alpha-push',
+    title: { ko: 'alpha branch push 승인', en: 'Approve alpha branch push' },
+    description: { ko: '사용자가 결정', en: 'User-owned decision' },
+  },
+]
+
+const partialRecord = buildReleaseReadinessHistoryRecord({
+  id: 'partial-record',
+  savedAt: '2026-06-08T13:30:00.000Z',
+  appVersionLabel: '26.6.3',
+  reviewedItemIds: ['completed-work'],
+  capturedHandoffItemIds: ['rollback-plan'],
+  reviewItems,
+  evidenceItems,
+  handoffItems,
+  runbookGuardrails,
+  userDecisions,
+})
+
+equal(partialRecord.schemaVersion, RELEASE_READINESS_HISTORY_SCHEMA_VERSION, 'history record should carry the schema version')
+equal(partialRecord.source, 'settings.release-readiness', 'history record should identify the readiness workspace source')
+equal(partialRecord.storageSurface, 'local-browser', 'history record should use the local browser storage surface')
+equal(partialRecord.externalActionsExecuted, false, 'history record must not claim push/deploy/restart execution')
+equal(partialRecord.pushDeployRestartBoundary, 'approval-required', 'external release actions should stay approval-owned')
+equal(partialRecord.summary.reviewedCount, 1, 'reviewed item count should be preserved')
+equal(partialRecord.summary.capturedHandoffCount, 1, 'captured handoff count should be preserved')
+equal(partialRecord.summary.readyForExport, false, 'partial records should not be marked export ready')
+equal(partialRecord.checklist.find((item) => item.id === 'completed-work')?.status, 'checked', 'checked review status should persist')
+equal(partialRecord.checklist.find((item) => item.id === 'evidence')?.status, 'open', 'open review status should persist')
+equal(partialRecord.handoff.find((item) => item.id === 'rollback-plan')?.status, 'captured', 'captured handoff status should persist')
+equal(partialRecord.handoff.find((item) => item.id === 'smoke-evidence')?.status, 'open', 'open handoff status should persist')
+equal(partialRecord.userDecisions[0]?.status, 'approval-required', 'user decisions should remain separate approval items')
+
+const completeRecord = buildReleaseReadinessHistoryRecord({
+  id: 'complete-record',
+  savedAt: '2026-06-08T13:31:00.000Z',
+  appVersionLabel: '26.6.3',
+  reviewedItemIds: reviewItems.map((item) => item.id),
+  capturedHandoffItemIds: handoffItems.map((item) => item.id),
+  reviewItems,
+  evidenceItems,
+  handoffItems,
+  runbookGuardrails,
+  userDecisions,
+})
+
+equal(completeRecord.summary.readyForExport, true, 'complete evidence records should be ready for later export')
+
+const storage = new MemoryStorage()
+saveReleaseReadinessHistoryRecord(partialRecord, storage)
+saveReleaseReadinessHistoryRecord(completeRecord, storage)
+const savedDocument = readReleaseReadinessHistoryFromStorage(storage)
+
+equal(savedDocument.records.length, 2, 'history document should keep saved records')
+equal(savedDocument.records[0]?.id, 'complete-record', 'newest saved record should be first')
+deepEqual(savedDocument.records[0]?.capturedHandoffItemIds, ['smoke-evidence', 'rollback-plan'], 'handoff item ids should keep contract order')
+
+for (let index = 0; index < MAX_RELEASE_READINESS_HISTORY_RECORDS + 3; index += 1) {
+  saveReleaseReadinessHistoryRecord(
+    buildReleaseReadinessHistoryRecord({
+      id: `record-${index}`,
+      savedAt: new Date(Date.UTC(2026, 5, 9, 0, index)).toISOString(),
+      appVersionLabel: '26.6.3',
+      reviewedItemIds: [],
+      capturedHandoffItemIds: [],
+      reviewItems,
+      evidenceItems,
+      handoffItems,
+      runbookGuardrails,
+      userDecisions,
+    }),
+    storage,
+  )
+}
+
+const cappedDocument = readReleaseReadinessHistoryFromStorage(storage)
+equal(cappedDocument.records.length, MAX_RELEASE_READINESS_HISTORY_RECORDS, 'history document should cap retained records')
+equal(cappedDocument.records[0]?.id, `record-${MAX_RELEASE_READINESS_HISTORY_RECORDS + 2}`, 'history cap should keep newest records first')
+
+storage.setItem(RELEASE_READINESS_HISTORY_STORAGE_KEY, '{not-json')
+equal(readReleaseReadinessHistoryFromStorage(storage).records.length, 0, 'corrupt local history should fail closed')
+
+ok(releaseReadinessTab.includes('data-release-readiness-history-contract="true"'), 'release readiness UI should expose the history contract surface')
+ok(releaseReadinessTab.includes('saveReleaseReadinessHistoryRecord'), 'release readiness UI should save evidence snapshots')
+ok(releaseReadinessTab.includes('readReleaseReadinessHistoryFromStorage'), 'release readiness UI should restore saved evidence snapshots')
+ok(releaseReadinessTab.includes('RELEASE_READINESS_HISTORY_SCHEMA_VERSION'), 'release readiness UI should show the active history schema')
+ok(historyContract.includes('externalActionsExecuted: false'), 'history contract should explicitly prevent external action execution evidence')
+ok(historyContract.includes("pushDeployRestartBoundary: 'approval-required'"), 'history contract should preserve release-action approval boundaries')
+ok(!releaseReadinessTab.includes('buildApiUrl('), 'history capture should not call backend action endpoints')
+ok(!releaseReadinessTab.includes('fetch('), 'history capture should not perform external release actions')
+ok(!releaseReadinessTab.includes('triggerBlobDownload'), 'history contract should not export handoffs until the export UI commit unit')
+
+console.log('Release readiness history contracts verified.')
