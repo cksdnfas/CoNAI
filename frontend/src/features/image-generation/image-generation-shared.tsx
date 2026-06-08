@@ -657,6 +657,33 @@ export function getHistoryCancellationDetail(record: GenerationHistoryRecord) {
   return '취소 요청이 들어간 상태야.'
 }
 
+export type HistoryRunRecoveryState = 'active' | 'completed' | 'retryable-failed' | 'retryable-cancelled' | 'failed-no-retry'
+
+/** Queue replay is only exposed when the backend has a failed/cancelled queue job id to clone. */
+export function canRetryHistoryQueueJob(record: GenerationHistoryRecord) {
+  return typeof record.queue_job_id === 'number'
+    && record.queue_job_id > 0
+    && (record.queue_status === 'failed' || record.queue_status === 'cancelled')
+}
+
+/** Classify the next operator action for a history row without inventing unsupported replay paths. */
+export function getHistoryRunRecoveryState(record: GenerationHistoryRecord): HistoryRunRecoveryState {
+  if (canRetryHistoryQueueJob(record)) {
+    return record.queue_status === 'cancelled' ? 'retryable-cancelled' : 'retryable-failed'
+  }
+
+  const displayStatus = resolveHistoryDisplayStatus(record)
+  if (displayStatus === 'completed') {
+    return 'completed'
+  }
+
+  if (displayStatus === 'pending' || displayStatus === 'processing') {
+    return 'active'
+  }
+
+  return 'failed-no-retry'
+}
+
 /** Resolve a compact label for the history status badge. */
 export function getHistoryStatusLabel(status: GenerationHistoryRecord['generation_status'], record?: GenerationHistoryRecord) {
   if (record && isHistoryMissingLinkedResult(record)) return '결과 없음'

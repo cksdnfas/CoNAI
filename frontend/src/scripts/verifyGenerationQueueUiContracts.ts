@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { TranslationInput, TranslationParams } from '../i18n'
-import type { GenerationQueueJobRecord } from '../lib/api-image-generation-types'
+import type { GenerationHistoryRecord, GenerationQueueJobRecord } from '../lib/api-image-generation-types'
+import { canRetryHistoryQueueJob, getHistoryRunRecoveryState } from '../features/image-generation/image-generation-shared'
 import {
   getGenerationQueueElapsedLabel,
   getGenerationQueueHeaderQuerySnapshot,
@@ -157,6 +158,20 @@ function assertRemainingLabels() {
   assertEqual(getGenerationQueueRemainingLabel(makeQueueRecord({ estimated_total_seconds: 120 }), translate, formatNumber), '2m', 'minute ETA should round to minutes')
   assertEqual(getGenerationQueueRemainingLabel(makeQueueRecord({ estimated_total_seconds: 3600 }), translate, formatNumber), '1h', 'whole-hour ETA should omit minutes')
   assertEqual(getGenerationQueueRemainingLabel(makeQueueRecord({ estimated_total_seconds: 3660 }), translate, formatNumber), '1h 1m', 'hour ETA should include remaining minutes when present')
+}
+
+function makeHistoryRecord(overrides: Partial<GenerationHistoryRecord> = {}): GenerationHistoryRecord {
+  return {
+    id: 201,
+    service_type: 'comfyui',
+    generation_status: 'completed',
+    queue_job_id: 101,
+    queue_status: 'completed',
+    queue_cancel_requested: 0,
+    actual_composite_hash: 'hash',
+    created_at: '2026-05-14T00:00:00.000Z',
+    ...overrides,
+  }
 }
 
 function assertOperationalMetaLabels() {
@@ -356,6 +371,33 @@ function assertHeaderWidgetStorageGuards() {
   )
 }
 
+function assertHistoryRecoveryState() {
+  const failedRetryable = makeHistoryRecord({
+    generation_status: 'failed',
+    queue_status: 'failed',
+    queue_job_id: 44,
+    actual_composite_hash: null,
+  })
+  assertEqual(canRetryHistoryQueueJob(failedRetryable), true, 'failed queue-linked history should be retryable')
+  assertEqual(getHistoryRunRecoveryState(failedRetryable), 'retryable-failed', 'failed queue-linked history should use failed retry state')
+
+  const cancelledRetryable = makeHistoryRecord({
+    generation_status: 'pending',
+    queue_status: 'cancelled',
+    queue_job_id: 45,
+    actual_composite_hash: null,
+  })
+  assertEqual(canRetryHistoryQueueJob(cancelledRetryable), true, 'cancelled queue-linked history should be retryable')
+  assertEqual(getHistoryRunRecoveryState(cancelledRetryable), 'retryable-cancelled', 'cancelled queue-linked history should use cancelled retry state')
+
+  assertEqual(getHistoryRunRecoveryState(makeHistoryRecord()), 'completed', 'completed history should route to result inspection')
+  assertEqual(
+    getHistoryRunRecoveryState(makeHistoryRecord({ generation_status: 'failed', queue_job_id: null, queue_status: null, actual_composite_hash: null })),
+    'failed-no-retry',
+    'failed history without a failed/cancelled queue job should not expose replay',
+  )
+}
+
 assertStatusLabels()
 assertWorkflowLabels()
 assertRequesterLabels()
@@ -363,6 +405,7 @@ assertRemainingLabels()
 assertOperationalMetaLabels()
 assertElapsedLabels()
 assertProgressPercent()
+assertHistoryRecoveryState()
 assertHeaderQuerySnapshotSelection()
 assertFilteredQueueHeaderQueryEnablement()
 assertHeaderRefreshTargets()
