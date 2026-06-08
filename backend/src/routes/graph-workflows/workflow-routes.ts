@@ -1,14 +1,19 @@
 import { Router, type Request, type Response } from 'express'
+import { GraphExecutionModel } from '../../models/GraphExecution'
 import { GraphWorkflowModel } from '../../models/GraphWorkflow'
+import { GraphWorkflowScheduleModel } from '../../models/GraphWorkflowSchedule'
 import { GraphWorkflowScheduleService } from '../../services/graphWorkflowScheduleService'
 import {
   buildGraphWorkflowBrowseContent,
   parseStoredGraphWorkflow,
 } from '../../services/graphWorkflowViewService'
+import { GraphWorkflowExecutionQueue } from '../../services/graphWorkflowExecutionQueue'
+import { getGraphWorkflowOutputRetentionState } from '../../services/graphWorkflowOutputRetentionService'
 import { asyncHandler } from '../../middleware/errorHandler'
 import { sendRouteBadRequest } from '../routeValidation'
 import type {
   GraphWorkflowCreateData,
+  GraphWorkflowRuntimeHealthRecord,
   GraphWorkflowUpdateData,
   ModuleGraphResponse,
 } from '../../types/moduleGraph'
@@ -50,6 +55,63 @@ export function createGraphWorkflowCrudRoutes() {
     } catch (error) {
       console.error('Error getting graph workflow browse content:', error)
       return res.status(500).json({ success: false, error: 'Failed to get graph workflow browse content' } as ModuleGraphResponse)
+    }
+  }))
+
+  router.get('/:id/runtime-health', asyncHandler(async (req: Request, res: Response) => {
+    const id = parseGraphRouteInteger(req.params.id)
+    if (isNaN(id)) {
+      return sendRouteBadRequest(res, 'Invalid graph workflow ID')
+    }
+
+    try {
+      const workflow = GraphWorkflowModel.findById(id)
+      if (!workflow) {
+        return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
+      }
+
+      const executionSummary = GraphExecutionModel.summarizeWorkflowRuntime(id)
+      const queueState = GraphWorkflowExecutionQueue.getWorkflowRuntimeQueueState(id)
+      const retryPolicy = GraphWorkflowScheduleModel.summarizeRuntimePolicyByWorkflowId(id)
+      const retentionState = getGraphWorkflowOutputRetentionState(id)
+      const health: GraphWorkflowRuntimeHealthRecord = {
+        workflow_id: id,
+        queue: {
+          queued_count: executionSummary.queued_count,
+          running_count: executionSummary.running_count,
+          manual_queued_count: executionSummary.manual_queued_count,
+          manual_running_count: executionSummary.manual_running_count,
+          schedule_queued_count: executionSummary.schedule_queued_count,
+          schedule_running_count: executionSummary.schedule_running_count,
+          in_process_running_count: queueState.in_process_running_count,
+          oldest_queued_at: executionSummary.oldest_queued_at,
+          retry_timer_pending: queueState.retry_timer_pending,
+          queue_recheck_interval_ms: queueState.queue_recheck_interval_ms,
+          schedule_concurrency_limit: queueState.schedule_concurrency_limit,
+          cancellation_requested_count: queueState.cancellation_requested_count,
+        },
+        retry_policy: retryPolicy,
+        retention: retentionState,
+        recovery: {
+          last_startup_recovery_at: queueState.last_startup_recovery?.recoveredAt ?? null,
+          startup_queued_backlog: queueState.last_startup_recovery?.queuedBacklog ?? 0,
+          startup_failed_running: queueState.last_startup_recovery?.failedRunning ?? 0,
+          running_not_in_process_count: Math.max(0, executionSummary.running_count - queueState.in_process_running_count),
+        },
+        telemetry: {
+          completed_count: executionSummary.completed_count,
+          failed_count: executionSummary.failed_count,
+          cancelled_count: executionSummary.cancelled_count,
+          latest_completed_at: executionSummary.latest_completed_at,
+          latest_failed_at: executionSummary.latest_failed_at,
+          latest_error_message: executionSummary.latest_error_message,
+        },
+      }
+
+      return res.json({ success: true, data: health } as ModuleGraphResponse)
+    } catch (error) {
+      console.error('Error getting graph workflow runtime health:', error)
+      return res.status(500).json({ success: false, error: 'Failed to get graph workflow runtime health' } as ModuleGraphResponse)
     }
   }))
 

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Folder, GitCompareArrows, History, PenSquare, Trash2 } from 'lucide-react'
+import { Activity, Archive, Folder, GitCompareArrows, History, PenSquare, RotateCcw, TimerReset, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
-import { getGraphWorkflowSchedules, getGraphWorkflowVersionSummaries, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord, type GraphWorkflowVersionSummaryRecord } from '@/lib/api-module-graph'
+import { getGraphWorkflowRuntimeHealth, getGraphWorkflowSchedules, getGraphWorkflowVersionSummaries, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord, type GraphWorkflowRuntimeHealthRecord, type GraphWorkflowVersionSummaryRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
@@ -236,6 +236,143 @@ function WorkflowVersionReviewBlock({
   )
 }
 
+function WorkflowRuntimeHealthBlock({
+  runtimeHealth,
+  runtimeHealthIsError,
+}: {
+  runtimeHealth?: GraphWorkflowRuntimeHealthRecord | null
+  runtimeHealthIsError: boolean
+}) {
+  const { t, formatNumber, formatDateTime } = useI18n()
+
+  if (runtimeHealthIsError) {
+    return (
+      <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+        {t({ ko: '런타임 상태를 불러오지 못했어.', en: 'Could not load runtime health.' })}
+      </div>
+    )
+  }
+
+  if (!runtimeHealth) {
+    return null
+  }
+
+  const activeQueueCount = runtimeHealth.queue.queued_count + runtimeHealth.queue.running_count
+  const recoveryConcernCount = runtimeHealth.recovery.startup_failed_running + runtimeHealth.recovery.running_not_in_process_count
+  const stoppedScheduleCount = runtimeHealth.retry_policy.paused_for_review_count
+    + runtimeHealth.retry_policy.stopped_after_error_count
+    + runtimeHealth.retry_policy.overlap_stopped_count
+  const latestErrorMessage = localizeGraphWorkflowErrorMessage(
+    runtimeHealth.telemetry.latest_error_message,
+    t({ ko: '최근 실행 오류가 있어.', en: 'A recent run failed.' }),
+  )
+  const queueMessage = activeQueueCount > 0
+    ? runtimeHealth.queue.oldest_queued_at
+      ? t({ ko: '가장 오래된 대기 작업 {time}', en: 'Oldest queued job {time}' }, { time: formatDateTime(runtimeHealth.queue.oldest_queued_at) })
+      : t({ ko: '활성 실행이 큐에서 처리 중이야.', en: 'Active runs are being processed by the queue.' })
+    : t({ ko: '현재 대기 또는 실행 중인 작업이 없어.', en: 'No queued or running jobs right now.' })
+  const retryMessage = runtimeHealth.queue.retry_timer_pending
+    ? t({ ko: '{ms}ms 재점검 타이머가 대기 중이야.', en: '{ms}ms queue recheck timer is pending.' }, { ms: formatNumber(runtimeHealth.queue.queue_recheck_interval_ms) })
+    : t({ ko: '즉시 처리 가능한 큐 재시도 타이머는 없어.', en: 'No queue retry timer is pending.' })
+  const retentionMessage = runtimeHealth.retention.pending_prune
+    ? t({ ko: '보존 정리 요청이 대기 중이야.', en: 'A retention prune request is pending.' })
+    : t({ ko: '보존 정리 요청은 대기 중이 아니야.', en: 'No retention prune request is pending.' })
+  const recoveryMessage = recoveryConcernCount > 0
+    ? t({ ko: '복구 점검 대상 {count}개가 있어.', en: '{count} recovery checks need review.' }, { count: formatNumber(recoveryConcernCount) })
+    : runtimeHealth.recovery.last_startup_recovery_at
+      ? t({ ko: '최근 시작 복구 {time}', en: 'Last startup recovery {time}' }, { time: formatDateTime(runtimeHealth.recovery.last_startup_recovery_at) })
+      : t({ ko: '시작 복구 기록은 아직 없어.', en: 'No startup recovery snapshot yet.' })
+
+  return (
+    <div className="space-y-3 rounded-sm border border-border bg-background/35 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+            <Activity className="h-4 w-4 text-primary" />
+            <span>{t({ ko: '런타임 상태', en: 'Runtime health' })}</span>
+            <Badge variant={activeQueueCount > 0 ? 'outline' : 'secondary'}>{t({ ko: '활성 {count}', en: 'Active {count}' }, { count: formatNumber(activeQueueCount) })}</Badge>
+            {recoveryConcernCount > 0 ? <Badge variant="outline">{t({ ko: '복구 {count}', en: 'Recovery {count}' }, { count: formatNumber(recoveryConcernCount) })}</Badge> : null}
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">{queueMessage}</div>
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-1.5 text-[11px]">
+          <Badge variant="outline">{t({ ko: '대기 {count}', en: 'Queued {count}' }, { count: formatNumber(runtimeHealth.queue.queued_count) })}</Badge>
+          <Badge variant="outline">{t({ ko: '실행 {count}', en: 'Running {count}' }, { count: formatNumber(runtimeHealth.queue.running_count) })}</Badge>
+          <Badge variant="outline">{t({ ko: '동시예약 {count}', en: 'Schedule cap {count}' }, { count: formatNumber(runtimeHealth.queue.schedule_concurrency_limit) })}</Badge>
+        </div>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        <div className="rounded-sm border border-border bg-background/45 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5 font-semibold text-foreground">
+            <TimerReset className="h-3.5 w-3.5 text-primary" />
+            <span>{t({ ko: '큐와 재시도', en: 'Queue and retry' })}</span>
+          </div>
+          <div className="mt-1.5 text-muted-foreground">
+            {t({ ko: '수동 {manualQueued}/{manualRunning} · 예약 {scheduleQueued}/{scheduleRunning}', en: 'Manual {manualQueued}/{manualRunning} · Scheduled {scheduleQueued}/{scheduleRunning}' }, {
+              manualQueued: formatNumber(runtimeHealth.queue.manual_queued_count),
+              manualRunning: formatNumber(runtimeHealth.queue.manual_running_count),
+              scheduleQueued: formatNumber(runtimeHealth.queue.schedule_queued_count),
+              scheduleRunning: formatNumber(runtimeHealth.queue.schedule_running_count),
+            })}
+          </div>
+          <div className="mt-1 text-muted-foreground">{retryMessage}</div>
+        </div>
+
+        <div className="rounded-sm border border-border bg-background/45 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5 font-semibold text-foreground">
+            <RotateCcw className="h-3.5 w-3.5 text-primary" />
+            <span>{t({ ko: '복구 텔레메트리', en: 'Recovery telemetry' })}</span>
+          </div>
+          <div className="mt-1.5 text-muted-foreground">{recoveryMessage}</div>
+          <div className="mt-1 text-muted-foreground">
+            {t({ ko: '완료 {completed} · 실패 {failed} · 취소 {cancelled}', en: 'Completed {completed} · Failed {failed} · Cancelled {cancelled}' }, {
+              completed: formatNumber(runtimeHealth.telemetry.completed_count),
+              failed: formatNumber(runtimeHealth.telemetry.failed_count),
+              cancelled: formatNumber(runtimeHealth.telemetry.cancelled_count),
+            })}
+          </div>
+          {latestErrorMessage ? <div className="mt-1 break-words text-amber-700 dark:text-amber-300">{latestErrorMessage}</div> : null}
+        </div>
+
+        <div className="rounded-sm border border-border bg-background/45 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5 font-semibold text-foreground">
+            <Archive className="h-3.5 w-3.5 text-primary" />
+            <span>{t({ ko: '산출물 보존', en: 'Artifact retention' })}</span>
+          </div>
+          <div className="mt-1.5 text-muted-foreground">
+            {t({ ko: '워크플로우당 최근 {count}개 보존', en: 'Keep latest {count} outputs per workflow' }, { count: formatNumber(runtimeHealth.retention.output_retention_limit) })}
+          </div>
+          <div className="mt-1 text-muted-foreground">{retentionMessage}</div>
+        </div>
+
+        <div className="rounded-sm border border-border bg-background/45 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5 font-semibold text-foreground">
+            <History className="h-3.5 w-3.5 text-primary" />
+            <span>{t({ ko: '자동 실행 정책', en: 'Autorun policy' })}</span>
+          </div>
+          <div className="mt-1.5 text-muted-foreground">
+            {t({ ko: '활성 {active}/{total} · 실패 시 중지 {stop} · 계속 {continueCount}', en: 'Active {active}/{total} · Stop {stop} · Continue {continueCount}' }, {
+              active: formatNumber(runtimeHealth.retry_policy.active_schedule_count),
+              total: formatNumber(runtimeHealth.retry_policy.schedule_count),
+              stop: formatNumber(runtimeHealth.retry_policy.stop_on_failure_count),
+              continueCount: formatNumber(runtimeHealth.retry_policy.continue_on_failure_count),
+            })}
+          </div>
+          {stoppedScheduleCount > 0 ? (
+            <div className="mt-1 text-amber-700 dark:text-amber-300">
+              {t({ ko: '검토/중지된 자동 실행 {count}개', en: '{count} autoruns are paused or stopped.' }, { count: formatNumber(stoppedScheduleCount) })}
+            </div>
+          ) : (
+            <div className="mt-1 text-muted-foreground">{t({ ko: '검토/중지된 자동 실행은 없어.', en: 'No autoruns are paused or stopped for review.' })}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** Render workflow-level runtime inputs so users can run saved workflows without opening the graph editor. */
 export function WorkflowRunnerPanel({
   selectedGraph,
@@ -274,6 +411,18 @@ export function WorkflowRunnerPanel({
     queryFn: () => getGraphWorkflowVersionSummaries(selectedGraph?.id as number),
     enabled: selectedGraph !== null,
     staleTime: 30_000,
+  })
+  const runtimeHealthQuery = useQuery({
+    queryKey: ['module-graph-workflow-runtime-health', selectedGraph?.id ?? null],
+    queryFn: () => getGraphWorkflowRuntimeHealth(selectedGraph?.id as number),
+    enabled: selectedGraph !== null,
+    staleTime: 10_000,
+    refetchInterval: (query) => {
+      const runtimeHealth = query.state.data
+      return runtimeHealth && (runtimeHealth.queue.queued_count > 0 || runtimeHealth.queue.running_count > 0 || runtimeHealth.retention.pending_prune)
+        ? 5_000
+        : false
+    },
   })
 
   const reviewRequiredSchedules = useMemo(
@@ -436,6 +585,11 @@ export function WorkflowRunnerPanel({
               versionSummaries={versionQuery.data ?? []}
               versionQueryIsError={versionQuery.isError}
               runtimeInputDiffEntries={runtimeInputDiffEntries}
+            />
+
+            <WorkflowRuntimeHealthBlock
+              runtimeHealth={runtimeHealthQuery.data ?? null}
+              runtimeHealthIsError={runtimeHealthQuery.isError}
             />
 
             {reviewRequiredSchedules.length > 0 ? (

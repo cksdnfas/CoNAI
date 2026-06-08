@@ -25,6 +25,15 @@ export function getGraphWorkflowOutputRetentionLimit() {
   return parseRetentionLimit(process.env.CONAI_GRAPH_WORKFLOW_OUTPUT_RETENTION_LIMIT, DEFAULT_GRAPH_WORKFLOW_OUTPUT_RETENTION_LIMIT)
 }
 
+/** Expose lightweight retention state for operator runtime health surfaces. */
+export function getGraphWorkflowOutputRetentionState(workflowId: number) {
+  return {
+    output_retention_limit: getGraphWorkflowOutputRetentionLimit(),
+    pending_prune: pendingRetentionPrunes.has(workflowId),
+    pending_prune_count: pendingRetentionPrunes.size,
+  }
+}
+
 /** Find graph workflow output/artifact rows outside the retained recent windows. */
 export function findGraphWorkflowRetentionOverflowArtifactIds(workflowId: number, retentionLimit = getGraphWorkflowOutputRetentionLimit()) {
   return findRetentionOverflowArtifactIds(workflowId, retentionLimit)

@@ -33,6 +33,10 @@ type InterruptedExecutionRecoverySummary = {
   failedRunning: number
 }
 
+type StartupRecoverySnapshot = InterruptedExecutionRecoverySummary & {
+  recoveredAt: string
+}
+
 const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
 const STRANDED_RUNNING_EXECUTION_MESSAGE = 'Execution process is no longer active. Re-run is required.'
 const QUEUE_RECHECK_INTERVAL_MS = 5000
@@ -60,6 +64,7 @@ export class GraphWorkflowExecutionQueue {
   private static runningJobs = new Map<number, QueuedExecutionJob>()
   private static cancelRequestedExecutionIds = new Set<number>()
   private static processRetryTimer: NodeJS.Timeout | null = null
+  private static lastStartupRecovery: StartupRecoverySnapshot | null = null
 
   /** Apply one conservative startup recovery pass before new executions are queued. */
   static start() {
@@ -68,6 +73,10 @@ export class GraphWorkflowExecutionQueue {
     }
 
     const recovery = this.recoverInterruptedExecutions()
+    this.lastStartupRecovery = {
+      ...recovery,
+      recoveredAt: new Date().toISOString(),
+    }
     this.initialized = true
     console.log(`🧩 Graph workflow execution queue ready (queued_backlog=${recovery.queuedBacklog}, failed_running=${recovery.failedRunning})`)
     this.processQueue()
@@ -317,6 +326,32 @@ export class GraphWorkflowExecutionQueue {
     }
 
     return runtimeStateById
+  }
+
+  /** Return in-process queue state that complements DB-backed execution counts. */
+  static getWorkflowRuntimeQueueState(workflowId: number) {
+    let inProcessRunningCount = 0
+    let cancellationRequestedCount = 0
+
+    for (const runningJob of this.runningJobs.values()) {
+      if (runningJob.workflowId !== workflowId) {
+        continue
+      }
+
+      inProcessRunningCount += 1
+      if (this.cancelRequestedExecutionIds.has(runningJob.executionId)) {
+        cancellationRequestedCount += 1
+      }
+    }
+
+    return {
+      in_process_running_count: inProcessRunningCount,
+      retry_timer_pending: Boolean(this.processRetryTimer),
+      queue_recheck_interval_ms: QUEUE_RECHECK_INTERVAL_MS,
+      schedule_concurrency_limit: this.resolveScheduleConcurrencyLimit(),
+      cancellation_requested_count: cancellationRequestedCount,
+      last_startup_recovery: this.lastStartupRecovery,
+    }
   }
 
   /** Check whether an execution has a pending cancellation request. */

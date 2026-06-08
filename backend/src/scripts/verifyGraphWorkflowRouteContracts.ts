@@ -224,6 +224,70 @@ function verifyWorkflowVersionSummaryRoute() {
   )
 }
 
+function verifyWorkflowRuntimeHealthRoute() {
+  const workflowRoutesSource = source('routes/graph-workflows/workflow-routes.ts')
+  const graphExecutionModelSource = source('models/GraphExecution.ts')
+  const graphWorkflowScheduleModelSource = source('models/GraphWorkflowSchedule.ts')
+  const graphWorkflowExecutionQueueSource = source('services/graphWorkflowExecutionQueue.ts')
+  const retentionServiceSource = source('services/graphWorkflowOutputRetentionService.ts')
+  const moduleGraphTypesSource = source('types/moduleGraph.ts')
+  const runtimeHealthRouteIndex = workflowRoutesSource.indexOf("router.get('/:id/runtime-health'")
+  const singleWorkflowRouteIndex = workflowRoutesSource.indexOf("router.get('/:id'")
+
+  assert.ok(runtimeHealthRouteIndex >= 0, 'workflow CRUD routes should expose runtime health summaries')
+  assert.ok(
+    runtimeHealthRouteIndex < singleWorkflowRouteIndex,
+    'workflow runtime health route must be registered before the generic workflow id route',
+  )
+  assert.match(
+    workflowRoutesSource,
+    /GraphExecutionModel\.summarizeWorkflowRuntime\(id\)/,
+    'runtime health route should use the execution model summary instead of hydrating execution rows',
+  )
+  assert.match(
+    workflowRoutesSource,
+    /GraphWorkflowExecutionQueue\.getWorkflowRuntimeQueueState\(id\)/,
+    'runtime health route should include in-process queue retry and cancellation state',
+  )
+  assert.match(
+    workflowRoutesSource,
+    /GraphWorkflowScheduleModel\.summarizeRuntimePolicyByWorkflowId\(id\)/,
+    'runtime health route should include autorun retry/failure policy counts',
+  )
+  assert.match(
+    workflowRoutesSource,
+    /getGraphWorkflowOutputRetentionState\(id\)/,
+    'runtime health route should include retention state without pruning inline',
+  )
+  assert.match(
+    graphExecutionModelSource,
+    /static summarizeWorkflowRuntime\(workflowId: number\): GraphWorkflowRuntimeExecutionSummary[\s\S]*COALESCE\(SUM\(CASE WHEN status = 'queued'/,
+    'GraphExecutionModel should summarize queue and telemetry counts in SQL',
+  )
+  assert.match(
+    graphWorkflowScheduleModelSource,
+    /static summarizeRuntimePolicyByWorkflowId\(workflowId: number\): GraphWorkflowScheduleRuntimePolicySummary[\s\S]*failure_policy/,
+    'GraphWorkflowScheduleModel should summarize retry policy and stopped schedule state',
+  )
+  assert.ok(
+    graphWorkflowExecutionQueueSource.includes('private static lastStartupRecovery')
+      && graphWorkflowExecutionQueueSource.includes('static getWorkflowRuntimeQueueState(workflowId: number)')
+      && graphWorkflowExecutionQueueSource.includes('retry_timer_pending: Boolean(this.processRetryTimer)'),
+    'GraphWorkflowExecutionQueue should expose startup recovery and retry timer state',
+  )
+  assert.ok(
+    retentionServiceSource.includes('export function getGraphWorkflowOutputRetentionState(workflowId: number)')
+      && retentionServiceSource.includes('pendingRetentionPrunes.has(workflowId)'),
+    'graph workflow retention service should expose lightweight pending prune state',
+  )
+  assert.ok(
+    moduleGraphTypesSource.includes('export interface GraphWorkflowRuntimeHealthRecord')
+      && moduleGraphTypesSource.includes('retry_policy')
+      && moduleGraphTypesSource.includes('running_not_in_process_count'),
+    'backend module graph types should define the runtime health response shape',
+  )
+}
+
 verifyGraphRouteIntegerParsing()
 verifyOptionalGraphFolderIdParsing()
 verifyRequiredIdBadRequestShape()
@@ -234,5 +298,6 @@ verifyScheduleEnqueueCountParsers()
 verifyExecutionListNewestTieBreaker()
 verifyExecutionDetailNewestTieBreakers()
 verifyWorkflowVersionSummaryRoute()
+verifyWorkflowRuntimeHealthRoute()
 
 console.log('✅ Graph workflow route contracts verified')

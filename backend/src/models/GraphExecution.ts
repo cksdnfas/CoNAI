@@ -11,6 +11,22 @@ export type GraphExecutionStatusCounts = {
   cancelled: number
 }
 
+export type GraphWorkflowRuntimeExecutionSummary = {
+  queued_count: number
+  running_count: number
+  manual_queued_count: number
+  manual_running_count: number
+  schedule_queued_count: number
+  schedule_running_count: number
+  completed_count: number
+  failed_count: number
+  cancelled_count: number
+  oldest_queued_at?: string | null
+  latest_completed_at?: string | null
+  latest_failed_at?: string | null
+  latest_error_message?: string | null
+}
+
 function createEmptyStatusCounts(): GraphExecutionStatusCounts {
   return {
     completed: 0,
@@ -180,6 +196,54 @@ export class GraphExecutionModel {
       ORDER BY created_date DESC, id DESC
       LIMIT ?
     `).all(workflowId, limit) as GraphExecutionRecord[]
+  }
+
+  /** Summarize workflow runtime status without loading execution rows or artifact payloads. */
+  static summarizeWorkflowRuntime(workflowId: number): GraphWorkflowRuntimeExecutionSummary {
+    const db = getUserSettingsDb()
+    const row = db.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0) as queued_count,
+        COALESCE(SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END), 0) as running_count,
+        COALESCE(SUM(CASE WHEN status = 'queued' AND trigger_type = 'manual' THEN 1 ELSE 0 END), 0) as manual_queued_count,
+        COALESCE(SUM(CASE WHEN status = 'running' AND trigger_type = 'manual' THEN 1 ELSE 0 END), 0) as manual_running_count,
+        COALESCE(SUM(CASE WHEN status = 'queued' AND trigger_type = 'schedule' THEN 1 ELSE 0 END), 0) as schedule_queued_count,
+        COALESCE(SUM(CASE WHEN status = 'running' AND trigger_type = 'schedule' THEN 1 ELSE 0 END), 0) as schedule_running_count,
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as completed_count,
+        COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) as failed_count,
+        COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) as cancelled_count,
+        MIN(CASE WHEN status = 'queued' THEN created_date ELSE NULL END) as oldest_queued_at,
+        MAX(CASE WHEN status = 'completed' THEN completed_at ELSE NULL END) as latest_completed_at,
+        MAX(CASE WHEN status = 'failed' THEN completed_at ELSE NULL END) as latest_failed_at
+      FROM graph_executions
+      WHERE graph_workflow_id = ?
+    `).get(workflowId) as Omit<GraphWorkflowRuntimeExecutionSummary, 'latest_error_message'> | undefined
+    const latestFailure = db.prepare(`
+      SELECT error_message
+      FROM graph_executions
+      WHERE graph_workflow_id = ?
+        AND status = 'failed'
+        AND error_message IS NOT NULL
+        AND TRIM(error_message) <> ''
+      ORDER BY COALESCE(completed_at, updated_date, created_date) DESC, id DESC
+      LIMIT 1
+    `).get(workflowId) as { error_message?: string | null } | undefined
+
+    return {
+      queued_count: Number(row?.queued_count ?? 0),
+      running_count: Number(row?.running_count ?? 0),
+      manual_queued_count: Number(row?.manual_queued_count ?? 0),
+      manual_running_count: Number(row?.manual_running_count ?? 0),
+      schedule_queued_count: Number(row?.schedule_queued_count ?? 0),
+      schedule_running_count: Number(row?.schedule_running_count ?? 0),
+      completed_count: Number(row?.completed_count ?? 0),
+      failed_count: Number(row?.failed_count ?? 0),
+      cancelled_count: Number(row?.cancelled_count ?? 0),
+      oldest_queued_at: row?.oldest_queued_at ?? null,
+      latest_completed_at: row?.latest_completed_at ?? null,
+      latest_failed_at: row?.latest_failed_at ?? null,
+      latest_error_message: latestFailure?.error_message ?? null,
+    }
   }
 
   /** Check whether queued graph execution work exists. */
