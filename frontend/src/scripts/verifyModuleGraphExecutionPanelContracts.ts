@@ -50,6 +50,7 @@ function assertExecutionPanelLookupPolicy() {
   const pageSectionsSource = source('features/module-graph/components/module-graph-page-sections.tsx')
   const pageViewModelSource = source('features/module-graph/use-module-graph-page-view-model.ts')
   const pageQueriesSource = source('features/module-graph/use-module-graph-page-queries.ts')
+  const apiModuleGraphSource = source('lib/api-module-graph.ts')
   const indexCssSource = source('index.css')
   const groupArtifactsByNodeSource = extractFunction(helpersSource, 'groupArtifactsByNode')
   const pickHighlightedArtifactsSource = extractFunction(helpersSource, 'pickHighlightedArtifacts')
@@ -513,6 +514,30 @@ function assertExecutionPanelLookupPolicy() {
       && pageQueriesSource.includes("execution.status")
       && pageQueriesSource.includes('refetchInterval: (query) => hasActiveGraphExecution(query.state.data) ? 5_000 : false'),
     'workflow execution list should poll while the selected workflow has queued/running executions so latest-result status can reach terminal detail loading',
+  )
+  assert(
+    apiModuleGraphSource.includes('export interface GraphWorkflowVersionSummaryRecord')
+      && apiModuleGraphSource.includes('export async function getGraphWorkflowVersionSummaries')
+      && apiModuleGraphSource.includes('/api/graph-workflows/${workflowId}/versions?${searchParams.toString()}'),
+    'module graph API client should expose compact saved workflow version summaries',
+  )
+  assert(
+    workflowRunnerSource.includes("queryKey: ['module-graph-workflow-versions', selectedGraph?.id ?? null]")
+      && workflowRunnerSource.includes('getGraphWorkflowVersionSummaries(selectedGraph?.id as number)')
+      && workflowRunnerSource.includes('WorkflowVersionReviewBlock'),
+    'workflow runner should query and render saved workflow version review context',
+  )
+  assert(
+    workflowRunnerSource.includes('function buildWorkflowRuntimeInputDiffEntries')
+      && workflowRunnerSource.includes('previousEntries: latestExecutionInputEntries')
+      && workflowRunnerSource.includes("entry.status !== 'unchanged'"),
+    'workflow runner should diff current runtime inputs against the latest execution input preset',
+  )
+  assert(
+    workflowRunnerSource.includes('latestExecution?.graph_version')
+      && workflowRunnerSource.includes('latestExecutionVersion === selectedGraph.version')
+      && workflowRunnerSource.includes('최근 실행은 이전 그래프 버전이야. 재실행 전에 변경 내용을 확인해줘.'),
+    'workflow runner should warn when the latest run used an older saved workflow version',
   )
   assert(
     pageViewModelSource.includes('const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])'),

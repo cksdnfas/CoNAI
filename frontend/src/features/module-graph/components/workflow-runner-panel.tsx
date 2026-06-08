@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Folder, PenSquare, Trash2 } from 'lucide-react'
+import { Folder, GitCompareArrows, History, PenSquare, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -8,11 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
-import { getGraphWorkflowSchedules, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord } from '@/lib/api-module-graph'
+import { getGraphWorkflowSchedules, getGraphWorkflowVersionSummaries, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord, type GraphWorkflowVersionSummaryRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
-import { buildExecutionComparisonSummary, buildNodeDisplayLabelMap, getExecutionInputEntries, getNodeDisplayLabelFromMap, parseExecutionPlan } from './graph-execution-panel-helpers'
+import { buildExecutionComparisonSummary, buildNodeDisplayLabelMap, formatPrimitiveValue, getExecutionInputEntries, getNodeDisplayLabelFromMap, parseExecutionPlan, type ExecutionInputEntry } from './graph-execution-panel-helpers'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 import { buildFinalResultLifecycleWarningSourceLabel, listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
@@ -42,6 +42,198 @@ type WorkflowRunnerPanelProps = {
   validationIssues?: WorkflowValidationIssue[]
   onValidationIssueSelect?: (issue: WorkflowValidationIssue) => void
   showHeader?: boolean
+}
+
+type RuntimeInputDiffStatus = 'added' | 'changed' | 'removed' | 'unchanged'
+
+type RuntimeInputDiffEntry = {
+  key: string
+  label: string
+  previousValue: unknown
+  currentValue: unknown
+  status: RuntimeInputDiffStatus
+}
+
+function stringifyComparableValue(value: unknown) {
+  if (value === undefined) {
+    return '__undefined__'
+  }
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function buildWorkflowRuntimeInputDiffEntries({
+  inputDefinitions,
+  inputValues,
+  previousEntries,
+}: {
+  inputDefinitions: GraphWorkflowExposedInput[]
+  inputValues: Record<string, unknown>
+  previousEntries: ExecutionInputEntry[]
+}) {
+  const currentKeys = inputDefinitions
+    .map((inputDefinition) => inputDefinition.id)
+    .filter((key) => Object.prototype.hasOwnProperty.call(inputValues, key))
+  const keys = Array.from(new Set([
+    ...previousEntries.map((entry) => entry.key),
+    ...currentKeys,
+  ]))
+  const labelByKey = new Map(inputDefinitions.map((inputDefinition) => [inputDefinition.id, inputDefinition.label]))
+  const previousValueByKey = new Map(previousEntries.map((entry) => [entry.key, entry.value]))
+
+  return keys.map((key): RuntimeInputDiffEntry => {
+    const hasPreviousValue = previousValueByKey.has(key)
+    const hasCurrentValue = Object.prototype.hasOwnProperty.call(inputValues, key)
+    const previousValue = previousValueByKey.get(key)
+    const currentValue = inputValues[key]
+    const status: RuntimeInputDiffStatus = !hasPreviousValue && hasCurrentValue
+      ? 'added'
+      : hasPreviousValue && !hasCurrentValue
+        ? 'removed'
+        : stringifyComparableValue(previousValue) === stringifyComparableValue(currentValue)
+          ? 'unchanged'
+          : 'changed'
+
+    return {
+      key,
+      label: labelByKey.get(key) ?? previousEntries.find((entry) => entry.key === key)?.label ?? key,
+      previousValue,
+      currentValue,
+      status,
+    }
+  })
+}
+
+function formatDelta(value: number) {
+  return value > 0 ? `+${value}` : String(value)
+}
+
+function formatRuntimeInputDiffValue(value: unknown) {
+  const text = formatPrimitiveValue(value)
+  return text.length > 120 ? `${text.slice(0, 119)}…` : text
+}
+
+function WorkflowVersionReviewBlock({
+  selectedGraph,
+  latestExecution,
+  versionSummaries,
+  versionQueryIsError,
+  runtimeInputDiffEntries,
+}: {
+  selectedGraph: GraphWorkflowRecord
+  latestExecution?: GraphExecutionRecord | null
+  versionSummaries: GraphWorkflowVersionSummaryRecord[]
+  versionQueryIsError: boolean
+  runtimeInputDiffEntries: RuntimeInputDiffEntry[]
+}) {
+  const { t, formatNumber, formatDateTime } = useI18n()
+  const latestVersion = versionSummaries[0] ?? null
+  const visibleVersionSummaries = versionSummaries.slice(0, 3)
+  const changedInputEntries = runtimeInputDiffEntries.filter((entry) => entry.status !== 'unchanged')
+  const visibleChangedInputEntries = changedInputEntries.slice(0, 3)
+  const hiddenChangedInputCount = Math.max(0, changedInputEntries.length - visibleChangedInputEntries.length)
+  const latestExecutionVersion = latestExecution?.graph_version ?? null
+  const latestRunUsesCurrentGraphVersion = latestExecutionVersion === null || latestExecutionVersion === selectedGraph.version
+
+  return (
+    <div className="space-y-3 rounded-sm border border-border bg-background/35 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+            <History className="h-4 w-4 text-primary" />
+            <span>{t({ ko: '버전 검토', en: 'Version review' })}</span>
+            <Badge variant="outline">v{selectedGraph.version}</Badge>
+            {latestExecutionVersion !== null ? (
+              <Badge variant={latestRunUsesCurrentGraphVersion ? 'secondary' : 'outline'}>
+                {t({ ko: '최근 실행 v{version}', en: 'Latest run v{version}' }, { version: latestExecutionVersion })}
+              </Badge>
+            ) : null}
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {latestRunUsesCurrentGraphVersion
+              ? t({ ko: '최근 실행과 현재 저장본의 그래프 버전이 같아.', en: 'The latest run and current saved graph version match.' })
+              : t({ ko: '최근 실행은 이전 그래프 버전이야. 재실행 전에 변경 내용을 확인해줘.', en: 'The latest run used an older graph version. Review changes before rerunning.' })}
+          </div>
+        </div>
+
+        {latestVersion ? (
+          <div className="flex flex-wrap justify-end gap-1.5 text-[11px]">
+            <Badge variant="outline">N {formatNumber(latestVersion.node_count)} ({formatDelta(latestVersion.node_delta)})</Badge>
+            <Badge variant="outline">E {formatNumber(latestVersion.edge_count)} ({formatDelta(latestVersion.edge_delta)})</Badge>
+            <Badge variant="outline">{t({ ko: '입력 {count}', en: 'Inputs {count}' }, { count: formatNumber(latestVersion.exposed_input_count) })} ({formatDelta(latestVersion.exposed_input_delta)})</Badge>
+            {latestVersion.debug_mode ? <Badge variant="outline">{t({ ko: '디버그', en: 'Debug' })}</Badge> : null}
+          </div>
+        ) : null}
+      </div>
+
+      {versionQueryIsError ? (
+        <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+          {t({ ko: '버전 이력을 불러오지 못했어.', en: 'Could not load version history.' })}
+        </div>
+      ) : visibleVersionSummaries.length > 0 ? (
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          {visibleVersionSummaries.map((version) => (
+            <span key={version.id} className="inline-flex min-h-7 items-center gap-1 rounded-sm border border-border bg-surface-low px-2 py-1">
+              <span className="font-medium text-foreground">v{version.version}</span>
+              <span>{formatDateTime(version.created_date)}</span>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+          {t({ ko: '저장된 버전 스냅샷이 아직 없어.', en: 'No saved version snapshots yet.' })}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <GitCompareArrows className="h-3.5 w-3.5" />
+          <span>{t({ ko: '입력 프리셋 차이', en: 'Input preset diff' })}</span>
+          <Badge variant={changedInputEntries.length > 0 ? 'outline' : 'secondary'}>{t({ ko: '변경 {count}', en: 'Changed {count}' }, { count: formatNumber(changedInputEntries.length) })}</Badge>
+        </div>
+
+        {!latestExecution ? (
+          <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+            {t({ ko: '최근 실행이 없어서 비교할 입력 프리셋이 없어.', en: 'There is no latest run to compare input presets against.' })}
+          </div>
+        ) : visibleChangedInputEntries.length === 0 ? (
+          <div className="rounded-sm border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+            {t({ ko: '현재 입력과 최근 실행 입력이 같아.', en: 'Current inputs match the latest run inputs.' })}
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {visibleChangedInputEntries.map((entry) => (
+              <div key={entry.key} className="rounded-sm border border-border bg-background/45 px-3 py-2 text-xs">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="outline">
+                    {entry.status === 'added'
+                      ? t({ ko: '추가', en: 'Added' })
+                      : entry.status === 'removed'
+                        ? t({ ko: '제거', en: 'Removed' })
+                        : t({ ko: '변경', en: 'Changed' })}
+                  </Badge>
+                  <span className="font-medium text-foreground">{entry.label}</span>
+                </div>
+                <div className="mt-1 grid gap-1 text-muted-foreground sm:grid-cols-2">
+                  <div className="break-all">{t({ ko: '이전: {value}', en: 'Previous: {value}' }, { value: formatRuntimeInputDiffValue(entry.previousValue) })}</div>
+                  <div className="break-all">{t({ ko: '현재: {value}', en: 'Current: {value}' }, { value: formatRuntimeInputDiffValue(entry.currentValue) })}</div>
+                </div>
+              </div>
+            ))}
+            {hiddenChangedInputCount > 0 ? (
+              <div className="text-xs text-muted-foreground">
+                {t({ ko: '추가 입력 차이 {count}개가 더 있어.', en: '{count} more input diffs are available.' }, { count: formatNumber(hiddenChangedInputCount) })}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 /** Render workflow-level runtime inputs so users can run saved workflows without opening the graph editor. */
@@ -77,6 +269,12 @@ export function WorkflowRunnerPanel({
     enabled: selectedGraph !== null,
     staleTime: 10_000,
   })
+  const versionQuery = useQuery({
+    queryKey: ['module-graph-workflow-versions', selectedGraph?.id ?? null],
+    queryFn: () => getGraphWorkflowVersionSummaries(selectedGraph?.id as number),
+    enabled: selectedGraph !== null,
+    staleTime: 30_000,
+  })
 
   const reviewRequiredSchedules = useMemo(
     () => (scheduleQuery.data ?? []).filter((schedule) => schedule.stop_reason_code === 'workflow_changed'),
@@ -105,6 +303,14 @@ export function WorkflowRunnerPanel({
   const latestExecutionInputEntries = useMemo(
     () => getExecutionInputEntries(parseExecutionPlan(latestExecution?.execution_plan), inputDefinitions),
     [inputDefinitions, latestExecution?.execution_plan],
+  )
+  const runtimeInputDiffEntries = useMemo(
+    () => buildWorkflowRuntimeInputDiffEntries({
+      inputDefinitions,
+      inputValues,
+      previousEntries: latestExecutionInputEntries,
+    }),
+    [inputDefinitions, inputValues, latestExecutionInputEntries],
   )
   const latestExecutionComparisonSummary = useMemo(() => buildExecutionComparisonSummary({
     inputEntries: latestExecutionInputEntries,
@@ -223,6 +429,14 @@ export function WorkflowRunnerPanel({
                 ) : null}
               </div>
             )}
+
+            <WorkflowVersionReviewBlock
+              selectedGraph={selectedGraph}
+              latestExecution={latestExecution}
+              versionSummaries={versionQuery.data ?? []}
+              versionQueryIsError={versionQuery.isError}
+              runtimeInputDiffEntries={runtimeInputDiffEntries}
+            />
 
             {reviewRequiredSchedules.length > 0 ? (
               <Alert>

@@ -53,6 +53,27 @@ export function createGraphWorkflowCrudRoutes() {
     }
   }))
 
+  router.get('/:id/versions', asyncHandler(async (req: Request, res: Response) => {
+    const id = parseGraphRouteInteger(req.params.id)
+    if (isNaN(id)) {
+      return sendRouteBadRequest(res, 'Invalid graph workflow ID')
+    }
+
+    try {
+      const workflow = GraphWorkflowModel.findById(id)
+      if (!workflow) {
+        return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
+      }
+
+      const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 12
+      const versions = GraphWorkflowModel.findVersionSummaries(id, Number.isInteger(limit) ? limit : 12)
+      return res.json({ success: true, data: versions } as ModuleGraphResponse)
+    } catch (error) {
+      console.error('Error getting graph workflow versions:', error)
+      return res.status(500).json({ success: false, error: 'Failed to get graph workflow versions' } as ModuleGraphResponse)
+    }
+  }))
+
   router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const id = parseGraphRouteInteger(req.params.id)
     if (isNaN(id)) {

@@ -126,6 +126,22 @@ export interface GraphWorkflowRecord {
   updated_date: string
 }
 
+export interface GraphWorkflowVersionSummaryRecord {
+  id: number
+  workflow_id: number
+  version: number
+  changelog?: string | null
+  created_date: string
+  node_count: number
+  edge_count: number
+  exposed_input_count: number
+  debug_mode: boolean
+  previous_version?: number | null
+  node_delta: number
+  edge_delta: number
+  exposed_input_delta: number
+}
+
 export interface GraphWorkflowFolderRecord {
   id: number
   name: string
@@ -514,6 +530,13 @@ export async function updateGraphWorkflow(workflowId: number, payload: {
     body: JSON.stringify(payload),
   })
 
+  return response.data
+}
+
+/** List compact saved-version snapshots for one graph workflow. */
+export async function getGraphWorkflowVersionSummaries(workflowId: number, limit = 12) {
+  const searchParams = new URLSearchParams({ limit: String(limit) })
+  const response = await requestJson<ApiEnvelope<GraphWorkflowVersionSummaryRecord[]>>(`/api/graph-workflows/${workflowId}/versions?${searchParams.toString()}`)
   return response.data
 }
 

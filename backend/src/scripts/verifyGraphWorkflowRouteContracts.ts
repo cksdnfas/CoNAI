@@ -186,6 +186,44 @@ function verifyExecutionDetailNewestTieBreakers() {
   )
 }
 
+function verifyWorkflowVersionSummaryRoute() {
+  const workflowRoutesSource = source('routes/graph-workflows/workflow-routes.ts')
+  const graphWorkflowModelSource = source('models/GraphWorkflow.ts')
+  const moduleGraphTypesSource = source('types/moduleGraph.ts')
+  const versionsRouteIndex = workflowRoutesSource.indexOf("router.get('/:id/versions'")
+  const singleWorkflowRouteIndex = workflowRoutesSource.indexOf("router.get('/:id'")
+
+  assert.ok(versionsRouteIndex >= 0, 'workflow CRUD routes should expose saved workflow version summaries')
+  assert.ok(
+    versionsRouteIndex < singleWorkflowRouteIndex,
+    'workflow version summaries route must be registered before the generic workflow id route',
+  )
+  assert.match(
+    workflowRoutesSource,
+    /GraphWorkflowModel\.findVersionSummaries\(id, Number\.isInteger\(limit\) \? limit : 12\)/,
+    'workflow version route should use the model summary reader with a safe default limit',
+  )
+  assert.match(
+    graphWorkflowModelSource,
+    /static findVersionSummaries\(workflowId: number, limit = 12\): GraphWorkflowVersionSummaryRecord\[\]/,
+    'GraphWorkflowModel should expose compact version summaries for operator review',
+  )
+  assert.match(
+    graphWorkflowModelSource,
+    /SELECT \* FROM graph_workflow_versions[\s\S]*ORDER BY version DESC, id DESC/,
+    'version summaries should read saved workflow snapshots newest-version first',
+  )
+  assert.match(
+    graphWorkflowModelSource,
+    /node_delta: previousRecord \? nodeCount - previousNodeCount : 0/,
+    'version summaries should include graph structure deltas against the previous snapshot',
+  )
+  assert.ok(
+    moduleGraphTypesSource.includes('export interface GraphWorkflowVersionSummaryRecord'),
+    'backend module graph types should define the version summary response shape',
+  )
+}
+
 verifyGraphRouteIntegerParsing()
 verifyOptionalGraphFolderIdParsing()
 verifyRequiredIdBadRequestShape()
@@ -195,5 +233,6 @@ verifyScheduleValueParsers()
 verifyScheduleEnqueueCountParsers()
 verifyExecutionListNewestTieBreaker()
 verifyExecutionDetailNewestTieBreakers()
+verifyWorkflowVersionSummaryRoute()
 
 console.log('✅ Graph workflow route contracts verified')

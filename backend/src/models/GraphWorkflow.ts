@@ -3,11 +3,58 @@ import {
   GraphWorkflowRecord,
   GraphWorkflowCreateData,
   GraphWorkflowUpdateData,
+  GraphWorkflowVersionRecord,
+  GraphWorkflowVersionSummaryRecord,
 } from '../types/moduleGraph'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
 
 function stringifyGraph(value: unknown) {
   return JSON.stringify(value ?? { nodes: [], edges: [] })
+}
+
+function parseGraphDocument(value: string | null | undefined) {
+  if (!value) {
+    return { nodes: [], edges: [], metadata: {} }
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as { nodes?: unknown[]; edges?: unknown[]; metadata?: { exposed_inputs?: unknown[]; debug_mode?: boolean } }
+      : { nodes: [], edges: [], metadata: {} }
+  } catch {
+    return { nodes: [], edges: [], metadata: {} }
+  }
+}
+
+function summarizeVersionRecord(
+  record: GraphWorkflowVersionRecord,
+  previousRecord?: GraphWorkflowVersionRecord,
+): GraphWorkflowVersionSummaryRecord {
+  const graph = parseGraphDocument(record.graph_json)
+  const previousGraph = parseGraphDocument(previousRecord?.graph_json)
+  const nodeCount = Array.isArray(graph.nodes) ? graph.nodes.length : 0
+  const edgeCount = Array.isArray(graph.edges) ? graph.edges.length : 0
+  const exposedInputCount = Array.isArray(graph.metadata?.exposed_inputs) ? graph.metadata.exposed_inputs.length : 0
+  const previousNodeCount = Array.isArray(previousGraph.nodes) ? previousGraph.nodes.length : 0
+  const previousEdgeCount = Array.isArray(previousGraph.edges) ? previousGraph.edges.length : 0
+  const previousExposedInputCount = Array.isArray(previousGraph.metadata?.exposed_inputs) ? previousGraph.metadata.exposed_inputs.length : 0
+
+  return {
+    id: record.id,
+    workflow_id: record.workflow_id,
+    version: record.version,
+    changelog: record.changelog,
+    created_date: record.created_date,
+    node_count: nodeCount,
+    edge_count: edgeCount,
+    exposed_input_count: exposedInputCount,
+    debug_mode: graph.metadata?.debug_mode === true,
+    previous_version: previousRecord?.version ?? null,
+    node_delta: previousRecord ? nodeCount - previousNodeCount : 0,
+    edge_delta: previousRecord ? edgeCount - previousEdgeCount : 0,
+    exposed_input_delta: previousRecord ? exposedInputCount - previousExposedInputCount : 0,
+  }
 }
 
 export class GraphWorkflowModel {
@@ -64,6 +111,21 @@ export class GraphWorkflowModel {
     query += ' ORDER BY updated_date DESC, id DESC'
 
     return db.prepare(query).all() as GraphWorkflowRecord[]
+  }
+
+  static findVersionSummaries(workflowId: number, limit = 12): GraphWorkflowVersionSummaryRecord[] {
+    const db = getUserSettingsDb()
+    const safeLimit = Math.max(1, Math.min(Math.floor(limit), 50))
+    const records = db.prepare(`
+      SELECT * FROM graph_workflow_versions
+      WHERE workflow_id = ?
+      ORDER BY version DESC, id DESC
+      LIMIT ?
+    `).all(workflowId, safeLimit + 1) as GraphWorkflowVersionRecord[]
+
+    return records
+      .slice(0, safeLimit)
+      .map((record, index) => summarizeVersionRecord(record, records[index + 1]))
   }
 
   static update(id: number, workflowData: GraphWorkflowUpdateData): boolean {

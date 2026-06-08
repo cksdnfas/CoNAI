@@ -206,6 +206,22 @@ export interface GraphWorkflowVersionRecord {
   created_date: string
 }
 
+export interface GraphWorkflowVersionSummaryRecord {
+  id: number
+  workflow_id: number
+  version: number
+  changelog?: string | null
+  created_date: string
+  node_count: number
+  edge_count: number
+  exposed_input_count: number
+  debug_mode: boolean
+  previous_version?: number | null
+  node_delta: number
+  edge_delta: number
+  exposed_input_delta: number
+}
+
 export interface GraphExecutionRecord {
   id: number
   graph_workflow_id: number
