@@ -37,8 +37,11 @@ ok(releaseReadinessTab.includes('RUNBOOK_GUARDRAILS'), 'release readiness worksp
 ok(releaseReadinessTab.includes("'protected-3999'"), 'runbook guardrails should include protected port 3999')
 ok(releaseReadinessTab.includes("'rollback-before-restart'"), 'runbook guardrails should require rollback notes before restart')
 ok(releaseReadinessTab.includes('Preparation only'), 'runbook guardrails should mark demo host actions as preparation only')
+ok(releaseReadinessTab.includes('data-release-readiness-runbook-export="true"'), 'release readiness workspace should expose exportable runbook history')
+ok(releaseReadinessTab.includes('data-release-readiness-history-record={record.id}'), 'saved readiness runs should be individually reviewable')
+ok(releaseReadinessTab.includes('data-release-readiness-handoff-output="true"'), 'release readiness workspace should render handoff output')
 ok(!releaseReadinessTab.includes('buildApiUrl('), 'release readiness workspace should not call backend action endpoints')
 ok(!releaseReadinessTab.includes('fetch('), 'release readiness workspace should not perform release side effects')
-ok(!releaseReadinessTab.includes('triggerBlobDownload'), 'release readiness workspace should not trigger generated handoff downloads yet')
+ok(releaseReadinessTab.includes('triggerBlobDownload'), 'release readiness workspace should provide local Markdown handoff export')
 
 console.log('Release readiness workspace contracts verified.')

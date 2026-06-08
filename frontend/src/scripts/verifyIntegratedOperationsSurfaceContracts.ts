@@ -40,6 +40,7 @@ ok(workflowRunnerPanel.includes('runtimeHealth.recovery.running_not_in_process_c
 ok(!releaseReadinessTab.includes('buildApiUrl('), 'integrated operations surface should not call backend action endpoints')
 ok(!releaseReadinessTab.includes('fetch('), 'integrated operations surface should not perform external release actions')
 ok(!releaseReadinessTab.includes('deleteImages('), 'integrated operations surface should not perform destructive media cleanup')
-ok(!releaseReadinessTab.includes('triggerBlobDownload'), 'integrated operations surface should not trigger generated handoff downloads')
+ok(releaseReadinessTab.includes('new Blob([selectedHandoffMarkdown]'), 'handoff export should be local generated Markdown only')
+ok(releaseReadinessTab.includes('triggerBlobDownload'), 'integrated operations surface should support local handoff export without backend actions')
 
 console.log('Integrated operations surface contracts verified.')

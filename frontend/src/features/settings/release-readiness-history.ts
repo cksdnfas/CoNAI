@@ -227,3 +227,71 @@ export function saveReleaseReadinessHistoryRecord(
 
   return document
 }
+
+function formatTranslationDictionary(value: TranslationDictionary) {
+  const ko = value.ko?.trim()
+  const en = value.en?.trim()
+  if (ko && en && ko !== en) return `${ko} / ${en}`
+  return ko || en || 'n/a'
+}
+
+function formatMarkdownStatus(status: string) {
+  return status.replace(/-/g, ' ')
+}
+
+function formatHistoryFileTimestamp(savedAt: string) {
+  return savedAt.replace(/\D/g, '').slice(0, 14) || 'snapshot'
+}
+
+export function buildReleaseReadinessHandoffFilename(record: ReleaseReadinessHistoryRecord) {
+  return `conai-release-readiness-${formatHistoryFileTimestamp(record.savedAt)}.md`
+}
+
+export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHistoryRecord) {
+  const lines = [
+    '# CoNAI Release Readiness Handoff',
+    '',
+    `- savedAt: ${record.savedAt}`,
+    `- appVersionLabel: ${record.appVersionLabel}`,
+    `- schemaVersion: ${record.schemaVersion}`,
+    `- source: ${record.source}`,
+    `- storageSurface: ${record.storageSurface}`,
+    `- externalActionsExecuted: ${record.externalActionsExecuted}`,
+    `- pushDeployRestartBoundary: ${record.pushDeployRestartBoundary}`,
+    `- readyForExport: ${record.summary.readyForExport}`,
+    '',
+    'This export is local release-review evidence only. It does not perform push, deploy, restart, smoke, destructive cleanup, package version bump, tag, or public release actions.',
+    '',
+    '## Review State',
+    '',
+    ...record.checklist.map((item) => (
+      `- [${item.status === 'checked' ? 'x' : ' '}] ${formatTranslationDictionary(item.title)}: ${formatTranslationDictionary(item.description)}`
+    )),
+    '',
+    '## Evidence',
+    '',
+    ...record.evidence.map((item) => (
+      `- ${formatTranslationDictionary(item.label)} (${formatMarkdownStatus(item.tone)}): ${item.value} - ${formatTranslationDictionary(item.detail)}`
+    )),
+    '',
+    '## Captured Handoff Evidence',
+    '',
+    ...record.handoff.map((item) => (
+      `- [${item.status === 'captured' ? 'x' : ' '}] ${formatTranslationDictionary(item.title)}: ${item.artifact} - ${formatTranslationDictionary(item.detail)}`
+    )),
+    '',
+    '## Runbook Guardrails',
+    '',
+    ...record.runbookGuardrails.map((item) => (
+      `- ${formatTranslationDictionary(item.phase)} / ${formatTranslationDictionary(item.status)}: ${formatTranslationDictionary(item.title)} - ${formatTranslationDictionary(item.description)}`
+    )),
+    '',
+    '## User-Owned Decisions',
+    '',
+    ...record.userDecisions.map((item) => (
+      `- ${formatTranslationDictionary(item.title)} (${formatMarkdownStatus(item.status)}): ${formatTranslationDictionary(item.description)}`
+    )),
+  ]
+
+  return `${lines.join('\n')}\n`
+}

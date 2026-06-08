@@ -2,6 +2,8 @@ import { deepEqual, equal, ok } from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  buildReleaseReadinessHandoffFilename,
+  buildReleaseReadinessHandoffMarkdown,
   buildReleaseReadinessHistoryRecord,
   MAX_RELEASE_READINESS_HISTORY_RECORDS,
   readReleaseReadinessHistoryFromStorage,
@@ -124,6 +126,15 @@ const completeRecord = buildReleaseReadinessHistoryRecord({
 
 equal(completeRecord.summary.readyForExport, true, 'complete evidence records should be ready for later export')
 
+const handoffMarkdown = buildReleaseReadinessHandoffMarkdown(completeRecord)
+ok(handoffMarkdown.includes('# CoNAI Release Readiness Handoff'), 'handoff export should have a stable title')
+ok(handoffMarkdown.includes('- externalActionsExecuted: false'), 'handoff export should preserve the no-external-action boundary')
+ok(handoffMarkdown.includes('- pushDeployRestartBoundary: approval-required'), 'handoff export should preserve approval boundaries')
+ok(handoffMarkdown.includes('## Captured Handoff Evidence'), 'handoff export should include captured handoff evidence separately')
+ok(handoffMarkdown.includes('## User-Owned Decisions'), 'handoff export should separate user-owned release decisions')
+ok(handoffMarkdown.includes('alpha branch push'), 'handoff export should carry user decision details')
+equal(buildReleaseReadinessHandoffFilename(completeRecord), 'conai-release-readiness-20260608133100.md', 'handoff export filename should derive from savedAt')
+
 const storage = new MemoryStorage()
 saveReleaseReadinessHistoryRecord(partialRecord, storage)
 saveReleaseReadinessHistoryRecord(completeRecord, storage)
@@ -159,13 +170,18 @@ storage.setItem(RELEASE_READINESS_HISTORY_STORAGE_KEY, '{not-json')
 equal(readReleaseReadinessHistoryFromStorage(storage).records.length, 0, 'corrupt local history should fail closed')
 
 ok(releaseReadinessTab.includes('data-release-readiness-history-contract="true"'), 'release readiness UI should expose the history contract surface')
+ok(releaseReadinessTab.includes('data-release-readiness-runbook-export="true"'), 'release readiness UI should expose the runbook export surface')
+ok(releaseReadinessTab.includes('data-release-readiness-handoff-output="true"'), 'release readiness UI should expose the handoff output surface')
 ok(releaseReadinessTab.includes('saveReleaseReadinessHistoryRecord'), 'release readiness UI should save evidence snapshots')
 ok(releaseReadinessTab.includes('readReleaseReadinessHistoryFromStorage'), 'release readiness UI should restore saved evidence snapshots')
 ok(releaseReadinessTab.includes('RELEASE_READINESS_HISTORY_SCHEMA_VERSION'), 'release readiness UI should show the active history schema')
+ok(releaseReadinessTab.includes('buildReleaseReadinessHandoffMarkdown'), 'release readiness UI should render a local handoff export')
+ok(releaseReadinessTab.includes('copyTextToClipboard'), 'release readiness UI should support copying handoff output')
+ok(releaseReadinessTab.includes('triggerBlobDownload'), 'release readiness UI should support local Markdown export')
 ok(historyContract.includes('externalActionsExecuted: false'), 'history contract should explicitly prevent external action execution evidence')
 ok(historyContract.includes("pushDeployRestartBoundary: 'approval-required'"), 'history contract should preserve release-action approval boundaries')
+ok(historyContract.includes('buildReleaseReadinessHandoffMarkdown'), 'history contract should own handoff markdown formatting')
 ok(!releaseReadinessTab.includes('buildApiUrl('), 'history capture should not call backend action endpoints')
 ok(!releaseReadinessTab.includes('fetch('), 'history capture should not perform external release actions')
-ok(!releaseReadinessTab.includes('triggerBlobDownload'), 'history contract should not export handoffs until the export UI commit unit')
 
 console.log('Release readiness history contracts verified.')

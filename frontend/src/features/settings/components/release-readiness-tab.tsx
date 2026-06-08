@@ -1,12 +1,18 @@
 import { useMemo, useState } from 'react'
-import { CheckCircle2, RotateCcw, Save } from 'lucide-react'
+import { CheckCircle2, ClipboardCopy, Download, History, RotateCcw, Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { SettingsInsetBlock, SettingsSection, SettingsToggleRow, SettingsValueTile } from './settings-primitives'
 import { APP_VERSION_LABEL } from '@/lib/app-metadata'
+import { triggerBlobDownload } from '@/lib/api-client'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { cn } from '@/lib/utils'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n, type TranslationDictionary } from '@/i18n'
 import {
+  buildReleaseReadinessHandoffFilename,
+  buildReleaseReadinessHandoffMarkdown,
   buildReleaseReadinessHistoryRecord,
   readReleaseReadinessHistoryFromStorage,
   RELEASE_READINESS_HISTORY_SCHEMA_VERSION,
@@ -14,6 +20,7 @@ import {
   type ReleaseReadinessChecklistItemContract,
   type ReleaseReadinessEvidenceItemContract,
   type ReleaseReadinessHandoffItemContract,
+  type ReleaseReadinessHistoryRecord,
   type ReleaseReadinessRunbookGuardrailContract,
   type ReleaseReadinessUserDecisionContract,
 } from '../release-readiness-history'
@@ -350,8 +357,10 @@ function getEvidenceToneVariant(tone: EvidenceItem['tone']) {
 /** Provide a release decision workspace that never performs external release actions itself. */
 export function ReleaseReadinessTab() {
   const { t, formatDateTime } = useI18n()
+  const { showSnackbar } = useSnackbar()
   const [readinessHistory, setReadinessHistory] = useState(() => readReleaseReadinessHistoryFromStorage().records)
   const latestReadinessRecord = readinessHistory[0] ?? null
+  const [selectedHistoryRecordId, setSelectedHistoryRecordId] = useState<string | null>(null)
   const [reviewedItems, setReviewedItems] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedItemIds ?? []))
   const [capturedHandoffItems, setCapturedHandoffItems] = useState<Set<string>>(() => new Set(latestReadinessRecord?.capturedHandoffItemIds ?? []))
   const reviewedCount = reviewedItems.size
@@ -366,6 +375,14 @@ export function ReleaseReadinessTab() {
     : t({ ko: '아직 없음', en: 'None yet' })
 
   const readinessPercent = useMemo(() => Math.round((reviewedCount / REVIEW_ITEMS.length) * 100), [reviewedCount])
+  const selectedReadinessRecord = useMemo(
+    () => readinessHistory.find((record) => record.id === selectedHistoryRecordId) ?? latestReadinessRecord,
+    [latestReadinessRecord, readinessHistory, selectedHistoryRecordId],
+  )
+  const selectedHandoffMarkdown = useMemo(
+    () => selectedReadinessRecord ? buildReleaseReadinessHandoffMarkdown(selectedReadinessRecord) : '',
+    [selectedReadinessRecord],
+  )
 
   const toggleReviewedItem = (id: string, checked: boolean) => {
     setReviewedItems((current) => {
@@ -404,6 +421,32 @@ export function ReleaseReadinessTab() {
     })
     const document = saveReleaseReadinessHistoryRecord(record)
     setReadinessHistory(document.records)
+    setSelectedHistoryRecordId(record.id)
+    showSnackbar({ message: t({ ko: '릴리즈 준비 스냅샷을 저장했어.', en: 'Saved the release readiness snapshot.' }), tone: 'info' })
+  }
+
+  const restoreReadinessHistoryRecord = (record: ReleaseReadinessHistoryRecord) => {
+    setSelectedHistoryRecordId(record.id)
+    setReviewedItems(new Set(record.reviewedItemIds))
+    setCapturedHandoffItems(new Set(record.capturedHandoffItemIds))
+  }
+
+  const copySelectedHandoffOutput = async () => {
+    if (!selectedHandoffMarkdown) return
+
+    try {
+      await copyTextToClipboard(selectedHandoffMarkdown)
+      showSnackbar({ message: t({ ko: '런북 핸드오프를 복사했어.', en: 'Copied the runbook handoff.' }), tone: 'info' })
+    } catch {
+      showSnackbar({ message: t({ ko: '런북 핸드오프 복사에 실패했어.', en: 'Failed to copy the runbook handoff.' }), tone: 'error' })
+    }
+  }
+
+  const downloadSelectedHandoffOutput = () => {
+    if (!selectedReadinessRecord || !selectedHandoffMarkdown) return
+
+    const blob = new Blob([selectedHandoffMarkdown], { type: 'text/markdown;charset=utf-8' })
+    triggerBlobDownload(blob, buildReleaseReadinessHandoffFilename(selectedReadinessRecord))
   }
 
   return (
@@ -478,6 +521,101 @@ export function ReleaseReadinessTab() {
               </SettingsToggleRow>
             )
           })}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        data-release-readiness-runbook-export="true"
+        heading={t({ ko: '런북 이력 내보내기', en: 'Runbook history export' })}
+        actions={(
+          <>
+            <Button type="button" size="sm" variant="secondary" disabled={!selectedReadinessRecord} onClick={() => void copySelectedHandoffOutput()}>
+              <ClipboardCopy className="h-4 w-4" />
+              {t({ ko: '핸드오프 복사', en: 'Copy handoff' })}
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={!selectedReadinessRecord} onClick={downloadSelectedHandoffOutput}>
+              <Download className="h-4 w-4" />
+              {t({ ko: 'MD 내보내기', en: 'Export MD' })}
+            </Button>
+          </>
+        )}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: '저장된 readiness 기록을 다시 확인하고, push/deploy/restart 없이 로컬 검토용 Markdown 핸드오프만 만들어.',
+            en: 'Review saved readiness records and produce a local Markdown handoff without push, deploy, or restart.',
+          })}
+        </SettingsInsetBlock>
+
+        <div className="grid gap-3 min-[1100px]:grid-cols-[minmax(280px,0.7fr)_minmax(0,1.3fr)]">
+          <SettingsInsetBlock className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <History className="h-4 w-4" />
+              {t({ ko: '저장된 실행 근거', en: 'Saved evidence runs' })}
+            </div>
+            {readinessHistory.length > 0 ? (
+              <div className="space-y-2">
+                {readinessHistory.map((record) => {
+                  const selected = selectedReadinessRecord?.id === record.id
+
+                  return (
+                    <button
+                      key={record.id}
+                      type="button"
+                      data-release-readiness-history-record={record.id}
+                      className={cn(
+                        'w-full rounded-sm border border-border/70 bg-surface-container/35 px-3 py-2 text-left transition hover:border-primary/50 hover:bg-primary/10',
+                        selected && 'border-primary/60 bg-primary/10',
+                      )}
+                      onClick={() => setSelectedHistoryRecordId(record.id)}
+                    >
+                      <span className="flex min-w-0 items-center justify-between gap-2">
+                        <span className="truncate text-sm font-medium text-foreground">
+                          {formatDateTime(record.savedAt, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <Badge variant={record.summary.readyForExport ? 'default' : 'secondary'}>
+                          {record.summary.readyForExport ? t({ ko: '내보내기 준비', en: 'Export ready' }) : t({ ko: '부분 기록', en: 'Partial' })}
+                        </Badge>
+                      </span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {t(
+                          { ko: '검토 {reviewed}/{reviewTotal} · 핸드오프 {handoff}/{handoffTotal}', en: 'Reviewed {reviewed}/{reviewTotal} · handoff {handoff}/{handoffTotal}' },
+                          {
+                            reviewed: record.summary.reviewedCount,
+                            reviewTotal: record.summary.reviewItemCount,
+                            handoff: record.summary.capturedHandoffCount,
+                            handoffTotal: record.summary.handoffItemCount,
+                          },
+                        )}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="rounded-sm border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">
+                {t({ ko: '저장된 readiness 기록이 없어.', en: 'No saved readiness records.' })}
+              </div>
+            )}
+            <Button type="button" size="sm" variant="outline" disabled={!selectedReadinessRecord} onClick={() => selectedReadinessRecord && restoreReadinessHistoryRecord(selectedReadinessRecord)}>
+              <RotateCcw className="h-4 w-4" />
+              {t({ ko: '선택 기록 불러오기', en: 'Load selected record' })}
+            </Button>
+          </SettingsInsetBlock>
+
+          <SettingsInsetBlock className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-foreground">{t({ ko: '핸드오프 출력', en: 'Handoff output' })}</div>
+              <Badge variant="outline">{t({ ko: '로컬 Markdown', en: 'Local Markdown' })}</Badge>
+            </div>
+            <Textarea
+              data-release-readiness-handoff-output="true"
+              variant="settings"
+              readOnly
+              className="min-h-[300px] resize-y font-mono text-xs leading-5"
+              value={selectedHandoffMarkdown || t({ ko: '스냅샷을 저장하면 핸드오프 출력이 여기에 생성돼.', en: 'Save a snapshot to generate handoff output here.' })}
+            />
+          </SettingsInsetBlock>
         </div>
       </SettingsSection>
 
