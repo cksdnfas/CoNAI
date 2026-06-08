@@ -13,6 +13,7 @@
     "verify:release-readiness-history-contracts": "tsx src/scripts/verifyReleaseReadinessHistoryContracts.ts",
     "verify:integrated-operations-surface-contracts": "tsx src/scripts/verifyIntegratedOperationsSurfaceContracts.ts",
     "verify:media-review-intelligence-contracts": "tsx src/scripts/verifyMediaReviewIntelligenceContracts.ts",
+    "verify:media-runtime-observability-contracts": "tsx src/scripts/verifyMediaRuntimeObservabilityContracts.ts",
     "verify:module-library-grouping": "tsx src/scripts/verifyModuleLibraryGrouping.ts",
     "verify:module-graph-execution-status-contracts": "tsx src/scripts/verifyModuleGraphExecutionStatusContracts.ts",
     "verify:module-graph-execution-panel-contracts": "tsx src/scripts/verifyModuleGraphExecutionPanelContracts.ts",

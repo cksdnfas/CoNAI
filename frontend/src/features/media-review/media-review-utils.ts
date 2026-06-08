@@ -12,6 +12,8 @@ export type MediaReviewTagQualitySuggestionKey = 'retag-missing' | 'retag-sparse
 export type MediaReviewGroupQualityCheckKey = 'ungrouped-loaded' | 'empty-groups' | 'auto-collect-not-run' | 'large-root-groups' | 'group-coverage-ready'
 export type MediaReviewSimilarityDecisionKind = 'duplicate-candidate' | 'keep-separate' | 'needs-human-review'
 export type MediaReviewCleanupStageAction = 'review-missing-file' | 'review-recycled-record' | 'hold-active-similar' | 'hold-active-selected'
+export type MediaReviewOperationalTrendKey = 'review-queue' | 'quality-backlog' | 'similarity-history' | 'cleanup-staging'
+export type MediaReviewOperationalTrendTone = 'ready' | 'watch' | 'attention'
 
 export interface MediaReviewSignals {
   compositeHash: string | null
@@ -89,6 +91,24 @@ export interface MediaReviewCleanupStagingPlan {
   recoverableCount: number
   similarCount: number
   destructiveCount: 0
+}
+
+export interface MediaReviewOperationalTrend {
+  key: MediaReviewOperationalTrendKey
+  primaryCount: number
+  secondaryCount: number
+  tone: MediaReviewOperationalTrendTone
+  queue: MediaReviewQueueKey | null
+}
+
+export interface MediaReviewOperationalTrendInput {
+  sourceSummary: MediaReviewSignalSummary
+  visibleSummary: MediaReviewSignalSummary
+  reviewedCount: number
+  recommendedQueues: MediaReviewRecommendedQueue[]
+  decisionSummary: MediaReviewSimilarityDecisionSummary
+  cleanupStagingPlan: MediaReviewCleanupStagingPlan
+  stagedCleanupItems: MediaReviewCleanupStageItem[]
 }
 
 function getRecordCount(record: Record<string, unknown> | null | undefined) {
@@ -248,6 +268,76 @@ export function buildMediaReviewCleanupStagingPlan(
     similarCount: items.filter((item) => item.action === 'hold-active-similar').length,
     destructiveCount: 0,
   }
+}
+
+function getMediaReviewTrendTone(count: number, attentionThreshold: number): MediaReviewOperationalTrendTone {
+  if (count >= attentionThreshold) {
+    return 'attention'
+  }
+
+  if (count > 0) {
+    return 'watch'
+  }
+
+  return 'ready'
+}
+
+export function buildMediaReviewOperationalTrends({
+  sourceSummary,
+  visibleSummary,
+  reviewedCount,
+  recommendedQueues,
+  decisionSummary,
+  cleanupStagingPlan,
+  stagedCleanupItems,
+}: MediaReviewOperationalTrendInput): MediaReviewOperationalTrend[] {
+  const reviewBacklogCount = Math.max(0, sourceSummary.totalCount - Math.max(0, Math.trunc(reviewedCount)))
+  const qualityBacklogCount = sourceSummary.missingTagCount
+    + sourceSummary.sparseTagCount
+    + sourceSummary.unratedCount
+    + sourceSummary.ungroupedCount
+  const recommendedQualityQueue = recommendedQueues.find((recommendation) => (
+    recommendation.queue === 'recoverable'
+    || recommendation.queue === 'missing-tags'
+    || recommendation.queue === 'sparse-tags'
+    || recommendation.queue === 'unrated'
+    || recommendation.queue === 'ungrouped'
+  ))
+  const stagedCleanupReviewCount = stagedCleanupItems.length
+  const selectedCleanupPreviewCount = cleanupStagingPlan.items.length
+
+  return [
+    {
+      key: 'review-queue',
+      primaryCount: reviewBacklogCount,
+      secondaryCount: visibleSummary.totalCount,
+      tone: recommendedQueues.some((recommendation) => recommendation.priority === 'high')
+        ? 'attention'
+        : getMediaReviewTrendTone(reviewBacklogCount, 48),
+      queue: reviewBacklogCount > 0 ? 'needs-review' : null,
+    },
+    {
+      key: 'quality-backlog',
+      primaryCount: qualityBacklogCount,
+      secondaryCount: recommendedQueues.length,
+      tone: getMediaReviewTrendTone(qualityBacklogCount, 24),
+      queue: recommendedQualityQueue?.queue ?? null,
+    },
+    {
+      key: 'similarity-history',
+      primaryCount: decisionSummary.totalCount,
+      secondaryCount: decisionSummary.needsHumanReviewCount,
+      tone: decisionSummary.needsHumanReviewCount > 0 ? 'watch' : decisionSummary.totalCount > 0 ? 'ready' : 'watch',
+      queue: 'similar',
+    },
+    {
+      key: 'cleanup-staging',
+      primaryCount: stagedCleanupReviewCount,
+      secondaryCount: selectedCleanupPreviewCount,
+      tone: stagedCleanupReviewCount > 0 || selectedCleanupPreviewCount > 0 ? 'watch' : 'ready',
+      queue: stagedCleanupReviewCount > 0 || selectedCleanupPreviewCount > 0 ? 'recoverable' : null,
+    },
+  ]
 }
 
 export function getMediaReviewSignals(image: ImageRecord, similarHashSet?: ReadonlySet<string>): MediaReviewSignals {

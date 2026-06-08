@@ -11,6 +11,7 @@ import { useI18n } from '@/i18n'
 import { getGraphWorkflowRuntimeHealth, getGraphWorkflowSchedules, getGraphWorkflowVersionSummaries, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord, type GraphWorkflowRuntimeHealthRecord, type GraphWorkflowVersionSummaryRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
+import { buildWorkflowRuntimeObservabilityTrends, type WorkflowRuntimeObservabilityTrend } from '../workflow-runtime-observability'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 import { buildExecutionComparisonSummary, buildNodeDisplayLabelMap, formatPrimitiveValue, getExecutionInputEntries, getNodeDisplayLabelFromMap, parseExecutionPlan, type ExecutionInputEntry } from './graph-execution-panel-helpers'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
@@ -115,6 +116,75 @@ function formatDelta(value: number) {
 function formatRuntimeInputDiffValue(value: unknown) {
   const text = formatPrimitiveValue(value)
   return text.length > 120 ? `${text.slice(0, 119)}…` : text
+}
+
+function getWorkflowRuntimeTrendToneClass(tone: WorkflowRuntimeObservabilityTrend['tone']) {
+  if (tone === 'attention') {
+    return 'border-amber-400/50 bg-amber-500/10'
+  }
+
+  if (tone === 'watch') {
+    return 'border-sky-400/40 bg-sky-500/10'
+  }
+
+  return 'border-emerald-400/35 bg-emerald-500/10'
+}
+
+function getWorkflowRuntimeTrendToneLabel(tone: WorkflowRuntimeObservabilityTrend['tone']) {
+  if (tone === 'attention') {
+    return { ko: '주의', en: 'Attention' }
+  }
+
+  if (tone === 'watch') {
+    return { ko: '관찰', en: 'Watch' }
+  }
+
+  return { ko: '안정', en: 'Ready' }
+}
+
+function getWorkflowRuntimeTrendCopy(trend: WorkflowRuntimeObservabilityTrend) {
+  if (trend.key === 'queue-health') {
+    return {
+      title: { ko: '큐 상태 추세', en: 'Queue health trend' },
+      primary: { ko: '활성 {count}', en: '{count} active' },
+      secondary: { ko: '프로세스 {count}', en: '{count} in process' },
+      tertiary: { ko: '취소요청 {count}', en: '{count} cancel requests' },
+    }
+  }
+
+  if (trend.key === 'retry-policy') {
+    return {
+      title: { ko: '재시도 정책 추세', en: 'Retry policy trend' },
+      primary: { ko: '중지/검토 {count}', en: '{count} stopped/review' },
+      secondary: { ko: '활성 예약 {count}', en: '{count} active schedules' },
+      tertiary: { ko: '재점검 {count}ms', en: '{count}ms recheck' },
+    }
+  }
+
+  if (trend.key === 'recovery') {
+    return {
+      title: { ko: '복구 이력 추세', en: 'Recovery history trend' },
+      primary: { ko: '점검 {count}', en: '{count} checks' },
+      secondary: { ko: '시작 대기 {count}', en: '{count} startup queued' },
+      tertiary: { ko: '시작 실패 {count}', en: '{count} startup failed' },
+    }
+  }
+
+  if (trend.key === 'retention') {
+    return {
+      title: { ko: '보존 정리 추세', en: 'Retention cleanup trend' },
+      primary: { ko: '대기 {count}', en: '{count} pending' },
+      secondary: { ko: '제한 {count}', en: '{count} limit' },
+      tertiary: { ko: '보존 큐 {count}', en: '{count} retention queue' },
+    }
+  }
+
+  return {
+    title: { ko: '완료/실패 이력', en: 'Terminal run history' },
+    primary: { ko: '종료 {count}', en: '{count} terminal' },
+    secondary: { ko: '실패/취소 {count}', en: '{count} failed/cancelled' },
+    tertiary: { ko: '실패율 {count}%', en: '{count}% failed' },
+  }
 }
 
 function WorkflowVersionReviewBlock({
@@ -282,6 +352,7 @@ function WorkflowRuntimeHealthBlock({
     : runtimeHealth.recovery.last_startup_recovery_at
       ? t({ ko: '최근 시작 복구 {time}', en: 'Last startup recovery {time}' }, { time: formatDateTime(runtimeHealth.recovery.last_startup_recovery_at) })
       : t({ ko: '시작 복구 기록은 아직 없어.', en: 'No startup recovery snapshot yet.' })
+  const observabilityTrends = buildWorkflowRuntimeObservabilityTrends(runtimeHealth)
 
   return (
     <div className="space-y-3 rounded-sm border border-border bg-background/35 p-3">
@@ -368,6 +439,32 @@ function WorkflowRuntimeHealthBlock({
             <div className="mt-1 text-muted-foreground">{t({ ko: '검토/중지된 자동 실행은 없어.', en: 'No autoruns are paused or stopped for review.' })}</div>
           )}
         </div>
+      </div>
+
+      <div className="grid gap-2 lg:grid-cols-5" data-workflow-runtime-observability-trends="true">
+        {observabilityTrends.map((trend) => {
+          const copy = getWorkflowRuntimeTrendCopy(trend)
+          return (
+            <div
+              key={trend.key}
+              className={`min-h-[8rem] rounded-sm border px-3 py-2 text-xs ${getWorkflowRuntimeTrendToneClass(trend.tone)}`}
+              data-workflow-runtime-trend={trend.key}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="font-semibold text-foreground">{t(copy.title)}</div>
+                <Badge variant="outline">{t(getWorkflowRuntimeTrendToneLabel(trend.tone))}</Badge>
+              </div>
+              <div className="mt-2 grid gap-1 text-muted-foreground">
+                <span>{t(copy.primary, { count: formatNumber(trend.primaryCount) })}</span>
+                <span>{t(copy.secondary, { count: formatNumber(trend.secondaryCount) })}</span>
+                <span>{t(copy.tertiary, { count: formatNumber(trend.tertiaryCount) })}</span>
+              </div>
+              {trend.timestamp ? (
+                <div className="mt-2 text-muted-foreground">{formatDateTime(trend.timestamp)}</div>
+              ) : null}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

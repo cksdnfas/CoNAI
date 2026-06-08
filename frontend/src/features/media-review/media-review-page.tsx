@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, CircleDot, ClipboardList, Filter, FolderPlus, FolderTree, Loader2, RotateCw, Search, ShieldCheck, Sigma, Star, Tags, Undo2, X } from 'lucide-react'
+import { Activity, CheckCircle2, CircleDot, ClipboardList, Filter, FolderPlus, FolderTree, Loader2, RotateCw, Search, ShieldCheck, Sigma, Star, Tags, Undo2, X } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -25,6 +25,7 @@ import { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import {
   buildMediaReviewCleanupStagingPlan,
+  buildMediaReviewOperationalTrends,
   buildMediaReviewSearchChips,
   buildMediaReviewSimilarityDecisionHistory,
   filterMediaReviewImages,
@@ -39,6 +40,7 @@ import {
   type MediaReviewCleanupStageItem,
   type MediaReviewCleanupStagingPlan,
   type MediaReviewGroupQualityCheck,
+  type MediaReviewOperationalTrend,
   type MediaReviewRecommendedQueue,
   type MediaReviewSimilarityDecisionHistoryItem,
   type MediaReviewSimilarityDecisionKind,
@@ -98,6 +100,18 @@ function getRecommendationToneClass(priority: 'high' | 'medium' | 'low') {
   return 'border-border bg-surface-lowest text-muted-foreground'
 }
 
+function getOperationalTrendToneClass(tone: MediaReviewOperationalTrend['tone']) {
+  if (tone === 'attention') {
+    return 'border-amber-400/50 bg-amber-500/10'
+  }
+
+  if (tone === 'watch') {
+    return 'border-sky-400/40 bg-sky-500/10'
+  }
+
+  return 'border-emerald-400/35 bg-emerald-500/10'
+}
+
 function getQueueRecommendationReason(queue: MediaReviewQueueKey) {
   if (queue === 'recoverable') {
     return { ko: '누락/휴지통 상태를 먼저 확인해.', en: 'Check missing or recycled records first.' }
@@ -124,6 +138,54 @@ function getQueueRecommendationReason(queue: MediaReviewQueueKey) {
   }
 
   return { ko: '아직 세션 검토 완료 표시가 없는 항목이야.', en: 'Items not yet marked reviewed in this session.' }
+}
+
+function getMediaReviewOperationalTrendCopy(trend: MediaReviewOperationalTrend) {
+  if (trend.key === 'review-queue') {
+    return {
+      title: { ko: '리뷰 큐 추세', en: 'Review queue trend' },
+      body: { ko: '세션 검토 완료와 현재 표시 큐를 비교해 남은 판단량을 보여줘.', en: 'Compares session-reviewed items with the current visible queue backlog.' },
+      primary: { ko: '대기 {count}', en: '{count} waiting' },
+      secondary: { ko: '표시 {count}', en: '{count} visible' },
+    }
+  }
+
+  if (trend.key === 'quality-backlog') {
+    return {
+      title: { ko: '품질 백로그 추세', en: 'Quality backlog trend' },
+      body: { ko: '태그, 등급, 그룹 신호가 약한 항목을 추천 큐와 함께 묶어 보여줘.', en: 'Combines weak tag, rating, and group signals with recommended queues.' },
+      primary: { ko: '백로그 {count}', en: '{count} backlog' },
+      secondary: { ko: '추천 {count}', en: '{count} recommendations' },
+    }
+  }
+
+  if (trend.key === 'similarity-history') {
+    return {
+      title: { ko: '유사도 결정 이력', en: 'Similarity decision history' },
+      body: { ko: '중복, 별도 보존, 추가 확인 결정을 다음 리뷰 근거로 남겨.', en: 'Keeps duplicate, separate, and needs-review decisions available for the next review.' },
+      primary: { ko: '기록 {count}', en: '{count} recorded' },
+      secondary: { ko: '확인 {count}', en: '{count} review' },
+    }
+  }
+
+  return {
+    title: { ko: '정리 스테이징 추세', en: 'Cleanup staging trend' },
+    body: { ko: '선택 후보와 누적 스테이징을 비교하되 삭제나 보존 정책 변경은 실행하지 않아.', en: 'Compares selected candidates with staged review items without deleting files or changing retention policy.' },
+    primary: { ko: '스테이징 {count}', en: '{count} staged' },
+    secondary: { ko: '선택 {count}', en: '{count} selected' },
+  }
+}
+
+function getMediaReviewTrendToneLabel(tone: MediaReviewOperationalTrend['tone']) {
+  if (tone === 'attention') {
+    return { ko: '주의', en: 'Attention' }
+  }
+
+  if (tone === 'watch') {
+    return { ko: '관찰', en: 'Watch' }
+  }
+
+  return { ko: '안정', en: 'Ready' }
 }
 
 function getTagSuggestionCopy(suggestion: MediaReviewTagQualitySuggestion) {
@@ -215,6 +277,52 @@ function getCleanupStageActionCopy(action: MediaReviewCleanupStageAction) {
   }
 
   return { ko: '활성 선택 항목 보류', en: 'Hold selected active item' }
+}
+
+function MediaReviewOperationalTrendPanel({
+  trends,
+  onQueueChange,
+}: {
+  trends: MediaReviewOperationalTrend[]
+  onQueueChange: (queue: MediaReviewQueueKey) => void
+}) {
+  const { t, formatNumber } = useI18n()
+
+  return (
+    <PageInset className="space-y-3" data-media-review-operational-trends="true">
+      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+        <Activity className="h-4 w-4 text-primary" />
+        <span>{t({ ko: '운영 추세', en: 'Operational trends' })}</span>
+      </div>
+      <div className="grid gap-2 lg:grid-cols-4">
+        {trends.map((trend) => {
+          const copy = getMediaReviewOperationalTrendCopy(trend)
+          return (
+            <div
+              key={trend.key}
+              className={`min-h-[8rem] rounded-sm border px-3 py-2 text-xs ${getOperationalTrendToneClass(trend.tone)}`}
+              data-media-review-trend={trend.key}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="font-semibold text-foreground">{t(copy.title)}</div>
+                <Badge variant="outline">{t(getMediaReviewTrendToneLabel(trend.tone))}</Badge>
+              </div>
+              <div className="mt-2 grid gap-1 text-muted-foreground">
+                <span>{t(copy.primary, { count: formatNumber(trend.primaryCount) })}</span>
+                <span>{t(copy.secondary, { count: formatNumber(trend.secondaryCount) })}</span>
+              </div>
+              <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
+              {trend.queue ? (
+                <Button className="mt-2" size="sm" variant="outline" onClick={() => onQueueChange(trend.queue!)}>
+                  {t({ ko: '큐 열기', en: 'Open queue' })}
+                </Button>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </PageInset>
+  )
 }
 
 function MediaReviewIntelligencePanel({
@@ -658,6 +766,22 @@ export function MediaReviewPage() {
     () => buildMediaReviewCleanupStagingPlan(selectedImages, similarHashSet),
     [selectedImages, similarHashSet],
   )
+  const similarityDecisionSummary = useMemo(
+    () => getMediaReviewSimilarityDecisionSummary(similarityDecisionHistory),
+    [similarityDecisionHistory],
+  )
+  const operationalTrends = useMemo(
+    () => buildMediaReviewOperationalTrends({
+      sourceSummary,
+      visibleSummary,
+      reviewedCount: reviewedIdSet.size,
+      recommendedQueues,
+      decisionSummary: similarityDecisionSummary,
+      cleanupStagingPlan: selectedCleanupStagePlan,
+      stagedCleanupItems: cleanupStageItems,
+    }),
+    [cleanupStageItems, recommendedQueues, reviewedIdSet.size, selectedCleanupStagePlan, similarityDecisionSummary, sourceSummary, visibleSummary],
+  )
 
   const assignToGroupMutation = useMutation({
     mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
@@ -905,6 +1029,14 @@ export function MediaReviewPage() {
           tagSuggestions={tagQualitySuggestions}
           groupChecks={groupQualityChecks}
           activeQueue={activeQueue}
+          onQueueChange={(queue) => {
+            setActiveQueue(queue)
+            setSelectedIds([])
+          }}
+        />
+
+        <MediaReviewOperationalTrendPanel
+          trends={operationalTrends}
           onQueueChange={(queue) => {
             setActiveQueue(queue)
             setSelectedIds([])

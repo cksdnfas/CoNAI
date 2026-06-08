@@ -1,0 +1,135 @@
+import { equal, ok } from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  buildMediaReviewCleanupStagingPlan,
+  buildMediaReviewOperationalTrends,
+  getMediaReviewRecommendedQueues,
+  getMediaReviewSignalSummary,
+  getMediaReviewSimilarityDecisionSummary,
+} from '../features/media-review/media-review-utils'
+import { buildWorkflowRuntimeObservabilityTrends } from '../features/module-graph/workflow-runtime-observability'
+import type { GraphWorkflowRuntimeHealthRecord } from '../lib/api-module-graph'
+import type { ImageRecord } from '../types/image'
+
+const reviewImages: ImageRecord[] = [
+  {
+    id: 1,
+    composite_hash: 'ready',
+    groups: [{ id: 1, name: 'Ready', collection_type: 'manual' }],
+    rating_score: 95,
+    auto_tags: {
+      general: { sky: 0.8, cloud: 0.7, tree: 0.6, river: 0.5, grass: 0.4, sun: 0.3 },
+      character: {},
+      rating: { general: 0.99 },
+    },
+  },
+  { id: 2, composite_hash: 'missing-tags', groups: [], rating_score: null, auto_tags: null },
+  {
+    id: 3,
+    composite_hash: 'sparse-tags',
+    groups: [],
+    rating_score: null,
+    auto_tags: { general: { face: 0.9 }, character: {}, rating: {} },
+  },
+  { id: 4, composite_hash: 'recoverable', groups: [], rating_score: null, file_status: 'missing', auto_tags: null },
+]
+
+const sourceSummary = getMediaReviewSignalSummary(reviewImages, new Set(['sparse-tags']))
+const visibleSummary = getMediaReviewSignalSummary(reviewImages.slice(1), new Set(['sparse-tags']))
+const recommendedQueues = getMediaReviewRecommendedQueues(sourceSummary, { reviewedCount: 1 })
+const cleanupStagingPlan = buildMediaReviewCleanupStagingPlan(reviewImages.slice(1), new Set(['sparse-tags']))
+const decisionSummary = getMediaReviewSimilarityDecisionSummary([
+  {
+    id: 'ready:sparse-tags:needs-human-review:2026-06-08T12:00:00.000Z',
+    anchorHash: 'ready',
+    targetHash: 'sparse-tags',
+    decision: 'needs-human-review',
+    decidedAt: '2026-06-08T12:00:00.000Z',
+    matchState: 'similar-match',
+    reversible: true,
+  },
+])
+
+const mediaTrends = buildMediaReviewOperationalTrends({
+  sourceSummary,
+  visibleSummary,
+  reviewedCount: 1,
+  recommendedQueues,
+  decisionSummary,
+  cleanupStagingPlan,
+  stagedCleanupItems: cleanupStagingPlan.items.slice(0, 2),
+})
+
+equal(mediaTrends.length, 4, 'media observability should expose four trend summaries')
+ok(mediaTrends.some((trend) => trend.key === 'review-queue' && trend.queue === 'needs-review'), 'review queue trend should link back to the needs-review queue')
+ok(mediaTrends.some((trend) => trend.key === 'cleanup-staging' && trend.primaryCount === 2 && trend.secondaryCount === 3), 'cleanup staging trend should compare staged history with selected candidates')
+ok(mediaTrends.some((trend) => trend.key === 'similarity-history' && trend.secondaryCount === 1), 'similarity trend should keep needs-human-review history visible')
+ok(cleanupStagingPlan.items.every((item) => item.destructiveAction === false), 'media observability must keep cleanup staging non-destructive')
+
+const runtimeHealth: GraphWorkflowRuntimeHealthRecord = {
+  workflow_id: 42,
+  queue: {
+    queued_count: 2,
+    running_count: 1,
+    manual_queued_count: 1,
+    manual_running_count: 0,
+    schedule_queued_count: 1,
+    schedule_running_count: 1,
+    in_process_running_count: 0,
+    oldest_queued_at: '2026-06-08T10:00:00.000Z',
+    retry_timer_pending: true,
+    queue_recheck_interval_ms: 5000,
+    schedule_concurrency_limit: 1,
+    cancellation_requested_count: 1,
+  },
+  retry_policy: {
+    schedule_count: 3,
+    active_schedule_count: 1,
+    stop_on_failure_count: 2,
+    continue_on_failure_count: 1,
+    paused_for_review_count: 1,
+    stopped_after_error_count: 1,
+    overlap_stopped_count: 0,
+  },
+  retention: {
+    output_retention_limit: 12,
+    pending_prune: true,
+    pending_prune_count: 4,
+  },
+  recovery: {
+    last_startup_recovery_at: '2026-06-08T09:00:00.000Z',
+    startup_queued_backlog: 2,
+    startup_failed_running: 1,
+    running_not_in_process_count: 1,
+  },
+  telemetry: {
+    completed_count: 6,
+    failed_count: 2,
+    cancelled_count: 2,
+    latest_completed_at: '2026-06-08T11:00:00.000Z',
+    latest_failed_at: '2026-06-08T12:00:00.000Z',
+    latest_error_message: 'Test failure',
+  },
+}
+
+const runtimeTrends = buildWorkflowRuntimeObservabilityTrends(runtimeHealth)
+equal(runtimeTrends.length, 5, 'workflow runtime observability should expose five trend summaries')
+ok(runtimeTrends.some((trend) => trend.key === 'queue-health' && trend.tone === 'attention' && trend.primaryCount === 3), 'queue trend should include active queue pressure and cancellation concern')
+ok(runtimeTrends.some((trend) => trend.key === 'retry-policy' && trend.primaryCount === 2), 'retry trend should count paused or stopped schedules')
+ok(runtimeTrends.some((trend) => trend.key === 'recovery' && trend.primaryCount === 2), 'recovery trend should include startup and in-process mismatch checks')
+ok(runtimeTrends.some((trend) => trend.key === 'retention' && trend.primaryCount === 4), 'retention trend should expose pending prune history')
+ok(runtimeTrends.some((trend) => trend.key === 'terminal-history' && trend.primaryCount === 10 && trend.tertiaryCount === 20), 'terminal history trend should summarize completed, failed, and cancelled runs')
+
+const root = process.cwd()
+const mediaReviewPage = readFileSync(join(root, 'src/features/media-review/media-review-page.tsx'), 'utf8')
+const workflowRunnerPanel = readFileSync(join(root, 'src/features/module-graph/components/workflow-runner-panel.tsx'), 'utf8')
+
+ok(mediaReviewPage.includes('data-media-review-operational-trends="true"'), 'media review page should render operational trend history')
+ok(mediaReviewPage.includes('data-media-review-trend={trend.key}'), 'media review trend rows should be identifiable')
+ok(workflowRunnerPanel.includes('data-workflow-runtime-observability-trends="true"'), 'workflow runner should render runtime observability trends')
+ok(workflowRunnerPanel.includes('data-workflow-runtime-trend={trend.key}'), 'workflow runtime trend rows should be identifiable')
+ok(workflowRunnerPanel.includes('buildWorkflowRuntimeObservabilityTrends(runtimeHealth)'), 'workflow runner should derive trends from existing runtime health boundaries')
+ok(!mediaReviewPage.includes('deleteImages('), 'media runtime observability should not add destructive media cleanup')
+
+console.log('Media/runtime observability contracts verified.')
