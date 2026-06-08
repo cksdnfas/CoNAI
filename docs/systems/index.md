@@ -14,6 +14,7 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 7. [MCP와 자동화 인터페이스](/systems/mcp-and-automation)
 8. [26.6.8 workflow-media-operations](/systems/26.6.8-workflow-media-operations)
 9. [26.6.8 dependency hardening plan](/systems/26.6.8-dependency-hardening-plan)
+10. [26.6.8 hardening-evidence-observability readiness](/systems/26.6.8-hardening-evidence-observability-readiness)
 
 ## 왜 이 순서인가
 
@@ -52,3 +53,7 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 ### 9) 26.6.8 dependency hardening plan
 - `npm audit` 결과를 backend runtime, frontend routing, docs/build tooling 표면으로 분리합니다.
 - 안전하게 적용할 수 있는 dependency update lane과 approval-needed 후보를 구분합니다.
+
+### 10) 26.6.8 hardening-evidence-observability readiness
+- dependency hardening, readiness evidence, media/runtime observability 로드맵의 최종 로컬 준비 경계를 정리합니다.
+- 남은 `better-queue -> uuid`, `vitepress -> vite -> esbuild`, retention/destructive cleanup 승인 결정을 분리합니다.

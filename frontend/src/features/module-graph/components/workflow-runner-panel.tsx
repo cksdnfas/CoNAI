@@ -11,7 +11,7 @@ import { useI18n } from '@/i18n'
 import { getGraphWorkflowRuntimeHealth, getGraphWorkflowSchedules, getGraphWorkflowVersionSummaries, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord, type GraphWorkflowRuntimeHealthRecord, type GraphWorkflowVersionSummaryRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
-import { buildWorkflowRuntimeObservabilityTrends, type WorkflowRuntimeObservabilityTrend } from '../workflow-runtime-observability'
+import { buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeThresholdGuidance, type WorkflowRuntimeObservabilityTrend, type WorkflowRuntimeThresholdGuidance } from '../workflow-runtime-observability'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 import { buildExecutionComparisonSummary, buildNodeDisplayLabelMap, formatPrimitiveValue, getExecutionInputEntries, getNodeDisplayLabelFromMap, parseExecutionPlan, type ExecutionInputEntry } from './graph-execution-panel-helpers'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
@@ -187,6 +187,46 @@ function getWorkflowRuntimeTrendCopy(trend: WorkflowRuntimeObservabilityTrend) {
   }
 }
 
+function getWorkflowRuntimeThresholdGuidanceCopy(guidance: WorkflowRuntimeThresholdGuidance) {
+  if (guidance.key === 'queue-pressure-threshold') {
+    return {
+      title: { ko: '큐 압력 기준', en: 'Queue pressure threshold' },
+      body: { ko: '활성 작업이 동시 실행 한계를 넘거나 취소 요청이 있으면 다음 실행 전 큐 상태를 먼저 확인해.', en: 'When active work exceeds the concurrency limit or cancellation is requested, review queue state before the next run.' },
+      unit: 'count' as const,
+    }
+  }
+
+  if (guidance.key === 'retry-stop-threshold') {
+    return {
+      title: { ko: '자동 실행 중지 기준', en: 'Autorun stop threshold' },
+      body: { ko: '검토 대기나 오류 중지된 예약이 있으면 재시작보다 중지 사유 확인이 먼저야.', en: 'Paused or error-stopped schedules need stop-reason review before restarting autoruns.' },
+      unit: 'count' as const,
+    }
+  }
+
+  if (guidance.key === 'recovery-mismatch-threshold') {
+    return {
+      title: { ko: '복구 불일치 기준', en: 'Recovery mismatch threshold' },
+      body: { ko: '시작 복구나 실행 프로세스 불일치가 있으면 최근 실패와 산출물 상태를 함께 봐.', en: 'Startup recovery or process mismatches should be reviewed with recent failures and output state.' },
+      unit: 'count' as const,
+    }
+  }
+
+  if (guidance.key === 'retention-approval-threshold') {
+    return {
+      title: { ko: '보존 승인 기준', en: 'Retention approval threshold' },
+      body: { ko: '보존 정리 대기 항목은 상태 신호로만 표시하고 삭제, schema, retention policy 변경은 별도 승인으로 남겨.', en: 'Pending retention prune items stay as state signals; deletion, schema, and retention policy changes remain separately approved.' },
+      unit: 'count' as const,
+    }
+  }
+
+  return {
+    title: { ko: '실패율 기준', en: 'Failure rate threshold' },
+    body: { ko: '실패율이 기준 이상이면 재실행 전에 오류 메시지와 입력 프리셋 차이를 같이 확인해.', en: 'When failure rate reaches the threshold, review errors and input preset diffs before rerunning.' },
+    unit: 'percent' as const,
+  }
+}
+
 function WorkflowVersionReviewBlock({
   selectedGraph,
   latestExecution,
@@ -353,6 +393,7 @@ function WorkflowRuntimeHealthBlock({
       ? t({ ko: '최근 시작 복구 {time}', en: 'Last startup recovery {time}' }, { time: formatDateTime(runtimeHealth.recovery.last_startup_recovery_at) })
       : t({ ko: '시작 복구 기록은 아직 없어.', en: 'No startup recovery snapshot yet.' })
   const observabilityTrends = buildWorkflowRuntimeObservabilityTrends(runtimeHealth)
+  const thresholdGuidance = buildWorkflowRuntimeThresholdGuidance(runtimeHealth)
 
   return (
     <div className="space-y-3 rounded-sm border border-border bg-background/35 p-3">
@@ -461,6 +502,45 @@ function WorkflowRuntimeHealthBlock({
               </div>
               {trend.timestamp ? (
                 <div className="mt-2 text-muted-foreground">{formatDateTime(trend.timestamp)}</div>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="grid gap-2 lg:grid-cols-5" data-workflow-runtime-threshold-guidance="true">
+        {thresholdGuidance.map((guidance) => {
+          const copy = getWorkflowRuntimeThresholdGuidanceCopy(guidance)
+          return (
+            <div
+              key={guidance.key}
+              className={`min-h-[8rem] rounded-sm border px-3 py-2 text-xs ${getWorkflowRuntimeTrendToneClass(guidance.tone)}`}
+              data-workflow-runtime-threshold={guidance.key}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="font-semibold text-foreground">{t(copy.title)}</div>
+                <Badge variant="outline">{t(getWorkflowRuntimeTrendToneLabel(guidance.tone))}</Badge>
+              </div>
+              <div className="mt-2 grid gap-1 text-muted-foreground">
+                <span>
+                  {copy.unit === 'percent'
+                    ? t({ ko: '현재 {count}%', en: '{count}% current' }, { count: formatNumber(guidance.currentCount) })
+                    : t({ ko: '현재 {count}', en: '{count} current' }, { count: formatNumber(guidance.currentCount) })}
+                </span>
+                <span>
+                  {copy.unit === 'percent'
+                    ? t({ ko: '기준 {count}%', en: '{count}% threshold' }, { count: formatNumber(guidance.thresholdCount) })
+                    : t({ ko: '기준 {count}', en: '{count} threshold' }, { count: formatNumber(guidance.thresholdCount) })}
+                </span>
+                <span>
+                  {guidance.approvalBoundary === 'approval-required'
+                    ? t({ ko: '별도 승인 필요', en: 'Separate approval required' })
+                    : t({ ko: '운영자 검토', en: 'Operator review' })}
+                </span>
+              </div>
+              <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
+              {guidance.timestamp ? (
+                <div className="mt-2 text-muted-foreground">{formatDateTime(guidance.timestamp)}</div>
               ) : null}
             </div>
           )

@@ -4,11 +4,12 @@ import { join } from 'node:path'
 import {
   buildMediaReviewCleanupStagingPlan,
   buildMediaReviewOperationalTrends,
+  buildMediaReviewThresholdGuidance,
   getMediaReviewRecommendedQueues,
   getMediaReviewSignalSummary,
   getMediaReviewSimilarityDecisionSummary,
 } from '../features/media-review/media-review-utils'
-import { buildWorkflowRuntimeObservabilityTrends } from '../features/module-graph/workflow-runtime-observability'
+import { buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeThresholdGuidance } from '../features/module-graph/workflow-runtime-observability'
 import type { GraphWorkflowRuntimeHealthRecord } from '../lib/api-module-graph'
 import type { ImageRecord } from '../types/image'
 
@@ -67,6 +68,13 @@ ok(mediaTrends.some((trend) => trend.key === 'cleanup-staging' && trend.primaryC
 ok(mediaTrends.some((trend) => trend.key === 'similarity-history' && trend.secondaryCount === 1), 'similarity trend should keep needs-human-review history visible')
 ok(cleanupStagingPlan.items.every((item) => item.destructiveAction === false), 'media observability must keep cleanup staging non-destructive')
 
+const mediaThresholdGuidance = buildMediaReviewThresholdGuidance(mediaTrends)
+equal(mediaThresholdGuidance.length, 4, 'media observability should expose four threshold guidance records')
+ok(mediaThresholdGuidance.some((guidance) => guidance.key === 'review-queue-threshold' && guidance.thresholdCount === 48), 'media review queue guidance should carry the review backlog threshold')
+ok(mediaThresholdGuidance.some((guidance) => guidance.key === 'quality-backlog-threshold' && guidance.thresholdCount === 24), 'media quality guidance should carry the quality backlog threshold')
+ok(mediaThresholdGuidance.some((guidance) => guidance.key === 'similarity-review-threshold' && guidance.currentCount === 1 && guidance.tone === 'watch'), 'similarity guidance should flag open human-review decisions')
+ok(mediaThresholdGuidance.some((guidance) => guidance.key === 'cleanup-approval-threshold' && guidance.approvalBoundary === 'approval-required'), 'cleanup guidance should keep destructive cleanup approval-owned')
+
 const runtimeHealth: GraphWorkflowRuntimeHealthRecord = {
   workflow_id: 42,
   queue: {
@@ -121,15 +129,28 @@ ok(runtimeTrends.some((trend) => trend.key === 'recovery' && trend.primaryCount 
 ok(runtimeTrends.some((trend) => trend.key === 'retention' && trend.primaryCount === 4), 'retention trend should expose pending prune history')
 ok(runtimeTrends.some((trend) => trend.key === 'terminal-history' && trend.primaryCount === 10 && trend.tertiaryCount === 20), 'terminal history trend should summarize completed, failed, and cancelled runs')
 
+const runtimeThresholdGuidance = buildWorkflowRuntimeThresholdGuidance(runtimeHealth)
+equal(runtimeThresholdGuidance.length, 5, 'workflow runtime observability should expose five threshold guidance records')
+ok(runtimeThresholdGuidance.some((guidance) => guidance.key === 'queue-pressure-threshold' && guidance.currentCount === 3 && guidance.thresholdCount === 1 && guidance.tone === 'attention'), 'queue threshold guidance should compare active queue pressure with concurrency')
+ok(runtimeThresholdGuidance.some((guidance) => guidance.key === 'retry-stop-threshold' && guidance.currentCount === 2 && guidance.tone === 'attention'), 'retry threshold guidance should flag stopped schedules')
+ok(runtimeThresholdGuidance.some((guidance) => guidance.key === 'recovery-mismatch-threshold' && guidance.currentCount === 2), 'recovery threshold guidance should carry mismatch counts')
+ok(runtimeThresholdGuidance.some((guidance) => guidance.key === 'retention-approval-threshold' && guidance.approvalBoundary === 'approval-required'), 'retention threshold guidance should keep cleanup approval-owned')
+ok(runtimeThresholdGuidance.some((guidance) => guidance.key === 'terminal-failure-threshold' && guidance.currentCount === 20 && guidance.thresholdCount === 20), 'terminal failure threshold guidance should carry the local failure-rate threshold')
+
 const root = process.cwd()
 const mediaReviewPage = readFileSync(join(root, 'src/features/media-review/media-review-page.tsx'), 'utf8')
 const workflowRunnerPanel = readFileSync(join(root, 'src/features/module-graph/components/workflow-runner-panel.tsx'), 'utf8')
 
 ok(mediaReviewPage.includes('data-media-review-operational-trends="true"'), 'media review page should render operational trend history')
 ok(mediaReviewPage.includes('data-media-review-trend={trend.key}'), 'media review trend rows should be identifiable')
+ok(mediaReviewPage.includes('data-media-review-threshold-guidance="true"'), 'media review page should render threshold guidance')
+ok(mediaReviewPage.includes('data-media-review-threshold={guidance.key}'), 'media review threshold rows should be identifiable')
 ok(workflowRunnerPanel.includes('data-workflow-runtime-observability-trends="true"'), 'workflow runner should render runtime observability trends')
 ok(workflowRunnerPanel.includes('data-workflow-runtime-trend={trend.key}'), 'workflow runtime trend rows should be identifiable')
+ok(workflowRunnerPanel.includes('data-workflow-runtime-threshold-guidance="true"'), 'workflow runner should render threshold guidance')
+ok(workflowRunnerPanel.includes('data-workflow-runtime-threshold={guidance.key}'), 'workflow runtime threshold rows should be identifiable')
 ok(workflowRunnerPanel.includes('buildWorkflowRuntimeObservabilityTrends(runtimeHealth)'), 'workflow runner should derive trends from existing runtime health boundaries')
+ok(workflowRunnerPanel.includes('buildWorkflowRuntimeThresholdGuidance(runtimeHealth)'), 'workflow runner should derive threshold guidance from existing runtime health boundaries')
 ok(!mediaReviewPage.includes('deleteImages('), 'media runtime observability should not add destructive media cleanup')
 
 console.log('Media/runtime observability contracts verified.')

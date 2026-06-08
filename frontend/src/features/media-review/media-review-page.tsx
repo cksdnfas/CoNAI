@@ -28,6 +28,7 @@ import {
   buildMediaReviewOperationalTrends,
   buildMediaReviewSearchChips,
   buildMediaReviewSimilarityDecisionHistory,
+  buildMediaReviewThresholdGuidance,
   filterMediaReviewImages,
   getMediaReviewGroupQualityChecks,
   getMediaReviewRecommendedQueues,
@@ -45,6 +46,7 @@ import {
   type MediaReviewSimilarityDecisionHistoryItem,
   type MediaReviewSimilarityDecisionKind,
   type MediaReviewTagQualitySuggestion,
+  type MediaReviewThresholdGuidance,
 } from './media-review-utils'
 
 type ReviewImagesPageParam = number | {
@@ -188,6 +190,34 @@ function getMediaReviewTrendToneLabel(tone: MediaReviewOperationalTrend['tone'])
   return { ko: '안정', en: 'Ready' }
 }
 
+function getMediaReviewThresholdGuidanceCopy(guidance: MediaReviewThresholdGuidance) {
+  if (guidance.key === 'review-queue-threshold') {
+    return {
+      title: { ko: '리뷰 처리 기준', en: 'Review queue threshold' },
+      body: { ko: '세션 미검토 항목이 기준 이상이면 리뷰 큐 우선순위가 주의로 올라가.', en: 'Unreviewed session items at or above the threshold raise review queue priority.' },
+    }
+  }
+
+  if (guidance.key === 'quality-backlog-threshold') {
+    return {
+      title: { ko: '품질 백로그 기준', en: 'Quality backlog threshold' },
+      body: { ko: '태그, 등급, 그룹 신호가 약한 항목이 기준 이상이면 품질 점검을 먼저 보강해.', en: 'Weak tag, rating, or group signals at or above the threshold make quality review the next focus.' },
+    }
+  }
+
+  if (guidance.key === 'similarity-review-threshold') {
+    return {
+      title: { ko: '유사도 확인 기준', en: 'Similarity review threshold' },
+      body: { ko: '추가 확인 결정이 남아 있으면 다음 정리 판단 전에 중복/별도 보존 근거를 다시 봐.', en: 'Open needs-review similarity decisions keep duplicate/separate evidence in front of cleanup judgment.' },
+    }
+  }
+
+  return {
+    title: { ko: '정리 승인 기준', en: 'Cleanup approval threshold' },
+    body: { ko: '정리 스테이징은 검토 목록까지만 만들고 삭제나 보존 정책 변경은 별도 승인 대상으로 남겨.', en: 'Cleanup staging only creates review records; deletion and retention policy changes remain separately approved.' },
+  }
+}
+
 function getTagSuggestionCopy(suggestion: MediaReviewTagQualitySuggestion) {
   if (suggestion.key === 'retag-missing') {
     return {
@@ -314,6 +344,57 @@ function MediaReviewOperationalTrendPanel({
               <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
               {trend.queue ? (
                 <Button className="mt-2" size="sm" variant="outline" onClick={() => onQueueChange(trend.queue!)}>
+                  {t({ ko: '큐 열기', en: 'Open queue' })}
+                </Button>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </PageInset>
+  )
+}
+
+function MediaReviewThresholdGuidancePanel({
+  guidanceItems,
+  onQueueChange,
+}: {
+  guidanceItems: MediaReviewThresholdGuidance[]
+  onQueueChange: (queue: MediaReviewQueueKey) => void
+}) {
+  const { t, formatNumber } = useI18n()
+
+  return (
+    <PageInset className="space-y-3" data-media-review-threshold-guidance="true">
+      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+        <ShieldCheck className="h-4 w-4 text-primary" />
+        <span>{t({ ko: '임계값 안내', en: 'Threshold guidance' })}</span>
+      </div>
+      <div className="grid gap-2 lg:grid-cols-4">
+        {guidanceItems.map((guidance) => {
+          const copy = getMediaReviewThresholdGuidanceCopy(guidance)
+          return (
+            <div
+              key={guidance.key}
+              className={`min-h-[8rem] rounded-sm border px-3 py-2 text-xs ${getOperationalTrendToneClass(guidance.tone)}`}
+              data-media-review-threshold={guidance.key}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="font-semibold text-foreground">{t(copy.title)}</div>
+                <Badge variant="outline">{t(getMediaReviewTrendToneLabel(guidance.tone))}</Badge>
+              </div>
+              <div className="mt-2 grid gap-1 text-muted-foreground">
+                <span>{t({ ko: '현재 {count}', en: '{count} current' }, { count: formatNumber(guidance.currentCount) })}</span>
+                <span>{t({ ko: '기준 {count}', en: '{count} threshold' }, { count: formatNumber(guidance.thresholdCount) })}</span>
+                <span>
+                  {guidance.approvalBoundary === 'approval-required'
+                    ? t({ ko: '별도 승인 필요', en: 'Separate approval required' })
+                    : t({ ko: '운영자 검토', en: 'Operator review' })}
+                </span>
+              </div>
+              <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
+              {guidance.queue ? (
+                <Button className="mt-2" size="sm" variant="outline" onClick={() => onQueueChange(guidance.queue!)}>
                   {t({ ko: '큐 열기', en: 'Open queue' })}
                 </Button>
               ) : null}
@@ -782,6 +863,7 @@ export function MediaReviewPage() {
     }),
     [cleanupStageItems, recommendedQueues, reviewedIdSet.size, selectedCleanupStagePlan, similarityDecisionSummary, sourceSummary, visibleSummary],
   )
+  const thresholdGuidance = useMemo(() => buildMediaReviewThresholdGuidance(operationalTrends), [operationalTrends])
 
   const assignToGroupMutation = useMutation({
     mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
@@ -1037,6 +1119,14 @@ export function MediaReviewPage() {
 
         <MediaReviewOperationalTrendPanel
           trends={operationalTrends}
+          onQueueChange={(queue) => {
+            setActiveQueue(queue)
+            setSelectedIds([])
+          }}
+        />
+
+        <MediaReviewThresholdGuidancePanel
+          guidanceItems={thresholdGuidance}
           onQueueChange={(queue) => {
             setActiveQueue(queue)
             setSelectedIds([])

@@ -14,6 +14,7 @@ export type MediaReviewSimilarityDecisionKind = 'duplicate-candidate' | 'keep-se
 export type MediaReviewCleanupStageAction = 'review-missing-file' | 'review-recycled-record' | 'hold-active-similar' | 'hold-active-selected'
 export type MediaReviewOperationalTrendKey = 'review-queue' | 'quality-backlog' | 'similarity-history' | 'cleanup-staging'
 export type MediaReviewOperationalTrendTone = 'ready' | 'watch' | 'attention'
+export type MediaReviewThresholdGuidanceKey = 'review-queue-threshold' | 'quality-backlog-threshold' | 'similarity-review-threshold' | 'cleanup-approval-threshold'
 
 export interface MediaReviewSignals {
   compositeHash: string | null
@@ -101,6 +102,15 @@ export interface MediaReviewOperationalTrend {
   queue: MediaReviewQueueKey | null
 }
 
+export interface MediaReviewThresholdGuidance {
+  key: MediaReviewThresholdGuidanceKey
+  currentCount: number
+  thresholdCount: number
+  tone: MediaReviewOperationalTrendTone
+  queue: MediaReviewQueueKey | null
+  approvalBoundary: 'operator-review' | 'approval-required'
+}
+
 export interface MediaReviewOperationalTrendInput {
   sourceSummary: MediaReviewSignalSummary
   visibleSummary: MediaReviewSignalSummary
@@ -110,6 +120,11 @@ export interface MediaReviewOperationalTrendInput {
   cleanupStagingPlan: MediaReviewCleanupStagingPlan
   stagedCleanupItems: MediaReviewCleanupStageItem[]
 }
+
+const MEDIA_REVIEW_QUEUE_ATTENTION_THRESHOLD = 48
+const MEDIA_REVIEW_QUALITY_BACKLOG_ATTENTION_THRESHOLD = 24
+const MEDIA_REVIEW_MANUAL_REVIEW_THRESHOLD = 1
+const MEDIA_REVIEW_CLEANUP_APPROVAL_THRESHOLD = 1
 
 function getRecordCount(record: Record<string, unknown> | null | undefined) {
   return record ? Object.keys(record).length : 0
@@ -313,14 +328,14 @@ export function buildMediaReviewOperationalTrends({
       secondaryCount: visibleSummary.totalCount,
       tone: recommendedQueues.some((recommendation) => recommendation.priority === 'high')
         ? 'attention'
-        : getMediaReviewTrendTone(reviewBacklogCount, 48),
+        : getMediaReviewTrendTone(reviewBacklogCount, MEDIA_REVIEW_QUEUE_ATTENTION_THRESHOLD),
       queue: reviewBacklogCount > 0 ? 'needs-review' : null,
     },
     {
       key: 'quality-backlog',
       primaryCount: qualityBacklogCount,
       secondaryCount: recommendedQueues.length,
-      tone: getMediaReviewTrendTone(qualityBacklogCount, 24),
+      tone: getMediaReviewTrendTone(qualityBacklogCount, MEDIA_REVIEW_QUALITY_BACKLOG_ATTENTION_THRESHOLD),
       queue: recommendedQualityQueue?.queue ?? null,
     },
     {
@@ -336,6 +351,51 @@ export function buildMediaReviewOperationalTrends({
       secondaryCount: selectedCleanupPreviewCount,
       tone: stagedCleanupReviewCount > 0 || selectedCleanupPreviewCount > 0 ? 'watch' : 'ready',
       queue: stagedCleanupReviewCount > 0 || selectedCleanupPreviewCount > 0 ? 'recoverable' : null,
+    },
+  ]
+}
+
+export function buildMediaReviewThresholdGuidance(trends: MediaReviewOperationalTrend[]): MediaReviewThresholdGuidance[] {
+  const trendByKey = new Map(trends.map((trend) => [trend.key, trend]))
+  const reviewQueueTrend = trendByKey.get('review-queue')
+  const qualityBacklogTrend = trendByKey.get('quality-backlog')
+  const similarityTrend = trendByKey.get('similarity-history')
+  const cleanupTrend = trendByKey.get('cleanup-staging')
+  const similarityReviewCount = similarityTrend?.secondaryCount ?? 0
+  const cleanupReviewCount = cleanupTrend?.primaryCount ?? 0
+
+  return [
+    {
+      key: 'review-queue-threshold',
+      currentCount: reviewQueueTrend?.primaryCount ?? 0,
+      thresholdCount: MEDIA_REVIEW_QUEUE_ATTENTION_THRESHOLD,
+      tone: reviewQueueTrend?.tone ?? 'ready',
+      queue: reviewQueueTrend?.queue ?? null,
+      approvalBoundary: 'operator-review',
+    },
+    {
+      key: 'quality-backlog-threshold',
+      currentCount: qualityBacklogTrend?.primaryCount ?? 0,
+      thresholdCount: MEDIA_REVIEW_QUALITY_BACKLOG_ATTENTION_THRESHOLD,
+      tone: qualityBacklogTrend?.tone ?? 'ready',
+      queue: qualityBacklogTrend?.queue ?? null,
+      approvalBoundary: 'operator-review',
+    },
+    {
+      key: 'similarity-review-threshold',
+      currentCount: similarityReviewCount,
+      thresholdCount: MEDIA_REVIEW_MANUAL_REVIEW_THRESHOLD,
+      tone: similarityReviewCount >= MEDIA_REVIEW_MANUAL_REVIEW_THRESHOLD ? 'watch' : 'ready',
+      queue: 'similar',
+      approvalBoundary: 'operator-review',
+    },
+    {
+      key: 'cleanup-approval-threshold',
+      currentCount: cleanupReviewCount,
+      thresholdCount: MEDIA_REVIEW_CLEANUP_APPROVAL_THRESHOLD,
+      tone: cleanupReviewCount >= MEDIA_REVIEW_CLEANUP_APPROVAL_THRESHOLD ? 'watch' : 'ready',
+      queue: cleanupTrend?.queue ?? null,
+      approvalBoundary: 'approval-required',
     },
   ]
 }
