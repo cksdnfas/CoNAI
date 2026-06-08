@@ -9,6 +9,7 @@ import {
   ImageDetailRoute,
   ImageGenerationRoute,
   ImageMetadataEditRoute,
+  MediaReviewRoute,
   LoginRoute,
   PublicComfyWorkflowRoute,
   WildcardRoute,
@@ -38,6 +39,10 @@ export const appRouter = createHashRouter([
       {
         index: true,
         element: <HomeRoute />,
+      },
+      {
+        path: 'review',
+        element: <RequireAuthPermission permissionKey="page.home.view"><MediaReviewRoute /></RequireAuthPermission>,
       },
       {
         path: 'groups',

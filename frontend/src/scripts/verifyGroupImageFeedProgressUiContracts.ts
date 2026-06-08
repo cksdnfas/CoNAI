@@ -1,4 +1,11 @@
 import { getGroupImageFeedProgressSummary } from '../features/groups/group-image-feed-progress'
+import {
+  buildMediaReviewSearchChips,
+  filterMediaReviewImages,
+  getMediaReviewSignals,
+  getMediaReviewSignalSummary,
+} from '../features/media-review/media-review-utils'
+import type { ImageRecord } from '../types/image'
 
 function assertEqual<T>(actual: T, expected: T, message: string) {
   if (actual !== expected) {
@@ -46,5 +53,60 @@ assertEmptySummary()
 assertPagedSummary()
 assertTotalNeverFallsBelowLoaded()
 assertCountNormalization()
+
+const mediaReviewImages: ImageRecord[] = [
+  {
+    id: 1,
+    composite_hash: 'hash-grouped-ready',
+    groups: [{ id: 1, name: 'group', collection_type: 'manual' }],
+    rating_score: 42,
+    auto_tags: {
+      general: { sky: 0.9, tree: 0.8, cloud: 0.7, river: 0.6, grass: 0.5, sunlight: 0.4 },
+      character: {},
+      rating: { general: 0.98 },
+    },
+  },
+  {
+    id: 2,
+    composite_hash: 'hash-ungrouped-missing',
+    groups: [],
+    rating_score: null,
+    auto_tags: null,
+  },
+  {
+    id: 3,
+    composite_hash: 'hash-ungrouped-sparse',
+    groups: [],
+    rating_score: null,
+    auto_tags: {
+      general: { face: 0.7, portrait: 0.65 },
+      character: {},
+      rating: { sensitive: 0.52 },
+    },
+  },
+]
+
+const similarHashSet = new Set(['hash-ungrouped-sparse'])
+const summary = getMediaReviewSignalSummary(mediaReviewImages, similarHashSet)
+
+assertEqual(summary.totalCount, 3, 'media review summary should count loaded review rows')
+assertEqual(summary.groupedCount, 1, 'media review should surface grouped rows')
+assertEqual(summary.ungroupedCount, 2, 'media review should surface ungrouped rows')
+assertEqual(summary.ratedCount, 2, 'media review should treat rating label or score as rated')
+assertEqual(summary.unratedCount, 1, 'media review should surface missing rating rows')
+assertEqual(summary.missingTagCount, 1, 'media review should surface missing auto-tag rows')
+assertEqual(summary.sparseTagCount, 1, 'media review should surface sparse tag-quality rows')
+assertEqual(summary.similarCount, 1, 'media review should surface selected-anchor similarity matches')
+
+assertEqual(getMediaReviewSignals(mediaReviewImages[0]).tagQuality, 'ready', 'six or more prompt tags should be review-ready')
+assertEqual(filterMediaReviewImages(mediaReviewImages, 'ungrouped').length, 2, 'ungrouped queue should not move or delete media')
+assertEqual(filterMediaReviewImages(mediaReviewImages, 'missing-tags').length, 1, 'missing-tags queue should isolate items without auto tags')
+assertEqual(filterMediaReviewImages(mediaReviewImages, 'sparse-tags').length, 1, 'sparse-tags queue should isolate weak tag coverage')
+assertEqual(filterMediaReviewImages(mediaReviewImages, 'unrated').length, 1, 'unrated queue should isolate items with no rating signal')
+assertEqual(filterMediaReviewImages(mediaReviewImages, 'similar', similarHashSet).length, 1, 'similar queue should use the selected-anchor hash set')
+
+const reviewSearchChips = buildMediaReviewSearchChips('comfy forest')
+assertEqual(reviewSearchChips.length, 3, 'media review search should combine prompt, auto-tag, and model search chips')
+assertEqual(reviewSearchChips.every((chip) => chip.operator === 'OR'), true, 'media review search chips should share OR semantics for one text query')
 
 console.log('Group image feed progress UI contracts verified.')
