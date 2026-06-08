@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import {
+  createGraphWorkflow,
   createGraphWorkflowFolder,
   deleteGraphWorkflow,
   deleteGraphWorkflowFolder,
@@ -25,6 +26,7 @@ export function useModuleGraphBrowseActions({
   folderDeleteTarget,
   workflowView,
   modules,
+  graphWorkflows,
   graphWorkflowFolders,
   setNodes,
   setEdges,
@@ -59,6 +61,7 @@ export function useModuleGraphBrowseActions({
   folderDeleteTarget: GraphWorkflowFolderRecord | null
   workflowView: 'browse' | 'edit'
   modules: ModuleDefinitionRecord[]
+  graphWorkflows: GraphWorkflowRecord[]
   graphWorkflowFolders: GraphWorkflowFolderRecord[]
   setNodes: Dispatch<SetStateAction<ModuleGraphNode[]>>
   setEdges: Dispatch<SetStateAction<ModuleGraphEdge[]>>
@@ -261,6 +264,41 @@ export function useModuleGraphBrowseActions({
     handleLoadGraph(selectedGraphRecord, { openEditor: true, silent: true })
   }, [handleLoadGraph, selectedGraphRecord, showSnackbar])
 
+  /** Duplicate the selected saved workflow while preserving its folder and graph document. */
+  const handleDuplicateSelectedWorkflow = useCallback(async () => {
+    if (!selectedGraphRecord) {
+      showSnackbar({ message: '먼저 워크플로우를 하나 선택해줘.', tone: 'error' })
+      return
+    }
+
+    const currentNames = new Set(graphWorkflows.map((workflow) => workflow.name))
+    const baseName = `${selectedGraphRecord.name} 복사본`
+    let nextName = baseName
+    let suffix = 2
+    while (currentNames.has(nextName)) {
+      nextName = `${baseName} ${suffix}`
+      suffix += 1
+    }
+
+    try {
+      const result = await createGraphWorkflow({
+        name: nextName,
+        description: selectedGraphRecord.description || undefined,
+        graph: JSON.parse(JSON.stringify(selectedGraphRecord.graph)) as GraphWorkflowRecord['graph'],
+        folder_id: selectedGraphRecord.folder_id ?? null,
+        version: selectedGraphRecord.version,
+        is_active: selectedGraphRecord.is_active,
+      })
+      await refetchGraphWorkflows()
+      setSelectedGraphId(result.id)
+      setSelectedExecutionId(null)
+      setWorkflowView('browse')
+      showSnackbar({ message: '워크플로우를 복제했어.', tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '워크플로우 복제에 실패했어.', tone: 'error' })
+    }
+  }, [graphWorkflows, refetchGraphWorkflows, selectedGraphRecord, setSelectedExecutionId, setSelectedGraphId, setWorkflowView, showSnackbar])
+
   /** Delete the selected workflow after confirmation and reset browse/editor state. */
   const handleDeleteSelectedWorkflow = useCallback(async () => {
     if (!selectedGraphRecord) {
@@ -335,6 +373,7 @@ export function useModuleGraphBrowseActions({
     handleConfirmDeleteFolder,
     handleAssignSelectedWorkflowFolder,
     handleEditSelectedWorkflow,
+    handleDuplicateSelectedWorkflow,
     handleDeleteSelectedWorkflow,
     handleLeaveWorkflowEditor,
     handleRefreshWorkspace,

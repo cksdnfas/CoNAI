@@ -16,6 +16,7 @@ export function useModuleGraphPageActions({
   nodes,
   edges,
   modules,
+  graphWorkflows,
   graphWorkflowFolders,
   selectedFolderId,
   selectedFolderRecord,
@@ -69,6 +70,7 @@ export function useModuleGraphPageActions({
   nodes: ModuleGraphNode[]
   edges: ModuleGraphEdge[]
   modules: ModuleDefinitionRecord[]
+  graphWorkflows: GraphWorkflowRecord[]
   graphWorkflowFolders: GraphWorkflowFolderRecord[]
   selectedFolderId: number | null
   selectedFolderRecord: GraphWorkflowFolderRecord | null
@@ -186,6 +188,7 @@ export function useModuleGraphPageActions({
     handleConfirmDeleteFolder,
     handleAssignSelectedWorkflowFolder,
     handleEditSelectedWorkflow,
+    handleDuplicateSelectedWorkflow,
     handleDeleteSelectedWorkflow,
     handleLeaveWorkflowEditor,
     handleRefreshWorkspace: handleRefreshBrowseWorkspace,
@@ -197,6 +200,7 @@ export function useModuleGraphPageActions({
     folderDeleteTarget,
     workflowView,
     modules,
+    graphWorkflows,
     graphWorkflowFolders,
     setNodes,
     setEdges,
@@ -301,6 +305,7 @@ export function useModuleGraphPageActions({
     handleConfirmDeleteFolder,
     handleAssignSelectedWorkflowFolder,
     handleEditSelectedWorkflow,
+    handleDuplicateSelectedWorkflow,
     handleDeleteSelectedWorkflow,
     handleLeaveWorkflowEditor,
     handleRefreshWorkspace,

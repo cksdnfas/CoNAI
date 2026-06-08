@@ -187,6 +187,7 @@ export interface CreateComfyUIServerPayload {
   capacity?: number
   description?: string
   routing_tags?: string[]
+  is_active?: boolean
   is_default?: boolean
 }
 

@@ -52,6 +52,7 @@ const GRAPH_COMFY_TARGET_TAG_KEY = 'execution_target_tag'
 const GRAPH_COMFY_TARGET_SERVER_ID_KEY = 'execution_target_server_id'
 
 type LlmPresetCollectionKey = keyof LlmPresetOptionCollections
+type ComfyWorkflowServerCandidate = ComfyUIServer & { is_enabled?: boolean | number }
 
 function getLlmPresetTypeOptions(t: ReturnType<typeof useI18n>['t']): Array<{ value: LlmPresetCollectionKey; label: string }> {
   return [
@@ -96,6 +97,10 @@ function resolveComfyTargetBadgeLabel(t: ReturnType<typeof useI18n>['t'], inputV
   }
 
   return t({ ko: '자동 분산', en: 'Auto routing' })
+}
+
+function isActiveComfyWorkflowServerCandidate(server: ComfyWorkflowServerCandidate) {
+  return server.is_active !== false && server.is_enabled !== false && server.is_enabled !== 0
 }
 
 function getSelectOptionValue(option: ModuleGraphSelectOption) {
@@ -341,8 +346,10 @@ export function ModuleGraphNodeCard({ id, data, selected }: NodeProps<ModuleGrap
     enabled: canConfigureComfyTarget,
     staleTime: 30_000,
   })
-  const linkedComfyServers = workflowServersQuery.data ?? []
-  const candidateComfyServers: ComfyUIServer[] = linkedComfyServers.length > 0 ? linkedComfyServers : (comfyServersQuery.data ?? [])
+  const linkedComfyServers = (workflowServersQuery.data ?? []) as ComfyWorkflowServerCandidate[]
+  const activeLinkedComfyServers = linkedComfyServers.filter(isActiveComfyWorkflowServerCandidate)
+  const activeGlobalComfyServers = ((comfyServersQuery.data ?? []) as ComfyWorkflowServerCandidate[]).filter(isActiveComfyWorkflowServerCandidate)
+  const candidateComfyServers: ComfyUIServer[] = linkedComfyServers.length > 0 ? activeLinkedComfyServers : activeGlobalComfyServers
   const comfyRoutingTags = Array.from(new Set(candidateComfyServers.flatMap((server) => server.routing_tags ?? []))).sort((left, right) => left.localeCompare(right))
   const knownComfyTargetValues = new Set<string>([
     'auto',

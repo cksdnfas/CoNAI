@@ -105,8 +105,8 @@ export function ComfyGenerationPanel({
   })
 
   const serversQuery = useQuery({
-    queryKey: ['image-generation-comfyui-servers'],
-    queryFn: () => getGenerationComfyUIServers(true),
+    queryKey: ['image-generation-comfyui-servers', 'all'],
+    queryFn: () => getGenerationComfyUIServers(false),
   })
 
   const dropdownListsQuery = useQuery({
@@ -175,7 +175,8 @@ export function ComfyGenerationPanel({
   const selectedWorkflowFields = useMemo(() => resolveWorkflowFields(selectedWorkflow), [resolveWorkflowFields, selectedWorkflow])
   const moduleSaveWorkflowFields = useMemo(() => resolveWorkflowFields(moduleSaveWorkflow), [resolveWorkflowFields, moduleSaveWorkflow])
 
-  const activeServers = useMemo(() => serversQuery.data ?? [], [serversQuery.data])
+  const servers = useMemo(() => serversQuery.data ?? [], [serversQuery.data])
+  const activeServers = useMemo(() => servers.filter((server) => server.is_active !== false), [servers])
   const {
     isComfyServerSubmitting,
     comfyServerForm,
@@ -192,7 +193,9 @@ export function ComfyGenerationPanel({
     handleSubmitComfyServer,
     handleEditServer,
     handleDeleteServer,
+    handleToggleComfyServerActive,
   } = useComfyServerController({
+    servers,
     activeServers,
     refetchServers: serversQuery.refetch,
     showSnackbar,
@@ -578,12 +581,14 @@ export function ComfyGenerationPanel({
             />
 
             <ComfyServerListSection
-              servers={activeServers}
+              servers={servers}
+              activeServerCount={activeServers.length}
               serverTests={comfyServerTests}
               onOpenCreateServer={handleOpenCreateServer}
               onEditServer={handleEditServer}
               onDeleteServer={(serverId) => void handleDeleteServer(serverId)}
               onTestServer={(serverId) => void handleTestComfyServer(serverId)}
+              onToggleServerActive={(serverId, isActive) => void handleToggleComfyServerActive(serverId, isActive)}
             />
           </div>
         ) : selectedWorkflow ? (

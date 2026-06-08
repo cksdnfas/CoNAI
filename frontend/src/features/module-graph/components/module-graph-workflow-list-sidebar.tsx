@@ -1,4 +1,4 @@
-import { ArrowLeft, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, Copy, FolderPlus, PenSquare, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
@@ -21,6 +21,7 @@ export function ModuleGraphWorkflowListSidebar({
   onRefreshWorkspace,
   onOpenBrowseManage,
   onCreateWorkflow,
+  onDuplicateWorkflow,
   onEditWorkflow,
   onDeleteWorkflow,
   onDeleteFolder,
@@ -40,6 +41,7 @@ export function ModuleGraphWorkflowListSidebar({
   onRefreshWorkspace: () => void
   onOpenBrowseManage: () => void
   onCreateWorkflow: () => void
+  onDuplicateWorkflow: () => void
   onEditWorkflow: () => void
   onDeleteWorkflow: () => void
   onDeleteFolder: (folderId: number) => void
@@ -107,6 +109,19 @@ export function ModuleGraphWorkflowListSidebar({
           >
             <Plus className="h-4 w-4" />
           </Button>
+          {workflowView === 'browse' && selectedGraphRecord ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              className="bg-surface-low"
+              onClick={onDuplicateWorkflow}
+              aria-label={t({ ko: '워크플로우 복제', en: 'Duplicate workflow' })}
+              title={t({ ko: '워크플로우 복제', en: 'Duplicate workflow' })}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          ) : null}
           {workflowView === 'browse' && selectedGraphRecord ? (
             <Button
               type="button"

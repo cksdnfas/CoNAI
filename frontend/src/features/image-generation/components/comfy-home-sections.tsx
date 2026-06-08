@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { SettingsModal } from '@/features/settings/components/settings-modal'
-import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsSection } from '@/features/settings/components/settings-primitives'
+import { SettingsField, SettingsModalBody, SettingsModalFooter, SettingsSection, SettingsToggleRow } from '@/features/settings/components/settings-primitives'
 import { useI18n } from '@/i18n'
 import { DEFAULT_COMFY_MODEL_API_PATHS } from '@/lib/api-image-generation-workflows'
 import type { ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api-image-generation-types'
@@ -147,15 +147,18 @@ export function ComfyWorkflowListSection({
 
 type ServerListSectionProps = {
   servers: ComfyUIServer[]
+  activeServerCount: number
   serverTests: Record<number, ComfyUIServerTestState>
   onOpenCreateServer: () => void
   onEditServer: (serverId: number) => void
   onDeleteServer: (serverId: number) => void
   onTestServer: (serverId: number) => void
+  onToggleServerActive: (serverId: number, isActive: boolean) => void
 }
 
-export function ComfyServerListSection({ servers, serverTests, onOpenCreateServer, onEditServer, onDeleteServer, onTestServer }: ServerListSectionProps) {
+export function ComfyServerListSection({ servers, activeServerCount, serverTests, onOpenCreateServer, onEditServer, onDeleteServer, onTestServer, onToggleServerActive }: ServerListSectionProps) {
   const { t, formatNumber } = useI18n()
+  const inactiveServerCount = Math.max(0, servers.length - activeServerCount)
 
   return (
     <SettingsSection
@@ -167,7 +170,9 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
       )}
       actions={(
         <>
-          <Badge variant="outline">{servers.length}</Badge>
+          <Badge variant="outline">{t({ ko: '전체 {count}', en: '{count} total' }, { count: formatNumber(servers.length) })}</Badge>
+          <Badge variant="secondary">{t({ ko: '활성 {count}', en: '{count} active' }, { count: formatNumber(activeServerCount) })}</Badge>
+          {inactiveServerCount > 0 ? <Badge variant="outline">{t({ ko: '비활성 {count}', en: '{count} inactive' }, { count: formatNumber(inactiveServerCount) })}</Badge> : null}
           <Button type="button" size="sm" variant="outline" onClick={onOpenCreateServer}>
             <Plus className="h-4 w-4" />
             {t({ ko: '서버 등록', en: 'Add server' })}
@@ -181,6 +186,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
             const testState = serverTests[server.id]
             const connectionStatus = testState?.status
             const isModalServer = server.backend_type === 'modal' || connectionStatus?.backend_type === 'modal'
+            const isActive = server.is_active !== false
 
             return (
               <div key={server.id} className="rounded-sm border border-border bg-surface-low px-3 py-3 text-sm text-muted-foreground">
@@ -188,6 +194,7 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium text-foreground">{server.name}</span>
+                      <Badge variant={isActive ? 'secondary' : 'outline'}>{isActive ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
                       {!isModalServer && server.is_default ? <Badge variant="secondary">{t({ ko: '대표', en: 'Default' })}</Badge> : null}
                       {isModalServer ? <Badge variant="outline">Modal</Badge> : null}
                       {isModalServer ? (
@@ -223,6 +230,14 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                   </div>
 
                   <div className="flex shrink-0 flex-col items-end gap-2">
+                    <SettingsToggleRow className="min-w-[8rem] px-2 py-1 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={isActive}
+                        onChange={(event) => onToggleServerActive(server.id, event.target.checked)}
+                      />
+                      <span className="flex-1">{t({ ko: '활성', en: 'Active' })}</span>
+                    </SettingsToggleRow>
                     <Button
                       type="button"
                       size="sm"

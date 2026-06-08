@@ -224,6 +224,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     handleConfirmDeleteFolder,
     handleAssignSelectedWorkflowFolder,
     handleEditSelectedWorkflow,
+    handleDuplicateSelectedWorkflow,
     handleDeleteSelectedWorkflow,
     handleLeaveWorkflowEditor,
     handleRefreshWorkspace,
@@ -244,6 +245,7 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
     nodes,
     edges,
     modules,
+    graphWorkflows: graphWorkflowsQuery.data ?? [],
     graphWorkflowFolders: graphWorkflowFoldersQuery.data ?? [],
     selectedFolderId,
     selectedFolderRecord,
@@ -327,6 +329,9 @@ function ModuleWorkflowWorkspaceInner({ embedded = false }: ModuleWorkflowWorksp
       }}
       onOpenBrowseManage={() => setIsBrowseManageModalOpen(true)}
       onCreateWorkflow={handleCreateWorkflow}
+      onDuplicateWorkflow={() => {
+        void handleDuplicateSelectedWorkflow()
+      }}
       onEditWorkflow={handleEditSelectedWorkflow}
       onDeleteWorkflow={() => {
         void handleDeleteSelectedWorkflow()

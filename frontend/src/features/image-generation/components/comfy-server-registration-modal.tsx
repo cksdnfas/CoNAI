@@ -68,6 +68,16 @@ export function ComfyServerRegistrationModal({
           <Input variant="settings" value={form.routingTags} onChange={(event) => onFieldChange('routingTags', event.target.value)} placeholder="gpu4090, high-vram, fast-lane" />
         </SettingsField>
 
+        <SettingsToggleRow>
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={(event) => onFieldChange('isActive', event.target.checked)}
+          />
+          <span className="flex-1">{t({ ko: '활성 서버', en: 'Active server' })}</span>
+          <span className="text-[11px] text-muted-foreground">{t({ ko: '생성 후보 포함', en: 'Include in routing' })}</span>
+        </SettingsToggleRow>
+
         {canSelectRepresentative ? (
           <SettingsToggleRow>
             <input

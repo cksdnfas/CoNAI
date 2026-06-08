@@ -109,6 +109,7 @@ export type ComfyUIServerFormDraft = {
   capacity: string
   description: string
   routingTags: string
+  isActive: boolean
   isDefault: boolean
 }
 
@@ -230,6 +231,7 @@ export const DEFAULT_COMFYUI_SERVER_FORM: ComfyUIServerFormDraft = {
   capacity: '1',
   description: '',
   routingTags: '',
+  isActive: true,
   isDefault: false,
 }
 
