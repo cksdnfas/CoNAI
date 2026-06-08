@@ -38,6 +38,10 @@ export interface AutoTabProps {
   isSavingKaloscope: boolean
   isSavingRatingWeights: boolean
   isSavingRatingTiers: boolean
+  hasTaggerChanges: boolean
+  hasKaloscopeChanges: boolean
+  hasRatingWeightsChanges: boolean
+  hasRatingTiersChanges: boolean
   isCheckingTaggerDependencies: boolean
   autoTestHashInput: string
   onAutoTestHashInputChange: (value: string) => void

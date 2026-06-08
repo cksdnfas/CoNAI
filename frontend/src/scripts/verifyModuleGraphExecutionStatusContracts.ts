@@ -36,6 +36,7 @@ function extractFunction(sourceText: string, functionName: string) {
 function assertExecutionStatusLookupPolicy() {
   const sharedSource = source('features/module-graph/module-graph-shared.tsx')
   const syncSource = source('features/module-graph/use-module-graph-workspace-sync.ts')
+  const workflowRunnerSource = source('features/module-graph/components/workflow-runner-panel.tsx')
   const statusSource = extractFunction(sharedSource, 'getNodeExecutionStatus')
   const buildFlowFromGraphRecordSource = extractFunction(sharedSource, 'buildFlowFromGraphRecord')
 
@@ -82,6 +83,18 @@ function assertExecutionStatusLookupPolicy() {
   assert(
     !buildFlowFromGraphRecordSource.includes('nodes.find((node) => node.id === edge.'),
     'saved workflow loading must not scan graph nodes for every edge',
+  )
+  assert(
+    workflowRunnerSource.includes('const runReadinessMessage = !selectedGraph'),
+    'workflow runner should compute one actionable run-readiness message before execution',
+  )
+  assert(
+    workflowRunnerSource.includes('const firstBlockingIssue = validationIssues.find((issue) => issue.severity === \'error\') ?? null'),
+    'workflow runner should surface the first blocking validation issue near the run action',
+  )
+  assert(
+    workflowRunnerSource.includes('Action needed before running'),
+    'workflow runner should render an explicit action-needed state when validation blocks execution',
   )
 }
 

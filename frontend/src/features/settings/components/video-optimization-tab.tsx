@@ -18,6 +18,7 @@ interface VideoOptimizationTabProps {
   onPatchVideoOptimization: (patch: Partial<VideoOptimizationSettings>) => void
   onSave: () => void
   isSaving: boolean
+  hasChanges: boolean
 }
 
 /** Render H.264 MP4 optimization defaults for upload, generated-output, and backup video flows. */
@@ -26,6 +27,7 @@ export function VideoOptimizationTab({
   onPatchVideoOptimization,
   onSave,
   isSaving,
+  hasChanges,
 }: VideoOptimizationTabProps) {
   const { t } = useI18n()
 
@@ -38,9 +40,9 @@ export function VideoOptimizationTab({
             <Button
               size="icon-sm"
               onClick={onSave}
-              disabled={!videoOptimizationDraft || isSaving}
-              aria-label={t({ ko: '비디오 최적화 설정 저장', en: 'Save video optimization settings' })}
-              title={t({ ko: '비디오 최적화 설정 저장', en: 'Save video optimization settings' })}
+              disabled={!videoOptimizationDraft || isSaving || !hasChanges}
+              aria-label={hasChanges ? t({ ko: '비디오 최적화 설정 저장', en: 'Save video optimization settings' }) : t({ ko: '비디오 최적화 설정 변경 없음', en: 'No video optimization settings changes' })}
+              title={hasChanges ? t({ ko: '비디오 최적화 설정 저장', en: 'Save video optimization settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>

@@ -80,6 +80,10 @@ const LlmConnectionsTabLazy = lazy(async () => {
 
 type AppSettingsRecord = Awaited<ReturnType<typeof getAppSettings>>
 
+function areSettingsDraftsEqual(left: unknown, right: unknown) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
 function SettingsSectionFallback() {
   return <div className="min-h-[16rem] rounded-sm border border-border/80 bg-surface-low/50 animate-pulse" />
 }
@@ -132,12 +136,19 @@ export function SettingsPage() {
 
   const { tabProps: foldersTabProps } = useFolderSettingsTab({ notifyInfo, notifyError })
 
+  const effectiveGeneralDraft = generalDraft ?? settingsQuery.data?.general ?? null
   const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
   const effectiveImageSaveDraft = imageSaveDraft ?? settingsQuery.data?.imageSave ?? null
   const effectiveThumbnailDraft = thumbnailDraft ?? settingsQuery.data?.thumbnail ?? null
   const effectiveGenerationThrottleDraft = generationThrottleDraft ?? settingsQuery.data?.generationThrottle ?? null
   const effectiveVideoOptimizationDraft = videoOptimizationDraft ?? settingsQuery.data?.videoOptimization ?? null
   const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
+  const isGeneralDraftDirty = Boolean(effectiveGeneralDraft && settingsQuery.data?.general && !areSettingsDraftsEqual(effectiveGeneralDraft, settingsQuery.data.general))
+  const isMetadataDraftDirty = Boolean(effectiveMetadataDraft && settingsQuery.data?.metadataExtraction && !areSettingsDraftsEqual(effectiveMetadataDraft, settingsQuery.data.metadataExtraction))
+  const isImageSaveDraftDirty = Boolean(effectiveImageSaveDraft && settingsQuery.data?.imageSave && !areSettingsDraftsEqual(effectiveImageSaveDraft, settingsQuery.data.imageSave))
+  const isThumbnailDraftDirty = Boolean(effectiveThumbnailDraft && settingsQuery.data?.thumbnail && !areSettingsDraftsEqual(effectiveThumbnailDraft, settingsQuery.data.thumbnail))
+  const isGenerationThrottleDraftDirty = Boolean(effectiveGenerationThrottleDraft && settingsQuery.data?.generationThrottle && !areSettingsDraftsEqual(effectiveGenerationThrottleDraft, settingsQuery.data.generationThrottle))
+  const isVideoOptimizationDraftDirty = Boolean(effectiveVideoOptimizationDraft && settingsQuery.data?.videoOptimization && !areSettingsDraftsEqual(effectiveVideoOptimizationDraft, settingsQuery.data.videoOptimization))
 
   const { tabProps: appearanceTabProps } = useAppearanceSettingsTab({
     isActive: activeTab === 'appearance',
@@ -254,8 +265,6 @@ export function SettingsPage() {
     return <Navigate to="/" replace />
   }
 
-  const effectiveGeneralDraft = generalDraft ?? settingsQuery.data?.general ?? null
-
   const patchGeneralDraft = (patch: Partial<GeneralSettings>) => {
     if (!effectiveGeneralDraft) return
     setGeneralDraft({ ...effectiveGeneralDraft, ...patch })
@@ -337,6 +346,7 @@ export function SettingsPage() {
                 onPatchDeleteProtection={patchDeleteProtectionDraft}
                 onSave={() => effectiveGeneralDraft && void generalMutation.mutateAsync(effectiveGeneralDraft)}
                 isSaving={generalMutation.isPending}
+                hasChanges={isGeneralDraftDirty}
               />
             ) : null}
 
@@ -358,6 +368,7 @@ export function SettingsPage() {
                 onPatchMetadata={patchMetadataDraft}
                 onSave={() => effectiveMetadataDraft && void metadataMutation.mutateAsync(effectiveMetadataDraft)}
                 isSaving={metadataMutation.isPending}
+                hasChanges={isMetadataDraftDirty}
                 onReextractAll={() => void metadataReextractMutation.mutateAsync()}
                 isReextracting={metadataReextractMutation.isPending}
               />
@@ -369,18 +380,22 @@ export function SettingsPage() {
                 onPatchImageSave={patchImageSaveDraft}
                 onSave={() => effectiveImageSaveDraft && void imageSaveMutation.mutateAsync(effectiveImageSaveDraft)}
                 isSaving={imageSaveMutation.isPending}
+                hasImageSaveChanges={isImageSaveDraftDirty}
                 thumbnailDraft={effectiveThumbnailDraft}
                 onPatchThumbnail={patchThumbnailDraft}
                 onSaveThumbnail={() => effectiveThumbnailDraft && void thumbnailMutation.mutateAsync(effectiveThumbnailDraft)}
                 isSavingThumbnail={thumbnailMutation.isPending}
+                hasThumbnailChanges={isThumbnailDraftDirty}
                 generationThrottleDraft={effectiveGenerationThrottleDraft}
                 onPatchGenerationThrottle={patchGenerationThrottleDraft}
                 onSaveGenerationThrottle={() => effectiveGenerationThrottleDraft && void generationThrottleMutation.mutateAsync(effectiveGenerationThrottleDraft)}
                 isSavingGenerationThrottle={generationThrottleMutation.isPending}
+                hasGenerationThrottleChanges={isGenerationThrottleDraftDirty}
                 videoOptimizationDraft={effectiveVideoOptimizationDraft}
                 onPatchVideoOptimization={patchVideoOptimizationDraft}
                 onSaveVideoOptimization={() => effectiveVideoOptimizationDraft && void videoOptimizationMutation.mutateAsync(effectiveVideoOptimizationDraft)}
                 isSavingVideoOptimization={videoOptimizationMutation.isPending}
+                hasVideoOptimizationChanges={isVideoOptimizationDraftDirty}
               />
             ) : null}
 

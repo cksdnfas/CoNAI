@@ -137,6 +137,20 @@ export function WorkflowRunnerPanel({
     : null
   const latestExecutionDetailLoadMessage = latestExecutionDetailError
     ?? (latestExecutionDetailIsLoading ? t({ ko: '최종 결과를 불러오는 중...', en: 'Loading final results...' }) : t({ ko: '최종 결과 정보를 불러오지 못했어.', en: 'Could not load final result details.' }))
+  const blockingIssueCount = validationIssues.filter((issue) => issue.severity === 'error').length
+  const warningIssueCount = validationIssues.filter((issue) => issue.severity === 'warning').length
+  const firstBlockingIssue = validationIssues.find((issue) => issue.severity === 'error') ?? null
+  const runReadinessMessage = !selectedGraph
+    ? t({ ko: '워크플로우를 먼저 선택해야 해.', en: 'Select a workflow first.' })
+    : isExecuting
+      ? t({ ko: '실행 요청을 보내는 중이야.', en: 'A run request is being sent.' })
+      : !canExecute
+        ? firstBlockingIssue
+          ? t({ ko: '{title}부터 정리하면 실행할 수 있어.', en: 'Resolve {title} first, then run.' }, { title: firstBlockingIssue.title })
+          : t({ ko: '치명 검증 이슈를 먼저 정리해야 해.', en: 'Resolve the critical validation issues first.' })
+        : warningIssueCount > 0
+          ? t({ ko: '실행은 가능하지만 경고 {count}개를 먼저 훑어봐.', en: 'The workflow can run, but review {count} warnings first.' }, { count: formatNumber(warningIssueCount) })
+          : t({ ko: '필수 실행 조건이 충족됐어.', en: 'Required run conditions are satisfied.' })
 
   return (
     <Card>
@@ -278,6 +292,17 @@ export function WorkflowRunnerPanel({
               onInputValueClear={onInputValueClear}
               onInputImageChange={onInputImageChange}
             />
+
+            <Alert variant={!canExecute ? 'destructive' : 'default'}>
+              <AlertTitle className="flex flex-wrap items-center gap-1.5">
+                <span>{canExecute ? t({ ko: '실행 준비', en: 'Run readiness' }) : t({ ko: '실행 전 조치 필요', en: 'Action needed before running' })}</span>
+                {blockingIssueCount > 0 ? <Badge variant="outline">{t({ ko: '치명 {count}', en: 'Critical {count}' }, { count: formatNumber(blockingIssueCount) })}</Badge> : null}
+                {warningIssueCount > 0 ? <Badge variant="outline">{t({ ko: '경고 {count}', en: 'Warnings {count}' }, { count: formatNumber(warningIssueCount) })}</Badge> : null}
+              </AlertTitle>
+              <AlertDescription className="pt-2 text-sm text-muted-foreground">
+                {runReadinessMessage}
+              </AlertDescription>
+            </Alert>
 
             <div className="flex flex-wrap gap-2 pt-1">
               <Button type="button" onClick={onExecute} disabled={isExecuting || !canExecute}>

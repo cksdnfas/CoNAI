@@ -18,6 +18,7 @@ interface GeneralTabProps {
   onPatchDeleteProtection: (patch: Partial<GeneralSettings['deleteProtection']>) => void
   onSave: () => void
   isSaving: boolean
+  hasChanges: boolean
 }
 
 const DEFAULT_DATA_REMATCH_OPTIONS: DataRematchOptions = {
@@ -62,7 +63,7 @@ function getPhaseLabel(status: DataRematchJobSnapshot | undefined, locale: 'ko' 
 }
 
 /** Render app-wide defaults that should be easy to find from the first settings tab. */
-export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtection, onSave, isSaving }: GeneralTabProps) {
+export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtection, onSave, isSaving, hasChanges }: GeneralTabProps) {
   const { t, language } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -149,9 +150,9 @@ export function GeneralTab({ generalDraft, onPatchGeneral, onPatchDeleteProtecti
             <Button
               size="icon-sm"
               onClick={onSave}
-              disabled={!generalDraft || isSaving}
-              aria-label={t({ ko: '일반 설정 저장', en: 'Save general settings' })}
-              title={t({ ko: '일반 설정 저장', en: 'Save general settings' })}
+              disabled={!generalDraft || isSaving || !hasChanges}
+              aria-label={hasChanges ? t({ ko: '일반 설정 저장', en: 'Save general settings' }) : t({ ko: '일반 설정 변경 없음', en: 'No general settings changes' })}
+              title={hasChanges ? t({ ko: '일반 설정 저장', en: 'Save general settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>

@@ -43,18 +43,22 @@ interface ImageSaveTabProps {
   onPatchImageSave: (patch: Partial<ImageSaveSettings>) => void
   onSave: () => void
   isSaving: boolean
+  hasImageSaveChanges: boolean
   thumbnailDraft: ThumbnailSettings | null
   onPatchThumbnail: (patch: Partial<ThumbnailSettings>) => void
   onSaveThumbnail: () => void
   isSavingThumbnail: boolean
+  hasThumbnailChanges: boolean
   generationThrottleDraft: GenerationThrottleSettings | null
   onPatchGenerationThrottle: (patch: GenerationThrottleDraftPatch) => void
   onSaveGenerationThrottle: () => void
   isSavingGenerationThrottle: boolean
+  hasGenerationThrottleChanges: boolean
   videoOptimizationDraft: VideoOptimizationSettings | null
   onPatchVideoOptimization: (patch: Partial<VideoOptimizationSettings>) => void
   onSaveVideoOptimization: () => void
   isSavingVideoOptimization: boolean
+  hasVideoOptimizationChanges: boolean
 }
 
 /** Render media save defaults used by save dialogs and attachment flows. */
@@ -63,18 +67,22 @@ export function ImageSaveTab({
   onPatchImageSave,
   onSave,
   isSaving,
+  hasImageSaveChanges,
   thumbnailDraft,
   onPatchThumbnail,
   onSaveThumbnail,
   isSavingThumbnail,
+  hasThumbnailChanges,
   generationThrottleDraft,
   onPatchGenerationThrottle,
   onSaveGenerationThrottle,
   isSavingGenerationThrottle,
+  hasGenerationThrottleChanges,
   videoOptimizationDraft,
   onPatchVideoOptimization,
   onSaveVideoOptimization,
   isSavingVideoOptimization,
+  hasVideoOptimizationChanges,
 }: ImageSaveTabProps) {
   const { t } = useI18n()
 
@@ -87,9 +95,9 @@ export function ImageSaveTab({
             <Button
               size="icon-sm"
               onClick={onSaveGenerationThrottle}
-              disabled={!generationThrottleDraft || isSavingGenerationThrottle}
-              aria-label={t({ ko: '생성 텀 설정 저장', en: 'Save generation throttle settings' })}
-              title={t({ ko: '생성 텀 설정 저장', en: 'Save generation throttle settings' })}
+              disabled={!generationThrottleDraft || isSavingGenerationThrottle || !hasGenerationThrottleChanges}
+              aria-label={hasGenerationThrottleChanges ? t({ ko: '생성 텀 설정 저장', en: 'Save generation throttle settings' }) : t({ ko: '생성 텀 설정 변경 없음', en: 'No generation throttle changes' })}
+              title={hasGenerationThrottleChanges ? t({ ko: '생성 텀 설정 저장', en: 'Save generation throttle settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -203,9 +211,9 @@ export function ImageSaveTab({
             <Button
               size="icon-sm"
               onClick={onSave}
-              disabled={!imageSaveDraft || isSaving}
-              aria-label={t({ ko: '이미지 저장 설정 저장', en: 'Save image saving settings' })}
-              title={t({ ko: '이미지 저장 설정 저장', en: 'Save image saving settings' })}
+              disabled={!imageSaveDraft || isSaving || !hasImageSaveChanges}
+              aria-label={hasImageSaveChanges ? t({ ko: '이미지 저장 설정 저장', en: 'Save image saving settings' }) : t({ ko: '이미지 저장 설정 변경 없음', en: 'No image saving settings changes' })}
+              title={hasImageSaveChanges ? t({ ko: '이미지 저장 설정 저장', en: 'Save image saving settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -355,9 +363,9 @@ export function ImageSaveTab({
             <Button
               size="icon-sm"
               onClick={onSaveThumbnail}
-              disabled={!thumbnailDraft || isSavingThumbnail}
-              aria-label={t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' })}
-              title={t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' })}
+              disabled={!thumbnailDraft || isSavingThumbnail || !hasThumbnailChanges}
+              aria-label={hasThumbnailChanges ? t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' }) : t({ ko: '썸네일 설정 변경 없음', en: 'No thumbnail settings changes' })}
+              title={hasThumbnailChanges ? t({ ko: '썸네일 설정 저장', en: 'Save thumbnail settings' }) : t({ ko: '저장할 변경 없음', en: 'No changes to save' })}
             >
               <Save className="h-4 w-4" />
             </Button>
@@ -405,6 +413,7 @@ export function ImageSaveTab({
         onPatchVideoOptimization={onPatchVideoOptimization}
         onSave={onSaveVideoOptimization}
         isSaving={isSavingVideoOptimization}
+        hasChanges={hasVideoOptimizationChanges}
       />
     </div>
   )

@@ -60,5 +60,9 @@ assertIncludes(appShell, 'headerNavigation.search !== false', 'app shell search 
 assertIncludes(appShell, 'headerNavigation.account !== false', 'app shell account visibility gate');
 assertIncludes(generalTab, 'HEADER_NAVIGATION_OPTIONS.map', 'general tab checklist rendering');
 assertIncludes(settingsPage, "['public-header-navigation-settings']", 'settings page public nav cache sync');
+assertIncludes(settingsPage, 'isGeneralDraftDirty', 'settings page general draft dirty check');
+assertIncludes(settingsPage, 'hasImageSaveChanges={isImageSaveDraftDirty}', 'settings page image-save draft dirty check');
+assertIncludes(settingsPage, 'hasGenerationThrottleChanges={isGenerationThrottleDraftDirty}', 'settings page generation throttle draft dirty check');
+assertIncludes(generalTab, 'disabled={!generalDraft || isSaving || !hasChanges}', 'general tab save only enables for draft changes');
 
 console.log('Header navigation settings contracts verified.');

@@ -22,6 +22,10 @@ const comfyGenerationPanelSource = readFileSync(
   resolve(process.cwd(), 'src/features/image-generation/components/comfy-generation-panel.tsx'),
   'utf8',
 )
+const comfyWorkflowControllerPanelSource = readFileSync(
+  resolve(process.cwd(), 'src/features/image-generation/components/comfy-workflow-controller-panel.tsx'),
+  'utf8',
+)
 
 match(
   markedFieldsEditorSource,
@@ -122,6 +126,26 @@ doesNotMatch(
   comfyGenerationPanelSource,
   /dropdownListsQuery\.data\?\.find\(\(item\) => item\.id === listId\)/,
   'Dropdown list deletion must not rescan dropdown lists for every delete action',
+)
+match(
+  comfyWorkflowControllerPanelSource,
+  /const missingRequiredFields = useMemo\(/,
+  'Comfy workflow controller should derive missing required fields before queueing',
+)
+match(
+  comfyWorkflowControllerPanelSource,
+  /hasWorkflowFieldValue\(workflowDraft\[field\.id\]\)/,
+  'Comfy workflow controller should reuse the shared workflow-field value helper for readiness',
+)
+match(
+  comfyWorkflowControllerPanelSource,
+  /const readinessIssues = useMemo\(\(\) => \{/,
+  'Comfy workflow controller should render actionable readiness issues for inputs and routing',
+)
+match(
+  comfyWorkflowControllerPanelSource,
+  /routingCanGenerate && missingRequiredFields\.length === 0 && queueRegistrationCountValid/,
+  'Comfy workflow controller should gate queueing on routing, required fields, and queue count',
 )
 
 console.log('Comfy workflow authoring contracts verified.')
