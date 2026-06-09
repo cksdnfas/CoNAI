@@ -21,6 +21,7 @@ import {
   type ReleaseReadinessEvidenceItemContract,
   type ReleaseReadinessHandoffItemContract,
   type ReleaseReadinessHistoryRecord,
+  type ReleaseReadinessOperationStepContract,
   type ReleaseReadinessRunbookGuardrailContract,
   type ReleaseReadinessUserDecisionContract,
 } from '../release-readiness-history'
@@ -29,6 +30,7 @@ type ReadinessItem = ReleaseReadinessChecklistItemContract
 type EvidenceItem = ReleaseReadinessEvidenceItemContract
 type HandoffEvidenceItem = ReleaseReadinessHandoffItemContract
 type RunbookGuardrail = ReleaseReadinessRunbookGuardrailContract
+type OperationStep = ReleaseReadinessOperationStepContract
 type UserDecisionItem = ReleaseReadinessUserDecisionContract
 
 type IntegratedOperationsLane = {
@@ -319,6 +321,63 @@ const RUNBOOK_GUARDRAILS: RunbookGuardrail[] = [
   },
 ]
 
+const OPERATION_STEPS: OperationStep[] = [
+  {
+    id: 'local-preflight',
+    phase: { ko: '로컬 사전 확인', en: 'Local preflight' },
+    approval: { ko: '로컬만 허용', en: 'Local only' },
+    command: 'git status --short --branch && git log --oneline origin/alphatest..HEAD',
+    target: 'local alphatest workspace',
+    smokeAssertion: 'working tree is clean; ahead range matches the approved handoff packet',
+    stopCondition: 'stop if dirty work, unexpected branch, or an unapproved commit range appears',
+  },
+  {
+    id: 'alpha-push',
+    phase: { ko: 'alpha push', en: 'Alpha push' },
+    approval: { ko: '사용자 승인 필요', en: 'User approval required' },
+    command: 'git push origin alphatest',
+    target: 'origin/alphatest',
+    smokeAssertion: 'remote alphatest HEAD matches the approved local commit after push',
+    stopCondition: 'stop if the push target or commit range differs; do not force push',
+  },
+  {
+    id: 'demo-host-update',
+    phase: { ko: 'demo host 업데이트', en: 'Demo host update' },
+    approval: { ko: '별도 승인 필요', en: 'Separate approval required' },
+    command: 'git fetch origin && git checkout alphatest && git pull --ff-only origin alphatest',
+    target: 'approved demo host only',
+    smokeAssertion: 'demo host worktree reaches the approved commit without touching protected service 3999',
+    stopCondition: 'stop if fast-forward pull is unavailable or the demo host branch differs',
+  },
+  {
+    id: 'demo-service-restart',
+    phase: { ko: 'demo service 재시작', en: 'Demo service restart' },
+    approval: { ko: '재시작 승인 필요', en: 'Restart approval required' },
+    command: 'restart configured demo service only',
+    target: 'live target 2999 demo service',
+    smokeAssertion: 'configured service restarts while protected service 3999 remains untouched',
+    stopCondition: 'stop if another service, port 3999, schema/data cleanup, or auth/security work is required',
+  },
+  {
+    id: 'live-smoke',
+    phase: { ko: 'live smoke', en: 'Live smoke' },
+    approval: { ko: 'smoke 승인 필요', en: 'Smoke approval required' },
+    command: 'open live target 2999 and run frontend load, backend health, media browsing, workflow readiness, and MCP opt-in checks',
+    target: 'live target 2999 only',
+    smokeAssertion: 'frontend, API reachability, key media browsing, workflow readiness, and MCP opt-in boundary pass',
+    stopCondition: 'stop at the first failed assertion and report the failure before further changes',
+  },
+  {
+    id: 'rollback-handoff',
+    phase: { ko: '롤백 핸드오프', en: 'Rollback handoff' },
+    approval: { ko: '롤백 승인 필요', en: 'Rollback approval required' },
+    command: 'prepare rollback to previous approved commit and restart configured demo service only',
+    target: 'approved demo branch and configured demo service',
+    smokeAssertion: 'rollback target, previous commit, service target, and no-touch 3999 evidence are recorded',
+    stopCondition: 'stop if rollback would require force push, destructive cleanup, or protected service 3999 access',
+  },
+]
+
 const USER_DECISIONS: UserDecisionItem[] = [
   {
     id: 'alpha-push',
@@ -417,6 +476,7 @@ export function ReleaseReadinessTab() {
       evidenceItems: EVIDENCE_ITEMS,
       handoffItems: HANDOFF_EVIDENCE_ITEMS,
       runbookGuardrails: RUNBOOK_GUARDRAILS,
+      operationSteps: OPERATION_STEPS,
       userDecisions: USER_DECISIONS,
     })
     const document = saveReleaseReadinessHistoryRecord(record)
@@ -721,6 +781,37 @@ export function ReleaseReadinessTab() {
               </SettingsToggleRow>
             )
           })}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        data-release-readiness-operation-checklist="true"
+        heading={t({ ko: '승인 후 작업 체크리스트', en: 'Post-approval operation checklist' })}
+        actions={<Badge variant="outline">{t({ ko: '실행 없음', en: 'No execution' })}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: '이 목록은 승인 뒤 사람이 실행 여부를 판단할 순서와 중단 조건만 기록해. 이 화면은 push, pull, restart, smoke, rollback을 실행하지 않아.',
+            en: 'This list records the post-approval order and stop conditions only. This screen does not run push, pull, restart, smoke, or rollback.',
+          })}
+        </SettingsInsetBlock>
+        <div className="grid gap-3 min-[1100px]:grid-cols-2">
+          {OPERATION_STEPS.map((step) => (
+            <SettingsInsetBlock key={step.id} data-release-readiness-operation-step={step.id} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{t(step.phase)}</Badge>
+                <Badge variant="outline">{t(step.approval)}</Badge>
+              </div>
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 font-mono text-xs leading-5 text-foreground">
+                {step.command}
+              </div>
+              <div className="grid gap-2 text-xs leading-5 text-muted-foreground">
+                <div><span className="font-semibold text-foreground">{t({ ko: '대상', en: 'Target' })}: </span>{step.target}</div>
+                <div><span className="font-semibold text-foreground">{t({ ko: '확인', en: 'Assertion' })}: </span>{step.smokeAssertion}</div>
+                <div><span className="font-semibold text-foreground">{t({ ko: '중단', en: 'Stop' })}: </span>{step.stopCondition}</div>
+              </div>
+            </SettingsInsetBlock>
+          ))}
         </div>
       </SettingsSection>
 

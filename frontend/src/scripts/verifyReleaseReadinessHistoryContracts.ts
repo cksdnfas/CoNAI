@@ -76,6 +76,27 @@ const runbookGuardrails = [
   },
 ]
 
+const operationSteps = [
+  {
+    id: 'alpha-push',
+    phase: { ko: 'alpha push', en: 'Alpha push' },
+    approval: { ko: '사용자 승인 필요', en: 'User approval required' },
+    command: 'git push origin alphatest',
+    target: 'origin/alphatest',
+    smokeAssertion: 'remote HEAD matches the approved commit',
+    stopCondition: 'stop if the target or commit range differs',
+  },
+  {
+    id: 'demo-host-update',
+    phase: { ko: 'demo host 업데이트', en: 'Demo host update' },
+    approval: { ko: '별도 승인 필요', en: 'Separate approval required' },
+    command: 'git pull --ff-only origin alphatest',
+    target: 'approved demo host only',
+    smokeAssertion: 'demo host reaches the approved commit without touching service 3999',
+    stopCondition: 'stop if fast-forward pull is unavailable',
+  },
+]
+
 const userDecisions = [
   {
     id: 'alpha-push',
@@ -94,6 +115,7 @@ const partialRecord = buildReleaseReadinessHistoryRecord({
   evidenceItems,
   handoffItems,
   runbookGuardrails,
+  operationSteps,
   userDecisions,
 })
 
@@ -109,6 +131,7 @@ equal(partialRecord.checklist.find((item) => item.id === 'completed-work')?.stat
 equal(partialRecord.checklist.find((item) => item.id === 'evidence')?.status, 'open', 'open review status should persist')
 equal(partialRecord.handoff.find((item) => item.id === 'rollback-plan')?.status, 'captured', 'captured handoff status should persist')
 equal(partialRecord.handoff.find((item) => item.id === 'smoke-evidence')?.status, 'open', 'open handoff status should persist')
+equal(partialRecord.operationSteps.length, 2, 'approval-gated operation steps should persist')
 equal(partialRecord.userDecisions[0]?.status, 'approval-required', 'user decisions should remain separate approval items')
 
 const completeRecord = buildReleaseReadinessHistoryRecord({
@@ -121,6 +144,7 @@ const completeRecord = buildReleaseReadinessHistoryRecord({
   evidenceItems,
   handoffItems,
   runbookGuardrails,
+  operationSteps,
   userDecisions,
 })
 
@@ -131,6 +155,8 @@ ok(handoffMarkdown.includes('# CoNAI Release Readiness Handoff'), 'handoff expor
 ok(handoffMarkdown.includes('- externalActionsExecuted: false'), 'handoff export should preserve the no-external-action boundary')
 ok(handoffMarkdown.includes('- pushDeployRestartBoundary: approval-required'), 'handoff export should preserve approval boundaries')
 ok(handoffMarkdown.includes('## Captured Handoff Evidence'), 'handoff export should include captured handoff evidence separately')
+ok(handoffMarkdown.includes('## Approval-Gated Operation Checklist'), 'handoff export should include the approval-gated operation checklist')
+ok(handoffMarkdown.includes('git push origin alphatest'), 'handoff export should include the alpha push command for later approval')
 ok(handoffMarkdown.includes('## User-Owned Decisions'), 'handoff export should separate user-owned release decisions')
 ok(handoffMarkdown.includes('alpha branch push'), 'handoff export should carry user decision details')
 equal(buildReleaseReadinessHandoffFilename(completeRecord), 'conai-release-readiness-20260608133100.md', 'handoff export filename should derive from savedAt')
@@ -156,6 +182,7 @@ for (let index = 0; index < MAX_RELEASE_READINESS_HISTORY_RECORDS + 3; index += 
       evidenceItems,
       handoffItems,
       runbookGuardrails,
+      operationSteps,
       userDecisions,
     }),
     storage,
@@ -180,6 +207,7 @@ ok(releaseReadinessTab.includes('copyTextToClipboard'), 'release readiness UI sh
 ok(releaseReadinessTab.includes('triggerBlobDownload'), 'release readiness UI should support local Markdown export')
 ok(historyContract.includes('externalActionsExecuted: false'), 'history contract should explicitly prevent external action execution evidence')
 ok(historyContract.includes("pushDeployRestartBoundary: 'approval-required'"), 'history contract should preserve release-action approval boundaries')
+ok(historyContract.includes('operationSteps'), 'history contract should persist operation checklist steps')
 ok(historyContract.includes('buildReleaseReadinessHandoffMarkdown'), 'history contract should own handoff markdown formatting')
 ok(!releaseReadinessTab.includes('buildApiUrl('), 'history capture should not call backend action endpoints')
 ok(!releaseReadinessTab.includes('fetch('), 'history capture should not perform external release actions')

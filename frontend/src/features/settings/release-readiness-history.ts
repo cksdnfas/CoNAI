@@ -39,6 +39,16 @@ export type ReleaseReadinessRunbookGuardrailContract = {
 
 export type ReleaseReadinessUserDecisionContract = ReleaseReadinessChecklistItemContract
 
+export type ReleaseReadinessOperationStepContract = {
+  id: string
+  phase: TranslationDictionary
+  approval: TranslationDictionary
+  command: string
+  target: string
+  smokeAssertion: string
+  stopCondition: string
+}
+
 export type ReleaseReadinessHistoryRecord = {
   id: string
   schemaVersion: typeof RELEASE_READINESS_HISTORY_SCHEMA_VERSION
@@ -61,6 +71,7 @@ export type ReleaseReadinessHistoryRecord = {
   evidence: ReleaseReadinessEvidenceItemContract[]
   handoff: Array<ReleaseReadinessHandoffItemContract & { status: 'captured' | 'open' }>
   runbookGuardrails: ReleaseReadinessRunbookGuardrailContract[]
+  operationSteps: ReleaseReadinessOperationStepContract[]
   userDecisions: Array<ReleaseReadinessUserDecisionContract & { status: 'approval-required' }>
 }
 
@@ -80,6 +91,7 @@ export type ReleaseReadinessHistorySnapshotInput = {
   evidenceItems: readonly ReleaseReadinessEvidenceItemContract[]
   handoffItems: readonly ReleaseReadinessHandoffItemContract[]
   runbookGuardrails: readonly ReleaseReadinessRunbookGuardrailContract[]
+  operationSteps: readonly ReleaseReadinessOperationStepContract[]
   userDecisions: readonly ReleaseReadinessUserDecisionContract[]
 }
 
@@ -110,9 +122,13 @@ function buildRecordId(savedAt: string) {
   return `release-readiness-${timestamp}-${suffix}`
 }
 
-function isHistoryRecord(value: unknown): value is ReleaseReadinessHistoryRecord {
+type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps'> & {
+  operationSteps?: ReleaseReadinessOperationStepContract[]
+}
+
+function isHistoryRecord(value: unknown): value is PersistedReleaseReadinessHistoryRecord {
   if (!value || typeof value !== 'object') return false
-  const record = value as Partial<ReleaseReadinessHistoryRecord>
+  const record = value as Partial<PersistedReleaseReadinessHistoryRecord>
   return (
     record.schemaVersion === RELEASE_READINESS_HISTORY_SCHEMA_VERSION
     && record.source === 'settings.release-readiness'
@@ -128,6 +144,7 @@ function isHistoryRecord(value: unknown): value is ReleaseReadinessHistoryRecord
     && Array.isArray(record.evidence)
     && Array.isArray(record.handoff)
     && Array.isArray(record.runbookGuardrails)
+    && (record.operationSteps === undefined || Array.isArray(record.operationSteps))
     && Array.isArray(record.userDecisions)
   )
 }
@@ -169,6 +186,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       status: capturedSet.has(item.id) ? 'captured' : 'open',
     })),
     runbookGuardrails: input.runbookGuardrails.map((item) => ({ ...item })),
+    operationSteps: input.operationSteps.map((item) => ({ ...item })),
     userDecisions: input.userDecisions.map((item) => ({
       ...item,
       status: 'approval-required',
@@ -185,6 +203,10 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
 
   const records = document.records
     .filter(isHistoryRecord)
+    .map((record) => ({
+      ...record,
+      operationSteps: Array.isArray(record.operationSteps) ? record.operationSteps : [],
+    }))
     .sort((left, right) => Date.parse(right.savedAt) - Date.parse(left.savedAt))
     .slice(0, MAX_RELEASE_READINESS_HISTORY_RECORDS)
 
@@ -284,6 +306,12 @@ export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHis
     '',
     ...record.runbookGuardrails.map((item) => (
       `- ${formatTranslationDictionary(item.phase)} / ${formatTranslationDictionary(item.status)}: ${formatTranslationDictionary(item.title)} - ${formatTranslationDictionary(item.description)}`
+    )),
+    '',
+    '## Approval-Gated Operation Checklist',
+    '',
+    ...record.operationSteps.map((item) => (
+      `- ${formatTranslationDictionary(item.phase)} / ${formatTranslationDictionary(item.approval)}: ${item.command} -> ${item.target}; smoke: ${item.smokeAssertion}; stop: ${item.stopCondition}`
     )),
     '',
     '## User-Owned Decisions',
