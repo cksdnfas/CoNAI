@@ -89,6 +89,31 @@ const alertReviewItems = [
   },
 ]
 
+const trendEvidenceItems = [
+  {
+    id: 'dependency-audit-trend',
+    domain: 'dependency-security' as const,
+    title: { ko: '의존성 보안 추세', en: 'Dependency security trend' },
+    sourceSurface: 'npm audit + npm --prefix docs audit',
+    metric: 'vulnerability-count-trend',
+    trend: { ko: 'audit 기준선 clean', en: 'Audit baseline is clean' },
+    exportValue: 'M1-CU1/M1-CU2 dependency audit lanes are clean',
+    releaseUse: { ko: '릴리즈 보안 근거', en: 'Release security evidence' },
+    approvalBoundary: 'local-evidence' as const,
+  },
+  {
+    id: 'release-handoff-trend',
+    domain: 'release-operations' as const,
+    title: { ko: '릴리즈 핸드오프 추세', en: 'Release handoff trend' },
+    sourceSurface: 'Settings > Release readiness',
+    metric: 'captured-handoff-readiness',
+    trend: { ko: 'push/restart 없이 누적', en: 'Accumulates without push or restart' },
+    exportValue: 'handoff Markdown includes approval gates',
+    releaseUse: { ko: '사용자 승인 판단', en: 'User approval decision' },
+    approvalBoundary: 'approval-required' as const,
+  },
+]
+
 const runbookGuardrails = [
   {
     id: 'protected-3999',
@@ -138,6 +163,7 @@ const partialRecord = buildReleaseReadinessHistoryRecord({
   reviewItems,
   evidenceItems,
   alertReviewItems,
+  trendEvidenceItems,
   handoffItems,
   runbookGuardrails,
   operationSteps,
@@ -152,12 +178,15 @@ equal(partialRecord.pushDeployRestartBoundary, 'approval-required', 'external re
 equal(partialRecord.summary.reviewedCount, 1, 'reviewed item count should be preserved')
 equal(partialRecord.summary.capturedHandoffCount, 1, 'captured handoff count should be preserved')
 equal(partialRecord.summary.reviewedAlertCount, 1, 'reviewed alert count should be preserved')
+equal(partialRecord.summary.trendEvidenceCount, 2, 'trend evidence count should be preserved')
 equal(partialRecord.summary.readyForExport, false, 'partial records should not be marked export ready')
 equal(partialRecord.checklist.find((item) => item.id === 'completed-work')?.status, 'checked', 'checked review status should persist')
 equal(partialRecord.checklist.find((item) => item.id === 'evidence')?.status, 'open', 'open review status should persist')
 equal(partialRecord.observabilityAlerts.find((item) => item.id === 'runtime-retention')?.status, 'reviewed', 'reviewed alert status should persist')
 equal(partialRecord.observabilityAlerts.find((item) => item.id === 'media-review-queue')?.status, 'open', 'open alert status should persist')
 equal(partialRecord.observabilityAlerts.find((item) => item.id === 'runtime-retention')?.approvalBoundary, 'approval-required', 'approval-required alert boundaries should persist')
+equal(partialRecord.trendEvidence.find((item) => item.id === 'dependency-audit-trend')?.metric, 'vulnerability-count-trend', 'trend evidence metric should persist')
+equal(partialRecord.trendEvidence.find((item) => item.id === 'release-handoff-trend')?.approvalBoundary, 'approval-required', 'approval-gated trend evidence should persist')
 equal(partialRecord.handoff.find((item) => item.id === 'rollback-plan')?.status, 'captured', 'captured handoff status should persist')
 equal(partialRecord.handoff.find((item) => item.id === 'smoke-evidence')?.status, 'open', 'open handoff status should persist')
 equal(partialRecord.operationSteps.length, 2, 'approval-gated operation steps should persist')
@@ -173,6 +202,7 @@ const completeRecord = buildReleaseReadinessHistoryRecord({
   reviewItems,
   evidenceItems,
   alertReviewItems,
+  trendEvidenceItems,
   handoffItems,
   runbookGuardrails,
   operationSteps,
@@ -189,6 +219,9 @@ ok(handoffMarkdown.includes('## Captured Handoff Evidence'), 'handoff export sho
 ok(handoffMarkdown.includes('## Observability Alert Review'), 'handoff export should include observability alert review separately')
 ok(handoffMarkdown.includes('retention-approval-threshold'), 'handoff export should include runtime retention alert evidence')
 ok(handoffMarkdown.includes('approval required'), 'handoff export should preserve approval-required alert boundaries')
+ok(handoffMarkdown.includes('## Trend Evidence'), 'handoff export should include trend evidence separately')
+ok(handoffMarkdown.includes('vulnerability-count-trend'), 'handoff export should include dependency audit trend evidence')
+ok(handoffMarkdown.includes('captured-handoff-readiness'), 'handoff export should include release handoff trend evidence')
 ok(handoffMarkdown.includes('## Approval-Gated Operation Checklist'), 'handoff export should include the approval-gated operation checklist')
 ok(handoffMarkdown.includes('git push origin alphatest'), 'handoff export should include the alpha push command for later approval')
 ok(handoffMarkdown.includes('## User-Owned Decisions'), 'handoff export should separate user-owned release decisions')
@@ -216,6 +249,7 @@ for (let index = 0; index < MAX_RELEASE_READINESS_HISTORY_RECORDS + 3; index += 
       reviewItems,
       evidenceItems,
       alertReviewItems,
+      trendEvidenceItems,
       handoffItems,
       runbookGuardrails,
       operationSteps,
@@ -235,6 +269,13 @@ equal(readReleaseReadinessHistoryFromStorage(storage).records.length, 0, 'corrup
 ok(releaseReadinessTab.includes('data-release-readiness-history-contract="true"'), 'release readiness UI should expose the history contract surface')
 ok(releaseReadinessTab.includes('data-release-readiness-alert-review="true"'), 'release readiness UI should expose the observability alert review surface')
 ok(releaseReadinessTab.includes('ALERT_REVIEW_ITEMS'), 'release readiness UI should define persisted alert review items')
+ok(releaseReadinessTab.includes('data-release-readiness-trend-evidence="true"'), 'release readiness UI should expose the trend evidence surface')
+ok(releaseReadinessTab.includes('TREND_EVIDENCE_ITEMS'), 'release readiness UI should define exportable trend evidence')
+ok(releaseReadinessTab.includes("'dependency-audit-trend'"), 'trend evidence should include dependency audit status')
+ok(releaseReadinessTab.includes("'release-handoff-trend'"), 'trend evidence should include release handoff status')
+ok(releaseReadinessTab.includes("'media-review-trend'"), 'trend evidence should include media review status')
+ok(releaseReadinessTab.includes("'workflow-runtime-trend'"), 'trend evidence should include workflow runtime status')
+ok(releaseReadinessTab.includes("'final-verification-trend'"), 'trend evidence should include final verification status')
 ok(releaseReadinessTab.includes("'review-queue-threshold'"), 'alert review should persist media review queue threshold state')
 ok(releaseReadinessTab.includes("'quality-backlog-threshold'"), 'alert review should persist quality backlog threshold state')
 ok(releaseReadinessTab.includes("'similarity-review-threshold'"), 'alert review should persist similarity decision threshold state')
@@ -257,6 +298,8 @@ ok(historyContract.includes("pushDeployRestartBoundary: 'approval-required'"), '
 ok(historyContract.includes('operationSteps'), 'history contract should persist operation checklist steps')
 ok(historyContract.includes('observabilityAlerts'), 'history contract should persist observability alert review items')
 ok(historyContract.includes('reviewedAlertIds'), 'history contract should persist reviewed alert ids')
+ok(historyContract.includes('trendEvidence'), 'history contract should persist trend evidence items')
+ok(historyContract.includes('ReleaseReadinessTrendEvidenceContract'), 'history contract should type trend evidence records')
 ok(historyContract.includes('buildReleaseReadinessHandoffMarkdown'), 'history contract should own handoff markdown formatting')
 ok(!releaseReadinessTab.includes('buildApiUrl('), 'history capture should not call backend action endpoints')
 ok(!releaseReadinessTab.includes('fetch('), 'history capture should not perform external release actions')

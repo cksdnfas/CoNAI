@@ -60,6 +60,18 @@ export type ReleaseReadinessAlertReviewItemContract = {
   approvalBoundary: 'operator-review' | 'approval-required'
 }
 
+export type ReleaseReadinessTrendEvidenceContract = {
+  id: string
+  domain: 'dependency-security' | 'release-operations' | 'media-review' | 'workflow-runtime'
+  title: TranslationDictionary
+  sourceSurface: string
+  metric: string
+  trend: TranslationDictionary
+  exportValue: string
+  releaseUse: TranslationDictionary
+  approvalBoundary: 'local-evidence' | 'operator-review' | 'approval-required'
+}
+
 export type ReleaseReadinessHistoryRecord = {
   id: string
   schemaVersion: typeof RELEASE_READINESS_HISTORY_SCHEMA_VERSION
@@ -79,11 +91,13 @@ export type ReleaseReadinessHistoryRecord = {
     handoffItemCount: number
     reviewedAlertCount: number
     alertReviewItemCount: number
+    trendEvidenceCount: number
     readyForExport: boolean
   }
   checklist: Array<ReleaseReadinessChecklistItemContract & { status: 'checked' | 'open' }>
   evidence: ReleaseReadinessEvidenceItemContract[]
   observabilityAlerts: Array<ReleaseReadinessAlertReviewItemContract & { status: 'reviewed' | 'open' }>
+  trendEvidence: ReleaseReadinessTrendEvidenceContract[]
   handoff: Array<ReleaseReadinessHandoffItemContract & { status: 'captured' | 'open' }>
   runbookGuardrails: ReleaseReadinessRunbookGuardrailContract[]
   operationSteps: ReleaseReadinessOperationStepContract[]
@@ -106,6 +120,7 @@ export type ReleaseReadinessHistorySnapshotInput = {
   reviewItems: readonly ReleaseReadinessChecklistItemContract[]
   evidenceItems: readonly ReleaseReadinessEvidenceItemContract[]
   alertReviewItems: readonly ReleaseReadinessAlertReviewItemContract[]
+  trendEvidenceItems: readonly ReleaseReadinessTrendEvidenceContract[]
   handoffItems: readonly ReleaseReadinessHandoffItemContract[]
   runbookGuardrails: readonly ReleaseReadinessRunbookGuardrailContract[]
   operationSteps: readonly ReleaseReadinessOperationStepContract[]
@@ -139,13 +154,15 @@ function buildRecordId(savedAt: string) {
   return `release-readiness-${timestamp}-${suffix}`
 }
 
-type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'observabilityAlerts' | 'summary'> & {
+type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'observabilityAlerts' | 'trendEvidence' | 'summary'> & {
   operationSteps?: ReleaseReadinessOperationStepContract[]
   reviewedAlertIds?: string[]
   observabilityAlerts?: Array<ReleaseReadinessAlertReviewItemContract & { status: 'reviewed' | 'open' }>
-  summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount'> & {
+  trendEvidence?: ReleaseReadinessTrendEvidenceContract[]
+  summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount' | 'trendEvidenceCount'> & {
     reviewedAlertCount?: number
     alertReviewItemCount?: number
+    trendEvidenceCount?: number
   }
 }
 
@@ -167,6 +184,7 @@ function isHistoryRecord(value: unknown): value is PersistedReleaseReadinessHist
     && Array.isArray(record.checklist)
     && Array.isArray(record.evidence)
     && (record.observabilityAlerts === undefined || Array.isArray(record.observabilityAlerts))
+    && (record.trendEvidence === undefined || Array.isArray(record.trendEvidence))
     && Array.isArray(record.handoff)
     && Array.isArray(record.runbookGuardrails)
     && (record.operationSteps === undefined || Array.isArray(record.operationSteps))
@@ -185,6 +203,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
   const reviewItemCount = input.reviewItems.length
   const handoffItemCount = input.handoffItems.length
   const alertReviewItemCount = input.alertReviewItems.length
+  const trendEvidenceCount = input.trendEvidenceItems.length
 
   return {
     id: input.id ?? buildRecordId(savedAt),
@@ -205,9 +224,11 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       handoffItemCount,
       reviewedAlertCount: reviewedAlertIds.length,
       alertReviewItemCount,
+      trendEvidenceCount,
       readyForExport: reviewItemCount > 0
         && handoffItemCount > 0
         && alertReviewItemCount > 0
+        && trendEvidenceCount > 0
         && reviewedItemIds.length === reviewItemCount
         && capturedHandoffItemIds.length === handoffItemCount
         && reviewedAlertIds.length === alertReviewItemCount,
@@ -221,6 +242,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       ...item,
       status: alertReviewSet.has(item.id) ? 'reviewed' : 'open',
     })),
+    trendEvidence: input.trendEvidenceItems.map((item) => ({ ...item })),
     handoff: input.handoffItems.map((item) => ({
       ...item,
       status: capturedSet.has(item.id) ? 'captured' : 'open',
@@ -250,8 +272,10 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
         ...record.summary,
         reviewedAlertCount: record.summary.reviewedAlertCount ?? uniqueIds(record.reviewedAlertIds ?? []).length,
         alertReviewItemCount: record.summary.alertReviewItemCount ?? record.observabilityAlerts?.length ?? 0,
+        trendEvidenceCount: record.summary.trendEvidenceCount ?? record.trendEvidence?.length ?? 0,
       },
       observabilityAlerts: Array.isArray(record.observabilityAlerts) ? record.observabilityAlerts : [],
+      trendEvidence: Array.isArray(record.trendEvidence) ? record.trendEvidence : [],
       operationSteps: Array.isArray(record.operationSteps) ? record.operationSteps : [],
     }))
     .sort((left, right) => Date.parse(right.savedAt) - Date.parse(left.savedAt))
@@ -347,6 +371,12 @@ export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHis
     '',
     ...record.observabilityAlerts.map((item) => (
       `- [${item.status === 'reviewed' ? 'x' : ' '}] ${formatTranslationDictionary(item.title)} (${item.sourceSurface} / ${item.thresholdKey} / ${formatMarkdownStatus(item.approvalBoundary)}): ${formatTranslationDictionary(item.signal)} - ${formatTranslationDictionary(item.detail)}`
+    )),
+    '',
+    '## Trend Evidence',
+    '',
+    ...record.trendEvidence.map((item) => (
+      `- ${formatTranslationDictionary(item.title)} (${item.domain} / ${item.sourceSurface} / ${item.metric} / ${formatMarkdownStatus(item.approvalBoundary)}): ${formatTranslationDictionary(item.trend)} - ${item.exportValue}; release use: ${formatTranslationDictionary(item.releaseUse)}`
     )),
     '',
     '## Captured Handoff Evidence',

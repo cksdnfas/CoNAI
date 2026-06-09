@@ -24,6 +24,7 @@ import {
   type ReleaseReadinessHistoryRecord,
   type ReleaseReadinessOperationStepContract,
   type ReleaseReadinessRunbookGuardrailContract,
+  type ReleaseReadinessTrendEvidenceContract,
   type ReleaseReadinessUserDecisionContract,
 } from '../release-readiness-history'
 
@@ -33,6 +34,7 @@ type EvidenceItem = ReleaseReadinessEvidenceItemContract
 type HandoffEvidenceItem = ReleaseReadinessHandoffItemContract
 type RunbookGuardrail = ReleaseReadinessRunbookGuardrailContract
 type OperationStep = ReleaseReadinessOperationStepContract
+type TrendEvidenceItem = ReleaseReadinessTrendEvidenceContract
 type UserDecisionItem = ReleaseReadinessUserDecisionContract
 
 type IntegratedOperationsLane = {
@@ -315,6 +317,94 @@ const ALERT_REVIEW_ITEMS: AlertReviewItem[] = [
   },
 ]
 
+const TREND_EVIDENCE_ITEMS: TrendEvidenceItem[] = [
+  {
+    id: 'dependency-audit-trend',
+    domain: 'dependency-security',
+    title: { ko: '의존성 보안 추세', en: 'Dependency security trend' },
+    sourceSurface: 'npm audit + npm --prefix docs audit',
+    metric: 'vulnerability-count-trend',
+    trend: {
+      ko: 'runtime과 docs toolchain audit가 0 vulnerabilities 기준선으로 돌아옴.',
+      en: 'Runtime and docs toolchain audits returned to a 0-vulnerability baseline.',
+    },
+    exportValue: 'M1-CU1/M1-CU2: better-queue removal plus VitePress nested Vite override; npm audit lanes are clean',
+    releaseUse: {
+      ko: '보안 dependency lane은 릴리즈 검토 근거로 넘기고, 새 downgrade나 broad override는 별도 승인으로 남겨.',
+      en: 'Use the security dependency lane as release evidence while new downgrades or broad overrides stay separately approved.',
+    },
+    approvalBoundary: 'local-evidence',
+  },
+  {
+    id: 'release-handoff-trend',
+    domain: 'release-operations',
+    title: { ko: '릴리즈 핸드오프 추세', en: 'Release handoff trend' },
+    sourceSurface: 'Settings > Release readiness + docs/systems/26.6.9-*',
+    metric: 'captured-handoff-readiness',
+    trend: {
+      ko: 'alpha handoff, demo operation checklist, rollback boundary가 push/deploy/restart 없이 누적됨.',
+      en: 'Alpha handoff, demo operation checklist, and rollback boundaries accumulate without push, deploy, or restart.',
+    },
+    exportValue: 'local Markdown handoff includes branch range, approval gates, operation steps, and no-touch 3999 boundaries',
+    releaseUse: {
+      ko: '사용자가 외부 작업 승인 여부를 판단할 때 같은 export를 검토하게 해.',
+      en: 'Give the user the same export when deciding whether to approve external release actions.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+  {
+    id: 'media-review-trend',
+    domain: 'media-review',
+    title: { ko: '미디어 검토 추세', en: 'Media review trend' },
+    sourceSurface: 'Media review > operational trends',
+    metric: 'review-quality-cleanup-signals',
+    trend: {
+      ko: 'review queue, quality backlog, similarity decision, cleanup staging 신호가 readiness 기록으로 묶임.',
+      en: 'Review queue, quality backlog, similarity decisions, and cleanup staging signals are bundled into readiness records.',
+    },
+    exportValue: 'operator-review thresholds: review-queue, quality-backlog, similarity-review; approval-required cleanup staging',
+    releaseUse: {
+      ko: '공개 전 품질 판단에는 쓰되, 삭제나 retention 변경은 승인 작업으로 분리해.',
+      en: 'Use this for pre-release quality judgment while deletion or retention changes stay separate approvals.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'workflow-runtime-trend',
+    domain: 'workflow-runtime',
+    title: { ko: '워크플로우 런타임 추세', en: 'Workflow runtime trend' },
+    sourceSurface: 'Module graph > runtime health',
+    metric: 'queue-retry-recovery-retention-signals',
+    trend: {
+      ko: 'queue pressure, retry stop, recovery mismatch, retention, terminal failure 신호가 재실행 전 근거로 저장됨.',
+      en: 'Queue pressure, retry stop, recovery mismatch, retention, and terminal failure signals are saved before rerun decisions.',
+    },
+    exportValue: 'runtime thresholds: queue-pressure, retry-stop, recovery-mismatch, retention-approval, terminal-failure',
+    releaseUse: {
+      ko: 'rerun, smoke, restart 판단 전에 같은 runtime record를 다시 보게 해.',
+      en: 'Review the same runtime record before rerun, smoke, or restart decisions.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'final-verification-trend',
+    domain: 'release-operations',
+    title: { ko: '최종 검증 추세', en: 'Final verification trend' },
+    sourceSurface: 'M3-CU2 final checks',
+    metric: 'local-verification-baseline',
+    trend: {
+      ko: 'final readiness는 audit, release readiness, media/runtime contracts, build, Graphify 갱신으로 닫힘.',
+      en: 'Final readiness closes on audit, release readiness, media/runtime contracts, build, and Graphify refresh.',
+    },
+    exportValue: 'npm audit; npm run verify:release-readiness; npm run verify:media-runtime-observability-contracts; npm run build; python -m graphify update .',
+    releaseUse: {
+      ko: 'completion handoff에서 로컬 검증 baseline과 남은 승인 결정을 나누는 기준으로 사용해.',
+      en: 'Use this in the completion handoff to separate the local verification baseline from remaining approvals.',
+    },
+    approvalBoundary: 'local-evidence',
+  },
+]
+
 const REVIEW_LANES: ReadinessItem[] = [
   {
     id: 'local-results',
@@ -554,6 +644,7 @@ export function ReleaseReadinessTab() {
   const readinessState = allReviewed ? t({ ko: '검토 완료', en: 'Reviewed' }) : t({ ko: '{count}/{total} 확인', en: '{count}/{total} checked' }, { count: reviewedCount, total: REVIEW_ITEMS.length })
   const handoffState = allHandoffCaptured ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
   const alertReviewState = allAlertsReviewed ? t({ ko: '알림 검토 완료', en: 'Alerts reviewed' }) : t({ ko: '{count}/{total} 알림', en: '{count}/{total} alerts' }, { count: reviewedAlertCount, total: ALERT_REVIEW_ITEMS.length })
+  const trendEvidenceState = t({ ko: '{count}개 추세 근거', en: '{count} trend evidence items' }, { count: TREND_EVIDENCE_ITEMS.length })
   const historyState = readinessHistory.length > 0 ? t({ ko: '{count}개 저장', en: '{count} saved' }, { count: readinessHistory.length }) : t({ ko: '기록 없음', en: 'No records' })
   const latestHistoryLabel = latestReadinessRecord
     ? formatDateTime(latestReadinessRecord.savedAt, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -614,6 +705,7 @@ export function ReleaseReadinessTab() {
       reviewItems: REVIEW_ITEMS,
       evidenceItems: EVIDENCE_ITEMS,
       alertReviewItems: ALERT_REVIEW_ITEMS,
+      trendEvidenceItems: TREND_EVIDENCE_ITEMS,
       handoffItems: HANDOFF_EVIDENCE_ITEMS,
       runbookGuardrails: RUNBOOK_GUARDRAILS,
       operationSteps: OPERATION_STEPS,
@@ -677,6 +769,7 @@ export function ReleaseReadinessTab() {
               <Badge variant={allReviewed ? 'default' : 'secondary'}>{readinessState}</Badge>
               <Badge variant={allHandoffCaptured ? 'default' : 'secondary'}>{handoffState}</Badge>
               <Badge variant={allAlertsReviewed ? 'default' : 'secondary'}>{alertReviewState}</Badge>
+              <Badge variant="outline">{trendEvidenceState}</Badge>
               <div className="min-w-0 text-sm text-muted-foreground">
                 {t({
                   ko: '완료 작업, 주의 사항, 검증 근거, 사용자 결정을 릴리즈 액션 전에 한곳에서 점검해.',
@@ -791,10 +884,11 @@ export function ReleaseReadinessTab() {
                         )}
                         {' · '}
                         {t(
-                          { ko: '알림 {alerts}/{alertTotal}', en: 'alerts {alerts}/{alertTotal}' },
+                          { ko: '알림 {alerts}/{alertTotal} · 추세 {trends}', en: 'alerts {alerts}/{alertTotal} · trends {trends}' },
                           {
                             alerts: record.summary.reviewedAlertCount,
                             alertTotal: record.summary.alertReviewItemCount,
+                            trends: record.summary.trendEvidenceCount,
                           },
                         )}
                       </span>
@@ -881,6 +975,42 @@ export function ReleaseReadinessTab() {
               </SettingsToggleRow>
             )
           })}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        data-release-readiness-trend-evidence="true"
+        heading={t({ ko: '관측 추세 근거', en: 'Trend evidence' })}
+        actions={<Badge variant="secondary">{trendEvidenceState}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: '의존성 보안, 릴리즈 핸드오프, 미디어 검토, 워크플로우 런타임 신호를 하나의 exportable trend evidence로 저장해 completion handoff에서 같은 기준으로 볼 수 있게 해.',
+            en: 'Save dependency security, release handoff, media review, and workflow runtime signals as exportable trend evidence for the completion handoff.',
+          })}
+        </SettingsInsetBlock>
+
+        <div className="grid gap-3 min-[1000px]:grid-cols-2">
+          {TREND_EVIDENCE_ITEMS.map((item) => (
+            <SettingsInsetBlock key={item.id} data-release-readiness-trend={item.id} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{t(item.title)}</Badge>
+                <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                  {item.approvalBoundary === 'approval-required'
+                    ? t({ ko: '승인 필요', en: 'Approval needed' })
+                    : item.approvalBoundary === 'operator-review'
+                      ? t({ ko: '운영 검토', en: 'Operator review' })
+                      : t({ ko: '로컬 근거', en: 'Local evidence' })}
+                </Badge>
+              </div>
+              <div className="font-mono text-xs text-foreground/90">{item.metric}</div>
+              <div className="text-sm leading-6 text-muted-foreground">{t(item.trend)}</div>
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 font-mono text-xs leading-5 text-foreground">
+                {item.exportValue}
+              </div>
+              <div className="text-xs leading-5 text-muted-foreground">{t(item.releaseUse)}</div>
+            </SettingsInsetBlock>
+          ))}
         </div>
       </SettingsSection>
 
