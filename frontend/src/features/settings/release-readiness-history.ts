@@ -49,6 +49,17 @@ export type ReleaseReadinessOperationStepContract = {
   stopCondition: string
 }
 
+export type ReleaseReadinessAlertReviewItemContract = {
+  id: string
+  domain: 'media-review' | 'workflow-runtime'
+  title: TranslationDictionary
+  signal: TranslationDictionary
+  sourceSurface: string
+  thresholdKey: string
+  detail: TranslationDictionary
+  approvalBoundary: 'operator-review' | 'approval-required'
+}
+
 export type ReleaseReadinessHistoryRecord = {
   id: string
   schemaVersion: typeof RELEASE_READINESS_HISTORY_SCHEMA_VERSION
@@ -60,15 +71,19 @@ export type ReleaseReadinessHistoryRecord = {
   pushDeployRestartBoundary: 'approval-required'
   reviewedItemIds: string[]
   capturedHandoffItemIds: string[]
+  reviewedAlertIds: string[]
   summary: {
     reviewedCount: number
     reviewItemCount: number
     capturedHandoffCount: number
     handoffItemCount: number
+    reviewedAlertCount: number
+    alertReviewItemCount: number
     readyForExport: boolean
   }
   checklist: Array<ReleaseReadinessChecklistItemContract & { status: 'checked' | 'open' }>
   evidence: ReleaseReadinessEvidenceItemContract[]
+  observabilityAlerts: Array<ReleaseReadinessAlertReviewItemContract & { status: 'reviewed' | 'open' }>
   handoff: Array<ReleaseReadinessHandoffItemContract & { status: 'captured' | 'open' }>
   runbookGuardrails: ReleaseReadinessRunbookGuardrailContract[]
   operationSteps: ReleaseReadinessOperationStepContract[]
@@ -87,8 +102,10 @@ export type ReleaseReadinessHistorySnapshotInput = {
   appVersionLabel: string
   reviewedItemIds: Iterable<string>
   capturedHandoffItemIds: Iterable<string>
+  reviewedAlertIds: Iterable<string>
   reviewItems: readonly ReleaseReadinessChecklistItemContract[]
   evidenceItems: readonly ReleaseReadinessEvidenceItemContract[]
+  alertReviewItems: readonly ReleaseReadinessAlertReviewItemContract[]
   handoffItems: readonly ReleaseReadinessHandoffItemContract[]
   runbookGuardrails: readonly ReleaseReadinessRunbookGuardrailContract[]
   operationSteps: readonly ReleaseReadinessOperationStepContract[]
@@ -122,8 +139,14 @@ function buildRecordId(savedAt: string) {
   return `release-readiness-${timestamp}-${suffix}`
 }
 
-type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps'> & {
+type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'observabilityAlerts' | 'summary'> & {
   operationSteps?: ReleaseReadinessOperationStepContract[]
+  reviewedAlertIds?: string[]
+  observabilityAlerts?: Array<ReleaseReadinessAlertReviewItemContract & { status: 'reviewed' | 'open' }>
+  summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount'> & {
+    reviewedAlertCount?: number
+    alertReviewItemCount?: number
+  }
 }
 
 function isHistoryRecord(value: unknown): value is PersistedReleaseReadinessHistoryRecord {
@@ -140,8 +163,10 @@ function isHistoryRecord(value: unknown): value is PersistedReleaseReadinessHist
     && typeof record.appVersionLabel === 'string'
     && Array.isArray(record.reviewedItemIds)
     && Array.isArray(record.capturedHandoffItemIds)
+    && (record.reviewedAlertIds === undefined || Array.isArray(record.reviewedAlertIds))
     && Array.isArray(record.checklist)
     && Array.isArray(record.evidence)
+    && (record.observabilityAlerts === undefined || Array.isArray(record.observabilityAlerts))
     && Array.isArray(record.handoff)
     && Array.isArray(record.runbookGuardrails)
     && (record.operationSteps === undefined || Array.isArray(record.operationSteps))
@@ -153,10 +178,13 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
   const savedAt = input.savedAt ?? new Date().toISOString()
   const reviewedItemIds = uniqueIds(input.reviewedItemIds)
   const capturedHandoffItemIds = uniqueIds(input.capturedHandoffItemIds)
+  const reviewedAlertIds = uniqueIds(input.reviewedAlertIds)
   const reviewedSet = new Set(reviewedItemIds)
   const capturedSet = new Set(capturedHandoffItemIds)
+  const alertReviewSet = new Set(reviewedAlertIds)
   const reviewItemCount = input.reviewItems.length
   const handoffItemCount = input.handoffItems.length
+  const alertReviewItemCount = input.alertReviewItems.length
 
   return {
     id: input.id ?? buildRecordId(savedAt),
@@ -169,18 +197,30 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
     pushDeployRestartBoundary: 'approval-required',
     reviewedItemIds,
     capturedHandoffItemIds,
+    reviewedAlertIds,
     summary: {
       reviewedCount: reviewedItemIds.length,
       reviewItemCount,
       capturedHandoffCount: capturedHandoffItemIds.length,
       handoffItemCount,
-      readyForExport: reviewItemCount > 0 && handoffItemCount > 0 && reviewedItemIds.length === reviewItemCount && capturedHandoffItemIds.length === handoffItemCount,
+      reviewedAlertCount: reviewedAlertIds.length,
+      alertReviewItemCount,
+      readyForExport: reviewItemCount > 0
+        && handoffItemCount > 0
+        && alertReviewItemCount > 0
+        && reviewedItemIds.length === reviewItemCount
+        && capturedHandoffItemIds.length === handoffItemCount
+        && reviewedAlertIds.length === alertReviewItemCount,
     },
     checklist: input.reviewItems.map((item) => ({
       ...item,
       status: reviewedSet.has(item.id) ? 'checked' : 'open',
     })),
     evidence: input.evidenceItems.map((item) => ({ ...item })),
+    observabilityAlerts: input.alertReviewItems.map((item) => ({
+      ...item,
+      status: alertReviewSet.has(item.id) ? 'reviewed' : 'open',
+    })),
     handoff: input.handoffItems.map((item) => ({
       ...item,
       status: capturedSet.has(item.id) ? 'captured' : 'open',
@@ -205,6 +245,13 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
     .filter(isHistoryRecord)
     .map((record) => ({
       ...record,
+      reviewedAlertIds: uniqueIds(record.reviewedAlertIds ?? []),
+      summary: {
+        ...record.summary,
+        reviewedAlertCount: record.summary.reviewedAlertCount ?? uniqueIds(record.reviewedAlertIds ?? []).length,
+        alertReviewItemCount: record.summary.alertReviewItemCount ?? record.observabilityAlerts?.length ?? 0,
+      },
+      observabilityAlerts: Array.isArray(record.observabilityAlerts) ? record.observabilityAlerts : [],
       operationSteps: Array.isArray(record.operationSteps) ? record.operationSteps : [],
     }))
     .sort((left, right) => Date.parse(right.savedAt) - Date.parse(left.savedAt))
@@ -294,6 +341,12 @@ export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHis
     '',
     ...record.evidence.map((item) => (
       `- ${formatTranslationDictionary(item.label)} (${formatMarkdownStatus(item.tone)}): ${item.value} - ${formatTranslationDictionary(item.detail)}`
+    )),
+    '',
+    '## Observability Alert Review',
+    '',
+    ...record.observabilityAlerts.map((item) => (
+      `- [${item.status === 'reviewed' ? 'x' : ' '}] ${formatTranslationDictionary(item.title)} (${item.sourceSurface} / ${item.thresholdKey} / ${formatMarkdownStatus(item.approvalBoundary)}): ${formatTranslationDictionary(item.signal)} - ${formatTranslationDictionary(item.detail)}`
     )),
     '',
     '## Captured Handoff Evidence',

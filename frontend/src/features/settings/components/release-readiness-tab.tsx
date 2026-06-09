@@ -18,6 +18,7 @@ import {
   RELEASE_READINESS_HISTORY_SCHEMA_VERSION,
   saveReleaseReadinessHistoryRecord,
   type ReleaseReadinessChecklistItemContract,
+  type ReleaseReadinessAlertReviewItemContract,
   type ReleaseReadinessEvidenceItemContract,
   type ReleaseReadinessHandoffItemContract,
   type ReleaseReadinessHistoryRecord,
@@ -27,6 +28,7 @@ import {
 } from '../release-readiness-history'
 
 type ReadinessItem = ReleaseReadinessChecklistItemContract
+type AlertReviewItem = ReleaseReadinessAlertReviewItemContract
 type EvidenceItem = ReleaseReadinessEvidenceItemContract
 type HandoffEvidenceItem = ReleaseReadinessHandoffItemContract
 type RunbookGuardrail = ReleaseReadinessRunbookGuardrailContract
@@ -190,6 +192,126 @@ const EVIDENCE_ITEMS: EvidenceItem[] = [
     value: 'approval-required',
     detail: { ko: 'push, deploy, restart는 별도 승인 필요', en: 'Push, deploy, and restart need separate approval' },
     tone: 'blocked',
+  },
+]
+
+const ALERT_REVIEW_ITEMS: AlertReviewItem[] = [
+  {
+    id: 'media-review-queue',
+    domain: 'media-review',
+    title: { ko: '미디어 검토 큐', en: 'Media review queue' },
+    signal: { ko: '미검토 항목 backlog', en: 'Unreviewed item backlog' },
+    sourceSurface: 'Media review > operational trends',
+    thresholdKey: 'review-queue-threshold',
+    detail: {
+      ko: '미검토 항목은 operator review 상태로만 저장하고 자동 정리나 삭제로 이어지지 않아.',
+      en: 'Unreviewed items are saved as operator-review state only and do not trigger cleanup or deletion.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'media-quality-backlog',
+    domain: 'media-review',
+    title: { ko: '품질 backlog', en: 'Quality backlog' },
+    signal: { ko: 'missing/sparse tags, unrated, ungrouped 합산', en: 'Missing/sparse tags, unrated, and ungrouped totals' },
+    sourceSurface: 'Media review > threshold guidance',
+    thresholdKey: 'quality-backlog-threshold',
+    detail: {
+      ko: '태그와 그룹 품질 신호는 릴리즈 판단 근거로만 남기고 데이터 변경은 별도 작업으로 분리해.',
+      en: 'Tag and group quality signals stay as release-review evidence; data changes remain separate work.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'media-similarity-decision',
+    domain: 'media-review',
+    title: { ko: '유사도 결정 기록', en: 'Similarity decision history' },
+    signal: { ko: 'needs-human-review 결정', en: 'Needs-human-review decisions' },
+    sourceSurface: 'Media review > similarity history',
+    thresholdKey: 'similarity-review-threshold',
+    detail: {
+      ko: '유사 이미지 판단은 reversible review record로 남기고 중복 처리나 삭제는 자동 실행하지 않아.',
+      en: 'Similarity decisions stay as reversible review records and never run duplicate handling or deletion automatically.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'media-cleanup-staging',
+    domain: 'media-review',
+    title: { ko: '정리 staging', en: 'Cleanup staging' },
+    signal: { ko: 'recoverable/missing/similar staging', en: 'Recoverable, missing, and similar staging' },
+    sourceSurface: 'Media review > cleanup staging',
+    thresholdKey: 'cleanup-approval-threshold',
+    detail: {
+      ko: '정리 후보는 비파괴 staging으로만 저장하고 삭제, retention policy, schema 변경은 승인 필요로 남겨.',
+      en: 'Cleanup candidates are saved as non-destructive staging; deletion, retention policy, and schema changes need approval.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+  {
+    id: 'runtime-queue-pressure',
+    domain: 'workflow-runtime',
+    title: { ko: '큐 압력', en: 'Queue pressure' },
+    signal: { ko: 'active queue와 concurrency mismatch', en: 'Active queue and concurrency mismatch' },
+    sourceSurface: 'Module graph > run panel',
+    thresholdKey: 'queue-pressure-threshold',
+    detail: {
+      ko: '큐 압력은 다음 실행 전 확인 대상으로 저장하고 실행, 취소, 재시작은 여기서 수행하지 않아.',
+      en: 'Queue pressure is saved for review before the next run; execution, cancellation, and restart do not run here.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'runtime-retry-policy',
+    domain: 'workflow-runtime',
+    title: { ko: '재시도 정책', en: 'Retry policy' },
+    signal: { ko: 'paused/stopped autorun', en: 'Paused or stopped autoruns' },
+    sourceSurface: 'Module graph > runtime health',
+    thresholdKey: 'retry-stop-threshold',
+    detail: {
+      ko: '중지된 자동 실행은 stop reason review로만 저장하고 rerun은 별도 판단 뒤 진행해.',
+      en: 'Stopped autoruns are saved for stop-reason review only; reruns remain a separate decision.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'runtime-recovery',
+    domain: 'workflow-runtime',
+    title: { ko: '복구 불일치', en: 'Recovery mismatch' },
+    signal: { ko: 'startup recovery와 running-not-in-process', en: 'Startup recovery and running-not-in-process state' },
+    sourceSurface: 'Module graph > recovery telemetry',
+    thresholdKey: 'recovery-mismatch-threshold',
+    detail: {
+      ko: '복구 신호는 최근 실패와 산출물 상태를 다시 볼 근거로 저장하고 프로세스 조작은 실행하지 않아.',
+      en: 'Recovery signals are saved as evidence to recheck failures and outputs; process actions do not run here.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'runtime-retention',
+    domain: 'workflow-runtime',
+    title: { ko: '산출물 보존', en: 'Artifact retention' },
+    signal: { ko: 'pending retention prune', en: 'Pending retention prune' },
+    sourceSurface: 'Module graph > artifact retention',
+    thresholdKey: 'retention-approval-threshold',
+    detail: {
+      ko: '보존 정리 신호는 승인 필요 상태로만 저장하고 삭제나 보존 정책 변경은 수행하지 않아.',
+      en: 'Retention-prune signals are saved as approval-required state only; deletion and policy changes do not run.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+  {
+    id: 'runtime-terminal-failure',
+    domain: 'workflow-runtime',
+    title: { ko: '실패 이력', en: 'Terminal failure history' },
+    signal: { ko: 'failed/cancelled terminal run ratio', en: 'Failed and cancelled terminal run ratio' },
+    sourceSurface: 'Module graph > terminal history',
+    thresholdKey: 'terminal-failure-threshold',
+    detail: {
+      ko: '실패율 신호는 error/input diff review 근거로 저장하고 즉시 재실행은 하지 않아.',
+      en: 'Failure-rate signals are saved for error/input diff review and do not trigger immediate reruns.',
+    },
+    approvalBoundary: 'operator-review',
   },
 ]
 
@@ -422,12 +544,16 @@ export function ReleaseReadinessTab() {
   const [selectedHistoryRecordId, setSelectedHistoryRecordId] = useState<string | null>(null)
   const [reviewedItems, setReviewedItems] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedItemIds ?? []))
   const [capturedHandoffItems, setCapturedHandoffItems] = useState<Set<string>>(() => new Set(latestReadinessRecord?.capturedHandoffItemIds ?? []))
+  const [reviewedAlerts, setReviewedAlerts] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedAlertIds ?? []))
   const reviewedCount = reviewedItems.size
   const capturedHandoffCount = capturedHandoffItems.size
+  const reviewedAlertCount = reviewedAlerts.size
   const allReviewed = reviewedCount === REVIEW_ITEMS.length
   const allHandoffCaptured = capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length
+  const allAlertsReviewed = reviewedAlertCount === ALERT_REVIEW_ITEMS.length
   const readinessState = allReviewed ? t({ ko: '검토 완료', en: 'Reviewed' }) : t({ ko: '{count}/{total} 확인', en: '{count}/{total} checked' }, { count: reviewedCount, total: REVIEW_ITEMS.length })
   const handoffState = allHandoffCaptured ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
+  const alertReviewState = allAlertsReviewed ? t({ ko: '알림 검토 완료', en: 'Alerts reviewed' }) : t({ ko: '{count}/{total} 알림', en: '{count}/{total} alerts' }, { count: reviewedAlertCount, total: ALERT_REVIEW_ITEMS.length })
   const historyState = readinessHistory.length > 0 ? t({ ko: '{count}개 저장', en: '{count} saved' }, { count: readinessHistory.length }) : t({ ko: '기록 없음', en: 'No records' })
   const latestHistoryLabel = latestReadinessRecord
     ? formatDateTime(latestReadinessRecord.savedAt, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -467,13 +593,27 @@ export function ReleaseReadinessTab() {
     })
   }
 
+  const toggleAlertReviewItem = (id: string, checked: boolean) => {
+    setReviewedAlerts((current) => {
+      const next = new Set(current)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
   const saveReadinessHistorySnapshot = () => {
     const record = buildReleaseReadinessHistoryRecord({
       appVersionLabel: APP_VERSION_LABEL,
       reviewedItemIds: reviewedItems,
       capturedHandoffItemIds: capturedHandoffItems,
+      reviewedAlertIds: reviewedAlerts,
       reviewItems: REVIEW_ITEMS,
       evidenceItems: EVIDENCE_ITEMS,
+      alertReviewItems: ALERT_REVIEW_ITEMS,
       handoffItems: HANDOFF_EVIDENCE_ITEMS,
       runbookGuardrails: RUNBOOK_GUARDRAILS,
       operationSteps: OPERATION_STEPS,
@@ -489,6 +629,7 @@ export function ReleaseReadinessTab() {
     setSelectedHistoryRecordId(record.id)
     setReviewedItems(new Set(record.reviewedItemIds))
     setCapturedHandoffItems(new Set(record.capturedHandoffItemIds))
+    setReviewedAlerts(new Set(record.reviewedAlertIds))
   }
 
   const copySelectedHandoffOutput = async () => {
@@ -535,6 +676,7 @@ export function ReleaseReadinessTab() {
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant={allReviewed ? 'default' : 'secondary'}>{readinessState}</Badge>
               <Badge variant={allHandoffCaptured ? 'default' : 'secondary'}>{handoffState}</Badge>
+              <Badge variant={allAlertsReviewed ? 'default' : 'secondary'}>{alertReviewState}</Badge>
               <div className="min-w-0 text-sm text-muted-foreground">
                 {t({
                   ko: '완료 작업, 주의 사항, 검증 근거, 사용자 결정을 릴리즈 액션 전에 한곳에서 점검해.',
@@ -647,6 +789,14 @@ export function ReleaseReadinessTab() {
                             handoffTotal: record.summary.handoffItemCount,
                           },
                         )}
+                        {' · '}
+                        {t(
+                          { ko: '알림 {alerts}/{alertTotal}', en: 'alerts {alerts}/{alertTotal}' },
+                          {
+                            alerts: record.summary.reviewedAlertCount,
+                            alertTotal: record.summary.alertReviewItemCount,
+                          },
+                        )}
                       </span>
                     </button>
                   )
@@ -676,6 +826,61 @@ export function ReleaseReadinessTab() {
               value={selectedHandoffMarkdown || t({ ko: '스냅샷을 저장하면 핸드오프 출력이 여기에 생성돼.', en: 'Save a snapshot to generate handoff output here.' })}
             />
           </SettingsInsetBlock>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        data-release-readiness-alert-review="true"
+        heading={t({ ko: '관측 알림 검토', en: 'Observability alert review' })}
+        actions={(
+          <>
+            <Button type="button" size="sm" variant="outline" onClick={() => setReviewedAlerts(new Set(ALERT_REVIEW_ITEMS.map((item) => item.id)))}>
+              <CheckCircle2 className="h-4 w-4" />
+              {t({ ko: '알림 검토 표시', en: 'Mark alerts' })}
+            </Button>
+            <Button type="button" size="icon-sm" variant="secondary" onClick={() => setReviewedAlerts(new Set())} aria-label={t({ ko: '알림 검토 초기화', en: 'Reset alert review' })} title={t({ ko: '알림 검토 초기화', en: 'Reset alert review' })}>
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </>
+        )}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: '미디어 검토와 워크플로우 런타임의 threshold 신호를 readiness 이력에 같이 저장해, cleanup/rerun/restart 판단 전에 같은 기록으로 다시 볼 수 있게 해.',
+            en: 'Save media-review and workflow-runtime threshold signals with readiness history so cleanup, rerun, and restart decisions can revisit the same record.',
+          })}
+        </SettingsInsetBlock>
+
+        <div className="grid gap-3 min-[1000px]:grid-cols-3">
+          {ALERT_REVIEW_ITEMS.map((item) => {
+            const checked = reviewedAlerts.has(item.id)
+
+            return (
+              <SettingsToggleRow
+                key={item.id}
+                data-release-readiness-alert={item.id}
+                className={cn('items-start', checked && 'border-primary/40 bg-primary/10')}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => toggleAlertReviewItem(item.id, event.target.checked)}
+                  aria-label={t(item.title)}
+                />
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">{t(item.title)}</span>
+                    <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                      {item.approvalBoundary === 'approval-required' ? t({ ko: '승인 필요', en: 'Approval needed' }) : t({ ko: '운영 검토', en: 'Operator review' })}
+                    </Badge>
+                  </span>
+                  <span className="mt-1 block font-mono text-xs text-foreground/90">{item.thresholdKey}</span>
+                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">{t(item.signal)}</span>
+                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">{t(item.detail)}</span>
+                </span>
+              </SettingsToggleRow>
+            )
+          })}
         </div>
       </SettingsSection>
 

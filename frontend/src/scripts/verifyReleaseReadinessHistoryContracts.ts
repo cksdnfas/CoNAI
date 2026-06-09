@@ -66,6 +66,29 @@ const handoffItems = [
   },
 ]
 
+const alertReviewItems = [
+  {
+    id: 'media-review-queue',
+    domain: 'media-review' as const,
+    title: { ko: '미디어 검토 큐', en: 'Media review queue' },
+    signal: { ko: '미검토 항목 backlog', en: 'Unreviewed item backlog' },
+    sourceSurface: 'Media review > operational trends',
+    thresholdKey: 'review-queue-threshold',
+    detail: { ko: '운영 검토 상태만 저장', en: 'Saved as operator-review state only' },
+    approvalBoundary: 'operator-review' as const,
+  },
+  {
+    id: 'runtime-retention',
+    domain: 'workflow-runtime' as const,
+    title: { ko: '산출물 보존', en: 'Artifact retention' },
+    signal: { ko: 'pending retention prune', en: 'Pending retention prune' },
+    sourceSurface: 'Module graph > artifact retention',
+    thresholdKey: 'retention-approval-threshold',
+    detail: { ko: '삭제나 보존 정책 변경은 승인 필요', en: 'Deletion or retention policy changes require approval' },
+    approvalBoundary: 'approval-required' as const,
+  },
+]
+
 const runbookGuardrails = [
   {
     id: 'protected-3999',
@@ -111,8 +134,10 @@ const partialRecord = buildReleaseReadinessHistoryRecord({
   appVersionLabel: '26.6.3',
   reviewedItemIds: ['completed-work'],
   capturedHandoffItemIds: ['rollback-plan'],
+  reviewedAlertIds: ['runtime-retention'],
   reviewItems,
   evidenceItems,
+  alertReviewItems,
   handoffItems,
   runbookGuardrails,
   operationSteps,
@@ -126,9 +151,13 @@ equal(partialRecord.externalActionsExecuted, false, 'history record must not cla
 equal(partialRecord.pushDeployRestartBoundary, 'approval-required', 'external release actions should stay approval-owned')
 equal(partialRecord.summary.reviewedCount, 1, 'reviewed item count should be preserved')
 equal(partialRecord.summary.capturedHandoffCount, 1, 'captured handoff count should be preserved')
+equal(partialRecord.summary.reviewedAlertCount, 1, 'reviewed alert count should be preserved')
 equal(partialRecord.summary.readyForExport, false, 'partial records should not be marked export ready')
 equal(partialRecord.checklist.find((item) => item.id === 'completed-work')?.status, 'checked', 'checked review status should persist')
 equal(partialRecord.checklist.find((item) => item.id === 'evidence')?.status, 'open', 'open review status should persist')
+equal(partialRecord.observabilityAlerts.find((item) => item.id === 'runtime-retention')?.status, 'reviewed', 'reviewed alert status should persist')
+equal(partialRecord.observabilityAlerts.find((item) => item.id === 'media-review-queue')?.status, 'open', 'open alert status should persist')
+equal(partialRecord.observabilityAlerts.find((item) => item.id === 'runtime-retention')?.approvalBoundary, 'approval-required', 'approval-required alert boundaries should persist')
 equal(partialRecord.handoff.find((item) => item.id === 'rollback-plan')?.status, 'captured', 'captured handoff status should persist')
 equal(partialRecord.handoff.find((item) => item.id === 'smoke-evidence')?.status, 'open', 'open handoff status should persist')
 equal(partialRecord.operationSteps.length, 2, 'approval-gated operation steps should persist')
@@ -140,8 +169,10 @@ const completeRecord = buildReleaseReadinessHistoryRecord({
   appVersionLabel: '26.6.3',
   reviewedItemIds: reviewItems.map((item) => item.id),
   capturedHandoffItemIds: handoffItems.map((item) => item.id),
+  reviewedAlertIds: alertReviewItems.map((item) => item.id),
   reviewItems,
   evidenceItems,
+  alertReviewItems,
   handoffItems,
   runbookGuardrails,
   operationSteps,
@@ -155,6 +186,9 @@ ok(handoffMarkdown.includes('# CoNAI Release Readiness Handoff'), 'handoff expor
 ok(handoffMarkdown.includes('- externalActionsExecuted: false'), 'handoff export should preserve the no-external-action boundary')
 ok(handoffMarkdown.includes('- pushDeployRestartBoundary: approval-required'), 'handoff export should preserve approval boundaries')
 ok(handoffMarkdown.includes('## Captured Handoff Evidence'), 'handoff export should include captured handoff evidence separately')
+ok(handoffMarkdown.includes('## Observability Alert Review'), 'handoff export should include observability alert review separately')
+ok(handoffMarkdown.includes('retention-approval-threshold'), 'handoff export should include runtime retention alert evidence')
+ok(handoffMarkdown.includes('approval required'), 'handoff export should preserve approval-required alert boundaries')
 ok(handoffMarkdown.includes('## Approval-Gated Operation Checklist'), 'handoff export should include the approval-gated operation checklist')
 ok(handoffMarkdown.includes('git push origin alphatest'), 'handoff export should include the alpha push command for later approval')
 ok(handoffMarkdown.includes('## User-Owned Decisions'), 'handoff export should separate user-owned release decisions')
@@ -178,8 +212,10 @@ for (let index = 0; index < MAX_RELEASE_READINESS_HISTORY_RECORDS + 3; index += 
       appVersionLabel: '26.6.3',
       reviewedItemIds: [],
       capturedHandoffItemIds: [],
+      reviewedAlertIds: [],
       reviewItems,
       evidenceItems,
+      alertReviewItems,
       handoffItems,
       runbookGuardrails,
       operationSteps,
@@ -197,6 +233,17 @@ storage.setItem(RELEASE_READINESS_HISTORY_STORAGE_KEY, '{not-json')
 equal(readReleaseReadinessHistoryFromStorage(storage).records.length, 0, 'corrupt local history should fail closed')
 
 ok(releaseReadinessTab.includes('data-release-readiness-history-contract="true"'), 'release readiness UI should expose the history contract surface')
+ok(releaseReadinessTab.includes('data-release-readiness-alert-review="true"'), 'release readiness UI should expose the observability alert review surface')
+ok(releaseReadinessTab.includes('ALERT_REVIEW_ITEMS'), 'release readiness UI should define persisted alert review items')
+ok(releaseReadinessTab.includes("'review-queue-threshold'"), 'alert review should persist media review queue threshold state')
+ok(releaseReadinessTab.includes("'quality-backlog-threshold'"), 'alert review should persist quality backlog threshold state')
+ok(releaseReadinessTab.includes("'similarity-review-threshold'"), 'alert review should persist similarity decision threshold state')
+ok(releaseReadinessTab.includes("'cleanup-approval-threshold'"), 'alert review should keep cleanup staging approval-gated')
+ok(releaseReadinessTab.includes("'queue-pressure-threshold'"), 'alert review should persist workflow queue pressure threshold state')
+ok(releaseReadinessTab.includes("'retry-stop-threshold'"), 'alert review should persist retry stop threshold state')
+ok(releaseReadinessTab.includes("'recovery-mismatch-threshold'"), 'alert review should persist recovery mismatch threshold state')
+ok(releaseReadinessTab.includes("'retention-approval-threshold'"), 'alert review should persist retention approval threshold state')
+ok(releaseReadinessTab.includes("'terminal-failure-threshold'"), 'alert review should persist terminal failure threshold state')
 ok(releaseReadinessTab.includes('data-release-readiness-runbook-export="true"'), 'release readiness UI should expose the runbook export surface')
 ok(releaseReadinessTab.includes('data-release-readiness-handoff-output="true"'), 'release readiness UI should expose the handoff output surface')
 ok(releaseReadinessTab.includes('saveReleaseReadinessHistoryRecord'), 'release readiness UI should save evidence snapshots')
@@ -208,6 +255,8 @@ ok(releaseReadinessTab.includes('triggerBlobDownload'), 'release readiness UI sh
 ok(historyContract.includes('externalActionsExecuted: false'), 'history contract should explicitly prevent external action execution evidence')
 ok(historyContract.includes("pushDeployRestartBoundary: 'approval-required'"), 'history contract should preserve release-action approval boundaries')
 ok(historyContract.includes('operationSteps'), 'history contract should persist operation checklist steps')
+ok(historyContract.includes('observabilityAlerts'), 'history contract should persist observability alert review items')
+ok(historyContract.includes('reviewedAlertIds'), 'history contract should persist reviewed alert ids')
 ok(historyContract.includes('buildReleaseReadinessHandoffMarkdown'), 'history contract should own handoff markdown formatting')
 ok(!releaseReadinessTab.includes('buildApiUrl('), 'history capture should not call backend action endpoints')
 ok(!releaseReadinessTab.includes('fetch('), 'history capture should not perform external release actions')
