@@ -89,6 +89,24 @@ export type ReleaseReadinessAutomationRehearsalContract = {
   approvalBoundary: 'local-evidence' | 'operator-review' | 'approval-required'
 }
 
+export type ReleaseReadinessHistoryIntelligenceSignalContract = {
+  id: string
+  domain: 'release-operations' | 'workflow-runtime' | 'media-review'
+  sourceSurface: string
+  priority: 'high' | 'medium' | 'watch'
+  title: TranslationDictionary
+  caveat: TranslationDictionary
+  evidenceAnchor: string
+  recommendedReview: TranslationDictionary
+  approvalBoundary: 'local-evidence' | 'operator-review' | 'approval-required'
+}
+
+export type ReleaseReadinessHistoryIntelligenceSummaryContract = {
+  priorityHighlights: string[]
+  caveats: string[]
+  signals: ReleaseReadinessHistoryIntelligenceSignalContract[]
+}
+
 export type ReleaseReadinessEvidenceReviewContract = {
   id: string
   sourceSurface: TranslationDictionary
@@ -119,6 +137,7 @@ export type ReleaseReadinessHistoryRecord = {
     reviewedAlertCount: number
     alertReviewItemCount: number
     trendEvidenceCount: number
+    readinessIntelligenceSignalCount: number
     readyForExport: boolean
   }
   checklist: Array<ReleaseReadinessChecklistItemContract & { status: 'checked' | 'open' }>
@@ -127,6 +146,7 @@ export type ReleaseReadinessHistoryRecord = {
   trendEvidence: ReleaseReadinessTrendEvidenceContract[]
   automationContext: ReleaseReadinessAutomationContextContract[]
   automationRehearsal: Array<ReleaseReadinessAutomationRehearsalContract & { status: 'reviewed' | 'open' }>
+  readinessIntelligence: ReleaseReadinessHistoryIntelligenceSummaryContract
   evidenceReview: ReleaseReadinessEvidenceReviewContract[]
   handoff: Array<ReleaseReadinessHandoffItemContract & { status: 'captured' | 'open' }>
   runbookGuardrails: ReleaseReadinessRunbookGuardrailContract[]
@@ -154,6 +174,7 @@ export type ReleaseReadinessHistorySnapshotInput = {
   trendEvidenceItems: readonly ReleaseReadinessTrendEvidenceContract[]
   automationContextItems: readonly ReleaseReadinessAutomationContextContract[]
   automationRehearsalItems?: readonly ReleaseReadinessAutomationRehearsalContract[]
+  readinessIntelligenceItems?: readonly ReleaseReadinessHistoryIntelligenceSignalContract[]
   evidenceReviewItems: readonly ReleaseReadinessEvidenceReviewContract[]
   handoffItems: readonly ReleaseReadinessHandoffItemContract[]
   runbookGuardrails: readonly ReleaseReadinessRunbookGuardrailContract[]
@@ -188,7 +209,7 @@ function buildRecordId(savedAt: string) {
   return `release-readiness-${timestamp}-${suffix}`
 }
 
-type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'evidenceReview' | 'summary'> & {
+type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'evidenceReview' | 'summary'> & {
   operationSteps?: ReleaseReadinessOperationStepContract[]
   reviewedAlertIds?: string[]
   reviewedAutomationRehearsalIds?: string[]
@@ -196,11 +217,13 @@ type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord
   trendEvidence?: ReleaseReadinessTrendEvidenceContract[]
   automationContext?: ReleaseReadinessAutomationContextContract[]
   automationRehearsal?: ReleaseReadinessAutomationRehearsalContract[]
+  readinessIntelligence?: ReleaseReadinessHistoryIntelligenceSummaryContract
   evidenceReview?: ReleaseReadinessEvidenceReviewContract[]
-  summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount' | 'trendEvidenceCount'> & {
+  summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount' | 'trendEvidenceCount' | 'readinessIntelligenceSignalCount'> & {
     reviewedAlertCount?: number
     alertReviewItemCount?: number
     trendEvidenceCount?: number
+    readinessIntelligenceSignalCount?: number
   }
 }
 
@@ -226,6 +249,7 @@ function isHistoryRecord(value: unknown): value is PersistedReleaseReadinessHist
     && (record.trendEvidence === undefined || Array.isArray(record.trendEvidence))
     && (record.automationContext === undefined || Array.isArray(record.automationContext))
     && (record.automationRehearsal === undefined || Array.isArray(record.automationRehearsal))
+    && (record.readinessIntelligence === undefined || typeof record.readinessIntelligence === 'object')
     && (record.evidenceReview === undefined || Array.isArray(record.evidenceReview))
     && Array.isArray(record.handoff)
     && Array.isArray(record.runbookGuardrails)
@@ -249,6 +273,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
   const alertReviewItemCount = input.alertReviewItems.length
   const trendEvidenceCount = input.trendEvidenceItems.length
   const automationRehearsalItemCount = input.automationRehearsalItems?.length ?? 0
+  const readinessIntelligenceItems = input.readinessIntelligenceItems ?? []
 
   return {
     id: input.id ?? buildRecordId(savedAt),
@@ -271,11 +296,11 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       reviewedAlertCount: reviewedAlertIds.length,
       alertReviewItemCount,
       trendEvidenceCount,
+      readinessIntelligenceSignalCount: readinessIntelligenceItems.length,
       readyForExport: reviewItemCount > 0
         && handoffItemCount > 0
         && alertReviewItemCount > 0
         && trendEvidenceCount > 0
-        && automationRehearsalItemCount > 0
         && reviewedItemIds.length === reviewItemCount
         && capturedHandoffItemIds.length === handoffItemCount
         && reviewedAlertIds.length === alertReviewItemCount
@@ -296,6 +321,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       ...item,
       status: automationRehearsalSet.has(item.id) ? 'reviewed' : 'open',
     })),
+    readinessIntelligence: buildReleaseReadinessHistoryIntelligenceSummary(readinessIntelligenceItems),
     evidenceReview: input.evidenceReviewItems.map((item) => ({ ...item })),
     handoff: input.handoffItems.map((item) => ({
       ...item,
@@ -307,6 +333,20 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       ...item,
       status: 'approval-required',
     })),
+  }
+}
+
+export function buildReleaseReadinessHistoryIntelligenceSummary(
+  signals: readonly ReleaseReadinessHistoryIntelligenceSignalContract[],
+): ReleaseReadinessHistoryIntelligenceSummaryContract {
+  return {
+    priorityHighlights: signals
+      .filter((signal) => signal.priority === 'high')
+      .map((signal) => `${signal.id}: ${signal.evidenceAnchor}`),
+    caveats: signals
+      .filter((signal) => signal.approvalBoundary !== 'local-evidence')
+      .map((signal) => `${signal.id}: ${formatTranslationDictionary(signal.caveat)}`),
+    signals: signals.map((signal) => ({ ...signal })),
   }
 }
 
@@ -328,6 +368,7 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
         reviewedAlertCount: record.summary.reviewedAlertCount ?? uniqueIds(record.reviewedAlertIds ?? []).length,
         alertReviewItemCount: record.summary.alertReviewItemCount ?? record.observabilityAlerts?.length ?? 0,
         trendEvidenceCount: record.summary.trendEvidenceCount ?? record.trendEvidence?.length ?? 0,
+        readinessIntelligenceSignalCount: record.summary.readinessIntelligenceSignalCount ?? record.readinessIntelligence?.signals?.length ?? 0,
       },
       observabilityAlerts: Array.isArray(record.observabilityAlerts) ? record.observabilityAlerts : [],
       trendEvidence: Array.isArray(record.trendEvidence) ? record.trendEvidence : [],
@@ -338,6 +379,9 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
           status: uniqueIds(record.reviewedAutomationRehearsalIds ?? []).includes(item.id) ? 'reviewed' as const : 'open' as const,
         }))
         : [],
+      readinessIntelligence: record.readinessIntelligence && Array.isArray(record.readinessIntelligence.signals)
+        ? buildReleaseReadinessHistoryIntelligenceSummary(record.readinessIntelligence.signals)
+        : buildReleaseReadinessHistoryIntelligenceSummary([]),
       evidenceReview: Array.isArray(record.evidenceReview) ? record.evidenceReview : [],
       operationSteps: Array.isArray(record.operationSteps) ? record.operationSteps : [],
     }))
@@ -452,6 +496,12 @@ export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHis
     '',
     ...record.automationRehearsal.map((item) => (
       `- [${item.status === 'reviewed' ? 'x' : ' '}] ${formatTranslationDictionary(item.rehearsalSurface)} (${item.dryRunAnchor} / ${item.localDiffArtifact} / ${formatMarkdownStatus(item.approvalBoundary)}): stop ${formatTranslationDictionary(item.stopCondition)}`
+    )),
+    '',
+    '## Readiness History Intelligence',
+    '',
+    ...record.readinessIntelligence.signals.map((item) => (
+      `- ${item.id}: ${formatTranslationDictionary(item.title)} (${item.domain} / ${item.sourceSurface} / ${item.evidenceAnchor} / ${item.priority} / ${formatMarkdownStatus(item.approvalBoundary)}): caveat ${formatTranslationDictionary(item.caveat)}; review ${formatTranslationDictionary(item.recommendedReview)}`
     )),
     '',
     '## Operator Evidence Review Console',

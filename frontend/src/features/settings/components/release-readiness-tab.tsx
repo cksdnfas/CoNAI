@@ -28,6 +28,7 @@ import {
   type ReleaseReadinessTrendEvidenceContract,
   type ReleaseReadinessAutomationContextContract,
   type ReleaseReadinessAutomationRehearsalContract,
+  type ReleaseReadinessHistoryIntelligenceSignalContract,
   type ReleaseReadinessUserDecisionContract,
 } from '../release-readiness-history'
 
@@ -41,6 +42,7 @@ type TrendEvidenceItem = ReleaseReadinessTrendEvidenceContract
 type UserDecisionItem = ReleaseReadinessUserDecisionContract
 type AutomationContextItem = ReleaseReadinessAutomationContextContract
 type AutomationRehearsalItem = ReleaseReadinessAutomationRehearsalContract
+type ReadinessHistoryIntelligenceSignal = ReleaseReadinessHistoryIntelligenceSignalContract
 type OperatorEvidenceReviewItem = ReleaseReadinessEvidenceReviewContract
 
 type IntegratedOperationsLane = {
@@ -526,6 +528,60 @@ const AUTOMATION_REHEARSAL_ITEMS: AutomationRehearsalItem[] = [
   },
 ]
 
+const READINESS_HISTORY_INTELLIGENCE_SIGNALS: ReadinessHistoryIntelligenceSignal[] = [
+  {
+    id: 'release-handoff-priority',
+    domain: 'release-operations',
+    sourceSurface: 'Settings > Release readiness history',
+    priority: 'high',
+    title: { ko: '릴리즈 핸드오프 우선순위', en: 'Release handoff priority' },
+    caveat: {
+      ko: 'push, deploy, restart는 history intelligence가 추천해도 승인 전 실행하지 않아.',
+      en: 'Push, deploy, and restart stay unexecuted before approval even when history intelligence recommends review.',
+    },
+    evidenceAnchor: 'captured-handoff-readiness + final-verification-trend',
+    recommendedReview: {
+      ko: '최근 snapshot의 readyForExport, handoff capture, final verification trend를 먼저 비교해.',
+      en: 'Compare the latest snapshot readyForExport state, handoff capture, and final verification trend first.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+  {
+    id: 'workflow-runtime-caveat',
+    domain: 'workflow-runtime',
+    sourceSurface: 'Module graph > runtime health + terminal history',
+    priority: 'medium',
+    title: { ko: '워크플로우 런타임 caveat', en: 'Workflow runtime caveat' },
+    caveat: {
+      ko: 'queue pressure, retry stop, recovery mismatch는 rerun/restart 전에 operator review로 남겨.',
+      en: 'Queue pressure, retry stops, and recovery mismatches stay operator-review evidence before rerun or restart.',
+    },
+    evidenceAnchor: 'queue-retry-recovery-retention-signals',
+    recommendedReview: {
+      ko: '실패 이력과 recovery handoff packet을 같이 보고 smoke 전 중단 조건을 확인해.',
+      en: 'Review terminal failure history with the recovery handoff packet and confirm stop conditions before smoke.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'media-stewardship-caveat',
+    domain: 'media-review',
+    sourceSurface: 'Media review > operational trends + similarity history',
+    priority: 'watch',
+    title: { ko: '미디어 스튜어드십 caveat', en: 'Media stewardship caveat' },
+    caveat: {
+      ko: 'cleanup staging은 review signal만 만들고 삭제/retention 변경은 승인 항목으로 분리해.',
+      en: 'Cleanup staging creates review signals only; deletion and retention changes stay separate approval items.',
+    },
+    evidenceAnchor: 'review-quality-cleanup-signals',
+    recommendedReview: {
+      ko: '품질 backlog와 similarity decision history를 릴리즈 공개 전 caveat로 함께 확인해.',
+      en: 'Review quality backlog and similarity decision history together as pre-release caveats.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+]
+
 const REVIEW_LANES: ReadinessItem[] = [
   {
     id: 'local-results',
@@ -771,6 +827,7 @@ export function ReleaseReadinessTab() {
   const alertReviewState = allAlertsReviewed ? t({ ko: '알림 검토 완료', en: 'Alerts reviewed' }) : t({ ko: '{count}/{total} 알림', en: '{count}/{total} alerts' }, { count: reviewedAlertCount, total: ALERT_REVIEW_ITEMS.length })
   const exportReadinessState = allEvidenceReadyForExport ? t({ ko: '내보내기 준비', en: 'Ready to export' }) : t({ ko: '증거 보강 필요', en: 'Evidence needed' })
   const trendEvidenceState = t({ ko: '{count}개 추세 근거', en: '{count} trend evidence items' }, { count: TREND_EVIDENCE_ITEMS.length })
+  const readinessIntelligenceState = t({ ko: '{count}개 priority/caveat', en: '{count} priority/caveat signals' }, { count: READINESS_HISTORY_INTELLIGENCE_SIGNALS.length })
   const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
   const automationRehearsalState = allAutomationRehearsalsReviewed ? t({ ko: '리허설 검토 완료', en: 'Rehearsals reviewed' }) : t({ ko: '{count}/{total} 리허설', en: '{count}/{total} rehearsals' }, { count: reviewedAutomationRehearsalCount, total: AUTOMATION_REHEARSAL_ITEMS.length })
   const historyState = readinessHistory.length > 0 ? t({ ko: '{count}개 저장', en: '{count} saved' }, { count: readinessHistory.length }) : t({ ko: '기록 없음', en: 'No records' })
@@ -849,6 +906,7 @@ export function ReleaseReadinessTab() {
       trendEvidenceItems: TREND_EVIDENCE_ITEMS,
       automationContextItems: AUTOMATION_CONTEXT_ITEMS,
       automationRehearsalItems: AUTOMATION_REHEARSAL_ITEMS,
+      readinessIntelligenceItems: READINESS_HISTORY_INTELLIGENCE_SIGNALS,
       evidenceReviewItems: OPERATOR_EVIDENCE_REVIEW_ITEMS,
       handoffItems: HANDOFF_EVIDENCE_ITEMS,
       runbookGuardrails: RUNBOOK_GUARDRAILS,
@@ -917,6 +975,7 @@ export function ReleaseReadinessTab() {
               <Badge variant={allAutomationRehearsalsReviewed ? 'default' : 'secondary'}>{automationRehearsalState}</Badge>
               <Badge data-release-readiness-export-state="true" variant={allEvidenceReadyForExport ? 'default' : 'outline'}>{exportReadinessState}</Badge>
               <Badge variant="outline">{trendEvidenceState}</Badge>
+              <Badge data-release-readiness-history-intelligence-badge="true" variant="outline">{readinessIntelligenceState}</Badge>
               <div className="min-w-0 text-sm text-muted-foreground">
                 {t({
                   ko: '완료 작업, 주의 사항, 검증 근거, 사용자 결정을 릴리즈 액션 전에 한곳에서 점검해.',
@@ -1031,11 +1090,12 @@ export function ReleaseReadinessTab() {
                         )}
                         {' · '}
                         {t(
-                          { ko: '알림 {alerts}/{alertTotal} · 추세 {trends}', en: 'alerts {alerts}/{alertTotal} · trends {trends}' },
+                          { ko: '알림 {alerts}/{alertTotal} · 추세 {trends} · intelligence {intelligence}', en: 'alerts {alerts}/{alertTotal} · trends {trends} · intelligence {intelligence}' },
                           {
                             alerts: record.summary.reviewedAlertCount,
                             alertTotal: record.summary.alertReviewItemCount,
                             trends: record.summary.trendEvidenceCount,
+                            intelligence: record.summary.readinessIntelligenceSignalCount,
                           },
                         )}
                       </span>
@@ -1161,7 +1221,41 @@ export function ReleaseReadinessTab() {
         </div>
       </SettingsSection>
 
+      <SettingsSection
+        data-release-readiness-history-intelligence="true"
+        heading={t({ ko: 'readiness history intelligence', en: 'Readiness history intelligence' })}
+        actions={<Badge variant="secondary">{readinessIntelligenceState}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: '저장된 release readiness 기록에서 release operations, workflow runtime, media stewardship 신호를 priority/caveat 요약으로 묶어. 이 표면은 추천과 근거만 만들고 push, deploy, restart, cleanup은 실행하지 않아.',
+            en: 'Summarize saved release-readiness records into priority/caveat signals across release operations, workflow runtime, and media stewardship. This surface produces recommendations and evidence only; it does not push, deploy, restart, or clean up.',
+          })}
+        </SettingsInsetBlock>
 
+        <div className="grid gap-3 min-[1000px]:grid-cols-3">
+          {READINESS_HISTORY_INTELLIGENCE_SIGNALS.map((item) => (
+            <SettingsInsetBlock key={item.id} data-release-readiness-history-intelligence-signal={item.id} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={item.priority === 'high' ? 'default' : item.priority === 'medium' ? 'secondary' : 'outline'}>{item.priority}</Badge>
+                <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                  {item.approvalBoundary === 'approval-required'
+                    ? t({ ko: '승인 필요', en: 'Approval needed' })
+                    : item.approvalBoundary === 'operator-review'
+                      ? t({ ko: '운영 검토', en: 'Operator review' })
+                      : t({ ko: '로컬 근거', en: 'Local evidence' })}
+                </Badge>
+              </div>
+              <div className="text-sm font-semibold text-foreground">{t(item.title)}</div>
+              <div className="font-mono text-xs text-foreground/90">{item.evidenceAnchor}</div>
+              <div className="text-sm leading-6 text-muted-foreground">{t(item.caveat)}</div>
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
+                {t(item.recommendedReview)}
+              </div>
+            </SettingsInsetBlock>
+          ))}
+        </div>
+      </SettingsSection>
 
       <SettingsSection
         data-release-readiness-automation-rehearsal="true"
