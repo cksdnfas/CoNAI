@@ -60,7 +60,8 @@
     "verify:module-graph-bypass-contracts": "tsx src/scripts/verifyModuleGraphBypassContracts.ts",
     "verify:workflow-queue-recovery-cockpit-contracts": "tsx src/scripts/verifyWorkflowQueueRecoveryCockpitContracts.ts",
     "verify:automation-rehearsal-contracts": "tsx src/scripts/verifyAutomationRehearsalContracts.ts",
-    "verify:readiness-history-intelligence-contracts": "tsx src/scripts/verifyReadinessHistoryIntelligenceContracts.ts"
+    "verify:readiness-history-intelligence-contracts": "tsx src/scripts/verifyReadinessHistoryIntelligenceContracts.ts",
+    "verify:release-handoff-decision-cockpit-contracts": "tsx src/scripts/verifyReleaseHandoffDecisionCockpitContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",

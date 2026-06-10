@@ -22,6 +22,16 @@ export type ReleaseReadinessEvidenceItemContract = {
   tone: ReleaseReadinessEvidenceTone
 }
 
+export type ReleaseReadinessDecisionCockpitItemContract = {
+  id: string
+  lane: 'local-verification' | 'commit-scope' | 'approval-gate' | 'caveat-review' | 'evidence-export'
+  title: TranslationDictionary
+  source: string
+  decisionQuestion: TranslationDictionary
+  localEvidence: string
+  boundary: 'local-evidence' | 'operator-review' | 'approval-required'
+}
+
 export type ReleaseReadinessHandoffItemContract = {
   id: string
   title: TranslationDictionary
@@ -138,10 +148,12 @@ export type ReleaseReadinessHistoryRecord = {
     alertReviewItemCount: number
     trendEvidenceCount: number
     readinessIntelligenceSignalCount: number
+    decisionCockpitItemCount: number
     readyForExport: boolean
   }
   checklist: Array<ReleaseReadinessChecklistItemContract & { status: 'checked' | 'open' }>
   evidence: ReleaseReadinessEvidenceItemContract[]
+  decisionCockpit: ReleaseReadinessDecisionCockpitItemContract[]
   observabilityAlerts: Array<ReleaseReadinessAlertReviewItemContract & { status: 'reviewed' | 'open' }>
   trendEvidence: ReleaseReadinessTrendEvidenceContract[]
   automationContext: ReleaseReadinessAutomationContextContract[]
@@ -170,6 +182,7 @@ export type ReleaseReadinessHistorySnapshotInput = {
   reviewedAutomationRehearsalIds?: Iterable<string>
   reviewItems: readonly ReleaseReadinessChecklistItemContract[]
   evidenceItems: readonly ReleaseReadinessEvidenceItemContract[]
+  decisionCockpitItems?: readonly ReleaseReadinessDecisionCockpitItemContract[]
   alertReviewItems: readonly ReleaseReadinessAlertReviewItemContract[]
   trendEvidenceItems: readonly ReleaseReadinessTrendEvidenceContract[]
   automationContextItems: readonly ReleaseReadinessAutomationContextContract[]
@@ -209,11 +222,12 @@ function buildRecordId(savedAt: string) {
   return `release-readiness-${timestamp}-${suffix}`
 }
 
-type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'evidenceReview' | 'summary'> & {
+type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'evidenceReview' | 'decisionCockpit' | 'summary'> & {
   operationSteps?: ReleaseReadinessOperationStepContract[]
   reviewedAlertIds?: string[]
   reviewedAutomationRehearsalIds?: string[]
   observabilityAlerts?: Array<ReleaseReadinessAlertReviewItemContract & { status: 'reviewed' | 'open' }>
+  decisionCockpit?: ReleaseReadinessDecisionCockpitItemContract[]
   trendEvidence?: ReleaseReadinessTrendEvidenceContract[]
   automationContext?: ReleaseReadinessAutomationContextContract[]
   automationRehearsal?: ReleaseReadinessAutomationRehearsalContract[]
@@ -224,6 +238,7 @@ type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord
     alertReviewItemCount?: number
     trendEvidenceCount?: number
     readinessIntelligenceSignalCount?: number
+    decisionCockpitItemCount?: number
   }
 }
 
@@ -246,6 +261,7 @@ function isHistoryRecord(value: unknown): value is PersistedReleaseReadinessHist
     && Array.isArray(record.checklist)
     && Array.isArray(record.evidence)
     && (record.observabilityAlerts === undefined || Array.isArray(record.observabilityAlerts))
+    && (record.decisionCockpit === undefined || Array.isArray(record.decisionCockpit))
     && (record.trendEvidence === undefined || Array.isArray(record.trendEvidence))
     && (record.automationContext === undefined || Array.isArray(record.automationContext))
     && (record.automationRehearsal === undefined || Array.isArray(record.automationRehearsal))
@@ -271,6 +287,8 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
   const reviewItemCount = input.reviewItems.length
   const handoffItemCount = input.handoffItems.length
   const alertReviewItemCount = input.alertReviewItems.length
+  const decisionCockpitItems = input.decisionCockpitItems ?? []
+  const decisionCockpitItemCount = decisionCockpitItems.length
   const trendEvidenceCount = input.trendEvidenceItems.length
   const automationRehearsalItemCount = input.automationRehearsalItems?.length ?? 0
   const readinessIntelligenceItems = input.readinessIntelligenceItems ?? []
@@ -297,6 +315,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       alertReviewItemCount,
       trendEvidenceCount,
       readinessIntelligenceSignalCount: readinessIntelligenceItems.length,
+      decisionCockpitItemCount,
       readyForExport: reviewItemCount > 0
         && handoffItemCount > 0
         && alertReviewItemCount > 0
@@ -311,6 +330,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       status: reviewedSet.has(item.id) ? 'checked' : 'open',
     })),
     evidence: input.evidenceItems.map((item) => ({ ...item })),
+    decisionCockpit: decisionCockpitItems.map((item) => ({ ...item })),
     observabilityAlerts: input.alertReviewItems.map((item) => ({
       ...item,
       status: alertReviewSet.has(item.id) ? 'reviewed' : 'open',
@@ -369,7 +389,9 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
         alertReviewItemCount: record.summary.alertReviewItemCount ?? record.observabilityAlerts?.length ?? 0,
         trendEvidenceCount: record.summary.trendEvidenceCount ?? record.trendEvidence?.length ?? 0,
         readinessIntelligenceSignalCount: record.summary.readinessIntelligenceSignalCount ?? record.readinessIntelligence?.signals?.length ?? 0,
+        decisionCockpitItemCount: record.summary.decisionCockpitItemCount ?? record.decisionCockpit?.length ?? 0,
       },
+      decisionCockpit: Array.isArray(record.decisionCockpit) ? record.decisionCockpit : [],
       observabilityAlerts: Array.isArray(record.observabilityAlerts) ? record.observabilityAlerts : [],
       trendEvidence: Array.isArray(record.trendEvidence) ? record.trendEvidence : [],
       automationContext: Array.isArray(record.automationContext) ? record.automationContext : [],
@@ -472,6 +494,12 @@ export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHis
     '',
     ...record.evidence.map((item) => (
       `- ${formatTranslationDictionary(item.label)} (${formatMarkdownStatus(item.tone)}): ${item.value} - ${formatTranslationDictionary(item.detail)}`
+    )),
+    '',
+    '## Release Handoff Decision Cockpit',
+    '',
+    ...record.decisionCockpit.map((item) => (
+      `- ${formatTranslationDictionary(item.title)} (${item.lane} / ${item.source} / ${formatMarkdownStatus(item.boundary)}): asks ${formatTranslationDictionary(item.decisionQuestion)}; evidence ${item.localEvidence}`
     )),
     '',
     '## Observability Alert Review',

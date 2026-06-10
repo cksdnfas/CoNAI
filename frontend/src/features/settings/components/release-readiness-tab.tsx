@@ -20,6 +20,7 @@ import {
   type ReleaseReadinessChecklistItemContract,
   type ReleaseReadinessAlertReviewItemContract,
   type ReleaseReadinessEvidenceItemContract,
+  type ReleaseReadinessDecisionCockpitItemContract,
   type ReleaseReadinessHandoffItemContract,
   type ReleaseReadinessHistoryRecord,
   type ReleaseReadinessEvidenceReviewContract,
@@ -35,6 +36,7 @@ import {
 type ReadinessItem = ReleaseReadinessChecklistItemContract
 type AlertReviewItem = ReleaseReadinessAlertReviewItemContract
 type EvidenceItem = ReleaseReadinessEvidenceItemContract
+type DecisionCockpitItem = ReleaseReadinessDecisionCockpitItemContract
 type HandoffEvidenceItem = ReleaseReadinessHandoffItemContract
 type RunbookGuardrail = ReleaseReadinessRunbookGuardrailContract
 type OperationStep = ReleaseReadinessOperationStepContract
@@ -202,6 +204,54 @@ const EVIDENCE_ITEMS: EvidenceItem[] = [
     value: 'approval-required',
     detail: { ko: 'push, deploy, restart는 별도 승인 필요', en: 'Push, deploy, and restart need separate approval' },
     tone: 'blocked',
+  },
+]
+
+const DECISION_COCKPIT_ITEMS: DecisionCockpitItem[] = [
+  {
+    id: 'verification-baseline',
+    lane: 'local-verification',
+    title: { ko: '로컬 검증 baseline', en: 'Local verification baseline' },
+    source: 'npm run build + npm run verify:release-readiness + git diff --check',
+    decisionQuestion: { ko: '릴리즈 판단 전에 로컬 build/docs/contracts 근거가 최신인가?', en: 'Is local build/docs/contracts evidence current before release judgment?' },
+    localEvidence: 'canonical local checks only; no live smoke, deploy, restart, or public endpoint action',
+    boundary: 'local-evidence',
+  },
+  {
+    id: 'local-commit-range',
+    lane: 'commit-scope',
+    title: { ko: '로컬 커밋 범위', en: 'Local commit range' },
+    source: 'git status --short --branch; git log --oneline origin/alphatest..HEAD',
+    decisionQuestion: { ko: 'push 승인 전에 포함될 커밋 범위와 dirty 상태가 기대와 일치하는가?', en: 'Does the commit range and dirty state match expectations before push approval?' },
+    localEvidence: 'branch snapshot and ahead range are review evidence; worker does not push',
+    boundary: 'approval-required',
+  },
+  {
+    id: 'approval-gate-register',
+    lane: 'approval-gate',
+    title: { ko: '승인 게이트 등록부', en: 'Approval gate register' },
+    source: 'USER_DECISIONS + OPERATION_STEPS + RUNBOOK_GUARDRAILS',
+    decisionQuestion: { ko: 'push, demo update, restart/smoke, cleanup이 실행 버튼이 아니라 사용자 결정으로 분리됐는가?', en: 'Are push, demo update, restart/smoke, and cleanup separated as user decisions instead of action buttons?' },
+    localEvidence: 'approval-required boundaries remain visible in the exported handoff',
+    boundary: 'approval-required',
+  },
+  {
+    id: 'caveat-triage-snapshot',
+    lane: 'caveat-review',
+    title: { ko: '주의 사항 triage snapshot', en: 'Caveat triage snapshot' },
+    source: 'ALERT_REVIEW_ITEMS + READINESS_HISTORY_INTELLIGENCE_SIGNALS',
+    decisionQuestion: { ko: '미디어/runtime caveat가 cleanup/rerun/restart 전 검토 항목으로 남아 있는가?', en: 'Do media/runtime caveats remain review items before cleanup, rerun, or restart?' },
+    localEvidence: 'observability alerts and intelligence caveats are persisted as review evidence only',
+    boundary: 'operator-review',
+  },
+  {
+    id: 'handoff-export-packet',
+    lane: 'evidence-export',
+    title: { ko: '핸드오프 export packet', en: 'Handoff export packet' },
+    source: 'buildReleaseReadinessHandoffMarkdown(record)',
+    decisionQuestion: { ko: '승인 전 공유할 Markdown handoff가 검증, caveat, 승인 게이트를 한 번에 담는가?', en: 'Does the pre-approval Markdown handoff carry verification, caveats, and approval gates together?' },
+    localEvidence: 'local Markdown export/copy only; no backend action endpoint or external side effect',
+    boundary: 'local-evidence',
   },
 ]
 
@@ -829,6 +879,7 @@ export function ReleaseReadinessTab() {
   const trendEvidenceState = t({ ko: '{count}개 추세 근거', en: '{count} trend evidence items' }, { count: TREND_EVIDENCE_ITEMS.length })
   const readinessIntelligenceState = t({ ko: '{count}개 priority/caveat', en: '{count} priority/caveat signals' }, { count: READINESS_HISTORY_INTELLIGENCE_SIGNALS.length })
   const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
+  const decisionCockpitState = t({ ko: '{count}개 판단 카드', en: '{count} decision cards' }, { count: DECISION_COCKPIT_ITEMS.length })
   const automationRehearsalState = allAutomationRehearsalsReviewed ? t({ ko: '리허설 검토 완료', en: 'Rehearsals reviewed' }) : t({ ko: '{count}/{total} 리허설', en: '{count}/{total} rehearsals' }, { count: reviewedAutomationRehearsalCount, total: AUTOMATION_REHEARSAL_ITEMS.length })
   const historyState = readinessHistory.length > 0 ? t({ ko: '{count}개 저장', en: '{count} saved' }, { count: readinessHistory.length }) : t({ ko: '기록 없음', en: 'No records' })
   const latestHistoryLabel = latestReadinessRecord
@@ -903,6 +954,7 @@ export function ReleaseReadinessTab() {
       reviewedAutomationRehearsalIds: reviewedAutomationRehearsals,
       reviewItems: REVIEW_ITEMS,
       evidenceItems: EVIDENCE_ITEMS,
+      decisionCockpitItems: DECISION_COCKPIT_ITEMS,
       alertReviewItems: ALERT_REVIEW_ITEMS,
       trendEvidenceItems: TREND_EVIDENCE_ITEMS,
       automationContextItems: AUTOMATION_CONTEXT_ITEMS,
@@ -1023,6 +1075,42 @@ export function ReleaseReadinessTab() {
               </SettingsToggleRow>
             )
           })}
+        </div>
+      </SettingsSection>
+
+
+      <SettingsSection
+        data-release-handoff-decision-cockpit="true"
+        heading={t({ ko: '릴리즈 핸드오프 판단 콕핏', en: 'Release handoff decision cockpit' })}
+        actions={<Badge variant="secondary">{decisionCockpitState}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: '로컬 검증, 커밋 범위, 승인 게이트, caveat, export packet을 한 화면의 판단 계약으로 묶어. 이 콕핏은 근거와 질문만 만들고 push, deploy, restart, cleanup, public smoke는 실행하지 않아.',
+            en: 'Bundle local verification, commit range, approval gates, caveats, and the export packet into one decision contract. This cockpit produces evidence and questions only; it does not push, deploy, restart, clean up, or run public smoke.',
+          })}
+        </SettingsInsetBlock>
+
+        <div className="grid gap-3 min-[1000px]:grid-cols-2">
+          {DECISION_COCKPIT_ITEMS.map((item) => (
+            <SettingsInsetBlock key={item.id} data-release-handoff-decision-cockpit-item={item.id} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{t(item.title)}</Badge>
+                <Badge variant={item.boundary === 'approval-required' ? 'outline' : 'secondary'}>
+                  {item.boundary === 'approval-required'
+                    ? t({ ko: '승인 필요', en: 'Approval needed' })
+                    : item.boundary === 'operator-review'
+                      ? t({ ko: '운영 검토', en: 'Operator review' })
+                      : t({ ko: '로컬 근거', en: 'Local evidence' })}
+                </Badge>
+              </div>
+              <div className="font-mono text-xs text-foreground/90">{item.source}</div>
+              <div className="text-sm leading-6 text-muted-foreground">{t(item.decisionQuestion)}</div>
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 font-mono text-xs leading-5 text-foreground">
+                {item.localEvidence}
+              </div>
+            </SettingsInsetBlock>
+          ))}
         </div>
       </SettingsSection>
 
