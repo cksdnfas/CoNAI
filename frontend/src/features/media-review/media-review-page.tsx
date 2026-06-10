@@ -28,6 +28,7 @@ import {
   buildMediaReviewOperationalTrends,
   buildMediaReviewSearchChips,
   buildMediaReviewSessionContinuitySnapshot,
+  buildMediaReviewStewardshipWorkspace,
   buildMediaReviewSimilarityDecisionHistory,
   buildMediaReviewThresholdGuidance,
   clearMediaReviewSessionContinuitySnapshot,
@@ -49,6 +50,7 @@ import {
   type MediaReviewRecommendedQueue,
   type MediaReviewSimilarityDecisionHistoryItem,
   type MediaReviewSimilarityDecisionKind,
+  type MediaReviewStewardshipWorkspace,
   type MediaReviewTagQualitySuggestion,
   type MediaReviewThresholdGuidance,
 } from './media-review-utils'
@@ -311,6 +313,88 @@ function getCleanupStageActionCopy(action: MediaReviewCleanupStageAction) {
   }
 
   return { ko: '활성 선택 항목 보류', en: 'Hold selected active item' }
+}
+
+
+function getMediaReviewStewardshipLaneCopy(lane: MediaReviewStewardshipWorkspace['lanes'][number]) {
+  if (lane.key === 'duplicate-review') {
+    return {
+      title: { ko: '중복 후보 리뷰', en: 'Duplicate candidate review' },
+      body: { ko: '유사도 결과와 세션 결정을 묶어 보존/중복 판단 근거만 남겨.', en: 'Combines similarity results and session decisions as keep-or-duplicate evidence only.' },
+    }
+  }
+
+  if (lane.key === 'retention-candidates') {
+    return {
+      title: { ko: '보존 후보 점검', en: 'Retention candidate check' },
+      body: { ko: '누락/휴지통/복구 신호를 모아 승인 전 검토 대상으로만 표시해.', en: 'Collects missing, recycled, and recoverable signals as pre-approval review candidates only.' },
+    }
+  }
+
+  return {
+    title: { ko: '정리 승인 패킷', en: 'Cleanup approval packet' },
+    body: { ko: '스테이징된 항목을 삭제 실행 없이 승인 패킷 후보로 묶어.', en: 'Bundles staged items into approval-packet candidates without running deletion.' },
+  }
+}
+
+function MediaReviewStewardshipWorkspacePanel({
+  workspace,
+  onQueueChange,
+}: {
+  workspace: MediaReviewStewardshipWorkspace
+  onQueueChange: (queue: MediaReviewQueueKey) => void
+}) {
+  const { t, formatNumber } = useI18n()
+
+  return (
+    <PageInset className="space-y-3" data-media-review-stewardship-workspace="true">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <span>{t({ ko: '비파괴 라이브러리 스튜어드십', en: 'Non-destructive library stewardship' })}</span>
+        </div>
+        <Badge variant="outline">{t({ ko: '삭제 실행 {count}', en: '{count} destructive actions' }, { count: formatNumber(workspace.destructiveActionCount) })}</Badge>
+      </div>
+      <div className="grid gap-2 lg:grid-cols-3">
+        {workspace.lanes.map((lane) => {
+          const copy = getMediaReviewStewardshipLaneCopy(lane)
+          return (
+            <div
+              key={lane.key}
+              className={`min-h-[9rem] rounded-sm border px-3 py-2 text-xs ${getOperationalTrendToneClass(lane.tone)}`}
+              data-media-review-stewardship-lane={lane.key}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="font-semibold text-foreground">{t(copy.title)}</div>
+                <Badge variant="outline">{t(getMediaReviewTrendToneLabel(lane.tone))}</Badge>
+              </div>
+              <div className="mt-2 grid gap-1 text-muted-foreground">
+                <span>{t({ ko: '항목 {count}', en: '{count} items' }, { count: formatNumber(lane.itemCount) })}</span>
+                <span>{t({ ko: '근거 {count}', en: '{count} evidence' }, { count: formatNumber(lane.evidenceCount) })}</span>
+                <span>
+                  {lane.approvalBoundary === 'approval-required'
+                    ? t({ ko: '삭제/보존 정책은 별도 승인 필요', en: 'Deletion or retention policy requires separate approval' })
+                    : t({ ko: '운영자 검토만 기록', en: 'Operator review evidence only' })}
+                </span>
+              </div>
+              <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
+              {lane.queue ? (
+                <Button className="mt-2" size="sm" variant="outline" onClick={() => onQueueChange(lane.queue!)}>
+                  {t({ ko: '큐 열기', en: 'Open queue' })}
+                </Button>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {t({
+          ko: '이 패널은 중복/보존/정리 승인 후보를 한 화면에 모으지만 파일 삭제, 휴지통 비우기, 보존 정책 변경을 실행하지 않아.',
+          en: 'This panel collects duplicate, retention, and cleanup approval candidates in one place without deleting files, emptying recycle bins, or changing retention policy.',
+        })}
+      </div>
+    </PageInset>
+  )
 }
 
 function MediaReviewOperationalTrendPanel({
@@ -882,6 +966,15 @@ export function MediaReviewPage() {
     [cleanupStageItems, recommendedQueues, reviewedIdSet.size, selectedCleanupStagePlan, similarityDecisionSummary, sourceSummary, visibleSummary],
   )
   const thresholdGuidance = useMemo(() => buildMediaReviewThresholdGuidance(operationalTrends), [operationalTrends])
+  const stewardshipWorkspace = useMemo(
+    () => buildMediaReviewStewardshipWorkspace({
+      summary: sourceSummary,
+      decisionSummary: similarityDecisionSummary,
+      cleanupStagingPlan: selectedCleanupStagePlan,
+      stagedCleanupItems: cleanupStageItems,
+    }),
+    [cleanupStageItems, selectedCleanupStagePlan, similarityDecisionSummary, sourceSummary],
+  )
 
   const assignToGroupMutation = useMutation({
     mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
@@ -1145,6 +1238,14 @@ export function MediaReviewPage() {
 
         <MediaReviewOperationalTrendPanel
           trends={operationalTrends}
+          onQueueChange={(queue) => {
+            setActiveQueue(queue)
+            setSelectedIds([])
+          }}
+        />
+
+        <MediaReviewStewardshipWorkspacePanel
+          workspace={stewardshipWorkspace}
           onQueueChange={(queue) => {
             setActiveQueue(queue)
             setSelectedIds([])

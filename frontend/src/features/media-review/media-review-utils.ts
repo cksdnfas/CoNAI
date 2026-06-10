@@ -15,6 +15,7 @@ export type MediaReviewCleanupStageAction = 'review-missing-file' | 'review-recy
 export type MediaReviewOperationalTrendKey = 'review-queue' | 'quality-backlog' | 'similarity-history' | 'cleanup-staging'
 export type MediaReviewOperationalTrendTone = 'ready' | 'watch' | 'attention'
 export type MediaReviewThresholdGuidanceKey = 'review-queue-threshold' | 'quality-backlog-threshold' | 'similarity-review-threshold' | 'cleanup-approval-threshold'
+export type MediaReviewStewardshipLaneKey = 'duplicate-review' | 'retention-candidates' | 'cleanup-approval'
 
 export interface MediaReviewSignals {
   compositeHash: string | null
@@ -109,6 +110,24 @@ export interface MediaReviewThresholdGuidance {
   tone: MediaReviewOperationalTrendTone
   queue: MediaReviewQueueKey | null
   approvalBoundary: 'operator-review' | 'approval-required'
+}
+
+export interface MediaReviewStewardshipLane {
+  key: MediaReviewStewardshipLaneKey
+  itemCount: number
+  evidenceCount: number
+  tone: MediaReviewOperationalTrendTone
+  queue: MediaReviewQueueKey | null
+  approvalBoundary: 'operator-review' | 'approval-required'
+  destructiveAction: false
+}
+
+export interface MediaReviewStewardshipWorkspace {
+  lanes: MediaReviewStewardshipLane[]
+  duplicateCandidateCount: number
+  retentionCandidateCount: number
+  cleanupApprovalItemCount: number
+  destructiveActionCount: 0
 }
 
 export interface MediaReviewOperationalTrendInput {
@@ -570,6 +589,54 @@ export function buildMediaReviewThresholdGuidance(trends: MediaReviewOperational
       approvalBoundary: 'approval-required',
     },
   ]
+}
+
+
+export function buildMediaReviewStewardshipWorkspace(input: {
+  summary: MediaReviewSignalSummary
+  decisionSummary: MediaReviewSimilarityDecisionSummary
+  cleanupStagingPlan: MediaReviewCleanupStagingPlan
+  stagedCleanupItems: MediaReviewCleanupStageItem[]
+}): MediaReviewStewardshipWorkspace {
+  const duplicateCandidateCount = input.summary.similarCount + input.decisionSummary.duplicateCandidateCount
+  const retentionCandidateCount = input.summary.recoverableCount + input.cleanupStagingPlan.recoverableCount
+  const cleanupApprovalItemCount = input.stagedCleanupItems.length
+
+  return {
+    duplicateCandidateCount,
+    retentionCandidateCount,
+    cleanupApprovalItemCount,
+    destructiveActionCount: 0,
+    lanes: [
+      {
+        key: 'duplicate-review',
+        itemCount: duplicateCandidateCount,
+        evidenceCount: input.decisionSummary.totalCount,
+        tone: duplicateCandidateCount > 0 ? 'watch' : 'ready',
+        queue: duplicateCandidateCount > 0 ? 'similar' : null,
+        approvalBoundary: 'operator-review',
+        destructiveAction: false,
+      },
+      {
+        key: 'retention-candidates',
+        itemCount: retentionCandidateCount,
+        evidenceCount: input.summary.recoverableCount,
+        tone: retentionCandidateCount > 0 ? 'watch' : 'ready',
+        queue: retentionCandidateCount > 0 ? 'recoverable' : null,
+        approvalBoundary: 'approval-required',
+        destructiveAction: false,
+      },
+      {
+        key: 'cleanup-approval',
+        itemCount: cleanupApprovalItemCount,
+        evidenceCount: input.cleanupStagingPlan.items.length,
+        tone: cleanupApprovalItemCount > 0 ? 'attention' : input.cleanupStagingPlan.items.length > 0 ? 'watch' : 'ready',
+        queue: cleanupApprovalItemCount > 0 || input.cleanupStagingPlan.items.length > 0 ? 'recoverable' : null,
+        approvalBoundary: 'approval-required',
+        destructiveAction: false,
+      },
+    ],
+  }
 }
 
 export function getMediaReviewSignals(image: ImageRecord, similarHashSet?: ReadonlySet<string>): MediaReviewSignals {

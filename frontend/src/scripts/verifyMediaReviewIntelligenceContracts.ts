@@ -7,6 +7,7 @@ import {
   getMediaReviewRecommendedQueues,
   getMediaReviewSignalSummary,
   buildMediaReviewSimilarityDecisionHistory,
+  buildMediaReviewStewardshipWorkspace,
   getMediaReviewSimilarityDecisionSummary,
   getMediaReviewTagQualitySuggestions,
 } from '../features/media-review/media-review-utils'
@@ -88,6 +89,12 @@ const decisionHistory = buildMediaReviewSimilarityDecisionHistory(
 )
 const decisionSummary = getMediaReviewSimilarityDecisionSummary(decisionHistory)
 const cleanupStagingPlan = buildMediaReviewCleanupStagingPlan(reviewImages, similarHashSet)
+const stewardshipWorkspace = buildMediaReviewStewardshipWorkspace({
+  summary,
+  decisionSummary,
+  cleanupStagingPlan,
+  stagedCleanupItems: cleanupStagingPlan.items.slice(0, 2),
+})
 
 equal(recommendations[0].queue, 'recoverable', 'recoverable queue should be recommended before normal quality queues')
 ok(recommendations.some((recommendation) => recommendation.queue === 'missing-tags'), 'recommended queues should include missing tag work')
@@ -105,6 +112,10 @@ equal(cleanupStagingPlan.items.length, reviewImages.length, 'cleanup staging sho
 equal(cleanupStagingPlan.recoverableCount, 1, 'cleanup staging should count missing/deleted records as recoverable review')
 equal(cleanupStagingPlan.destructiveCount, 0, 'cleanup staging should never plan destructive cleanup')
 ok(cleanupStagingPlan.items.every((item) => item.destructiveAction === false), 'cleanup staging items should be explicitly non-destructive')
+equal(stewardshipWorkspace.destructiveActionCount, 0, 'stewardship workspace should never plan destructive actions')
+ok(stewardshipWorkspace.lanes.some((lane) => lane.key === 'duplicate-review' && lane.queue === 'similar'), 'stewardship workspace should expose duplicate review as a non-destructive lane')
+ok(stewardshipWorkspace.lanes.some((lane) => lane.key === 'retention-candidates' && lane.approvalBoundary === 'approval-required'), 'retention candidates should remain approval-gated')
+ok(stewardshipWorkspace.lanes.every((lane) => lane.destructiveAction === false), 'stewardship lanes should be explicit non-destructive evidence lanes')
 
 const root = process.cwd()
 const reviewPage = readFileSync(join(root, 'src/features/media-review/media-review-page.tsx'), 'utf8')
@@ -115,6 +126,8 @@ ok(reviewPage.includes('data-media-review-tag-quality-suggestions="true"'), 'med
 ok(reviewPage.includes('data-media-review-group-quality-checks="true"'), 'media review page should render group quality checks')
 ok(reviewPage.includes('data-media-review-similarity-history="true"'), 'media review page should render similarity decision history')
 ok(reviewPage.includes('data-media-review-cleanup-staging="true"'), 'media review page should render reversible cleanup staging')
+ok(reviewPage.includes('data-media-review-stewardship-workspace="true"'), 'media review page should render the non-destructive stewardship workspace')
+ok(reviewPage.includes('data-media-review-stewardship-lane={lane.key}'), 'stewardship workspace should render evidence lanes')
 ok(reviewPage.includes('handleStageCleanupSelected'), 'media review cleanup staging should be a local staging action')
 ok(!reviewPage.includes('deleteImages('), 'media review intelligence should not add destructive deletion actions')
 ok(!reviewPage.includes('triggerBlobDownload'), 'media review intelligence should not turn quality checks into downloads')
