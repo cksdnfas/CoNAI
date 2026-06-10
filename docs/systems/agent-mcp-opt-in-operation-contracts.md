@@ -31,7 +31,7 @@ Before an agent uses CoNAI MCP for anything beyond local contract review, it mus
 
 ## Dry-run evidence packet
 
-A safe dry-run does not call mutating MCP tools and does not generate media. It records:
+A safe dry-run does not call mutating MCP tools and does not generate media. The local evidence exporter is documented in [`agent-mcp-local-evidence-export`](./agent-mcp-local-evidence-export.md) and can be run with `npm run export:mcp-dry-run-evidence`. It records:
 
 ```json
 {
@@ -42,7 +42,9 @@ A safe dry-run does not call mutating MCP tools and does not generate media. It 
   "toolsReviewed": ["search_prompts", "search_images"],
   "mutationApproved": false,
   "generationApproved": false,
-  "backupRequiredBeforeMutation": true
+  "backupRequiredBeforeMutation": true,
+  "dryRunOnly": true,
+  "externalSideEffects": false
 }
 ```
 
@@ -61,6 +63,7 @@ The local contract check is:
 
 ```bash
 npm run verify:mcp-opt-in-operation-contracts
+npm run verify:mcp-local-evidence-export
 ```
 
-It verifies the HTTP opt-in guard, method boundary, package script aliases, and this operations contract without starting a server or touching runtime data.
+These checks verify the HTTP opt-in guard, method boundary, package script aliases, dry-run evidence export schema, and this operations contract without starting a server or touching runtime data.

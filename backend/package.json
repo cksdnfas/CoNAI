@@ -23,6 +23,8 @@
     "verify:graph-final-result-promotion-contracts": "tsx src/scripts/verifyGraphFinalResultPromotionContracts.ts",
     "verify:mcp-generation-tools-contracts": "tsx src/scripts/verifyMcpGenerationToolsContracts.ts",
     "verify:mcp-opt-in-operation-contracts": "tsx src/scripts/verifyMcpOptInOperationContracts.ts",
+    "export:mcp-dry-run-evidence": "tsx src/scripts/exportMcpDryRunEvidence.ts",
+    "verify:mcp-local-evidence-export": "tsx src/scripts/verifyMcpLocalEvidenceExportContracts.ts",
     "verify:runtime-role-contracts": "tsx src/scripts/verifyRuntimeRoleContracts.ts",
     "verify:result-retention-contracts": "tsx src/scripts/verifyResultRetentionContracts.ts",
     "verify:video-optimization": "tsx src/scripts/verifyVideoOptimizationContracts.ts",

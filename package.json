@@ -173,6 +173,8 @@
     "verify:graph-final-result-promotion-contracts": "cd backend && npm run verify:graph-final-result-promotion-contracts",
     "verify:mcp-generation-tools-contracts": "cd backend && npm run verify:mcp-generation-tools-contracts",
     "verify:mcp-opt-in-operation-contracts": "cd backend && npm run verify:mcp-opt-in-operation-contracts",
+    "export:mcp-dry-run-evidence": "cd backend && npm run export:mcp-dry-run-evidence --",
+    "verify:mcp-local-evidence-export": "cd backend && npm run verify:mcp-local-evidence-export",
     "verify:runtime-role-contracts": "cd backend && npm run verify:runtime-role-contracts"
   },
   "devDependencies": {
