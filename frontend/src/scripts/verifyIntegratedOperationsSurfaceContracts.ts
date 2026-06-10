@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 const root = process.cwd()
 const releaseReadinessTab = readFileSync(join(root, 'src/features/settings/components/release-readiness-tab.tsx'), 'utf8')
+const operatorEvidenceConsoleDoc = readFileSync(join(root, '../docs/systems/operator-evidence-review-console.md'), 'utf8')
 const mediaReviewPage = readFileSync(join(root, 'src/features/media-review/media-review-page.tsx'), 'utf8')
 const mediaReviewUtils = readFileSync(join(root, 'src/features/media-review/media-review-utils.ts'), 'utf8')
 const workflowRunnerPanel = readFileSync(join(root, 'src/features/module-graph/components/workflow-runner-panel.tsx'), 'utf8')
@@ -11,6 +12,8 @@ const moduleGraphApi = readFileSync(join(root, 'src/lib/api-module-graph.ts'), '
 
 ok(releaseReadinessTab.includes('data-integrated-operations-surface="true"'), 'release readiness should expose an integrated operations surface')
 ok(releaseReadinessTab.includes('data-release-readiness-operator-evidence-console="true"'), 'integrated readiness should include an operator evidence review console')
+ok(releaseReadinessTab.includes('data-release-readiness-export-state="true"'), 'readiness workspace should expose export-readiness state for operator polish')
+ok(releaseReadinessTab.includes('setCapturedHandoffItems(new Set(HANDOFF_EVIDENCE_ITEMS.map((item) => item.id)))'), 'handoff evidence should support one-click operator marking')
 ok(releaseReadinessTab.includes('INTEGRATED_OPERATIONS_LANES'), 'integrated surface should be driven by explicit operation lanes')
 ok(releaseReadinessTab.includes("'release-handoff'"), 'integrated surface should include release handoff readiness')
 ok(releaseReadinessTab.includes("'media-intelligence'"), 'integrated surface should include media intelligence readiness')
@@ -43,5 +46,9 @@ ok(!releaseReadinessTab.includes('fetch('), 'integrated operations surface shoul
 ok(!releaseReadinessTab.includes('deleteImages('), 'integrated operations surface should not perform destructive media cleanup')
 ok(releaseReadinessTab.includes('new Blob([selectedHandoffMarkdown]'), 'handoff export should be local generated Markdown only')
 ok(releaseReadinessTab.includes('triggerBlobDownload'), 'integrated operations surface should support local handoff export without backend actions')
+
+ok(operatorEvidenceConsoleDoc.includes('This note records the local-safe operator workflow'), 'operator evidence console docs should explain the local-safe operator workflow')
+ok(operatorEvidenceConsoleDoc.includes('It must not call MCP tools'), 'operator evidence console docs should preserve MCP and external-action boundaries')
+ok(operatorEvidenceConsoleDoc.includes('Confirm the export readiness badge'), 'operator evidence console docs should cover the polished export-readiness operator flow')
 
 console.log('Integrated operations surface contracts verified.')

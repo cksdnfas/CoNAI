@@ -724,9 +724,11 @@ export function ReleaseReadinessTab() {
   const allReviewed = reviewedCount === REVIEW_ITEMS.length
   const allHandoffCaptured = capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length
   const allAlertsReviewed = reviewedAlertCount === ALERT_REVIEW_ITEMS.length
+  const allEvidenceReadyForExport = allReviewed && allHandoffCaptured && allAlertsReviewed
   const readinessState = allReviewed ? t({ ko: '검토 완료', en: 'Reviewed' }) : t({ ko: '{count}/{total} 확인', en: '{count}/{total} checked' }, { count: reviewedCount, total: REVIEW_ITEMS.length })
   const handoffState = allHandoffCaptured ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
   const alertReviewState = allAlertsReviewed ? t({ ko: '알림 검토 완료', en: 'Alerts reviewed' }) : t({ ko: '{count}/{total} 알림', en: '{count}/{total} alerts' }, { count: reviewedAlertCount, total: ALERT_REVIEW_ITEMS.length })
+  const exportReadinessState = allEvidenceReadyForExport ? t({ ko: '내보내기 준비', en: 'Ready to export' }) : t({ ko: '증거 보강 필요', en: 'Evidence needed' })
   const trendEvidenceState = t({ ko: '{count}개 추세 근거', en: '{count} trend evidence items' }, { count: TREND_EVIDENCE_ITEMS.length })
   const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
   const historyState = readinessHistory.length > 0 ? t({ ko: '{count}개 저장', en: '{count} saved' }, { count: readinessHistory.length }) : t({ ko: '기록 없음', en: 'No records' })
@@ -855,6 +857,7 @@ export function ReleaseReadinessTab() {
               <Badge variant={allReviewed ? 'default' : 'secondary'}>{readinessState}</Badge>
               <Badge variant={allHandoffCaptured ? 'default' : 'secondary'}>{handoffState}</Badge>
               <Badge variant={allAlertsReviewed ? 'default' : 'secondary'}>{alertReviewState}</Badge>
+              <Badge data-release-readiness-export-state="true" variant={allEvidenceReadyForExport ? 'default' : 'outline'}>{exportReadinessState}</Badge>
               <Badge variant="outline">{trendEvidenceState}</Badge>
               <div className="min-w-0 text-sm text-muted-foreground">
                 {t({
@@ -1241,7 +1244,18 @@ export function ReleaseReadinessTab() {
 
       <SettingsSection
         heading={t({ ko: '릴리즈 핸드오프 근거', en: 'Release handoff evidence' })}
-        actions={<Badge variant={capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length ? 'default' : 'secondary'}>{handoffState}</Badge>}
+        actions={(
+          <>
+            <Badge variant={capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length ? 'default' : 'secondary'}>{handoffState}</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={() => setCapturedHandoffItems(new Set(HANDOFF_EVIDENCE_ITEMS.map((item) => item.id)))}>
+              <CheckCircle2 className="h-4 w-4" />
+              {t({ ko: '근거 캡처 표시', en: 'Mark evidence' })}
+            </Button>
+            <Button type="button" size="icon-sm" variant="secondary" onClick={() => setCapturedHandoffItems(new Set())} aria-label={t({ ko: '근거 캡처 초기화', en: 'Reset evidence capture' })} title={t({ ko: '근거 캡처 초기화', en: 'Reset evidence capture' })}>
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </>
+        )}
       >
         <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
           {t({
