@@ -121,10 +121,21 @@ export interface MediaReviewOperationalTrendInput {
   stagedCleanupItems: MediaReviewCleanupStageItem[]
 }
 
+export interface MediaReviewSessionContinuitySnapshot {
+  schemaVersion: 1
+  savedAt: string
+  reviewedIds: string[]
+  similarityDecisionHistory: MediaReviewSimilarityDecisionHistoryItem[]
+  cleanupStageItems: MediaReviewCleanupStageItem[]
+}
+
+export const MEDIA_REVIEW_SESSION_CONTINUITY_STORAGE_KEY = 'conai:media-review:session-continuity:v1'
+
 const MEDIA_REVIEW_QUEUE_ATTENTION_THRESHOLD = 48
 const MEDIA_REVIEW_QUALITY_BACKLOG_ATTENTION_THRESHOLD = 24
 const MEDIA_REVIEW_MANUAL_REVIEW_THRESHOLD = 1
 const MEDIA_REVIEW_CLEANUP_APPROVAL_THRESHOLD = 1
+const MEDIA_REVIEW_SESSION_HISTORY_LIMIT = 48
 
 function getRecordCount(record: Record<string, unknown> | null | undefined) {
   return record ? Object.keys(record).length : 0
@@ -153,6 +164,167 @@ function getMediaReviewItemId(image: ImageRecord, fallbackIndex = 0) {
   }
 
   return `review-item-${fallbackIndex}`
+}
+
+function normalizeStringList(value: unknown, limit = MEDIA_REVIEW_SESSION_HISTORY_LIMIT) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.length > 0).slice(0, limit)
+    : []
+}
+
+function isMediaReviewSimilarityDecisionKind(value: unknown): value is MediaReviewSimilarityDecisionKind {
+  return value === 'duplicate-candidate' || value === 'keep-separate' || value === 'needs-human-review'
+}
+
+function normalizeSimilarityDecisionHistory(value: unknown): MediaReviewSimilarityDecisionHistoryItem[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap((item): MediaReviewSimilarityDecisionHistoryItem[] => {
+    if (!item || typeof item !== 'object') {
+      return []
+    }
+
+    const record = item as Record<string, unknown>
+    if (
+      typeof record.id !== 'string'
+      || typeof record.anchorHash !== 'string'
+      || typeof record.targetHash !== 'string'
+      || typeof record.decidedAt !== 'string'
+      || !isMediaReviewSimilarityDecisionKind(record.decision)
+    ) {
+      return []
+    }
+
+    return [{
+      id: record.id,
+      anchorHash: record.anchorHash,
+      targetHash: record.targetHash,
+      decision: record.decision,
+      decidedAt: record.decidedAt,
+      matchState: record.matchState === 'similar-match' ? 'similar-match' : 'manual-selection',
+      reversible: true,
+    }]
+  }).slice(0, MEDIA_REVIEW_SESSION_HISTORY_LIMIT)
+}
+
+function isMediaReviewCleanupStageAction(value: unknown): value is MediaReviewCleanupStageAction {
+  return value === 'review-missing-file' || value === 'review-recycled-record' || value === 'hold-active-similar' || value === 'hold-active-selected'
+}
+
+function isMediaReviewRecoverabilityState(value: unknown): value is MediaReviewRecoverabilityState {
+  return value === 'active' || value === 'missing' || value === 'deleted'
+}
+
+function normalizeCleanupStageItems(value: unknown): MediaReviewCleanupStageItem[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap((item): MediaReviewCleanupStageItem[] => {
+    if (!item || typeof item !== 'object') {
+      return []
+    }
+
+    const record = item as Record<string, unknown>
+    if (
+      typeof record.id !== 'string'
+      || !isMediaReviewCleanupStageAction(record.action)
+      || !isMediaReviewRecoverabilityState(record.recoverabilityState)
+    ) {
+      return []
+    }
+
+    const reason = record.reason === 'missing-file'
+      || record.reason === 'recycled-record'
+      || record.reason === 'similar-active'
+      || record.reason === 'selected-active'
+      ? record.reason
+      : 'selected-active'
+
+    return [{
+      id: record.id,
+      compositeHash: typeof record.compositeHash === 'string' && record.compositeHash.length > 0 ? record.compositeHash : null,
+      action: record.action,
+      recoverabilityState: record.recoverabilityState,
+      reason,
+      destructiveAction: false,
+    }]
+  }).slice(0, MEDIA_REVIEW_SESSION_HISTORY_LIMIT)
+}
+
+export function buildMediaReviewSessionContinuitySnapshot(input: {
+  reviewedIds: string[]
+  similarityDecisionHistory: MediaReviewSimilarityDecisionHistoryItem[]
+  cleanupStageItems: MediaReviewCleanupStageItem[]
+  savedAt?: string
+}): MediaReviewSessionContinuitySnapshot {
+  return {
+    schemaVersion: 1,
+    savedAt: input.savedAt ?? new Date().toISOString(),
+    reviewedIds: normalizeStringList(input.reviewedIds),
+    similarityDecisionHistory: normalizeSimilarityDecisionHistory(input.similarityDecisionHistory),
+    cleanupStageItems: normalizeCleanupStageItems(input.cleanupStageItems),
+  }
+}
+
+export function parseMediaReviewSessionContinuitySnapshot(rawValue: string | null | undefined): MediaReviewSessionContinuitySnapshot | null {
+  if (!rawValue) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as Record<string, unknown>
+    if (!parsed || parsed.schemaVersion !== 1) {
+      return null
+    }
+
+    return buildMediaReviewSessionContinuitySnapshot({
+      savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : new Date().toISOString(),
+      reviewedIds: normalizeStringList(parsed.reviewedIds),
+      similarityDecisionHistory: normalizeSimilarityDecisionHistory(parsed.similarityDecisionHistory),
+      cleanupStageItems: normalizeCleanupStageItems(parsed.cleanupStageItems),
+    })
+  } catch {
+    return null
+  }
+}
+
+export function loadMediaReviewSessionContinuitySnapshot(): MediaReviewSessionContinuitySnapshot | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    return parseMediaReviewSessionContinuitySnapshot(window.localStorage.getItem(MEDIA_REVIEW_SESSION_CONTINUITY_STORAGE_KEY))
+  } catch {
+    return null
+  }
+}
+
+export function saveMediaReviewSessionContinuitySnapshot(snapshot: MediaReviewSessionContinuitySnapshot) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.setItem(MEDIA_REVIEW_SESSION_CONTINUITY_STORAGE_KEY, JSON.stringify(snapshot))
+  } catch {
+    // Local storage can be unavailable in private browsing or restricted shells.
+  }
+}
+
+export function clearMediaReviewSessionContinuitySnapshot() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.removeItem(MEDIA_REVIEW_SESSION_CONTINUITY_STORAGE_KEY)
+  } catch {
+    // Ignore storage cleanup failures; in-memory review state can still be cleared.
+  }
 }
 
 export function buildMediaReviewSearchChips(searchText: string): SearchChip[] {

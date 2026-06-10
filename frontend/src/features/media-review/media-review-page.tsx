@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, CheckCircle2, CircleDot, ClipboardList, Filter, FolderPlus, FolderTree, Loader2, RotateCw, Search, ShieldCheck, Sigma, Star, Tags, Undo2, X } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -27,8 +27,10 @@ import {
   buildMediaReviewCleanupStagingPlan,
   buildMediaReviewOperationalTrends,
   buildMediaReviewSearchChips,
+  buildMediaReviewSessionContinuitySnapshot,
   buildMediaReviewSimilarityDecisionHistory,
   buildMediaReviewThresholdGuidance,
+  clearMediaReviewSessionContinuitySnapshot,
   filterMediaReviewImages,
   getMediaReviewGroupQualityChecks,
   getMediaReviewRecommendedQueues,
@@ -36,6 +38,8 @@ import {
   getMediaReviewSignalSummary,
   getMediaReviewSimilarityDecisionSummary,
   getMediaReviewTagQualitySuggestions,
+  loadMediaReviewSessionContinuitySnapshot,
+  saveMediaReviewSessionContinuitySnapshot,
   type MediaReviewQueueKey,
   type MediaReviewCleanupStageAction,
   type MediaReviewCleanupStageItem,
@@ -700,15 +704,29 @@ export function MediaReviewPage() {
   const [appliedSearchText, setAppliedSearchText] = useState('')
   const [activeQueue, setActiveQueue] = useState<MediaReviewQueueKey>('all')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [reviewedIds, setReviewedIds] = useState<string[]>([])
-  const [similarityDecisionHistory, setSimilarityDecisionHistory] = useState<MediaReviewSimilarityDecisionHistoryItem[]>([])
-  const [cleanupStageItems, setCleanupStageItems] = useState<MediaReviewCleanupStageItem[]>([])
+  const [restoredSessionSnapshot] = useState(() => loadMediaReviewSessionContinuitySnapshot())
+  const [reviewedIds, setReviewedIds] = useState<string[]>(() => restoredSessionSnapshot?.reviewedIds ?? [])
+  const [similarityDecisionHistory, setSimilarityDecisionHistory] = useState<MediaReviewSimilarityDecisionHistoryItem[]>(() => restoredSessionSnapshot?.similarityDecisionHistory ?? [])
+  const [cleanupStageItems, setCleanupStageItems] = useState<MediaReviewCleanupStageItem[]>(() => restoredSessionSnapshot?.cleanupStageItems ?? [])
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
 
   useAuthPermissionRedirect({
     enabled: !authStatusQuery.isLoading && !canViewReview,
     permissionKey: 'page.home.view',
   })
+
+  useEffect(() => {
+    if (reviewedIds.length === 0 && similarityDecisionHistory.length === 0 && cleanupStageItems.length === 0) {
+      clearMediaReviewSessionContinuitySnapshot()
+      return
+    }
+
+    saveMediaReviewSessionContinuitySnapshot(buildMediaReviewSessionContinuitySnapshot({
+      reviewedIds,
+      similarityDecisionHistory,
+      cleanupStageItems,
+    }))
+  }, [cleanupStageItems, reviewedIds, similarityDecisionHistory])
 
   const searchChips = useMemo(() => buildMediaReviewSearchChips(appliedSearchText), [appliedSearchText])
   const isSearchMode = searchChips.length > 0
@@ -1018,6 +1036,14 @@ export function MediaReviewPage() {
     })
   }
 
+  const handleClearSessionContinuity = () => {
+    setReviewedIds([])
+    setSimilarityDecisionHistory([])
+    setCleanupStageItems([])
+    clearMediaReviewSessionContinuitySnapshot()
+    showSnackbar({ message: t({ ko: '복원된 리뷰 세션 기록을 지웠어.', en: 'Cleared restored review session history.' }), tone: 'info' })
+  }
+
   const renderReviewOverlay = (image: ImageRecord): ReactNode => {
     const safetyOverlay = renderSafetyOverlay(image)
 
@@ -1141,6 +1167,16 @@ export function MediaReviewPage() {
             {appliedSearchText ? <Badge variant="outline">{appliedSearchText}</Badge> : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {restoredSessionSnapshot ? (
+              <Badge variant="outline" data-media-review-session-continuity="true">
+                {t({ ko: '세션 복원됨', en: 'session restored' })}
+              </Badge>
+            ) : null}
+            {reviewedIds.length > 0 || similarityDecisionHistory.length > 0 || cleanupStageItems.length > 0 ? (
+              <Button size="sm" variant="outline" onClick={handleClearSessionContinuity}>
+                {t({ ko: '세션 기록 지우기', en: 'Clear session history' })}
+              </Button>
+            ) : null}
             {selectedAnchorHash ? (
               <Badge>{t({ ko: '유사 기준 선택됨', en: 'similarity anchor selected' })}</Badge>
             ) : (

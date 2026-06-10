@@ -4,10 +4,12 @@ import { join } from 'node:path'
 import {
   buildMediaReviewCleanupStagingPlan,
   buildMediaReviewOperationalTrends,
+  buildMediaReviewSessionContinuitySnapshot,
   buildMediaReviewThresholdGuidance,
   getMediaReviewRecommendedQueues,
   getMediaReviewSignalSummary,
   getMediaReviewSimilarityDecisionSummary,
+  parseMediaReviewSessionContinuitySnapshot,
 } from '../features/media-review/media-review-utils'
 import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeRunbookEvidence, buildWorkflowRuntimeThresholdGuidance } from '../features/module-graph/workflow-runtime-observability'
 import type { GraphWorkflowRuntimeHealthRecord } from '../lib/api-module-graph'
@@ -74,6 +76,28 @@ ok(mediaThresholdGuidance.some((guidance) => guidance.key === 'review-queue-thre
 ok(mediaThresholdGuidance.some((guidance) => guidance.key === 'quality-backlog-threshold' && guidance.thresholdCount === 24), 'media quality guidance should carry the quality backlog threshold')
 ok(mediaThresholdGuidance.some((guidance) => guidance.key === 'similarity-review-threshold' && guidance.currentCount === 1 && guidance.tone === 'watch'), 'similarity guidance should flag open human-review decisions')
 ok(mediaThresholdGuidance.some((guidance) => guidance.key === 'cleanup-approval-threshold' && guidance.approvalBoundary === 'approval-required'), 'cleanup guidance should keep destructive cleanup approval-owned')
+
+const mediaSessionSnapshot = buildMediaReviewSessionContinuitySnapshot({
+  savedAt: '2026-06-08T13:00:00.000Z',
+  reviewedIds: ['ready', 'sparse-tags'],
+  similarityDecisionHistory: [{
+    id: 'ready:sparse-tags:needs-human-review:2026-06-08T12:00:00.000Z',
+    anchorHash: 'ready',
+    targetHash: 'sparse-tags',
+    decision: 'needs-human-review',
+    decidedAt: '2026-06-08T12:00:00.000Z',
+    matchState: 'similar-match',
+    reversible: true,
+  }],
+  cleanupStageItems: cleanupStagingPlan.items,
+})
+equal(mediaSessionSnapshot.schemaVersion, 1, 'media review session continuity should use an explicit schema version')
+equal(mediaSessionSnapshot.reviewedIds.length, 2, 'media review session continuity should preserve reviewed ids')
+ok(mediaSessionSnapshot.cleanupStageItems.every((item) => item.destructiveAction === false), 'persisted cleanup staging must stay non-destructive')
+const parsedMediaSessionSnapshot = parseMediaReviewSessionContinuitySnapshot(JSON.stringify(mediaSessionSnapshot))
+ok(parsedMediaSessionSnapshot, 'media review session continuity should parse persisted snapshots')
+equal(parsedMediaSessionSnapshot?.similarityDecisionHistory.length, 1, 'media review session continuity should restore similarity decisions')
+equal(parsedMediaSessionSnapshot?.cleanupStageItems.length, 3, 'media review session continuity should restore cleanup staging evidence')
 
 const runtimeHealth: GraphWorkflowRuntimeHealthRecord = {
   workflow_id: 42,
@@ -159,6 +183,10 @@ ok(mediaReviewPage.includes('data-media-review-operational-trends="true"'), 'med
 ok(mediaReviewPage.includes('data-media-review-trend={trend.key}'), 'media review trend rows should be identifiable')
 ok(mediaReviewPage.includes('data-media-review-threshold-guidance="true"'), 'media review page should render threshold guidance')
 ok(mediaReviewPage.includes('data-media-review-threshold={guidance.key}'), 'media review threshold rows should be identifiable')
+ok(mediaReviewPage.includes('loadMediaReviewSessionContinuitySnapshot()'), 'media review page should restore session continuity from local storage')
+ok(mediaReviewPage.includes('saveMediaReviewSessionContinuitySnapshot(buildMediaReviewSessionContinuitySnapshot({'), 'media review page should persist review session continuity')
+ok(mediaReviewPage.includes('data-media-review-session-continuity="true"'), 'media review page should expose restored session continuity status')
+ok(mediaReviewPage.includes('clearMediaReviewSessionContinuitySnapshot()'), 'media review page should provide a local session continuity reset')
 ok(workflowRunnerPanel.includes('data-workflow-runtime-observability-trends="true"'), 'workflow runner should render runtime observability trends')
 ok(workflowRunnerPanel.includes('data-workflow-runtime-trend={trend.key}'), 'workflow runtime trend rows should be identifiable')
 ok(workflowRunnerPanel.includes('data-workflow-runtime-threshold-guidance="true"'), 'workflow runner should render threshold guidance')
