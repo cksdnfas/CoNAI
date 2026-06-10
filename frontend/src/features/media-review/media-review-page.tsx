@@ -1,7 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, CheckCircle2, CircleDot, ClipboardList, Filter, FolderPlus, FolderTree, Loader2, RotateCw, Search, ShieldCheck, Sigma, Star, Tags, Undo2, X } from 'lucide-react'
+import { Activity, CheckCircle2, CircleDot, ClipboardList, Download, Filter, FolderPlus, FolderTree, Loader2, RotateCw, Search, ShieldCheck, Sigma, Star, Tags, Undo2, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,9 +22,13 @@ import { ImageSelectionBar } from '@/features/images/components/image-selection-
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
 import { batchTagImages, getImages, getSimilarImages, searchImagesComplex } from '@/lib/api-images'
+import { triggerBlobDownload } from '@/lib/api-client'
 import { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import {
+  buildMediaReviewCleanupApprovalPacket,
+  buildMediaReviewCleanupApprovalPacketFilename,
+  buildMediaReviewCleanupApprovalPacketMarkdown,
   buildMediaReviewCleanupStagingPlan,
   buildMediaReviewOperationalTrends,
   buildMediaReviewSearchChips,
@@ -339,9 +344,13 @@ function getMediaReviewStewardshipLaneCopy(lane: MediaReviewStewardshipWorkspace
 
 function MediaReviewStewardshipWorkspacePanel({
   workspace,
+  canExportCleanupApprovalPacket,
+  onExportCleanupApprovalPacket,
   onQueueChange,
 }: {
   workspace: MediaReviewStewardshipWorkspace
+  canExportCleanupApprovalPacket: boolean
+  onExportCleanupApprovalPacket: () => void
   onQueueChange: (queue: MediaReviewQueueKey) => void
 }) {
   const { t, formatNumber } = useI18n()
@@ -353,7 +362,19 @@ function MediaReviewStewardshipWorkspacePanel({
           <ShieldCheck className="h-4 w-4 text-primary" />
           <span>{t({ ko: '비파괴 라이브러리 스튜어드십', en: 'Non-destructive library stewardship' })}</span>
         </div>
-        <Badge variant="outline">{t({ ko: '삭제 실행 {count}', en: '{count} destructive actions' }, { count: formatNumber(workspace.destructiveActionCount) })}</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">{t({ ko: '삭제 실행 {count}', en: '{count} destructive actions' }, { count: formatNumber(workspace.destructiveActionCount) })}</Badge>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!canExportCleanupApprovalPacket}
+            onClick={onExportCleanupApprovalPacket}
+            data-media-review-cleanup-approval-export="true"
+          >
+            <Download className="h-4 w-4" />
+            {t({ ko: '승인 패킷 MD', en: 'Approval packet MD' })}
+          </Button>
+        </div>
       </div>
       <div className="grid gap-2 lg:grid-cols-3">
         {workspace.lanes.map((lane) => {
@@ -975,6 +996,14 @@ export function MediaReviewPage() {
     }),
     [cleanupStageItems, selectedCleanupStagePlan, similarityDecisionSummary, sourceSummary],
   )
+  const cleanupApprovalPacket = useMemo(
+    () => buildMediaReviewCleanupApprovalPacket(cleanupStageItems),
+    [cleanupStageItems],
+  )
+  const cleanupApprovalPacketMarkdown = useMemo(
+    () => buildMediaReviewCleanupApprovalPacketMarkdown(cleanupApprovalPacket),
+    [cleanupApprovalPacket],
+  )
 
   const assignToGroupMutation = useMutation({
     mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
@@ -1129,6 +1158,19 @@ export function MediaReviewPage() {
     })
   }
 
+  const handleExportCleanupApprovalPacket = () => {
+    if (cleanupApprovalPacket.itemCount === 0) {
+      return
+    }
+
+    const blob = new Blob([cleanupApprovalPacketMarkdown], { type: 'text/markdown;charset=utf-8' })
+    triggerBlobDownload(blob, buildMediaReviewCleanupApprovalPacketFilename(cleanupApprovalPacket))
+    showSnackbar({
+      message: t({ ko: '정리 승인 패킷 Markdown을 만들었어.', en: 'Created the cleanup approval packet Markdown.' }),
+      tone: 'info',
+    })
+  }
+
   const handleClearSessionContinuity = () => {
     setReviewedIds([])
     setSimilarityDecisionHistory([])
@@ -1246,6 +1288,8 @@ export function MediaReviewPage() {
 
         <MediaReviewStewardshipWorkspacePanel
           workspace={stewardshipWorkspace}
+          canExportCleanupApprovalPacket={cleanupApprovalPacket.itemCount > 0}
+          onExportCleanupApprovalPacket={handleExportCleanupApprovalPacket}
           onQueueChange={(queue) => {
             setActiveQueue(queue)
             setSelectedIds([])

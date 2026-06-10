@@ -2,6 +2,9 @@ import { equal, ok } from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  buildMediaReviewCleanupApprovalPacket,
+  buildMediaReviewCleanupApprovalPacketFilename,
+  buildMediaReviewCleanupApprovalPacketMarkdown,
   buildMediaReviewCleanupStagingPlan,
   getMediaReviewGroupQualityChecks,
   getMediaReviewRecommendedQueues,
@@ -89,6 +92,9 @@ const decisionHistory = buildMediaReviewSimilarityDecisionHistory(
 )
 const decisionSummary = getMediaReviewSimilarityDecisionSummary(decisionHistory)
 const cleanupStagingPlan = buildMediaReviewCleanupStagingPlan(reviewImages, similarHashSet)
+const cleanupApprovalPacket = buildMediaReviewCleanupApprovalPacket(cleanupStagingPlan.items.slice(0, 2), '2026-06-08T16:30:00.000Z')
+const cleanupApprovalPacketMarkdown = buildMediaReviewCleanupApprovalPacketMarkdown(cleanupApprovalPacket)
+const cleanupApprovalPacketFilename = buildMediaReviewCleanupApprovalPacketFilename(cleanupApprovalPacket)
 const stewardshipWorkspace = buildMediaReviewStewardshipWorkspace({
   summary,
   decisionSummary,
@@ -116,6 +122,12 @@ equal(stewardshipWorkspace.destructiveActionCount, 0, 'stewardship workspace sho
 ok(stewardshipWorkspace.lanes.some((lane) => lane.key === 'duplicate-review' && lane.queue === 'similar'), 'stewardship workspace should expose duplicate review as a non-destructive lane')
 ok(stewardshipWorkspace.lanes.some((lane) => lane.key === 'retention-candidates' && lane.approvalBoundary === 'approval-required'), 'retention candidates should remain approval-gated')
 ok(stewardshipWorkspace.lanes.every((lane) => lane.destructiveAction === false), 'stewardship lanes should be explicit non-destructive evidence lanes')
+equal(cleanupApprovalPacket.itemCount, 2, 'cleanup approval packets should include staged cleanup evidence items')
+equal(cleanupApprovalPacket.destructiveActionCount, 0, 'cleanup approval packets should never authorize destructive actions')
+ok(cleanupApprovalPacket.items.every((item) => item.approvalBoundary === 'approval-required' && item.recommendedDecision === 'review-before-cleanup'), 'cleanup approval packet items should stay approval-gated')
+ok(cleanupApprovalPacketMarkdown.includes('local review evidence only'), 'cleanup approval packet Markdown should document the local-only guardrail')
+ok(cleanupApprovalPacketMarkdown.includes('approvalBoundary: approval-required'), 'cleanup approval packet Markdown should preserve approval boundaries')
+equal(cleanupApprovalPacketFilename, 'conai-media-cleanup-approval-packet-20260608-163000.md', 'cleanup approval packet filename should be stable and local')
 
 const root = process.cwd()
 const reviewPage = readFileSync(join(root, 'src/features/media-review/media-review-page.tsx'), 'utf8')
@@ -128,8 +140,10 @@ ok(reviewPage.includes('data-media-review-similarity-history="true"'), 'media re
 ok(reviewPage.includes('data-media-review-cleanup-staging="true"'), 'media review page should render reversible cleanup staging')
 ok(reviewPage.includes('data-media-review-stewardship-workspace="true"'), 'media review page should render the non-destructive stewardship workspace')
 ok(reviewPage.includes('data-media-review-stewardship-lane={lane.key}'), 'stewardship workspace should render evidence lanes')
+ok(reviewPage.includes('data-media-review-cleanup-approval-export="true"'), 'stewardship workspace should expose local cleanup approval packet export')
+ok(reviewPage.includes('new Blob([cleanupApprovalPacketMarkdown]'), 'cleanup approval export should be local generated Markdown only')
+ok(reviewPage.includes('triggerBlobDownload'), 'cleanup approval packet should download locally without backend cleanup actions')
 ok(reviewPage.includes('handleStageCleanupSelected'), 'media review cleanup staging should be a local staging action')
 ok(!reviewPage.includes('deleteImages('), 'media review intelligence should not add destructive deletion actions')
-ok(!reviewPage.includes('triggerBlobDownload'), 'media review intelligence should not turn quality checks into downloads')
 
 console.log('Media review intelligence contracts verified.')

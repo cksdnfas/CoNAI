@@ -130,6 +130,24 @@ export interface MediaReviewStewardshipWorkspace {
   destructiveActionCount: 0
 }
 
+export interface MediaReviewCleanupApprovalPacketItem extends MediaReviewCleanupStageItem {
+  approvalBoundary: 'approval-required'
+  recommendedDecision: 'review-before-cleanup'
+  evidenceLabel: string
+}
+
+export interface MediaReviewCleanupApprovalPacket {
+  schemaVersion: 1
+  generatedAt: string
+  approvalBoundary: 'approval-required'
+  destructiveActionCount: 0
+  itemCount: number
+  activeCount: number
+  recoverableCount: number
+  similarCount: number
+  items: MediaReviewCleanupApprovalPacketItem[]
+}
+
 export interface MediaReviewOperationalTrendInput {
   sourceSummary: MediaReviewSignalSummary
   visibleSummary: MediaReviewSignalSummary
@@ -637,6 +655,98 @@ export function buildMediaReviewStewardshipWorkspace(input: {
       },
     ],
   }
+}
+
+function getCleanupApprovalEvidenceLabel(item: MediaReviewCleanupStageItem) {
+  if (item.action === 'review-missing-file') {
+    return 'missing-file-review'
+  }
+
+  if (item.action === 'review-recycled-record') {
+    return 'recycled-record-review'
+  }
+
+  if (item.action === 'hold-active-similar') {
+    return 'active-similar-hold'
+  }
+
+  return 'active-selected-hold'
+}
+
+export function buildMediaReviewCleanupApprovalPacket(
+  stagedCleanupItems: MediaReviewCleanupStageItem[],
+  generatedAt = new Date().toISOString(),
+): MediaReviewCleanupApprovalPacket {
+  const items = normalizeCleanupStageItems(stagedCleanupItems).map<MediaReviewCleanupApprovalPacketItem>((item) => ({
+    ...item,
+    approvalBoundary: 'approval-required',
+    recommendedDecision: 'review-before-cleanup',
+    evidenceLabel: getCleanupApprovalEvidenceLabel(item),
+  }))
+
+  return {
+    schemaVersion: 1,
+    generatedAt,
+    approvalBoundary: 'approval-required',
+    destructiveActionCount: 0,
+    itemCount: items.length,
+    activeCount: items.filter((item) => item.recoverabilityState === 'active').length,
+    recoverableCount: items.filter((item) => item.recoverabilityState !== 'active').length,
+    similarCount: items.filter((item) => item.action === 'hold-active-similar').length,
+    items,
+  }
+}
+
+export function buildMediaReviewCleanupApprovalPacketMarkdown(packet: MediaReviewCleanupApprovalPacket) {
+  const lines = [
+    '# CoNAI media cleanup approval packet',
+    '',
+    `- schemaVersion: ${packet.schemaVersion}`,
+    `- generatedAt: ${packet.generatedAt}`,
+    `- approvalBoundary: ${packet.approvalBoundary}`,
+    `- destructiveActionCount: ${packet.destructiveActionCount}`,
+    `- itemCount: ${packet.itemCount}`,
+    `- activeCount: ${packet.activeCount}`,
+    `- recoverableCount: ${packet.recoverableCount}`,
+    `- similarCount: ${packet.similarCount}`,
+    '',
+    '## Guardrail',
+    '',
+    'This packet is local review evidence only. It does not delete files, empty recycle bins, change retention policy, call backend cleanup APIs, or approve cleanup by itself.',
+    '',
+    '## Items',
+    '',
+  ]
+
+  if (packet.items.length === 0) {
+    lines.push('- none')
+  } else {
+    packet.items.forEach((item, index) => {
+      lines.push(
+        `${index + 1}. ${item.id}`,
+        `   - compositeHash: ${item.compositeHash ?? 'none'}`,
+        `   - action: ${item.action}`,
+        `   - reason: ${item.reason}`,
+        `   - recoverabilityState: ${item.recoverabilityState}`,
+        `   - evidenceLabel: ${item.evidenceLabel}`,
+        `   - approvalBoundary: ${item.approvalBoundary}`,
+        `   - recommendedDecision: ${item.recommendedDecision}`,
+        `   - destructiveAction: ${item.destructiveAction}`,
+      )
+    })
+  }
+
+  return `${lines.join('\n')}\n`
+}
+
+export function buildMediaReviewCleanupApprovalPacketFilename(packet: MediaReviewCleanupApprovalPacket) {
+  const timestamp = packet.generatedAt
+    .replace(/\.\d{3}Z$/, 'Z')
+    .replace(/[^0-9TZ]/g, '')
+    .replace('T', '-')
+    .replace('Z', '')
+
+  return `conai-media-cleanup-approval-packet-${timestamp || 'local'}.md`
 }
 
 export function getMediaReviewSignals(image: ImageRecord, similarHashSet?: ReadonlySet<string>): MediaReviewSignals {
