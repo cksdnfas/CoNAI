@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   buildWorkflowRuntimeFailureGroups,
+  buildWorkflowRuntimeRecoveryHandoffPacket,
   buildWorkflowRuntimeRerunPreflight,
 } from '../features/module-graph/workflow-runtime-observability'
 import type { GraphWorkflowRuntimeHealthRecord } from '../lib/api-module-graph'
@@ -69,6 +70,15 @@ ok(preflight.some((check) => check.key === 'recovery-output-preflight' && check.
 ok(preflight.some((check) => check.key === 'latest-error-preflight' && check.status === 'blocked'), 'recent errors should block immediate rerun')
 ok(preflight.some((check) => check.key === 'approval-boundary-preflight' && check.status === 'approval-needed' && check.approvalBoundary === 'approval-required'), 'destructive/external recovery remains approval-gated')
 
+const handoffPacket = buildWorkflowRuntimeRecoveryHandoffPacket(runtimeHealth)
+equal(handoffPacket.externalActionsExecuted, false, 'handoff packet must remain local-only')
+equal(handoffPacket.blockedCheckCount, 4, 'handoff packet should count blocked preflight checks')
+equal(handoffPacket.approvalNeededCheckCount, 1, 'handoff packet should count approval-needed checks')
+ok(handoffPacket.markdown.includes('externalActionsExecuted: false'), 'handoff Markdown should record that no external action ran')
+ok(handoffPacket.markdown.includes('pushDeployRestartBoundary: approval-required'), 'handoff Markdown should keep push/deploy/restart approval-owned')
+ok(handoffPacket.markdown.includes('queue-pressure: action=review-before-rerun'), 'handoff Markdown should include grouped queue failure evidence')
+ok(handoffPacket.markdown.includes('approval-boundary-preflight: status=approval-needed'), 'handoff Markdown should include approval-boundary preflight evidence')
+
 const workflowRunnerPanel = readFileSync(join(process.cwd(), 'src/features/module-graph/components/workflow-runner-panel.tsx'), 'utf8')
 ok(workflowRunnerPanel.includes('data-workflow-runtime-failure-groups="true"'), 'workflow runner should render grouped failure evidence')
 ok(workflowRunnerPanel.includes('data-workflow-runtime-failure-group={group.key}'), 'workflow failure groups should be identifiable')
@@ -76,6 +86,11 @@ ok(workflowRunnerPanel.includes('data-workflow-runtime-rerun-preflight="true"'),
 ok(workflowRunnerPanel.includes('data-workflow-runtime-rerun-preflight-check={check.key}'), 'workflow rerun preflight checks should be identifiable')
 ok(workflowRunnerPanel.includes('buildWorkflowRuntimeFailureGroups(runtimeHealth)'), 'workflow runner should derive failure groups from local runtime health')
 ok(workflowRunnerPanel.includes('buildWorkflowRuntimeRerunPreflight(runtimeHealth)'), 'workflow runner should derive preflight checks from local runtime health')
+ok(workflowRunnerPanel.includes('buildWorkflowRuntimeRecoveryHandoffPacket(runtimeHealth)'), 'workflow runner should derive local recovery handoff packets from runtime health')
+ok(workflowRunnerPanel.includes('data-workflow-runtime-recovery-handoff="true"'), 'workflow runner should render the local recovery handoff packet surface')
+ok(workflowRunnerPanel.includes('data-workflow-runtime-recovery-handoff-download="true"'), 'workflow runner should expose a local Markdown handoff download')
+ok(workflowRunnerPanel.includes('new Blob([recoveryHandoffPacket.markdown]'), 'recovery handoff export should be local generated Markdown only')
+ok(workflowRunnerPanel.includes('triggerBlobDownload'), 'recovery handoff export should use a local browser download')
 ok(!workflowRunnerPanel.includes('runGraphWorkflowScheduleNow('), 'queue recovery cockpit must not rerun schedules automatically')
 ok(!workflowRunnerPanel.includes('resumeGraphWorkflowSchedule('), 'queue recovery cockpit must not resume autoruns automatically')
 

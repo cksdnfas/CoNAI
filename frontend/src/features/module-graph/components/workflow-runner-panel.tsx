@@ -9,9 +9,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
 import { getGraphWorkflowRuntimeHealth, getGraphWorkflowSchedules, getGraphWorkflowVersionSummaries, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord, type GraphWorkflowRuntimeHealthRecord, type GraphWorkflowVersionSummaryRecord } from '@/lib/api-module-graph'
+import { triggerBlobDownload } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
-import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeFailureGroups, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeRerunPreflight, buildWorkflowRuntimeRunbookEvidence, buildWorkflowRuntimeThresholdGuidance, type WorkflowRuntimeDecisionCue, type WorkflowRuntimeFailureGroup, type WorkflowRuntimeObservabilityTrend, type WorkflowRuntimeRerunPreflightCheck, type WorkflowRuntimeRunbookEvidence, type WorkflowRuntimeThresholdGuidance } from '../workflow-runtime-observability'
+import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeFailureGroups, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeRecoveryHandoffPacket, buildWorkflowRuntimeRerunPreflight, buildWorkflowRuntimeRunbookEvidence, buildWorkflowRuntimeThresholdGuidance, type WorkflowRuntimeDecisionCue, type WorkflowRuntimeFailureGroup, type WorkflowRuntimeObservabilityTrend, type WorkflowRuntimeRerunPreflightCheck, type WorkflowRuntimeRunbookEvidence, type WorkflowRuntimeThresholdGuidance } from '../workflow-runtime-observability'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 import { buildExecutionComparisonSummary, buildNodeDisplayLabelMap, formatPrimitiveValue, getExecutionInputEntries, getNodeDisplayLabelFromMap, parseExecutionPlan, type ExecutionInputEntry } from './graph-execution-panel-helpers'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
@@ -557,6 +558,11 @@ function WorkflowRuntimeHealthBlock({
   const runbookEvidence = buildWorkflowRuntimeRunbookEvidence(runtimeHealth)
   const failureGroups = buildWorkflowRuntimeFailureGroups(runtimeHealth)
   const rerunPreflight = buildWorkflowRuntimeRerunPreflight(runtimeHealth)
+  const recoveryHandoffPacket = buildWorkflowRuntimeRecoveryHandoffPacket(runtimeHealth)
+  const handleRecoveryHandoffDownload = () => {
+    const blob = new Blob([recoveryHandoffPacket.markdown], { type: 'text/markdown;charset=utf-8' })
+    triggerBlobDownload(blob, `conai-workflow-${runtimeHealth.workflow_id}-recovery-handoff.md`)
+  }
 
   return (
     <div className="space-y-3 rounded-sm border border-border bg-background/35 p-3">
@@ -770,6 +776,27 @@ function WorkflowRuntimeHealthBlock({
             </div>
           )
         })}
+      </div>
+
+      <div className="rounded-sm border border-border bg-background/45 px-3 py-2 text-xs" data-workflow-runtime-recovery-handoff="true">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="font-semibold text-foreground">{t({ ko: '복구 인계 패킷', en: 'Recovery handoff packet' })}</div>
+            <div className="mt-1 text-muted-foreground">
+              {t({ ko: '차단 {blocked} · 승인 {approval} · 증거 {evidence}', en: '{blocked} blocked · {approval} approval · {evidence} evidence' }, {
+                blocked: formatNumber(recoveryHandoffPacket.blockedCheckCount),
+                approval: formatNumber(recoveryHandoffPacket.approvalNeededCheckCount),
+                evidence: formatNumber(recoveryHandoffPacket.evidenceSignalCount),
+              })}
+            </div>
+            <div className="mt-1 text-muted-foreground">
+              {t({ ko: '로컬 Markdown만 생성하고 큐, 예약, 파일, 서비스, 외부 시스템은 변경하지 않아.', en: 'Generates local Markdown only; queues, schedules, files, services, and external systems are not changed.' })}
+            </div>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={handleRecoveryHandoffDownload} data-workflow-runtime-recovery-handoff-download="true">
+            {t({ ko: '인계 Markdown 저장', en: 'Save handoff Markdown' })}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-2 lg:grid-cols-5" data-workflow-runtime-failure-groups="true">

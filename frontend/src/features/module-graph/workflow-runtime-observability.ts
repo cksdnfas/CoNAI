@@ -68,6 +68,14 @@ export interface WorkflowRuntimeRerunPreflightCheck {
   timestamp?: string | null
 }
 
+export interface WorkflowRuntimeRecoveryHandoffPacket {
+  markdown: string
+  blockedCheckCount: number
+  approvalNeededCheckCount: number
+  evidenceSignalCount: number
+  externalActionsExecuted: false
+}
+
 const RUNTIME_REVIEW_THRESHOLD = 1
 const RUNTIME_FAILURE_PERCENT_THRESHOLD = 20
 
@@ -400,6 +408,77 @@ export function buildWorkflowRuntimeFailureGroups(runtimeHealth: GraphWorkflowRu
 }
 
 /** Build local-only preflight gates for rerun/recovery handoff decisions. */
+function formatHandoffTimestamp(value?: string | null) {
+  return value && value.trim().length > 0 ? value : 'none'
+}
+
+/** Build a local-only Markdown packet for approval-gated recovery/rerun handoff review. */
+export function buildWorkflowRuntimeRecoveryHandoffPacket(runtimeHealth: GraphWorkflowRuntimeHealthRecord): WorkflowRuntimeRecoveryHandoffPacket {
+  const failureGroups = buildWorkflowRuntimeFailureGroups(runtimeHealth)
+  const preflightChecks = buildWorkflowRuntimeRerunPreflight(runtimeHealth)
+  const blockedCheckCount = preflightChecks.filter((check) => check.status === 'blocked').length
+  const approvalNeededCheckCount = preflightChecks.filter((check) => check.status === 'approval-needed').length
+  const evidenceSignalCount = failureGroups.reduce((total, group) => total + group.evidenceCount, 0)
+  const latestTimestamp = runtimeHealth.telemetry.latest_failed_at
+    ?? runtimeHealth.telemetry.latest_completed_at
+    ?? runtimeHealth.queue.oldest_queued_at
+    ?? runtimeHealth.recovery.last_startup_recovery_at
+    ?? null
+  const lines = [
+    '# Workflow recovery handoff packet',
+    '',
+    `- workflowId: ${runtimeHealth.workflow_id}`,
+    `- generatedAtSource: ${formatHandoffTimestamp(latestTimestamp)}`,
+    '- externalActionsExecuted: false',
+    '- pushDeployRestartBoundary: approval-required',
+    `- blockedPreflightChecks: ${blockedCheckCount}`,
+    `- approvalNeededChecks: ${approvalNeededCheckCount}`,
+    `- evidenceSignals: ${evidenceSignalCount}`,
+    '',
+    '## Queue state',
+    '',
+    `- queued: ${runtimeHealth.queue.queued_count}`,
+    `- running: ${runtimeHealth.queue.running_count}`,
+    `- inProcessRunning: ${runtimeHealth.queue.in_process_running_count}`,
+    `- cancellationRequested: ${runtimeHealth.queue.cancellation_requested_count}`,
+    `- oldestQueuedAt: ${formatHandoffTimestamp(runtimeHealth.queue.oldest_queued_at)}`,
+    '',
+    '## Recovery and terminal evidence',
+    '',
+    `- startupQueuedBacklog: ${runtimeHealth.recovery.startup_queued_backlog}`,
+    `- startupFailedRunning: ${runtimeHealth.recovery.startup_failed_running}`,
+    `- runningNotInProcess: ${runtimeHealth.recovery.running_not_in_process_count}`,
+    `- lastStartupRecoveryAt: ${formatHandoffTimestamp(runtimeHealth.recovery.last_startup_recovery_at)}`,
+    `- completed: ${runtimeHealth.telemetry.completed_count}`,
+    `- failed: ${runtimeHealth.telemetry.failed_count}`,
+    `- cancelled: ${runtimeHealth.telemetry.cancelled_count}`,
+    `- latestFailedAt: ${formatHandoffTimestamp(runtimeHealth.telemetry.latest_failed_at)}`,
+    `- latestErrorMessage: ${runtimeHealth.telemetry.latest_error_message ?? 'none'}`,
+    '',
+    '## Failure groups',
+    '',
+    ...failureGroups.map((group) => `- ${group.key}: action=${group.action}; evidence=${group.evidenceCount}; approvalBoundary=${group.approvalBoundary}`),
+    '',
+    '## Rerun preflight',
+    '',
+    ...preflightChecks.map((check) => `- ${check.key}: status=${check.status}; guardrails=${check.guardrailCount}; approvalBoundary=${check.approvalBoundary}`),
+    '',
+    '## Operator handoff',
+    '',
+    '- Review blocked preflight checks before any rerun.',
+    '- Keep cleanup, service restart, external side effects, and retention policy changes approval-owned.',
+    '- This packet is generated locally from runtime health only and does not mutate queues, schedules, files, services, or external systems.',
+  ]
+
+  return {
+    markdown: lines.join('\n'),
+    blockedCheckCount,
+    approvalNeededCheckCount,
+    evidenceSignalCount,
+    externalActionsExecuted: false,
+  }
+}
+
 export function buildWorkflowRuntimeRerunPreflight(runtimeHealth: GraphWorkflowRuntimeHealthRecord): WorkflowRuntimeRerunPreflightCheck[] {
   const activeQueueCount = runtimeHealth.queue.queued_count + runtimeHealth.queue.running_count
   const queuePressureCount = Math.max(0, activeQueueCount - Math.max(1, runtimeHealth.queue.schedule_concurrency_limit))
