@@ -11,7 +11,7 @@ import { useI18n } from '@/i18n'
 import { getGraphWorkflowRuntimeHealth, getGraphWorkflowSchedules, getGraphWorkflowVersionSummaries, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord, type GraphWorkflowRuntimeHealthRecord, type GraphWorkflowVersionSummaryRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
-import { buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeThresholdGuidance, type WorkflowRuntimeObservabilityTrend, type WorkflowRuntimeThresholdGuidance } from '../workflow-runtime-observability'
+import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeThresholdGuidance, type WorkflowRuntimeDecisionCue, type WorkflowRuntimeObservabilityTrend, type WorkflowRuntimeThresholdGuidance } from '../workflow-runtime-observability'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 import { buildExecutionComparisonSummary, buildNodeDisplayLabelMap, formatPrimitiveValue, getExecutionInputEntries, getNodeDisplayLabelFromMap, parseExecutionPlan, type ExecutionInputEntry } from './graph-execution-panel-helpers'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
@@ -227,6 +227,63 @@ function getWorkflowRuntimeThresholdGuidanceCopy(guidance: WorkflowRuntimeThresh
   }
 }
 
+function getWorkflowRuntimeDecisionCueCopy(cue: WorkflowRuntimeDecisionCue) {
+  if (cue.key === 'queue-rerun-readiness') {
+    return {
+      title: { ko: '재실행 전 큐 판단', en: 'Queue before rerun' },
+      primary: { ko: '활성 {count}', en: '{count} active' },
+      secondary: { ko: '압력 {count}', en: '{count} pressure' },
+      body: { ko: '큐 압력이나 취소 요청이 있으면 새 실행보다 대기/실행 상태 검토가 먼저야.', en: 'Queue pressure or cancellation requests make queue review the next step before a new run.' },
+    }
+  }
+
+  if (cue.key === 'autorun-stop-review') {
+    return {
+      title: { ko: '자동 실행 중지 판단', en: 'Autorun stop review' },
+      primary: { ko: '중지/검토 {count}', en: '{count} stopped/review' },
+      secondary: { ko: '활성 예약 {count}', en: '{count} active schedules' },
+      body: { ko: '멈춘 예약은 재시작 버튼보다 stop reason과 입력 변경 검토를 먼저 남겨.', en: 'Stopped schedules need stop-reason and input-change review before restart decisions.' },
+    }
+  }
+
+  if (cue.key === 'recovery-output-review') {
+    return {
+      title: { ko: '복구/산출물 판단', en: 'Recovery/output review' },
+      primary: { ko: '점검 {count}', en: '{count} checks' },
+      secondary: { ko: '시작 대기 {count}', en: '{count} startup queued' },
+      body: { ko: '복구 불일치가 있으면 최근 실패, 입력 diff, 산출물 상태를 함께 확인해.', en: 'Recovery mismatches should be reviewed with recent failures, input diffs, and output state.' },
+    }
+  }
+
+  if (cue.key === 'retention-cleanup-approval') {
+    return {
+      title: { ko: '보존 정리 승인', en: 'Retention cleanup approval' },
+      primary: { ko: '대기 {count}', en: '{count} pending' },
+      secondary: { ko: '제한 {count}', en: '{count} limit' },
+      body: { ko: '보존 정리 신호는 표시만 하고 삭제, schema, retention policy 변경은 별도 승인으로 남겨.', en: 'Retention cleanup is display-only here; deletion, schema, and policy changes stay separately approved.' },
+    }
+  }
+
+  return {
+    title: { ko: '오류 이력 판단', en: 'Error history review' },
+    primary: { ko: '실패율 {count}%', en: '{count}% failed' },
+    secondary: { ko: '실패/취소 {count}', en: '{count} failed/cancelled' },
+    body: { ko: '실패율이나 취소 이력이 있으면 즉시 재실행 대신 오류 메시지와 프리셋 차이를 먼저 봐.', en: 'Failure or cancellation history should lead to error and preset-diff review before rerun.' },
+  }
+}
+
+function getWorkflowRuntimeDecisionCueActionLabel(action: WorkflowRuntimeDecisionCue['action']) {
+  if (action === 'approval-required') {
+    return { ko: '승인 필요', en: 'Approval required' }
+  }
+
+  if (action === 'review-before-rerun') {
+    return { ko: '재실행 전 검토', en: 'Review before rerun' }
+  }
+
+  return { ko: '관찰 가능', en: 'Safe to observe' }
+}
+
 function WorkflowVersionReviewBlock({
   selectedGraph,
   latestExecution,
@@ -394,6 +451,7 @@ function WorkflowRuntimeHealthBlock({
       : t({ ko: '시작 복구 기록은 아직 없어.', en: 'No startup recovery snapshot yet.' })
   const observabilityTrends = buildWorkflowRuntimeObservabilityTrends(runtimeHealth)
   const thresholdGuidance = buildWorkflowRuntimeThresholdGuidance(runtimeHealth)
+  const decisionCues = buildWorkflowRuntimeDecisionCues(runtimeHealth)
 
   return (
     <div className="space-y-3 rounded-sm border border-border bg-background/35 p-3">
@@ -541,6 +599,37 @@ function WorkflowRuntimeHealthBlock({
               <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
               {guidance.timestamp ? (
                 <div className="mt-2 text-muted-foreground">{formatDateTime(guidance.timestamp)}</div>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="grid gap-2 lg:grid-cols-5" data-workflow-runtime-decision-surface="true">
+        {decisionCues.map((cue) => {
+          const copy = getWorkflowRuntimeDecisionCueCopy(cue)
+          return (
+            <div
+              key={cue.key}
+              className={`min-h-[8rem] rounded-sm border px-3 py-2 text-xs ${getWorkflowRuntimeTrendToneClass(cue.tone)}`}
+              data-workflow-runtime-decision-cue={cue.key}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="font-semibold text-foreground">{t(copy.title)}</div>
+                <Badge variant="outline">{t(getWorkflowRuntimeDecisionCueActionLabel(cue.action))}</Badge>
+              </div>
+              <div className="mt-2 grid gap-1 text-muted-foreground">
+                <span>{t(copy.primary, { count: formatNumber(cue.primaryCount) })}</span>
+                <span>{t(copy.secondary, { count: formatNumber(cue.secondaryCount) })}</span>
+                <span>
+                  {cue.approvalBoundary === 'approval-required'
+                    ? t({ ko: '사용자 승인 경계', en: 'User approval boundary' })
+                    : t({ ko: '운영자 검토 경계', en: 'Operator review boundary' })}
+                </span>
+              </div>
+              <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
+              {cue.timestamp ? (
+                <div className="mt-2 text-muted-foreground">{formatDateTime(cue.timestamp)}</div>
               ) : null}
             </div>
           )

@@ -9,7 +9,7 @@ import {
   getMediaReviewSignalSummary,
   getMediaReviewSimilarityDecisionSummary,
 } from '../features/media-review/media-review-utils'
-import { buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeThresholdGuidance } from '../features/module-graph/workflow-runtime-observability'
+import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeThresholdGuidance } from '../features/module-graph/workflow-runtime-observability'
 import type { GraphWorkflowRuntimeHealthRecord } from '../lib/api-module-graph'
 import type { ImageRecord } from '../types/image'
 
@@ -137,6 +137,14 @@ ok(runtimeThresholdGuidance.some((guidance) => guidance.key === 'recovery-mismat
 ok(runtimeThresholdGuidance.some((guidance) => guidance.key === 'retention-approval-threshold' && guidance.approvalBoundary === 'approval-required'), 'retention threshold guidance should keep cleanup approval-owned')
 ok(runtimeThresholdGuidance.some((guidance) => guidance.key === 'terminal-failure-threshold' && guidance.currentCount === 20 && guidance.thresholdCount === 20), 'terminal failure threshold guidance should carry the local failure-rate threshold')
 
+const runtimeDecisionCues = buildWorkflowRuntimeDecisionCues(runtimeHealth)
+equal(runtimeDecisionCues.length, 5, 'workflow runtime should expose five decision cues')
+ok(runtimeDecisionCues.some((cue) => cue.key === 'queue-rerun-readiness' && cue.action === 'review-before-rerun' && cue.secondaryCount === 4), 'queue decision cue should require review before rerun when pressure is present')
+ok(runtimeDecisionCues.some((cue) => cue.key === 'autorun-stop-review' && cue.action === 'review-before-rerun' && cue.primaryCount === 2), 'autorun decision cue should surface stopped schedule review')
+ok(runtimeDecisionCues.some((cue) => cue.key === 'recovery-output-review' && cue.action === 'review-before-rerun' && cue.primaryCount === 2), 'recovery decision cue should link mismatches to output review')
+ok(runtimeDecisionCues.some((cue) => cue.key === 'retention-cleanup-approval' && cue.action === 'approval-required' && cue.approvalBoundary === 'approval-required'), 'retention decision cue should keep cleanup approval-owned')
+ok(runtimeDecisionCues.some((cue) => cue.key === 'terminal-error-review' && cue.primaryCount === 20 && cue.secondaryCount === 4), 'terminal decision cue should expose failure percent and non-success history')
+
 const root = process.cwd()
 const mediaReviewPage = readFileSync(join(root, 'src/features/media-review/media-review-page.tsx'), 'utf8')
 const workflowRunnerPanel = readFileSync(join(root, 'src/features/module-graph/components/workflow-runner-panel.tsx'), 'utf8')
@@ -149,8 +157,12 @@ ok(workflowRunnerPanel.includes('data-workflow-runtime-observability-trends="tru
 ok(workflowRunnerPanel.includes('data-workflow-runtime-trend={trend.key}'), 'workflow runtime trend rows should be identifiable')
 ok(workflowRunnerPanel.includes('data-workflow-runtime-threshold-guidance="true"'), 'workflow runner should render threshold guidance')
 ok(workflowRunnerPanel.includes('data-workflow-runtime-threshold={guidance.key}'), 'workflow runtime threshold rows should be identifiable')
+ok(workflowRunnerPanel.includes('data-workflow-runtime-decision-surface="true"'), 'workflow runner should render runtime decision cues')
+ok(workflowRunnerPanel.includes('data-workflow-runtime-decision-cue={cue.key}'), 'workflow runtime decision cue rows should be identifiable')
 ok(workflowRunnerPanel.includes('buildWorkflowRuntimeObservabilityTrends(runtimeHealth)'), 'workflow runner should derive trends from existing runtime health boundaries')
 ok(workflowRunnerPanel.includes('buildWorkflowRuntimeThresholdGuidance(runtimeHealth)'), 'workflow runner should derive threshold guidance from existing runtime health boundaries')
+ok(workflowRunnerPanel.includes('buildWorkflowRuntimeDecisionCues(runtimeHealth)'), 'workflow runner should derive decision cues from existing runtime health boundaries')
 ok(!mediaReviewPage.includes('deleteImages('), 'media runtime observability should not add destructive media cleanup')
+ok(!workflowRunnerPanel.includes('deleteImages('), 'workflow runtime decision surface should not add destructive cleanup')
 
 console.log('Media/runtime observability contracts verified.')
