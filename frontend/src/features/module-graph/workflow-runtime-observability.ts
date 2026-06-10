@@ -5,6 +5,7 @@ export type WorkflowRuntimeObservabilityTrendTone = 'ready' | 'watch' | 'attenti
 export type WorkflowRuntimeThresholdGuidanceKey = 'queue-pressure-threshold' | 'retry-stop-threshold' | 'recovery-mismatch-threshold' | 'retention-approval-threshold' | 'terminal-failure-threshold'
 export type WorkflowRuntimeDecisionCueKey = 'queue-rerun-readiness' | 'autorun-stop-review' | 'recovery-output-review' | 'retention-cleanup-approval' | 'terminal-error-review'
 export type WorkflowRuntimeDecisionCueAction = 'safe-to-observe' | 'review-before-rerun' | 'approval-required'
+export type WorkflowRuntimeRunbookEvidenceKey = 'rerun-readiness-evidence' | 'rollback-handoff-evidence' | 'stop-condition-evidence'
 
 export interface WorkflowRuntimeObservabilityTrend {
   key: WorkflowRuntimeObservabilityTrendKey
@@ -30,6 +31,16 @@ export interface WorkflowRuntimeDecisionCue {
   action: WorkflowRuntimeDecisionCueAction
   primaryCount: number
   secondaryCount: number
+  approvalBoundary: 'operator-review' | 'approval-required'
+  timestamp?: string | null
+}
+
+export interface WorkflowRuntimeRunbookEvidence {
+  key: WorkflowRuntimeRunbookEvidenceKey
+  tone: WorkflowRuntimeObservabilityTrendTone
+  action: WorkflowRuntimeDecisionCueAction
+  evidenceCount: number
+  guardrailCount: number
   approvalBoundary: 'operator-review' | 'approval-required'
   timestamp?: string | null
 }
@@ -235,6 +246,56 @@ export function buildWorkflowRuntimeDecisionCues(runtimeHealth: GraphWorkflowRun
       secondaryCount: nonSuccessHistoryCount,
       approvalBoundary: 'operator-review',
       timestamp: runtimeHealth.telemetry.latest_failed_at ?? runtimeHealth.telemetry.latest_completed_at ?? null,
+    },
+  ]
+}
+
+export function buildWorkflowRuntimeRunbookEvidence(runtimeHealth: GraphWorkflowRuntimeHealthRecord): WorkflowRuntimeRunbookEvidence[] {
+  const activeQueueCount = runtimeHealth.queue.queued_count + runtimeHealth.queue.running_count
+  const queuePressureCount = Math.max(0, activeQueueCount - Math.max(1, runtimeHealth.queue.schedule_concurrency_limit))
+    + runtimeHealth.queue.cancellation_requested_count
+    + Math.max(0, runtimeHealth.queue.running_count - runtimeHealth.queue.in_process_running_count)
+  const stoppedScheduleCount = runtimeHealth.retry_policy.paused_for_review_count
+    + runtimeHealth.retry_policy.stopped_after_error_count
+    + runtimeHealth.retry_policy.overlap_stopped_count
+  const recoveryConcernCount = runtimeHealth.recovery.startup_failed_running
+    + runtimeHealth.recovery.running_not_in_process_count
+  const nonSuccessHistoryCount = runtimeHealth.telemetry.failed_count + runtimeHealth.telemetry.cancelled_count
+  const rollbackEvidenceCount = recoveryConcernCount
+    + runtimeHealth.telemetry.failed_count
+    + runtimeHealth.telemetry.cancelled_count
+    + runtimeHealth.retention.pending_prune_count
+  const stopConditionEvidenceCount = stoppedScheduleCount
+    + runtimeHealth.queue.cancellation_requested_count
+    + runtimeHealth.telemetry.failed_count
+
+  return [
+    {
+      key: 'rerun-readiness-evidence',
+      tone: queuePressureCount + stoppedScheduleCount + recoveryConcernCount + nonSuccessHistoryCount > 0 ? 'attention' : activeQueueCount > 0 ? 'watch' : 'ready',
+      action: queuePressureCount + stoppedScheduleCount + recoveryConcernCount + nonSuccessHistoryCount > 0 ? 'review-before-rerun' : 'safe-to-observe',
+      evidenceCount: activeQueueCount + stoppedScheduleCount + recoveryConcernCount + nonSuccessHistoryCount,
+      guardrailCount: queuePressureCount + stoppedScheduleCount + recoveryConcernCount + nonSuccessHistoryCount,
+      approvalBoundary: 'operator-review',
+      timestamp: runtimeHealth.queue.oldest_queued_at ?? runtimeHealth.telemetry.latest_failed_at ?? runtimeHealth.telemetry.latest_completed_at ?? null,
+    },
+    {
+      key: 'rollback-handoff-evidence',
+      tone: rollbackEvidenceCount > 0 ? 'attention' : 'ready',
+      action: rollbackEvidenceCount > 0 ? 'approval-required' : 'safe-to-observe',
+      evidenceCount: rollbackEvidenceCount,
+      guardrailCount: rollbackEvidenceCount > 0 ? 1 : 0,
+      approvalBoundary: 'approval-required',
+      timestamp: runtimeHealth.recovery.last_startup_recovery_at ?? runtimeHealth.telemetry.latest_failed_at ?? runtimeHealth.telemetry.latest_completed_at ?? null,
+    },
+    {
+      key: 'stop-condition-evidence',
+      tone: stopConditionEvidenceCount > 0 ? 'attention' : runtimeHealth.queue.retry_timer_pending ? 'watch' : 'ready',
+      action: stopConditionEvidenceCount > 0 ? 'review-before-rerun' : 'safe-to-observe',
+      evidenceCount: stopConditionEvidenceCount,
+      guardrailCount: stopConditionEvidenceCount,
+      approvalBoundary: 'operator-review',
+      timestamp: runtimeHealth.telemetry.latest_failed_at ?? null,
     },
   ]
 }

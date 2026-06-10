@@ -11,7 +11,7 @@ import { useI18n } from '@/i18n'
 import { getGraphWorkflowRuntimeHealth, getGraphWorkflowSchedules, getGraphWorkflowVersionSummaries, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord, type GraphWorkflowRuntimeHealthRecord, type GraphWorkflowVersionSummaryRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
-import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeThresholdGuidance, type WorkflowRuntimeDecisionCue, type WorkflowRuntimeObservabilityTrend, type WorkflowRuntimeThresholdGuidance } from '../workflow-runtime-observability'
+import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeRunbookEvidence, buildWorkflowRuntimeThresholdGuidance, type WorkflowRuntimeDecisionCue, type WorkflowRuntimeObservabilityTrend, type WorkflowRuntimeRunbookEvidence, type WorkflowRuntimeThresholdGuidance } from '../workflow-runtime-observability'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 import { buildExecutionComparisonSummary, buildNodeDisplayLabelMap, formatPrimitiveValue, getExecutionInputEntries, getNodeDisplayLabelFromMap, parseExecutionPlan, type ExecutionInputEntry } from './graph-execution-panel-helpers'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
@@ -284,6 +284,27 @@ function getWorkflowRuntimeDecisionCueActionLabel(action: WorkflowRuntimeDecisio
   return { ko: '관찰 가능', en: 'Safe to observe' }
 }
 
+function getWorkflowRuntimeRunbookEvidenceCopy(evidence: WorkflowRuntimeRunbookEvidence) {
+  if (evidence.key === 'rerun-readiness-evidence') {
+    return {
+      title: { ko: '재실행 증거', en: 'Rerun readiness evidence' },
+      body: { ko: '큐 압력, 중지된 예약, 복구 불일치, 실패/취소 이력을 모아 즉시 재실행 대신 검토 순서를 남겨.', en: 'Collect queue pressure, stopped schedules, recovery mismatches, and failed/cancelled history before deciding on reruns.' },
+    }
+  }
+
+  if (evidence.key === 'rollback-handoff-evidence') {
+    return {
+      title: { ko: '롤백 인계 증거', en: 'Rollback handoff evidence' },
+      body: { ko: '복구/실패/보존 정리 신호는 롤백 후보와 서비스 재시작 승인 여부를 분리해서 인계해.', en: 'Recovery, failure, and retention signals are handed off separately from rollback and service restart approval.' },
+    }
+  }
+
+  return {
+    title: { ko: '중단 조건 증거', en: 'Stop condition evidence' },
+    body: { ko: '검토/중지된 자동 실행, 취소 요청, 최근 실패가 있으면 예약 재개보다 stop reason 기록을 먼저 확인해.', en: 'Paused/stopped autoruns, cancellation requests, and recent failures require stop-reason review before resuming schedules.' },
+  }
+}
+
 function WorkflowVersionReviewBlock({
   selectedGraph,
   latestExecution,
@@ -452,6 +473,7 @@ function WorkflowRuntimeHealthBlock({
   const observabilityTrends = buildWorkflowRuntimeObservabilityTrends(runtimeHealth)
   const thresholdGuidance = buildWorkflowRuntimeThresholdGuidance(runtimeHealth)
   const decisionCues = buildWorkflowRuntimeDecisionCues(runtimeHealth)
+  const runbookEvidence = buildWorkflowRuntimeRunbookEvidence(runtimeHealth)
 
   return (
     <div className="space-y-3 rounded-sm border border-border bg-background/35 p-3">
@@ -630,6 +652,37 @@ function WorkflowRuntimeHealthBlock({
               <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
               {cue.timestamp ? (
                 <div className="mt-2 text-muted-foreground">{formatDateTime(cue.timestamp)}</div>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="grid gap-2 lg:grid-cols-3" data-workflow-runtime-runbook-evidence="true">
+        {runbookEvidence.map((evidence) => {
+          const copy = getWorkflowRuntimeRunbookEvidenceCopy(evidence)
+          return (
+            <div
+              key={evidence.key}
+              className={`min-h-[8rem] rounded-sm border px-3 py-2 text-xs ${getWorkflowRuntimeTrendToneClass(evidence.tone)}`}
+              data-workflow-runtime-runbook-evidence-card={evidence.key}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="font-semibold text-foreground">{t(copy.title)}</div>
+                <Badge variant="outline">{t(getWorkflowRuntimeDecisionCueActionLabel(evidence.action))}</Badge>
+              </div>
+              <div className="mt-2 grid gap-1 text-muted-foreground">
+                <span>{t({ ko: '증거 {count}', en: '{count} evidence signals' }, { count: formatNumber(evidence.evidenceCount) })}</span>
+                <span>{t({ ko: '가드레일 {count}', en: '{count} guardrails' }, { count: formatNumber(evidence.guardrailCount) })}</span>
+                <span>
+                  {evidence.approvalBoundary === 'approval-required'
+                    ? t({ ko: '승인 후 실행', en: 'Execute only after approval' })
+                    : t({ ko: '로컬 검토만', en: 'Local review only' })}
+                </span>
+              </div>
+              <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
+              {evidence.timestamp ? (
+                <div className="mt-2 text-muted-foreground">{formatDateTime(evidence.timestamp)}</div>
               ) : null}
             </div>
           )

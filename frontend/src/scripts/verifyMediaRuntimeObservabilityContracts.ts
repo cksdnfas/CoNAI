@@ -9,7 +9,7 @@ import {
   getMediaReviewSignalSummary,
   getMediaReviewSimilarityDecisionSummary,
 } from '../features/media-review/media-review-utils'
-import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeThresholdGuidance } from '../features/module-graph/workflow-runtime-observability'
+import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeRunbookEvidence, buildWorkflowRuntimeThresholdGuidance } from '../features/module-graph/workflow-runtime-observability'
 import type { GraphWorkflowRuntimeHealthRecord } from '../lib/api-module-graph'
 import type { ImageRecord } from '../types/image'
 
@@ -145,6 +145,12 @@ ok(runtimeDecisionCues.some((cue) => cue.key === 'recovery-output-review' && cue
 ok(runtimeDecisionCues.some((cue) => cue.key === 'retention-cleanup-approval' && cue.action === 'approval-required' && cue.approvalBoundary === 'approval-required'), 'retention decision cue should keep cleanup approval-owned')
 ok(runtimeDecisionCues.some((cue) => cue.key === 'terminal-error-review' && cue.primaryCount === 20 && cue.secondaryCount === 4), 'terminal decision cue should expose failure percent and non-success history')
 
+const runtimeRunbookEvidence = buildWorkflowRuntimeRunbookEvidence(runtimeHealth)
+equal(runtimeRunbookEvidence.length, 3, 'workflow runtime should expose three runbook evidence records')
+ok(runtimeRunbookEvidence.some((evidence) => evidence.key === 'rerun-readiness-evidence' && evidence.action === 'review-before-rerun' && evidence.guardrailCount === 12), 'rerun evidence should collect queue, stop, recovery, and terminal guardrails')
+ok(runtimeRunbookEvidence.some((evidence) => evidence.key === 'rollback-handoff-evidence' && evidence.action === 'approval-required' && evidence.approvalBoundary === 'approval-required'), 'rollback evidence should keep rollback/restart execution approval-owned')
+ok(runtimeRunbookEvidence.some((evidence) => evidence.key === 'stop-condition-evidence' && evidence.evidenceCount === 5), 'stop condition evidence should include stopped schedules, cancellations, and recent failures')
+
 const root = process.cwd()
 const mediaReviewPage = readFileSync(join(root, 'src/features/media-review/media-review-page.tsx'), 'utf8')
 const workflowRunnerPanel = readFileSync(join(root, 'src/features/module-graph/components/workflow-runner-panel.tsx'), 'utf8')
@@ -162,6 +168,9 @@ ok(workflowRunnerPanel.includes('data-workflow-runtime-decision-cue={cue.key}'),
 ok(workflowRunnerPanel.includes('buildWorkflowRuntimeObservabilityTrends(runtimeHealth)'), 'workflow runner should derive trends from existing runtime health boundaries')
 ok(workflowRunnerPanel.includes('buildWorkflowRuntimeThresholdGuidance(runtimeHealth)'), 'workflow runner should derive threshold guidance from existing runtime health boundaries')
 ok(workflowRunnerPanel.includes('buildWorkflowRuntimeDecisionCues(runtimeHealth)'), 'workflow runner should derive decision cues from existing runtime health boundaries')
+ok(workflowRunnerPanel.includes('data-workflow-runtime-runbook-evidence="true"'), 'workflow runner should render runbook evidence')
+ok(workflowRunnerPanel.includes('data-workflow-runtime-runbook-evidence-card={evidence.key}'), 'workflow runbook evidence rows should be identifiable')
+ok(workflowRunnerPanel.includes('buildWorkflowRuntimeRunbookEvidence(runtimeHealth)'), 'workflow runner should derive runbook evidence from existing runtime health boundaries')
 ok(!mediaReviewPage.includes('deleteImages('), 'media runtime observability should not add destructive media cleanup')
 ok(!workflowRunnerPanel.includes('deleteImages('), 'workflow runtime decision surface should not add destructive cleanup')
 

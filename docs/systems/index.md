@@ -15,10 +15,11 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 8. [local automation context operations map](/systems/local-automation-context-operations-map)
 9. [26.6.9 alpha release handoff packet](/systems/26.6.9-alpha-release-handoff)
 10. [26.6.9 demo operation readiness checklist](/systems/26.6.9-demo-operation-readiness)
-11. [26.6.9 final readiness trend evidence](/systems/26.6.9-final-readiness-trend-evidence)
-12. [26.6.8 workflow-media-operations](/systems/26.6.8-workflow-media-operations)
-13. [26.6.8 dependency hardening plan](/systems/26.6.8-dependency-hardening-plan)
-14. [26.6.8 hardening-evidence-observability readiness](/systems/26.6.8-hardening-evidence-observability-readiness)
+11. [workflow recovery runbook evidence](/systems/workflow-recovery-runbook-evidence)
+12. [26.6.9 final readiness trend evidence](/systems/26.6.9-final-readiness-trend-evidence)
+13. [26.6.8 workflow-media-operations](/systems/26.6.8-workflow-media-operations)
+14. [26.6.8 dependency hardening plan](/systems/26.6.8-dependency-hardening-plan)
+15. [26.6.8 hardening-evidence-observability readiness](/systems/26.6.8-hardening-evidence-observability-readiness)
 
 ## 왜 이 순서인가
 
@@ -62,18 +63,22 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 - alpha push, demo host update, configured demo service restart, live target `2999` smoke, rollback handoff의 승인 후 순서를 고정합니다.
 - 실행 명령, 대상, 확인 기준, 중단 조건을 분리해 사용자 승인 전 외부 작업이 일어나지 않게 합니다.
 
-### 11) 26.6.9 final readiness trend evidence
+### 11) workflow recovery runbook evidence
+- 워크플로우 런타임 화면에 재실행, 롤백 인계, 중단 조건 evidence card를 추가한 로컬 runbook 기준입니다.
+- queue/retry/recovery/terminal/retention 신호를 기존 health data에서 읽고, rollback/restart/destructive cleanup은 승인 경계로 유지합니다.
+
+### 12) 26.6.9 final readiness trend evidence
 - dependency/security 결과, release handoff, media/runtime observability, final local verification을 하나의 exportable trend evidence로 묶습니다.
 - package version bump, push, deploy, restart, protected service `3999`, destructive cleanup은 사용자 승인 결정으로 분리합니다.
 
-### 12) 26.6.8 workflow-media-operations
+### 13) 26.6.8 workflow-media-operations
 - 워크플로우·미디어 운영 업그레이드를 로컬 검토 전에 어떤 순서로 검증할지 정리합니다.
 - push, deploy, restart, protected service 조작 없이 확인 가능한 로컬 준비 경계입니다.
 
-### 13) 26.6.8 dependency hardening plan
+### 14) 26.6.8 dependency hardening plan
 - `npm audit` 결과를 backend runtime, frontend routing, docs/build tooling 표면으로 분리합니다.
 - 안전하게 적용할 수 있는 dependency update lane과 approval-needed 후보를 구분합니다.
 
-### 14) 26.6.8 hardening-evidence-observability readiness
+### 15) 26.6.8 hardening-evidence-observability readiness
 - dependency hardening, readiness evidence, media/runtime observability 로드맵의 최종 로컬 준비 경계를 정리합니다.
 - 남은 `better-queue -> uuid`, `vitepress -> vite -> esbuild`, retention/destructive cleanup 승인 결정을 분리합니다.
