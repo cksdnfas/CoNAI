@@ -176,7 +176,8 @@
     "export:mcp-dry-run-evidence": "cd backend && npm run export:mcp-dry-run-evidence --",
     "verify:mcp-local-evidence-export": "cd backend && npm run verify:mcp-local-evidence-export",
     "verify:runtime-role-contracts": "cd backend && npm run verify:runtime-role-contracts",
-    "verify:workflow-queue-recovery-cockpit-contracts": "cd frontend && npm run verify:workflow-queue-recovery-cockpit-contracts"
+    "verify:workflow-queue-recovery-cockpit-contracts": "cd frontend && npm run verify:workflow-queue-recovery-cockpit-contracts",
+    "verify:automation-rehearsal-contracts": "cd frontend && npm run verify:automation-rehearsal-contracts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

@@ -27,6 +27,7 @@ import {
   type ReleaseReadinessRunbookGuardrailContract,
   type ReleaseReadinessTrendEvidenceContract,
   type ReleaseReadinessAutomationContextContract,
+  type ReleaseReadinessAutomationRehearsalContract,
   type ReleaseReadinessUserDecisionContract,
 } from '../release-readiness-history'
 
@@ -39,6 +40,7 @@ type OperationStep = ReleaseReadinessOperationStepContract
 type TrendEvidenceItem = ReleaseReadinessTrendEvidenceContract
 type UserDecisionItem = ReleaseReadinessUserDecisionContract
 type AutomationContextItem = ReleaseReadinessAutomationContextContract
+type AutomationRehearsalItem = ReleaseReadinessAutomationRehearsalContract
 type OperatorEvidenceReviewItem = ReleaseReadinessEvidenceReviewContract
 
 type IntegratedOperationsLane = {
@@ -488,6 +490,42 @@ const AUTOMATION_CONTEXT_ITEMS: AutomationContextItem[] = [
   },
 ]
 
+const AUTOMATION_REHEARSAL_ITEMS: AutomationRehearsalItem[] = [
+  {
+    id: 'cleanup-staging-dry-run',
+    rehearsalSurface: { ko: '정리 staging 리허설', en: 'Cleanup staging rehearsal' },
+    dryRunAnchor: 'Media review > cleanup staging preview',
+    localDiffArtifact: 'local candidate diff only; no deletion or retention-policy mutation',
+    stopCondition: {
+      ko: '삭제, retention 변경, schema 변경이 필요하면 즉시 승인 요청으로 중단해.',
+      en: 'Stop for approval when deletion, retention changes, or schema changes are required.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+  {
+    id: 'workflow-recovery-replay-dry-run',
+    rehearsalSurface: { ko: '워크플로우 복구 replay 리허설', en: 'Workflow recovery replay rehearsal' },
+    dryRunAnchor: 'buildWorkflowRuntimeRecoveryHandoffPacket(runtimeHealth)',
+    localDiffArtifact: 'queue/retry/recovery handoff packet; no rerun, cancel, or restart',
+    stopCondition: {
+      ko: 'rerun, cancel, restart, live smoke가 필요하면 리허설 결과만 남기고 멈춰.',
+      en: 'Stop with rehearsal evidence when rerun, cancel, restart, or live smoke is needed.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'release-candidate-command-dry-run',
+    rehearsalSurface: { ko: '릴리즈 후보 명령 리허설', en: 'Release candidate command rehearsal' },
+    dryRunAnchor: 'Settings > Release readiness operation checklist',
+    localDiffArtifact: 'command plan and expected smoke assertions only; no push/deploy/restart',
+    stopCondition: {
+      ko: 'push, deploy, restart, public smoke는 사용자 승인 전 실행하지 않아.',
+      en: 'Do not run push, deploy, restart, or public smoke before user approval.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+]
+
 const REVIEW_LANES: ReadinessItem[] = [
   {
     id: 'local-results',
@@ -731,6 +769,7 @@ export function ReleaseReadinessTab() {
   const exportReadinessState = allEvidenceReadyForExport ? t({ ko: '내보내기 준비', en: 'Ready to export' }) : t({ ko: '증거 보강 필요', en: 'Evidence needed' })
   const trendEvidenceState = t({ ko: '{count}개 추세 근거', en: '{count} trend evidence items' }, { count: TREND_EVIDENCE_ITEMS.length })
   const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
+  const automationRehearsalState = t({ ko: '{count}개 리허설 계약', en: '{count} rehearsal contracts' }, { count: AUTOMATION_REHEARSAL_ITEMS.length })
   const historyState = readinessHistory.length > 0 ? t({ ko: '{count}개 저장', en: '{count} saved' }, { count: readinessHistory.length }) : t({ ko: '기록 없음', en: 'No records' })
   const latestHistoryLabel = latestReadinessRecord
     ? formatDateTime(latestReadinessRecord.savedAt, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -793,6 +832,7 @@ export function ReleaseReadinessTab() {
       alertReviewItems: ALERT_REVIEW_ITEMS,
       trendEvidenceItems: TREND_EVIDENCE_ITEMS,
       automationContextItems: AUTOMATION_CONTEXT_ITEMS,
+      automationRehearsalItems: AUTOMATION_REHEARSAL_ITEMS,
       evidenceReviewItems: OPERATOR_EVIDENCE_REVIEW_ITEMS,
       handoffItems: HANDOFF_EVIDENCE_ITEMS,
       runbookGuardrails: RUNBOOK_GUARDRAILS,
@@ -1103,6 +1143,42 @@ export function ReleaseReadinessTab() {
         </div>
       </SettingsSection>
 
+
+
+      <SettingsSection
+        data-release-readiness-automation-rehearsal="true"
+        heading={t({ ko: '자동화 리허설 계약', en: 'Automation rehearsal contracts' })}
+        actions={<Badge variant="secondary">{automationRehearsalState}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: 'cleanup, recovery, release 후보 작업을 dry-run 근거와 로컬 diff로만 리허설해. 이 표면은 삭제, rerun, push, deploy, restart, 외부 서비스를 실행하지 않아.',
+            en: 'Rehearse cleanup, recovery, and release-candidate work with dry-run evidence and local diffs only. This surface does not delete, rerun, push, deploy, restart, or call external services.',
+          })}
+        </SettingsInsetBlock>
+
+        <div className="grid gap-3 min-[1000px]:grid-cols-3">
+          {AUTOMATION_REHEARSAL_ITEMS.map((item) => (
+            <SettingsInsetBlock key={item.id} data-release-readiness-automation-rehearsal-item={item.id} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{t(item.rehearsalSurface)}</Badge>
+                <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                  {item.approvalBoundary === 'approval-required'
+                    ? t({ ko: '승인 필요', en: 'Approval needed' })
+                    : item.approvalBoundary === 'operator-review'
+                      ? t({ ko: '운영 검토', en: 'Operator review' })
+                      : t({ ko: '로컬 근거', en: 'Local evidence' })}
+                </Badge>
+              </div>
+              <div className="font-mono text-xs text-foreground/90">{item.dryRunAnchor}</div>
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 font-mono text-xs leading-5 text-foreground">
+                {item.localDiffArtifact}
+              </div>
+              <div className="text-xs leading-5 text-muted-foreground">{t(item.stopCondition)}</div>
+            </SettingsInsetBlock>
+          ))}
+        </div>
+      </SettingsSection>
 
       <SettingsSection
         data-release-readiness-operator-evidence-console="true"
