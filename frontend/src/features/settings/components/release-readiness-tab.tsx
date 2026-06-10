@@ -756,20 +756,23 @@ export function ReleaseReadinessTab() {
   const [reviewedItems, setReviewedItems] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedItemIds ?? []))
   const [capturedHandoffItems, setCapturedHandoffItems] = useState<Set<string>>(() => new Set(latestReadinessRecord?.capturedHandoffItemIds ?? []))
   const [reviewedAlerts, setReviewedAlerts] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedAlertIds ?? []))
+  const [reviewedAutomationRehearsals, setReviewedAutomationRehearsals] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedAutomationRehearsalIds ?? []))
   const reviewedCount = reviewedItems.size
   const capturedHandoffCount = capturedHandoffItems.size
   const reviewedAlertCount = reviewedAlerts.size
+  const reviewedAutomationRehearsalCount = reviewedAutomationRehearsals.size
   const allReviewed = reviewedCount === REVIEW_ITEMS.length
   const allHandoffCaptured = capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length
   const allAlertsReviewed = reviewedAlertCount === ALERT_REVIEW_ITEMS.length
-  const allEvidenceReadyForExport = allReviewed && allHandoffCaptured && allAlertsReviewed
+  const allAutomationRehearsalsReviewed = reviewedAutomationRehearsalCount === AUTOMATION_REHEARSAL_ITEMS.length
+  const allEvidenceReadyForExport = allReviewed && allHandoffCaptured && allAlertsReviewed && allAutomationRehearsalsReviewed
   const readinessState = allReviewed ? t({ ko: '검토 완료', en: 'Reviewed' }) : t({ ko: '{count}/{total} 확인', en: '{count}/{total} checked' }, { count: reviewedCount, total: REVIEW_ITEMS.length })
   const handoffState = allHandoffCaptured ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
   const alertReviewState = allAlertsReviewed ? t({ ko: '알림 검토 완료', en: 'Alerts reviewed' }) : t({ ko: '{count}/{total} 알림', en: '{count}/{total} alerts' }, { count: reviewedAlertCount, total: ALERT_REVIEW_ITEMS.length })
   const exportReadinessState = allEvidenceReadyForExport ? t({ ko: '내보내기 준비', en: 'Ready to export' }) : t({ ko: '증거 보강 필요', en: 'Evidence needed' })
   const trendEvidenceState = t({ ko: '{count}개 추세 근거', en: '{count} trend evidence items' }, { count: TREND_EVIDENCE_ITEMS.length })
   const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
-  const automationRehearsalState = t({ ko: '{count}개 리허설 계약', en: '{count} rehearsal contracts' }, { count: AUTOMATION_REHEARSAL_ITEMS.length })
+  const automationRehearsalState = allAutomationRehearsalsReviewed ? t({ ko: '리허설 검토 완료', en: 'Rehearsals reviewed' }) : t({ ko: '{count}/{total} 리허설', en: '{count}/{total} rehearsals' }, { count: reviewedAutomationRehearsalCount, total: AUTOMATION_REHEARSAL_ITEMS.length })
   const historyState = readinessHistory.length > 0 ? t({ ko: '{count}개 저장', en: '{count} saved' }, { count: readinessHistory.length }) : t({ ko: '기록 없음', en: 'No records' })
   const latestHistoryLabel = latestReadinessRecord
     ? formatDateTime(latestReadinessRecord.savedAt, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -821,12 +824,25 @@ export function ReleaseReadinessTab() {
     })
   }
 
+  const toggleAutomationRehearsalItem = (id: string, checked: boolean) => {
+    setReviewedAutomationRehearsals((current) => {
+      const next = new Set(current)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
   const saveReadinessHistorySnapshot = () => {
     const record = buildReleaseReadinessHistoryRecord({
       appVersionLabel: APP_VERSION_LABEL,
       reviewedItemIds: reviewedItems,
       capturedHandoffItemIds: capturedHandoffItems,
       reviewedAlertIds: reviewedAlerts,
+      reviewedAutomationRehearsalIds: reviewedAutomationRehearsals,
       reviewItems: REVIEW_ITEMS,
       evidenceItems: EVIDENCE_ITEMS,
       alertReviewItems: ALERT_REVIEW_ITEMS,
@@ -850,6 +866,7 @@ export function ReleaseReadinessTab() {
     setReviewedItems(new Set(record.reviewedItemIds))
     setCapturedHandoffItems(new Set(record.capturedHandoffItemIds))
     setReviewedAlerts(new Set(record.reviewedAlertIds))
+    setReviewedAutomationRehearsals(new Set(record.reviewedAutomationRehearsalIds))
   }
 
   const copySelectedHandoffOutput = async () => {
@@ -897,6 +914,7 @@ export function ReleaseReadinessTab() {
               <Badge variant={allReviewed ? 'default' : 'secondary'}>{readinessState}</Badge>
               <Badge variant={allHandoffCaptured ? 'default' : 'secondary'}>{handoffState}</Badge>
               <Badge variant={allAlertsReviewed ? 'default' : 'secondary'}>{alertReviewState}</Badge>
+              <Badge variant={allAutomationRehearsalsReviewed ? 'default' : 'secondary'}>{automationRehearsalState}</Badge>
               <Badge data-release-readiness-export-state="true" variant={allEvidenceReadyForExport ? 'default' : 'outline'}>{exportReadinessState}</Badge>
               <Badge variant="outline">{trendEvidenceState}</Badge>
               <div className="min-w-0 text-sm text-muted-foreground">
@@ -1148,7 +1166,18 @@ export function ReleaseReadinessTab() {
       <SettingsSection
         data-release-readiness-automation-rehearsal="true"
         heading={t({ ko: '자동화 리허설 계약', en: 'Automation rehearsal contracts' })}
-        actions={<Badge variant="secondary">{automationRehearsalState}</Badge>}
+        actions={(
+          <>
+            <Badge variant={allAutomationRehearsalsReviewed ? 'default' : 'secondary'}>{automationRehearsalState}</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={() => setReviewedAutomationRehearsals(new Set(AUTOMATION_REHEARSAL_ITEMS.map((item) => item.id)))}>
+              <CheckCircle2 className="h-4 w-4" />
+              {t({ ko: '리허설 검토 표시', en: 'Mark rehearsals' })}
+            </Button>
+            <Button type="button" size="icon-sm" variant="secondary" onClick={() => setReviewedAutomationRehearsals(new Set())} aria-label={t({ ko: '리허설 검토 초기화', en: 'Reset rehearsal review' })} title={t({ ko: '리허설 검토 초기화', en: 'Reset rehearsal review' })}>
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </>
+        )}
       >
         <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
           {t({
@@ -1158,10 +1187,20 @@ export function ReleaseReadinessTab() {
         </SettingsInsetBlock>
 
         <div className="grid gap-3 min-[1000px]:grid-cols-3">
-          {AUTOMATION_REHEARSAL_ITEMS.map((item) => (
-            <SettingsInsetBlock key={item.id} data-release-readiness-automation-rehearsal-item={item.id} className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">{t(item.rehearsalSurface)}</Badge>
+          {AUTOMATION_REHEARSAL_ITEMS.map((item) => {
+            const checked = reviewedAutomationRehearsals.has(item.id)
+
+            return (
+              <SettingsToggleRow key={item.id} data-release-readiness-automation-rehearsal-item={item.id} className={cn('items-start space-y-0', checked && 'border-primary/40 bg-primary/10')}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => toggleAutomationRehearsalItem(item.id, event.target.checked)}
+                  aria-label={t(item.rehearsalSurface)}
+                />
+                <span className="min-w-0 space-y-3">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">{t(item.rehearsalSurface)}</Badge>
                 <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
                   {item.approvalBoundary === 'approval-required'
                     ? t({ ko: '승인 필요', en: 'Approval needed' })
@@ -1169,14 +1208,16 @@ export function ReleaseReadinessTab() {
                       ? t({ ko: '운영 검토', en: 'Operator review' })
                       : t({ ko: '로컬 근거', en: 'Local evidence' })}
                 </Badge>
-              </div>
-              <div className="font-mono text-xs text-foreground/90">{item.dryRunAnchor}</div>
-              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 font-mono text-xs leading-5 text-foreground">
-                {item.localDiffArtifact}
-              </div>
-              <div className="text-xs leading-5 text-muted-foreground">{t(item.stopCondition)}</div>
-            </SettingsInsetBlock>
-          ))}
+                  </span>
+                  <span className="block font-mono text-xs text-foreground/90">{item.dryRunAnchor}</span>
+                  <span className="block rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 font-mono text-xs leading-5 text-foreground">
+                    {item.localDiffArtifact}
+                  </span>
+                  <span className="block text-xs leading-5 text-muted-foreground">{t(item.stopCondition)}</span>
+                </span>
+              </SettingsToggleRow>
+            )
+          })}
         </div>
       </SettingsSection>
 
