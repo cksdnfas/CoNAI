@@ -11,7 +11,7 @@ import { useI18n } from '@/i18n'
 import { getGraphWorkflowRuntimeHealth, getGraphWorkflowSchedules, getGraphWorkflowVersionSummaries, type GraphExecutionArtifactRecord, type GraphExecutionFinalResultRecord, type GraphExecutionLogRecord, type GraphExecutionNodeIoRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowRecord, type GraphWorkflowRuntimeHealthRecord, type GraphWorkflowVersionSummaryRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
-import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeRunbookEvidence, buildWorkflowRuntimeThresholdGuidance, type WorkflowRuntimeDecisionCue, type WorkflowRuntimeObservabilityTrend, type WorkflowRuntimeRunbookEvidence, type WorkflowRuntimeThresholdGuidance } from '../workflow-runtime-observability'
+import { buildWorkflowRuntimeDecisionCues, buildWorkflowRuntimeFailureGroups, buildWorkflowRuntimeObservabilityTrends, buildWorkflowRuntimeRerunPreflight, buildWorkflowRuntimeRunbookEvidence, buildWorkflowRuntimeThresholdGuidance, type WorkflowRuntimeDecisionCue, type WorkflowRuntimeFailureGroup, type WorkflowRuntimeObservabilityTrend, type WorkflowRuntimeRerunPreflightCheck, type WorkflowRuntimeRunbookEvidence, type WorkflowRuntimeThresholdGuidance } from '../workflow-runtime-observability'
 import type { SavedGraphWorkflowSummary } from '../saved-graph-list-summary'
 import { buildExecutionComparisonSummary, buildNodeDisplayLabelMap, formatPrimitiveValue, getExecutionInputEntries, getNodeDisplayLabelFromMap, parseExecutionPlan, type ExecutionInputEntry } from './graph-execution-panel-helpers'
 import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflow-validation-panel'
@@ -305,6 +305,87 @@ function getWorkflowRuntimeRunbookEvidenceCopy(evidence: WorkflowRuntimeRunbookE
   }
 }
 
+function getWorkflowRuntimeFailureGroupCopy(group: WorkflowRuntimeFailureGroup) {
+  if (group.key === 'queue-pressure') {
+    return {
+      title: { ko: '큐 압력 그룹', en: 'Queue pressure group' },
+      primary: { ko: '활성 {count}', en: '{count} active' },
+      secondary: { ko: '압력 {count}', en: '{count} pressure' },
+      body: { ko: '대기/실행, 초과 동시성, 취소 요청을 한 묶음으로 보고 재실행 전에 큐 배출을 확인해.', en: 'Review queued/running work, over-capacity pressure, and cancellation requests together before rerun.' },
+    }
+  }
+
+  if (group.key === 'autorun-stopped') {
+    return {
+      title: { ko: '자동 실행 중지 그룹', en: 'Stopped autorun group' },
+      primary: { ko: '중지 {count}', en: '{count} stopped' },
+      secondary: { ko: '활성 예약 {count}', en: '{count} active schedules' },
+      body: { ko: '중지/검토 예약은 재개보다 stop reason 확인이 먼저야.', en: 'Stopped/review-held schedules need stop-reason review before resuming.' },
+    }
+  }
+
+  if (group.key === 'startup-recovery') {
+    return {
+      title: { ko: '시작 복구 그룹', en: 'Startup recovery group' },
+      primary: { ko: '복구 점검 {count}', en: '{count} recovery checks' },
+      secondary: { ko: '시작 대기 {count}', en: '{count} startup queued' },
+      body: { ko: '시작 복구와 실행 프로세스 불일치는 산출물 확인 뒤 넘겨.', en: 'Startup recovery and process mismatch evidence needs output review before handoff.' },
+    }
+  }
+
+  if (group.key === 'terminal-failures') {
+    return {
+      title: { ko: '실패 이력 그룹', en: 'Terminal failure group' },
+      primary: { ko: '실패 {count}', en: '{count} failed' },
+      secondary: { ko: '실패율 {count}%', en: '{count}% failed' },
+      body: { ko: '최근 실패율은 입력 diff와 오류 메시지를 확인하기 전 자동 재실행하지 않는 근거야.', en: 'Failure rate evidence blocks automatic rerun until input diffs and errors are reviewed.' },
+    }
+  }
+
+  return {
+    title: { ko: '승인 경계 그룹', en: 'Approval boundary group' },
+    primary: { ko: '보존 대기 {count}', en: '{count} retention pending' },
+    secondary: { ko: '경계 신호 {count}', en: '{count} boundary signals' },
+    body: { ko: '정리, 재시작, 외부 부작용은 여기서 실행하지 않고 승인 항목으로 남겨.', en: 'Cleanup, restart, and external side effects remain approval-owned and are not executed here.' },
+  }
+}
+
+function getWorkflowRuntimeRerunPreflightCopy(check: WorkflowRuntimeRerunPreflightCheck) {
+  if (check.key === 'queue-drain-preflight') {
+    return { title: { ko: '큐 배출 확인', en: 'Queue drain preflight' }, body: { ko: '활성 큐나 압력 신호가 없어야 다음 재실행 판단이 가능해.', en: 'The active queue and pressure signals must be reviewed before the next rerun.' } }
+  }
+
+  if (check.key === 'autorun-reason-preflight') {
+    return { title: { ko: '자동 실행 사유 확인', en: 'Autorun reason preflight' }, body: { ko: '중지/검토 사유가 남아 있으면 예약 재개보다 이유 확인이 먼저야.', en: 'Review paused/stopped autorun reasons before resuming schedules.' } }
+  }
+
+  if (check.key === 'recovery-output-preflight') {
+    return { title: { ko: '복구 산출물 확인', en: 'Recovery output preflight' }, body: { ko: '복구 불일치가 있으면 산출물과 최근 실패를 먼저 확인해.', en: 'Recovery mismatches require output and recent-failure review first.' } }
+  }
+
+  if (check.key === 'latest-error-preflight') {
+    return { title: { ko: '최근 오류 확인', en: 'Latest error preflight' }, body: { ko: '최근 오류가 있으면 오류 메시지와 입력 변경을 확인하기 전 재실행하지 마.', en: 'Recent errors block rerun until the error and input changes are reviewed.' } }
+  }
+
+  return { title: { ko: '승인 경계 확인', en: 'Approval boundary preflight' }, body: { ko: '삭제, 재시작, 외부 부작용은 별도 승인 전까지 로컬 증거로만 남겨.', en: 'Deletion, restart, and external side effects remain local evidence until separately approved.' } }
+}
+
+function getWorkflowRuntimeRerunPreflightStatusLabel(status: WorkflowRuntimeRerunPreflightCheck['status']) {
+  if (status === 'approval-needed') {
+    return { ko: '승인 필요', en: 'Approval needed' }
+  }
+
+  if (status === 'blocked') {
+    return { ko: '차단', en: 'Blocked' }
+  }
+
+  if (status === 'review-needed') {
+    return { ko: '검토 필요', en: 'Review needed' }
+  }
+
+  return { ko: '준비됨', en: 'Ready' }
+}
+
 function WorkflowVersionReviewBlock({
   selectedGraph,
   latestExecution,
@@ -474,6 +555,8 @@ function WorkflowRuntimeHealthBlock({
   const thresholdGuidance = buildWorkflowRuntimeThresholdGuidance(runtimeHealth)
   const decisionCues = buildWorkflowRuntimeDecisionCues(runtimeHealth)
   const runbookEvidence = buildWorkflowRuntimeRunbookEvidence(runtimeHealth)
+  const failureGroups = buildWorkflowRuntimeFailureGroups(runtimeHealth)
+  const rerunPreflight = buildWorkflowRuntimeRerunPreflight(runtimeHealth)
 
   return (
     <div className="space-y-3 rounded-sm border border-border bg-background/35 p-3">
@@ -683,6 +766,63 @@ function WorkflowRuntimeHealthBlock({
               <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
               {evidence.timestamp ? (
                 <div className="mt-2 text-muted-foreground">{formatDateTime(evidence.timestamp)}</div>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="grid gap-2 lg:grid-cols-5" data-workflow-runtime-failure-groups="true">
+        {failureGroups.map((group) => {
+          const copy = getWorkflowRuntimeFailureGroupCopy(group)
+          return (
+            <div
+              key={group.key}
+              className={`min-h-[8rem] rounded-sm border px-3 py-2 text-xs ${getWorkflowRuntimeTrendToneClass(group.tone)}`}
+              data-workflow-runtime-failure-group={group.key}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="font-semibold text-foreground">{t(copy.title)}</div>
+                <Badge variant="outline">{t(getWorkflowRuntimeDecisionCueActionLabel(group.action))}</Badge>
+              </div>
+              <div className="mt-2 grid gap-1 text-muted-foreground">
+                <span>{t(copy.primary, { count: formatNumber(group.primaryCount) })}</span>
+                <span>{t(copy.secondary, { count: formatNumber(group.secondaryCount) })}</span>
+                <span>{t({ ko: '증거 {count}', en: '{count} evidence signals' }, { count: formatNumber(group.evidenceCount) })}</span>
+              </div>
+              <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
+              {group.timestamp ? (
+                <div className="mt-2 text-muted-foreground">{formatDateTime(group.timestamp)}</div>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="grid gap-2 lg:grid-cols-5" data-workflow-runtime-rerun-preflight="true">
+        {rerunPreflight.map((check) => {
+          const copy = getWorkflowRuntimeRerunPreflightCopy(check)
+          return (
+            <div
+              key={check.key}
+              className={`min-h-[8rem] rounded-sm border px-3 py-2 text-xs ${getWorkflowRuntimeTrendToneClass(check.tone)}`}
+              data-workflow-runtime-rerun-preflight-check={check.key}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="font-semibold text-foreground">{t(copy.title)}</div>
+                <Badge variant="outline">{t(getWorkflowRuntimeRerunPreflightStatusLabel(check.status))}</Badge>
+              </div>
+              <div className="mt-2 grid gap-1 text-muted-foreground">
+                <span>{t({ ko: '가드레일 {count}', en: '{count} guardrails' }, { count: formatNumber(check.guardrailCount) })}</span>
+                <span>
+                  {check.approvalBoundary === 'approval-required'
+                    ? t({ ko: '사용자 승인 경계', en: 'User approval boundary' })
+                    : t({ ko: '운영자 검토 경계', en: 'Operator review boundary' })}
+                </span>
+              </div>
+              <div className="mt-2 text-muted-foreground">{t(copy.body)}</div>
+              {check.timestamp ? (
+                <div className="mt-2 text-muted-foreground">{formatDateTime(check.timestamp)}</div>
               ) : null}
             </div>
           )
