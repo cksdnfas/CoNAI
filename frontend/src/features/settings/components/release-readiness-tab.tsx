@@ -844,6 +844,7 @@ export function ReleaseReadinessTab() {
     () => selectedReadinessRecord ? buildReleaseReadinessHandoffMarkdown(selectedReadinessRecord) : '',
     [selectedReadinessRecord],
   )
+  const selectedReadinessIntelligence = selectedReadinessRecord?.readinessIntelligence ?? null
 
   const toggleReviewedItem = (id: string, checked: boolean) => {
     setReviewedItems((current) => {
@@ -1118,6 +1119,32 @@ export function ReleaseReadinessTab() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm font-semibold text-foreground">{t({ ko: '핸드오프 출력', en: 'Handoff output' })}</div>
               <Badge variant="outline">{t({ ko: '로컬 Markdown', en: 'Local Markdown' })}</Badge>
+            </div>
+            <div data-release-readiness-selected-intelligence="true" className="grid gap-3 min-[900px]:grid-cols-2">
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t({ ko: '선택 기록 우선순위', en: 'Selected priority highlights' })}
+                </div>
+                <div className="mt-2 space-y-1 font-mono text-xs leading-5 text-foreground">
+                  {selectedReadinessIntelligence?.priorityHighlights.length ? selectedReadinessIntelligence.priorityHighlights.map((item) => (
+                    <div key={item}>{item}</div>
+                  )) : (
+                    <div>{t({ ko: '저장된 priority highlight 없음', en: 'No saved priority highlights' })}</div>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t({ ko: '선택 기록 caveat', en: 'Selected caveats' })}
+                </div>
+                <div className="mt-2 space-y-1 text-xs leading-5 text-foreground">
+                  {selectedReadinessIntelligence?.caveats.length ? selectedReadinessIntelligence.caveats.map((item) => (
+                    <div key={item}>{item}</div>
+                  )) : (
+                    <div>{t({ ko: '저장된 caveat 없음', en: 'No saved caveats' })}</div>
+                  )}
+                </div>
+              </div>
             </div>
             <Textarea
               data-release-readiness-handoff-output="true"

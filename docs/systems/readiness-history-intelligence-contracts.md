@@ -40,6 +40,7 @@ Approved local behavior:
 - Persist signal counts and signal summaries in browser-local readiness history records.
 - Export the intelligence section in local Markdown handoff output.
 - Render a Settings UI review surface that presents recommendations and caveats.
+- Render selected-snapshot operator polish beside the local Markdown handoff so priority highlights and caveats remain visible while an operator copies or downloads the handoff.
 - Verify the contract with a local `tsx` script.
 
 ## Verification
