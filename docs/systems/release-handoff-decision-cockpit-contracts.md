@@ -16,6 +16,12 @@ This document records the local-only foundation contract for the `release-handof
 4. `caveat-triage-snapshot` - media/runtime caveats remain operator review evidence before cleanup/rerun/restart.
 5. `handoff-export-packet` - Markdown export carries verification, caveats, and approval gates for review.
 
+## Operator polish
+
+- The cockpit summary row shows approval-required, operator-review, and local-evidence card counts before the operator reads every card.
+- The boundary summary is intentionally text-only and evidence-only, so it can be copied into a handoff review without executing release actions.
+- Saved readiness history list rows include the decision cockpit card count alongside alert, trend, and intelligence counts.
+
 ## No external side effects
 
 The cockpit stores `boundary` values (`local-evidence`, `operator-review`, or `approval-required`) and local evidence strings only. It must not import backend action clients, call `fetch`, mutate live services, or hide approval-required operations behind UI action buttons.

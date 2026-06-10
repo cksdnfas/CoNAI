@@ -880,6 +880,17 @@ export function ReleaseReadinessTab() {
   const readinessIntelligenceState = t({ ko: '{count}개 priority/caveat', en: '{count} priority/caveat signals' }, { count: READINESS_HISTORY_INTELLIGENCE_SIGNALS.length })
   const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
   const decisionCockpitState = t({ ko: '{count}개 판단 카드', en: '{count} decision cards' }, { count: DECISION_COCKPIT_ITEMS.length })
+  const decisionCockpitApprovalCount = DECISION_COCKPIT_ITEMS.filter((item) => item.boundary === 'approval-required').length
+  const decisionCockpitOperatorReviewCount = DECISION_COCKPIT_ITEMS.filter((item) => item.boundary === 'operator-review').length
+  const decisionCockpitLocalEvidenceCount = DECISION_COCKPIT_ITEMS.filter((item) => item.boundary === 'local-evidence').length
+  const decisionCockpitApprovalState = t(
+    { ko: '승인 {approval} · 운영검토 {operator} · 로컬근거 {local}', en: 'approval {approval} · operator {operator} · local {local}' },
+    {
+      approval: decisionCockpitApprovalCount,
+      operator: decisionCockpitOperatorReviewCount,
+      local: decisionCockpitLocalEvidenceCount,
+    },
+  )
   const automationRehearsalState = allAutomationRehearsalsReviewed ? t({ ko: '리허설 검토 완료', en: 'Rehearsals reviewed' }) : t({ ko: '{count}/{total} 리허설', en: '{count}/{total} rehearsals' }, { count: reviewedAutomationRehearsalCount, total: AUTOMATION_REHEARSAL_ITEMS.length })
   const historyState = readinessHistory.length > 0 ? t({ ko: '{count}개 저장', en: '{count} saved' }, { count: readinessHistory.length }) : t({ ko: '기록 없음', en: 'No records' })
   const latestHistoryLabel = latestReadinessRecord
@@ -1091,6 +1102,25 @@ export function ReleaseReadinessTab() {
           })}
         </SettingsInsetBlock>
 
+        <div data-release-handoff-decision-cockpit-summary="true" className="grid gap-3 min-[900px]:grid-cols-3">
+          <SettingsValueTile
+            label={t({ ko: '승인 분리', en: 'Approvals separated' })}
+            value={t({ ko: '{count}개 게이트', en: '{count} gates' }, { count: decisionCockpitApprovalCount })}
+          />
+          <SettingsValueTile
+            label={t({ ko: '운영 검토', en: 'Operator review' })}
+            value={t({ ko: '{count}개 caveat', en: '{count} caveats' }, { count: decisionCockpitOperatorReviewCount })}
+          />
+          <SettingsValueTile
+            label={t({ ko: '로컬 근거', en: 'Local evidence' })}
+            value={t({ ko: '{count}개 export 근거', en: '{count} export evidence' }, { count: decisionCockpitLocalEvidenceCount })}
+          />
+        </div>
+
+        <SettingsInsetBlock data-release-handoff-decision-cockpit-boundary-summary="true" className="font-mono text-xs leading-5 text-foreground/90">
+          {decisionCockpitApprovalState}
+        </SettingsInsetBlock>
+
         <div className="grid gap-3 min-[1000px]:grid-cols-2">
           {DECISION_COCKPIT_ITEMS.map((item) => (
             <SettingsInsetBlock key={item.id} data-release-handoff-decision-cockpit-item={item.id} className="space-y-3">
@@ -1179,12 +1209,13 @@ export function ReleaseReadinessTab() {
                         )}
                         {' · '}
                         {t(
-                          { ko: '알림 {alerts}/{alertTotal} · 추세 {trends} · intelligence {intelligence}', en: 'alerts {alerts}/{alertTotal} · trends {trends} · intelligence {intelligence}' },
+                          { ko: '알림 {alerts}/{alertTotal} · 추세 {trends} · intelligence {intelligence} · 콕핏 {cockpit}', en: 'alerts {alerts}/{alertTotal} · trends {trends} · intelligence {intelligence} · cockpit {cockpit}' },
                           {
                             alerts: record.summary.reviewedAlertCount,
                             alertTotal: record.summary.alertReviewItemCount,
                             trends: record.summary.trendEvidenceCount,
                             intelligence: record.summary.readinessIntelligenceSignalCount,
+                            cockpit: record.summary.decisionCockpitItemCount,
                           },
                         )}
                       </span>
