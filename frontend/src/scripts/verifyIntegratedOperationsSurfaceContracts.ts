@@ -10,6 +10,7 @@ const workflowRunnerPanel = readFileSync(join(root, 'src/features/module-graph/c
 const moduleGraphApi = readFileSync(join(root, 'src/lib/api-module-graph.ts'), 'utf8')
 
 ok(releaseReadinessTab.includes('data-integrated-operations-surface="true"'), 'release readiness should expose an integrated operations surface')
+ok(releaseReadinessTab.includes('data-release-readiness-operator-evidence-console="true"'), 'integrated readiness should include an operator evidence review console')
 ok(releaseReadinessTab.includes('INTEGRATED_OPERATIONS_LANES'), 'integrated surface should be driven by explicit operation lanes')
 ok(releaseReadinessTab.includes("'release-handoff'"), 'integrated surface should include release handoff readiness')
 ok(releaseReadinessTab.includes("'media-intelligence'"), 'integrated surface should include media intelligence readiness')

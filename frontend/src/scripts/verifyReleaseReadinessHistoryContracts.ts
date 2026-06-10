@@ -114,6 +114,25 @@ const trendEvidenceItems = [
   },
 ]
 
+const evidenceReviewItems = [
+  {
+    id: 'mcp-dry-run-evidence-packet',
+    sourceSurface: { ko: 'MCP dry-run evidence', en: 'MCP dry-run evidence' },
+    evidenceAnchor: 'npm run export:mcp-dry-run-evidence',
+    compares: { ko: 'tool boundary 비교', en: 'Tool boundary comparison' },
+    operatorQuestion: { ko: '승인 범위 판단', en: 'Approval scope decision' },
+    approvalBoundary: 'operator-review' as const,
+  },
+  {
+    id: 'workflow-recovery-handoff-packet',
+    sourceSurface: { ko: 'Workflow recovery handoff', en: 'Workflow recovery handoff' },
+    evidenceAnchor: 'buildWorkflowRuntimeRecoveryHandoffPacket(runtimeHealth)',
+    compares: { ko: '복구 근거 비교', en: 'Recovery evidence comparison' },
+    operatorQuestion: { ko: 'rerun과 rollback 경계 판단', en: 'Rerun and rollback boundary decision' },
+    approvalBoundary: 'approval-required' as const,
+  },
+]
+
 const automationContextItems = [
   {
     id: 'local-automation-context-map',
@@ -182,6 +201,7 @@ const partialRecord = buildReleaseReadinessHistoryRecord({
   alertReviewItems,
   trendEvidenceItems,
   automationContextItems,
+  evidenceReviewItems,
   handoffItems,
   runbookGuardrails,
   operationSteps,
@@ -200,6 +220,8 @@ equal(partialRecord.summary.trendEvidenceCount, 2, 'trend evidence count should 
 equal(partialRecord.summary.readyForExport, false, 'partial records should not be marked export ready')
 equal(partialRecord.automationContext.length, 2, 'automation context should persist with readiness records')
 equal(partialRecord.automationContext[1]?.boundary, 'opt-in-only', 'MCP automation context should preserve opt-in-only boundary')
+equal(partialRecord.evidenceReview.length, 2, 'operator evidence review items should persist with readiness records')
+equal(partialRecord.evidenceReview[1]?.approvalBoundary, 'approval-required', 'approval-gated evidence review boundaries should persist')
 equal(partialRecord.checklist.find((item) => item.id === 'completed-work')?.status, 'checked', 'checked review status should persist')
 equal(partialRecord.checklist.find((item) => item.id === 'evidence')?.status, 'open', 'open review status should persist')
 equal(partialRecord.observabilityAlerts.find((item) => item.id === 'runtime-retention')?.status, 'reviewed', 'reviewed alert status should persist')
@@ -224,6 +246,7 @@ const completeRecord = buildReleaseReadinessHistoryRecord({
   alertReviewItems,
   trendEvidenceItems,
   automationContextItems,
+  evidenceReviewItems,
   handoffItems,
   runbookGuardrails,
   operationSteps,
@@ -237,6 +260,8 @@ ok(handoffMarkdown.includes('# CoNAI Release Readiness Handoff'), 'handoff expor
 ok(handoffMarkdown.includes('- externalActionsExecuted: false'), 'handoff export should preserve the no-external-action boundary')
 ok(handoffMarkdown.includes('- pushDeployRestartBoundary: approval-required'), 'handoff export should preserve approval boundaries')
 ok(handoffMarkdown.includes('## Automation Context'), 'handoff export should include automation context separately')
+ok(handoffMarkdown.includes('## Operator Evidence Review Console'), 'handoff export should include operator evidence review console separately')
+ok(handoffMarkdown.includes('npm run export:mcp-dry-run-evidence'), 'handoff export should include MCP dry-run evidence anchors')
 ok(handoffMarkdown.includes('docs/systems/local-automation-context-operations-map.md'), 'handoff export should include the local automation context map')
 ok(handoffMarkdown.includes('opt in only'), 'handoff export should preserve opt-in-only automation boundaries')
 ok(handoffMarkdown.includes('## Captured Handoff Evidence'), 'handoff export should include captured handoff evidence separately')
@@ -275,6 +300,7 @@ for (let index = 0; index < MAX_RELEASE_READINESS_HISTORY_RECORDS + 3; index += 
       alertReviewItems,
       trendEvidenceItems,
       automationContextItems,
+      evidenceReviewItems,
       handoffItems,
       runbookGuardrails,
       operationSteps,
@@ -302,6 +328,8 @@ ok(releaseReadinessTab.includes("'media-review-trend'"), 'trend evidence should 
 ok(releaseReadinessTab.includes("'workflow-runtime-trend'"), 'trend evidence should include workflow runtime status')
 ok(releaseReadinessTab.includes("'final-verification-trend'"), 'trend evidence should include final verification status')
 ok(releaseReadinessTab.includes('data-release-readiness-automation-context="true"'), 'release readiness UI should expose automation context handoff')
+ok(releaseReadinessTab.includes('data-release-readiness-operator-evidence-console="true"'), 'release readiness UI should expose operator evidence review console')
+ok(releaseReadinessTab.includes('OPERATOR_EVIDENCE_REVIEW_ITEMS'), 'release readiness UI should define operator evidence review items')
 ok(releaseReadinessTab.includes('AUTOMATION_CONTEXT_ITEMS'), 'release readiness UI should define automation context items')
 ok(releaseReadinessTab.includes("'local-automation-context-map'"), 'automation context should include the local context map')
 ok(releaseReadinessTab.includes("'mcp-automation-opt-in'"), 'automation context should include MCP opt-in entry points')
@@ -329,8 +357,10 @@ ok(historyContract.includes('observabilityAlerts'), 'history contract should per
 ok(historyContract.includes('reviewedAlertIds'), 'history contract should persist reviewed alert ids')
 ok(historyContract.includes('trendEvidence'), 'history contract should persist trend evidence items')
 ok(historyContract.includes('automationContext'), 'history contract should persist automation context items')
+ok(historyContract.includes('evidenceReview'), 'history contract should persist operator evidence review items')
 ok(historyContract.includes('ReleaseReadinessTrendEvidenceContract'), 'history contract should type trend evidence records')
 ok(historyContract.includes('ReleaseReadinessAutomationContextContract'), 'history contract should type automation context records')
+ok(historyContract.includes('ReleaseReadinessEvidenceReviewContract'), 'history contract should type operator evidence review records')
 ok(historyContract.includes('buildReleaseReadinessHandoffMarkdown'), 'history contract should own handoff markdown formatting')
 ok(!releaseReadinessTab.includes('buildApiUrl('), 'history capture should not call backend action endpoints')
 ok(!releaseReadinessTab.includes('fetch('), 'history capture should not perform external release actions')

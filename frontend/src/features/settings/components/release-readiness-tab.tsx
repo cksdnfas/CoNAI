@@ -22,6 +22,7 @@ import {
   type ReleaseReadinessEvidenceItemContract,
   type ReleaseReadinessHandoffItemContract,
   type ReleaseReadinessHistoryRecord,
+  type ReleaseReadinessEvidenceReviewContract,
   type ReleaseReadinessOperationStepContract,
   type ReleaseReadinessRunbookGuardrailContract,
   type ReleaseReadinessTrendEvidenceContract,
@@ -38,6 +39,7 @@ type OperationStep = ReleaseReadinessOperationStepContract
 type TrendEvidenceItem = ReleaseReadinessTrendEvidenceContract
 type UserDecisionItem = ReleaseReadinessUserDecisionContract
 type AutomationContextItem = ReleaseReadinessAutomationContextContract
+type OperatorEvidenceReviewItem = ReleaseReadinessEvidenceReviewContract
 
 type IntegratedOperationsLane = {
   id: string
@@ -408,6 +410,51 @@ const TREND_EVIDENCE_ITEMS: TrendEvidenceItem[] = [
 ]
 
 
+const OPERATOR_EVIDENCE_REVIEW_ITEMS: OperatorEvidenceReviewItem[] = [
+  {
+    id: 'mcp-dry-run-evidence-packet',
+    sourceSurface: { ko: 'MCP dry-run evidence', en: 'MCP dry-run evidence' },
+    evidenceAnchor: 'npm run export:mcp-dry-run-evidence',
+    compares: {
+      ko: 'tool boundary, target endpoint, read-only versus approval-required operation classes',
+      en: 'tool boundary, target endpoint, read-only versus approval-required operation classes',
+    },
+    operatorQuestion: {
+      ko: 'agent가 live MCP tool을 호출하기 전에 dry-run evidence만으로 승인 범위를 판단할 수 있는가?',
+      en: 'Can an operator judge the approval scope from dry-run evidence before any live MCP tool call?',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'workflow-recovery-handoff-packet',
+    sourceSurface: { ko: 'Workflow recovery handoff', en: 'Workflow recovery handoff' },
+    evidenceAnchor: 'buildWorkflowRuntimeRecoveryHandoffPacket(runtimeHealth)',
+    compares: {
+      ko: 'queue pressure, stopped autoruns, recovery mismatch, terminal failure, retention approval signals',
+      en: 'queue pressure, stopped autoruns, recovery mismatch, terminal failure, retention approval signals',
+    },
+    operatorQuestion: {
+      ko: 'rerun, rollback, restart, cleanup 중 어떤 결정이 로컬 검토이고 어떤 결정이 별도 승인인가?',
+      en: 'Which rerun, rollback, restart, or cleanup decisions are local review versus separate approval?',
+    },
+    approvalBoundary: 'approval-required',
+  },
+  {
+    id: 'media-approval-packet',
+    sourceSurface: { ko: 'Media approval packet', en: 'Media approval packet' },
+    evidenceAnchor: 'Media review > cleanup staging + similarity decision history',
+    compares: {
+      ko: 'review queue, tag quality backlog, similarity decisions, reversible cleanup staging',
+      en: 'review queue, tag quality backlog, similarity decisions, reversible cleanup staging',
+    },
+    operatorQuestion: {
+      ko: '미디어 정리 후보가 비파괴 검토에 머무르고 삭제/retention 변경은 승인 항목으로 분리됐는가?',
+      en: 'Do media cleanup candidates remain non-destructive review while deletion and retention changes stay approval-owned?',
+    },
+    approvalBoundary: 'approval-required',
+  },
+]
+
 const AUTOMATION_CONTEXT_ITEMS: AutomationContextItem[] = [
   {
     id: 'local-automation-context-map',
@@ -681,6 +728,7 @@ export function ReleaseReadinessTab() {
   const handoffState = allHandoffCaptured ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
   const alertReviewState = allAlertsReviewed ? t({ ko: '알림 검토 완료', en: 'Alerts reviewed' }) : t({ ko: '{count}/{total} 알림', en: '{count}/{total} alerts' }, { count: reviewedAlertCount, total: ALERT_REVIEW_ITEMS.length })
   const trendEvidenceState = t({ ko: '{count}개 추세 근거', en: '{count} trend evidence items' }, { count: TREND_EVIDENCE_ITEMS.length })
+  const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
   const historyState = readinessHistory.length > 0 ? t({ ko: '{count}개 저장', en: '{count} saved' }, { count: readinessHistory.length }) : t({ ko: '기록 없음', en: 'No records' })
   const latestHistoryLabel = latestReadinessRecord
     ? formatDateTime(latestReadinessRecord.savedAt, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -743,6 +791,7 @@ export function ReleaseReadinessTab() {
       alertReviewItems: ALERT_REVIEW_ITEMS,
       trendEvidenceItems: TREND_EVIDENCE_ITEMS,
       automationContextItems: AUTOMATION_CONTEXT_ITEMS,
+      evidenceReviewItems: OPERATOR_EVIDENCE_REVIEW_ITEMS,
       handoffItems: HANDOFF_EVIDENCE_ITEMS,
       runbookGuardrails: RUNBOOK_GUARDRAILS,
       operationSteps: OPERATION_STEPS,
@@ -1051,6 +1100,41 @@ export function ReleaseReadinessTab() {
         </div>
       </SettingsSection>
 
+
+      <SettingsSection
+        data-release-readiness-operator-evidence-console="true"
+        heading={t({ ko: '운영자 근거 검토 콘솔', en: 'Operator evidence review console' })}
+        actions={<Badge variant="secondary">{evidenceConsoleState}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: 'MCP dry-run, workflow recovery handoff, media approval packet을 한 화면의 비교 계약으로 묶어. 이 콘솔은 증거를 비교할 뿐 MCP 호출, rerun, cleanup, restart, 외부 작업은 실행하지 않아.',
+            en: 'Bundle MCP dry-run, workflow recovery handoff, and media approval packet evidence into one comparison contract. This console compares evidence only; it does not call MCP, rerun workflows, clean media, restart services, or perform external actions.',
+          })}
+        </SettingsInsetBlock>
+
+        <div className="grid gap-3 min-[1000px]:grid-cols-3">
+          {OPERATOR_EVIDENCE_REVIEW_ITEMS.map((item) => (
+            <SettingsInsetBlock key={item.id} data-release-readiness-operator-evidence={item.id} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{t(item.sourceSurface)}</Badge>
+                <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                  {item.approvalBoundary === 'approval-required'
+                    ? t({ ko: '승인 필요', en: 'Approval needed' })
+                    : item.approvalBoundary === 'operator-review'
+                      ? t({ ko: '운영 검토', en: 'Operator review' })
+                      : t({ ko: '로컬 근거', en: 'Local evidence' })}
+                </Badge>
+              </div>
+              <div className="font-mono text-xs text-foreground/90">{item.evidenceAnchor}</div>
+              <div className="text-sm leading-6 text-muted-foreground">{t(item.compares)}</div>
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
+                {t(item.operatorQuestion)}
+              </div>
+            </SettingsInsetBlock>
+          ))}
+        </div>
+      </SettingsSection>
 
       <SettingsSection
         data-release-readiness-automation-context="true"
