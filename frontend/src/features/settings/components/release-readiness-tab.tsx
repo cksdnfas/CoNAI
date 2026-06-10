@@ -25,6 +25,7 @@ import {
   type ReleaseReadinessOperationStepContract,
   type ReleaseReadinessRunbookGuardrailContract,
   type ReleaseReadinessTrendEvidenceContract,
+  type ReleaseReadinessAutomationContextContract,
   type ReleaseReadinessUserDecisionContract,
 } from '../release-readiness-history'
 
@@ -36,6 +37,7 @@ type RunbookGuardrail = ReleaseReadinessRunbookGuardrailContract
 type OperationStep = ReleaseReadinessOperationStepContract
 type TrendEvidenceItem = ReleaseReadinessTrendEvidenceContract
 type UserDecisionItem = ReleaseReadinessUserDecisionContract
+type AutomationContextItem = ReleaseReadinessAutomationContextContract
 
 type IntegratedOperationsLane = {
   id: string
@@ -405,6 +407,40 @@ const TREND_EVIDENCE_ITEMS: TrendEvidenceItem[] = [
   },
 ]
 
+
+const AUTOMATION_CONTEXT_ITEMS: AutomationContextItem[] = [
+  {
+    id: 'local-automation-context-map',
+    surface: { ko: '로컬 자동화 컨텍스트 맵', en: 'Local automation context map' },
+    contractAnchor: 'docs/systems/local-automation-context-operations-map.md',
+    reviewUse: {
+      ko: '릴리즈 준비, 워크플로우 런타임, 미디어 리뷰, MCP 자동화 표면을 같은 handoff 기준으로 검토해.',
+      en: 'Review release readiness, workflow runtime, media review, and MCP automation surfaces against the same handoff baseline.',
+    },
+    boundary: 'local-evidence',
+  },
+  {
+    id: 'mcp-automation-opt-in',
+    surface: { ko: 'MCP/에이전트 진입점', en: 'MCP and agent entry points' },
+    contractAnchor: 'docs/GUIDE/MCP_GUIDE.md + backend/src/mcp/*',
+    reviewUse: {
+      ko: 'agent-facing entry point는 opt-in 문서와 backend anchor가 맞을 때만 다음 작업 근거로 사용해.',
+      en: 'Use agent-facing entry points as future-work evidence only when opt-in docs and backend anchors agree.',
+    },
+    boundary: 'opt-in-only',
+  },
+  {
+    id: 'cross-surface-handoff-export',
+    surface: { ko: '통합 핸드오프 export', en: 'Cross-surface handoff export' },
+    contractAnchor: 'Settings > Release readiness Markdown export',
+    reviewUse: {
+      ko: 'automation, workflow, media 신호와 사용자 승인 항목을 한 Markdown export에서 다시 확인해.',
+      en: 'Recheck automation, workflow, media signals, and user-owned approvals in one Markdown export.',
+    },
+    boundary: 'approval-required',
+  },
+]
+
 const REVIEW_LANES: ReadinessItem[] = [
   {
     id: 'local-results',
@@ -706,6 +742,7 @@ export function ReleaseReadinessTab() {
       evidenceItems: EVIDENCE_ITEMS,
       alertReviewItems: ALERT_REVIEW_ITEMS,
       trendEvidenceItems: TREND_EVIDENCE_ITEMS,
+      automationContextItems: AUTOMATION_CONTEXT_ITEMS,
       handoffItems: HANDOFF_EVIDENCE_ITEMS,
       runbookGuardrails: RUNBOOK_GUARDRAILS,
       operationSteps: OPERATION_STEPS,
@@ -1009,6 +1046,39 @@ export function ReleaseReadinessTab() {
                 {item.exportValue}
               </div>
               <div className="text-xs leading-5 text-muted-foreground">{t(item.releaseUse)}</div>
+            </SettingsInsetBlock>
+          ))}
+        </div>
+      </SettingsSection>
+
+
+      <SettingsSection
+        data-release-readiness-automation-context="true"
+        heading={t({ ko: '자동화 컨텍스트 핸드오프', en: 'Automation context handoff' })}
+        actions={<Badge variant="secondary">{t({ ko: '로컬 근거', en: 'Local evidence' })}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: 'agent/operator가 다음 작업 전에 릴리즈 준비, 워크플로우, 미디어 리뷰, MCP 진입점을 같은 export contract로 확인하게 해. 여기서 MCP 호출, push, deploy, restart는 실행하지 않아.',
+            en: 'Let agents and operators review release readiness, workflow, media review, and MCP entry points through the same export contract before future work. This does not call MCP, push, deploy, or restart.',
+          })}
+        </SettingsInsetBlock>
+
+        <div className="grid gap-3 min-[1000px]:grid-cols-3">
+          {AUTOMATION_CONTEXT_ITEMS.map((item) => (
+            <SettingsInsetBlock key={item.id} data-release-readiness-automation-context-item={item.id} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{t(item.surface)}</Badge>
+                <Badge variant={item.boundary === 'approval-required' ? 'outline' : 'secondary'}>
+                  {item.boundary === 'approval-required'
+                    ? t({ ko: '승인 필요', en: 'Approval needed' })
+                    : item.boundary === 'opt-in-only'
+                      ? t({ ko: 'opt-in 전용', en: 'Opt-in only' })
+                      : t({ ko: '로컬 근거', en: 'Local evidence' })}
+                </Badge>
+              </div>
+              <div className="font-mono text-xs text-foreground/90">{item.contractAnchor}</div>
+              <div className="text-sm leading-6 text-muted-foreground">{t(item.reviewUse)}</div>
             </SettingsInsetBlock>
           ))}
         </div>
