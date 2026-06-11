@@ -94,7 +94,10 @@ export type ReleaseReadinessAutomationRehearsalContract = {
   id: string
   rehearsalSurface: TranslationDictionary
   dryRunAnchor: string
+  evidencePacket: string
+  comparisonTarget: string
   localDiffArtifact: string
+  rehearsalOutcome: TranslationDictionary
   stopCondition: TranslationDictionary
   approvalBoundary: 'local-evidence' | 'operator-review' | 'approval-required'
 }
@@ -608,7 +611,7 @@ export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHis
     '## Automation Rehearsal',
     '',
     ...record.automationRehearsal.map((item) => (
-      `- [${item.status === 'reviewed' ? 'x' : ' '}] ${formatTranslationDictionary(item.rehearsalSurface)} (${item.dryRunAnchor} / ${item.localDiffArtifact} / ${formatMarkdownStatus(item.approvalBoundary)}): stop ${formatTranslationDictionary(item.stopCondition)}`
+      `- [${item.status === 'reviewed' ? 'x' : ' '}] ${formatTranslationDictionary(item.rehearsalSurface)} (${item.dryRunAnchor} / ${item.evidencePacket} / compares ${item.comparisonTarget} / ${item.localDiffArtifact} / ${formatMarkdownStatus(item.approvalBoundary)}): outcome ${formatTranslationDictionary(item.rehearsalOutcome)}; stop ${formatTranslationDictionary(item.stopCondition)}`
     )),
     '',
     '## Readiness History Intelligence',

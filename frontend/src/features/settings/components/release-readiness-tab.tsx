@@ -596,21 +596,33 @@ const AUTOMATION_CONTEXT_ITEMS: AutomationContextItem[] = [
 
 const AUTOMATION_REHEARSAL_ITEMS: AutomationRehearsalItem[] = [
   {
-    id: 'cleanup-staging-dry-run',
-    rehearsalSurface: { ko: '정리 staging 리허설', en: 'Cleanup staging rehearsal' },
-    dryRunAnchor: 'Media review > cleanup staging preview',
-    localDiffArtifact: 'local candidate diff only; no deletion or retention-policy mutation',
-    stopCondition: {
-      ko: '삭제, retention 변경, schema 변경이 필요하면 즉시 승인 요청으로 중단해.',
-      en: 'Stop for approval when deletion, retention changes, or schema changes are required.',
+    id: 'mcp-dry-run-evidence-rehearsal',
+    rehearsalSurface: { ko: 'MCP dry-run 근거 리허설', en: 'MCP dry-run evidence rehearsal' },
+    dryRunAnchor: 'npm run export:mcp-dry-run-evidence',
+    evidencePacket: 'mcp-dry-run-json-bundle',
+    comparisonTarget: 'docs/systems/agent-mcp-local-evidence-export.md + docs/GUIDE/MCP_GUIDE.md',
+    localDiffArtifact: 'tool-class comparison packet; no live MCP call, generation, mutation, or external service access',
+    rehearsalOutcome: {
+      ko: 'read-only tool과 approvalRequired tool 경계를 같은 packet에서 비교해 다음 승인 판단 근거로 남겨.',
+      en: 'Compare read-only tools against approvalRequired tools in one packet for the next approval judgment.',
     },
-    approvalBoundary: 'approval-required',
+    stopCondition: {
+      ko: 'live MCP 호출, generation, mutation, credential 사용이 필요하면 dry-run 근거만 남기고 멈춰.',
+      en: 'Stop with dry-run evidence only when live MCP calls, generation, mutation, or credential use is required.',
+    },
+    approvalBoundary: 'operator-review',
   },
   {
     id: 'workflow-recovery-replay-dry-run',
     rehearsalSurface: { ko: '워크플로우 복구 replay 리허설', en: 'Workflow recovery replay rehearsal' },
     dryRunAnchor: 'buildWorkflowRuntimeRecoveryHandoffPacket(runtimeHealth)',
+    evidencePacket: 'workflow-recovery-handoff-packet',
+    comparisonTarget: 'queue pressure + retry policy + recovery mismatch + terminal failure groups',
     localDiffArtifact: 'queue/retry/recovery handoff packet; no rerun, cancel, or restart',
+    rehearsalOutcome: {
+      ko: '복구 replay 전에 queue/retry/recovery 신호를 승인 경계별로 비교 가능한 handoff로 묶어.',
+      en: 'Bundle queue, retry, and recovery signals into a comparable handoff before any recovery replay.',
+    },
     stopCondition: {
       ko: 'rerun, cancel, restart, live smoke가 필요하면 리허설 결과만 남기고 멈춰.',
       en: 'Stop with rehearsal evidence when rerun, cancel, restart, or live smoke is needed.',
@@ -618,10 +630,33 @@ const AUTOMATION_REHEARSAL_ITEMS: AutomationRehearsalItem[] = [
     approvalBoundary: 'operator-review',
   },
   {
+    id: 'cleanup-staging-comparison-dry-run',
+    rehearsalSurface: { ko: '정리 staging 비교 리허설', en: 'Cleanup staging comparison rehearsal' },
+    dryRunAnchor: 'Media review > cleanup staging preview',
+    evidencePacket: 'media-approval-packet',
+    comparisonTarget: 'review queue + tag quality backlog + similarity decisions + reversible cleanup staging',
+    localDiffArtifact: 'local candidate diff only; no deletion or retention-policy mutation',
+    rehearsalOutcome: {
+      ko: 'cleanup 후보와 media 품질 backlog를 비파괴 staging 비교 근거로만 보존해.',
+      en: 'Preserve cleanup candidates and media quality backlog as non-destructive staging comparison evidence only.',
+    },
+    stopCondition: {
+      ko: '삭제, retention 변경, schema 변경이 필요하면 즉시 승인 요청으로 중단해.',
+      en: 'Stop for approval when deletion, retention changes, or schema changes are required.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+  {
     id: 'release-candidate-command-dry-run',
     rehearsalSurface: { ko: '릴리즈 후보 명령 리허설', en: 'Release candidate command rehearsal' },
     dryRunAnchor: 'Settings > Release readiness operation checklist',
+    evidencePacket: 'readiness-markdown-bundle',
+    comparisonTarget: 'release handoff decision cockpit + approval-gated operation checklist',
     localDiffArtifact: 'command plan and expected smoke assertions only; no push/deploy/restart',
+    rehearsalOutcome: {
+      ko: '릴리즈 후보 명령은 실행 대신 handoff Markdown에 예상 순서와 중지 조건으로만 남겨.',
+      en: 'Represent release-candidate commands as expected order and stop conditions in handoff Markdown instead of executing them.',
+    },
     stopCondition: {
       ko: 'push, deploy, restart, public smoke는 사용자 승인 전 실행하지 않아.',
       en: 'Do not run push, deploy, restart, or public smoke before user approval.',
@@ -1699,9 +1734,14 @@ export function ReleaseReadinessTab() {
                 </Badge>
                   </span>
                   <span className="block font-mono text-xs text-foreground/90">{item.dryRunAnchor}</span>
+                  <span className="block font-mono text-xs text-muted-foreground">{item.evidencePacket}</span>
+                  <span className="block rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 font-mono text-xs leading-5 text-foreground">
+                    {item.comparisonTarget}
+                  </span>
                   <span className="block rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 font-mono text-xs leading-5 text-foreground">
                     {item.localDiffArtifact}
                   </span>
+                  <span className="block text-xs leading-5 text-muted-foreground">{t(item.rehearsalOutcome)}</span>
                   <span className="block text-xs leading-5 text-muted-foreground">{t(item.stopCondition)}</span>
                 </span>
               </SettingsToggleRow>
