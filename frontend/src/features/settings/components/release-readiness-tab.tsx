@@ -240,6 +240,15 @@ const DECISION_COCKPIT_ITEMS: DecisionCockpitItem[] = [
     boundary: 'approval-required',
   },
   {
+    id: 'demo-host-readiness',
+    lane: 'demo-readiness',
+    title: { ko: '데모 호스트 준비도', en: 'Demo host readiness' },
+    source: 'OPERATION_STEPS + RUNBOOK_GUARDRAILS + protected service 3999 boundary',
+    decisionQuestion: { ko: '승인 후 데모 호스트 갱신, 지정 서비스 재시작, live smoke 순서와 중지 조건이 분리돼 있는가?', en: 'Are the approved demo host update, selected service restart, live smoke sequence, and stop conditions separated?' },
+    localEvidence: 'readiness checklist only; no demo host pull, service restart, live smoke, or protected 3999 access',
+    boundary: 'approval-required',
+  },
+  {
     id: 'caveat-triage-snapshot',
     lane: 'caveat-review',
     title: { ko: '주의 사항 triage snapshot', en: 'Caveat triage snapshot' },

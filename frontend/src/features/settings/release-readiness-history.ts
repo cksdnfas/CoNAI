@@ -24,7 +24,7 @@ export type ReleaseReadinessEvidenceItemContract = {
 
 export type ReleaseReadinessDecisionCockpitItemContract = {
   id: string
-  lane: 'local-verification' | 'commit-scope' | 'approval-gate' | 'caveat-review' | 'evidence-export'
+  lane: 'local-verification' | 'commit-scope' | 'approval-gate' | 'demo-readiness' | 'caveat-review' | 'evidence-export'
   title: TranslationDictionary
   source: string
   decisionQuestion: TranslationDictionary
