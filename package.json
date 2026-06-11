@@ -81,6 +81,7 @@
     "verify:integrated-operations-surface-contracts": "cd frontend && npm run verify:integrated-operations-surface-contracts",
     "verify:media-review-intelligence-contracts": "cd frontend && npm run verify:media-review-intelligence-contracts",
     "verify:media-runtime-observability-contracts": "cd frontend && npm run verify:media-runtime-observability-contracts",
+    "verify:media-runtime-caveat-triage-contracts": "cd frontend && npm run verify:media-runtime-caveat-triage-contracts",
     "verify:prompt-list-progress-contracts": "cd frontend && npm run verify:prompt-list-progress-contracts",
     "verify:upload-result-links": "cd frontend && npm run verify:upload-result-links",
     "verify:danbooru-browser-progress-contracts": "cd frontend && npm run verify:danbooru-browser-progress-contracts",

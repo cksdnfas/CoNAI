@@ -30,6 +30,7 @@ import {
   type ReleaseReadinessAutomationContextContract,
   type ReleaseReadinessAutomationRehearsalContract,
   type ReleaseReadinessHistoryIntelligenceSignalContract,
+  type ReleaseReadinessMediaRuntimeTriageQueueContract,
   type ReleaseReadinessUserDecisionContract,
 } from '../release-readiness-history'
 
@@ -45,6 +46,7 @@ type UserDecisionItem = ReleaseReadinessUserDecisionContract
 type AutomationContextItem = ReleaseReadinessAutomationContextContract
 type AutomationRehearsalItem = ReleaseReadinessAutomationRehearsalContract
 type ReadinessHistoryIntelligenceSignal = ReleaseReadinessHistoryIntelligenceSignalContract
+type MediaRuntimeTriageQueueItem = ReleaseReadinessMediaRuntimeTriageQueueContract
 type OperatorEvidenceReviewItem = ReleaseReadinessEvidenceReviewContract
 
 type IntegratedOperationsLane = {
@@ -578,6 +580,74 @@ const AUTOMATION_REHEARSAL_ITEMS: AutomationRehearsalItem[] = [
   },
 ]
 
+
+const MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS: MediaRuntimeTriageQueueItem[] = [
+  {
+    id: 'review-backlog-before-cleanup',
+    axis: 'media-review',
+    priority: 'now',
+    title: { ko: '정리 전 review backlog', en: 'Review backlog before cleanup' },
+    evidenceAnchor: 'media-review-queue + media-quality-backlog',
+    triageQuestion: {
+      ko: '미검토/품질 backlog가 공개나 정리 판단 전에 충분히 분리됐는가?',
+      en: 'Are unreviewed and quality backlog signals separated before publication or cleanup judgment?',
+    },
+    safeNextStep: {
+      ko: 'operator-review 큐로 고정하고 삭제/retention 변경은 승인 항목으로 남겨.',
+      en: 'Pin this as an operator-review queue and keep deletion or retention changes as approvals.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'similarity-cleanup-approval-gate',
+    axis: 'media-review',
+    priority: 'next',
+    title: { ko: '유사도/정리 승인 게이트', en: 'Similarity and cleanup approval gate' },
+    evidenceAnchor: 'media-similarity-decision + media-cleanup-staging',
+    triageQuestion: {
+      ko: '유사도 판단과 정리 후보가 비파괴 staging으로만 남아 있는가?',
+      en: 'Do similarity decisions and cleanup candidates remain non-destructive staging only?',
+    },
+    safeNextStep: {
+      ko: '후보 목록과 판단 근거만 export하고 삭제, schema, retention 변경은 실행하지 않아.',
+      en: 'Export only candidate lists and rationale; do not delete or change schema/retention.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+  {
+    id: 'runtime-rerun-readiness-review',
+    axis: 'workflow-runtime',
+    priority: 'now',
+    title: { ko: '재실행 전 runtime readiness', en: 'Runtime readiness before rerun' },
+    evidenceAnchor: 'runtime-queue-pressure + runtime-retry-policy + runtime-recovery',
+    triageQuestion: {
+      ko: 'queue/retry/recovery caveat가 rerun, smoke, restart 전 중단 조건으로 기록됐는가?',
+      en: 'Are queue, retry, and recovery caveats recorded as stop conditions before rerun, smoke, or restart?',
+    },
+    safeNextStep: {
+      ko: 'recovery handoff packet을 먼저 비교하고 rerun/restart/live smoke는 승인 전 수행하지 않아.',
+      en: 'Compare the recovery handoff packet first and do not rerun/restart/live-smoke before approval.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'runtime-retention-terminal-gate',
+    axis: 'workflow-runtime',
+    priority: 'watch',
+    title: { ko: '보존/terminal failure 게이트', en: 'Retention and terminal failure gate' },
+    evidenceAnchor: 'runtime-retention + runtime-terminal-failure',
+    triageQuestion: {
+      ko: 'retention prune와 terminal failure 신호가 보존 변경이나 재시작으로 이어지지 않도록 분리됐는가?',
+      en: 'Are retention-prune and terminal-failure signals separated from retention changes or restarts?',
+    },
+    safeNextStep: {
+      ko: '실패/보존 신호는 watch queue로 export하고 정책 변경, 삭제, 재시작은 별도 승인으로 남겨.',
+      en: 'Export failure/retention signals as a watch queue; policy changes, deletion, and restart stay separate approvals.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+]
+
 const READINESS_HISTORY_INTELLIGENCE_SIGNALS: ReadinessHistoryIntelligenceSignal[] = [
   {
     id: 'release-handoff-priority',
@@ -879,6 +949,9 @@ export function ReleaseReadinessTab() {
   const trendEvidenceState = t({ ko: '{count}개 추세 근거', en: '{count} trend evidence items' }, { count: TREND_EVIDENCE_ITEMS.length })
   const readinessIntelligenceState = t({ ko: '{count}개 priority/caveat', en: '{count} priority/caveat signals' }, { count: READINESS_HISTORY_INTELLIGENCE_SIGNALS.length })
   const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
+  const mediaRuntimeTriageQueueState = t({ ko: '{count}개 triage queue', en: '{count} triage queue items' }, { count: MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.length })
+  const mediaRuntimeTriageApprovalCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'approval-required').length
+  const mediaRuntimeTriageOperatorCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'operator-review').length
   const decisionCockpitState = t({ ko: '{count}개 판단 카드', en: '{count} decision cards' }, { count: DECISION_COCKPIT_ITEMS.length })
   const decisionCockpitApprovalCount = DECISION_COCKPIT_ITEMS.filter((item) => item.boundary === 'approval-required').length
   const decisionCockpitOperatorReviewCount = DECISION_COCKPIT_ITEMS.filter((item) => item.boundary === 'operator-review').length
@@ -971,6 +1044,7 @@ export function ReleaseReadinessTab() {
       automationContextItems: AUTOMATION_CONTEXT_ITEMS,
       automationRehearsalItems: AUTOMATION_REHEARSAL_ITEMS,
       readinessIntelligenceItems: READINESS_HISTORY_INTELLIGENCE_SIGNALS,
+      mediaRuntimeTriageQueueItems: MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS,
       evidenceReviewItems: OPERATOR_EVIDENCE_REVIEW_ITEMS,
       handoffItems: HANDOFF_EVIDENCE_ITEMS,
       runbookGuardrails: RUNBOOK_GUARDRAILS,
@@ -1215,7 +1289,7 @@ export function ReleaseReadinessTab() {
                             alertTotal: record.summary.alertReviewItemCount,
                             trends: record.summary.trendEvidenceCount,
                             intelligence: record.summary.readinessIntelligenceSignalCount,
-                            cockpit: record.summary.decisionCockpitItemCount,
+                            cockpit: record.summary.decisionCockpitItemCount + (record.summary.mediaRuntimeTriageQueueCount ?? 0),
                           },
                         )}
                       </span>
@@ -1362,6 +1436,51 @@ export function ReleaseReadinessTab() {
                 {item.exportValue}
               </div>
               <div className="text-xs leading-5 text-muted-foreground">{t(item.releaseUse)}</div>
+            </SettingsInsetBlock>
+          ))}
+        </div>
+      </SettingsSection>
+
+
+      <SettingsSection
+        data-media-runtime-caveat-triage="true"
+        heading={t({ ko: '미디어/runtime caveat triage queue', en: 'Media/runtime caveat triage queue' })}
+        actions={<Badge variant="secondary">{mediaRuntimeTriageQueueState}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: '미디어 review와 workflow runtime caveat를 우선순위 queue로 묶되, 이 표면은 검토 질문과 안전한 다음 단계만 기록해. 삭제, retention 변경, rerun, restart, live smoke는 실행하지 않아.',
+            en: 'Prioritize media-review and workflow-runtime caveats into queues while recording only review questions and safe next steps. This surface does not delete, change retention, rerun, restart, or live-smoke.',
+          })}
+        </SettingsInsetBlock>
+
+        <div data-media-runtime-caveat-triage-summary="true" className="grid gap-3 min-[900px]:grid-cols-2">
+          <SettingsValueTile
+            label={t({ ko: '운영 검토', en: 'Operator review' })}
+            value={t({ ko: '{count}개 queue', en: '{count} queues' }, { count: mediaRuntimeTriageOperatorCount })}
+          />
+          <SettingsValueTile
+            label={t({ ko: '승인 필요', en: 'Approval needed' })}
+            value={t({ ko: '{count}개 gate', en: '{count} gates' }, { count: mediaRuntimeTriageApprovalCount })}
+          />
+        </div>
+
+        <div className="grid gap-3 min-[1000px]:grid-cols-2">
+          {MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.map((item) => (
+            <SettingsInsetBlock key={item.id} data-media-runtime-caveat-triage-item={item.id} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={item.priority === 'now' ? 'default' : item.priority === 'next' ? 'secondary' : 'outline'}>{item.priority}</Badge>
+                <Badge variant="secondary">{item.axis}</Badge>
+                <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                  {item.approvalBoundary === 'approval-required' ? t({ ko: '승인 필요', en: 'Approval needed' }) : t({ ko: '운영 검토', en: 'Operator review' })}
+                </Badge>
+              </div>
+              <div className="text-sm font-semibold text-foreground">{t(item.title)}</div>
+              <div className="font-mono text-xs text-foreground/90">{item.evidenceAnchor}</div>
+              <div className="text-sm leading-6 text-muted-foreground">{t(item.triageQuestion)}</div>
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
+                {t(item.safeNextStep)}
+              </div>
             </SettingsInsetBlock>
           ))}
         </div>
