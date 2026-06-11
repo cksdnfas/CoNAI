@@ -61,6 +61,8 @@ ok(releaseReadinessTab.includes('DECISION_COCKPIT_ITEMS'), 'release readiness UI
 ok(releaseReadinessTab.includes('data-release-handoff-decision-cockpit="true"'), 'release readiness UI should expose the decision cockpit surface')
 ok(releaseReadinessTab.includes('data-release-handoff-decision-cockpit-summary="true"'), 'decision cockpit should expose an operator summary row')
 ok(releaseReadinessTab.includes('data-release-handoff-decision-cockpit-boundary-summary="true"'), 'decision cockpit should summarize local/operator/approval boundaries')
+ok(releaseReadinessTab.includes('data-release-readiness-selected-cockpit-boundaries="true"'), 'saved handoff output should preserve selected cockpit boundary summaries')
+ok(releaseReadinessTab.includes('selectedDecisionCockpitBoundaryState'), 'selected handoff output should compute persisted cockpit approval/operator/local counts')
 ok(releaseReadinessTab.includes('data-release-handoff-decision-cockpit-item={item.id}'), 'decision cockpit cards should be individually addressable')
 ok(releaseReadinessTab.includes('decisionCockpitApprovalCount'), 'decision cockpit should count approval-required cards for operators')
 ok(releaseReadinessTab.includes('decisionCockpitOperatorReviewCount'), 'decision cockpit should count operator-review cards for operators')

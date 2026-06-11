@@ -21,6 +21,7 @@ This document records the local-only foundation contract for the `release-handof
 
 - The cockpit summary row shows approval-required, operator-review, and local-evidence card counts before the operator reads every card.
 - The boundary summary is intentionally text-only and evidence-only, so it can be copied into a handoff review without executing release actions.
+- Saved readiness handoff output repeats the selected snapshot's cockpit boundary counts, making approval/operator/local split reviewable before copying or exporting Markdown.
 - Demo host readiness is a checklist contract only: it records the intended approved host update, selected service restart, smoke order, no-touch `3999` boundary, and rollback stop conditions without connecting to a host or process manager.
 - Saved readiness history list rows include the decision cockpit card count alongside alert, trend, and intelligence counts.
 

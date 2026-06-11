@@ -1038,6 +1038,18 @@ export function ReleaseReadinessTab() {
     [selectedReadinessRecord],
   )
   const selectedReadinessIntelligence = selectedReadinessRecord?.readinessIntelligence ?? null
+  const selectedDecisionCockpitBoundaryState = useMemo(() => {
+    if (!selectedReadinessRecord) return null
+
+    const approval = selectedReadinessRecord.decisionCockpit.filter((item) => item.boundary === 'approval-required').length
+    const operator = selectedReadinessRecord.decisionCockpit.filter((item) => item.boundary === 'operator-review').length
+    const local = selectedReadinessRecord.decisionCockpit.filter((item) => item.boundary === 'local-evidence').length
+
+    return t(
+      { ko: '저장 콕핏: 승인 {approval} · 운영검토 {operator} · 로컬근거 {local}', en: 'Saved cockpit: approval {approval} · operator {operator} · local {local}' },
+      { approval, operator, local },
+    )
+  }, [selectedReadinessRecord, t])
 
   const toggleReviewedItem = (id: string, checked: boolean) => {
     setReviewedItems((current) => {
@@ -1427,6 +1439,9 @@ export function ReleaseReadinessTab() {
                 </div>
               </div>
             </div>
+            <SettingsInsetBlock data-release-readiness-selected-cockpit-boundaries="true" className="font-mono text-xs leading-5 text-foreground/90">
+              {selectedDecisionCockpitBoundaryState ?? t({ ko: '저장된 콕핏 경계 요약 없음', en: 'No saved cockpit boundary summary.' })}
+            </SettingsInsetBlock>
             <Textarea
               data-release-readiness-handoff-output="true"
               variant="settings"
