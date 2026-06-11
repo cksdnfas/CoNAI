@@ -31,6 +31,7 @@ import {
   type ReleaseReadinessAutomationRehearsalContract,
   type ReleaseReadinessHistoryIntelligenceSignalContract,
   type ReleaseReadinessMediaRuntimeTriageQueueContract,
+  type ReleaseReadinessReleaseRiskDashboardContract,
   type ReleaseReadinessLocalEvidenceExportContract,
   type ReleaseReadinessUserDecisionContract,
 } from '../release-readiness-history'
@@ -48,6 +49,7 @@ type AutomationContextItem = ReleaseReadinessAutomationContextContract
 type AutomationRehearsalItem = ReleaseReadinessAutomationRehearsalContract
 type ReadinessHistoryIntelligenceSignal = ReleaseReadinessHistoryIntelligenceSignalContract
 type MediaRuntimeTriageQueueItem = ReleaseReadinessMediaRuntimeTriageQueueContract
+type ReleaseRiskDashboardItem = ReleaseReadinessReleaseRiskDashboardContract
 type OperatorEvidenceReviewItem = ReleaseReadinessEvidenceReviewContract
 type LocalEvidenceExportItem = ReleaseReadinessLocalEvidenceExportContract
 
@@ -733,6 +735,57 @@ const MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS: MediaRuntimeTriageQueueItem[] = [
   },
 ]
 
+const RELEASE_RISK_DASHBOARD_ITEMS: ReleaseRiskDashboardItem[] = [
+  {
+    id: 'media-quality-release-blocker',
+    axis: 'media-review',
+    severity: 'high',
+    title: { ko: '미디어 품질 release blocker', en: 'Media quality release blocker' },
+    evidenceAnchor: 'review-backlog-before-cleanup + similarity-cleanup-approval-gate',
+    releaseRisk: {
+      ko: '품질 backlog와 유사도/정리 staging이 확인되지 않으면 공개 또는 cleanup 판단이 섞일 수 있어.',
+      en: 'Unreviewed quality backlog and similarity cleanup staging can mix publication and cleanup decisions.',
+    },
+    mitigation: {
+      ko: '릴리즈 판단 전 backlog 검토와 비파괴 staging export를 먼저 완료하고 삭제/retention은 승인 항목으로 남겨.',
+      en: 'Complete backlog review and non-destructive staging export before release judgment; keep deletion and retention as approvals.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+  {
+    id: 'runtime-rerun-release-stop-condition',
+    axis: 'workflow-runtime',
+    severity: 'high',
+    title: { ko: 'runtime rerun release stop condition', en: 'Runtime rerun release stop condition' },
+    evidenceAnchor: 'runtime-rerun-readiness-review + runtime-retention-terminal-gate',
+    releaseRisk: {
+      ko: 'queue/retry/recovery/terminal failure 신호가 분리되지 않으면 rerun, smoke, restart 판단이 너무 빨라져.',
+      en: 'Unseparated queue, retry, recovery, and terminal-failure signals can accelerate rerun, smoke, or restart decisions too early.',
+    },
+    mitigation: {
+      ko: 'recovery handoff packet과 terminal failure watch queue를 먼저 비교하고 rerun/restart/live smoke는 승인 전 실행하지 않아.',
+      en: 'Compare recovery handoff packets and terminal-failure watch queues first; do not rerun/restart/live-smoke before approval.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'release-evidence-drift-watch',
+    axis: 'release-operations',
+    severity: 'medium',
+    title: { ko: '릴리즈 근거 drift watch', en: 'Release evidence drift watch' },
+    evidenceAnchor: 'release-readiness-history + automation-rehearsal + local-evidence-export',
+    releaseRisk: {
+      ko: '미디어/runtime risk와 handoff snapshot이 따로 저장되면 릴리즈 승인 질문에서 최신 근거가 갈라질 수 있어.',
+      en: 'If media/runtime risk and handoff snapshots are saved separately, approval questions can drift from current evidence.',
+    },
+    mitigation: {
+      ko: 'risk dashboard를 handoff Markdown에 함께 export해서 승인 전에 같은 snapshot으로 비교해.',
+      en: 'Export the risk dashboard with the handoff Markdown so approval review compares a single snapshot.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+]
+
 const READINESS_HISTORY_INTELLIGENCE_SIGNALS: ReadinessHistoryIntelligenceSignal[] = [
   {
     id: 'release-handoff-priority',
@@ -1053,6 +1106,12 @@ export function ReleaseReadinessTab() {
   )
   const mediaRuntimeTriageApprovalCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'approval-required').length
   const mediaRuntimeTriageOperatorCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'operator-review').length
+  const releaseRiskDashboardHighCount = RELEASE_RISK_DASHBOARD_ITEMS.filter((item) => item.severity === 'high').length
+  const releaseRiskDashboardApprovalCount = RELEASE_RISK_DASHBOARD_ITEMS.filter((item) => item.approvalBoundary === 'approval-required').length
+  const releaseRiskDashboardState = t(
+    { ko: 'high {high} · approval {approval} · external actions 0', en: 'high {high} · approval {approval} · external actions 0' },
+    { high: releaseRiskDashboardHighCount, approval: releaseRiskDashboardApprovalCount },
+  )
   const decisionCockpitState = t({ ko: '{count}개 판단 카드', en: '{count} decision cards' }, { count: DECISION_COCKPIT_ITEMS.length })
   const decisionCockpitApprovalCount = DECISION_COCKPIT_ITEMS.filter((item) => item.boundary === 'approval-required').length
   const decisionCockpitOperatorReviewCount = DECISION_COCKPIT_ITEMS.filter((item) => item.boundary === 'operator-review').length
@@ -1182,6 +1241,7 @@ export function ReleaseReadinessTab() {
       automationRehearsalItems: AUTOMATION_REHEARSAL_ITEMS,
       readinessIntelligenceItems: READINESS_HISTORY_INTELLIGENCE_SIGNALS,
       mediaRuntimeTriageQueueItems: MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS,
+      releaseRiskDashboardItems: RELEASE_RISK_DASHBOARD_ITEMS,
       evidenceReviewItems: OPERATOR_EVIDENCE_REVIEW_ITEMS,
       localEvidenceExportItems: LOCAL_EVIDENCE_EXPORT_ITEMS,
       handoffItems: HANDOFF_EVIDENCE_ITEMS,
@@ -1442,7 +1502,7 @@ export function ReleaseReadinessTab() {
                             alertTotal: record.summary.alertReviewItemCount,
                             trends: record.summary.trendEvidenceCount,
                             intelligence: record.summary.readinessIntelligenceSignalCount,
-                            cockpit: record.summary.decisionCockpitItemCount + (record.summary.mediaRuntimeTriageQueueCount ?? 0) + (record.summary.localEvidenceExportCount ?? 0),
+                            cockpit: record.summary.decisionCockpitItemCount + (record.summary.mediaRuntimeTriageQueueCount ?? 0) + (record.summary.releaseRiskDashboardItemCount ?? 0) + (record.summary.localEvidenceExportCount ?? 0),
                           },
                         )}
                       </span>
@@ -1669,6 +1729,54 @@ export function ReleaseReadinessTab() {
               </SettingsToggleRow>
             )
           })}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        data-media-runtime-release-risk-dashboard="true"
+        heading={t({ ko: '미디어/runtime release risk dashboard', en: 'Media/runtime release risk dashboard' })}
+        actions={<Badge variant="secondary">{releaseRiskDashboardState}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: '미디어 품질 backlog와 workflow runtime stop condition을 릴리즈 우선순위 risk로 묶어. 이 dashboard는 근거와 mitigation만 기록하고 cleanup, rerun, restart, push, deploy, external service는 실행하지 않아.',
+            en: 'Combine media quality backlog and workflow runtime stop conditions into release-priority risk. This dashboard records evidence and mitigation only; it does not clean up, rerun, restart, push, deploy, or call external services.',
+          })}
+        </SettingsInsetBlock>
+
+        <div data-media-runtime-release-risk-dashboard-summary="true" className="grid gap-3 min-[900px]:grid-cols-3">
+          <SettingsValueTile
+            label={t({ ko: 'high risk', en: 'High risk' })}
+            value={t({ ko: '{count}개', en: '{count}' }, { count: releaseRiskDashboardHighCount })}
+          />
+          <SettingsValueTile
+            label={t({ ko: '승인 필요', en: 'Approval needed' })}
+            value={t({ ko: '{count}개 gate', en: '{count} gates' }, { count: releaseRiskDashboardApprovalCount })}
+          />
+          <SettingsValueTile
+            label={t({ ko: '근거 anchor', en: 'Evidence anchors' })}
+            value={t({ ko: '{count}개', en: '{count}' }, { count: RELEASE_RISK_DASHBOARD_ITEMS.length })}
+          />
+        </div>
+
+        <div className="grid gap-3 min-[1000px]:grid-cols-3">
+          {RELEASE_RISK_DASHBOARD_ITEMS.map((item) => (
+            <SettingsInsetBlock key={item.id} data-media-runtime-release-risk-dashboard-item={item.id} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={item.severity === 'high' ? 'default' : item.severity === 'medium' ? 'secondary' : 'outline'}>{item.severity}</Badge>
+                <Badge variant="secondary">{item.axis}</Badge>
+                <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                  {item.approvalBoundary === 'approval-required' ? t({ ko: '승인 필요', en: 'Approval needed' }) : t({ ko: '운영 검토', en: 'Operator review' })}
+                </Badge>
+              </div>
+              <div className="text-sm font-semibold text-foreground">{t(item.title)}</div>
+              <div className="font-mono text-xs text-foreground/90">{item.evidenceAnchor}</div>
+              <div className="text-sm leading-6 text-muted-foreground">{t(item.releaseRisk)}</div>
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
+                {t(item.mitigation)}
+              </div>
+            </SettingsInsetBlock>
+          ))}
         </div>
       </SettingsSection>
 

@@ -22,10 +22,11 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 15. [26.6.9 final readiness trend evidence](/systems/26.6.9-final-readiness-trend-evidence)
 16. [operator evidence review console](/systems/operator-evidence-review-console)
 17. [automation rehearsal contracts](/systems/automation-rehearsal-contracts)
-18. [local automation context completion evidence](/systems/local-automation-context-completion-evidence)
-19. [26.6.8 workflow-media-operations](/systems/26.6.8-workflow-media-operations)
-20. [26.6.8 dependency hardening plan](/systems/26.6.8-dependency-hardening-plan)
-21. [26.6.8 hardening-evidence-observability readiness](/systems/26.6.8-hardening-evidence-observability-readiness)
+18. [media/runtime release risk dashboard contracts](/systems/media-runtime-release-risk-dashboard-contracts)
+19. [local automation context completion evidence](/systems/local-automation-context-completion-evidence)
+20. [26.6.8 workflow-media-operations](/systems/26.6.8-workflow-media-operations)
+21. [26.6.8 dependency hardening plan](/systems/26.6.8-dependency-hardening-plan)
+22. [26.6.8 hardening-evidence-observability readiness](/systems/26.6.8-hardening-evidence-observability-readiness)
 
 ## 왜 이 순서인가
 

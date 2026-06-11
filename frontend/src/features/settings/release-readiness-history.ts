@@ -131,6 +131,17 @@ export type ReleaseReadinessMediaRuntimeTriageQueueContract = {
   approvalBoundary: 'operator-review' | 'approval-required'
 }
 
+export type ReleaseReadinessReleaseRiskDashboardContract = {
+  id: string
+  axis: 'media-review' | 'workflow-runtime' | 'release-operations'
+  severity: 'high' | 'medium' | 'watch'
+  title: TranslationDictionary
+  evidenceAnchor: string
+  releaseRisk: TranslationDictionary
+  mitigation: TranslationDictionary
+  approvalBoundary: 'operator-review' | 'approval-required'
+}
+
 export type ReleaseReadinessEvidenceReviewContract = {
   id: string
   sourceSurface: TranslationDictionary
@@ -176,6 +187,8 @@ export type ReleaseReadinessHistoryRecord = {
     decisionCockpitItemCount: number
     mediaRuntimeTriageQueueCount: number
     reviewedMediaRuntimeTriageCount: number
+    releaseRiskDashboardItemCount: number
+    releaseRiskDashboardHighCount: number
     localEvidenceExportCount: number
     reviewedLocalEvidenceExportCount: number
     readyForExport: boolean
@@ -190,6 +203,7 @@ export type ReleaseReadinessHistoryRecord = {
   readinessIntelligence: ReleaseReadinessHistoryIntelligenceSummaryContract
   reviewedMediaRuntimeTriageIds: string[]
   mediaRuntimeTriageQueue: Array<ReleaseReadinessMediaRuntimeTriageQueueContract & { status: 'reviewed' | 'open' }>
+  releaseRiskDashboard: ReleaseReadinessReleaseRiskDashboardContract[]
   evidenceReview: ReleaseReadinessEvidenceReviewContract[]
   localEvidenceExports: Array<ReleaseReadinessLocalEvidenceExportContract & { status: 'reviewed' | 'open' }>
   handoff: Array<ReleaseReadinessHandoffItemContract & { status: 'captured' | 'open' }>
@@ -222,6 +236,7 @@ export type ReleaseReadinessHistorySnapshotInput = {
   automationRehearsalItems?: readonly ReleaseReadinessAutomationRehearsalContract[]
   readinessIntelligenceItems?: readonly ReleaseReadinessHistoryIntelligenceSignalContract[]
   mediaRuntimeTriageQueueItems?: readonly ReleaseReadinessMediaRuntimeTriageQueueContract[]
+  releaseRiskDashboardItems?: readonly ReleaseReadinessReleaseRiskDashboardContract[]
   reviewedMediaRuntimeTriageIds?: Iterable<string>
   evidenceReviewItems: readonly ReleaseReadinessEvidenceReviewContract[]
   localEvidenceExportItems?: readonly ReleaseReadinessLocalEvidenceExportContract[]
@@ -258,7 +273,7 @@ function buildRecordId(savedAt: string) {
   return `release-readiness-${timestamp}-${suffix}`
 }
 
-type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'reviewedMediaRuntimeTriageIds' | 'reviewedLocalEvidenceExportIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'mediaRuntimeTriageQueue' | 'evidenceReview' | 'localEvidenceExports' | 'decisionCockpit' | 'summary'> & {
+type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'reviewedMediaRuntimeTriageIds' | 'reviewedLocalEvidenceExportIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'mediaRuntimeTriageQueue' | 'releaseRiskDashboard' | 'evidenceReview' | 'localEvidenceExports' | 'decisionCockpit' | 'summary'> & {
   operationSteps?: ReleaseReadinessOperationStepContract[]
   reviewedAlertIds?: string[]
   reviewedAutomationRehearsalIds?: string[]
@@ -271,6 +286,7 @@ type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord
   automationRehearsal?: ReleaseReadinessAutomationRehearsalContract[]
   readinessIntelligence?: ReleaseReadinessHistoryIntelligenceSummaryContract
   mediaRuntimeTriageQueue?: ReleaseReadinessMediaRuntimeTriageQueueContract[]
+  releaseRiskDashboard?: ReleaseReadinessReleaseRiskDashboardContract[]
   evidenceReview?: ReleaseReadinessEvidenceReviewContract[]
   localEvidenceExports?: ReleaseReadinessLocalEvidenceExportContract[]
   summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount' | 'trendEvidenceCount' | 'readinessIntelligenceSignalCount' | 'reviewedMediaRuntimeTriageCount' | 'reviewedLocalEvidenceExportCount'> & {
@@ -281,6 +297,8 @@ type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord
     decisionCockpitItemCount?: number
     mediaRuntimeTriageQueueCount?: number
     reviewedMediaRuntimeTriageCount?: number
+    releaseRiskDashboardItemCount?: number
+    releaseRiskDashboardHighCount?: number
     localEvidenceExportCount?: number
     reviewedLocalEvidenceExportCount?: number
   }
@@ -313,6 +331,7 @@ function isHistoryRecord(value: unknown): value is PersistedReleaseReadinessHist
     && (record.automationRehearsal === undefined || Array.isArray(record.automationRehearsal))
     && (record.readinessIntelligence === undefined || typeof record.readinessIntelligence === 'object')
     && (record.mediaRuntimeTriageQueue === undefined || Array.isArray(record.mediaRuntimeTriageQueue))
+    && (record.releaseRiskDashboard === undefined || Array.isArray(record.releaseRiskDashboard))
     && (record.evidenceReview === undefined || Array.isArray(record.evidenceReview))
     && (record.localEvidenceExports === undefined || Array.isArray(record.localEvidenceExports))
     && Array.isArray(record.handoff)
@@ -345,6 +364,8 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
   const automationRehearsalItemCount = input.automationRehearsalItems?.length ?? 0
   const readinessIntelligenceItems = input.readinessIntelligenceItems ?? []
   const mediaRuntimeTriageQueueItems = input.mediaRuntimeTriageQueueItems ?? []
+  const releaseRiskDashboardItems = input.releaseRiskDashboardItems ?? []
+  const releaseRiskDashboardHighCount = releaseRiskDashboardItems.filter((item) => item.severity === 'high').length
   const localEvidenceExportItems = input.localEvidenceExportItems ?? []
 
   return {
@@ -374,6 +395,8 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       decisionCockpitItemCount,
       mediaRuntimeTriageQueueCount: mediaRuntimeTriageQueueItems.length,
       reviewedMediaRuntimeTriageCount: reviewedMediaRuntimeTriageIds.length,
+      releaseRiskDashboardItemCount: releaseRiskDashboardItems.length,
+      releaseRiskDashboardHighCount,
       localEvidenceExportCount: localEvidenceExportItems.length,
       reviewedLocalEvidenceExportCount: reviewedLocalEvidenceExportIds.length,
       readyForExport: reviewItemCount > 0
@@ -408,6 +431,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       ...item,
       status: mediaRuntimeTriageSet.has(item.id) ? 'reviewed' as const : 'open' as const,
     })),
+    releaseRiskDashboard: releaseRiskDashboardItems.map((item) => ({ ...item })),
     evidenceReview: input.evidenceReviewItems.map((item) => ({ ...item })),
     localEvidenceExports: localEvidenceExportItems.map((item) => ({
       ...item,
@@ -463,6 +487,8 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
         decisionCockpitItemCount: record.summary.decisionCockpitItemCount ?? record.decisionCockpit?.length ?? 0,
         mediaRuntimeTriageQueueCount: record.summary.mediaRuntimeTriageQueueCount ?? record.mediaRuntimeTriageQueue?.length ?? 0,
         reviewedMediaRuntimeTriageCount: record.summary.reviewedMediaRuntimeTriageCount ?? uniqueIds(record.reviewedMediaRuntimeTriageIds ?? []).length,
+        releaseRiskDashboardItemCount: record.summary.releaseRiskDashboardItemCount ?? record.releaseRiskDashboard?.length ?? 0,
+        releaseRiskDashboardHighCount: record.summary.releaseRiskDashboardHighCount ?? record.releaseRiskDashboard?.filter((item) => item.severity === 'high').length ?? 0,
         localEvidenceExportCount: record.summary.localEvidenceExportCount ?? record.localEvidenceExports?.length ?? 0,
         reviewedLocalEvidenceExportCount: record.summary.reviewedLocalEvidenceExportCount ?? uniqueIds(record.reviewedLocalEvidenceExportIds ?? []).length,
       },
@@ -486,6 +512,7 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
           status: uniqueIds(record.reviewedMediaRuntimeTriageIds ?? []).includes(item.id) ? 'reviewed' as const : 'open' as const,
         }))
         : [],
+      releaseRiskDashboard: Array.isArray(record.releaseRiskDashboard) ? record.releaseRiskDashboard : [],
       evidenceReview: Array.isArray(record.evidenceReview) ? record.evidenceReview : [],
       localEvidenceExports: Array.isArray(record.localEvidenceExports)
         ? record.localEvidenceExports.map((item) => ({
@@ -624,6 +651,12 @@ export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHis
     '',
     ...record.mediaRuntimeTriageQueue.map((item) => (
       `- [${item.status === 'reviewed' ? 'x' : ' '}] ${formatTranslationDictionary(item.title)} (${item.axis} / ${item.priority} / ${item.evidenceAnchor} / ${formatMarkdownStatus(item.approvalBoundary)}): asks ${formatTranslationDictionary(item.triageQuestion)}; safe next ${formatTranslationDictionary(item.safeNextStep)}`
+    )),
+    '',
+    '## Media Runtime Release Risk Dashboard',
+    '',
+    ...record.releaseRiskDashboard.map((item) => (
+      `- ${formatTranslationDictionary(item.title)} (${item.axis} / ${item.severity} / ${item.evidenceAnchor} / ${formatMarkdownStatus(item.approvalBoundary)}): risk ${formatTranslationDictionary(item.releaseRisk)}; mitigation ${formatTranslationDictionary(item.mitigation)}`
     )),
     '',
     '## Operator Evidence Review Console',

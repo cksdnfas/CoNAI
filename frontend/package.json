@@ -62,7 +62,8 @@
     "verify:automation-rehearsal-contracts": "tsx src/scripts/verifyAutomationRehearsalContracts.ts",
     "verify:readiness-history-intelligence-contracts": "tsx src/scripts/verifyReadinessHistoryIntelligenceContracts.ts",
     "verify:release-handoff-decision-cockpit-contracts": "tsx src/scripts/verifyReleaseHandoffDecisionCockpitContracts.ts",
-    "verify:media-runtime-caveat-triage-contracts": "tsx src/scripts/verifyMediaRuntimeCaveatTriageContracts.ts"
+    "verify:media-runtime-caveat-triage-contracts": "tsx src/scripts/verifyMediaRuntimeCaveatTriageContracts.ts",
+    "verify:media-runtime-release-risk-dashboard-contracts": "tsx src/scripts/verifyMediaRuntimeReleaseRiskDashboardContracts.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.91.3",

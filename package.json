@@ -180,7 +180,8 @@
     "verify:workflow-queue-recovery-cockpit-contracts": "cd frontend && npm run verify:workflow-queue-recovery-cockpit-contracts",
     "verify:automation-rehearsal-contracts": "cd frontend && npm run verify:automation-rehearsal-contracts",
     "verify:readiness-history-intelligence-contracts": "cd frontend && npm run verify:readiness-history-intelligence-contracts",
-    "verify:release-handoff-decision-cockpit-contracts": "cd frontend && npm run verify:release-handoff-decision-cockpit-contracts"
+    "verify:release-handoff-decision-cockpit-contracts": "cd frontend && npm run verify:release-handoff-decision-cockpit-contracts",
+    "verify:media-runtime-release-risk-dashboard-contracts": "cd frontend && npm run verify:media-runtime-release-risk-dashboard-contracts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
