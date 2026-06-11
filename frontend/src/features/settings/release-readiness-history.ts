@@ -137,6 +137,16 @@ export type ReleaseReadinessEvidenceReviewContract = {
   approvalBoundary: 'local-evidence' | 'operator-review' | 'approval-required'
 }
 
+export type ReleaseReadinessLocalEvidenceExportContract = {
+  id: string
+  bundle: TranslationDictionary
+  sourceSurface: string
+  exportCommand: string
+  comparisonAnchor: string
+  hardeningContract: TranslationDictionary
+  approvalBoundary: 'local-evidence' | 'operator-review' | 'approval-required'
+}
+
 export type ReleaseReadinessHistoryRecord = {
   id: string
   schemaVersion: typeof RELEASE_READINESS_HISTORY_SCHEMA_VERSION
@@ -162,6 +172,7 @@ export type ReleaseReadinessHistoryRecord = {
     decisionCockpitItemCount: number
     mediaRuntimeTriageQueueCount: number
     reviewedMediaRuntimeTriageCount: number
+    localEvidenceExportCount: number
     readyForExport: boolean
   }
   checklist: Array<ReleaseReadinessChecklistItemContract & { status: 'checked' | 'open' }>
@@ -175,6 +186,7 @@ export type ReleaseReadinessHistoryRecord = {
   reviewedMediaRuntimeTriageIds: string[]
   mediaRuntimeTriageQueue: Array<ReleaseReadinessMediaRuntimeTriageQueueContract & { status: 'reviewed' | 'open' }>
   evidenceReview: ReleaseReadinessEvidenceReviewContract[]
+  localEvidenceExports: ReleaseReadinessLocalEvidenceExportContract[]
   handoff: Array<ReleaseReadinessHandoffItemContract & { status: 'captured' | 'open' }>
   runbookGuardrails: ReleaseReadinessRunbookGuardrailContract[]
   operationSteps: ReleaseReadinessOperationStepContract[]
@@ -206,6 +218,7 @@ export type ReleaseReadinessHistorySnapshotInput = {
   mediaRuntimeTriageQueueItems?: readonly ReleaseReadinessMediaRuntimeTriageQueueContract[]
   reviewedMediaRuntimeTriageIds?: Iterable<string>
   evidenceReviewItems: readonly ReleaseReadinessEvidenceReviewContract[]
+  localEvidenceExportItems?: readonly ReleaseReadinessLocalEvidenceExportContract[]
   handoffItems: readonly ReleaseReadinessHandoffItemContract[]
   runbookGuardrails: readonly ReleaseReadinessRunbookGuardrailContract[]
   operationSteps: readonly ReleaseReadinessOperationStepContract[]
@@ -239,7 +252,7 @@ function buildRecordId(savedAt: string) {
   return `release-readiness-${timestamp}-${suffix}`
 }
 
-type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'reviewedMediaRuntimeTriageIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'mediaRuntimeTriageQueue' | 'evidenceReview' | 'decisionCockpit' | 'summary'> & {
+type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'reviewedMediaRuntimeTriageIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'mediaRuntimeTriageQueue' | 'evidenceReview' | 'localEvidenceExports' | 'decisionCockpit' | 'summary'> & {
   operationSteps?: ReleaseReadinessOperationStepContract[]
   reviewedAlertIds?: string[]
   reviewedAutomationRehearsalIds?: string[]
@@ -252,6 +265,7 @@ type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord
   readinessIntelligence?: ReleaseReadinessHistoryIntelligenceSummaryContract
   mediaRuntimeTriageQueue?: ReleaseReadinessMediaRuntimeTriageQueueContract[]
   evidenceReview?: ReleaseReadinessEvidenceReviewContract[]
+  localEvidenceExports?: ReleaseReadinessLocalEvidenceExportContract[]
   summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount' | 'trendEvidenceCount' | 'readinessIntelligenceSignalCount' | 'reviewedMediaRuntimeTriageCount'> & {
     reviewedAlertCount?: number
     alertReviewItemCount?: number
@@ -260,6 +274,7 @@ type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord
     decisionCockpitItemCount?: number
     mediaRuntimeTriageQueueCount?: number
     reviewedMediaRuntimeTriageCount?: number
+    localEvidenceExportCount?: number
   }
 }
 
@@ -290,6 +305,7 @@ function isHistoryRecord(value: unknown): value is PersistedReleaseReadinessHist
     && (record.readinessIntelligence === undefined || typeof record.readinessIntelligence === 'object')
     && (record.mediaRuntimeTriageQueue === undefined || Array.isArray(record.mediaRuntimeTriageQueue))
     && (record.evidenceReview === undefined || Array.isArray(record.evidenceReview))
+    && (record.localEvidenceExports === undefined || Array.isArray(record.localEvidenceExports))
     && Array.isArray(record.handoff)
     && Array.isArray(record.runbookGuardrails)
     && (record.operationSteps === undefined || Array.isArray(record.operationSteps))
@@ -318,6 +334,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
   const automationRehearsalItemCount = input.automationRehearsalItems?.length ?? 0
   const readinessIntelligenceItems = input.readinessIntelligenceItems ?? []
   const mediaRuntimeTriageQueueItems = input.mediaRuntimeTriageQueueItems ?? []
+  const localEvidenceExportItems = input.localEvidenceExportItems ?? []
 
   return {
     id: input.id ?? buildRecordId(savedAt),
@@ -345,6 +362,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       decisionCockpitItemCount,
       mediaRuntimeTriageQueueCount: mediaRuntimeTriageQueueItems.length,
       reviewedMediaRuntimeTriageCount: reviewedMediaRuntimeTriageIds.length,
+      localEvidenceExportCount: localEvidenceExportItems.length,
       readyForExport: reviewItemCount > 0
         && handoffItemCount > 0
         && alertReviewItemCount > 0
@@ -377,6 +395,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       status: mediaRuntimeTriageSet.has(item.id) ? 'reviewed' as const : 'open' as const,
     })),
     evidenceReview: input.evidenceReviewItems.map((item) => ({ ...item })),
+    localEvidenceExports: localEvidenceExportItems.map((item) => ({ ...item })),
     handoff: input.handoffItems.map((item) => ({
       ...item,
       status: capturedSet.has(item.id) ? 'captured' : 'open',
@@ -426,6 +445,7 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
         decisionCockpitItemCount: record.summary.decisionCockpitItemCount ?? record.decisionCockpit?.length ?? 0,
         mediaRuntimeTriageQueueCount: record.summary.mediaRuntimeTriageQueueCount ?? record.mediaRuntimeTriageQueue?.length ?? 0,
         reviewedMediaRuntimeTriageCount: record.summary.reviewedMediaRuntimeTriageCount ?? uniqueIds(record.reviewedMediaRuntimeTriageIds ?? []).length,
+        localEvidenceExportCount: record.summary.localEvidenceExportCount ?? record.localEvidenceExports?.length ?? 0,
       },
       decisionCockpit: Array.isArray(record.decisionCockpit) ? record.decisionCockpit : [],
       observabilityAlerts: Array.isArray(record.observabilityAlerts) ? record.observabilityAlerts : [],
@@ -448,6 +468,7 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
         }))
         : [],
       evidenceReview: Array.isArray(record.evidenceReview) ? record.evidenceReview : [],
+      localEvidenceExports: Array.isArray(record.localEvidenceExports) ? record.localEvidenceExports : [],
       operationSteps: Array.isArray(record.operationSteps) ? record.operationSteps : [],
     }))
     .sort((left, right) => Date.parse(right.savedAt) - Date.parse(left.savedAt))
@@ -585,6 +606,12 @@ export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHis
     '',
     ...record.evidenceReview.map((item) => (
       `- ${formatTranslationDictionary(item.sourceSurface)} (${item.evidenceAnchor} / ${formatMarkdownStatus(item.approvalBoundary)}): compares ${formatTranslationDictionary(item.compares)}; asks ${formatTranslationDictionary(item.operatorQuestion)}`
+    )),
+    '',
+    '## Local Evidence Export Bundles',
+    '',
+    ...record.localEvidenceExports.map((item) => (
+      `- ${formatTranslationDictionary(item.bundle)} (${item.sourceSurface} / ${item.exportCommand} / ${item.comparisonAnchor} / ${formatMarkdownStatus(item.approvalBoundary)}): ${formatTranslationDictionary(item.hardeningContract)}`
     )),
     '',
     '## Captured Handoff Evidence',

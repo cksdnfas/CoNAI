@@ -31,6 +31,7 @@ import {
   type ReleaseReadinessAutomationRehearsalContract,
   type ReleaseReadinessHistoryIntelligenceSignalContract,
   type ReleaseReadinessMediaRuntimeTriageQueueContract,
+  type ReleaseReadinessLocalEvidenceExportContract,
   type ReleaseReadinessUserDecisionContract,
 } from '../release-readiness-history'
 
@@ -48,6 +49,7 @@ type AutomationRehearsalItem = ReleaseReadinessAutomationRehearsalContract
 type ReadinessHistoryIntelligenceSignal = ReleaseReadinessHistoryIntelligenceSignalContract
 type MediaRuntimeTriageQueueItem = ReleaseReadinessMediaRuntimeTriageQueueContract
 type OperatorEvidenceReviewItem = ReleaseReadinessEvidenceReviewContract
+type LocalEvidenceExportItem = ReleaseReadinessLocalEvidenceExportContract
 
 type IntegratedOperationsLane = {
   id: string
@@ -511,6 +513,45 @@ const OPERATOR_EVIDENCE_REVIEW_ITEMS: OperatorEvidenceReviewItem[] = [
   },
 ]
 
+const LOCAL_EVIDENCE_EXPORT_ITEMS: LocalEvidenceExportItem[] = [
+  {
+    id: 'readiness-markdown-bundle',
+    bundle: { ko: 'readiness Markdown bundle', en: 'Readiness Markdown bundle' },
+    sourceSurface: 'Settings > Release readiness Markdown export',
+    exportCommand: 'buildReleaseReadinessHandoffMarkdown(record)',
+    comparisonAnchor: 'release handoff decision cockpit + operator evidence console',
+    hardeningContract: {
+      ko: '저장된 snapshot에서 검증, caveat, approval gate, MCP dry-run anchor를 비교 가능한 Markdown으로 묶고 외부 작업은 실행하지 않아.',
+      en: 'Bundle verification, caveats, approval gates, and MCP dry-run anchors from a saved snapshot into comparable Markdown without executing external actions.',
+    },
+    approvalBoundary: 'local-evidence',
+  },
+  {
+    id: 'mcp-dry-run-json-bundle',
+    bundle: { ko: 'MCP dry-run JSON bundle', en: 'MCP dry-run JSON bundle' },
+    sourceSurface: 'backend/src/mcp/mcpDryRunEvidence.ts',
+    exportCommand: 'npm run export:mcp-dry-run-evidence',
+    comparisonAnchor: 'docs/systems/agent-mcp-local-evidence-export.md',
+    hardeningContract: {
+      ko: 'read-only tool class와 approvalRequired tool class를 같은 packet에서 비교하되 live MCP 호출, generation, mutation은 수행하지 않아.',
+      en: 'Compare read-only and approval-required tool classes in the same packet without live MCP calls, generation, or mutation.',
+    },
+    approvalBoundary: 'operator-review',
+  },
+  {
+    id: 'recovery-comparison-bundle',
+    bundle: { ko: 'recovery comparison bundle', en: 'Recovery comparison bundle' },
+    sourceSurface: 'Workflow recovery handoff + media/runtime triage queue',
+    exportCommand: 'local handoff export only',
+    comparisonAnchor: 'workflow-recovery-handoff-packet + media-runtime-caveat-triage',
+    hardeningContract: {
+      ko: 'recovery handoff와 media/runtime triage 상태를 다음 승인 판단용으로 나란히 보존하고 rerun, restart, cleanup은 승인 경계로 유지해.',
+      en: 'Preserve recovery handoff and media/runtime triage state side by side for later approval decisions while rerun, restart, and cleanup remain approval-gated.',
+    },
+    approvalBoundary: 'approval-required',
+  },
+]
+
 const AUTOMATION_CONTEXT_ITEMS: AutomationContextItem[] = [
   {
     id: 'local-automation-context-map',
@@ -952,6 +993,7 @@ export function ReleaseReadinessTab() {
   const trendEvidenceState = t({ ko: '{count}개 추세 근거', en: '{count} trend evidence items' }, { count: TREND_EVIDENCE_ITEMS.length })
   const readinessIntelligenceState = t({ ko: '{count}개 priority/caveat', en: '{count} priority/caveat signals' }, { count: READINESS_HISTORY_INTELLIGENCE_SIGNALS.length })
   const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
+  const localEvidenceExportState = t({ ko: '{count}개 local bundle', en: '{count} local bundles' }, { count: LOCAL_EVIDENCE_EXPORT_ITEMS.length })
   const mediaRuntimeTriageQueueState = allMediaRuntimeTriageReviewed ? t({ ko: 'triage 검토 완료', en: 'Triage reviewed' }) : t({ ko: '{count}/{total} triage', en: '{count}/{total} triage' }, { count: reviewedMediaRuntimeTriageCount, total: MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.length })
   const mediaRuntimeTriageApprovalCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'approval-required').length
   const mediaRuntimeTriageOperatorCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'operator-review').length
@@ -1062,6 +1104,7 @@ export function ReleaseReadinessTab() {
       readinessIntelligenceItems: READINESS_HISTORY_INTELLIGENCE_SIGNALS,
       mediaRuntimeTriageQueueItems: MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS,
       evidenceReviewItems: OPERATOR_EVIDENCE_REVIEW_ITEMS,
+      localEvidenceExportItems: LOCAL_EVIDENCE_EXPORT_ITEMS,
       handoffItems: HANDOFF_EVIDENCE_ITEMS,
       runbookGuardrails: RUNBOOK_GUARDRAILS,
       operationSteps: OPERATION_STEPS,
@@ -1131,6 +1174,7 @@ export function ReleaseReadinessTab() {
               <Badge data-release-readiness-export-state="true" variant={allEvidenceReadyForExport ? 'default' : 'outline'}>{exportReadinessState}</Badge>
               <Badge variant="outline">{trendEvidenceState}</Badge>
               <Badge data-release-readiness-history-intelligence-badge="true" variant="outline">{readinessIntelligenceState}</Badge>
+              <Badge data-local-evidence-export-hardening-badge="true" variant="outline">{localEvidenceExportState}</Badge>
               <div className="min-w-0 text-sm text-muted-foreground">
                 {t({
                   ko: '완료 작업, 주의 사항, 검증 근거, 사용자 결정을 릴리즈 액션 전에 한곳에서 점검해.',
@@ -1306,7 +1350,7 @@ export function ReleaseReadinessTab() {
                             alertTotal: record.summary.alertReviewItemCount,
                             trends: record.summary.trendEvidenceCount,
                             intelligence: record.summary.readinessIntelligenceSignalCount,
-                            cockpit: record.summary.decisionCockpitItemCount + (record.summary.mediaRuntimeTriageQueueCount ?? 0),
+                            cockpit: record.summary.decisionCockpitItemCount + (record.summary.mediaRuntimeTriageQueueCount ?? 0) + (record.summary.localEvidenceExportCount ?? 0),
                           },
                         )}
                       </span>
@@ -1653,6 +1697,41 @@ export function ReleaseReadinessTab() {
               <div className="text-sm leading-6 text-muted-foreground">{t(item.compares)}</div>
               <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
                 {t(item.operatorQuestion)}
+              </div>
+            </SettingsInsetBlock>
+          ))}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        data-local-evidence-export-hardening="true"
+        heading={t({ ko: '로컬 근거 export hardening', en: 'Local evidence export hardening' })}
+        actions={<Badge variant="secondary">{localEvidenceExportState}</Badge>}
+      >
+        <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
+          {t({
+            ko: 'readiness Markdown, MCP dry-run JSON, recovery 비교 bundle을 같은 로컬 export 계약으로 묶어. 이 표면은 파일 다운로드/복사 근거만 만들고 MCP 호출, rerun, cleanup, push/deploy/restart는 실행하지 않아.',
+            en: 'Bind readiness Markdown, MCP dry-run JSON, and recovery comparison bundles into one local export contract. This surface only creates copy/download evidence and does not call MCP, rerun, clean up, push, deploy, or restart.',
+          })}
+        </SettingsInsetBlock>
+
+        <div className="grid gap-3 min-[1000px]:grid-cols-3">
+          {LOCAL_EVIDENCE_EXPORT_ITEMS.map((item) => (
+            <SettingsInsetBlock key={item.id} data-local-evidence-export-bundle={item.id} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{t(item.bundle)}</Badge>
+                <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                  {item.approvalBoundary === 'approval-required'
+                    ? t({ ko: '승인 필요', en: 'Approval needed' })
+                    : item.approvalBoundary === 'operator-review'
+                      ? t({ ko: '운영 검토', en: 'Operator review' })
+                      : t({ ko: '로컬 근거', en: 'Local evidence' })}
+                </Badge>
+              </div>
+              <div className="font-mono text-xs text-foreground/90">{item.exportCommand}</div>
+              <div className="font-mono text-xs text-foreground/90">{item.comparisonAnchor}</div>
+              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
+                {t(item.hardeningContract)}
               </div>
             </SettingsInsetBlock>
           ))}
