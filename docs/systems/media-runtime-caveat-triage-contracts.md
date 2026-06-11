@@ -21,8 +21,8 @@ This document records the local-only foundation contract for the `media-runtime-
 - `data-media-runtime-caveat-triage="true"` exposes the queue surface.
 - `data-media-runtime-caveat-triage-summary="true"` exposes operator-review and approval-required counts.
 - `data-media-runtime-caveat-triage-item={item.id}` keeps each queue card individually addressable for regression checks.
-- Saved release readiness history records include `mediaRuntimeTriageQueue` and `summary.mediaRuntimeTriageQueueCount`.
-- Markdown handoff export includes a `## Media Runtime Caveat Triage Queue` section.
+- Saved release readiness history records include `mediaRuntimeTriageQueue`, `reviewedMediaRuntimeTriageIds`, `summary.mediaRuntimeTriageQueueCount`, and `summary.reviewedMediaRuntimeTriageCount`.
+- Markdown handoff export includes a `## Media Runtime Caveat Triage Queue` section with reviewed/open checklist state.
 
 ## No external side effects
 

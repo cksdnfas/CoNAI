@@ -161,6 +161,7 @@ export type ReleaseReadinessHistoryRecord = {
     readinessIntelligenceSignalCount: number
     decisionCockpitItemCount: number
     mediaRuntimeTriageQueueCount: number
+    reviewedMediaRuntimeTriageCount: number
     readyForExport: boolean
   }
   checklist: Array<ReleaseReadinessChecklistItemContract & { status: 'checked' | 'open' }>
@@ -171,7 +172,8 @@ export type ReleaseReadinessHistoryRecord = {
   automationContext: ReleaseReadinessAutomationContextContract[]
   automationRehearsal: Array<ReleaseReadinessAutomationRehearsalContract & { status: 'reviewed' | 'open' }>
   readinessIntelligence: ReleaseReadinessHistoryIntelligenceSummaryContract
-  mediaRuntimeTriageQueue: ReleaseReadinessMediaRuntimeTriageQueueContract[]
+  reviewedMediaRuntimeTriageIds: string[]
+  mediaRuntimeTriageQueue: Array<ReleaseReadinessMediaRuntimeTriageQueueContract & { status: 'reviewed' | 'open' }>
   evidenceReview: ReleaseReadinessEvidenceReviewContract[]
   handoff: Array<ReleaseReadinessHandoffItemContract & { status: 'captured' | 'open' }>
   runbookGuardrails: ReleaseReadinessRunbookGuardrailContract[]
@@ -202,6 +204,7 @@ export type ReleaseReadinessHistorySnapshotInput = {
   automationRehearsalItems?: readonly ReleaseReadinessAutomationRehearsalContract[]
   readinessIntelligenceItems?: readonly ReleaseReadinessHistoryIntelligenceSignalContract[]
   mediaRuntimeTriageQueueItems?: readonly ReleaseReadinessMediaRuntimeTriageQueueContract[]
+  reviewedMediaRuntimeTriageIds?: Iterable<string>
   evidenceReviewItems: readonly ReleaseReadinessEvidenceReviewContract[]
   handoffItems: readonly ReleaseReadinessHandoffItemContract[]
   runbookGuardrails: readonly ReleaseReadinessRunbookGuardrailContract[]
@@ -236,10 +239,11 @@ function buildRecordId(savedAt: string) {
   return `release-readiness-${timestamp}-${suffix}`
 }
 
-type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'mediaRuntimeTriageQueue' | 'evidenceReview' | 'decisionCockpit' | 'summary'> & {
+type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord, 'operationSteps' | 'reviewedAlertIds' | 'reviewedAutomationRehearsalIds' | 'reviewedMediaRuntimeTriageIds' | 'observabilityAlerts' | 'trendEvidence' | 'automationContext' | 'automationRehearsal' | 'readinessIntelligence' | 'mediaRuntimeTriageQueue' | 'evidenceReview' | 'decisionCockpit' | 'summary'> & {
   operationSteps?: ReleaseReadinessOperationStepContract[]
   reviewedAlertIds?: string[]
   reviewedAutomationRehearsalIds?: string[]
+  reviewedMediaRuntimeTriageIds?: string[]
   observabilityAlerts?: Array<ReleaseReadinessAlertReviewItemContract & { status: 'reviewed' | 'open' }>
   decisionCockpit?: ReleaseReadinessDecisionCockpitItemContract[]
   trendEvidence?: ReleaseReadinessTrendEvidenceContract[]
@@ -248,13 +252,14 @@ type PersistedReleaseReadinessHistoryRecord = Omit<ReleaseReadinessHistoryRecord
   readinessIntelligence?: ReleaseReadinessHistoryIntelligenceSummaryContract
   mediaRuntimeTriageQueue?: ReleaseReadinessMediaRuntimeTriageQueueContract[]
   evidenceReview?: ReleaseReadinessEvidenceReviewContract[]
-  summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount' | 'trendEvidenceCount' | 'readinessIntelligenceSignalCount'> & {
+  summary: Omit<ReleaseReadinessHistoryRecord['summary'], 'reviewedAlertCount' | 'alertReviewItemCount' | 'trendEvidenceCount' | 'readinessIntelligenceSignalCount' | 'reviewedMediaRuntimeTriageCount'> & {
     reviewedAlertCount?: number
     alertReviewItemCount?: number
     trendEvidenceCount?: number
     readinessIntelligenceSignalCount?: number
     decisionCockpitItemCount?: number
     mediaRuntimeTriageQueueCount?: number
+    reviewedMediaRuntimeTriageCount?: number
   }
 }
 
@@ -274,6 +279,7 @@ function isHistoryRecord(value: unknown): value is PersistedReleaseReadinessHist
     && Array.isArray(record.capturedHandoffItemIds)
     && (record.reviewedAlertIds === undefined || Array.isArray(record.reviewedAlertIds))
     && (record.reviewedAutomationRehearsalIds === undefined || Array.isArray(record.reviewedAutomationRehearsalIds))
+    && (record.reviewedMediaRuntimeTriageIds === undefined || Array.isArray(record.reviewedMediaRuntimeTriageIds))
     && Array.isArray(record.checklist)
     && Array.isArray(record.evidence)
     && (record.observabilityAlerts === undefined || Array.isArray(record.observabilityAlerts))
@@ -297,10 +303,12 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
   const capturedHandoffItemIds = uniqueIds(input.capturedHandoffItemIds)
   const reviewedAlertIds = uniqueIds(input.reviewedAlertIds)
   const reviewedAutomationRehearsalIds = uniqueIds(input.reviewedAutomationRehearsalIds ?? [])
+  const reviewedMediaRuntimeTriageIds = uniqueIds(input.reviewedMediaRuntimeTriageIds ?? [])
   const reviewedSet = new Set(reviewedItemIds)
   const capturedSet = new Set(capturedHandoffItemIds)
   const alertReviewSet = new Set(reviewedAlertIds)
   const automationRehearsalSet = new Set(reviewedAutomationRehearsalIds)
+  const mediaRuntimeTriageSet = new Set(reviewedMediaRuntimeTriageIds)
   const reviewItemCount = input.reviewItems.length
   const handoffItemCount = input.handoffItems.length
   const alertReviewItemCount = input.alertReviewItems.length
@@ -324,6 +332,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
     capturedHandoffItemIds,
     reviewedAlertIds,
     reviewedAutomationRehearsalIds,
+    reviewedMediaRuntimeTriageIds,
     summary: {
       reviewedCount: reviewedItemIds.length,
       reviewItemCount,
@@ -335,6 +344,7 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       readinessIntelligenceSignalCount: readinessIntelligenceItems.length,
       decisionCockpitItemCount,
       mediaRuntimeTriageQueueCount: mediaRuntimeTriageQueueItems.length,
+      reviewedMediaRuntimeTriageCount: reviewedMediaRuntimeTriageIds.length,
       readyForExport: reviewItemCount > 0
         && handoffItemCount > 0
         && alertReviewItemCount > 0
@@ -342,7 +352,8 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
         && reviewedItemIds.length === reviewItemCount
         && capturedHandoffItemIds.length === handoffItemCount
         && reviewedAlertIds.length === alertReviewItemCount
-        && reviewedAutomationRehearsalIds.length === automationRehearsalItemCount,
+        && reviewedAutomationRehearsalIds.length === automationRehearsalItemCount
+        && reviewedMediaRuntimeTriageIds.length === mediaRuntimeTriageQueueItems.length,
     },
     checklist: input.reviewItems.map((item) => ({
       ...item,
@@ -361,7 +372,10 @@ export function buildReleaseReadinessHistoryRecord(input: ReleaseReadinessHistor
       status: automationRehearsalSet.has(item.id) ? 'reviewed' : 'open',
     })),
     readinessIntelligence: buildReleaseReadinessHistoryIntelligenceSummary(readinessIntelligenceItems),
-    mediaRuntimeTriageQueue: mediaRuntimeTriageQueueItems.map((item) => ({ ...item })),
+    mediaRuntimeTriageQueue: mediaRuntimeTriageQueueItems.map((item) => ({
+      ...item,
+      status: mediaRuntimeTriageSet.has(item.id) ? 'reviewed' as const : 'open' as const,
+    })),
     evidenceReview: input.evidenceReviewItems.map((item) => ({ ...item })),
     handoff: input.handoffItems.map((item) => ({
       ...item,
@@ -411,6 +425,7 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
         readinessIntelligenceSignalCount: record.summary.readinessIntelligenceSignalCount ?? record.readinessIntelligence?.signals?.length ?? 0,
         decisionCockpitItemCount: record.summary.decisionCockpitItemCount ?? record.decisionCockpit?.length ?? 0,
         mediaRuntimeTriageQueueCount: record.summary.mediaRuntimeTriageQueueCount ?? record.mediaRuntimeTriageQueue?.length ?? 0,
+        reviewedMediaRuntimeTriageCount: record.summary.reviewedMediaRuntimeTriageCount ?? uniqueIds(record.reviewedMediaRuntimeTriageIds ?? []).length,
       },
       decisionCockpit: Array.isArray(record.decisionCockpit) ? record.decisionCockpit : [],
       observabilityAlerts: Array.isArray(record.observabilityAlerts) ? record.observabilityAlerts : [],
@@ -422,10 +437,16 @@ export function normalizeReleaseReadinessHistoryDocument(value: unknown): Releas
           status: uniqueIds(record.reviewedAutomationRehearsalIds ?? []).includes(item.id) ? 'reviewed' as const : 'open' as const,
         }))
         : [],
+      reviewedMediaRuntimeTriageIds: uniqueIds(record.reviewedMediaRuntimeTriageIds ?? []),
       readinessIntelligence: record.readinessIntelligence && Array.isArray(record.readinessIntelligence.signals)
         ? buildReleaseReadinessHistoryIntelligenceSummary(record.readinessIntelligence.signals)
         : buildReleaseReadinessHistoryIntelligenceSummary([]),
-      mediaRuntimeTriageQueue: Array.isArray(record.mediaRuntimeTriageQueue) ? record.mediaRuntimeTriageQueue : [],
+      mediaRuntimeTriageQueue: Array.isArray(record.mediaRuntimeTriageQueue)
+        ? record.mediaRuntimeTriageQueue.map((item) => ({
+          ...item,
+          status: uniqueIds(record.reviewedMediaRuntimeTriageIds ?? []).includes(item.id) ? 'reviewed' as const : 'open' as const,
+        }))
+        : [],
       evidenceReview: Array.isArray(record.evidenceReview) ? record.evidenceReview : [],
       operationSteps: Array.isArray(record.operationSteps) ? record.operationSteps : [],
     }))
@@ -557,7 +578,7 @@ export function buildReleaseReadinessHandoffMarkdown(record: ReleaseReadinessHis
     '## Media Runtime Caveat Triage Queue',
     '',
     ...record.mediaRuntimeTriageQueue.map((item) => (
-      `- ${formatTranslationDictionary(item.title)} (${item.axis} / ${item.priority} / ${item.evidenceAnchor} / ${formatMarkdownStatus(item.approvalBoundary)}): asks ${formatTranslationDictionary(item.triageQuestion)}; safe next ${formatTranslationDictionary(item.safeNextStep)}`
+      `- [${item.status === 'reviewed' ? 'x' : ' '}] ${formatTranslationDictionary(item.title)} (${item.axis} / ${item.priority} / ${item.evidenceAnchor} / ${formatMarkdownStatus(item.approvalBoundary)}): asks ${formatTranslationDictionary(item.triageQuestion)}; safe next ${formatTranslationDictionary(item.safeNextStep)}`
     )),
     '',
     '## Operator Evidence Review Console',

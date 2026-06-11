@@ -933,15 +933,18 @@ export function ReleaseReadinessTab() {
   const [capturedHandoffItems, setCapturedHandoffItems] = useState<Set<string>>(() => new Set(latestReadinessRecord?.capturedHandoffItemIds ?? []))
   const [reviewedAlerts, setReviewedAlerts] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedAlertIds ?? []))
   const [reviewedAutomationRehearsals, setReviewedAutomationRehearsals] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedAutomationRehearsalIds ?? []))
+  const [reviewedMediaRuntimeTriage, setReviewedMediaRuntimeTriage] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedMediaRuntimeTriageIds ?? []))
   const reviewedCount = reviewedItems.size
   const capturedHandoffCount = capturedHandoffItems.size
   const reviewedAlertCount = reviewedAlerts.size
   const reviewedAutomationRehearsalCount = reviewedAutomationRehearsals.size
+  const reviewedMediaRuntimeTriageCount = reviewedMediaRuntimeTriage.size
   const allReviewed = reviewedCount === REVIEW_ITEMS.length
   const allHandoffCaptured = capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length
   const allAlertsReviewed = reviewedAlertCount === ALERT_REVIEW_ITEMS.length
   const allAutomationRehearsalsReviewed = reviewedAutomationRehearsalCount === AUTOMATION_REHEARSAL_ITEMS.length
-  const allEvidenceReadyForExport = allReviewed && allHandoffCaptured && allAlertsReviewed && allAutomationRehearsalsReviewed
+  const allMediaRuntimeTriageReviewed = reviewedMediaRuntimeTriageCount === MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.length
+  const allEvidenceReadyForExport = allReviewed && allHandoffCaptured && allAlertsReviewed && allAutomationRehearsalsReviewed && allMediaRuntimeTriageReviewed
   const readinessState = allReviewed ? t({ ko: '검토 완료', en: 'Reviewed' }) : t({ ko: '{count}/{total} 확인', en: '{count}/{total} checked' }, { count: reviewedCount, total: REVIEW_ITEMS.length })
   const handoffState = allHandoffCaptured ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
   const alertReviewState = allAlertsReviewed ? t({ ko: '알림 검토 완료', en: 'Alerts reviewed' }) : t({ ko: '{count}/{total} 알림', en: '{count}/{total} alerts' }, { count: reviewedAlertCount, total: ALERT_REVIEW_ITEMS.length })
@@ -949,7 +952,7 @@ export function ReleaseReadinessTab() {
   const trendEvidenceState = t({ ko: '{count}개 추세 근거', en: '{count} trend evidence items' }, { count: TREND_EVIDENCE_ITEMS.length })
   const readinessIntelligenceState = t({ ko: '{count}개 priority/caveat', en: '{count} priority/caveat signals' }, { count: READINESS_HISTORY_INTELLIGENCE_SIGNALS.length })
   const evidenceConsoleState = t({ ko: '{count}개 근거 소스', en: '{count} evidence sources' }, { count: OPERATOR_EVIDENCE_REVIEW_ITEMS.length })
-  const mediaRuntimeTriageQueueState = t({ ko: '{count}개 triage queue', en: '{count} triage queue items' }, { count: MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.length })
+  const mediaRuntimeTriageQueueState = allMediaRuntimeTriageReviewed ? t({ ko: 'triage 검토 완료', en: 'Triage reviewed' }) : t({ ko: '{count}/{total} triage', en: '{count}/{total} triage' }, { count: reviewedMediaRuntimeTriageCount, total: MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.length })
   const mediaRuntimeTriageApprovalCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'approval-required').length
   const mediaRuntimeTriageOperatorCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'operator-review').length
   const decisionCockpitState = t({ ko: '{count}개 판단 카드', en: '{count} decision cards' }, { count: DECISION_COCKPIT_ITEMS.length })
@@ -1029,6 +1032,18 @@ export function ReleaseReadinessTab() {
     })
   }
 
+  const toggleMediaRuntimeTriageItem = (id: string, checked: boolean) => {
+    setReviewedMediaRuntimeTriage((current) => {
+      const next = new Set(current)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
   const saveReadinessHistorySnapshot = () => {
     const record = buildReleaseReadinessHistoryRecord({
       appVersionLabel: APP_VERSION_LABEL,
@@ -1036,6 +1051,7 @@ export function ReleaseReadinessTab() {
       capturedHandoffItemIds: capturedHandoffItems,
       reviewedAlertIds: reviewedAlerts,
       reviewedAutomationRehearsalIds: reviewedAutomationRehearsals,
+      reviewedMediaRuntimeTriageIds: reviewedMediaRuntimeTriage,
       reviewItems: REVIEW_ITEMS,
       evidenceItems: EVIDENCE_ITEMS,
       decisionCockpitItems: DECISION_COCKPIT_ITEMS,
@@ -1063,6 +1079,7 @@ export function ReleaseReadinessTab() {
     setCapturedHandoffItems(new Set(record.capturedHandoffItemIds))
     setReviewedAlerts(new Set(record.reviewedAlertIds))
     setReviewedAutomationRehearsals(new Set(record.reviewedAutomationRehearsalIds))
+    setReviewedMediaRuntimeTriage(new Set(record.reviewedMediaRuntimeTriageIds))
   }
 
   const copySelectedHandoffOutput = async () => {
@@ -1445,7 +1462,18 @@ export function ReleaseReadinessTab() {
       <SettingsSection
         data-media-runtime-caveat-triage="true"
         heading={t({ ko: '미디어/runtime caveat triage queue', en: 'Media/runtime caveat triage queue' })}
-        actions={<Badge variant="secondary">{mediaRuntimeTriageQueueState}</Badge>}
+        actions={(
+          <>
+            <Badge variant={allMediaRuntimeTriageReviewed ? 'default' : 'secondary'}>{mediaRuntimeTriageQueueState}</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={() => setReviewedMediaRuntimeTriage(new Set(MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.map((item) => item.id)))}>
+              <CheckCircle2 className="h-4 w-4" />
+              {t({ ko: 'triage 검토 표시', en: 'Mark triage' })}
+            </Button>
+            <Button type="button" size="icon-sm" variant="secondary" onClick={() => setReviewedMediaRuntimeTriage(new Set())} aria-label={t({ ko: 'triage 검토 초기화', en: 'Reset triage review' })} title={t({ ko: 'triage 검토 초기화', en: 'Reset triage review' })}>
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </>
+        )}
       >
         <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
           {t({
@@ -1454,7 +1482,7 @@ export function ReleaseReadinessTab() {
           })}
         </SettingsInsetBlock>
 
-        <div data-media-runtime-caveat-triage-summary="true" className="grid gap-3 min-[900px]:grid-cols-2">
+        <div data-media-runtime-caveat-triage-summary="true" className="grid gap-3 min-[900px]:grid-cols-3">
           <SettingsValueTile
             label={t({ ko: '운영 검토', en: 'Operator review' })}
             value={t({ ko: '{count}개 queue', en: '{count} queues' }, { count: mediaRuntimeTriageOperatorCount })}
@@ -1463,26 +1491,42 @@ export function ReleaseReadinessTab() {
             label={t({ ko: '승인 필요', en: 'Approval needed' })}
             value={t({ ko: '{count}개 gate', en: '{count} gates' }, { count: mediaRuntimeTriageApprovalCount })}
           />
+          <SettingsValueTile
+            label={t({ ko: '검토 완료', en: 'Reviewed' })}
+            value={t({ ko: '{count}/{total}개', en: '{count}/{total}' }, { count: reviewedMediaRuntimeTriageCount, total: MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.length })}
+          />
         </div>
 
         <div className="grid gap-3 min-[1000px]:grid-cols-2">
-          {MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.map((item) => (
-            <SettingsInsetBlock key={item.id} data-media-runtime-caveat-triage-item={item.id} className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={item.priority === 'now' ? 'default' : item.priority === 'next' ? 'secondary' : 'outline'}>{item.priority}</Badge>
-                <Badge variant="secondary">{item.axis}</Badge>
-                <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
-                  {item.approvalBoundary === 'approval-required' ? t({ ko: '승인 필요', en: 'Approval needed' }) : t({ ko: '운영 검토', en: 'Operator review' })}
-                </Badge>
-              </div>
-              <div className="text-sm font-semibold text-foreground">{t(item.title)}</div>
-              <div className="font-mono text-xs text-foreground/90">{item.evidenceAnchor}</div>
-              <div className="text-sm leading-6 text-muted-foreground">{t(item.triageQuestion)}</div>
-              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
-                {t(item.safeNextStep)}
-              </div>
-            </SettingsInsetBlock>
-          ))}
+          {MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.map((item) => {
+            const checked = reviewedMediaRuntimeTriage.has(item.id)
+
+            return (
+              <SettingsToggleRow key={item.id} data-media-runtime-caveat-triage-item={item.id} className={cn('items-start space-y-0', checked && 'border-primary/40 bg-primary/10')}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => toggleMediaRuntimeTriageItem(item.id, event.target.checked)}
+                  aria-label={t(item.title)}
+                />
+                <span className="min-w-0 space-y-3">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Badge variant={item.priority === 'now' ? 'default' : item.priority === 'next' ? 'secondary' : 'outline'}>{item.priority}</Badge>
+                    <Badge variant="secondary">{item.axis}</Badge>
+                    <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                      {item.approvalBoundary === 'approval-required' ? t({ ko: '승인 필요', en: 'Approval needed' }) : t({ ko: '운영 검토', en: 'Operator review' })}
+                    </Badge>
+                  </span>
+                  <span className="block text-sm font-semibold text-foreground">{t(item.title)}</span>
+                  <span className="block font-mono text-xs text-foreground/90">{item.evidenceAnchor}</span>
+                  <span className="block text-sm leading-6 text-muted-foreground">{t(item.triageQuestion)}</span>
+                  <span className="block rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
+                    {t(item.safeNextStep)}
+                  </span>
+                </span>
+              </SettingsToggleRow>
+            )
+          })}
         </div>
       </SettingsSection>
 

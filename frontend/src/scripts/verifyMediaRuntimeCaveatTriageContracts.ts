@@ -41,6 +41,7 @@ const record = buildReleaseReadinessHistoryRecord({
   reviewedItemIds: [],
   capturedHandoffItemIds: [],
   reviewedAlertIds: [],
+  reviewedMediaRuntimeTriageIds: ['similarity-cleanup-approval-gate'],
   reviewItems: [],
   evidenceItems: [],
   alertReviewItems: [],
@@ -56,7 +57,9 @@ const record = buildReleaseReadinessHistoryRecord({
 })
 
 equal(record.summary.mediaRuntimeTriageQueueCount, 2, 'history summary should count media/runtime triage queue items')
+equal(record.summary.reviewedMediaRuntimeTriageCount, 1, 'history summary should count reviewed media/runtime triage items')
 equal(record.mediaRuntimeTriageQueue[1]?.approvalBoundary, 'approval-required', 'triage queue should preserve approval boundaries')
+equal(record.mediaRuntimeTriageQueue[1]?.status, 'reviewed', 'triage queue should persist reviewed operator state')
 const markdown = buildReleaseReadinessHandoffMarkdown(record)
 ok(markdown.includes('## Media Runtime Caveat Triage Queue'), 'handoff markdown should export the triage queue section')
 ok(markdown.includes('Similarity and cleanup approval gate'), 'handoff markdown should include approval-gated cleanup triage')
@@ -66,6 +69,8 @@ ok(releaseReadinessTab.includes('data-media-runtime-caveat-triage-summary="true"
 ok(releaseReadinessTab.includes('data-media-runtime-caveat-triage-item={item.id}'), 'triage cards should be individually addressable')
 ok(releaseReadinessTab.includes('mediaRuntimeTriageApprovalCount'), 'triage queue should count approval-required cards')
 ok(releaseReadinessTab.includes('mediaRuntimeTriageOperatorCount'), 'triage queue should count operator-review cards')
+ok(releaseReadinessTab.includes('reviewedMediaRuntimeTriage'), 'triage queue should expose operator review check state')
+ok(releaseReadinessTab.includes('toggleMediaRuntimeTriageItem'), 'triage queue should allow individual operator-review toggles')
 ok(releaseReadinessTab.includes("'review-backlog-before-cleanup'"), 'triage queue should include review backlog before cleanup')
 ok(releaseReadinessTab.includes("'runtime-rerun-readiness-review'"), 'triage queue should include runtime rerun readiness')
 ok(historyContract.includes('ReleaseReadinessMediaRuntimeTriageQueueContract'), 'history contract should type media/runtime triage records')
