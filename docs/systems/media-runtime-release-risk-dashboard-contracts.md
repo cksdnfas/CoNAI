@@ -20,7 +20,8 @@ This document records the local-only foundation contract for the `M3-media-runti
 - `data-media-runtime-release-risk-dashboard="true"` exposes the dashboard surface.
 - `data-media-runtime-release-risk-dashboard-summary="true"` exposes high-risk, approval-required, and evidence-anchor counts.
 - `data-media-runtime-release-risk-dashboard-item={item.id}` keeps each risk card individually addressable for regression checks.
-- Saved release readiness history records include `releaseRiskDashboard`, `summary.releaseRiskDashboardItemCount`, and `summary.releaseRiskDashboardHighCount`.
+- Operator review toggles mark individual risk cards as reviewed without performing cleanup, rerun, restart, push, deploy, or external actions.
+- Saved release readiness history records include `releaseRiskDashboard`, `summary.releaseRiskDashboardItemCount`, `summary.releaseRiskDashboardHighCount`, and `summary.reviewedReleaseRiskDashboardCount`.
 - Markdown handoff export includes a `## Media Runtime Release Risk Dashboard` section with risk and mitigation text.
 
 ## No external side effects

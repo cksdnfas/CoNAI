@@ -50,6 +50,7 @@ const record = buildReleaseReadinessHistoryRecord({
   automationContextItems: [],
   mediaRuntimeTriageQueueItems: [],
   releaseRiskDashboardItems,
+  reviewedReleaseRiskDashboardIds: ['media-quality-release-blocker'],
   evidenceReviewItems: [],
   handoffItems: [],
   runbookGuardrails: [],
@@ -59,6 +60,8 @@ const record = buildReleaseReadinessHistoryRecord({
 
 equal(record.summary.releaseRiskDashboardItemCount, 2, 'history summary should count release risk dashboard items')
 equal(record.summary.releaseRiskDashboardHighCount, 2, 'history summary should count high-severity release risks')
+equal(record.summary.reviewedReleaseRiskDashboardCount, 1, 'history summary should count reviewed release risks')
+equal(record.releaseRiskDashboard[0]?.status, 'reviewed', 'risk dashboard should preserve operator review state')
 equal(record.releaseRiskDashboard[0]?.approvalBoundary, 'approval-required', 'risk dashboard should preserve approval boundaries')
 const markdown = buildReleaseReadinessHandoffMarkdown(record)
 ok(markdown.includes('## Media Runtime Release Risk Dashboard'), 'handoff markdown should export the release risk dashboard section')
@@ -69,6 +72,8 @@ ok(releaseReadinessTab.includes('data-media-runtime-release-risk-dashboard-summa
 ok(releaseReadinessTab.includes('data-media-runtime-release-risk-dashboard-item={item.id}'), 'risk cards should be individually addressable')
 ok(releaseReadinessTab.includes('releaseRiskDashboardHighCount'), 'risk dashboard should count high-severity risks')
 ok(releaseReadinessTab.includes('releaseRiskDashboardApprovalCount'), 'risk dashboard should count approval-required risks')
+ok(releaseReadinessTab.includes('reviewedReleaseRiskDashboard'), 'risk dashboard should track operator-reviewed risks')
+ok(releaseReadinessTab.includes('toggleReleaseRiskDashboardItem'), 'risk dashboard should allow per-card review toggles')
 ok(releaseReadinessTab.includes("'media-quality-release-blocker'"), 'risk dashboard should include media quality blocker')
 ok(releaseReadinessTab.includes("'runtime-rerun-release-stop-condition'"), 'risk dashboard should include runtime stop condition')
 ok(historyContract.includes('ReleaseReadinessReleaseRiskDashboardContract'), 'history contract should type release risk dashboard records')

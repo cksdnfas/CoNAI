@@ -1072,20 +1072,23 @@ export function ReleaseReadinessTab() {
   const [reviewedAlerts, setReviewedAlerts] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedAlertIds ?? []))
   const [reviewedAutomationRehearsals, setReviewedAutomationRehearsals] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedAutomationRehearsalIds ?? []))
   const [reviewedMediaRuntimeTriage, setReviewedMediaRuntimeTriage] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedMediaRuntimeTriageIds ?? []))
+  const [reviewedReleaseRiskDashboard, setReviewedReleaseRiskDashboard] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedReleaseRiskDashboardIds ?? []))
   const [reviewedLocalEvidenceExports, setReviewedLocalEvidenceExports] = useState<Set<string>>(() => new Set(latestReadinessRecord?.reviewedLocalEvidenceExportIds ?? []))
   const reviewedCount = reviewedItems.size
   const capturedHandoffCount = capturedHandoffItems.size
   const reviewedAlertCount = reviewedAlerts.size
   const reviewedAutomationRehearsalCount = reviewedAutomationRehearsals.size
   const reviewedMediaRuntimeTriageCount = reviewedMediaRuntimeTriage.size
+  const reviewedReleaseRiskDashboardCount = reviewedReleaseRiskDashboard.size
   const reviewedLocalEvidenceExportCount = reviewedLocalEvidenceExports.size
   const allReviewed = reviewedCount === REVIEW_ITEMS.length
   const allHandoffCaptured = capturedHandoffCount === HANDOFF_EVIDENCE_ITEMS.length
   const allAlertsReviewed = reviewedAlertCount === ALERT_REVIEW_ITEMS.length
   const allAutomationRehearsalsReviewed = reviewedAutomationRehearsalCount === AUTOMATION_REHEARSAL_ITEMS.length
   const allMediaRuntimeTriageReviewed = reviewedMediaRuntimeTriageCount === MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.length
+  const allReleaseRiskDashboardReviewed = reviewedReleaseRiskDashboardCount === RELEASE_RISK_DASHBOARD_ITEMS.length
   const allLocalEvidenceExportsReviewed = reviewedLocalEvidenceExportCount === LOCAL_EVIDENCE_EXPORT_ITEMS.length
-  const allEvidenceReadyForExport = allReviewed && allHandoffCaptured && allAlertsReviewed && allAutomationRehearsalsReviewed && allMediaRuntimeTriageReviewed && allLocalEvidenceExportsReviewed
+  const allEvidenceReadyForExport = allReviewed && allHandoffCaptured && allAlertsReviewed && allAutomationRehearsalsReviewed && allMediaRuntimeTriageReviewed && allReleaseRiskDashboardReviewed && allLocalEvidenceExportsReviewed
   const readinessState = allReviewed ? t({ ko: '검토 완료', en: 'Reviewed' }) : t({ ko: '{count}/{total} 확인', en: '{count}/{total} checked' }, { count: reviewedCount, total: REVIEW_ITEMS.length })
   const handoffState = allHandoffCaptured ? t({ ko: '근거 캡처 완료', en: 'Evidence captured' }) : t({ ko: '{count}/{total} 캡처', en: '{count}/{total} captured' }, { count: capturedHandoffCount, total: HANDOFF_EVIDENCE_ITEMS.length })
   const alertReviewState = allAlertsReviewed ? t({ ko: '알림 검토 완료', en: 'Alerts reviewed' }) : t({ ko: '{count}/{total} 알림', en: '{count}/{total} alerts' }, { count: reviewedAlertCount, total: ALERT_REVIEW_ITEMS.length })
@@ -1108,6 +1111,9 @@ export function ReleaseReadinessTab() {
   const mediaRuntimeTriageOperatorCount = MEDIA_RUNTIME_TRIAGE_QUEUE_ITEMS.filter((item) => item.approvalBoundary === 'operator-review').length
   const releaseRiskDashboardHighCount = RELEASE_RISK_DASHBOARD_ITEMS.filter((item) => item.severity === 'high').length
   const releaseRiskDashboardApprovalCount = RELEASE_RISK_DASHBOARD_ITEMS.filter((item) => item.approvalBoundary === 'approval-required').length
+  const releaseRiskDashboardReviewState = allReleaseRiskDashboardReviewed
+    ? t({ ko: 'risk 검토 완료', en: 'Risks reviewed' })
+    : t({ ko: '{count}/{total} risk', en: '{count}/{total} risks' }, { count: reviewedReleaseRiskDashboardCount, total: RELEASE_RISK_DASHBOARD_ITEMS.length })
   const releaseRiskDashboardState = t(
     { ko: 'high {high} · approval {approval} · external actions 0', en: 'high {high} · approval {approval} · external actions 0' },
     { high: releaseRiskDashboardHighCount, approval: releaseRiskDashboardApprovalCount },
@@ -1231,6 +1237,7 @@ export function ReleaseReadinessTab() {
       reviewedAlertIds: reviewedAlerts,
       reviewedAutomationRehearsalIds: reviewedAutomationRehearsals,
       reviewedMediaRuntimeTriageIds: reviewedMediaRuntimeTriage,
+      reviewedReleaseRiskDashboardIds: reviewedReleaseRiskDashboard,
       reviewedLocalEvidenceExportIds: reviewedLocalEvidenceExports,
       reviewItems: REVIEW_ITEMS,
       evidenceItems: EVIDENCE_ITEMS,
@@ -1262,7 +1269,20 @@ export function ReleaseReadinessTab() {
     setReviewedAlerts(new Set(record.reviewedAlertIds))
     setReviewedAutomationRehearsals(new Set(record.reviewedAutomationRehearsalIds))
     setReviewedMediaRuntimeTriage(new Set(record.reviewedMediaRuntimeTriageIds))
+    setReviewedReleaseRiskDashboard(new Set(record.reviewedReleaseRiskDashboardIds))
     setReviewedLocalEvidenceExports(new Set(record.reviewedLocalEvidenceExportIds))
+  }
+
+  const toggleReleaseRiskDashboardItem = (id: string, checked: boolean) => {
+    setReviewedReleaseRiskDashboard((current) => {
+      const next = new Set(current)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
   }
 
   const toggleLocalEvidenceExportItem = (id: string, checked: boolean) => {
@@ -1735,7 +1755,19 @@ export function ReleaseReadinessTab() {
       <SettingsSection
         data-media-runtime-release-risk-dashboard="true"
         heading={t({ ko: '미디어/runtime release risk dashboard', en: 'Media/runtime release risk dashboard' })}
-        actions={<Badge variant="secondary">{releaseRiskDashboardState}</Badge>}
+        actions={(
+          <>
+            <Badge variant={allReleaseRiskDashboardReviewed ? 'default' : 'secondary'}>{releaseRiskDashboardReviewState}</Badge>
+            <Badge variant="secondary">{releaseRiskDashboardState}</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={() => setReviewedReleaseRiskDashboard(new Set(RELEASE_RISK_DASHBOARD_ITEMS.map((item) => item.id)))}>
+              <CheckCircle2 className="h-4 w-4" />
+              {t({ ko: 'risk 검토 표시', en: 'Mark risks' })}
+            </Button>
+            <Button type="button" size="icon-sm" variant="secondary" onClick={() => setReviewedReleaseRiskDashboard(new Set())} aria-label={t({ ko: 'risk 검토 초기화', en: 'Reset risk review' })} title={t({ ko: 'risk 검토 초기화', en: 'Reset risk review' })}>
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </>
+        )}
       >
         <SettingsInsetBlock className="text-sm leading-6 text-muted-foreground">
           {t({
@@ -1754,29 +1786,41 @@ export function ReleaseReadinessTab() {
             value={t({ ko: '{count}개 gate', en: '{count} gates' }, { count: releaseRiskDashboardApprovalCount })}
           />
           <SettingsValueTile
-            label={t({ ko: '근거 anchor', en: 'Evidence anchors' })}
-            value={t({ ko: '{count}개', en: '{count}' }, { count: RELEASE_RISK_DASHBOARD_ITEMS.length })}
+            label={t({ ko: '검토 완료', en: 'Reviewed' })}
+            value={t({ ko: '{count}/{total}개', en: '{count}/{total}' }, { count: reviewedReleaseRiskDashboardCount, total: RELEASE_RISK_DASHBOARD_ITEMS.length })}
           />
         </div>
 
         <div className="grid gap-3 min-[1000px]:grid-cols-3">
-          {RELEASE_RISK_DASHBOARD_ITEMS.map((item) => (
-            <SettingsInsetBlock key={item.id} data-media-runtime-release-risk-dashboard-item={item.id} className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={item.severity === 'high' ? 'default' : item.severity === 'medium' ? 'secondary' : 'outline'}>{item.severity}</Badge>
-                <Badge variant="secondary">{item.axis}</Badge>
-                <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
-                  {item.approvalBoundary === 'approval-required' ? t({ ko: '승인 필요', en: 'Approval needed' }) : t({ ko: '운영 검토', en: 'Operator review' })}
-                </Badge>
-              </div>
-              <div className="text-sm font-semibold text-foreground">{t(item.title)}</div>
-              <div className="font-mono text-xs text-foreground/90">{item.evidenceAnchor}</div>
-              <div className="text-sm leading-6 text-muted-foreground">{t(item.releaseRisk)}</div>
-              <div className="rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
-                {t(item.mitigation)}
-              </div>
-            </SettingsInsetBlock>
-          ))}
+          {RELEASE_RISK_DASHBOARD_ITEMS.map((item) => {
+            const checked = reviewedReleaseRiskDashboard.has(item.id)
+
+            return (
+              <SettingsToggleRow key={item.id} data-media-runtime-release-risk-dashboard-item={item.id} className={cn('items-start space-y-0', checked && 'border-primary/40 bg-primary/10')}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => toggleReleaseRiskDashboardItem(item.id, event.target.checked)}
+                  aria-label={t(item.title)}
+                />
+                <span className="min-w-0 space-y-3">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Badge variant={item.severity === 'high' ? 'default' : item.severity === 'medium' ? 'secondary' : 'outline'}>{item.severity}</Badge>
+                    <Badge variant="secondary">{item.axis}</Badge>
+                    <Badge variant={item.approvalBoundary === 'approval-required' ? 'outline' : 'secondary'}>
+                      {item.approvalBoundary === 'approval-required' ? t({ ko: '승인 필요', en: 'Approval needed' }) : t({ ko: '운영 검토', en: 'Operator review' })}
+                    </Badge>
+                  </span>
+                  <span className="block text-sm font-semibold text-foreground">{t(item.title)}</span>
+                  <span className="block font-mono text-xs text-foreground/90">{item.evidenceAnchor}</span>
+                  <span className="block text-sm leading-6 text-muted-foreground">{t(item.releaseRisk)}</span>
+                  <span className="block rounded-sm border border-border/60 bg-surface-container/35 px-3 py-2 text-xs leading-5 text-foreground">
+                    {t(item.mitigation)}
+                  </span>
+                </span>
+              </SettingsToggleRow>
+            )
+          })}
         </div>
       </SettingsSection>
 
